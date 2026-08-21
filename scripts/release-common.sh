@@ -116,7 +116,7 @@ PY
     fi
 }
 
-report_zips() {
+report_files() {
     local zipfile
     echo
     for zipfile in "$@"; do

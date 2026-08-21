@@ -24,10 +24,6 @@ while [ $# -gt 0 ]; do
         --version) version=${2:?--version needs a value}; shift 2 ;;
         --rid) rid=${2:?--rid needs a value}; shift 2 ;;
         --out) out=${2:?--out needs a value}; shift 2 ;;
-        -h|--help)
-            sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
-            exit 0
-            ;;
         *)
             echo "unknown argument '$1'" >&2
             exit 1
@@ -50,7 +46,8 @@ if [ "$rid" = osx-universal ]; then
     esac
 
     if ! command -v lipo >/dev/null 2>&1; then
-        echo "error: lipo is required to build osx-universal binaries" >&2
+        echo "lipo makes the universal binary and ships with the macOS command line tools." >&2
+        echo "Name a single --rid to publish one slice without it." >&2
         exit 1
     fi
 else
@@ -169,11 +166,11 @@ fi
 case "$rid" in
     linux-*)
         if [ ! -f "$stage/$folder/$name.desktop" ]; then
-            echo "warning: $name.desktop is not in the publish. GlobalShortcuts portal will refuse the app id." >&2
+            echo "warning: $name.desktop is not in the publish, so the GlobalShortcuts portal will refuse the app id." >&2
         fi
         ;;
 esac
 
 make_zip "$out/$folder.zip" "$stage" "$folder"
 
-report_zips "$out/$folder.zip"
+report_files "$out/$folder.zip"

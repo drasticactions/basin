@@ -16,10 +16,6 @@ while [ $# -gt 0 ]; do
         --version) version=${2:?--version needs a value}; shift 2 ;;
         --rid) rid=${2:?--rid needs a value}; shift 2 ;;
         --out) out=${2:?--out needs a value}; shift 2 ;;
-        -h|--help)
-            sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
-            exit 0
-            ;;
         -*)
             echo "unknown argument '$1'" >&2
             exit 1
@@ -50,6 +46,10 @@ else
         fi
 
         if [ "$path" = "$waylonia" ]; then
+            case "$(host_rid)" in
+                win-*) echo "waylonia is packaged by scripts/build-waylonia.ps1" >&2 ;;
+                *) echo "waylonia is packaged by scripts/build-waylonia.sh" >&2 ;;
+            esac
             exit 1
         fi
 
@@ -87,4 +87,4 @@ for project in "${projects[@]}"; do
     built+=("$out/$folder.zip")
 done
 
-report_zips "${built[@]}"
+report_files "${built[@]}"
