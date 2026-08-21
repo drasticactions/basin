@@ -19,7 +19,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
     private nint _transferFrame;
     private readonly int _hardwareFormat = int.MinValue;
     private readonly string _codecName;
-    private bool _reportedPath;
+    private static bool s_reportedPath;
     private nint _scaler;
     private nint _converted;
     private int _convertedWidth;
@@ -161,19 +161,19 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
             }
 
             frame = _transferFrame;
-            if (!_reportedPath)
+            DecodedOnHardware = true;
+            if (!s_reportedPath)
             {
-                _reportedPath = true;
-                DecodedOnHardware = true;
+                s_reportedPath = true;
                 BasinLog.Info($"ffmpeg: {_codecName} decodes on hardware");
             }
         }
-        else if (!_reportedPath)
+        else if (!s_reportedPath)
         {
-            _reportedPath = true;
+            s_reportedPath = true;
             if (_transferFrame != 0)
             {
-                BasinLog.Info($"ffmpeg: {_codecName} decodes in software; the device declined the stream");
+                BasinLog.Warn($"ffmpeg: {_codecName} decodes in software; the device declined the stream");
             }
         }
 

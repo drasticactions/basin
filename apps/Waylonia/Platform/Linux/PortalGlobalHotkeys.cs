@@ -107,7 +107,7 @@ internal sealed class PortalGlobalHotkeys : IDisposable
                 return;
             }
 
-            BasinLog.Info($"{_hotkeys.Count} global hotkey(s) bound through the desktop portal");
+            BasinLog.Debug($"{_hotkeys.Count} global hotkey(s) bound through the desktop portal");
         }
         catch (DBusErrorReplyException error) when (error.ErrorName.Contains("ServiceUnknown"))
         {

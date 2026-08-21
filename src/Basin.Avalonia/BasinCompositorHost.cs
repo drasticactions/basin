@@ -241,7 +241,7 @@ public sealed class BasinCompositorHost : IDisposable
         {
             Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
-        BasinLog.Info($"avalonia: XDG_RUNTIME_DIR is unset; sockets bind under {directory}");
+        BasinLog.Debug($"avalonia: XDG_RUNTIME_DIR is unset; sockets bind under {directory}");
         return directory;
     }
 }

@@ -72,7 +72,7 @@ internal sealed class WindowsGlobalHotkeys : IDisposable
         }
 
         Win32Properties.AddWndProcHookCallback(anchor, instance._hook);
-        BasinLog.Info($"{instance._bindings.Count} global hotkey(s) registered");
+        BasinLog.Debug($"{instance._bindings.Count} global hotkey(s) registered");
         return instance;
     }
 

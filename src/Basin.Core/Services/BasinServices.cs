@@ -139,7 +139,7 @@ public sealed class BasinServices : IDisposable
                 if (!_table.ContainsKey(capability) && !_unresolved.Contains(capability))
                 {
                     _unresolved.Add(capability);
-                    BasinLog.Warn($"no implementation for {capability.Name}; protocols consuming it degrade");
+                    BasinLog.Debug($"no implementation for {capability.Name}; protocols consuming it degrade");
                 }
             }
         }

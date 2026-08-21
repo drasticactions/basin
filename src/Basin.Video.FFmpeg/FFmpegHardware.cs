@@ -43,7 +43,7 @@ internal sealed unsafe class FFmpegHardware
             var made = FFmpegNative.av_hwdevice_ctx_create(&device, type, null, 0, 0);
             if (made < 0)
             {
-                BasinLog.Info($"ffmpeg: no {typeName} device opens here: {FFmpegNative.DescribeError(made)}");
+                BasinLog.Debug($"ffmpeg: no {typeName} device opens here: {FFmpegNative.DescribeError(made)}");
                 continue;
             }
 

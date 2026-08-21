@@ -29,7 +29,7 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder
             else
             {
                 FFmpegNative.HardwarePixelFormat = hardware.PixelFormat;
-                BasinLog.Info($"ffmpeg: hardware decode over {hardware.Name}");
+                BasinLog.Debug($"ffmpeg: hardware decode over {hardware.Name}");
             }
         }
 

@@ -80,7 +80,7 @@ internal sealed unsafe class MacGlobalHotkeys : IDisposable
             return null;
         }
 
-        BasinLog.Info($"{instance._bindings.Count} global hotkey(s) registered");
+        BasinLog.Debug($"{instance._bindings.Count} global hotkey(s) registered");
         return instance;
     }
 

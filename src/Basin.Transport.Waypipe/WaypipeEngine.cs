@@ -362,7 +362,7 @@ public sealed class WaypipeEngine : IDisposable
 
         var image = CreateImage(remoteId, slice, declaredSize: null);
         _decodeSessions[remoteId] = _options.VideoDecoder!.Open(codec, image.Width, image.Height, image.Format);
-        Basin.Diagnostics.BasinLog.Info(
+        Basin.Diagnostics.BasinLog.Debug(
             $"remote id {remoteId} is a {codec} stream into a {image.Width}x{image.Height} host region");
     }
 

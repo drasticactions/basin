@@ -161,7 +161,7 @@ internal static unsafe class FFmpegNative
 
         av_log_set_level(LogWarning);
         av_log_set_callback((nint)(delegate* unmanaged[Cdecl]<nint, int, byte*, byte*, void>)&LogCallback);
-        BasinLog.Info(
+        BasinLog.Debug(
             $"ffmpeg: decode over {avcodecName} {avcodecMajor}, {avutilName} {avutilMajor}, {swscaleName} {swscaleMajor}");
         return null;
     }

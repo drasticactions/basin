@@ -50,7 +50,7 @@ internal sealed class X11GlobalHotkeys : IDisposable
             }
 
             instance._grabber = grabber;
-            BasinLog.Info($"{registered} global hotkey(s) registered");
+            BasinLog.Debug($"{registered} global hotkey(s) registered");
         });
         return instance;
     }
