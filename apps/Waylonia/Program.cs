@@ -21,6 +21,8 @@ internal static class Program
         var cli = new BasinCommand("Runs a Wayland application inside an Avalonia window.");
         var frames = cli.Add(CommonOptions.Frames());
         var screenshot = cli.Add(CommonOptions.Screenshot());
+        frames.Hidden = true;
+        screenshot.Hidden = true;
         var socketOption = cli.Add(new Option<string?>("--socket")
         {
             Description = "the Wayland socket name to bind, where the platform has one.",
@@ -79,6 +81,12 @@ internal static class Program
             if (ssh is null && listen is null)
             {
                 commandText ??= config.Command;
+            }
+
+            if (MissingClientSource(
+                OperatingSystem.IsLinux(), OperatingSystem.IsWindows(), ssh, listen, commandText))
+            {
+                return cli.Usage(result);
             }
 
             var compress = result.GetResult(compressOption) is null or { Implicit: true }
@@ -144,5 +152,16 @@ internal static class Program
             cli.ReportFrames(WayloniaApp.Rendered);
             return status;
         });
+    }
+
+    internal static bool MissingClientSource(
+        bool linux, bool windows, string? ssh, string? listen, string? command)
+    {
+        if (linux || ssh is not null || listen is not null)
+        {
+            return false;
+        }
+
+        return windows || command is null;
     }
 }

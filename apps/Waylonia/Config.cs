@@ -112,7 +112,7 @@ internal sealed class Config
             else
             {
                 log.LogWarning(
-                    "video takes h264, vp9, av1 or none, each with an optional ,hw suffix, ignoring '{Name}'",
+                    "Invalid --video, ignoring '{Name}'",
                     videoCodec);
             }
         }
@@ -180,9 +180,6 @@ internal sealed class Config
     private static void WritePlaceholder(string path, ILogger log)
     {
         const string placeholder = """
-            # Waylonia reads this file at startup. Every key is a default the matching
-            # command-line flag still overrides; uncomment what you want.
-
             # The waypipe channel compression: "lz4", "zstd" or "none".
             #compress = "lz4"
 
@@ -212,19 +209,13 @@ internal sealed class Config
             # than wherever the host desktop would put it.
             #follow-cursor = true
 
-            # Remote-session profiles: `waylonia --ssh NAME` matches these before
-            # treating NAME as a literal ssh destination. A trailing command or an
-            # explicit --compress on the command line still wins.
+            # Remote-session profiles:
             #[hosts.dev]
             #ssh = "user@devbox"
             #command = "tmux new -A -s main"
             #compress = "none"
 
-            # Host-global hotkeys: the chord fires anywhere on the desktop, no window
-            # focused, and launches the command as a client of this session. Modifiers
-            # are ctrl, alt/option, shift and super/cmd/win. On a Linux Wayland session
-            # the chord goes through the desktop portal, which may ask for consent and
-            # lets the desktop rebind it.
+            # Host-global hotkeys.
             #[hotkeys]
             #"ctrl+alt+t" = "foot"
 

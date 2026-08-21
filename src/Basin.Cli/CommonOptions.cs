@@ -223,7 +223,7 @@ public static class CommonOptions
         var option = new Option<string>("--video")
         {
             Description = "decode per-buffer video from the channel peer: h264, vp9, av1 or none, "
-                + "with an optional ,hw suffix decoding on this host's GPU; implies --gpu",
+                + "Include ',hw' suffix for decoding on GPU.",
             HelpName = "CODEC[,hw]",
             DefaultValueFactory = _ => "none",
         };
@@ -232,7 +232,7 @@ public static class CommonOptions
         {
             if (!IsVideoChoice(result.GetValueOrDefault<string>()))
             {
-                result.AddError("--video takes h264, vp9, av1 or none, each with an optional ,hw suffix");
+                result.AddError("Invalid --video, ignoring.");
             }
         });
 

@@ -2,6 +2,7 @@ using System.Collections;
 using System.CommandLine;
 using System.CommandLine.Help;
 using System.CommandLine.Parsing;
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 
@@ -79,10 +80,18 @@ public sealed class BasinCommand
         return BasinLogging.Create(BasinLogging.ParseLevel(name));
     }
 
+    [Conditional("DEBUG")]
     public void WriteOptions(ParseResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
         Console.WriteLine("OPTIONS " + string.Join(' ', _report.Select(entry => entry(result))));
+    }
+
+    public int Usage(ParseResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        _ = new HelpAction().Invoke(result);
+        return 1;
     }
 
     private static string Format(object? value) => value switch
