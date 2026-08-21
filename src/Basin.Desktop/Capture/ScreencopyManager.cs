@@ -91,6 +91,10 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
 
     public void OnSourceDamaged(IOutput output, Box damage) => NotifyOutputDamaged(output, damage);
 
+    public void OnCursorChanged()
+    {
+    }
+
     public void NotifyOutputDamaged(IOutput output, Box damage)
     {
         foreach (var (key, accumulator) in _accumulated)
@@ -158,7 +162,13 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
             }
 
             var mode = output.CurrentMode;
-            _ = new Frame(this, frame, output, new Box(0, 0, mode.Width, mode.Height), AccumulatorFor(manager, output));
+            _ = new Frame(
+                this,
+                frame,
+                output,
+                new Box(0, 0, mode.Width, mode.Height),
+                AccumulatorFor(manager, output),
+                e.OverlayCursor != 0);
         };
         manager.CaptureOutputRegion += (_, e) =>
         {
@@ -179,7 +189,7 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
                 y,
                 Math.Clamp(physical.Width, 0, mode.Width - x),
                 Math.Clamp(physical.Height, 0, mode.Height - y));
-            _ = new Frame(this, frame, output, region, AccumulatorFor(manager, output));
+            _ = new Frame(this, frame, output, region, AccumulatorFor(manager, output), e.OverlayCursor != 0);
         };
     }
 
@@ -189,15 +199,23 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
         private readonly ZwlrScreencopyFrameV1Resource _resource;
         private readonly Box _region;
         private readonly Accumulator _accumulator;
+        private readonly bool _overlayCursor;
         private nint _bufferHandle;
 
-        public Frame(ScreencopyManager owner, ZwlrScreencopyFrameV1Resource resource, IOutput output, Box region, Accumulator accumulator)
+        public Frame(
+            ScreencopyManager owner,
+            ZwlrScreencopyFrameV1Resource resource,
+            IOutput output,
+            Box region,
+            Accumulator accumulator,
+            bool overlayCursor)
         {
             _owner = owner;
             _resource = resource;
             Output = output;
             _region = region;
             _accumulator = accumulator;
+            _overlayCursor = overlayCursor;
 
             resource.SendBuffer(WlShm.Format.Xrgb8888, (uint)region.Width, (uint)region.Height, (uint)(region.Width * 4));
             if (resource.Version >= 3)
@@ -278,7 +296,7 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
                 return false;
             }
 
-            var source = CaptureSource.Output(Output);
+            var source = CaptureSource.Output(Output, _overlayCursor);
             return capture.Supports(source) && capture.Capture(source, _region, target);
         }
     }

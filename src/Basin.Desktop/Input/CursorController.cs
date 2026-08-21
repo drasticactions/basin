@@ -38,6 +38,8 @@ public sealed class CursorController : IDisposable
         _layout.Changed += Refresh;
     }
 
+    public IScreenCapture? Capture { get; set; }
+
     public CursorImages? Images => _images;
 
     public IOutput? CursorOutput => _cursorOn;
@@ -154,6 +156,8 @@ public sealed class CursorController : IDisposable
                 Present(force: true);
             }
         }
+
+        PublishCursor();
     }
 
     public void UseParentCursor() => _parentMode = true;
@@ -256,6 +260,7 @@ public sealed class CursorController : IDisposable
         }
 
         _hidden = true;
+        PublishCursor();
         if (_parentMode)
         {
             _parent?.HideCursor();
@@ -281,6 +286,7 @@ public sealed class CursorController : IDisposable
         if (_parentMode)
         {
             _parent?.SetCursor(image.Buffer, image.HotspotX, image.HotspotY, _parentScale);
+            PublishCursor();
             return;
         }
 
@@ -314,6 +320,7 @@ public sealed class CursorController : IDisposable
                 Show(image);
             }
 
+            PublishCursor();
             return;
         }
 
@@ -410,6 +417,7 @@ public sealed class CursorController : IDisposable
         {
             _parentScale = ScaleAt(_x, _y);
             _parent?.SetCursor(image.Buffer, image.HotspotX, image.HotspotY, _parentScale);
+            PublishCursor();
             return;
         }
 
@@ -434,6 +442,7 @@ public sealed class CursorController : IDisposable
         if (index < 0)
         {
             _cursorOn = null;
+            PublishCursor();
             return;
         }
 
@@ -481,6 +490,33 @@ public sealed class CursorController : IDisposable
                 scene?.RequestPlaneCommit();
             }
         }
+
+        PublishCursor();
+    }
+
+    private void PublishCursor()
+    {
+        if (Capture is not { } capture)
+        {
+            return;
+        }
+
+        if (_hidden || _showing is not { } image)
+        {
+            capture.SetCursor(null, default);
+            return;
+        }
+
+        capture.SetCursor(
+            image.Buffer,
+            new CaptureCursorState(
+                (int)Math.Round(_x),
+                (int)Math.Round(_y),
+                image.HotspotX,
+                image.HotspotY,
+                image.Width,
+                image.Height,
+                IsVisible: true));
     }
 
     private SceneOutput? SceneOf(IOutput output)

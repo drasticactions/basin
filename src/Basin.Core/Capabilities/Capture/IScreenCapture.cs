@@ -10,6 +10,8 @@ public interface IScreenCapture
 
     bool TryCursorState(IOutput output, out CaptureCursorState cursor);
 
+    void SetCursor(IBuffer? image, in CaptureCursorState state);
+
     void AddDamageObserver(ICaptureDamageObserver observer);
 
     void RemoveDamageObserver(ICaptureDamageObserver observer);

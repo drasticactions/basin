@@ -76,6 +76,7 @@ internal sealed class DamSeat : IDisposable
         _cursor = new CursorController(layout)
         {
             Shapes = services.Require<CursorShapeManager>(),
+            Capture = services.Find<Basin.Capabilities.IScreenCapture>(),
         };
         _cursor.Shapes.CursorRequested += _cursor.ShowImage;
         _relativePointer = services.Require<RelativePointerManager>();

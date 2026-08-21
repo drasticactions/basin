@@ -78,10 +78,21 @@ internal sealed class TestScreenCapture : IScreenCapture
         }
     }
 
+    public CaptureCursorState Cursor { get; private set; }
+
+    public IBuffer? CursorImage { get; private set; }
+
+    public void SetCursor(IBuffer? image, in CaptureCursorState state)
+    {
+        CursorImage = image;
+        Cursor = image is null ? default : state with { IsVisible = true };
+        _damageObservers.CursorChanged();
+    }
+
     public bool TryCursorState(IOutput output, out CaptureCursorState cursor)
     {
-        cursor = default;
-        return false;
+        cursor = Cursor;
+        return Cursor.IsVisible;
     }
 }
 
@@ -406,6 +417,10 @@ internal sealed class ToplevelCapture : IScreenCapture
     {
         cursor = default;
         return false;
+    }
+
+    public void SetCursor(IBuffer? image, in CaptureCursorState state)
+    {
     }
 }
 

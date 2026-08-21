@@ -344,7 +344,7 @@ internal static class Program
 
         var pointer = new LayoutPointer(layout);
 
-        var cursor = new Basin.Desktop.CursorController(layout);
+        var cursor = new Basin.Desktop.CursorController(layout) { Capture = capture };
 
         OutputView? ViewOf(IOutput? output)
         {

@@ -96,10 +96,13 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
                 frame.Complete();
             }
         }
+    }
 
-        foreach (var cursorSession in _cursorSessions)
+    public void OnCursorChanged()
+    {
+        for (var i = _cursorSessions.Count - 1; i >= 0; i--)
         {
-            cursorSession.Refresh();
+            _cursorSessions[i].Refresh();
         }
     }
 
@@ -156,7 +159,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             var source = e.Source is { } sourceResource
                 ? ImageCaptureSourceManager.FromResource(sourceResource.RawHandle)
                 : default;
-            var session = new Session(this, resource, source);
+            var session = new Session(this, resource, source, ((uint)e.Options & 1u) != 0);
             if (session.Stopped)
             {
                 resource.SendStopped();
@@ -230,11 +233,16 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         private readonly ExtImageCopyCaptureSessionV1Resource _resource;
         private Frame? _activeFrame;
 
-        public Session(ImageCopyCaptureManager owner, ExtImageCopyCaptureSessionV1Resource resource, in CaptureSource source)
+        public Session(
+            ImageCopyCaptureManager owner,
+            ExtImageCopyCaptureSessionV1Resource resource,
+            in CaptureSource source,
+            bool paintCursors)
         {
             _owner = owner;
             _resource = resource;
             Source = source;
+            PaintCursors = paintCursors;
 
             if (owner._capture is { } capture && capture.Supports(source) && capture.TryDescribe(source, out var format))
             {
@@ -268,6 +276,8 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
 
         public CaptureSource Source { get; }
 
+        public bool PaintCursors { get; }
+
         public int Width { get; }
 
         public int Height { get; }
@@ -285,8 +295,18 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             _resource.SendDone();
         }
 
-        public bool Render(IBuffer target) =>
-            _owner._capture is { } capture && capture.Capture(Source, default, target);
+        public bool Render(IBuffer target)
+        {
+            if (_owner._capture is not { } capture)
+            {
+                return false;
+            }
+
+            var source = PaintCursors && Source is { Kind: CaptureSourceKind.Output, OutputTarget: { } output }
+                ? CaptureSource.Output(output, overlayCursor: true)
+                : Source;
+            return capture.Capture(source, default, target);
+        }
 
         public void Stop()
         {
@@ -492,6 +512,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         private readonly IOutput? _output;
         private readonly DamageAccumulator _damage;
         private readonly List<CursorFrame> _waiting = [];
+        private (int Width, int Height)? _sent;
 
         private sealed class CursorFrame
         {
@@ -519,17 +540,12 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
 
         public void SendConstraints()
         {
-            if (_resource.IsDestroyed)
+            if (_resource.IsDestroyed || !TryDescribe(out var format))
             {
                 return;
             }
 
-            if (!TryDescribe(out var format))
-            {
-                _resource.SendStopped();
-                return;
-            }
-
+            _sent = (format.Width, format.Height);
             _resource.SendBufferSize((uint)format.Width, (uint)format.Height);
             _resource.SendShmFormat(WlShm.Format.Argb8888);
             _owner.SendDmabufConstraints(_resource, [DrmFormat.Argb8888]);
@@ -540,6 +556,11 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         {
             if (TryDescribe(out var format))
             {
+                if (_sent != (format.Width, format.Height))
+                {
+                    SendConstraints();
+                }
+
                 _damage.Add(new Box(0, 0, format.Width, format.Height));
             }
 

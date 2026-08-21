@@ -507,7 +507,7 @@ internal sealed partial class TinyComp : IDisposable
 
             RaiseHostWindow(window);
         };
-        _cursor = new Basin.Desktop.CursorController(_layout);
+        _cursor = new Basin.Desktop.CursorController(_layout) { Capture = _capture };
         _cursorShapes = _services.Require<Basin.Desktop.CursorShapeManager>();
         _cursorShapes.CursorRequested += _cursor.ShowImage;
         _cursor.Shapes = _cursorShapes;

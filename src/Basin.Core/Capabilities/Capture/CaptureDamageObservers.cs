@@ -21,4 +21,15 @@ public sealed class CaptureDamageObservers
 
         _observers.EndDispatch();
     }
+
+    public void CursorChanged()
+    {
+        var count = _observers.BeginDispatch();
+        for (var i = 0; i < count; i++)
+        {
+            _observers[i]?.OnCursorChanged();
+        }
+
+        _observers.EndDispatch();
+    }
 }

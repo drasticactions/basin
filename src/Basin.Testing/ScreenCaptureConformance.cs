@@ -96,6 +96,40 @@ public abstract class ScreenCaptureConformance
     }
 
     [Fact]
+    public void A_published_cursor_is_reported_and_withdrawn()
+    {
+        var capture = Create();
+        if (!capture.Supports(CaptureSource.Cursor(Output)))
+        {
+            return;
+        }
+
+        var image = CreateTarget(new CaptureFormat(64, 64, DrmFormat.Argb8888));
+        try
+        {
+            capture.SetCursor(image, new CaptureCursorState(10, 12, 4, 5, 24, 24, IsVisible: true));
+            Assert.True(capture.TryDescribe(CaptureSource.Cursor(Output), out var format));
+            Assert.Equal(24, format.Width);
+            Assert.Equal(24, format.Height);
+
+            Assert.True(capture.TryCursorState(Output, out var cursor));
+            Assert.True(cursor.IsVisible);
+            Assert.Equal(24, cursor.Width);
+            Assert.Equal(24, cursor.Height);
+            Assert.Equal(4, cursor.HotspotX);
+            Assert.Equal(5, cursor.HotspotY);
+
+            capture.SetCursor(null, default);
+            Assert.False(capture.TryCursorState(Output, out _));
+            Assert.False(capture.TryDescribe(CaptureSource.Cursor(Output), out _));
+        }
+        finally
+        {
+            DestroyTarget(image);
+        }
+    }
+
+    [Fact]
     public void Capture_allocates_nothing_across_1000_frames()
     {
         var capture = Create();

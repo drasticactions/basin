@@ -110,7 +110,13 @@ public sealed class CursorImages : IDisposable
                                 $"and the buffer is {buffer.Width}x{buffer.Height}, so it cannot go on a cursor plane");
                         }
 
-                        image = new CursorImage(buffer, frame.HotspotX, frame.HotspotY, clipped);
+                        image = new CursorImage(
+                            buffer,
+                            Math.Min(frame.Width, buffer.Width),
+                            Math.Min(frame.Height, buffer.Height),
+                            frame.HotspotX,
+                            frame.HotspotY,
+                            clipped);
                     }
                     else
                     {
@@ -184,6 +190,8 @@ public sealed class CursorImages : IDisposable
 
             return new CursorImage(
                 _clientImage,
+                Math.Min(width, _clientImage.Width),
+                Math.Min(height, _clientImage.Height),
                 (int)Math.Round(hotspotX * scale),
                 (int)Math.Round(hotspotY * scale));
         }

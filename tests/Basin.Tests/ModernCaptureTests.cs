@@ -196,6 +196,154 @@ public sealed class ImageCopyCaptureTests
     }
 
     [Fact]
+    public void Cursor_session_waits_for_a_cursor_and_then_captures_it()
+    {
+        using var host = new CompositorTestHost();
+        using var sources = new ImageCaptureSourceManager(host.Display);
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer };
+        using var manager = new ImageCopyCaptureManager(host.Display, host.Buffers, capture);
+
+        var bound = Bind(host);
+        var pointer = host.Client.Seat!.GetPointer();
+        var source = bound.OutputSources.CreateSource(host.Client.Outputs[0]);
+        var cursorSession = bound.Capture.CreatePointerCursorSession(source, pointer);
+
+        var entered = 0;
+        var left = 0;
+        var position = (X: 0, Y: 0);
+        var hotspot = (X: 0, Y: 0);
+        cursorSession.Enter += (_, _) => entered++;
+        cursorSession.Leave += (_, _) => left++;
+        cursorSession.Position += (_, e) => position = (e.X, e.Y);
+        cursorSession.Hotspot += (_, e) => hotspot = (e.X, e.Y);
+
+        var session = cursorSession.GetCaptureSession();
+        var sessionEvents = SessionEvents.Attach(session);
+        host.PumpToClient();
+        Assert.Equal(0, sessionEvents.Done);
+        Assert.False(sessionEvents.Stopped);
+        Assert.Equal(0, entered);
+
+        var image = new MemoryBuffer(24, 24, DrmFormat.Argb8888);
+        FillCursor(image, 0xFF3366CCu);
+        capture.SetCursor(image, new CaptureCursorState(40, 50, 4, 5, 24, 24, IsVisible: true));
+        host.PumpUntil(() => sessionEvents.Done == 1);
+        Assert.Equal(1, entered);
+        Assert.Equal((40, 50), position);
+        Assert.Equal((4, 5), hotspot);
+        Assert.Equal((24u, 24u), sessionEvents.BufferSize);
+
+        var frame = session.CreateFrame();
+        var frameEvents = FrameEvents.Attach(frame);
+        var target = host.Client.CreateBuffer(24, 24, Fill.Solid(24, 24, 0x00000000));
+        frame.AttachBuffer(target.Proxy);
+        frame.DamageBuffer(0, 0, 24, 24);
+        frame.Capture();
+        host.PumpUntil(() => frameEvents.Ready || frameEvents.Failed);
+        Assert.True(frameEvents.Ready);
+        unsafe
+        {
+            var pixel = *(uint*)(target.Data + (12 * target.Stride) + (12 * 4));
+            Assert.Equal(0xFF3366CCu, pixel | 0xFF000000u);
+        }
+
+        frame.Dispose();
+        host.PumpToServer();
+
+        capture.SetCursor(null, default);
+        host.PumpUntil(() => left == 1);
+
+        session.Destroy();
+        cursorSession.Destroy();
+        host.PumpToServer();
+        image.Destroy();
+    }
+
+    [Fact]
+    public void A_session_asking_for_paint_cursors_gets_the_cursor_over_the_output()
+    {
+        using var host = new CompositorTestHost();
+        using var sources = new ImageCaptureSourceManager(host.Display);
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer };
+        using var manager = new ImageCopyCaptureManager(host.Display, host.Buffers, capture);
+
+        var image = new MemoryBuffer(64, 64, DrmFormat.Argb8888);
+        FillCursor(image, 0xFF3366CCu);
+        capture.SetCursor(image, new CaptureCursorState(60, 40, 4, 5, 24, 24, IsVisible: true));
+
+        var bound = Bind(host);
+        var session = bound.Capture.CreateSession(bound.OutputSources.CreateSource(host.Client.Outputs[0]), Basin.Desktop.Protocol.ExtImageCopyCaptureManagerV1.Options.PaintCursors);
+        var sessionEvents = SessionEvents.Attach(session);
+        host.PumpUntil(() => sessionEvents.Done == 1);
+
+        var frame = session.CreateFrame();
+        var frameEvents = FrameEvents.Attach(frame);
+        var target = host.Client.CreateBuffer(160, 120, Fill.Solid(160, 120, 0x00000000));
+        frame.AttachBuffer(target.Proxy);
+        frame.DamageBuffer(0, 0, 160, 120);
+        frame.Capture();
+        host.PumpUntil(() => frameEvents.Ready || frameEvents.Failed);
+        Assert.True(frameEvents.Ready);
+        unsafe
+        {
+            var onCursor = *(uint*)(target.Data + (40 * target.Stride) + (60 * 4));
+            var offCursor = *(uint*)(target.Data + (100 * target.Stride) + (20 * 4));
+            Assert.Equal(0xFF3366CCu, onCursor | 0xFF000000u);
+            Assert.NotEqual(0xFF3366CCu, offCursor | 0xFF000000u);
+        }
+
+        frame.Dispose();
+        session.Destroy();
+        host.PumpToServer();
+        image.Destroy();
+    }
+
+    [Fact]
+    public void A_cursor_off_the_output_never_enters_its_session()
+    {
+        using var host = new CompositorTestHost();
+        using var sources = new ImageCaptureSourceManager(host.Display);
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer };
+        using var manager = new ImageCopyCaptureManager(host.Display, host.Buffers, capture);
+
+        var bound = Bind(host);
+        var pointer = host.Client.Seat!.GetPointer();
+        var source = bound.OutputSources.CreateSource(host.Client.Outputs[0]);
+        var cursorSession = bound.Capture.CreatePointerCursorSession(source, pointer);
+        var entered = 0;
+        cursorSession.Enter += (_, _) => entered++;
+
+        var image = new MemoryBuffer(24, 24, DrmFormat.Argb8888);
+        FillCursor(image, 0xFF3366CCu);
+        var mode = host.Output.CurrentMode;
+        capture.SetCursor(image, new CaptureCursorState(mode.Width + 100, mode.Height + 100, 4, 5, 24, 24, IsVisible: true));
+        host.PumpToClient();
+        Assert.Equal(0, entered);
+
+        capture.SetCursor(image, new CaptureCursorState(10, 10, 4, 5, 24, 24, IsVisible: true));
+        host.PumpUntil(() => entered == 1);
+
+        cursorSession.Destroy();
+        host.PumpToServer();
+        image.Destroy();
+    }
+
+    private static unsafe void FillCursor(MemoryBuffer buffer, uint pixel)
+    {
+        Assert.True(buffer.BeginDataAccess(BufferDataAccess.Write, out var view));
+        for (var y = 0; y < buffer.Height; y++)
+        {
+            var row = (uint*)(view.Data + (y * view.Stride));
+            for (var x = 0; x < buffer.Width; x++)
+            {
+                row[x] = pixel;
+            }
+        }
+
+        buffer.EndDataAccess();
+    }
+
+    [Fact]
     public void Session_counts_are_reported_per_source()
     {
         using var host = new CompositorTestHost();

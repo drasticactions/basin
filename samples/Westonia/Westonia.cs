@@ -109,7 +109,7 @@ internal sealed partial class Westonia : IDisposable
         var capturePack = new SceneCapturePack(_scene, _layout);
         capturePack.Capture.Renderer = _renderer;
         var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
-        _cursor = new Basin.Desktop.CursorController(_layout);
+        _cursor = new Basin.Desktop.CursorController(_layout) { Capture = capturePack.Capture };
         if (_host.Session is { } session && options.Backend == BackendKind.Drm)
         {
             _input = new Basin.Backend.Libinput.LibinputBackend(_host.Loop, session);

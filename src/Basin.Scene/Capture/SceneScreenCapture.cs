@@ -37,12 +37,19 @@ public sealed class SceneScreenCapture : IScreenCapture
         _damageObservers.Damaged(output, damage);
     }
 
-    public void SetCursor(IBuffer? buffer, int x, int y, int hotspotX, int hotspotY)
+    public void SetCursor(IBuffer? image, in CaptureCursorState state)
     {
-        _cursorBuffer = buffer;
-        _cursor = buffer is null
+        var next = image is null || state.Width <= 0 || state.Height <= 0
             ? default
-            : new CaptureCursorState(x, y, hotspotX, hotspotY, buffer.Width, buffer.Height, IsVisible: true);
+            : state with { IsVisible = true };
+        if (ReferenceEquals(image, _cursorBuffer) && next == _cursor)
+        {
+            return;
+        }
+
+        _cursorBuffer = image;
+        _cursor = next;
+        _damageObservers.CursorChanged();
     }
 
     public bool Supports(in CaptureSource source) => Renderer is null ? false : source.Kind switch
@@ -69,12 +76,12 @@ public sealed class SceneScreenCapture : IScreenCapture
                 return true;
 
             case CaptureSourceKind.Cursor:
-                if (_cursorBuffer is not { } cursor)
+                if (!_cursor.IsVisible)
                 {
                     return false;
                 }
 
-                format = new CaptureFormat(cursor.Width, cursor.Height, DrmFormat.Argb8888);
+                format = new CaptureFormat(_cursor.Width, _cursor.Height, DrmFormat.Argb8888);
                 return true;
 
             case CaptureSourceKind.Toplevel:
@@ -97,7 +104,7 @@ public sealed class SceneScreenCapture : IScreenCapture
         ArgumentNullException.ThrowIfNull(target);
         return source.Kind switch
         {
-            CaptureSourceKind.Output => CaptureOutput(source.OutputTarget!, region, target),
+            CaptureSourceKind.Output => CaptureOutput(source.OutputTarget!, region, target, source.OverlayCursor),
             CaptureSourceKind.Toplevel => CaptureToplevel(source.ToplevelId, region, target),
             CaptureSourceKind.Cursor => CaptureCursor(target),
             _ => false,
@@ -107,21 +114,65 @@ public sealed class SceneScreenCapture : IScreenCapture
     public bool TryCursorState(IOutput output, out CaptureCursorState cursor)
     {
         ArgumentNullException.ThrowIfNull(output);
+        cursor = default;
         if (!_cursor.IsVisible)
         {
-            cursor = default;
             return false;
         }
 
         var box = _layout.BoxOf(output);
-        cursor = _cursor with { X = _cursor.X - box.X, Y = _cursor.Y - box.Y };
+        var scale = output.Scale;
+        var x = (int)Math.Round((_cursor.X - box.X) * scale);
+        var y = (int)Math.Round((_cursor.Y - box.Y) * scale);
+        var left = x - _cursor.HotspotX;
+        var top = y - _cursor.HotspotY;
+        var mode = output.CurrentMode;
+        if (left + _cursor.Width <= 0 || top + _cursor.Height <= 0 || left >= mode.Width || top >= mode.Height)
+        {
+            return false;
+        }
+
+        cursor = _cursor with { X = x, Y = y };
         return true;
     }
 
-    private bool CaptureOutput(IOutput output, in Box region, IBuffer target)
+    private bool CaptureOutput(IOutput output, in Box region, IBuffer target, bool overlayCursor)
     {
         var box = _layout.BoxOf(output);
-        return RenderAt(box.X + region.X, box.Y + region.Y, output.Scale, target);
+        if (!RenderAt(box.X + region.X, box.Y + region.Y, output.Scale, target))
+        {
+            return false;
+        }
+
+        return !overlayCursor || DrawCursorOver(output, region, target);
+    }
+
+    private bool DrawCursorOver(IOutput output, in Box region, IBuffer target)
+    {
+        if (_cursorBuffer is not { } image ||
+            Renderer is not { } renderer ||
+            !TryCursorState(output, out var cursor))
+        {
+            return true;
+        }
+
+        using var texture = renderer.ImportTexture(image);
+        if (texture is null)
+        {
+            return true;
+        }
+
+        var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
+        pass.AddTexture(texture, new TextureRenderOptions
+        {
+            SrcBox = new FBox(0, 0, cursor.Width, cursor.Height),
+            DstBox = new Box(
+                cursor.X - cursor.HotspotX - region.X,
+                cursor.Y - cursor.HotspotY - region.Y,
+                cursor.Width,
+                cursor.Height),
+        });
+        return pass.Submit();
     }
 
     private bool CaptureToplevel(ulong toplevelId, in Box region, IBuffer target)
@@ -142,7 +193,7 @@ public sealed class SceneScreenCapture : IScreenCapture
 
     private bool CaptureCursor(IBuffer target)
     {
-        if (_cursorBuffer is not { } cursor)
+        if (_cursorBuffer is not { } cursor || !_cursor.IsVisible)
         {
             return false;
         }
@@ -158,10 +209,13 @@ public sealed class SceneScreenCapture : IScreenCapture
             return false;
         }
 
+        var width = Math.Min(target.Width, _cursor.Width);
+        var height = Math.Min(target.Height, _cursor.Height);
         var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
         pass.AddTexture(texture, new TextureRenderOptions
         {
-            DstBox = new Box(0, 0, Math.Min(target.Width, cursor.Width), Math.Min(target.Height, cursor.Height)),
+            SrcBox = new FBox(0, 0, width, height),
+            DstBox = new Box(0, 0, width, height),
         });
         return pass.Submit();
     }

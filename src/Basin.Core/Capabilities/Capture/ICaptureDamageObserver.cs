@@ -6,4 +6,6 @@ namespace Basin.Capabilities;
 public interface ICaptureDamageObserver
 {
     void OnSourceDamaged(IOutput output, Box damage);
+
+    void OnCursorChanged();
 }

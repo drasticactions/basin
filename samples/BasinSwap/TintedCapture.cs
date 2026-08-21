@@ -30,6 +30,8 @@ internal sealed class TintedCapture : IScreenCapture, ICaptureDamageObserver
 
     public void OnSourceDamaged(IOutput output, Box damage) => _damageObservers.Damaged(output, damage);
 
+    public void OnCursorChanged() => _damageObservers.CursorChanged();
+
     public int Captures { get; private set; }
 
     public void NotifyDamaged(IOutput output, Box damage) => _inner.NotifyDamaged(output, damage);
@@ -41,6 +43,8 @@ internal sealed class TintedCapture : IScreenCapture, ICaptureDamageObserver
 
     public bool TryCursorState(IOutput output, out CaptureCursorState cursor) =>
         _inner.TryCursorState(output, out cursor);
+
+    public void SetCursor(IBuffer? image, in CaptureCursorState state) => _inner.SetCursor(image, state);
 
     public unsafe bool Capture(in CaptureSource source, in Box region, IBuffer target)
     {
