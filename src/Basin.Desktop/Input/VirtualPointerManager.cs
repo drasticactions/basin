@@ -26,24 +26,33 @@ public sealed class VirtualPointerManager : IDisposable
     private void OnBind(WlClient client, uint version, uint id)
     {
         var manager = new ZwlrVirtualPointerManagerV1Resource(client, version, id);
-        manager.CreateVirtualPointer += (_, e) => WirePointer(new ZwlrVirtualPointerV1Resource(client, manager.Version, e.Id));
-        manager.CreateVirtualPointerWithOutput += (_, e) => WirePointer(new ZwlrVirtualPointerV1Resource(client, manager.Version, e.Id));
+        manager.CreateVirtualPointer += (_, e) =>
+            WirePointer(new ZwlrVirtualPointerV1Resource(client, manager.Version, e.Id), Seat.Seat.FromResource(e.Seat));
+        manager.CreateVirtualPointerWithOutput += (_, e) =>
+            WirePointer(new ZwlrVirtualPointerV1Resource(client, manager.Version, e.Id), Seat.Seat.FromResource(e.Seat));
     }
 
-    private void WirePointer(ZwlrVirtualPointerV1Resource pointer)
+    private void WirePointer(ZwlrVirtualPointerV1Resource pointer, Seat.Seat? seat)
     {
-        pointer.Motion += (_, e) => _sink?.PointerMotion(e.Time, e.Dx.ToDouble(), e.Dy.ToDouble());
+        var sink = seat?.InputSink ?? _sink;
+        if (seat is not null)
+        {
+            seat.AddVirtualDevice(SeatCapability.Pointer);
+            pointer.Destroyed += (_, _) => seat.RemoveVirtualDevice(SeatCapability.Pointer);
+        }
+
+        pointer.Motion += (_, e) => sink?.PointerMotion(e.Time, e.Dx.ToDouble(), e.Dy.ToDouble());
         pointer.MotionAbsolute += (_, e) =>
         {
             if (e.XExtent != 0 && e.YExtent != 0)
             {
-                _sink?.PointerMotionAbsolute(e.Time, e.X, e.Y, e.XExtent, e.YExtent);
+                sink?.PointerMotionAbsolute(e.Time, e.X, e.Y, e.XExtent, e.YExtent);
             }
         };
-        pointer.Button += (_, e) => _sink?.PointerButton(e.Time, e.Button, e.State == WlPointer.ButtonState.Pressed);
-        pointer.Axis += (_, e) => _sink?.PointerAxis(e.Time, (uint)e.Axis, e.Value.ToDouble());
-        pointer.AxisSource += (_, e) => _sink?.PointerAxisSource((uint)e.AxisSource);
-        pointer.AxisStop += (_, e) => _sink?.PointerAxisStop(e.Time, (uint)e.Axis);
-        pointer.Frame += (_, _) => _sink?.Frame();
+        pointer.Button += (_, e) => sink?.PointerButton(e.Time, e.Button, e.State == WlPointer.ButtonState.Pressed);
+        pointer.Axis += (_, e) => sink?.PointerAxis(e.Time, (uint)e.Axis, e.Value.ToDouble());
+        pointer.AxisSource += (_, e) => sink?.PointerAxisSource((uint)e.AxisSource);
+        pointer.AxisStop += (_, e) => sink?.PointerAxisStop(e.Time, (uint)e.Axis);
+        pointer.Frame += (_, _) => sink?.Frame();
     }
 }

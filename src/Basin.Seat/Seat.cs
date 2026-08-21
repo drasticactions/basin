@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Wayland;
 using Wayland.Server;
@@ -10,10 +11,14 @@ public sealed class Seat : IDisposable
 
     private const int SerialHistory = 128;
 
+    private static readonly Dictionary<WlSeatResource, Seat> ByResource = [];
+
     private readonly WlGlobal _global;
     private readonly List<SeatClient> _clients = [];
     private readonly (uint Serial, SerialKind Kind)[] _serials = new (uint, SerialKind)[SerialHistory];
     private readonly List<WlSeatResource> _resources = [];
+    private readonly int[] _virtualDevices = new int[3];
+    private SeatCapability _virtualOwned;
     private int _serialCount;
     private SeatCapability _capabilities;
     private bool _disposed;
@@ -41,6 +46,11 @@ public sealed class Seat : IDisposable
 
     public uint NameFor(WlClient client) => _global.NameFor(client);
 
+    public static Seat? FromResource(WlSeatResource? resource) =>
+        resource is not null && ByResource.TryGetValue(resource, out var seat) ? seat : null;
+
+    public IInputSink? InputSink { get; set; }
+
     internal Surface? ResolveSurface(Wayland.WlSurfaceResource? resource) => Compositor.ResolveSurface(resource);
 
     public SeatPointer Pointer { get; }
@@ -53,6 +63,44 @@ public sealed class Seat : IDisposable
 
     public void SetCapability(SeatCapability capability, bool present) =>
         Capabilities = present ? Capabilities | capability : Capabilities & ~capability;
+
+    public void AddVirtualDevice(SeatCapability capability)
+    {
+        var index = SlotOf(capability);
+        if (index < 0)
+        {
+            return;
+        }
+
+        if (_virtualDevices[index]++ == 0 && (_capabilities & capability) == 0)
+        {
+            _virtualOwned |= capability;
+            SetCapability(capability, true);
+        }
+    }
+
+    public void RemoveVirtualDevice(SeatCapability capability)
+    {
+        var index = SlotOf(capability);
+        if (index < 0 || _virtualDevices[index] == 0)
+        {
+            return;
+        }
+
+        if (--_virtualDevices[index] == 0 && (_virtualOwned & capability) != 0)
+        {
+            _virtualOwned &= ~capability;
+            SetCapability(capability, false);
+        }
+    }
+
+    private static int SlotOf(SeatCapability capability) => capability switch
+    {
+        SeatCapability.Pointer => 0,
+        SeatCapability.Keyboard => 1,
+        SeatCapability.Touch => 2,
+        _ => -1,
+    };
 
     public SeatCapability Capabilities
     {
@@ -80,6 +128,11 @@ public sealed class Seat : IDisposable
         }
 
         _disposed = true;
+        foreach (var resource in _resources)
+        {
+            ByResource.Remove(resource);
+        }
+
         Keyboard.Dispose();
         _global.Dispose();
         BasinCounters.Untrack();
@@ -160,7 +213,12 @@ public sealed class Seat : IDisposable
     {
         var resource = new WlSeatResource(client, version, id);
         _resources.Add(resource);
-        resource.Destroyed += (_, _) => _resources.Remove(resource);
+        ByResource[resource] = this;
+        resource.Destroyed += (_, _) =>
+        {
+            _resources.Remove(resource);
+            ByResource.Remove(resource);
+        };
         resource.SendCapabilities((WlSeat.Capability)_capabilities);
         if (version >= 2)
         {

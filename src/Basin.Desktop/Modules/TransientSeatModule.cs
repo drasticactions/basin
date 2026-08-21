@@ -9,5 +9,6 @@ public sealed class TransientSeatModule : DesktopModule<TransientSeatManager>
 
     public override int Version => TransientSeatManager.Version;
 
-    protected override TransientSeatManager Create(BasinServices services) => new(services.Display);
+    protected override TransientSeatManager Create(BasinServices services) =>
+        new(services.Display, services.Find<CompositorGlobal>(), services.Find<IKeymapSource>());
 }

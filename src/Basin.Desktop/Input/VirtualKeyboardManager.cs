@@ -33,13 +33,20 @@ public sealed class VirtualKeyboardManager : IDisposable
         manager.CreateVirtualKeyboard += (_, e) =>
         {
             var keyboard = new ZwpVirtualKeyboardV1Resource(client, manager.Version, e.Id);
-            var device = _sink?.CreateKeyboard();
+            var seat = Seat.Seat.FromResource(e.Seat);
+            var sink = seat?.InputSink ?? _sink;
+            var device = sink?.CreateKeyboard();
             if (device is not null)
             {
                 device.Tag = client;
             }
 
-            keyboard.Destroyed += (_, _) => device?.Dispose();
+            seat?.AddVirtualDevice(SeatCapability.Keyboard);
+            keyboard.Destroyed += (_, _) =>
+            {
+                device?.Dispose();
+                seat?.RemoveVirtualDevice(SeatCapability.Keyboard);
+            };
             keyboard.Keymap += (_, ke) =>
             {
                 if (device is not null && ReadKeymap(ke.Fd, ke.Size) is { } bytes)
@@ -56,9 +63,9 @@ public sealed class VirtualKeyboardManager : IDisposable
                     keyboard.Client.CloseFd(ke.Fd);
                 }
             };
-            keyboard.Key += (_, ke) => _sink?.Key(device, ke.Time, ke.Key, ke.State == 1);
+            keyboard.Key += (_, ke) => sink?.Key(device, ke.Time, ke.Key, ke.State == 1);
             keyboard.Modifiers += (_, me) =>
-                _sink?.Modifiers(device, me.ModsDepressed, me.ModsLatched, me.ModsLocked, me.Group);
+                sink?.Modifiers(device, me.ModsDepressed, me.ModsLatched, me.ModsLocked, me.Group);
         };
     }
 

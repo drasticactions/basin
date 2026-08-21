@@ -309,6 +309,129 @@ public sealed class TransientSeatTests
         host.PumpToServer();
         transient?.Dispose();
     }
+
+    [Fact]
+    public void A_created_seat_takes_the_virtual_devices_aimed_at_it()
+    {
+        using var host = new CompositorTestHost();
+        var fallback = new RecordingInputSink();
+        var routed = new RecordingInputSink();
+        using var manager = new TransientSeatManager(host.Display, host.Compositor);
+        using var pointers = new VirtualPointerManager(host.Display, fallback);
+
+        Basin.Seat.Seat? created = null;
+        manager.SeatCreated += seat => created = seat;
+        manager.SeatRequested += request => request.Create(_ => routed);
+
+        Basin.Desktop.Protocol.ExtTransientSeatManagerV1? seats = null;
+        Basin.Desktop.Protocol.ZwlrVirtualPointerManagerV1? virtualPointers = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "ext_transient_seat_manager_v1")
+            {
+                seats = registry.Bind<Basin.Desktop.Protocol.ExtTransientSeatManagerV1>(e.Name, 1);
+            }
+            else if (e.Interface == "zwlr_virtual_pointer_manager_v1")
+            {
+                virtualPointers = registry.Bind<Basin.Desktop.Protocol.ZwlrVirtualPointerManagerV1>(e.Name, 2);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(seats);
+        Assert.NotNull(virtualPointers);
+
+        var handle = seats!.Create();
+        var readyName = 0u;
+        handle.Ready += (_, e) => readyName = e.GlobalName;
+        host.PumpUntil(() => readyName != 0);
+        Assert.NotNull(created);
+        Assert.Equal("seat-1", created!.Name);
+
+        var bound = registry.Bind<Wayland.WlSeat>(readyName, 7);
+        var capabilities = new List<WlSeat.Capability>();
+        bound.Capabilities += (_, e) => capabilities.Add(e.Capabilities);
+        host.PumpUntil(() => capabilities.Count == 1);
+        Assert.Equal(default, capabilities[0]);
+
+        var pointer = virtualPointers!.CreateVirtualPointer(bound);
+        pointer.Motion(1, WlFixed.FromDouble(4), WlFixed.FromDouble(5));
+        pointer.Frame();
+        host.PumpUntil(() => routed.Frames == 1 && capabilities.Count == 2);
+        Assert.Equal((1u, 4.0, 5.0), Assert.Single(routed.Motions));
+        Assert.Empty(fallback.Motions);
+        Assert.Equal(WlSeat.Capability.Pointer, capabilities[1]);
+
+        pointer.Dispose();
+        host.PumpUntil(() => capabilities.Count == 3);
+        Assert.Equal(default, capabilities[2]);
+
+        bound.Dispose();
+        handle.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
+    public void A_scene_driven_seat_enters_the_surface_under_its_pointer()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new TransientSeatManager(host.Display, host.Compositor);
+        using var pointers = new VirtualPointerManager(host.Display, sink: null);
+
+        manager.SeatRequested += request =>
+            request.Create(seat => new Basin.Desktop.SceneSeatInput(seat, host.Scene, host.Layout));
+
+        Basin.Desktop.Protocol.ExtTransientSeatManagerV1? seats = null;
+        Basin.Desktop.Protocol.ZwlrVirtualPointerManagerV1? virtualPointers = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "ext_transient_seat_manager_v1")
+            {
+                seats = registry.Bind<Basin.Desktop.Protocol.ExtTransientSeatManagerV1>(e.Name, 1);
+            }
+            else if (e.Interface == "zwlr_virtual_pointer_manager_v1")
+            {
+                virtualPointers = registry.Bind<Basin.Desktop.Protocol.ZwlrVirtualPointerManagerV1>(e.Name, 2);
+            }
+        };
+        host.PumpToClient();
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Solid(64, 48, 0xFF204060));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 64, 48);
+        surface.Commit();
+        host.PumpUntil(() => host.SurfaceScenes.Count == 1);
+
+        var handle = seats!.Create();
+        var readyName = 0u;
+        handle.Ready += (_, e) => readyName = e.GlobalName;
+        host.PumpUntil(() => readyName != 0);
+
+        var bound = registry.Bind<Wayland.WlSeat>(readyName, 7);
+        var pointerProxy = bound.GetPointer();
+        var entered = 0;
+        var at = (X: 0.0, Y: 0.0);
+        pointerProxy.Enter += (_, e) =>
+        {
+            entered++;
+            at = (e.SurfaceX.ToDouble(), e.SurfaceY.ToDouble());
+        };
+
+        var mode = host.Output.CurrentMode;
+        var pointer = virtualPointers!.CreateVirtualPointer(bound);
+        pointer.MotionAbsolute(1, 20, 10, (uint)mode.Width, (uint)mode.Height);
+        pointer.Frame();
+        host.PumpUntil(() => entered == 1);
+        Assert.Equal((20.0, 10.0), at);
+
+        pointer.Dispose();
+        pointerProxy.Dispose();
+        bound.Dispose();
+        handle.Dispose();
+        host.PumpToServer();
+    }
 }
 
 public sealed class CursorShapeTests

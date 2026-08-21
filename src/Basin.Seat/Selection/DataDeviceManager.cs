@@ -19,6 +19,24 @@ public sealed class DataDeviceManager : IDisposable
 
     public void Dispose() => _global.Dispose();
 
+    private Seat? Resolve(WlSeatResource? resource)
+    {
+        if (resource is null)
+        {
+            return null;
+        }
+
+        foreach (var seat in _seats)
+        {
+            if (seat.OwnsResource(resource))
+            {
+                return seat;
+            }
+        }
+
+        return Seat.FromResource(resource);
+    }
+
     private void OnBind(WlClient client, uint version, uint id)
     {
         var manager = new WlDataDeviceManagerResource(client, version, id);
@@ -31,19 +49,16 @@ public sealed class DataDeviceManager : IDisposable
 
         manager.GetDataDevice += (_, e) =>
         {
-            foreach (var seat in _seats)
+            if (Resolve(e.Seat) is not { } seat)
             {
-                if (e.Seat is { } seatResource && seat.OwnsResource(seatResource))
-                {
-                    var device = new WlDataDeviceResource(client, manager.Version, e.Id);
-                    var seatClient = seat.ClientFor(client);
-                    seatClient.AddDataDevice(device);
-                    seat.DataDevice.WireDevice(seatClient, device);
-                    return;
-                }
+                manager.PostError(0, "unknown seat");
+                return;
             }
 
-            manager.PostError(0, "unknown seat");
+            var device = new WlDataDeviceResource(client, manager.Version, e.Id);
+            var seatClient = seat.ClientFor(client);
+            seatClient.AddDataDevice(device);
+            seat.DataDevice.WireDevice(seatClient, device);
         };
     }
 }

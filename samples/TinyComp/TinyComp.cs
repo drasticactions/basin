@@ -446,6 +446,10 @@ internal sealed partial class TinyComp : IDisposable
         _services.Require<Basin.Desktop.VirtualKeyboardManager>().KeymapSubmitted +=
             (fd, _) => fd.Close();
         _services.Require<Basin.Desktop.SystemBellManager>().Rang += _ => Console.WriteLine("BELL");
+        var transientSeats = _services.Require<Basin.Desktop.TransientSeatManager>();
+        transientSeats.SeatRequested += request =>
+            request.Create(seat => new Basin.Desktop.SceneSeatInput(seat, _scene, _layout));
+        transientSeats.SeatCreated += seat => Console.WriteLine($"SEAT {seat.Name}");
         _kdeDecorations = _services.Require<Basin.Desktop.KdeServerDecorationManager>();
         _backgroundEffects = _services.Require<Basin.Desktop.BackgroundEffectManager>();
         _kdeDecorations.ModeRequested += (surface, mode) =>
