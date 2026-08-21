@@ -9,7 +9,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         var cli = new BasinCommand(
-            "A Wayland kiosk: one maximized application, everything else prevented.\n"
+            ".NET Wayland kiosk.\n"
             + "\n"
             + "Usage: dam [OPTIONS] [--] [APPLICATION...]\n"
             + "\n"
@@ -25,7 +25,7 @@ internal static class Program
 
         var decorationsOption = cli.Add(new Option<bool>("--no-decorations", "-d")
         {
-            Description = "tell clients the server decorates; dam itself draws nothing",
+            Description = "tell clients the server decorates their windows, so they should not draw their own",
         });
         var debugOption = cli.Add(new Option<bool>("-D")
         {
