@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Backend.Headless</PackageId>
+    <RootNamespace>Basin.Backend.Headless</RootNamespace>
+    <Description>Headless backend for Basin with virtual outputs.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+  </ItemGroup>
+
+</Project>

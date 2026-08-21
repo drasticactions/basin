@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Avalonia</PackageId>
+    <RootNamespace>Basin.Avalonia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>Hosts a Basin compositor inside an Avalonia application: the custom visual, the tick, and the host window model.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <InternalsVisibleTo Include="Waylonia.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
+    <ProjectReference Include="../Basin.Render.Avalonia/Basin.Render.Avalonia.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+</Project>

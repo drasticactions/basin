@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Scene</PackageId>
+    <RootNamespace>Basin.Scene</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Optional retained scene graph for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+  </ItemGroup>
+
+</Project>

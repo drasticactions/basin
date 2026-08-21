@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Render.Skia.Gpu</PackageId>
+    <RootNamespace>Basin.Render.Skia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>SkiaSharp GPU renderers for Basin: Ganesh on GL, Ganesh on Vulkan, and Graphite.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+</Project>

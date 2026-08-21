@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EightWm</RootNamespace>
+    <AssemblyName>eight-wm</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <ProjectReference Include="../../src/Basin.Renderers/Basin.Renderers.csproj" />
+    <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />
+    <ProjectReference Include="../../src/Basin.Color/Basin.Color.csproj" />
+    <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
+    <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../../src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
+    <PackageReference Include="Svg.Skia" />
+    <PackageReference Include="Tomlyn" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/fonts/Selawik-Regular.ttf" LogicalName="Selawik-Regular.ttf" />
+    <EmbeddedResource Include="../../assets/fonts/Selawik-Semibold.ttf" LogicalName="Selawik-Semibold.ttf" />
+  </ItemGroup>
+
+</Project>

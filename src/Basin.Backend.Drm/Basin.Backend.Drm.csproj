@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Backend.Drm</PackageId>
+    <RootNamespace>Basin.Backend.Drm</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>DRM backend for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Session/Basin.Session.csproj" />
+    <PackageReference Include="drm-dotnet" />
+    <PackageReference Include="liftoff-dotnet" />
+    <PackageReference Include="mesa-dotnet" />
+    <PackageReference Include="udev-dotnet" />
+  </ItemGroup>
+
+</Project>

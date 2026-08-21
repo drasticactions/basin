@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Basin.UI.Skia.Gpu</PackageId>
+    <RootNamespace>Basin.UI.Skia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>Skia GPU UI adapters for Basin, drawing UI elements on GL, Vulkan and Graphite.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
+    <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <ProjectReference Include="../Basin.UI.Skia/Basin.UI.Skia.csproj" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+</Project>

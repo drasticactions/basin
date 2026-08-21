@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Westonia.Shell"
+             x:Class="Westonia.Shell.FrameEdgeView"
+             x:DataType="shell:FrameEdgeModel">
+  <Panel>
+    <Border Background="{Binding ShadowBrush}" Margin="{Binding ShadowMargin}" CornerRadius="{Binding Radius}" />
+    <Border Classes="weston-frame"
+            Classes.active="{Binding Active}"
+            Margin="{Binding ChromeMargin}"
+            CornerRadius="{Binding Radius}" />
+  </Panel>
+</UserControl>

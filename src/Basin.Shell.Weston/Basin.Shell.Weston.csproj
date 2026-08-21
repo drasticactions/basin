@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Shell.Weston</PackageId>
+    <RootNamespace>Basin.Shell.Weston</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>weston's private desktop-shell protocols for Basin, over an internal shell-role seam.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WestonProtocolDir)weston-desktop-shell.xml" WaylandNamespace="Basin.Shell.Weston.Protocol" />
+  </ItemGroup>
+
+</Project>

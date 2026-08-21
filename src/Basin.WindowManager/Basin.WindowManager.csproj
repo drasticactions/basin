@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.WindowManager</PackageId>
+    <RootNamespace>Basin.WindowManager</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Implementation of river-window-management-v1 Wayland protocols, for use with Basin.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xkbcommon-dotnet" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-window-management-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-xkb-bindings-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-layer-shell-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-input-management-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-xkb-config-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/tablet/tablet-v2.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/cursor-shape/cursor-shape-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+  </ItemGroup>
+
+</Project>

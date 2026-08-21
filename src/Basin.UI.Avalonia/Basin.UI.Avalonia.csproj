@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.UI.Avalonia</PackageId>
+    <RootNamespace>Basin.UI.Avalonia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>Avalonia windowing backend for Basin, so a compositor can draw its own chrome with a toolkit.</Description>
+    <BasinAvaloniaBackend>true</BasinAvaloniaBackend>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Westonia" />
+    <InternalsVisibleTo Include="Westonia.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.HarfBuzz" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+</Project>

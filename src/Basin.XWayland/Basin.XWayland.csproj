@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.XWayland</PackageId>
+    <RootNamespace>Basin.XWayland</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>XWayland integration for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <PackageReference Include="xcb-dotnet" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xwayland-shell/xwayland-shell-v1.xml" WaylandNamespace="Basin.XWayland.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xwayland-keyboard-grab/xwayland-keyboard-grab-unstable-v1.xml" WaylandNamespace="Basin.XWayland.Protocol" />
+  </ItemGroup>
+
+</Project>

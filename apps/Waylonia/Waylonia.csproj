@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <RootNamespace>Waylonia</RootNamespace>
+    <AssemblyName>waylonia</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Platform/Linux/**" Condition="!$([MSBuild]::IsOSPlatform('Linux'))" />
+    <Compile Remove="Platform/Mac/**" Condition="!$([MSBuild]::IsOSPlatform('OSX'))" />
+    <Compile Remove="Platform/Windows/**" Condition="!$([MSBuild]::IsOSPlatform('Windows'))" />
+    <Compile Remove="Platform/NonLinux/**" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <Compile Remove="Platform/Fallback/**" Condition="$([MSBuild]::IsOSPlatform('Windows')) or $([MSBuild]::IsOSPlatform('OSX')) or $([MSBuild]::IsOSPlatform('Linux'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Waylonia.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/Wayland_Logo.png" LogicalName="Waylonia.Wayland_Logo.png" />
+    <None Include="waylonia.desktop" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
+    <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Tomlyn" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Wayland" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <PackageReference Include="Tmds.DBus.Protocol" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+  </ItemGroup>
+
+</Project>

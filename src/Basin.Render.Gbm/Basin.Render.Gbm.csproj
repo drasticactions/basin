@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Render.Gbm</PackageId>
+    <RootNamespace>Basin.Render.Gbm</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>GBM renderer for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <PackageReference Include="mesa-dotnet" />
+  </ItemGroup>
+
+</Project>

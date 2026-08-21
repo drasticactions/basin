@@ -1,0 +1,26 @@
+<Project>
+
+  <PropertyGroup Condition="'$(Configuration)' != 'Release' or '$(BasinCounters)' == 'true'">
+    <DefineConstants>$(DefineConstants);BASIN_COUNTERS</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="BasinAvaloniaImplementationAssemblies"
+          Condition="'$(BasinAvaloniaBackend)' == 'true'"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_BasinAvaloniaRef Include="@(ReferencePath)"
+                         Condition="$([System.String]::Copy('%(ReferencePath.NuGetPackageId)').StartsWith('Avalonia')) and $([System.String]::Copy('%(ReferencePath.Identity)').Contains('/ref/'))" />
+      <ReferencePath Remove="@(_BasinAvaloniaRef)" />
+      <ReferencePath Include="@(_BasinAvaloniaRef->Replace('/ref/', '/lib/'))" />
+    </ItemGroup>
+    <Error Condition="'@(_BasinAvaloniaRef)' == ''"
+           Text="BasinAvaloniaBackend is set but no Avalonia reference assembly was found to swap for its implementation assembly." />
+  </Target>
+
+  <Target Name="VerifyProtocolXml" BeforeTargets="CoreCompile">
+    <Error Condition="'@(AdditionalFiles)' != '' and !Exists('%(AdditionalFiles.Identity)')"
+           Text="Protocol XML not found: %(AdditionalFiles.Identity)." />
+  </Target>
+
+</Project>

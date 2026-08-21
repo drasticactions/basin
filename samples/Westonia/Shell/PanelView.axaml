@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Westonia.Shell"
+             x:Class="Westonia.Shell.PanelView"
+             x:DataType="shell:PanelModel">
+  <ThemeVariantScope RequestedThemeVariant="{Binding Variant}">
+    <Border Background="{Binding PanelBrush}">
+    <DockPanel LastChildFill="True">
+      <TextBlock Classes="weston-clock"
+                 DockPanel.Dock="{Binding ClockDock}"
+                 Margin="10,0,10,0"
+                 IsVisible="{Binding ClockVisible}"
+                 Text="{Binding Clock}" />
+      <ItemsControl ItemsSource="{Binding Launchers}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="shell:LauncherModel">
+            <Button Classes="weston-launcher" Command="{Binding Launch}" ToolTip.Tip="{Binding DisplayName}">
+              <Image Source="{Binding Icon}" Width="24" Height="24" />
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </DockPanel>
+    </Border>
+  </ThemeVariantScope>
+</UserControl>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BasinChurn</RootNamespace>
+    <AssemblyName>basinchurn</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="BasinChurn.Protocol" />
+  </ItemGroup>
+
+</Project>

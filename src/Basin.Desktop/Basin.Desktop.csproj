@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Desktop</PackageId>
+    <RootNamespace>Basin.Desktop</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Desktop integration pack for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-output/xdg-output-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-session-lock/ext-session-lock-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-screencopy-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-data-control-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/primary-selection/primary-selection-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-output-management-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-output-power-management-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-foreign-toplevel-management-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/pointer-constraints/pointer-constraints-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/relative-pointer/relative-pointer-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/tablet/tablet-v2.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/cursor-shape/cursor-shape-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/single-pixel-buffer/single-pixel-buffer-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/fractional-scale/fractional-scale-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-idle-notify/ext-idle-notify-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/idle-inhibit/idle-inhibit-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-activation/xdg-activation-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-image-capture-source/ext-image-capture-source-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-export-dmabuf-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-gamma-control-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-workspace/ext-workspace-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/pointer-gestures/pointer-gestures-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(BasinProtocolDir)virtual-keyboard-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-virtual-pointer-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-transient-seat/ext-transient-seat-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-data-control/ext-data-control-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/alpha-modifier/alpha-modifier-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-background-effect/ext-background-effect-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-foreign/xdg-foreign-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-foreign/xdg-foreign-unstable-v2.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-system-bell/xdg-system-bell-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)server-decoration.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)org-kde-plasma-virtual-desktop.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)plasma-window-management.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/security-context/security-context-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/text-input/text-input-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/text-input/text-input-unstable-v3.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(BasinProtocolDir)input-method-unstable-v2.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/tearing-control/tearing-control-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/fifo/fifo-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/pointer-warp/pointer-warp-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-session-management/xdg-session-management-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/commit-timing/commit-timing-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/content-type/content-type-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/drm-lease/drm-lease-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/color-management/color-management-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/color-representation/color-representation-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+  </ItemGroup>
+
+</Project>

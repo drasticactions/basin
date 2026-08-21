@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Session</PackageId>
+    <RootNamespace>Basin.Session</RootNamespace>
+    <Description>Seat/session management for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <PackageReference Include="seatd-dotnet" />
+  </ItemGroup>
+
+</Project>

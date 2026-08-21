@@ -1,0 +1,68 @@
+<Solution>
+  <Folder Name="/apps/">
+    <Project Path="apps/Dam/Dam.csproj" />
+    <Project Path="apps/Dinghy/Dinghy.csproj" />
+    <Project Path="apps/Inlet/Inlet.csproj" />
+    <Project Path="apps/RetroWm/RetroWm.csproj" />
+    <Project Path="apps/Waylonia/Waylonia.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/BasinHeadless/BasinHeadless.csproj" />
+    <Project Path="samples/BasinSwap/BasinSwap.csproj" />
+    <Project Path="samples/BlurClient/BlurClient.csproj" />
+    <Project Path="samples/EightWm/EightWm.csproj" />
+    <Project Path="samples/InletWm/InletWm.csproj" />
+    <Project Path="samples/TinyComp/TinyComp.csproj" />
+    <Project Path="samples/TinyWl/TinyWl.csproj" />
+    <Project Path="samples/Westonia/Westonia.csproj" />
+    <Project Path="samples/WorkspacePager/WorkspacePager.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+    <Project Path="src/Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
+    <Project Path="src/Basin.Cli/Basin.Cli.csproj" />
+    <Project Path="src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <Project Path="src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <Project Path="src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <Project Path="src/Basin.Color/Basin.Color.csproj" />
+    <Project Path="src/Basin.Core/Basin.Core.csproj" />
+    <Project Path="src/Basin.Desktop/Basin.Desktop.csproj" />
+    <Project Path="src/Basin.Host/Basin.Host.csproj" />
+    <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <Project Path="src/Basin.Render.Avalonia/Basin.Render.Avalonia.csproj" />
+    <Project Path="src/Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
+    <Project Path="src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <Project Path="src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
+    <Project Path="src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
+    <Project Path="src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <Project Path="src/Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
+    <Project Path="src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <Project Path="src/Basin.Renderers/Basin.Renderers.csproj" />
+    <Project Path="src/Basin.Effects/Basin.Effects.csproj" />
+    <Project Path="src/Basin.Scene/Basin.Scene.csproj" />
+    <Project Path="src/Basin.Testing/Basin.Testing.csproj" />
+    <Project Path="src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
+    <Project Path="src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <Project Path="src/Basin.Seat/Basin.Seat.csproj" />
+    <Project Path="src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
+    <Project Path="src/Basin.Session/Basin.Session.csproj" />
+    <Project Path="src/Basin.Shell.River/Basin.Shell.River.csproj" />
+    <Project Path="src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
+    <Project Path="src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <Project Path="src/Basin.WindowManager/Basin.WindowManager.csproj" />
+    <Project Path="src/Basin.UI.Decoration/Basin.UI.Decoration.csproj" />
+    <Project Path="src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
+    <Project Path="src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+    <Project Path="src/Basin.XWayland/Basin.XWayland.csproj" />
+  </Folder>
+  <Folder Name="/external/">
+    <Project Path="external/NImpeller/src/NImpeller/NImpeller.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Basin.Tests/Basin.Tests.csproj" />
+    <Project Path="tests/BasinChurn/BasinChurn.csproj" />
+    <Project Path="tests/Waylonia.Tests/Waylonia.Tests.csproj" />
+    <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
+  </Folder>
+</Solution>

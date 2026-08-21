@@ -1,0 +1,121 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="WestonPanelForeground">#FF101010</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonPanelHover">#33000000</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonPanelPressed">#55000000</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherBackground">#F0F0F0F0</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherBorder">#FF808080</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherForeground">#FF101010</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherSelection">#FF3060A0</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherSelectedForeground">#FFFFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockBackdrop">#FF202020</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockPanel">#FFE8E8E8</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockForeground">#FF101010</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockHint">#FF505050</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameInactive">#FFBFBFBF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameTitleActive">#FF000000</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameTitleInactive">#FF666666</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameCloseHot">#50000000</SolidColorBrush>
+          <LinearGradientBrush x:Key="WestonFrameActive" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0.0" Color="#FFFFFFFF" />
+            <GradientStop Offset="0.2" Color="#FFCCCCCC" />
+            <GradientStop Offset="1.0" Color="#FFCCCCCC" />
+          </LinearGradientBrush>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="WestonPanelForeground">#FFFFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonPanelHover">#33FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonPanelPressed">#66FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherBackground">#E0202020</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherBorder">#FF606060</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherForeground">#FFFFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherSelection">#FF3060A0</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonSwitcherSelectedForeground">#FFFFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockBackdrop">#FF000000</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockPanel">#FF303030</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockForeground">#FFFFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonLockHint">#FFBBBBBB</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameInactive">#FF3A3A3A</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameTitleActive">#FFFFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameTitleInactive">#FF999999</SolidColorBrush>
+          <SolidColorBrush x:Key="WestonFrameCloseHot">#50FFFFFF</SolidColorBrush>
+          <LinearGradientBrush x:Key="WestonFrameActive" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0.0" Color="#FF5A5A5A" />
+            <GradientStop Offset="0.2" Color="#FF3A3A3A" />
+            <GradientStop Offset="1.0" Color="#FF3A3A3A" />
+          </LinearGradientBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <x:Double x:Key="WestonPanelHeight">32</x:Double>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <Style Selector="TextBlock.weston-clock">
+    <Setter Property="Foreground" Value="{DynamicResource WestonPanelForeground}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="TextAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.weston-launcher">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="4" />
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+
+  <Style Selector="Button.weston-launcher:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource WestonPanelHover}" />
+  </Style>
+
+  <Style Selector="Button.weston-launcher:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource WestonPanelPressed}" />
+  </Style>
+
+  <Style Selector="Border.weston-frame">
+    <Setter Property="Background" Value="{DynamicResource WestonFrameInactive}" />
+  </Style>
+
+  <Style Selector="Border.weston-frame.active">
+    <Setter Property="Background" Value="{DynamicResource WestonFrameActive}" />
+  </Style>
+
+  <Style Selector="TextBlock.weston-title">
+    <Setter Property="Foreground" Value="{DynamicResource WestonFrameTitleInactive}" />
+  </Style>
+
+  <Style Selector="Border.weston-frame.active TextBlock.weston-title">
+    <Setter Property="Foreground" Value="{DynamicResource WestonFrameTitleActive}" />
+  </Style>
+
+  <Style Selector="Path.weston-close">
+    <Setter Property="Stroke" Value="{DynamicResource WestonFrameTitleInactive}" />
+  </Style>
+
+  <Style Selector="Border.weston-frame.active Path.weston-close">
+    <Setter Property="Stroke" Value="{DynamicResource WestonFrameTitleActive}" />
+  </Style>
+
+  <Style Selector="TextBlock.weston-switcher-entry">
+    <Setter Property="Foreground" Value="{DynamicResource WestonSwitcherForeground}" />
+  </Style>
+
+  <Style Selector="Border.selected">
+    <Setter Property="Background" Value="{DynamicResource WestonSwitcherSelection}" />
+  </Style>
+
+  <Style Selector="Border.selected TextBlock.weston-switcher-entry">
+    <Setter Property="Foreground" Value="{DynamicResource WestonSwitcherSelectedForeground}" />
+  </Style>
+
+  <Style Selector="Border.weston-close-button:pointerover">
+    <Setter Property="Background" Value="{DynamicResource WestonFrameCloseHot}" />
+  </Style>
+</Styles>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Seat.Backends</PackageId>
+    <RootNamespace>Basin.Seat.Backends</RootNamespace>
+    <Description>Seat wiring for Basin's input backends.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <ProjectReference Include="../Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Render.Impeller</PackageId>
+    <RootNamespace>Basin.Render.Impeller</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Flutter Impeller renderer for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../../external/NImpeller/src/NImpeller/NImpeller.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(RepoRoot)assets/impeller/linux-x64/libimpeller.so"
+          CopyToOutputDirectory="PreserveNewest"
+          TargetPath="libimpeller.so"
+          Visible="false"
+          Pack="true"
+          PackagePath="runtimes/linux-x64/native/" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Host</PackageId>
+    <RootNamespace>Basin.Host</RootNamespace>
+    <Description>Compositor bootstrap for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Session/Basin.Session.csproj" />
+    <ProjectReference Include="../Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+  </ItemGroup>
+
+</Project>

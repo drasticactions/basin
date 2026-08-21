@@ -1,0 +1,83 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SkiaSharpVersion>4.152.0-preview.1.1</SkiaSharpVersion>
+    <HarfBuzzSharpVersion>14.2.1-preview.1.1</HarfBuzzSharpVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <AvaloniaVersion>12.1.1</AvaloniaVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ZeroGcVersion>1.0.0-zerogc.26405.1</ZeroGcVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="drm-dotnet" Version="2.4.134" />
+    <PackageVersion Include="lcms2-dotnet" Version="2.19.1" />
+    <PackageVersion Include="libinput-dotnet" Version="1.30.4" />
+    <PackageVersion Include="liftoff-dotnet" Version="0.5.0" />
+    <PackageVersion Include="mesa-dotnet" Version="26.1.5" />
+    <PackageVersion Include="pixman-dotnet" Version="0.46.5" />
+    <PackageVersion Include="seatd-dotnet" Version="0.9.3" />
+    <PackageVersion Include="udev-dotnet" Version="261.2.0" />
+    <PackageVersion Include="WaylandSharpest" Version="1.26.8" />
+    <PackageVersion Include="xcb-dotnet" Version="1.17.0" />
+    <PackageVersion Include="xkbcommon-dotnet" Version="1.13.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Silk.NET.OpenGL" Version="2.23.0" />
+    <PackageVersion Include="Silk.NET.OpenGLES" Version="2.23.0" />
+    <PackageVersion Include="Silk.NET.Vulkan" Version="2.23.0" />
+    <PackageVersion Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.23.0" />
+    <PackageVersion Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.23.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="SkiaSharp.HarfBuzz" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.WebAssembly" Version="$(SkiaSharpVersion)" />
+    <PackageVersion Include="HarfBuzzSharp" Version="$(HarfBuzzSharpVersion)" />
+    <PackageVersion Include="HarfBuzzSharp.NativeAssets.Linux" Version="$(HarfBuzzSharpVersion)" />
+    <PackageVersion Include="HarfBuzzSharp.NativeAssets.WebAssembly" Version="$(HarfBuzzSharpVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.HarfBuzz" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Wayland" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="IgnoresAccessChecksToGenerator" Version="0.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="K4os.Compression.LZ4" Version="1.3.8" />
+    <PackageVersion Include="ZstdSharp.Port" Version="0.8.6" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Svg.Skia" Version="3.0.4" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.10" />
+    <PackageVersion Include="Tmds.DBus.Protocol" Version="0.94.2" />
+    <PackageVersion Include="Tomlyn" Version="0.19.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.v3.assert" Version="3.2.2" />
+    <PackageVersion Include="xunit.v3.extensibility.core" Version="3.2.2" />
+  </ItemGroup>
+
+</Project>

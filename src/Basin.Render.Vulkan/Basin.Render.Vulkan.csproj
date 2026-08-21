@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Render.Vulkan</PackageId>
+    <RootNamespace>Basin.Render.Vulkan</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Vulkan renderer for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" />
+    <EmbeddedResource Include="shaders/quad.vert.spv" LogicalName="quad.vert.spv" />
+    <EmbeddedResource Include="shaders/solid.frag.spv" LogicalName="solid.frag.spv" />
+    <EmbeddedResource Include="shaders/texture.frag.spv" LogicalName="texture.frag.spv" />
+    <EmbeddedResource Include="shaders/texture_lut.frag.spv" LogicalName="texture_lut.frag.spv" />
+    <EmbeddedResource Include="shaders/output.frag.spv" LogicalName="output.frag.spv" />
+    <EmbeddedResource Include="shaders/mesh.vert.spv" LogicalName="mesh.vert.spv" />
+    <EmbeddedResource Include="shaders/mesh.frag.spv" LogicalName="mesh.frag.spv" />
+    <PackageReference Include="mesa-dotnet" />
+  </ItemGroup>
+
+</Project>

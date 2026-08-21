@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>WorkspacePager</RootNamespace>
+    <AssemblyName>workspacepager</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="WorkspacePager.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-workspace/ext-workspace-v1.xml" WaylandNamespace="WorkspacePager.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-layer-shell-unstable-v1.xml" WaylandNamespace="WorkspacePager.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)org-kde-plasma-virtual-desktop.xml" WaylandNamespace="WorkspacePager.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)plasma-window-management.xml" WaylandNamespace="WorkspacePager.Protocol" />
+  </ItemGroup>
+
+</Project>

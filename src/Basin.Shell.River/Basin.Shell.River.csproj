@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Shell.River</PackageId>
+    <RootNamespace>Basin.Shell.River</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>river-window-management-v1 for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../Basin.XWayland/Basin.XWayland.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="xkbcommon-dotnet" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-window-management-v1.xml" WaylandNamespace="Basin.Shell.River.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-xkb-bindings-v1.xml" WaylandNamespace="Basin.Shell.River.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-layer-shell-v1.xml" WaylandNamespace="Basin.Shell.River.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-input-management-v1.xml" WaylandNamespace="Basin.Shell.River.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-xkb-config-v1.xml" WaylandNamespace="Basin.Shell.River.Protocol" />
+    <AdditionalFiles Include="$(RiverProtocolDir)river-libinput-config-v1.xml" WaylandNamespace="Basin.Shell.River.Protocol" />
+  </ItemGroup>
+
+</Project>

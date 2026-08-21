@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>TinyWl</RootNamespace>
+    <AssemblyName>tinywl</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />
+    <ProjectReference Include="../../src/Basin.Renderers/Basin.Renderers.csproj" />
+    <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+  </ItemGroup>
+
+</Project>

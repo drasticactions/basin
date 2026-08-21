@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Westonia.Shell"
+             x:Class="Westonia.Shell.UnlockView"
+             x:DataType="shell:UnlockModel">
+  <Panel Background="{DynamicResource WestonLockBackdrop}">
+    <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+            Background="{DynamicResource WestonLockPanel}"
+            CornerRadius="4" Padding="24" MinWidth="320">
+      <StackPanel Spacing="16">
+        <TextBlock Text="Screen locked"
+                   Foreground="{DynamicResource WestonLockForeground}"
+                   FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding Hint}"
+                   Foreground="{DynamicResource WestonLockHint}"
+                   FontSize="13" HorizontalAlignment="Center" />
+        <Button Content="Unlock" Command="{Binding Unlock}" HorizontalAlignment="Center" />
+      </StackPanel>
+    </Border>
+  </Panel>
+</UserControl>

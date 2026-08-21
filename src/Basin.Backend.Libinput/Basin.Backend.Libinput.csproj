@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Backend.Libinput</PackageId>
+    <RootNamespace>Basin.Backend.Libinput</RootNamespace>
+    <Description>Physical input backend for Basin using libinput.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Session/Basin.Session.csproj" />
+    <PackageReference Include="libinput-dotnet" />
+    <PackageReference Include="udev-dotnet" />
+  </ItemGroup>
+
+</Project>

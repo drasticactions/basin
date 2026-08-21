@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BlurClient</RootNamespace>
+    <AssemblyName>blurclient</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="BlurClient.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-background-effect/ext-background-effect-v1.xml" WaylandNamespace="BlurClient.Protocol" />
+  </ItemGroup>
+
+</Project>

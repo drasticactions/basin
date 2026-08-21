@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Render.Gl</PackageId>
+    <RootNamespace>Basin.Render.Gl</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>GLES renderer for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
+    <PackageReference Include="mesa-dotnet" />
+    <PackageReference Include="Silk.NET.OpenGLES" />
+  </ItemGroup>
+
+</Project>

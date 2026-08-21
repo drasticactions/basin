@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Basin.Samples.Headless</RootNamespace>
+    <AssemblyName>basinheadless</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+    <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
+    <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="Basin.Samples.Headless" />
+  </ItemGroup>
+
+</Project>

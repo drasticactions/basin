@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../apps/Dam/Dam.csproj" />
+    <ProjectReference Include="../../samples/EightWm/EightWm.csproj" />
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
+    <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
+    <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
+    <ProjectReference Include="../../src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Avalonia/Basin.Render.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <ProjectReference Include="../../src/Basin.Renderers/Basin.Renderers.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Color/Basin.Color.csproj" />
+    <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
+    <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.River/Basin.Shell.River.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../../src/Basin.WindowManager/Basin.WindowManager.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Decoration/Basin.UI.Decoration.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The frame tests draw shaped text. The typeface is embedded, so the
+         goldens never depend on the machine's fonts. -->
+    <EmbeddedResource Include="../../assets/fonts/NotoSansCJK-Regular.ttc" LogicalName="NotoSansCJK-Regular.ttc" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Goldens/**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

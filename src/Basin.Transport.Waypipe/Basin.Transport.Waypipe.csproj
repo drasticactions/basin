@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Transport.Waypipe</PackageId>
+    <RootNamespace>Basin.Transport.Waypipe</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Replays a stock waypipe channel into Basin as one synthetic client.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="K4os.Compression.LZ4" />
+    <PackageReference Include="ZstdSharp.Port" />
+  </ItemGroup>
+
+</Project>

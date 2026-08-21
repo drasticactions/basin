@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Core</PackageId>
+    <RootNamespace>Basin</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Core libraries for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="pixman-dotnet" />
+    <PackageReference Include="drm-dotnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/linux-dmabuf/linux-dmabuf-v1.xml" WaylandNamespace="Basin.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/viewporter/viewporter.xml" WaylandNamespace="Basin.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/presentation-time/presentation-time.xml" WaylandNamespace="Basin.Protocol" />
+  </ItemGroup>
+
+</Project>

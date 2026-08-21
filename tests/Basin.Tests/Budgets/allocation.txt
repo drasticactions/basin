@@ -1,0 +1,58 @@
+# Allocation budgets. One row per path a client drives.
+#
+# Regenerate with BASIN_UPDATE_BUDGETS=1 and read the diff before committing it.
+# A row that moves is the point of this file.
+#
+# Recorded in Release with -p:BasinCounters=true, which is what CI runs. A Debug
+# build inlines differently and the census allocates on insert, so a figure taken
+# there is a different number rather than a wrong one. Outside that configuration
+# the assertions skip and say so, because a table that passes without being
+# checked is worse than no table.
+#
+# The measured region is server-side dispatch only. A client's requests are built
+# and flushed outside it, or the figure moves when the binding changes rather than
+# when basin does.
+#
+# The warm-up runs at the same round count as the measurement. Warmed at a smaller
+# count, a List<T> resizes inside the measured region and the figure wanders.
+#
+# kind is exact or ceiling. exact asserts equality, so a drift of 48 bytes is
+# visible. ceiling asserts no more than, which is the only honest assertion
+# against a figure a sampling tool produced.
+#
+# The server rows come from the test suite. The workload and zerogc rows come
+# from scripts/zerogc-budget.sh, which runs a whole command and reads its ALLOC
+# line. A workload row is exact cumulative allocation with headroom. A zerogc
+# row is the peak resident size of the same command under a collector that never
+# reclaims, which is coarse: ZeroGC reserves about 64 MB before anything runs.
+#
+# scope    kind     path                          bytes
+server     exact    commit-with-frame-callback     7168
+server     exact    frame-callback-fire               0
+server     exact    desktop-pack-fan-out              0
+server     exact    pointer-delivery                  0
+server     exact    key-delivery                      0
+server     exact    river-repaint-round            6400
+server     exact    attach-and-damage              5024
+server     exact    pointer-axis                      0
+workload   ceiling  headless-shm                 178377
+workload   ceiling  inlet-headless               595132
+zerogc     ceiling  headless-shm                 55463116
+zerogc     ceiling  inlet-headless               85096857
+client     exact    wm-layout-round                4000
+native     ceiling  inlet-pixman                 15500000
+server     exact    dmabuf-import                 67584
+server     exact    commit-swapping-buffers       11200
+server-managed exact    river-repaint-round            6400
+server-managed exact    desktop-pack-fan-out              0
+server-managed exact    commit-swapping-buffers        7040
+server-managed exact    frame-callback-fire               0
+client-managed exact    wm-layout-round                4000
+server-managed exact    commit-with-frame-callback    17600
+server-managed exact    pointer-delivery                  0
+server-managed exact    dmabuf-import                112800
+server-managed exact    key-delivery                      0
+server-managed exact    attach-and-damage              6400
+server-managed exact    pointer-axis                      0
+channel    exact    remote-frame                   6400
+channel    exact    remote-dmabuf-frame            6400

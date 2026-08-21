@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Basin.Samples.Swap</RootNamespace>
+    <AssemblyName>basinswap</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+    <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
+    <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+  </ItemGroup>
+
+</Project>

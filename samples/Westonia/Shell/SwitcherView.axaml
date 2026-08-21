@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Westonia.Shell"
+             x:Class="Westonia.Shell.SwitcherView"
+             x:DataType="shell:SwitcherModel">
+  <Border Background="{DynamicResource WestonSwitcherBackground}"
+          BorderBrush="{DynamicResource WestonSwitcherBorder}"
+          BorderThickness="1" CornerRadius="4" Padding="8">
+    <ItemsControl ItemsSource="{Binding Entries}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="shell:SwitcherEntry">
+          <Border Classes.selected="{Binding Selected}" Padding="8,4" CornerRadius="2">
+            <TextBlock Classes="weston-switcher-entry" Text="{Binding Title}" FontSize="14" />
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Border>
+</UserControl>

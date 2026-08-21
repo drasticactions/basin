@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Shell.Xdg</PackageId>
+    <RootNamespace>Basin.Shell.Xdg</RootNamespace>
+    <Description>xdg-shell implementation for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-decoration/xdg-decoration-unstable-v1.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-layer-shell-unstable-v1.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-dialog/xdg-dialog-v1.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-toplevel-drag/xdg-toplevel-drag-v1.xml" WaylandNamespace="Basin.Shell.Xdg.Protocol" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Waylonia
+Comment=Run a Wayland application inside a window on the host desktop
+Exec=waylonia
+Terminal=false
+Categories=Utility;
