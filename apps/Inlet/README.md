@@ -15,7 +15,7 @@ dotnet build apps/Inlet
 
 You need to give it a window manager to run on it.
 Any of the ones listed in the [river wiki](https://codeberg.org/river/wiki/src/branch/main/pages/wm-list.md) _should_ work.
-You can also try ones in this repo such as [InletWm](../../samples/InletWm) or [Dinghy](../Dinghy):
+You can also try ones in this repo such as [InletWm](../../samples/InletWm) or [Dinghy](../../samples/Dinghy):
 
 `-c` is river's: the command runs through `sh -c` once the socket is up, and
 everything in the session comes out of it. A manager documented as
@@ -28,20 +28,9 @@ dotnet run --project apps/Inlet -c Release -- -c 'inletwm --trace & weston-simpl
 
 ## Configuration
 
-With no `-c`, Inlet runs an executable init file, which is river's whole
-configuration mechanism. There is no config format to learn: the file is
-usually a shell script that starts a window manager and the other programs the
-session needs.
-
-Inlet looks for `$XDG_CONFIG_HOME/inlet/init` and then
+Configuration matches river's. Inlet looks for `$XDG_CONFIG_HOME/inlet/init` and then
 `$XDG_CONFIG_HOME/river/init`. Without `XDG_CONFIG_HOME` it reads the same two
-files under `$HOME/.config`. A river session therefore starts unchanged, and an
-`inlet/init` overrides it for the times the two must differ. If neither file
-exists, Inlet starts with no window manager and says so.
-
-A file that exists but is not executable stops the run with an error, because a
-`chmod` slip must not look like an empty session. `-c` replaces the search
-completely.
+files under `$HOME/.config`. Inlet's is used first, followed by river's.
 
 ```sh
 cat > ~/.config/inlet/init <<'EOF'
@@ -57,7 +46,7 @@ Options:
 | Option | What it does |
 |---|---|
 | `-c`, `--command CMD` | Run this through `sh -c` once the socket is up, instead of the init file. Its exit does not end the session |
-| `--backend KIND` | Where the outputs go: `nested`, `drm` or `headless`. `drm` uses KMS, libinput and libseat, and `headless` a virtual output |
+| `--backend KIND` | Where the outputs go: `nested`, `drm` or `headless`. |
 | `--xwayland` | Start Xwayland for X11 clients |
 | `--width N` | Output width in pixels, default 1280 |
 | `--height N` | Output height in pixels, default 720 |
