@@ -6,13 +6,13 @@ RetroWm is a tiling window manager.
 
 ```sh
 git submodule update --init --recursive
-dotnet build apps/RetroWm
+dotnet build samples/RetroWm
 ```
 
 ## Running
 
 RetroWm needs a compositor that speaks the river window-management protocols,
-which means [Inlet](../Inlet) or river itself.
+which means [Inlet](../../apps/Inlet) or river itself.
 
 With river:
 
@@ -25,7 +25,7 @@ listening:
 
 ```sh
 dotnet run --project apps/Inlet -- --outputs 1
-dotnet run --project apps/RetroWm -- --socket wayland-N
+dotnet run --project samples/RetroWm -- --socket wayland-N
 ```
 
 Or both halves with one command, built in Debug from source:

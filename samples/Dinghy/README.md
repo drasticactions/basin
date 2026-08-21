@@ -6,13 +6,13 @@ Dinghy is a port of [canoe](https://github.com/roblillack/canoe) to .NET.
 
 ```sh
 git submodule update --init --recursive
-dotnet build apps/Dinghy
+dotnet build samples/Dinghy
 ```
 
 ## Running
 
 Dinghy needs a compositor that speaks the river window-management protocols,
-which means [Inlet](../Inlet) or river itself.
+which means [Inlet](../../apps/Inlet) or river itself.
 
 With river:
 
@@ -25,7 +25,7 @@ listening:
 
 ```sh
 dotnet run --project apps/Inlet -c Release -- --backend nested
-dotnet run --project apps/Dinghy -c Release -- --socket wayland-N
+dotnet run --project samples/Dinghy -c Release -- --socket wayland-N
 ```
 
 `scripts/run-inlet-dinghy.sh` does both from a Debug build of each, and takes

@@ -1,9 +1,7 @@
 <Solution>
   <Folder Name="/apps/">
     <Project Path="apps/Dam/Dam.csproj" />
-    <Project Path="apps/Dinghy/Dinghy.csproj" />
     <Project Path="apps/Inlet/Inlet.csproj" />
-    <Project Path="apps/RetroWm/RetroWm.csproj" />
     <Project Path="apps/Waylonia/Waylonia.csproj" />
   </Folder>
   <Folder Name="/samples/">
