@@ -173,6 +173,17 @@ internal sealed class WayloniaApp : Application
                 _view?.Post(() =>
                 {
                     host.Screens.Apply(snapshot);
+                    if (OperatingSystem.IsMacOS())
+                    {
+                        foreach (var info in snapshot)
+                        {
+                            if (MacScreenScales.TryGetScale(info) is { } known)
+                            {
+                                host.Screens.NoteWindowScale(info.Key, known);
+                            }
+                        }
+                    }
+
                     if (key is not null && noteScale)
                     {
                         host.Screens.NoteWindowScale(key, scale);
