@@ -3,7 +3,7 @@ using SkiaSharp;
 
 namespace Basin.Render.Skia;
 
-internal interface ISkiaTexture : ITexture
+public interface ISkiaTexture : ITexture
 {
     bool Acquire(out SKImage image);
 

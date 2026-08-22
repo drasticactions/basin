@@ -1,7 +1,6 @@
 using Basin.Backend.Hosted;
 using Basin.Desktop;
 using Basin.Diagnostics;
-using Basin.Render.Avalonia;
 using Basin.Shell.Xdg;
 using Wayland.Server;
 

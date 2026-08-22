@@ -21,10 +21,11 @@
     <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
-    <ProjectReference Include="../Basin.Render.Avalonia/Basin.Render.Avalonia.csproj" />
+    <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="mesa-dotnet" />
   </ItemGroup>
 
 </Project>

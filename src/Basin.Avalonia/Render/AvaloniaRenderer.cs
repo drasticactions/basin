@@ -3,7 +3,7 @@ using Basin.Diagnostics;
 using Basin.Render.Skia;
 using SkiaSharp;
 
-namespace Basin.Render.Avalonia;
+namespace Basin.Avalonia;
 
 public sealed class AvaloniaRenderer : IRenderer
 {

@@ -1,7 +1,6 @@
 using Basin.Backend.Hosted;
 using Basin.Desktop;
 using Basin.Diagnostics;
-using Basin.Render.Avalonia;
 using Basin.Shell.Xdg;
 using Wayland.Server;
 
@@ -82,7 +81,7 @@ public sealed class BasinCompositorHost : IDisposable
 
     public LinuxDmabufGlobal? Dmabuf => _dmabuf;
 
-    private void OnEglAvailable(Render.Avalonia.AvaloniaEglImport import)
+    private void OnEglAvailable(AvaloniaEglImport import)
     {
         if (_disposed || _dmabuf is not null || !OperatingSystem.IsLinux())
         {

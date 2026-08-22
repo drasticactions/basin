@@ -1,6 +1,6 @@
 using Basin.Diagnostics;
 
-namespace Basin.Render.Avalonia;
+namespace Basin.Avalonia;
 
 public sealed unsafe class AvaloniaEglImport
 {

@@ -1,4 +1,4 @@
-namespace Basin.Render.Avalonia;
+namespace Basin.Avalonia;
 
 public sealed class AvaloniaFrameTarget : BufferBase
 {

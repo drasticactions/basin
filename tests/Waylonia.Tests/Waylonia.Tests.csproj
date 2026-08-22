@@ -22,7 +22,6 @@
     <ProjectReference Include="../../src/Basin.Avalonia/Basin.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
-    <ProjectReference Include="../../src/Basin.Render.Avalonia/Basin.Render.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
   </ItemGroup>

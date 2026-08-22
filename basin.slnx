@@ -27,7 +27,6 @@
     <Project Path="src/Basin.Desktop/Basin.Desktop.csproj" />
     <Project Path="src/Basin.Host/Basin.Host.csproj" />
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
-    <Project Path="src/Basin.Render.Avalonia/Basin.Render.Avalonia.csproj" />
     <Project Path="src/Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
     <Project Path="src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
     <Project Path="src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />

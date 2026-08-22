@@ -1,7 +1,7 @@
 using Basin.Render.Skia;
 using SkiaSharp;
 
-namespace Basin.Render.Avalonia;
+namespace Basin.Avalonia;
 
 internal sealed class AvaloniaDmabufTexture : ISkiaTexture
 {
