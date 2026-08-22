@@ -3,7 +3,6 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Basin.Scene;
 using Basin.Capabilities;
-using Basin.UI.Decoration;
 using Basin.UI.Skia;
 using SkiaSharp;
 using Xunit;

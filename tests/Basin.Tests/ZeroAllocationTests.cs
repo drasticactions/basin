@@ -141,7 +141,7 @@ public sealed class ZeroAllocationTests
 
         using var theme = new TestFrameTheme();
         using var uiHost = new Basin.UI.Skia.SkiaUIHost();
-        var frame = new Basin.UI.Decoration.Frame(uiHost, new TestFrameRenderer(theme), host.Scene.Root);
+        var frame = new Basin.Scene.Frame(uiHost, new TestFrameRenderer(theme), host.Scene.Root);
         var geometry = new Box(20, 40, 64, 48);
         var client = new Scene.SceneRect(host.Scene.Root, geometry.Width, geometry.Height, new RenderColor(0.8f, 0.5f, 0.2f, 1f));
         client.SetPosition(geometry.X, geometry.Y);

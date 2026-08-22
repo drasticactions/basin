@@ -1,9 +1,8 @@
 using Basin.Capabilities;
 using Basin.Diagnostics;
-using Basin.Scene;
 using Pixman;
 
-namespace Basin.UI.Decoration;
+namespace Basin.Scene;
 
 public sealed class Frame : IUISurfaceObserver, IDisposable
 {

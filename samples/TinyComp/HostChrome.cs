@@ -1,7 +1,6 @@
 using Basin;
 using Basin.Backend.Wayland;
 using Basin.Capabilities;
-using Basin.UI.Decoration;
 using Microsoft.Extensions.Logging;
 
 namespace TinyComp;

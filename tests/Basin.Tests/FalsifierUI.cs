@@ -1,5 +1,4 @@
 using Basin.Capabilities;
-using Basin.UI.Decoration;
 using Pixman;
 
 namespace Basin.Tests;

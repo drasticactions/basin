@@ -48,7 +48,6 @@
     <Project Path="src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
     <Project Path="src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <Project Path="src/Basin.WindowManager/Basin.WindowManager.csproj" />
-    <Project Path="src/Basin.UI.Decoration/Basin.UI.Decoration.csproj" />
     <Project Path="src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
     <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <Project Path="src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />

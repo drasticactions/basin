@@ -6,7 +6,6 @@ using Basin.Backend.Wayland;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 using Basin.Capabilities;
-using Basin.UI.Decoration;
 using Basin.UI.Skia;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

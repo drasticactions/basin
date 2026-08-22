@@ -1,6 +1,5 @@
 using Basin;
 using Basin.Scene;
-using Basin.UI.Decoration;
 
 namespace TinyComp;
 

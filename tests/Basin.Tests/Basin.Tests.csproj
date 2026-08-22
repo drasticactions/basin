@@ -47,7 +47,6 @@
     <ProjectReference Include="../../src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../../src/Basin.WindowManager/Basin.WindowManager.csproj" />
-    <ProjectReference Include="../../src/Basin.UI.Decoration/Basin.UI.Decoration.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
   </ItemGroup>
