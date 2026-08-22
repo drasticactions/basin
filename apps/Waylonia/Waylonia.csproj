@@ -16,8 +16,11 @@
     <Compile Remove="Platform/Linux/**" Condition="!$([MSBuild]::IsOSPlatform('Linux'))" />
     <Compile Remove="Platform/Mac/**" Condition="!$([MSBuild]::IsOSPlatform('OSX'))" />
     <Compile Remove="Platform/Windows/**" Condition="!$([MSBuild]::IsOSPlatform('Windows'))" />
-    <Compile Remove="Platform/NonLinux/**" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
-    <Compile Remove="Platform/Fallback/**" Condition="$([MSBuild]::IsOSPlatform('Windows')) or $([MSBuild]::IsOSPlatform('OSX')) or $([MSBuild]::IsOSPlatform('Linux'))" />
+    <Compile Remove="Platform/Generic/HostPlatform.cs" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <Compile Remove="Platform/Generic/WayloniaXWayland.cs" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <Compile Remove="Platform/Generic/HostScreenScales.cs" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+    <Compile Remove="Platform/Generic/GlobalHotkeys.cs" Condition="$([MSBuild]::IsOSPlatform('Windows')) or $([MSBuild]::IsOSPlatform('OSX')) or $([MSBuild]::IsOSPlatform('Linux'))" />
+    <Compile Remove="Platform/Generic/HostCursor.cs" Condition="$([MSBuild]::IsOSPlatform('Windows')) or $([MSBuild]::IsOSPlatform('OSX')) or $([MSBuild]::IsOSPlatform('Linux'))" />
   </ItemGroup>
 
   <ItemGroup>
