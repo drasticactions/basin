@@ -450,7 +450,9 @@ public sealed class ToplevelWindow : Window
 
     private void ContinueResizeDrag(WindowEdge edge, global::Avalonia.Input.PointerEventArgs e)
     {
-        var pointer = this.PointToScreen(e.GetPosition(this));
+        var pointer = OperatingSystem.IsMacOS() && MacPointerLocation.TryGet() is { } location
+            ? location
+            : this.PointToScreen(e.GetPosition(this));
         var scale = DesktopScaling > 0 ? DesktopScaling : 1.0;
         var dx = (pointer.X - _manualPointerStart.X) / scale;
         var dy = (pointer.Y - _manualPointerStart.Y) / scale;
@@ -697,13 +699,29 @@ public sealed class ToplevelWindow : Window
         }
         else if (e.Property == WindowStateProperty)
         {
-            _manager.HostStateChanged(_id, WindowState);
-            if (!_applyingClientState)
+            var state = WindowState;
+            var (predictedWidth, predictedHeight) = PredictedClientSize(state);
+            _manager.HostStateChanged(_id, state, predictedWidth, predictedHeight);
+            if (!_applyingClientState && predictedWidth == 0 && state is not WindowState.Normal)
             {
                 var size = ClientSize;
                 _manager.HostResized(
-                    _id, Math.Max(1, (int)Math.Round(size.Width)), Math.Max(1, (int)Math.Round(size.Height)), WindowState);
+                    _id, Math.Max(1, (int)Math.Round(size.Width)), Math.Max(1, (int)Math.Round(size.Height)), state);
             }
         }
+    }
+
+    private (int Width, int Height) PredictedClientSize(WindowState state)
+    {
+        if (state != WindowState.Maximized ||
+            (Screens.ScreenFromWindow(this) ?? Screens.Primary) is not { } screen)
+        {
+            return default;
+        }
+
+        var scale = DesktopScaling > 0 ? DesktopScaling : 1.0;
+        return (
+            Math.Max(1, (int)Math.Round(screen.WorkingArea.Width / scale)),
+            Math.Max(1, (int)Math.Round(screen.WorkingArea.Height / scale)));
     }
 }

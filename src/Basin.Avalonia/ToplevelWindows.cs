@@ -42,6 +42,8 @@ public sealed class ToplevelWindows : IDisposable
         public int WindowHeight;
         public int NormalMarginWidth;
         public int NormalMarginHeight;
+        public int NormalWidth;
+        public int NormalHeight;
         public int CloseRequests;
         public bool WindowCreated;
         public bool ConfigurePending;
@@ -651,38 +653,53 @@ public sealed class ToplevelWindows : IDisposable
     {
         _post(() =>
         {
-            if (!_entries.TryGetValue(id, out var entry))
+            if (_entries.TryGetValue(id, out var entry))
             {
-                return;
-            }
-
-            if (entry.ClientDecorated && state is not (WindowState.FullScreen or WindowState.Maximized))
-            {
-                width = Math.Max(1, width - entry.NormalMarginWidth);
-                height = Math.Max(1, height - entry.NormalMarginHeight);
-            }
-
-            if (width == entry.RequestedWidth && height == entry.RequestedHeight)
-            {
-                return;
-            }
-
-            if (entry.Toplevel is { } toplevel)
-            {
-                entry.ConfigurePending = true;
-                entry.RequestedWidth = width;
-                entry.RequestedHeight = height;
-                toplevel.SetSize(width, height);
-                toplevel.RequestConfigure();
-            }
-            else if (entry.Foreign is { } foreign)
-            {
-                entry.ConfigurePending = true;
-                entry.RequestedWidth = width;
-                entry.RequestedHeight = height;
-                foreign.Resize(width, height);
+                ResizeCore(entry, width, height, state);
             }
         });
+    }
+
+    private static void ResizeCore(Entry entry, int width, int height, WindowState state)
+    {
+        if (state is WindowState.Normal or WindowState.Maximized or WindowState.FullScreen)
+        {
+            entry.Toplevel?.SetMaximized(state == WindowState.Maximized);
+            entry.Toplevel?.SetFullscreen(state == WindowState.FullScreen);
+        }
+
+        if (state == WindowState.Normal)
+        {
+            entry.NormalWidth = width;
+            entry.NormalHeight = height;
+        }
+
+        if (entry.ClientDecorated && state is not (WindowState.FullScreen or WindowState.Maximized))
+        {
+            width = Math.Max(1, width - entry.NormalMarginWidth);
+            height = Math.Max(1, height - entry.NormalMarginHeight);
+        }
+
+        if (width == entry.RequestedWidth && height == entry.RequestedHeight)
+        {
+            return;
+        }
+
+        if (entry.Toplevel is { } toplevel)
+        {
+            entry.ConfigurePending = true;
+            entry.RequestedWidth = width;
+            entry.RequestedHeight = height;
+            toplevel.SetSize(width, height);
+            toplevel.RequestConfigure();
+        }
+        else if (entry.Foreign is { } foreign)
+        {
+            entry.ConfigurePending = true;
+            entry.RequestedWidth = width;
+            entry.RequestedHeight = height;
+            foreign.Resize(width, height);
+        }
     }
 
     internal void ClientResizeStateChanged(int id, bool resizing)
@@ -697,15 +714,27 @@ public sealed class ToplevelWindows : IDisposable
         });
     }
 
-    internal void HostStateChanged(int id, WindowState state)
+    internal void HostStateChanged(int id, WindowState state, int predictedWidth = 0, int predictedHeight = 0)
     {
         _post(() =>
         {
-            if (_entries.TryGetValue(id, out var entry) && entry.Toplevel is { } toplevel)
+            if (!_entries.TryGetValue(id, out var entry) || entry.Toplevel is not { } toplevel)
             {
-                toplevel.SetMaximized(state == WindowState.Maximized);
-                toplevel.SetFullscreen(state == WindowState.FullScreen);
-                toplevel.SetSuspended(state == WindowState.Minimized);
+                return;
+            }
+
+            toplevel.SetMaximized(state == WindowState.Maximized);
+            toplevel.SetFullscreen(state == WindowState.FullScreen);
+            toplevel.SetSuspended(state == WindowState.Minimized);
+            var (width, height) = (predictedWidth, predictedHeight);
+            if (state == WindowState.Normal && entry.NormalWidth > 0)
+            {
+                (width, height) = (entry.NormalWidth, entry.NormalHeight);
+            }
+
+            if (width > 0 && height > 0)
+            {
+                ResizeCore(entry, width, height, state);
             }
         });
     }
