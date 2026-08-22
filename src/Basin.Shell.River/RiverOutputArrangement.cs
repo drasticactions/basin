@@ -25,8 +25,9 @@ public sealed class RiverOutputArrangement
         foreach (var output in _order)
         {
             var mode = output.CurrentMode;
-            var width = Math.Max(1, (int)Math.Ceiling(mode.Width / output.Scale));
-            var height = Math.Max(1, (int)Math.Ceiling(mode.Height / output.Scale));
+            var across = Math.Max(1, (int)Math.Ceiling(mode.Width / output.Scale));
+            var down = Math.Max(1, (int)Math.Ceiling(mode.Height / output.Scale));
+            var (width, height) = output.Transform.SwapsAxes() ? (down, across) : (across, down);
 
             var requested = Placement?.Invoke(output);
             var box = requested is { } point

@@ -28,8 +28,8 @@ public static class OutputScaling
     public static (int Width, int Height) LogicalSize(this IOutput output)
     {
         var mode = output.CurrentMode;
-        return (
-            (int)Math.Round(mode.Width / output.Scale),
-            (int)Math.Round(mode.Height / output.Scale));
+        var width = (int)Math.Round(mode.Width / output.Scale);
+        var height = (int)Math.Round(mode.Height / output.Scale);
+        return output.Transform.SwapsAxes() ? (height, width) : (width, height);
     }
 }

@@ -5,7 +5,7 @@ namespace Basin.Scene;
 
 public readonly record struct SceneRenderOptions
 {
-    private readonly double _scale;
+    private readonly OutputProjection _projection;
 
     public SceneRenderOptions()
     {
@@ -15,8 +15,13 @@ public readonly record struct SceneRenderOptions
 
     public double Scale
     {
-        get => _scale == 0 ? 1.0 : _scale;
-        init => _scale = value;
+        get => _projection.Scale;
+        init => _projection = new OutputProjection(value, _projection.Transform, _projection.Width, _projection.Height);
     }
 
+    public OutputProjection Projection
+    {
+        get => _projection;
+        init => _projection = value;
+    }
 }

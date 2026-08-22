@@ -459,6 +459,7 @@ public sealed class CursorController : IDisposable
         if (force || !ReferenceEquals(_cursorOn, output))
         {
             if (!image.Clipped &&
+                output.Transform == OutputTransform.Normal &&
                 output is IHardwareCursor plane &&
                 plane.SetCursor(image.Buffer, image.HotspotX, image.HotspotY))
             {
@@ -467,6 +468,11 @@ public sealed class CursorController : IDisposable
             }
             else
             {
+                if (!_software)
+                {
+                    (output as IHardwareCursor)?.SetCursor(null, 0, 0);
+                }
+
                 scene?.SetSoftwareCursor(image.Buffer, image.HotspotX, image.HotspotY);
                 _software = true;
             }
@@ -547,17 +553,35 @@ public sealed class CursorController : IDisposable
         new(output.Scale, _descriptions.TryGetValue(output, out var description) ? description : null);
 
     private CursorKey KeyAt(double x, double y) =>
-        _layout.OutputAt(x, y) is { } output ? KeyFor(output)
+        DrivenAt(x, y) is { } output ? KeyFor(output)
         : _outputs.Count > 0 ? KeyFor(_outputs[0].Output)
         : new CursorKey(1, null);
 
     private double ScaleAt(double x, double y)
     {
-        if (_layout.OutputAt(x, y) is { } output)
+        if (DrivenAt(x, y) is { } output)
         {
             return output.Scale;
         }
 
         return _outputs.Count > 0 ? _outputs[0].Output.Scale : 1.0;
+    }
+
+    private IOutput? DrivenAt(double x, double y)
+    {
+        if (_layout.OutputAt(x, y) is not { } output)
+        {
+            return null;
+        }
+
+        foreach (var entry in _outputs)
+        {
+            if (ReferenceEquals(entry.Output, output))
+            {
+                return output;
+            }
+        }
+
+        return null;
     }
 }

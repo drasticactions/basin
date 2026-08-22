@@ -286,6 +286,10 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
 
         public DamageAccumulator Damage { get; }
 
+        public WlOutput.Transform Transform => Source is { Kind: CaptureSourceKind.Output, OutputTarget: { } output }
+            ? (WlOutput.Transform)output.Transform
+            : WlOutput.Transform.Normal;
+
         public void SendConstraints()
         {
             _resource.SendBufferSize((uint)Width, (uint)Height);
@@ -392,7 +396,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             }
 
             var damage = Session.Damage.Take();
-            _resource.SendTransform(WlOutput.Transform.Normal);
+            _resource.SendTransform(Session.Transform);
             _resource.SendDamage(damage.X, damage.Y, damage.Width, damage.Height);
             SendPresentationTime(_resource);
             _resource.SendReady();

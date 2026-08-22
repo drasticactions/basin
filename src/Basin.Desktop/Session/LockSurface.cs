@@ -32,7 +32,8 @@ public sealed class LockSurface
         surface.Destroyed += () => SetMapped(false);
         resource.Destroyed += (_, _) => SetMapped(false);
 
-        Configure(output.Output.CurrentMode.Width, output.Output.CurrentMode.Height);
+        var (logicalWidth, logicalHeight) = output.Output.LogicalSize();
+        Configure(logicalWidth, logicalHeight);
     }
 
     public Surface Surface { get; }

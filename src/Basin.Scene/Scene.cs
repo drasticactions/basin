@@ -283,10 +283,10 @@ public sealed partial class Scene
 
     public bool Render(IRenderer renderer, IBuffer target, in SceneRenderOptions options)
     {
-        var scale = options.Scale;
+        var projection = options.Projection;
         _renderList.Clear();
         CollectTree(Root, Root.X, Root.Y, Unclipped, _renderList);
-        PrepareCaptures(renderer, _renderList, scale);
+        PrepareCaptures(renderer, _renderList, projection.Scale);
 
         var targetBox = new Box(0, 0, target.Width, target.Height);
 
@@ -302,7 +302,7 @@ public sealed partial class Scene
 
         for (var i = 0; i < _renderList.Count; i++)
         {
-            DrawEntry(renderer, pass, _renderList[i], clip: null, scale);
+            DrawEntry(renderer, pass, _renderList[i], clip: null, projection);
         }
 
         return pass.Submit();
@@ -332,9 +332,10 @@ public sealed partial class Scene
             }
 
             pass.AddRect(background, new Box(0, 0, target.Width, target.Height));
+            var projection = new OutputProjection(scale);
             for (var i = 0; i < list.Count; i++)
             {
-                DrawEntry(renderer, pass, list[i], clip: null, scale);
+                DrawEntry(renderer, pass, list[i], clip: null, projection);
             }
 
             return pass.Submit();
@@ -419,9 +420,10 @@ public sealed partial class Scene
                 RenderFences.CloseFence(waitFence);
             }
 
+            var projection = new OutputProjection(scale);
             for (var i = 0; i < list.Count; i++)
             {
-                DrawEntry(renderer, pass, list[i], clip: null, scale, 0, 0, backdrops: false);
+                DrawEntry(renderer, pass, list[i], clip: null, projection, 0, 0, backdrops: false);
             }
 
             return pass.Submit();
@@ -518,20 +520,21 @@ public sealed partial class Scene
         return fence;
     }
 
-    internal static void DrawEntry(IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, double scale) =>
-        DrawEntry(renderer, pass, entry, clip, scale, 0, 0);
+    internal static void DrawEntry(IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection) =>
+        DrawEntry(renderer, pass, entry, clip, projection, 0, 0);
 
     internal static void DrawEntry(
-        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, double scale, int offsetX, int offsetY) =>
-        DrawEntry(renderer, pass, entry, clip, scale, offsetX, offsetY, backdrops: true);
+        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY) =>
+        DrawEntry(renderer, pass, entry, clip, projection, offsetX, offsetY, backdrops: true);
 
     private static void DrawEntry(
-        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, double scale, int offsetX, int offsetY,
+        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY,
         bool backdrops)
     {
+        var scale = projection.Scale;
         if (entry.Clip is { } clipBox)
         {
-            var physical = OutputScaling.ToPhysical(clipBox, scale).Translated(-offsetX, -offsetY);
+            var physical = projection.MapPixels(OutputScaling.ToPhysical(clipBox, scale).Translated(-offsetX, -offsetY));
             if (physical.IsEmpty)
             {
                 return;
@@ -554,27 +557,28 @@ public sealed partial class Scene
         switch (entry.Node)
         {
             case SceneMesh mesh:
-                DrawSceneMesh(renderer, pass, mesh, entry, clip, scale, offsetX, offsetY);
+                DrawSceneMesh(renderer, pass, mesh, entry, clip, projection, offsetX, offsetY);
                 break;
 
             case SceneShader shader:
-                DrawSceneShader(pass, shader, entry, clip, scale, offsetX, offsetY);
+                DrawSceneShader(pass, shader, entry, clip, projection, offsetX, offsetY);
                 break;
 
             case SceneTransform { Deformer: not null } deformed:
-                DrawDeformed(renderer, pass, deformed, entry, clip, scale, offsetX, offsetY, backdrops);
+                DrawDeformed(renderer, pass, deformed, entry, clip, projection, offsetX, offsetY, backdrops);
                 break;
 
             case SceneRect rect:
                 if (entry.Transformed)
                 {
-                    AddTransformedRect(pass, rect, entry, clip, scale, offsetX, offsetY);
+                    AddTransformedRect(pass, rect, entry, clip, projection, offsetX, offsetY);
                     break;
                 }
 
                 pass.AddRect(
                     ScaleColor(rect.Color, entry.Alpha),
-                    OutputScaling.ToPhysical(new Box(entry.X, entry.Y, rect.Width, rect.Height), scale).Translated(-offsetX, -offsetY),
+                    projection.MapPixels(
+                        OutputScaling.ToPhysical(new Box(entry.X, entry.Y, rect.Width, rect.Height), scale).Translated(-offsetX, -offsetY)),
                     clip);
                 break;
 
@@ -583,11 +587,11 @@ public sealed partial class Scene
                 {
                     if (entry.Transformed)
                     {
-                        AddTransformedBackdrop(pass, buffer, entry, clip, scale, offsetX, offsetY);
+                        AddTransformedBackdrop(pass, buffer, entry, clip, projection, offsetX, offsetY);
                     }
                     else
                     {
-                        AddBackdrop(pass, buffer, entry, clip, scale, offsetX, offsetY);
+                        AddBackdrop(pass, buffer, entry, clip, projection, offsetX, offsetY);
                     }
                 }
 
@@ -596,7 +600,7 @@ public sealed partial class Scene
                     var (width, height) = buffer.Size;
                     if (entry.Transformed)
                     {
-                        var matrix = PhysicalTransform(entry.Transform, scale, offsetX, offsetY);
+                        var matrix = PhysicalTransform(entry.Transform, projection, offsetX, offsetY);
                         if (scale != 1.0)
                         {
                             matrix = RenderTransform.Multiply(matrix, RenderTransform.Scale(1.0 / scale, 1.0 / scale));
@@ -619,6 +623,7 @@ public sealed partial class Scene
                         {
                             SrcBox = buffer.SourceBox,
                             DstBox = OutputScaling.ToPhysical(new Box(entry.X, entry.Y, width, height), scale).Translated(-offsetX, -offsetY),
+                            Transform = projection.MapsPixels ? projection.Matrix : RenderTransform.Identity,
                             Alpha = entry.Alpha,
                             Clip = clip,
                             Lut = buffer.Lut,
@@ -645,7 +650,7 @@ public sealed partial class Scene
 
     private static void DrawSceneMesh(
         IRenderer renderer, IRenderPass pass, SceneMesh mesh, in RenderEntry entry, PixmanRegion32? clip,
-        double scale, int offsetX, int offsetY)
+        in OutputProjection projection, int offsetX, int offsetY)
     {
         if (mesh.Source is not { } source || mesh.Bounds.IsEmpty)
         {
@@ -662,7 +667,7 @@ public sealed partial class Scene
         source.WriteVertices(mesh.Bounds, vertices);
 
         var full = RenderTransform.Multiply(
-            PhysicalTransform(entry.Transformed ? entry.Transform : RenderTransform.Identity, scale, offsetX, offsetY),
+            PhysicalTransform(entry.Transformed ? entry.Transform : RenderTransform.Identity, projection, offsetX, offsetY),
             RenderTransform.Translation(entry.X, entry.Y));
         MapVertices(vertices, full, entry.Alpha);
 
@@ -672,16 +677,16 @@ public sealed partial class Scene
 
     private static void DrawSceneShader(
         IRenderPass pass, SceneShader node, in RenderEntry entry, PixmanRegion32? clip,
-        double scale, int offsetX, int offsetY)
+        in OutputProjection projection, int offsetX, int offsetY)
     {
         if (node.Shader is not { } shader || node.Bounds.IsEmpty || entry.Transformed)
         {
             return;
         }
 
-        var dst = OutputScaling
-            .ToPhysical(node.Bounds.Translated(entry.X, entry.Y), scale)
-            .Translated(-offsetX, -offsetY);
+        var dst = projection.MapPixels(OutputScaling
+            .ToPhysical(node.Bounds.Translated(entry.X, entry.Y), projection.Scale)
+            .Translated(-offsetX, -offsetY));
         if (dst.IsEmpty)
         {
             return;
@@ -692,7 +697,7 @@ public sealed partial class Scene
 
     private static void DrawDeformed(
         IRenderer renderer, IRenderPass pass, SceneTransform node, in RenderEntry entry, PixmanRegion32? clip,
-        double scale, int offsetX, int offsetY, bool backdrops)
+        in OutputProjection projection, int offsetX, int offsetY, bool backdrops)
     {
         if (node.Deformer is not { } deformer)
         {
@@ -743,7 +748,7 @@ public sealed partial class Scene
         }
 
         var full = RenderTransform.Multiply(
-            PhysicalTransform(entry.Transformed ? entry.Transform : RenderTransform.Identity, scale, offsetX, offsetY),
+            PhysicalTransform(entry.Transformed ? entry.Transform : RenderTransform.Identity, projection, offsetX, offsetY),
             RenderTransform.Multiply(RenderTransform.Translation(entry.X, entry.Y), node.Matrix));
         if (backdrops && renderer.SupportsBackdropEffects)
         {
@@ -856,20 +861,24 @@ public sealed partial class Scene
         ? color
         : new RenderColor(color.R * alpha, color.G * alpha, color.B * alpha, color.A * alpha);
 
-    private static RenderTransform PhysicalTransform(in RenderTransform frame, double scale, int offsetX, int offsetY)
+    private static RenderTransform PhysicalTransform(in RenderTransform frame, in OutputProjection projection, int offsetX, int offsetY)
     {
+        var scale = projection.Scale;
         var physical = scale == 1.0
             ? frame
             : RenderTransform.Multiply(RenderTransform.Scale(scale, scale), frame);
-        return offsetX == 0 && offsetY == 0
+        var placed = offsetX == 0 && offsetY == 0
             ? physical
             : RenderTransform.Multiply(RenderTransform.Translation(-offsetX, -offsetY), physical);
+        return projection.MapsPixels
+            ? RenderTransform.Multiply(projection.Matrix, placed)
+            : placed;
     }
 
     private static void AddTransformedRect(
-        IRenderPass pass, SceneRect rect, in RenderEntry entry, PixmanRegion32? clip, double scale, int offsetX, int offsetY)
+        IRenderPass pass, SceneRect rect, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY)
     {
-        var transform = PhysicalTransform(entry.Transform, scale, offsetX, offsetY);
+        var transform = PhysicalTransform(entry.Transform, projection, offsetX, offsetY);
         var color = ScaleColor(rect.Color, entry.Alpha);
         var (x0, y0) = transform.Map(entry.X, entry.Y);
         var (x1, y1) = transform.Map(entry.X + rect.Width, entry.Y);
@@ -888,7 +897,7 @@ public sealed partial class Scene
     }
 
     private static void AddBackdrop(
-        IRenderPass pass, SceneBuffer buffer, in RenderEntry entry, PixmanRegion32? clip, double scale, int offsetX, int offsetY)
+        IRenderPass pass, SceneBuffer buffer, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY)
     {
         var (width, height) = buffer.Size;
         NodeScratch.Reset(new PixmanBox32(0, 0, width, height));
@@ -897,9 +906,9 @@ public sealed partial class Scene
         BackdropScratch.Clear();
         foreach (var rect in RegionRects.Of(LocalScratch))
         {
-            var physical = OutputScaling
-                .ToPhysical(new Box(entry.X + rect.X1, entry.Y + rect.Y1, rect.X2 - rect.X1, rect.Y2 - rect.Y1), scale)
-                .Translated(-offsetX, -offsetY);
+            var physical = projection.MapPixels(OutputScaling
+                .ToPhysical(new Box(entry.X + rect.X1, entry.Y + rect.Y1, rect.X2 - rect.X1, rect.Y2 - rect.Y1), projection.Scale)
+                .Translated(-offsetX, -offsetY));
             if (!physical.IsEmpty)
             {
                 BackdropScratch.UnionRect(BackdropScratch, physical.X, physical.Y, (uint)physical.Width, (uint)physical.Height);
@@ -924,13 +933,13 @@ public sealed partial class Scene
     }
 
     private static void AddTransformedBackdrop(
-        IRenderPass pass, SceneBuffer buffer, in RenderEntry entry, PixmanRegion32? clip, double scale, int offsetX, int offsetY)
+        IRenderPass pass, SceneBuffer buffer, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY)
     {
         var (width, height) = buffer.Size;
         NodeScratch.Reset(new PixmanBox32(0, 0, width, height));
         LocalScratch.Intersect(buffer.BackdropRegion!, NodeScratch);
 
-        var transform = PhysicalTransform(entry.Transform, scale, offsetX, offsetY);
+        var transform = PhysicalTransform(entry.Transform, projection, offsetX, offsetY);
         BackdropScratch.Clear();
         foreach (var rect in RegionRects.Of(LocalScratch))
         {

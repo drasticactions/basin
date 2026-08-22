@@ -403,7 +403,11 @@ internal sealed partial class Westonia : IDisposable
 
         var mode = view.Output.CurrentMode;
         var target = new MemoryBuffer(mode.Width, mode.Height, DrmFormat.Xrgb8888);
-        if (_scene.Render(_renderer, target, new RenderColor(0f, 0f, 0f, 1f), view.Output.Scale))
+        if (_scene.Render(_renderer, target, new SceneRenderOptions
+            {
+                Background = new RenderColor(0f, 0f, 0f, 1f),
+                Projection = OutputProjection.For(view.Output),
+            }))
         {
             BufferCapture.WritePng(target, path);
             _log.LogInformation("screenshot written to {Path}", path);

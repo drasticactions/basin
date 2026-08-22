@@ -181,7 +181,7 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
             }
 
             var mode = output.CurrentMode;
-            var physical = OutputScaling.ToPhysical(new Box(e.X, e.Y, e.Width, e.Height), output.Scale);
+            var physical = OutputProjection.For(output).Project(new Box(e.X, e.Y, e.Width, e.Height));
             var x = Math.Clamp(physical.X, 0, mode.Width);
             var y = Math.Clamp(physical.Y, 0, mode.Height);
             var region = new Box(

@@ -14,6 +14,7 @@ public sealed class SceneOutput : IDisposable
     private readonly PixmanRegion32 _difference = new();
     private Point _position;
     private double _scale;
+    private OutputProjection _projection;
     private BufferLock _scanoutHold;
     private int _scanoutStreak;
     private bool _scanningOut;
@@ -34,6 +35,7 @@ public sealed class SceneOutput : IDisposable
         _scene = scene;
         Output = output;
         _scale = output.Scale;
+        _projection = OutputProjection.For(output);
         Ring = new DamageRing(output.CurrentMode.Width, output.CurrentMode.Height);
         scene.Damaged += OnSceneDamaged;
         scene.FrameRequested += OnFrameRequested;
@@ -193,7 +195,8 @@ public sealed class SceneOutput : IDisposable
         if (_softwareCursor.Buffer is { } image)
         {
             var wasEmpty = Ring.IsEmpty;
-            Ring.Add(new Box(_cursorX - _cursorHotspotX, _cursorY - _cursorHotspotY, image.Width, image.Height));
+            Ring.Add(_projection.MapPixels(
+                new Box(_cursorX - _cursorHotspotX, _cursorY - _cursorHotspotY, image.Width, image.Height)));
             if (wasEmpty && !Ring.IsEmpty)
             {
                 DamagePending?.Invoke();
@@ -383,6 +386,7 @@ public sealed class SceneOutput : IDisposable
     {
 
         _scale = Output.Scale;
+        _projection = OutputProjection.For(Output);
         _runsBackdropEffects = renderer.SupportsBackdropEffects;
         Ring.Resize(mode.Width, mode.Height);
         _renderList.Clear();
@@ -399,7 +403,7 @@ public sealed class SceneOutput : IDisposable
             Ring.AddWhole();
         }
 
-        if (_postStages.Count == 0 &&
+        if (_postStages.Count == 0 && !_projection.IsTransformed &&
             options.AllowDirectScanout && _softwareCursor.Buffer is null && TryDirectScanout(state))
         {
             return true;
@@ -415,7 +419,7 @@ public sealed class SceneOutput : IDisposable
         _offloadedNowBoxes.Clear();
         _layers.Clear();
         var sendLayers = false;
-        if (options.AllowPlaneOffload && _softwareCursor.Buffer is null && _postStages.Count == 0)
+        if (options.AllowPlaneOffload && !_projection.IsTransformed && _softwareCursor.Buffer is null && _postStages.Count == 0)
         {
             SelectOverlayCandidates(mode, options.MaxOffloadLayers);
         }
@@ -923,6 +927,7 @@ public sealed class SceneOutput : IDisposable
             pass.AddTexture(cursorTexture, new TextureRenderOptions
             {
                 DstBox = new Box(_cursorX - _cursorHotspotX, _cursorY - _cursorHotspotY, cursorImage.Width, cursorImage.Height),
+                Transform = _projection.MapsPixels ? _projection.Matrix : RenderTransform.Identity,
                 Clip = _damage,
             });
         }
@@ -957,7 +962,7 @@ public sealed class SceneOutput : IDisposable
 
             if (entry.Clip is { } clipBox)
             {
-                physical = physical.Intersect(OutputScaling.ToPhysical(clipBox, _scale));
+                physical = physical.Intersect(_projection.Project(clipBox));
                 if (physical.IsEmpty)
                 {
                     clip.Clear();
@@ -1005,7 +1010,7 @@ public sealed class SceneOutput : IDisposable
             var clip = PoolRegion(i + 1);
             if (!clip.IsEmpty)
             {
-                Scene.DrawEntry(renderer, pass, _renderList[i], clip, _scale);
+                Scene.DrawEntry(renderer, pass, _renderList[i], clip, _projection);
             }
         }
 
@@ -1025,14 +1030,14 @@ public sealed class SceneOutput : IDisposable
 
     private bool CoversWholeNode(in Scene.RenderEntry entry, in Box physical) =>
         entry.Clip is not { } clipBox ||
-        OutputScaling.ToPhysical(clipBox, _scale).Contains(physical);
+        _projection.Project(clipBox).Contains(physical);
 
     private Box EntryPhysical(in Scene.RenderEntry entry, in Box bounds)
     {
         var logical = bounds.Translated(entry.X, entry.Y);
         if (!entry.Transformed)
         {
-            return OutputScaling.ToPhysical(logical, _scale);
+            return _projection.Project(logical);
         }
 
         if (!entry.Transform.TryMapBounds(logical, out var hull))
@@ -1040,7 +1045,7 @@ public sealed class SceneOutput : IDisposable
             return default;
         }
 
-        var physical = OutputScaling.ToPhysical(hull, _scale);
+        var physical = _projection.Project(hull);
         return new Box(physical.X - 1, physical.Y - 1, physical.Width + 2, physical.Height + 2);
     }
 
@@ -1135,9 +1140,10 @@ public sealed class SceneOutput : IDisposable
             DamagePending?.Invoke();
         }
 
-        if (Output.Scale != _scale)
+        if (Output.Scale != _scale || Output.Transform != _projection.Transform)
         {
             _scale = Output.Scale;
+            _projection = OutputProjection.For(Output);
             Ring.AddWhole();
             DamagePending?.Invoke();
         }
@@ -1256,8 +1262,8 @@ public sealed class SceneOutput : IDisposable
 
     private void OnSceneDamaged(SceneNode? source, Box box)
     {
-        var local = OutputScaling.ToPhysicalExpanded(
-            new Box(box.X - _position.X, box.Y - _position.Y, box.Width, box.Height), _scale);
+        var local = _projection.ProjectExpanded(
+            new Box(box.X - _position.X, box.Y - _position.Y, box.Width, box.Height));
         if (local.X >= Ring.Width || local.Y >= Ring.Height || local.Right <= 0 || local.Bottom <= 0)
         {
             return;

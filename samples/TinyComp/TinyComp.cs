@@ -1190,7 +1190,7 @@ internal sealed partial class TinyComp : IDisposable
     {
         var box = _layout.BoxOf(output);
         _scene.Root.SetPosition(-box.X, -box.Y);
-        var ok = _scene.Render(_renderer, target, Background, output.Scale);
+        var ok = _scene.Render(_renderer, target, SceneOptions(output));
         _scene.Root.SetPosition(0, 0);
         return ok;
     }
@@ -1992,6 +1992,12 @@ internal sealed partial class TinyComp : IDisposable
         Scale = scale,
     };
 
+    private SceneRenderOptions SceneOptions(IOutput output) => new()
+    {
+        Background = Background,
+        Projection = OutputProjection.For(output),
+    };
+
     private void RenderOutput(OutputView view)
     {
         _frameClock.BeginFrameAtNextRefresh(view.Output);
@@ -2003,7 +2009,7 @@ internal sealed partial class TinyComp : IDisposable
 
         var box = _layout.BoxOf(view.Output);
         _scene.Root.SetPosition(-box.X, -box.Y);
-        if (!_scene.Render(_renderer, target, SceneOptions(view.Output.Scale)))
+        if (!_scene.Render(_renderer, target, SceneOptions(view.Output)))
         {
             Console.WriteLine("SHOT render failed");
         }
@@ -2860,7 +2866,7 @@ internal sealed partial class TinyComp : IDisposable
 
         var box = _layout.BoxOf(view.Output);
         _scene.Root.SetPosition(-box.X, -box.Y);
-        var rendered = _scene.Render(_renderer, buffer, Background, view.Output.Scale);
+        var rendered = _scene.Render(_renderer, buffer, SceneOptions(view.Output));
         _scene.Root.SetPosition(0, 0);
         if (!rendered)
         {
@@ -3572,7 +3578,7 @@ internal sealed partial class TinyComp : IDisposable
         var target = new MemoryBuffer(view.Width, view.Height, DrmFormat.Xrgb8888);
         try
         {
-            _scene.Render(_renderer, target, SceneOptions(view.Output.Scale));
+            _scene.Render(_renderer, target, SceneOptions(view.Output));
             Basin.Diagnostics.BufferCapture.WritePng(target, path);
             Console.WriteLine($"SHOT {path}");
         }

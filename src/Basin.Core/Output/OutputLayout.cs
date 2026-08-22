@@ -42,6 +42,8 @@ public sealed class OutputLayout
         var entry = new Entry(output, new Point(x, y));
         _entries.Add(entry);
         output.Destroyed += entry.OnDestroyed = () => Remove(output);
+        output.Committed += entry.OnCommitted = fields => OnOutputCommitted(entry, fields);
+        entry.LastBox = entry.Box;
         OutputGlobal.For(output)?.NotifyPosition(x, y);
         Changed?.Invoke();
     }
@@ -84,12 +86,36 @@ public sealed class OutputLayout
                     output.Destroyed -= handler;
                 }
 
+                if (_entries[i].OnCommitted is { } committed)
+                {
+                    output.Committed -= committed;
+                }
+
                 _entries.RemoveAt(i);
                 return true;
             }
         }
 
         return false;
+    }
+
+    private void OnOutputCommitted(Entry entry, OutputStateFields fields)
+    {
+        const OutputStateFields Resized =
+            OutputStateFields.Mode | OutputStateFields.Scale | OutputStateFields.Transform;
+        if ((fields & Resized) == 0)
+        {
+            return;
+        }
+
+        var box = entry.Box;
+        if (box == entry.LastBox)
+        {
+            return;
+        }
+
+        entry.LastBox = box;
+        Changed?.Invoke();
     }
 
     public bool Contains(IOutput output)
@@ -166,14 +192,27 @@ public sealed class OutputLayout
         ArgumentNullException.ThrowIfNull(output);
         var box = BoxOf(output);
         var scale = output.Scale;
-        return (box.X + (physicalX / scale), box.Y + (physicalY / scale));
+        var (x, y) = (physicalX, physicalY);
+        if (output.Transform != OutputTransform.Normal)
+        {
+            var mode = output.CurrentMode;
+            (x, y) = output.Transform.ToMatrix(mode.Width, mode.Height).Map(physicalX, physicalY);
+        }
+
+        return (box.X + (x / scale), box.Y + (y / scale));
     }
 
     public (double X, double Y) FromNormalized(IOutput output, double normalizedX, double normalizedY)
     {
         ArgumentNullException.ThrowIfNull(output);
         var box = BoxOf(output);
-        return (box.X + (normalizedX * box.Width), box.Y + (normalizedY * box.Height));
+        var (x, y) = (normalizedX, normalizedY);
+        if (output.Transform != OutputTransform.Normal)
+        {
+            (x, y) = output.Transform.ToMatrix(1, 1).Map(normalizedX, normalizedY);
+        }
+
+        return (box.X + (x * box.Width), box.Y + (y * box.Height));
     }
 
     public IOutput? OutputAt(double x, double y)
@@ -227,6 +266,10 @@ public sealed class OutputLayout
         public Point Position { get; set; } = position;
 
         public Action? OnDestroyed { get; set; }
+
+        public Action<OutputStateFields>? OnCommitted { get; set; }
+
+        public Box LastBox { get; set; }
 
         public Box Box
         {

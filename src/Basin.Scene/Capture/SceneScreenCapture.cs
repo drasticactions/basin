@@ -114,7 +114,22 @@ public sealed class SceneScreenCapture : IScreenCapture
     public bool TryCursorState(IOutput output, out CaptureCursorState cursor)
     {
         ArgumentNullException.ThrowIfNull(output);
-        cursor = default;
+        var projection = OutputProjection.For(output);
+        if (!TryCursorPixels(output, projection, out var x, out var y))
+        {
+            cursor = default;
+            return false;
+        }
+
+        var (mappedX, mappedY) = projection.MapPoint(x, y);
+        cursor = _cursor with { X = mappedX, Y = mappedY };
+        return true;
+    }
+
+    private bool TryCursorPixels(IOutput output, in OutputProjection projection, out int x, out int y)
+    {
+        x = 0;
+        y = 0;
         if (!_cursor.IsVisible)
         {
             return false;
@@ -122,36 +137,31 @@ public sealed class SceneScreenCapture : IScreenCapture
 
         var box = _layout.BoxOf(output);
         var scale = output.Scale;
-        var x = (int)Math.Round((_cursor.X - box.X) * scale);
-        var y = (int)Math.Round((_cursor.Y - box.Y) * scale);
+        x = (int)Math.Round((_cursor.X - box.X) * scale);
+        y = (int)Math.Round((_cursor.Y - box.Y) * scale);
         var left = x - _cursor.HotspotX;
         var top = y - _cursor.HotspotY;
-        var mode = output.CurrentMode;
-        if (left + _cursor.Width <= 0 || top + _cursor.Height <= 0 || left >= mode.Width || top >= mode.Height)
-        {
-            return false;
-        }
-
-        cursor = _cursor with { X = x, Y = y };
-        return true;
+        return left + _cursor.Width > 0 && top + _cursor.Height > 0 &&
+            left < projection.Width && top < projection.Height;
     }
 
     private bool CaptureOutput(IOutput output, in Box region, IBuffer target, bool overlayCursor)
     {
         var box = _layout.BoxOf(output);
-        if (!RenderAt(box.X + region.X, box.Y + region.Y, output.Scale, target))
+        var projection = OutputProjection.For(output).CroppedTo(region.X, region.Y);
+        if (!RenderAt(box.X, box.Y, projection, target))
         {
             return false;
         }
 
-        return !overlayCursor || DrawCursorOver(output, region, target);
+        return !overlayCursor || DrawCursorOver(output, projection, target);
     }
 
-    private bool DrawCursorOver(IOutput output, in Box region, IBuffer target)
+    private bool DrawCursorOver(IOutput output, in OutputProjection projection, IBuffer target)
     {
         if (_cursorBuffer is not { } image ||
             Renderer is not { } renderer ||
-            !TryCursorState(output, out var cursor))
+            !TryCursorPixels(output, projection, out var x, out var y))
         {
             return true;
         }
@@ -165,12 +175,9 @@ public sealed class SceneScreenCapture : IScreenCapture
         var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
         pass.AddTexture(texture, new TextureRenderOptions
         {
-            SrcBox = new FBox(0, 0, cursor.Width, cursor.Height),
-            DstBox = new Box(
-                cursor.X - cursor.HotspotX - region.X,
-                cursor.Y - cursor.HotspotY - region.Y,
-                cursor.Width,
-                cursor.Height),
+            SrcBox = new FBox(0, 0, _cursor.Width, _cursor.Height),
+            DstBox = new Box(x - _cursor.HotspotX, y - _cursor.HotspotY, _cursor.Width, _cursor.Height),
+            Transform = projection.MapsPixels ? projection.Matrix : RenderTransform.Identity,
         });
         return pass.Submit();
     }
@@ -220,7 +227,10 @@ public sealed class SceneScreenCapture : IScreenCapture
         return pass.Submit();
     }
 
-    private bool RenderAt(int originX, int originY, double scale, IBuffer target)
+    private bool RenderAt(int originX, int originY, double scale, IBuffer target) =>
+        RenderAt(originX, originY, new OutputProjection(scale), target);
+
+    private bool RenderAt(int originX, int originY, in OutputProjection projection, IBuffer target)
     {
         if (Renderer is not { } renderer)
         {
@@ -233,7 +243,7 @@ public sealed class SceneScreenCapture : IScreenCapture
             return _scene.Render(renderer, target, new SceneRenderOptions
             {
                 Background = Background,
-                Scale = scale,
+                Projection = projection,
             });
         }
         finally
