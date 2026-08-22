@@ -271,7 +271,46 @@ public sealed class DamPolicyTests
     }
 
     [Fact]
-    public void Touch_down_focuses_without_a_pointer_button()
+    public void A_touch_tap_on_a_touch_client_is_delivered_and_focuses()
+    {
+        using var host = new DamTestHost();
+        var buttons = 0;
+        var pointer = host.Client.Seat!.GetPointer();
+        pointer.Button += (_, _) => buttons++;
+        var touch = host.Client.Seat!.GetTouch();
+        var touches = 0;
+        touch.Down += (_, _) => touches++;
+
+        var first = CreateToplevel(host.Client);
+        first.Surface.Commit();
+        host.PumpUntil(() => first.Serial != 0);
+        Map(host, first, 1280, 720);
+        host.PumpUntil(() => host.Dam.Views.Views.Count == 1);
+        var firstView = host.Dam.Views.Views[0];
+
+        var second = CreateToplevel(host.Client);
+        second.Surface.Commit();
+        host.PumpUntil(() => second.Serial != 0);
+        Map(host, second, 300, 200);
+        host.PumpUntil(() => host.Dam.Views.Views.Count == 2);
+        Assert.NotSame(firstView, host.Dam.Views.FocusedView);
+        host.PumpToServer();
+
+        host.Dam.DamSeat.TouchRouter.Down(0, 0, 1200, 700);
+        host.Dam.DamSeat.TouchRouter.Frame();
+        host.Dam.DamSeat.TouchRouter.Up(1, 0);
+        host.Dam.DamSeat.TouchRouter.Frame();
+        host.PumpUntil(() => touches == 1);
+        host.PumpToClient();
+
+        Assert.Same(firstView, host.Dam.Views.FocusedView);
+        Assert.Equal(0, buttons);
+        second.Surface.Destroy();
+        first.Surface.Destroy();
+    }
+
+    [Fact]
+    public void A_touch_tap_on_a_client_without_touch_drives_the_pointer()
     {
         using var host = new DamTestHost();
         var buttons = 0;
@@ -291,16 +330,15 @@ public sealed class DamPolicyTests
         Map(host, second, 300, 200);
         host.PumpUntil(() => host.Dam.Views.Views.Count == 2);
         Assert.NotSame(firstView, host.Dam.Views.FocusedView);
+        host.PumpToServer();
 
-        host.Dam.DamSeat.OnTouchDown(0, 0, 1200, 700);
-        host.Dam.DamSeat.OnTouchFrame();
-        host.Dam.DamSeat.OnTouchUp(1, 0);
-        host.Dam.DamSeat.OnTouchFrame();
-        host.PumpToClient();
-        host.PumpToClient();
+        host.Dam.DamSeat.TouchRouter.Down(0, 0, 1200, 700);
+        host.Dam.DamSeat.TouchRouter.Frame();
+        host.Dam.DamSeat.TouchRouter.Up(1, 0);
+        host.Dam.DamSeat.TouchRouter.Frame();
+        host.PumpUntil(() => buttons == 2);
 
         Assert.Same(firstView, host.Dam.Views.FocusedView);
-        Assert.Equal(0, buttons);
         second.Surface.Destroy();
         first.Surface.Destroy();
     }

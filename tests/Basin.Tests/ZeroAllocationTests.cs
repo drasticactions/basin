@@ -104,6 +104,93 @@ public sealed class ZeroAllocationTests
     }
 
     [Fact]
+    public void Touch_routing_allocates_nothing_over_1000_cycles()
+    {
+        using var host = new CompositorTestHost();
+        var screen = host.Backend.CreateTouchScreen();
+        var chrome = new CountingChrome();
+        var target = new CountingPointerTarget();
+        var idle = new Seat.SeatIdleSource();
+        var router = new Seat.TouchRouter(host.Seat.Touch)
+        {
+            Chrome = chrome,
+            Gestures = new Seat.CentroidSwipeGesture { Fingers = 3 },
+            Pointer = new Seat.TouchPointerDriver(host.Seat.Touch, target) { ClaimWithoutSurface = true },
+            Activity = idle,
+        };
+        screen.Down += (time, slot, x, y) => router.Down(time, slot, x * 160, y * 120);
+        screen.Motion += (time, slot, x, y) => router.Motion(time, slot, x * 160, y * 120);
+        screen.Up += router.Up;
+        screen.Frame += router.Frame;
+        screen.Cancel += router.Cancel;
+
+        void Cycle(int i)
+        {
+            chrome.Take = true;
+            screen.InjectDown(1, 0, 0.1, 0.1);
+            screen.InjectMotion(2, 0, 0.2, 0.2);
+            screen.InjectFrame();
+            screen.InjectUp(3, 0);
+            screen.InjectFrame();
+            chrome.Take = false;
+            screen.InjectDown(4, 1, 0.8, 0.8);
+            screen.InjectMotion(5, 1, 0.9, 0.9);
+            screen.InjectUp(6, 1);
+            screen.InjectFrame();
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Cycle(i);
+        }
+
+        NothingAllocated(1000, Cycle);
+        Assert.True(chrome.Presses >= 1000);
+        Assert.True(target.Buttons >= 2000);
+    }
+
+    private sealed class CountingChrome : Seat.ITouchChrome
+    {
+        public bool Take { get; set; }
+
+        public int Presses { get; private set; }
+
+        public bool TryPress(int id, uint timeMs, double x, double y)
+        {
+            if (!Take)
+            {
+                return false;
+            }
+
+            Presses++;
+            return true;
+        }
+
+        public void Motion(int id, uint timeMs, double x, double y)
+        {
+        }
+
+        public void Release(int id, uint timeMs, double x, double y)
+        {
+        }
+
+        public void Cancel()
+        {
+        }
+    }
+
+    private sealed class CountingPointerTarget : Seat.ITouchPointerTarget
+    {
+        public int Buttons { get; private set; }
+
+        public void Warp(uint timeMs, double x, double y)
+        {
+        }
+
+        public void Button(uint timeMs, uint button, bool pressed) => Buttons++;
+    }
+
+    [Fact]
     public void Frame_loop_allocates_nothing_at_fractional_scale()
     {
         using var host = new CompositorTestHost();

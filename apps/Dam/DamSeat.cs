@@ -13,7 +13,11 @@ using Xkb;
 
 namespace Dam;
 
-internal sealed class DamSeat : IDisposable
+internal sealed class DamSeat :
+    IDisposable,
+    ITouchHitTester,
+    ITouchPointerTarget,
+    ITouchActivitySink
 {
     private const uint BtnLeft = 0x110;
 
@@ -32,18 +36,16 @@ internal sealed class DamSeat : IDisposable
     private readonly CursorImageTheme _cursorTheme;
     private readonly SeatIdleSource _idle;
     private readonly RelativePointerManager _relativePointer;
-    private readonly TouchPoints _touchPoints = new();
     private readonly Action _stop;
     private readonly bool _allowVtSwitch;
     private readonly ILogger _log;
 
     private readonly SeatBinder _binder;
 
+    private readonly SeatTouchDriver _touch;
+
     private LibinputBackend? _libinput;
-    private int _livePoints;
     private int _touchId = -1;
-    private double _touchX;
-    private double _touchY;
     private SceneSurface? _dragIcon;
 
     public DamSeat(
@@ -91,11 +93,21 @@ internal sealed class DamSeat : IDisposable
         _binder.Button += OnButton;
         _binder.Axis += OnAxis;
         _binder.PointerLeft += _seat.Pointer.NotifyClearFocus;
-        _binder.TouchDown += OnTouchDown;
-        _binder.TouchMotion += OnTouchMotion;
-        _binder.TouchUp += OnTouchUp;
-        _binder.TouchFrame += OnTouchFrame;
-        _binder.TouchCancelled += OnTouchCancel;
+        _touch = new SeatTouchDriver(_binder, _seat);
+        _touch.Router.HitTester = this;
+        _touch.Router.Activity = this;
+        _touch.AttachPointer(this);
+        _touch.Routed += (id, kind, surface) =>
+        {
+            if (kind == TouchTargetKind.Client && _touchId < 0)
+            {
+                _touchId = id;
+                if (_touch.Router.TryGetPosition(id, out var x, out var y))
+                {
+                    PressCursorButton(true, x, y);
+                }
+            }
+        };
 
         _seat.Capabilities = SeatCapability.None;
         _seat.Keyboard.SetKeymap(SystemKeymap.Read());
@@ -171,6 +183,8 @@ internal sealed class DamSeat : IDisposable
             _binder.BindParent(parent);
         }
     }
+
+    internal TouchRouter TouchRouter => _touch.Router;
 
     internal void Warp(double x, double y)
     {
@@ -297,85 +311,62 @@ internal sealed class DamSeat : IDisposable
         }
     }
 
-    internal void OnTouchDown(uint timeMs, int id, double x, double y)
+    void ITouchActivitySink.OnTouchActivity()
     {
-        var hit = _scene.SurfaceAt(x, y);
-        uint serial = 0;
-        if (hit is { Surface: { } surface } point)
-        {
-            _touchPoints.Down(id, x, y, point.Node);
-            serial = _seat.Touch.NotifyDown(surface, timeMs, id, point.X, point.Y);
-            _livePoints++;
-        }
-
-        if (serial != 0 && _livePoints == 1)
-        {
-            _touchId = id;
-            _touchX = x;
-            _touchY = y;
-            PressCursorButton(true, x, y);
-        }
-
+        PositionDragIcon();
         _idle.NotifyActivity();
     }
 
-    internal void OnTouchMotion(uint timeMs, int id, double x, double y)
+    bool ITouchHitTester.TryHit(double layoutX, double layoutY, out TouchHit hit)
     {
-        if (_touchPoints.TryMotion(id, x, y, out var localX, out var localY))
+        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
         {
-            _seat.Touch.NotifyMotion(timeMs, id, localX, localY);
+            hit = new TouchHit(surface, at.X, at.Y, at.Node);
+            return true;
         }
 
-        if (id == _touchId)
+        hit = default;
+        return false;
+    }
+
+    bool ITouchHitTester.TryMap(
+        object? token, double layoutX, double layoutY, out double localX, out double localY)
+    {
+        if (token is SceneNode { IsDestroyed: false } node &&
+            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
         {
-            _touchX = x;
-            _touchY = y;
-            PositionDragIcon();
+            return true;
         }
 
-        _idle.NotifyActivity();
+        localX = 0;
+        localY = 0;
+        return false;
     }
 
-    internal void OnTouchUp(uint timeMs, int id)
+    void ITouchPointerTarget.Warp(uint timeMs, double x, double y)
     {
-        if (_touchPoints.Up(id))
-        {
-            _livePoints--;
-            _seat.Touch.NotifyUp(timeMs, id);
-            if (id == _touchId)
-            {
-                _touchId = -1;
-            }
-        }
-
-        _idle.NotifyActivity();
+        _pointer.Warp(x, y);
+        ProcessCursorMotion(timeMs);
     }
 
-    internal void OnTouchFrame()
-    {
-        _seat.Touch.NotifyFrame();
-        _idle.NotifyActivity();
-    }
-
-    private void OnTouchCancel()
-    {
-        _touchPoints.Clear();
-        _livePoints = 0;
-        _touchId = -1;
-        _seat.Touch.NotifyCancel();
-        _idle.NotifyActivity();
-    }
+    void ITouchPointerTarget.Button(uint timeMs, uint button, bool pressed) =>
+        OnButton(timeMs, button, pressed);
 
     private void PositionDragIcon()
     {
+        if (_touchId >= 0 && !_touch.Router.TryGetPosition(_touchId, out _, out _))
+        {
+            _touchId = -1;
+        }
+
         if (_dragIcon is not { IsDestroyed: false } icon)
         {
             return;
         }
 
-        if (_livePoints > 0 && _touchId >= 0)
+        if (_touchId >= 0 && _touch.Router.TryGetPosition(_touchId, out var x, out var y))
         {
-            icon.Tree.SetPosition((int)_touchX, (int)_touchY);
+            icon.Tree.SetPosition((int)x, (int)y);
         }
         else
         {

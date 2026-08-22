@@ -128,6 +128,47 @@ public sealed class SeatBinder
         input.PointerButton += (_, timeMs, button, pressed) => Button?.Invoke(timeMs, button, pressed);
         input.PointerScroll += (_, timeMs, axis) => Axis?.Invoke(timeMs, axis);
 
+        WireLibinputTouch(input);
+
+        if (start)
+        {
+            input.Start();
+        }
+    }
+
+    public void BindLibinputTouch(LibinputBackend input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        input.DeviceAdded += device =>
+        {
+            if (device.HasTouch)
+            {
+                _touchDevices++;
+                _seat.SetCapability(SeatCapability.Touch, _touchDevices > 0);
+            }
+        };
+        input.DeviceRemoved += device =>
+        {
+            if (device.HasTouch)
+            {
+                _touchDevices--;
+                _seat.SetCapability(SeatCapability.Touch, _touchDevices > 0);
+            }
+        };
+
+        WireLibinputTouch(input);
+    }
+
+    public void BindParentTouch(WaylandBackend parent)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+
+        parent.TouchAdded += BindParentTouch;
+    }
+
+    private void WireLibinputTouch(LibinputBackend input)
+    {
         input.TouchDown += (device, timeMs, slot, normalizedX, normalizedY) =>
         {
             if (TouchOutput(device) is not { } on)
@@ -151,11 +192,6 @@ public sealed class SeatBinder
         input.TouchUp += (_, timeMs, slot) => TouchUp?.Invoke(timeMs, slot);
         input.TouchFrame += _ => TouchFrame?.Invoke();
         input.TouchCancel += _ => TouchCancelled?.Invoke();
-
-        if (start)
-        {
-            input.Start();
-        }
     }
 
     public void BindParent(WaylandBackend parent)

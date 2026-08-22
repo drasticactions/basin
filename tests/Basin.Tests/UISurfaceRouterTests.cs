@@ -54,24 +54,91 @@ public sealed class UISurfaceRouterTests
     }
 
     [Fact]
-    public void Buttons_axis_and_touch_reach_the_hovered_surface()
+    public void Buttons_and_axis_reach_the_hovered_surface()
     {
         using var fixture = new RouterFixture();
         var panel = fixture.Add(new Box(0, 0, 100, 100));
 
         Assert.False(fixture.Router.PointerButton(1, 272, pressed: true));
-        Assert.False(fixture.Router.TouchDown(1, 0, 5, 5));
 
         fixture.Router.PointerMotion(1, 10, 10);
         Assert.True(fixture.Router.PointerButton(2, 272, pressed: true));
         Assert.True(fixture.Router.PointerAxis(3, 0, 15));
-        Assert.True(fixture.Router.TouchDown(4, 7, 20, 30));
-        Assert.True(fixture.Router.TouchUp(5, 7));
 
         Assert.Contains("button 272 down", panel.Surface.Log);
         Assert.Contains("axis 0,15", panel.Surface.Log);
-        Assert.Contains("touch-down 7 20,30", panel.Surface.Log);
-        Assert.Contains("touch-up 7", panel.Surface.Log);
+    }
+
+    [Fact]
+    public void Touch_hit_tests_at_the_contact_and_ignores_the_pointer_hover()
+    {
+        using var fixture = new RouterFixture();
+        var left = fixture.Add(new Box(0, 0, 100, 100));
+        var right = fixture.Add(new Box(200, 0, 100, 100));
+
+        Assert.False(fixture.Router.TouchDown(1, 0, 500, 500));
+        Assert.True(fixture.Router.TouchDown(2, 0, 10, 20));
+        Assert.True(fixture.Router.TouchDown(3, 1, 210, 40));
+        Assert.True(fixture.Router.TouchMotion(4, 0, 15, 25));
+        Assert.True(fixture.Router.TouchMotion(5, 1, 220, 50));
+        Assert.True(fixture.Router.TouchUp(6, 0));
+        Assert.True(fixture.Router.TouchUp(7, 1));
+
+        Assert.Equal("touch-down 0 10,20", left.Surface.Log[0]);
+        Assert.Equal("touch-motion 0 15,25", left.Surface.Log[1]);
+        Assert.Equal("touch-up 0", left.Surface.Log[2]);
+        Assert.Equal("touch-down 1 10,40", right.Surface.Log[0]);
+        Assert.Equal("touch-motion 1 20,50", right.Surface.Log[1]);
+        Assert.Equal("touch-up 1", right.Surface.Log[2]);
+        Assert.Null(fixture.Router.Hovered);
+    }
+
+    [Fact]
+    public void A_touch_up_reaches_the_latched_surface_after_the_finger_leaves_it()
+    {
+        using var fixture = new RouterFixture();
+        var panel = fixture.Add(new Box(0, 0, 100, 100));
+
+        Assert.True(fixture.Router.TouchDown(1, 4, 50, 50));
+        Assert.True(fixture.Router.TouchMotion(2, 4, 500, 500));
+        Assert.True(fixture.Router.TouchUp(3, 4));
+        Assert.False(fixture.Router.TouchUp(4, 4));
+
+        Assert.Contains("touch-up 4", panel.Surface.Log);
+    }
+
+    [Fact]
+    public void A_cancel_reaches_every_latched_surface_once()
+    {
+        using var fixture = new RouterFixture();
+        var left = fixture.Add(new Box(0, 0, 100, 100));
+        var right = fixture.Add(new Box(200, 0, 100, 100));
+
+        Assert.True(fixture.Router.TouchDown(1, 0, 10, 10));
+        Assert.True(fixture.Router.TouchDown(2, 1, 20, 20));
+        Assert.True(fixture.Router.TouchDown(3, 2, 210, 10));
+        Assert.True(fixture.Router.TouchCancel());
+        Assert.False(fixture.Router.TouchCancel());
+
+        Assert.Single(left.Surface.Log, "touch-cancel");
+        Assert.Single(right.Surface.Log, "touch-cancel");
+    }
+
+    [Fact]
+    public void A_destroyed_surface_drops_its_touch_latch()
+    {
+        using var fixture = new RouterFixture();
+        var panel = fixture.Add(new Box(0, 0, 100, 100));
+
+        Assert.True(fixture.Router.TouchDown(1, 0, 10, 10));
+        panel.Node.Dispose();
+        panel.Surface.Dispose();
+
+        Assert.True(fixture.Router.TouchMotion(2, 0, 20, 20));
+        Assert.False(fixture.Router.TouchMotion(3, 0, 30, 30));
+
+        Assert.DoesNotContain("touch-motion 0 20,20", panel.Surface.Log);
+        Assert.DoesNotContain("touch-up 0", panel.Surface.Log);
     }
 
     [Fact]

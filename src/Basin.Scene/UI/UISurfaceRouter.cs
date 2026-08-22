@@ -5,8 +5,12 @@ namespace Basin.Scene;
 
 public sealed class UISurfaceRouter : IUISurfaceObserver
 {
+    private const int TouchCapacity = 10;
+
     private readonly Scene _scene;
     private readonly UISurfaceIndex _index;
+    private readonly IUISurface?[] _touchSurfaces = new IUISurface?[TouchCapacity];
+    private readonly int[] _touchIds = new int[TouchCapacity];
     private IUISurface? _hovered;
     private IUISurface? _focus;
 
@@ -118,48 +122,81 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
 
     public bool TouchDown(uint timeMs, int id, double x, double y)
     {
-        if (_hovered is not { } surface)
+        if (SurfaceAt(x, y) is not { } hit)
         {
             return false;
         }
 
-        TryLocal(surface, x, y, out var localX, out var localY);
-        surface.NotifyTouchDown(timeMs, id, localX, localY);
+        var slot = TouchSlotOf(id);
+        if (slot < 0)
+        {
+            slot = FreeTouchSlot();
+            if (slot < 0)
+            {
+                return false;
+            }
+        }
+
+        _touchIds[slot] = id;
+        _touchSurfaces[slot] = hit.Surface;
+        hit.Surface.NotifyTouchDown(timeMs, id, hit.X, hit.Y);
         return true;
     }
 
     public bool TouchMotion(uint timeMs, int id, double x, double y)
     {
-        if (_hovered is not { } surface)
+        var slot = TouchSlotOf(id);
+        if (slot < 0 || _touchSurfaces[slot] is not { } surface)
         {
             return false;
         }
 
-        TryLocal(surface, x, y, out var localX, out var localY);
+        if (!TryLocal(surface, x, y, out var localX, out var localY))
+        {
+            _touchSurfaces[slot] = null;
+            return true;
+        }
+
         surface.NotifyTouchMotion(timeMs, id, localX, localY);
         return true;
     }
 
     public bool TouchUp(uint timeMs, int id)
     {
-        if (_hovered is not { } surface)
+        var slot = TouchSlotOf(id);
+        if (slot < 0 || _touchSurfaces[slot] is not { } surface)
         {
             return false;
         }
 
-        surface.NotifyTouchUp(timeMs, id);
+        _touchSurfaces[slot] = null;
+        if (_index.OwnerOf(surface) is not null)
+        {
+            surface.NotifyTouchUp(timeMs, id);
+        }
+
         return true;
     }
 
     public bool TouchCancel()
     {
-        if (_hovered is not { } surface)
+        var any = false;
+        for (var i = 0; i < TouchCapacity; i++)
         {
-            return false;
+            if (_touchSurfaces[i] is not { } surface)
+            {
+                continue;
+            }
+
+            any = true;
+            _touchSurfaces[i] = null;
+            if (!TouchLatched(surface) && _index.OwnerOf(surface) is not null)
+            {
+                surface.NotifyTouchCancel();
+            }
         }
 
-        surface.NotifyTouchCancel();
-        return true;
+        return any;
     }
 
     public void SetKeyboardFocus(IUISurface? surface, ReadOnlySpan<uint> pressed = default)
@@ -231,6 +268,14 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
 
     public void Forget(IUISurface surface)
     {
+        for (var i = 0; i < TouchCapacity; i++)
+        {
+            if (ReferenceEquals(_touchSurfaces[i], surface))
+            {
+                _touchSurfaces[i] = null;
+            }
+        }
+
         if (ReferenceEquals(surface, _hovered))
         {
             _hovered = null;
@@ -270,5 +315,44 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
         {
             surface.RemoveObserver(this);
         }
+    }
+
+    private bool TouchLatched(IUISurface surface)
+    {
+        for (var i = 0; i < TouchCapacity; i++)
+        {
+            if (ReferenceEquals(_touchSurfaces[i], surface))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int TouchSlotOf(int id)
+    {
+        for (var i = 0; i < TouchCapacity; i++)
+        {
+            if (_touchSurfaces[i] is not null && _touchIds[i] == id)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private int FreeTouchSlot()
+    {
+        for (var i = 0; i < TouchCapacity; i++)
+        {
+            if (_touchSurfaces[i] is null)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 }

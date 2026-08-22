@@ -13,7 +13,12 @@ using Xkb;
 
 namespace EightWm;
 
-internal sealed partial class ShellSeat : IDisposable
+internal sealed partial class ShellSeat :
+    IDisposable,
+    ITouchHitTester,
+    ITouchChrome,
+    ITouchActivitySink,
+    IEdgeSwipeHandler
 {
     internal const uint BtnLeft = 0x110;
     internal const uint BtnRight = 0x111;
@@ -32,10 +37,10 @@ internal sealed partial class ShellSeat : IDisposable
     private readonly CursorImageTheme _cursorTheme;
     private readonly SeatIdleSource _idle;
     private readonly RelativePointerManager _relativePointer;
-    private readonly TouchPoints _touchPoints = new();
-    private readonly EdgeSwipeRecognizer _edges = new();
-    private readonly EdgeSwipeSample[] _replay = new EdgeSwipeSample[EdgeSwipeRecognizer.WithheldCapacity];
+    private readonly EdgeSwipeGesture _edgeGesture = new();
+    private readonly SeatTouchDriver _touch;
     private ShellView? _edgeView;
+    private bool _pointerEdge;
     private readonly ILogger _log;
 
     private readonly SeatBinder _binder;
@@ -88,11 +93,19 @@ internal sealed partial class ShellSeat : IDisposable
         _binder.Button += OnButton;
         _binder.Axis += OnAxis;
         _binder.PointerLeft += _seat.Pointer.NotifyClearFocus;
-        _binder.TouchDown += OnTouchDown;
-        _binder.TouchMotion += OnTouchMotion;
-        _binder.TouchUp += OnTouchUp;
-        _binder.TouchFrame += _seat.Touch.NotifyFrame;
-        _binder.TouchCancelled += OnTouchCancel;
+        _touch = new SeatTouchDriver(_binder, _seat);
+        _edgeGesture.Handler = this;
+        _touch.Router.Gestures = _edgeGesture;
+        _touch.Router.HitTester = this;
+        _touch.Router.Chrome = this;
+        _touch.Router.Activity = this;
+        _touch.Routed += (_, _, surface) =>
+        {
+            if (surface is not null)
+            {
+                _shell.Focus(_shell.OwnerOf(surface));
+            }
+        };
 
         _seat.Capabilities = SeatCapability.None;
         _seat.Keyboard.SetKeymap(SystemKeymap.Read());
@@ -224,10 +237,10 @@ internal sealed partial class ShellSeat : IDisposable
     {
         var time = (uint)Environment.TickCount;
         _seat.SetCapability(SeatCapability.Touch, true);
-        OnTouchDown(time, 0, x, y);
-        _seat.Touch.NotifyFrame();
-        OnTouchUp(time + 1, 0);
-        _seat.Touch.NotifyFrame();
+        _touch.Router.Down(time, 0, x, y);
+        _touch.Router.Frame();
+        _touch.Router.Up(time + 1, 0);
+        _touch.Router.Frame();
     }
 
     internal void DescribeCursor(IOutput output, ImageDescription? description) =>
@@ -296,6 +309,26 @@ internal sealed partial class ShellSeat : IDisposable
         uint timeMs, double dx = 0, double dy = 0, double? unaccelDx = null, double? unaccelDy = null,
         bool fromMotion = true)
     {
+        if (_pointerEdge)
+        {
+            switch (_touch.Router.SyntheticMotion(PointerTouchId, timeMs, _pointer.X, _pointer.Y))
+            {
+                case TouchGestureVerdict.Withhold:
+                case TouchGestureVerdict.Claim:
+                case TouchGestureVerdict.Owned:
+                    _cursor.MoveTo(_pointer.X, _pointer.Y);
+                    _idle.NotifyActivity();
+                    return;
+                case TouchGestureVerdict.Decline:
+                    _pointerEdge = false;
+                    RouteButton(timeMs, BtnLeft, pressed: true);
+                    break;
+                default:
+                    _pointerEdge = false;
+                    break;
+            }
+        }
+
         if (fromMotion)
         {
             UsePointer();
@@ -404,6 +437,32 @@ internal sealed partial class ShellSeat : IDisposable
 
     internal void OnButton(uint timeMs, uint button, bool pressed)
     {
+        if (button == BtnLeft && pressed && !_pointerEdge &&
+            _touch.Router.SyntheticDown(PointerTouchId, timeMs, _pointer.X, _pointer.Y) ==
+            TouchGestureVerdict.Withhold)
+        {
+            _pointerEdge = true;
+            return;
+        }
+
+        if (button == BtnLeft && !pressed && _pointerEdge)
+        {
+            _pointerEdge = false;
+            switch (_touch.Router.SyntheticUp(PointerTouchId, timeMs))
+            {
+                case TouchGestureVerdict.Finish:
+                    return;
+                case TouchGestureVerdict.Decline:
+                    RouteButton(timeMs, BtnLeft, pressed: true);
+                    break;
+            }
+        }
+
+        RouteButton(timeMs, button, pressed);
+    }
+
+    private void RouteButton(uint timeMs, uint button, bool pressed)
+    {
         _idle.NotifyActivity();
         UsePointer();
         if (button == BtnLeft && !pressed && _splitView is { } dragging)
@@ -502,91 +561,66 @@ internal sealed partial class ShellSeat : IDisposable
 
     private int _splitTouch = -1;
 
-    internal void OnTouchDown(uint timeMs, int id, double x, double y)
+    void ITouchActivitySink.OnTouchActivity()
     {
         _idle.NotifyActivity();
         UseTouch();
-        var edgeView = _shell.ViewAt(x, y);
-        if (_shell.ChromePress(edgeView, x - edgeView.Box.X, y - edgeView.Box.Y, id))
-        {
-            _touchPoints.Down(id, x, y, null);
-            return;
-        }
-
-        _edges.BandWidth = _shell.EdgeBandNow;
-        var action = _edges.Begin(
-            id, x - edgeView.Box.X, y - edgeView.Box.Y, edgeView.Box.Width, edgeView.Box.Height, timeMs);
-        _log.LogDebug(
-            "touch down {Id} at {X},{Y} band={Action} edge={Edge}", id, x, y, action, _edges.Edge);
-        if (action == EdgeSwipeAction.Withhold)
-        {
-            _edgeView = edgeView;
-            return;
-        }
-
-        if (_splitTouch < 0)
-        {
-            var view = _shell.ViewAt(x, y);
-            if (_shell.BeginSplitDrag(view, x - view.Box.X, y - view.Box.Y))
-            {
-                _splitView = view;
-                _splitTouch = id;
-                _touchPoints.Down(id, x, y, null);
-                return;
-            }
-        }
-
-        var chromeView = edgeView;
-        if (_scene.SurfaceAt(x, y) is { Surface: { } surface } hit)
-        {
-            _shell.Focus(_shell.OwnerOf(surface));
-            _touchPoints.Down(id, x, y, hit.Node);
-            _seat.Touch.NotifyDown(surface, timeMs, id, hit.X, hit.Y);
-            return;
-        }
-
-        _touchPoints.Down(id, x, y, null);
-        _shell.StartPress(chromeView, x - chromeView.Box.X, y - chromeView.Box.Y, id);
     }
 
-    internal void OnTouchMotion(uint timeMs, int id, double x, double y)
+    bool ITouchHitTester.TryHit(double layoutX, double layoutY, out TouchHit hit)
     {
-        _idle.NotifyActivity();
-        if (_edgeView is { } tracking)
+        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
         {
-            var update = _edges.Update(id, x - tracking.Box.X, y - tracking.Box.Y, timeMs);
-            if (update != EdgeSwipeAction.Track)
-            {
-                _log.LogDebug(
-                    "touch move {Id} at {X},{Y} t={Time} -> {Action} progress={Progress:F2}",
-                    id, x, y, timeMs, update, _edges.Progress);
-            }
-
-            switch (update)
-            {
-                case EdgeSwipeAction.Withhold:
-                    return;
-
-                case EdgeSwipeAction.Claim:
-                    _seat.Touch.NotifyCancel();
-                    _touchPoints.Clear();
-                    _shell.TrackEdgeGesture(tracking, _edges);
-                    return;
-
-                case EdgeSwipeAction.Track:
-                    _shell.TrackEdgeGesture(tracking, _edges);
-                    return;
-
-                case EdgeSwipeAction.Decline:
-                    _edgeView = null;
-                    ReplayWithheld(id, x - tracking.Box.X, y - tracking.Box.Y, tracking);
-                    break;
-            }
+            hit = new TouchHit(surface, at.X, at.Y, at.Node);
+            return true;
         }
 
+        hit = default;
+        return false;
+    }
+
+    bool ITouchHitTester.TryMap(
+        object? token, double layoutX, double layoutY, out double localX, out double localY)
+    {
+        if (token is SceneNode { IsDestroyed: false } node &&
+            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
+        {
+            return true;
+        }
+
+        localX = 0;
+        localY = 0;
+        return false;
+    }
+
+    bool ITouchChrome.TryPress(int id, uint timeMs, double x, double y)
+    {
+        var view = _shell.ViewAt(x, y);
+        if (_shell.ChromePress(view, x - view.Box.X, y - view.Box.Y, id))
+        {
+            return true;
+        }
+
+        if (_splitTouch < 0 && _shell.BeginSplitDrag(view, x - view.Box.X, y - view.Box.Y))
+        {
+            _splitView = view;
+            _splitTouch = id;
+            return true;
+        }
+
+        if (_scene.SurfaceAt(x, y) is not null)
+        {
+            return false;
+        }
+
+        _shell.StartPress(view, x - view.Box.X, y - view.Box.Y, id);
+        return true;
+    }
+
+    void ITouchChrome.Motion(int id, uint timeMs, double x, double y)
+    {
         if (id == _splitTouch && _splitView is { } dragging)
         {
-            _ = _touchPoints.TryMotion(id, x, y, out _, out _);
             _shell.DragSplitter(dragging, x - dragging.Box.X, y - dragging.Box.Y);
             return;
         }
@@ -594,48 +628,14 @@ internal sealed partial class ShellSeat : IDisposable
         var view = _shell.ViewAt(x, y);
         if (_shell.ChromeMove(view, x - view.Box.X, y - view.Box.Y, id))
         {
-            _ = _touchPoints.TryMotion(id, x, y, out _, out _);
             return;
         }
 
-        if (_shell.StartMove(x - view.Box.X, y - view.Box.Y, id))
-        {
-            _ = _touchPoints.TryMotion(id, x, y, out _, out _);
-            return;
-        }
-
-        if (_touchPoints.TryMotion(id, x, y, out var localX, out var localY))
-        {
-            _seat.Touch.NotifyMotion(timeMs, id, localX, localY);
-        }
+        _ = _shell.StartMove(x - view.Box.X, y - view.Box.Y, id);
     }
 
-    internal void OnTouchUp(uint timeMs, int id)
+    void ITouchChrome.Release(int id, uint timeMs, double x, double y)
     {
-        _idle.NotifyActivity();
-        if (_edgeView is { } ending)
-        {
-            var action = _edges.End(id, timeMs);
-            _log.LogDebug("touch up {Id} t={Time} -> {Action} outcome={Outcome}", id, timeMs, action, _edges.Outcome);
-            if (action == EdgeSwipeAction.Finish)
-            {
-                _edgeView = null;
-                _shell.FinishEdgeGesture(ending, _edges);
-                return;
-            }
-
-            if (action == EdgeSwipeAction.Decline)
-            {
-                _edgeView = null;
-                _touchPoints.TryGetPosition(id, out var backX, out var backY);
-                ReplayWithheld(id, backX - ending.Box.X, backY - ending.Box.Y, ending);
-                _seat.Touch.NotifyUp(timeMs, id);
-                return;
-            }
-
-            _edgeView = null;
-        }
-
         if (id == _splitTouch)
         {
             _splitTouch = -1;
@@ -645,69 +645,20 @@ internal sealed partial class ShellSeat : IDisposable
                 _splitView = null;
             }
 
-            _ = _touchPoints.Up(id);
             return;
         }
 
-        _touchPoints.TryGetPosition(id, out var upX, out var upY);
-        var upView = _shell.ViewAt(upX, upY);
-        if (_shell.ChromeRelease(upView, upX - upView.Box.X, upY - upView.Box.Y, id))
+        var view = _shell.ViewAt(x, y);
+        if (_shell.ChromeRelease(view, x - view.Box.X, y - view.Box.Y, id))
         {
-            _ = _touchPoints.Up(id);
             return;
         }
 
-        if (_shell.StartRelease(upX - upView.Box.X, upY - upView.Box.Y, id))
-        {
-            _ = _touchPoints.Up(id);
-            return;
-        }
-
-        if (_touchPoints.Up(id))
-        {
-            _seat.Touch.NotifyUp(timeMs, id);
-        }
+        _ = _shell.StartRelease(x - view.Box.X, y - view.Box.Y, id);
     }
 
-    private void ReplayWithheld(int id, double localX, double localY, ShellView view)
+    void ITouchChrome.Cancel()
     {
-        var count = _edges.TakeWithheld(_replay);
-        for (var i = 0; i < count; i++)
-        {
-            var sample = _replay[i];
-            var x = sample.X + view.Box.X;
-            var y = sample.Y + view.Box.Y;
-            if (sample.Down)
-            {
-                DeliverTouchDown(sample.TimeMs, id, x, y);
-            }
-            else if (_touchPoints.TryMotion(id, x, y, out var replayX, out var replayY))
-            {
-                _seat.Touch.NotifyMotion(sample.TimeMs, id, replayX, replayY);
-            }
-        }
-
-        _ = localX;
-        _ = localY;
-    }
-
-    private void DeliverTouchDown(uint timeMs, int id, double x, double y)
-    {
-        if (_scene.SurfaceAt(x, y) is { Surface: { } surface } hit)
-        {
-            _shell.Focus(_shell.OwnerOf(surface));
-            _touchPoints.Down(id, x, y, hit.Node);
-            _seat.Touch.NotifyDown(surface, timeMs, id, hit.X, hit.Y);
-            return;
-        }
-
-        _touchPoints.Down(id, x, y, null);
-    }
-
-    private void OnTouchCancel()
-    {
-        _edges.Abort();
-        _edgeView = null;
         _shell.ChromeCancel();
         if (_splitView is { } dragging)
         {
@@ -716,9 +667,40 @@ internal sealed partial class ShellSeat : IDisposable
         }
 
         _splitTouch = -1;
-        _touchPoints.Clear();
-        _seat.Touch.NotifyCancel();
-        _idle.NotifyActivity();
+    }
+
+    bool IEdgeSwipeHandler.TryArea(double layoutX, double layoutY, out EdgeSwipeArea area)
+    {
+        var view = _shell.ViewAt(layoutX, layoutY);
+        _edgeView = view;
+        _edgeGesture.Recognizer.BandWidth = _shell.EdgeBandNow;
+        area = new EdgeSwipeArea(view.Box.X, view.Box.Y, view.Box.Width, view.Box.Height);
+        return true;
+    }
+
+    void IEdgeSwipeHandler.Claimed(EdgeSwipeRecognizer recognizer)
+    {
+        if (_edgeView is { } view)
+        {
+            _shell.TrackEdgeGesture(view, recognizer);
+        }
+    }
+
+    void IEdgeSwipeHandler.Track(EdgeSwipeRecognizer recognizer)
+    {
+        if (_edgeView is { } view)
+        {
+            _shell.TrackEdgeGesture(view, recognizer);
+        }
+    }
+
+    void IEdgeSwipeHandler.Finished(EdgeSwipeRecognizer recognizer)
+    {
+        if (_edgeView is { } view)
+        {
+            _edgeView = null;
+            _shell.FinishEdgeGesture(view, recognizer);
+        }
     }
 
     public void Dispose()

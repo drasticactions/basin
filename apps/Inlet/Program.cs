@@ -22,6 +22,56 @@ internal static class Program
 
     private const uint BtnLeft = 0x110;
 
+    private sealed class TouchPolicy : Basin.Seat.ITouchHitTester, Basin.Seat.ITouchPointerTarget
+    {
+        public required Scene Scene { get; init; }
+
+        public required RiverWindowManager Management { get; init; }
+
+        public required Basin.Seat.Seat Seat { get; init; }
+
+        public required LayoutPointer Pointer { get; init; }
+
+        public required Action<uint> Moved { get; init; }
+
+        public required Action<uint, uint, bool> Button { get; init; }
+
+        public bool TryHit(double layoutX, double layoutY, out Basin.Seat.TouchHit hit)
+        {
+            if (!Management.HasPointerOperation(Seat) &&
+                Scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
+            {
+                hit = new Basin.Seat.TouchHit(surface, at.X, at.Y, at.Node);
+                return true;
+            }
+
+            hit = default;
+            return false;
+        }
+
+        public bool TryMap(object? token, double layoutX, double layoutY, out double localX, out double localY)
+        {
+            if (token is SceneNode { IsDestroyed: false } node &&
+                node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
+            {
+                return true;
+            }
+
+            localX = 0;
+            localY = 0;
+            return false;
+        }
+
+        void Basin.Seat.ITouchPointerTarget.Warp(uint timeMs, double x, double y)
+        {
+            Pointer.Warp(x, y);
+            Moved(timeMs);
+        }
+
+        void Basin.Seat.ITouchPointerTarget.Button(uint timeMs, uint button, bool pressed) =>
+            Button(timeMs, button, pressed);
+    }
+
     private static int Main(string[] args)
     {
         var cli = new BasinCommand(
@@ -825,70 +875,32 @@ internal static class Program
             seat.Pointer.NotifyFrame();
         }
 
-        var touchPoints = new TouchPoints();
-        var emulator = new Basin.Seat.TouchPointerEmulator(seat.Touch);
-
-        void TouchDown(uint timeMs, int slot, double x, double y)
+        var touchBinder = new Basin.Seat.Backends.SeatBinder(seat, layout, pointer, cursor);
+        var touchDriver = new Basin.Seat.Backends.SeatTouchDriver(touchBinder, seat);
+        var touchPolicy = new TouchPolicy
         {
-            var over = management.HasPointerOperation(seat) ? null : scene.SurfaceAt(x, y);
-            if (over is { Surface: { } touched } hit && seat.Touch.Accepts(touched))
-            {
-                touchPoints.Down(slot, x, y, hit.Node);
-                management.NotifyInteraction(seat, touched);
-                seat.Touch.NotifyDown(touched, timeMs, slot, hit.X, hit.Y);
-                return;
-            }
-
-            if (!emulator.TryClaim(slot, over?.Surface))
-            {
-                return;
-            }
-
-            log.LogDebug("touch {Slot} at {X},{Y} drives the pointer", slot, x, y);
-            pointer.Warp(x, y);
-            PointerMoved(timeMs);
-            DeliverPointerButton(timeMs, BtnLeft, true);
-        }
-
-        void TouchMotion(uint timeMs, int slot, double x, double y)
+            Scene = scene,
+            Management = management,
+            Seat = seat,
+            Pointer = pointer,
+            Moved = PointerMoved,
+            Button = DeliverPointerButton,
+        };
+        touchDriver.Router.HitTester = touchPolicy;
+        touchDriver.AttachPointer(touchPolicy).ClaimWithoutSurface = true;
+        touchDriver.Router.Activity =
+            services.Find<Basin.Capabilities.IIdleSource>() as Basin.Seat.SeatIdleSource;
+        touchDriver.Routed += (slot, kind, surface) =>
         {
-            if (emulator.Owns(slot))
+            if (kind == Basin.Seat.TouchTargetKind.Client && surface is not null)
             {
-                pointer.Warp(x, y);
-                PointerMoved(timeMs);
-                return;
+                management.NotifyInteraction(seat, surface);
             }
-
-            if (touchPoints.TryMotion(slot, x, y, out var localX, out var localY))
+            else if (kind == Basin.Seat.TouchTargetKind.Pointer)
             {
-                seat.Touch.NotifyMotion(timeMs, slot, localX, localY);
+                log.LogDebug("touch {Slot} drives the pointer", slot);
             }
-        }
-
-        void TouchUp(uint timeMs, int slot)
-        {
-            if (emulator.Release(slot))
-            {
-                DeliverPointerButton(timeMs, BtnLeft, false);
-                return;
-            }
-
-            if (touchPoints.Up(slot))
-            {
-                seat.Touch.NotifyUp(timeMs, slot);
-            }
-        }
-
-        void TouchCancel()
-        {
-            touchPoints.Clear();
-            if (emulator.Cancel())
-            {
-                DeliverPointerButton((uint)Environment.TickCount, BtnLeft, false);
-            }
-
-            seat.Touch.NotifyCancel();
-        }
+        };
 
         driver.Frames = frameClock;
         driver.ModeChanged += view =>
@@ -983,16 +995,7 @@ internal static class Program
                 }
 
                 Console.WriteLine($"INPUT {type} {device.Name}");
-                UpdateTouchCapability();
             }
-
-            void UpdateTouchCapability() =>
-                seat.SetCapability(Basin.Seat.SeatCapability.Touch, libinput.HasTouchDevice);
-
-            IOutput? TouchOutput(Basin.Backend.Libinput.InputDevice device) =>
-                ((device.OutputName is { } name
-                    ? views.FirstOrDefault(v => v.Output.Name == name)
-                    : null) ?? (views.Count > 0 ? views[0] : null))?.Output;
 
             libinput.DeviceAdded += Register;
             libinput.DeviceRemoved += device =>
@@ -1003,8 +1006,6 @@ internal static class Program
                 {
                     keyboard.Dispose();
                 }
-
-                UpdateTouchCapability();
             };
 
             libinput.Key += (device, timeMs, key, pressed) =>
@@ -1034,31 +1035,7 @@ internal static class Program
                 seat.Pointer.NotifyFrame();
             };
 
-            libinput.TouchDown += (device, timeMs, slot, normalizedX, normalizedY) =>
-            {
-                if (TouchOutput(device) is not { } on)
-                {
-                    return;
-                }
-
-                var (x, y) = layout.FromNormalized(on, normalizedX, normalizedY);
-                TouchDown(timeMs, slot, x, y);
-            };
-
-            libinput.TouchMotion += (device, timeMs, slot, normalizedX, normalizedY) =>
-            {
-                if (TouchOutput(device) is not { } on)
-                {
-                    return;
-                }
-
-                var (x, y) = layout.FromNormalized(on, normalizedX, normalizedY);
-                TouchMotion(timeMs, slot, x, y);
-            };
-
-            libinput.TouchUp += (_, timeMs, slot) => TouchUp(timeMs, slot);
-            libinput.TouchFrame += _ => seat.Touch.NotifyFrame();
-            libinput.TouchCancel += _ => TouchCancel();
+            touchBinder.BindLibinputTouch(libinput);
 
             management.InputManager.SeatCreated += name => Console.WriteLine($"SEAT + {name}");
             management.InputManager.SeatDestroyed += name => Console.WriteLine($"SEAT - {name}");
@@ -1120,32 +1097,12 @@ internal static class Program
             };
         }
 
-        void WireParentTouch(WaylandTouchDevice parentTouch)
-        {
-            Console.WriteLine("INPUT Touch host");
-            seat.SetCapability(Basin.Seat.SeatCapability.Touch, true);
-
-            parentTouch.Down += (on, timeMs, slot, physicalX, physicalY) =>
-            {
-                var (x, y) = layout.ToLayout(on, physicalX, physicalY);
-                TouchDown(timeMs, slot, x, y);
-            };
-            parentTouch.Motion += (on, timeMs, slot, physicalX, physicalY) =>
-            {
-                var (x, y) = layout.ToLayout(on, physicalX, physicalY);
-                TouchMotion(timeMs, slot, x, y);
-            };
-            parentTouch.Up += TouchUp;
-            parentTouch.Frame += () => seat.Touch.NotifyFrame();
-            parentTouch.Cancel += TouchCancel;
-        }
-
         NestedSeam? seam = null;
         if (parent is not null)
         {
             parent.KeyboardAdded += WireParentKeyboard;
             parent.PointerAdded += WireParentPointer;
-            parent.TouchAdded += WireParentTouch;
+            touchBinder.BindParentTouch(parent);
             seam = new NestedSeam(
                 parent,
                 services.Find<Basin.Capabilities.ISelectionStore>(),

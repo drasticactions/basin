@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Westonia;
 
-internal sealed class WestoniaSeat : IDisposable
+internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchHitTester, Basin.Seat.ITouchChrome
 {
     private readonly Basin.Host.BasinHost _host;
     private readonly Seat _seat;
@@ -21,6 +21,8 @@ internal sealed class WestoniaSeat : IDisposable
     private readonly UISurfaceRouter _router;
     private readonly WestonShell _policy;
     private readonly ILogger _log;
+    private readonly Basin.Seat.Backends.SeatBinder _binder;
+    private readonly Basin.Seat.Backends.SeatTouchDriver _touch;
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
     private IUISurface? _routeSurface;
     private ButtonRoute _route;
@@ -55,15 +57,24 @@ internal sealed class WestoniaSeat : IDisposable
         _pointer = new LayoutPointer(layout);
         _pointer.Moved += () => MoveCursor((uint)Environment.TickCount);
 
+        _binder = new Basin.Seat.Backends.SeatBinder(_seat, layout, _pointer, cursor);
+        _touch = new Basin.Seat.Backends.SeatTouchDriver(_binder, _seat);
+        _touch.Router.HitTester = this;
+        _touch.Router.Chrome = this;
+        _touch.Router.Activity =
+            services.Find<Basin.Capabilities.IIdleSource>() as Basin.Seat.SeatIdleSource;
+
         if (host.Parent is { } parent)
         {
             parent.PointerAdded += WireParentPointer;
             parent.KeyboardAdded += WireParentKeyboard;
+            _binder.BindParentTouch(parent);
         }
 
         if (input is not null)
         {
             WireLibinput(input);
+            _binder.BindLibinputTouch(input);
             input.Start();
             _log.LogInformation("libinput started on seat {Seat}", host.Session?.SeatName ?? "seat0");
         }
@@ -140,16 +151,8 @@ internal sealed class WestoniaSeat : IDisposable
 
     private void WireLibinput(Basin.Backend.Libinput.LibinputBackend input)
     {
-        input.DeviceAdded += device =>
-        {
-            Console.WriteLine($"INPUT + {device.Name}");
-            _seat.SetCapability(SeatCapability.Touch, input.HasTouchDevice);
-        };
-        input.DeviceRemoved += device =>
-        {
-            Console.WriteLine($"INPUT - {device.Name}");
-            _seat.SetCapability(SeatCapability.Touch, input.HasTouchDevice);
-        };
+        input.DeviceAdded += device => Console.WriteLine($"INPUT + {device.Name}");
+        input.DeviceRemoved += device => Console.WriteLine($"INPUT - {device.Name}");
         input.Key += (_, time, key, pressed) => OnKey(time, key, pressed);
         input.PointerButton += (_, time, button, pressed) => OnButton(time, button, pressed);
         input.PointerMotion += (_, time, dx, dy, _, _) =>
@@ -163,69 +166,44 @@ internal sealed class WestoniaSeat : IDisposable
             MoveCursor(time);
         };
         input.PointerScroll += (_, time, axis) => OnAxis(time, axis);
-        input.TouchDown += (device, time, slot, nx, ny) =>
-        {
-            var (x, y) = TouchToLayout(nx, ny);
-            OnTouchDown(time, slot, x, y);
-        };
-        input.TouchMotion += (device, time, slot, nx, ny) =>
-        {
-            var (x, y) = TouchToLayout(nx, ny);
-            OnTouchMotion(time, slot, x, y);
-        };
-        input.TouchUp += (_, time, slot) => OnTouchUp(time, slot);
-        input.TouchFrame += _ => _seat.Touch.NotifyFrame();
-        input.TouchCancel += _ => OnTouchCancel();
     }
 
-    private (double X, double Y) TouchToLayout(double normalizedX, double normalizedY)
+    bool Basin.Seat.ITouchHitTester.TryHit(double layoutX, double layoutY, out Basin.Seat.TouchHit hit)
     {
-        var bounds = _layout.Bounds;
-        return (bounds.X + (normalizedX * bounds.Width), bounds.Y + (normalizedY * bounds.Height));
-    }
-
-    private void OnTouchDown(uint time, int slot, double x, double y)
-    {
-        _pointer.Warp(x, y);
-        MoveCursor(time);
-        if (_router.TouchDown(time, slot, x, y))
+        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
         {
-            return;
+            hit = new Basin.Seat.TouchHit(surface, at.X, at.Y, at.Node);
+            return true;
         }
 
-        if (_scene.SurfaceAt(x, y) is { Surface: { } client } hit)
-        {
-            _seat.Touch.NotifyDown(client, time, slot, hit.X, hit.Y);
-        }
+        hit = default;
+        return false;
     }
 
-    private void OnTouchMotion(uint time, int slot, double x, double y)
+    bool Basin.Seat.ITouchHitTester.TryMap(
+        object? token, double layoutX, double layoutY, out double localX, out double localY)
     {
-        _pointer.Warp(x, y);
-        MoveCursor(time);
-        if (_router.TouchMotion(time, slot, x, y))
+        if (token is SceneNode { IsDestroyed: false } node &&
+            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
         {
-            return;
+            return true;
         }
 
-        _seat.Touch.NotifyMotion(time, slot, x, y);
+        localX = 0;
+        localY = 0;
+        return false;
     }
 
-    private void OnTouchUp(uint time, int slot)
-    {
-        if (_router.TouchUp(time, slot))
-        {
-            return;
-        }
+    bool Basin.Seat.ITouchChrome.TryPress(int id, uint timeMs, double x, double y) =>
+        _router.TouchDown(timeMs, id, x, y);
 
-        _seat.Touch.NotifyUp(time, slot);
-    }
+    void Basin.Seat.ITouchChrome.Motion(int id, uint timeMs, double x, double y) =>
+        _router.TouchMotion(timeMs, id, x, y);
 
-    private void OnTouchCancel()
-    {
-        _router.TouchCancel();
-        _seat.Touch.NotifyCancel();
-    }
+    void Basin.Seat.ITouchChrome.Release(int id, uint timeMs, double x, double y) =>
+        _router.TouchUp(timeMs, id);
+
+    void Basin.Seat.ITouchChrome.Cancel() => _router.TouchCancel();
 
     private void MoveCursor(uint time)
     {

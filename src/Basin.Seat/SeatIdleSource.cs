@@ -4,7 +4,7 @@ using Xkb;
 
 namespace Basin.Seat;
 
-public sealed class SeatIdleSource : IIdleSource
+public sealed class SeatIdleSource : IIdleSource, ITouchActivitySink
 {
     private readonly System.Diagnostics.Stopwatch _since = System.Diagnostics.Stopwatch.StartNew();
     private int _inhibitors;
@@ -22,6 +22,8 @@ public sealed class SeatIdleSource : IIdleSource
         _since.Restart();
         Activity?.Invoke();
     }
+
+    void ITouchActivitySink.OnTouchActivity() => NotifyActivity();
 
     public IDisposable Inhibit()
     {

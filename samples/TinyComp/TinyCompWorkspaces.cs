@@ -24,17 +24,6 @@ internal sealed partial class TinyComp
     private int _swipeDirection;
     private bool _swipeArmed;
     private bool _swipeVisual;
-    private readonly TouchContacts _contacts = new();
-    private TouchSwipeState _touchSwipe;
-    private double _touchSwipeTravel;
-
-    private enum TouchSwipeState
-    {
-        Idle,
-        Watching,
-        Claimed,
-        Spent,
-    }
 
     internal sealed class Workspace
     {
@@ -619,8 +608,6 @@ internal sealed partial class TinyComp
 
     private void AbortWorkspaceSwipe()
     {
-        _touchSwipe = TouchSwipeState.Idle;
-        _touchSwipeTravel = 0;
         if (!_swipe.IsActive)
         {
             return;
@@ -629,103 +616,25 @@ internal sealed partial class TinyComp
         _ = EndWorkspaceSwipe(cancelled: true, timeMs: 0);
     }
 
-    private bool TouchSwipeDown(int id, double x, double y)
+    bool Basin.Seat.ICentroidSwipeHandler.Begin(double centroidX, double centroidY, uint timeMs)
     {
-        _contacts.Down(id, x, y);
-        if (_touchSwipe is TouchSwipeState.Claimed or TouchSwipeState.Spent)
+        if (_mode != DragMode.None || _effects.SwitcherActive ||
+            _touchFramePress is not null || _touchMoveResize is { Dragging: true })
         {
-            return true;
-        }
-
-        if (_contacts.Count == (int)TouchSwipeFingers && _mode == DragMode.None &&
-            !_effects.SwitcherActive && _touchFramePress is null && _touchDragSlot is null)
-        {
-            _touchSwipe = TouchSwipeState.Watching;
-            _touchSwipeTravel = 0;
-        }
-
-        return false;
-    }
-
-    private bool TouchSwipeMotion(int id, double x, double y, uint timeMs)
-    {
-        if (!_contacts.Motion(id, x, y, out var dx, out var dy))
-        {
-            return _touchSwipe is TouchSwipeState.Claimed or TouchSwipeState.Spent;
-        }
-
-        switch (_touchSwipe)
-        {
-            case TouchSwipeState.Watching:
-                _touchSwipeTravel += dx;
-                return Math.Abs(_touchSwipeTravel) >= TouchSwipeSlop && ClaimTouchSwipe(timeMs);
-
-            case TouchSwipeState.Claimed:
-                _ = UpdateWorkspaceSwipe(dx, dy, timeMs);
-                return true;
-
-            case TouchSwipeState.Spent:
-                return true;
-
-            default:
-                return false;
-        }
-    }
-
-    private bool ClaimTouchSwipe(uint timeMs)
-    {
-        var view = _contacts.TryCentroid(out var centerX, out var centerY) ? ViewAt(centerX, centerY) : null;
-        var travel = view is null ? 0 : _layout.BoxOf(view.Output).Width;
-        if (travel <= 0 ||
-            !BeginWorkspaceSwipeAt(view, travel, travel * TouchFlingFraction, TouchSwipeFingers, timeMs))
-        {
-            _touchSwipe = TouchSwipeState.Idle;
             return false;
         }
 
-        _touchSwipe = TouchSwipeState.Claimed;
-        if (_touchPointer.Cancel())
-        {
-            OnButton(timeMs, BtnLeft, pressed: false);
-        }
-
-        _touchPoints.Clear();
-        _seat.Touch.NotifyCancel();
-        return true;
+        var view = ViewAt(centroidX, centroidY);
+        var travel = view is null ? 0 : _layout.BoxOf(view.Output).Width;
+        return travel > 0 &&
+            BeginWorkspaceSwipeAt(view, travel, travel * TouchFlingFraction, TouchSwipeFingers, timeMs);
     }
 
-    private bool TouchSwipeUp(int id, uint timeMs)
-    {
-        _ = _contacts.Up(id);
-        switch (_touchSwipe)
-        {
-            case TouchSwipeState.Watching when _contacts.Count < (int)TouchSwipeFingers:
-                _touchSwipe = TouchSwipeState.Idle;
-                return false;
+    void Basin.Seat.ICentroidSwipeHandler.Update(double dx, double dy, uint timeMs) =>
+        _ = UpdateWorkspaceSwipe(dx, dy, timeMs);
 
-            case TouchSwipeState.Claimed:
-                _ = EndWorkspaceSwipe(cancelled: false, timeMs);
-                _touchSwipe = _contacts.Count > 0 ? TouchSwipeState.Spent : TouchSwipeState.Idle;
-                return true;
-
-            case TouchSwipeState.Spent:
-                if (_contacts.Count == 0)
-                {
-                    _touchSwipe = TouchSwipeState.Idle;
-                }
-
-                return true;
-
-            default:
-                return false;
-        }
-    }
-
-    private void TouchSwipeCancel()
-    {
-        _contacts.Clear();
-        AbortWorkspaceSwipe();
-    }
+    void Basin.Seat.ICentroidSwipeHandler.End(bool cancelled, uint timeMs) =>
+        _ = EndWorkspaceSwipe(cancelled, timeMs);
 
     private void FinishPendingSlide(Workspace? except = null)
     {

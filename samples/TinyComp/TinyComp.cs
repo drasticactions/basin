@@ -14,7 +14,14 @@ using Wayland.Server;
 
 namespace TinyComp;
 
-internal sealed partial class TinyComp : IDisposable
+internal sealed partial class TinyComp :
+    IDisposable,
+    Basin.Seat.ITouchHitTester,
+    Basin.Seat.ITouchChrome,
+    Basin.Seat.ITouchActivitySink,
+    Basin.Seat.ITouchPointerTarget,
+    Basin.Seat.ITouchDragHandler,
+    Basin.Seat.ICentroidSwipeHandler
 {
     private const uint BtnLeft = 0x110;
     private const uint BtnRight = 0x111;
@@ -400,7 +407,6 @@ internal sealed partial class TinyComp : IDisposable
 
         _compositor = _services.Require<CompositorGlobal>();
         _seat = _services.Require<Basin.Seat.Seat>();
-        _touchPointer = new Basin.Seat.TouchPointerEmulator(_seat.Touch);
         _shell = _services.Require<XdgShell>();
 
         _services.Find<Basin.Desktop.LinuxDrmSyncobjManager>()?.DeclareRenderer(_renderer);
@@ -555,6 +561,8 @@ internal sealed partial class TinyComp : IDisposable
             }
 
             WireLibinput(_input!);
+            SetupTouch();
+            _touchBinder!.BindLibinputTouch(_input!);
             WireTablets();
             _input!.Start();
             LoadCursorTheme();
@@ -573,7 +581,8 @@ internal sealed partial class TinyComp : IDisposable
             _backend.ParentGone += () => _running = false;
             _backend.PointerAdded += WirePointer;
             _backend.KeyboardAdded += WireKeyboard;
-            _backend.TouchAdded += WireTouch;
+            SetupTouch();
+            _touchBinder!.BindParentTouch(_backend);
             _seam = new NestedSeam(
                 _backend,
                 _services.Find<Basin.Capabilities.ISelectionStore>(),
@@ -1387,13 +1396,8 @@ internal sealed partial class TinyComp : IDisposable
         {
             Console.WriteLine($"INPUT + {device.Name}");
             ConfigureTouchpad(device);
-            UpdateTouchCapability(input);
         };
-        input.DeviceRemoved += device =>
-        {
-            Console.WriteLine($"INPUT - {device.Name}");
-            UpdateTouchCapability(input);
-        };
+        input.DeviceRemoved += device => Console.WriteLine($"INPUT - {device.Name}");
         input.Key += (_, time, key, pressed) =>
         {
             _idle.NotifyActivity();
@@ -1419,19 +1423,6 @@ internal sealed partial class TinyComp : IDisposable
             OnPointerPlaced(time);
         };
         input.PointerScroll += (_, time, axis) => _seat.Pointer.NotifyAxis(time, axis);
-        input.TouchDown += (device, time, slot, nx, ny) =>
-        {
-            var (x, y) = TouchToLayout(device, nx, ny);
-            OnTouchDown(time, slot, x, y);
-        };
-        input.TouchUp += (_, time, slot) => OnTouchUp(time, slot);
-        input.TouchMotion += (device, time, slot, nx, ny) =>
-        {
-            var (x, y) = TouchToLayout(device, nx, ny);
-            OnTouchMotion(time, slot, x, y);
-        };
-        input.TouchFrame += _ => _seat.Touch.NotifyFrame();
-        input.TouchCancel += _ => OnTouchCancel();
         input.Gesture += (_, type, gesture) =>
         {
             _idle.NotifyActivity();
@@ -1492,60 +1483,93 @@ internal sealed partial class TinyComp : IDisposable
         }
     }
 
-    private void UpdateTouchCapability(Basin.Backend.Libinput.LibinputBackend input) =>
-        _seat.SetCapability(Basin.Seat.SeatCapability.Touch, input.HasTouchDevice);
-
-    private (double X, double Y) TouchToLayout(Basin.Backend.Libinput.InputDevice device, double normalizedX, double normalizedY)
-    {
-        var view = (device.OutputName is { } name ? _views.FirstOrDefault(v => v.Output.Name == name) : null)
-            ?? _views.FirstOrDefault();
-        if (view is null)
-        {
-            return (normalizedX, normalizedY);
-        }
-
-        return _layout.FromNormalized(view.Output, normalizedX, normalizedY);
-    }
-
     private const int TouchGripSlop = 12;
     private const int TouchRingMargin = 32;
     private const int TouchCornerZone = 40;
     private const int TouchSplitGrabZone = 16;
 
-    private readonly TouchPoints _touchPoints = new();
-    private Basin.Seat.TouchPointerEmulator _touchPointer = null!;
-    private int? _touchDragSlot;
+    private readonly Basin.Seat.CentroidSwipeGesture _touchSwipeGesture = new()
+    {
+        Fingers = TouchSwipeFingers,
+        Slop = TouchSwipeSlop,
+    };
+
+    private Basin.Seat.Backends.SeatBinder? _touchBinder;
+    private Basin.Seat.Backends.SeatTouchDriver? _touchDriver;
+    private Basin.Seat.TouchMoveResize? _touchMoveResize;
     private int? _frameTouchSlot;
     private (Frame Frame, IGrabTarget Owner)? _touchFramePress;
 
-    private void OnTouchDown(uint time, int id, double x, double y)
+    private void SetupTouch()
     {
-        _idle.NotifyActivity();
-        if (TouchSwipeDown(id, x, y))
+        _touchBinder = new Basin.Seat.Backends.SeatBinder(
+            _seat, _layout, _pointer ?? new LayoutPointer(_layout), _cursor);
+        _touchDriver = new Basin.Seat.Backends.SeatTouchDriver(_touchBinder, _seat);
+        _touchMoveResize = _touchDriver.MoveResize;
+        _touchMoveResize.Handler = this;
+        _touchSwipeGesture.Handler = this;
+        _touchDriver.Router.HitTester = this;
+        _touchDriver.Router.Chrome = this;
+        _touchDriver.Router.Gestures = _touchSwipeGesture;
+        _touchDriver.Router.Activity = this;
+        _touchDriver.AttachPointer(this);
+        _touchDriver.Routed += (_, _, surface) =>
         {
-            return;
-        }
-
-        if (_scene.SurfaceAt(x, y) is { Surface: { } surface } hit)
-        {
-            FocusSurfaceOwner(surface);
-            if (_touchPointer.TryClaim(id, surface))
+            if (surface is not null)
             {
-                _touchPoints.Down(id, x, y, null);
-                MoveCursor(x, y, time);
-                OnButton(time, BtnLeft, pressed: true);
-                return;
+                FocusSurfaceOwner(surface);
             }
+        };
+    }
 
-            _touchPoints.Down(id, x, y, hit.Node);
-            _seat.Touch.NotifyDown(surface, time, id, hit.X, hit.Y);
-            return;
+    void Basin.Seat.ITouchActivitySink.OnTouchActivity() => _idle.NotifyActivity();
+
+    void Basin.Seat.ITouchPointerTarget.Warp(uint timeMs, double x, double y) => MoveCursor(x, y, timeMs);
+
+    void Basin.Seat.ITouchPointerTarget.Button(uint timeMs, uint button, bool pressed) =>
+        OnButton(timeMs, button, pressed);
+
+    void Basin.Seat.ITouchDragHandler.DragTo(double x, double y) => DragTo(x, y);
+
+    void Basin.Seat.ITouchDragHandler.DragEnd(bool cancelled) => EndTouchDrag();
+
+    bool Basin.Seat.ITouchHitTester.TryHit(double layoutX, double layoutY, out Basin.Seat.TouchHit hit)
+    {
+        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
+        {
+            hit = new Basin.Seat.TouchHit(surface, at.X, at.Y, at.Node);
+            return true;
         }
 
-        _touchPoints.Down(id, x, y, null);
+        hit = default;
+        return false;
+    }
+
+    bool Basin.Seat.ITouchHitTester.TryMap(
+        object? token, double layoutX, double layoutY, out double localX, out double localY)
+    {
+        if (token is SceneNode { IsDestroyed: false } node &&
+            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
+        {
+            return true;
+        }
+
+        localX = 0;
+        localY = 0;
+        return false;
+    }
+
+    bool Basin.Seat.ITouchChrome.TryPress(int id, uint timeMs, double x, double y)
+    {
+        var topFrame = _scene.NodeAt(x, y) is { Node: { } topNode } ? FindFrame(topNode) : null;
+        if (topFrame is null && _scene.SurfaceAt(x, y) is not null)
+        {
+            return false;
+        }
+
         if (_mode != DragMode.None || _touchFramePress is not null)
         {
-            return;
+            return true;
         }
 
         if (ViewAt(x, y)?.Active is { Tiled.Count: 2 } tiled &&
@@ -1553,8 +1577,8 @@ internal sealed partial class TinyComp : IDisposable
             y >= tiled.TileArea.Y && y < tiled.TileArea.Bottom)
         {
             BeginSplitDrag(tiled);
-            _touchDragSlot = id;
-            return;
+            _ = _touchMoveResize!.TryBeginContact(id, out _, out _);
+            return true;
         }
 
         if (_scene.NodeAt(x, y) is { Node: { } frameNode } && FindFrame(frameNode) is { } frameHit)
@@ -1563,14 +1587,14 @@ internal sealed partial class TinyComp : IDisposable
             PrepareMenu(frameHit);
             _touchFramePress = frameHit;
             _frameTouchSlot = id;
-            frameHit.Frame.TouchDown(x - frameHit.Owner.X, y - frameHit.Owner.Y, id, time);
+            frameHit.Frame.TouchDown(x - frameHit.Owner.X, y - frameHit.Owner.Y, id, timeMs);
             _frameTouchSlot = null;
             if (frameHit.Frame.IsMenuOpen)
             {
                 _openMenu = frameHit.Frame;
             }
 
-            return;
+            return true;
         }
 
         if (TryRingResize(x, y, TouchRingMargin, TouchCornerZone, out var ringEdges, out var ringWindow, out var ringXWindow))
@@ -1588,6 +1612,62 @@ internal sealed partial class TinyComp : IDisposable
             }
 
             _frameTouchSlot = null;
+            return true;
+        }
+
+        return false;
+    }
+
+    void Basin.Seat.ITouchChrome.Motion(int id, uint timeMs, double x, double y)
+    {
+    }
+
+    void Basin.Seat.ITouchChrome.Release(int id, uint timeMs, double x, double y)
+    {
+        if (_touchFramePress is { } held)
+        {
+            _touchFramePress = null;
+            held.Frame.TouchUp(x - held.Owner.X, y - held.Owner.Y, id);
+            if (held.Frame.IsMenuOpen)
+            {
+                _openMenu = held.Frame;
+            }
+        }
+    }
+
+    void Basin.Seat.ITouchChrome.Cancel()
+    {
+        if (_touchFramePress is { } held)
+        {
+            _touchFramePress = null;
+            held.Frame.TouchCancel();
+        }
+    }
+
+    private void EndTouchDrag()
+    {
+        if (_touchFramePress is { } dragging)
+        {
+            _touchFramePress = null;
+            dragging.Frame.TouchCancel();
+        }
+
+        if (_mode != DragMode.None)
+        {
+            if (_mode == DragMode.Split)
+            {
+                EndSplitDrag();
+            }
+
+            if (_mode == DragMode.Move && _grabWindow is { } dropped)
+            {
+                ReassignDraggedWorkspace(dropped);
+            }
+
+            _grabWindow?.SetResizing(false);
+            _mode = DragMode.None;
+            _effects.OnGrabEnd();
+            _grabWindow = null;
         }
     }
 
@@ -1621,120 +1701,6 @@ internal sealed partial class TinyComp : IDisposable
         else if (owner is XWindow xwindow)
         {
             FocusXWindow(xwindow);
-        }
-    }
-
-    private void OnTouchMotion(uint time, int id, double x, double y)
-    {
-        _idle.NotifyActivity();
-        if (TouchSwipeMotion(id, x, y, time))
-        {
-            return;
-        }
-
-        var latched = _touchPoints.TryMotion(id, x, y, out var localX, out var localY);
-        if (_touchDragSlot == id)
-        {
-            DragTo(x, y);
-            return;
-        }
-
-        if (_touchPointer.Owns(id))
-        {
-            MoveCursor(x, y, time);
-            return;
-        }
-
-        if (latched)
-        {
-            _seat.Touch.NotifyMotion(time, id, localX, localY);
-        }
-    }
-
-    private void OnTouchUp(uint time, int id)
-    {
-        _touchPoints.TryGetPosition(id, out var x, out var y);
-        _touchPoints.Up(id);
-        if (TouchSwipeUp(id, time))
-        {
-            return;
-        }
-
-        if (_touchDragSlot == id)
-        {
-            EndTouchDrag();
-            return;
-        }
-
-        if (_touchFramePress is { } held)
-        {
-            _touchFramePress = null;
-            held.Frame.TouchUp(x - held.Owner.X, y - held.Owner.Y, id);
-            if (held.Frame.IsMenuOpen)
-            {
-                _openMenu = held.Frame;
-            }
-
-            return;
-        }
-
-        if (_touchPointer.Release(id))
-        {
-            OnButton(time, BtnLeft, pressed: false);
-            return;
-        }
-
-        _seat.Touch.NotifyUp(time, id);
-    }
-
-    private void OnTouchCancel()
-    {
-        _touchPoints.Clear();
-        TouchSwipeCancel();
-        if (_touchPointer.Cancel())
-        {
-            OnButton((uint)Environment.TickCount, BtnLeft, pressed: false);
-        }
-
-        if (_touchFramePress is { } held)
-        {
-            _touchFramePress = null;
-            held.Frame.TouchCancel();
-        }
-
-        if (_touchDragSlot is not null)
-        {
-            EndTouchDrag();
-        }
-
-        _seat.Touch.NotifyCancel();
-    }
-
-    private void EndTouchDrag()
-    {
-        _touchDragSlot = null;
-        if (_touchFramePress is { } dragging)
-        {
-            _touchFramePress = null;
-            dragging.Frame.TouchCancel();
-        }
-
-        if (_mode != DragMode.None)
-        {
-            if (_mode == DragMode.Split)
-            {
-                EndSplitDrag();
-            }
-
-            if (_mode == DragMode.Move && _grabWindow is { } dropped)
-            {
-                ReassignDraggedWorkspace(dropped);
-            }
-
-            _grabWindow?.SetResizing(false);
-            _mode = DragMode.None;
-            _effects.OnGrabEnd();
-            _grabWindow = null;
         }
     }
 
@@ -2419,21 +2385,16 @@ internal sealed partial class TinyComp : IDisposable
     private (double X, double Y) GrabPosition(uint? serial)
     {
         if (_frameTouchSlot is { } frameSlot &&
-            _touchPoints.TryGetPosition(frameSlot, out var frameX, out var frameY))
+            _touchMoveResize!.TryBeginContact(frameSlot, out var frameX, out var frameY))
         {
-            _touchDragSlot = frameSlot;
             return (frameX, frameY);
         }
 
-        if (serial is { } s && _seat.Touch.TryGetPointBySerial(s, out var slot) &&
-            _touchPoints.TryGetPosition(slot, out var pointX, out var pointY))
+        if (_touchMoveResize is { } drag && drag.TryBegin(serial, out var pointX, out var pointY))
         {
-            _touchDragSlot = slot;
-            _seat.Touch.NotifyCancel();
             return (pointX, pointY);
         }
 
-        _touchDragSlot = null;
         _seat.Pointer.NotifyClearFocus();
         return (_cursorX, _cursorY);
     }
@@ -2766,24 +2727,6 @@ internal sealed partial class TinyComp : IDisposable
         pointer.HoldEnd += (time, cancelled) => _gestures.NotifyHoldEnd(time, cancelled);
     }
 
-    private void WireTouch(WaylandTouchDevice touch)
-    {
-        _seat.SetCapability(Basin.Seat.SeatCapability.Touch, true);
-        touch.Down += (output, time, id, x, y) =>
-        {
-            var (layoutX, layoutY) = _layout.ToLayout(output, x, y);
-            OnTouchDown(time, id, layoutX, layoutY);
-        };
-        touch.Motion += (output, time, id, x, y) =>
-        {
-            var (layoutX, layoutY) = _layout.ToLayout(output, x, y);
-            OnTouchMotion(time, id, layoutX, layoutY);
-        };
-        touch.Up += OnTouchUp;
-        touch.Frame += () => _seat.Touch.NotifyFrame();
-        touch.Cancel += OnTouchCancel;
-    }
-
     internal void InjectPointerMotion(uint time, double dx, double dy) =>
         MoveCursor(_cursorX + dx, _cursorY + dy, time);
 
@@ -2817,7 +2760,7 @@ internal sealed partial class TinyComp : IDisposable
             Trace($"motion {x:F1},{y:F1} mode={_mode}");
         }
 
-        if (_touchDragSlot is null && DragTo(x, y))
+        if (_touchMoveResize is not { Dragging: true } && DragTo(x, y))
         {
             return;
         }
@@ -3043,7 +2986,7 @@ internal sealed partial class TinyComp : IDisposable
             _mode = DragMode.None;
             _effects.OnGrabEnd();
             _grabWindow = null;
-            _touchDragSlot = null;
+            _touchMoveResize?.End();
             _framePress = null;
             if (!pressed)
             {
