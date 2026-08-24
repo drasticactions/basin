@@ -63,21 +63,13 @@ internal sealed partial class Westonia
 
     private void WritePresented(string path)
     {
-        if (_outputs.Views.FirstOrDefault()?.LastPresentedBuffer is not { IsDestroyed: false } buffer)
+        var buffer = _outputs.Views.FirstOrDefault()?.LastPresentedBuffer;
+        Console.WriteLine(Basin.Scene.SceneScreenshot.WritePresented(buffer, _renderer, path) switch
         {
-            Console.WriteLine("SHOTRAW none");
-            Console.Out.Flush();
-            return;
-        }
-
-        if (!BufferCapture.TryWritePng(buffer, _renderer, path))
-        {
-            Console.WriteLine($"SHOTRAW unreadable {buffer.Width}x{buffer.Height}");
-            Console.Out.Flush();
-            return;
-        }
-
-        Console.WriteLine($"SHOTRAW {path} {buffer.Width}x{buffer.Height}");
+            Basin.Scene.ScreenshotOutcome.NoFrame => "SHOTRAW none",
+            Basin.Scene.ScreenshotOutcome.Unreadable => $"SHOTRAW unreadable {buffer!.Width}x{buffer.Height}",
+            _ => $"SHOTRAW {path} {buffer!.Width}x{buffer.Height}",
+        });
         Console.Out.Flush();
     }
 

@@ -23,6 +23,7 @@
     <PackageVersion Include="libinput-dotnet" Version="1.30.4" />
     <PackageVersion Include="liftoff-dotnet" Version="0.5.0" />
     <PackageVersion Include="mesa-dotnet" Version="26.1.5" />
+    <PackageVersion Include="pipewire-dotnet" Version="1.6.8" />
     <PackageVersion Include="pixman-dotnet" Version="0.46.5" />
     <PackageVersion Include="seatd-dotnet" Version="0.9.3" />
     <PackageVersion Include="udev-dotnet" Version="261.2.0" />

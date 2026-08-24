@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Diagnostics;
 
 namespace Basin;
@@ -58,6 +59,39 @@ public abstract class OutputBase : IOutput
         }
 
         if ((state.Fields & OutputStateFields.InFence) != 0 && state.InFenceFd >= 0 && !SupportsInFence)
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.RgbRange) != 0 &&
+            state.RgbRange != OutputRgbRange.Automatic && !SupportsRgbRange)
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.MaxBitsPerColor) != 0 &&
+            state.MaxBitsPerColor != 0 && !SupportsMaxBitsPerColor)
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.Overscan) != 0 && state.Overscan != 0 && !SupportsOverscan)
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.CustomModes) != 0 &&
+            state.CustomModes is { Count: > 0 } && !SupportsCustomModes)
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.Sharpness) != 0 && state.Sharpness != 0 && !SupportsSharpness)
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.AbmLevel) != 0 && state.AbmLevel != 0 && !SupportsAbmLevel)
         {
             return false;
         }
@@ -130,6 +164,24 @@ public abstract class OutputBase : IOutput
     protected virtual bool SupportsLayers => false;
 
     protected virtual bool SupportsAdaptiveSync => false;
+
+    protected virtual bool SupportsRgbRange => false;
+
+    protected virtual bool SupportsMaxBitsPerColor => false;
+
+    protected virtual bool SupportsOverscan => false;
+
+    protected virtual bool SupportsCustomModes => false;
+
+    protected virtual bool SupportsSharpness => false;
+
+    protected virtual bool SupportsAbmLevel => false;
+
+    public virtual OutputConfigurationFeatures Features => OutputConfigurationFeatures.None;
+
+    public virtual OutputColorimetry? Colorimetry => null;
+
+    public virtual ReadOnlyMemory<byte> EdidBytes => default;
 
     public virtual bool SupportsInFence => false;
 

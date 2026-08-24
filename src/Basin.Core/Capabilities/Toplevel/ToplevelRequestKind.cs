@@ -10,4 +10,9 @@ public enum ToplevelRequestKind
     Unminimize,
     Fullscreen,
     Unfullscreen,
+    SetNoBorder,
+    UnsetNoBorder,
+    ExcludeFromCapture,
+    IncludeInCapture,
+    SendToOutput,
 }

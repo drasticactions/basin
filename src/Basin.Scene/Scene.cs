@@ -195,13 +195,13 @@ public sealed partial class Scene
         }
     }
 
-    public void CollectSurfaces(List<SceneSurfaceBox> into)
+    public void CollectSurfaces(List<SurfaceBox> into)
     {
         into.Clear();
         CollectSurfaces(Root, Root.X, Root.Y, into);
     }
 
-    private static void CollectSurfaces(SceneNode node, int x, int y, List<SceneSurfaceBox> into)
+    private static void CollectSurfaces(SceneNode node, int x, int y, List<SurfaceBox> into)
     {
         if (!node.Enabled)
         {
@@ -212,7 +212,7 @@ public sealed partial class Scene
         {
             case SceneBuffer { InputSurface: { IsDestroyed: false } surface } buffer:
                 var (width, height) = buffer.Size;
-                into.Add(new SceneSurfaceBox(surface, new Box(x, y, width, height)));
+                into.Add(new SurfaceBox(surface, new Box(x, y, width, height)));
                 break;
             case SceneTree tree:
                 foreach (var child in tree.Children)

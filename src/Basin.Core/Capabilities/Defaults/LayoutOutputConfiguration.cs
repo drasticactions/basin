@@ -2,8 +2,19 @@ namespace Basin.Capabilities.Defaults;
 
 public sealed class LayoutOutputConfiguration : IOutputConfiguration
 {
+    private const OutputConfigurationFeatures DrivableMask =
+        OutputConfigurationFeatures.Overscan |
+        OutputConfigurationFeatures.Vrr |
+        OutputConfigurationFeatures.RgbRange |
+        OutputConfigurationFeatures.MaxBitsPerColor |
+        OutputConfigurationFeatures.CustomModes |
+        OutputConfigurationFeatures.Sharpness |
+        OutputConfigurationFeatures.AbmLevel;
+
     private readonly OutputLayout _layout;
     private readonly Dictionary<IOutput, Parked> _parked = [];
+    private readonly Dictionary<IOutput, OutputConfigurationEntry> _committed = [];
+    private readonly Dictionary<IOutput, Action> _recorded = [];
 
     private sealed record Parked(Point Position, Action OnDestroyed);
 
@@ -45,7 +56,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
             using var state = new OutputState();
             Fill(state, entry);
             entry.Output.Commit(state);
-            if (entry.Enabled)
+            if (entry.Enabled && !Replicating(entry))
             {
                 Expose(entry);
             }
@@ -55,8 +66,86 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
             }
         }
 
+        foreach (var entry in entries)
+        {
+            Record(entry);
+        }
+
         Applied?.Invoke(entries);
         return true;
+    }
+
+    public OutputConfigurationFeatures Supported(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return output.Features & DrivableMask;
+    }
+
+    public bool TryRead(IOutput output, out OutputConfigurationEntry state)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _committed.TryGetValue(output, out state);
+    }
+
+    private void Record(in OutputConfigurationEntry entry)
+    {
+        var output = entry.Output;
+        var current = _committed.TryGetValue(output, out var existing)
+            ? existing
+            : new OutputConfigurationEntry { Output = output, Enabled = entry.Enabled };
+        current = current with { Enabled = entry.Enabled };
+        if (entry.Overscan is { } overscan)
+        {
+            current = current with { Overscan = overscan };
+        }
+
+        if (entry.RgbRange is { } rgbRange)
+        {
+            current = current with { RgbRange = rgbRange };
+        }
+
+        if (entry.MaxBitsPerColor is { } maxBpc)
+        {
+            current = current with { MaxBitsPerColor = maxBpc };
+        }
+
+        if (entry.VrrPolicy is { } vrrPolicy)
+        {
+            current = current with { VrrPolicy = vrrPolicy };
+        }
+
+        if (entry.CustomModes is { } customModes)
+        {
+            current = current with { CustomModes = customModes };
+        }
+
+        if (entry.ReplicationSourceUuid is { } replication)
+        {
+            current = current with { ReplicationSourceUuid = replication };
+        }
+
+        if (entry.Sharpness is { } sharpness)
+        {
+            current = current with { Sharpness = sharpness };
+        }
+
+        if (entry.AbmLevel is { } abmLevel)
+        {
+            current = current with { AbmLevel = abmLevel };
+        }
+
+        _committed[output] = current;
+        if (!_recorded.ContainsKey(output))
+        {
+            void OnDestroyed()
+            {
+                _committed.Remove(output);
+                _recorded.Remove(output);
+            }
+
+            _recorded[output] = OnDestroyed;
+            output.Destroyed += OnDestroyed;
+        }
     }
 
     private void Expose(in OutputConfigurationEntry entry)
@@ -100,6 +189,13 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
         return parked.Position;
     }
 
+    private bool Replicating(in OutputConfigurationEntry entry)
+    {
+        var source = entry.ReplicationSourceUuid ??
+            (_committed.TryGetValue(entry.Output, out var recorded) ? recorded.ReplicationSourceUuid : null);
+        return source is { Length: > 0 };
+    }
+
     private bool PoweredOff(IOutput output) => _layout.Contains(output) && !output.Enabled;
 
     private void Fill(OutputState state, in OutputConfigurationEntry entry)
@@ -128,6 +224,41 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
         if (entry.AdaptiveSync is { } adaptiveSync)
         {
             state.SetAdaptiveSync(adaptiveSync);
+        }
+
+        if (entry.VrrPolicy is { } vrrPolicy)
+        {
+            state.SetAdaptiveSync(vrrPolicy == OutputVrrPolicy.Always);
+        }
+
+        if (entry.Overscan is { } overscan)
+        {
+            state.SetOverscan(overscan);
+        }
+
+        if (entry.RgbRange is { } rgbRange)
+        {
+            state.SetRgbRange(rgbRange);
+        }
+
+        if (entry.MaxBitsPerColor is { } maxBpc)
+        {
+            state.SetMaxBitsPerColor(maxBpc);
+        }
+
+        if (entry.CustomModes is { } customModes)
+        {
+            state.SetCustomModes(customModes);
+        }
+
+        if (entry.Sharpness is { } sharpness)
+        {
+            state.SetSharpness(sharpness);
+        }
+
+        if (entry.AbmLevel is { } abmLevel)
+        {
+            state.SetAbmLevel(abmLevel);
         }
     }
 }

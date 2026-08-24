@@ -149,6 +149,14 @@ internal sealed class CompositorTestHost : IDisposable
         client.Dispose();
     }
 
+    public ShmTestClient AdoptClient(int clientFd)
+    {
+        var client = new ShmTestClient(clientFd);
+        _clients.Add(client);
+        client.BindGlobals(() => PumpToClient(client));
+        return client;
+    }
+
     public ShmTestClient ConnectClient()
     {
         int serverFd, clientFd;

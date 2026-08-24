@@ -12,12 +12,7 @@ internal static class Program
         var renderer = cli.Add(CommonOptions.Renderer(Basin.Renderers.RendererCatalog.Names, "vulkan"));
         var backend = cli.Add(CommonOptions.Backend(
             [BackendKind.Nested, BackendKind.Drm, BackendKind.Headless], acceptsSocketFd: true));
-        var outputs = cli.Add(new Option<int>("--outputs")
-        {
-            Description = "how many outputs to create",
-            HelpName = "N",
-            DefaultValueFactory = _ => 1,
-        });
+        var outputs = cli.Add(CommonOptions.Outputs());
         var scales = cli.Add(CommonOptions.Scales());
         var config = cli.Add(new Option<string?>("--config")
         {

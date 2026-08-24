@@ -19,6 +19,7 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
         public required Dictionary<ZwlrForeignToplevelManagerV1Resource, ZwlrForeignToplevelHandleV1Resource> Handles;
         public string? SentTitle;
         public string? SentAppId;
+        public ulong SentParentId;
     }
 
     public ForeignToplevelManager(WlServerDisplay display, IToplevelModel? model)
@@ -75,12 +76,13 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
 
         var title = !string.Equals(tracked.SentTitle, info.Title, StringComparison.Ordinal);
         var appId = !string.Equals(tracked.SentAppId, info.AppId, StringComparison.Ordinal);
-        if (!title && !appId)
+        var parent = info.ParentId != tracked.SentParentId;
+        if (!title && !appId && !parent)
         {
             return;
         }
 
-        foreach (var handle in tracked.Handles.Values)
+        foreach (var (manager, handle) in tracked.Handles)
         {
             if (handle.IsDestroyed)
             {
@@ -97,11 +99,44 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
                 handle.SendAppId(info.AppId);
             }
 
+            if (parent)
+            {
+                SendParent(manager, handle, info.ParentId);
+            }
+
             handle.SendDone();
         }
 
         tracked.SentTitle = info.Title;
         tracked.SentAppId = info.AppId;
+        if (parent)
+        {
+            tracked.SentParentId = info.ParentId;
+        }
+    }
+
+    private void SendParent(
+        ZwlrForeignToplevelManagerV1Resource manager,
+        ZwlrForeignToplevelHandleV1Resource handle,
+        ulong parentId)
+    {
+        if (!handle.SupportsSendParent)
+        {
+            return;
+        }
+
+        ZwlrForeignToplevelHandleV1Resource? parentHandle = null;
+        if (parentId != 0)
+        {
+            if (!_toplevels.TryGetValue(parentId, out var parent) ||
+                !parent.Handles.TryGetValue(manager, out parentHandle) ||
+                parentHandle.IsDestroyed)
+            {
+                return;
+            }
+        }
+
+        handle.SendParent(parentHandle);
     }
 
     private void OnRemoved(ulong id)
@@ -153,6 +188,11 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
             handle.SendAppId(info.AppId);
             tracked.SentTitle = info.Title;
             tracked.SentAppId = info.AppId;
+            if (info.ParentId != 0)
+            {
+                SendParent(manager, handle, info.ParentId);
+                tracked.SentParentId = info.ParentId;
+            }
         }
 
         handle.SendDone();

@@ -39,5 +39,7 @@ public sealed class InputDevice
 
     public LibinputDeviceConfig Config => Native.Config;
 
+    public void UpdateLeds(LibinputLed leds) => Native.UpdateLeds(leds);
+
     public string? OutputName => Native.OutputName;
 }

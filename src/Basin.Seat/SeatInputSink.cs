@@ -85,4 +85,59 @@ public class SeatInputSink : IInputSink
         Seat.Pointer.NotifyFrame();
         return true;
     }
+
+    public virtual bool TouchDown(uint timeMs, int id, double x, double y, double width, double height)
+    {
+        if (width <= 0 || height <= 0 || Seat.Touch.Router is not { } router)
+        {
+            return false;
+        }
+
+        router.Down(timeMs, id, x, y);
+        return true;
+    }
+
+    public virtual bool TouchMotion(uint timeMs, int id, double x, double y, double width, double height)
+    {
+        if (width <= 0 || height <= 0 || Seat.Touch.Router is not { } router)
+        {
+            return false;
+        }
+
+        router.Motion(timeMs, id, x, y);
+        return true;
+    }
+
+    public virtual bool TouchUp(uint timeMs, int id)
+    {
+        if (Seat.Touch.Router is not { } router)
+        {
+            return false;
+        }
+
+        router.Up(timeMs, id);
+        return true;
+    }
+
+    public virtual bool TouchFrame()
+    {
+        if (Seat.Touch.Router is not { } router)
+        {
+            return false;
+        }
+
+        router.Frame();
+        return true;
+    }
+
+    public virtual bool TouchCancel()
+    {
+        if (Seat.Touch.Router is not { } router)
+        {
+            return false;
+        }
+
+        router.Cancel();
+        return true;
+    }
 }

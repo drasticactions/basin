@@ -15,14 +15,10 @@ namespace EightWm;
 
 internal sealed partial class ShellSeat :
     IDisposable,
-    ITouchHitTester,
     ITouchChrome,
     ITouchActivitySink,
     IEdgeSwipeHandler
 {
-    internal const uint BtnLeft = 0x110;
-    internal const uint BtnRight = 0x111;
-
     private static readonly XkbKeysym SwitchVt1 = XkbKeysym.FromName("XF86Switch_VT_1");
     private static readonly XkbKeysym SwitchVt12 = XkbKeysym.FromName("XF86Switch_VT_12");
 
@@ -44,6 +40,7 @@ internal sealed partial class ShellSeat :
     private readonly ILogger _log;
 
     private readonly SeatBinder _binder;
+    private readonly SeatInjector _injector;
 
     private LibinputBackend? _libinput;
 
@@ -55,7 +52,7 @@ internal sealed partial class ShellSeat :
         Scene scene,
         OutputLayout layout,
         CursorImageTheme cursorTheme,
-        ShellInputSink inputSink,
+        Basin.Seat.Backends.HookInputSink inputSink,
         ILogger log)
     {
         _host = host;
@@ -96,7 +93,7 @@ internal sealed partial class ShellSeat :
         _touch = new SeatTouchDriver(_binder, _seat);
         _edgeGesture.Handler = this;
         _touch.Router.Gestures = _edgeGesture;
-        _touch.Router.HitTester = this;
+        _touch.Router.HitTester = new SceneTouchHitTester(_scene);
         _touch.Router.Chrome = this;
         _touch.Router.Activity = this;
         _touch.Routed += (_, _, surface) =>
@@ -129,23 +126,14 @@ internal sealed partial class ShellSeat :
             ProcessCursorMotion(timeMs, dx, dy);
             return true;
         };
-        inputSink.OnPointerMotionAbsolute = (timeMs, x, y, extentWidth, extentHeight) =>
+        _injector = new SeatInjector(_binder, _seat, _layout, _pointer)
         {
-            _binder.EnsurePointerCapability();
-            var bounds = _layout.Bounds;
-            if (bounds.Width <= 0 || bounds.Height <= 0)
-            {
-                return true;
-            }
-
-            var previousX = _pointer.X;
-            var previousY = _pointer.Y;
-            _pointer.Warp(
-                bounds.X + (x / extentWidth * bounds.Width),
-                bounds.Y + (y / extentHeight * bounds.Height));
-            ProcessCursorMotion(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
-            return true;
+            Moved = timeMs => ProcessCursorMotion(timeMs),
+            MovedBy = (timeMs, dx, dy) => ProcessCursorMotion(timeMs, dx, dy),
+            DeliverButton = OnButton,
+            DeliverKey = OnKey,
         };
+        inputSink.OnPointerMotionAbsolute = _injector.MotionAbsolute;
         inputSink.OnPointerButton = (timeMs, button, pressed) =>
         {
             OnButton(timeMs, button, pressed);
@@ -168,17 +156,7 @@ internal sealed partial class ShellSeat :
 
     internal void Refocus() => ProcessCursorMotion((uint)Environment.TickCount, fromMotion: false);
 
-    internal void CenterCursor()
-    {
-        var bounds = _layout.Bounds;
-        if (bounds.IsEmpty)
-        {
-            return;
-        }
-
-        _pointer.Warp(bounds.X + (bounds.Width / 2.0), bounds.Y + (bounds.Height / 2.0));
-        _cursor.MoveTo(_pointer.X, _pointer.Y);
-    }
+    internal void CenterCursor() => _injector.Center();
 
     private bool _touchDriving;
 
@@ -206,32 +184,19 @@ internal sealed partial class ShellSeat :
         _cursor.Reveal();
     }
 
-    internal void WarpTo(double x, double y)
-    {
-        _binder.EnsurePointerCapability();
-        _pointer.Warp(x, y);
-        ProcessCursorMotion((uint)Environment.TickCount);
-    }
+    internal void WarpTo(double x, double y) => _injector.Warp(x, y);
 
-    internal void InjectKey(uint code, bool pressed)
-    {
-        if ((_seat.Capabilities & SeatCapability.Keyboard) == 0)
-        {
-            _seat.SetCapability(SeatCapability.Keyboard, true);
-        }
-
-        OnKey((uint)Environment.TickCount, code, pressed);
-    }
+    internal void InjectKey(uint code, bool pressed) => _injector.Key(code, pressed);
 
     internal void ClickAt()
     {
         var time = (uint)Environment.TickCount;
-        OnButton(time, BtnLeft, pressed: true);
-        OnButton(time, BtnLeft, pressed: false);
+        OnButton(time, InputCodes.BtnLeft, pressed: true);
+        OnButton(time, InputCodes.BtnLeft, pressed: false);
     }
 
     internal void ButtonAt(bool pressed) =>
-        OnButton((uint)Environment.TickCount, BtnLeft, pressed);
+        OnButton((uint)Environment.TickCount, InputCodes.BtnLeft, pressed);
 
     internal void TapAt(double x, double y)
     {
@@ -321,7 +286,7 @@ internal sealed partial class ShellSeat :
                     return;
                 case TouchGestureVerdict.Decline:
                     _pointerEdge = false;
-                    RouteButton(timeMs, BtnLeft, pressed: true);
+                    RouteButton(timeMs, InputCodes.BtnLeft, pressed: true);
                     break;
                 default:
                     _pointerEdge = false;
@@ -437,7 +402,7 @@ internal sealed partial class ShellSeat :
 
     internal void OnButton(uint timeMs, uint button, bool pressed)
     {
-        if (button == BtnLeft && pressed && !_pointerEdge &&
+        if (button == InputCodes.BtnLeft && pressed && !_pointerEdge &&
             _touch.Router.SyntheticDown(PointerTouchId, timeMs, _pointer.X, _pointer.Y) ==
             TouchGestureVerdict.Withhold)
         {
@@ -445,7 +410,7 @@ internal sealed partial class ShellSeat :
             return;
         }
 
-        if (button == BtnLeft && !pressed && _pointerEdge)
+        if (button == InputCodes.BtnLeft && !pressed && _pointerEdge)
         {
             _pointerEdge = false;
             switch (_touch.Router.SyntheticUp(PointerTouchId, timeMs))
@@ -453,7 +418,7 @@ internal sealed partial class ShellSeat :
                 case TouchGestureVerdict.Finish:
                     return;
                 case TouchGestureVerdict.Decline:
-                    RouteButton(timeMs, BtnLeft, pressed: true);
+                    RouteButton(timeMs, InputCodes.BtnLeft, pressed: true);
                     break;
             }
         }
@@ -465,14 +430,14 @@ internal sealed partial class ShellSeat :
     {
         _idle.NotifyActivity();
         UsePointer();
-        if (button == BtnLeft && !pressed && _splitView is { } dragging)
+        if (button == InputCodes.BtnLeft && !pressed && _splitView is { } dragging)
         {
             _shell.EndSplitDrag(dragging);
             _splitView = null;
             return;
         }
 
-        if (button == BtnLeft && !pressed)
+        if (button == InputCodes.BtnLeft && !pressed)
         {
             var releaseView = _shell.ViewAt(_pointer.X, _pointer.Y);
             if (_shell.ChromeRelease(
@@ -487,7 +452,7 @@ internal sealed partial class ShellSeat :
             }
         }
 
-        if (button == BtnLeft && pressed)
+        if (button == InputCodes.BtnLeft && pressed)
         {
             var charmsView = _shell.ViewAt(_pointer.X, _pointer.Y);
             if (_shell.CornerClick(
@@ -521,7 +486,7 @@ internal sealed partial class ShellSeat :
             }
         }
 
-        if (button == BtnRight && pressed && _scene.SurfaceAt(_pointer.X, _pointer.Y) is { Surface: { } target })
+        if (button == InputCodes.BtnRight && pressed && _scene.SurfaceAt(_pointer.X, _pointer.Y) is { Surface: { } target })
         {
             _shell.Focus(_shell.OwnerOf(target));
             _shell.ToggleTitle(_shell.ViewAt(_pointer.X, _pointer.Y));
@@ -565,32 +530,6 @@ internal sealed partial class ShellSeat :
     {
         _idle.NotifyActivity();
         UseTouch();
-    }
-
-    bool ITouchHitTester.TryHit(double layoutX, double layoutY, out TouchHit hit)
-    {
-        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
-        {
-            hit = new TouchHit(surface, at.X, at.Y, at.Node);
-            return true;
-        }
-
-        hit = default;
-        return false;
-    }
-
-    bool ITouchHitTester.TryMap(
-        object? token, double layoutX, double layoutY, out double localX, out double localY)
-    {
-        if (token is SceneNode { IsDestroyed: false } node &&
-            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
-        {
-            return true;
-        }
-
-        localX = 0;
-        localY = 0;
-        return false;
     }
 
     bool ITouchChrome.TryPress(int id, uint timeMs, double x, double y)

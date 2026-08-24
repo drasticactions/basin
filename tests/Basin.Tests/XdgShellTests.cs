@@ -18,6 +18,28 @@ public sealed class XdgShellTests
     }
 
     [Fact]
+    public void The_fullscreen_request_carries_its_output()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+
+        window.Toplevel.SetFullscreen(host.Client.Outputs[0]);
+        host.PumpToServer();
+        Assert.True(window.ServerToplevel.RequestedFullscreen);
+        Assert.Same(host.Output, window.ServerToplevel.RequestedFullscreenOutput);
+
+        window.Toplevel.UnsetFullscreen();
+        host.PumpToServer();
+        Assert.False(window.ServerToplevel.RequestedFullscreen);
+        Assert.Null(window.ServerToplevel.RequestedFullscreenOutput);
+
+        window.Toplevel.SetFullscreen(null);
+        host.PumpToServer();
+        Assert.True(window.ServerToplevel.RequestedFullscreen);
+        Assert.Null(window.ServerToplevel.RequestedFullscreenOutput);
+    }
+
+    [Fact]
     public void Set_size_and_states_reach_the_client_in_one_configure()
     {
         using var host = new CompositorTestHost();

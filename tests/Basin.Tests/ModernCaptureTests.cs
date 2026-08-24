@@ -381,10 +381,12 @@ public sealed class ImageCopyCaptureTests
         var model = new TestToplevelModel();
         using var list = new ForeignToplevelListManager(host.Display, model);
         using var sources = new ImageCaptureSourceManager(host.Display);
+        var index = new Basin.Scene.ToplevelSceneIndex();
         var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout)
         {
             Renderer = host.Renderer,
             Toplevels = model,
+            Index = index,
         };
         using var manager = new ImageCopyCaptureManager(host.Display, host.Buffers, capture);
 
@@ -399,8 +401,7 @@ public sealed class ImageCopyCaptureTests
         var scene = new Basin.Scene.SceneSurface(tree, window.ServerToplevel.Surface);
 
         var toplevelId = model.Add(string.Empty, "basin-test", window.ServerToplevel.Surface, new Box(0, 0, 60, 50));
-        capture.ToplevelContent = id =>
-            id == toplevelId ? new Basin.Scene.ToplevelCaptureTrees(tree, null) : default;
+        index.Set(toplevelId, new Basin.Scene.ToplevelCaptureTrees(tree, null));
 
         var intruder = new Basin.Scene.SceneRect(host.Scene.Root, 60, 50, new RenderColor(1, 0, 0, 1));
         intruder.SetPosition(30, 0);
@@ -561,5 +562,135 @@ public sealed class ExportDmabufTests
 
         close(fd);
         host.PumpToServer();
+    }
+}
+
+public sealed class CaptureExclusionTests
+{
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void An_excluded_toplevel_is_absent_from_an_output_capture(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var model = new TestToplevelModel();
+        var index = new Basin.Scene.ToplevelSceneIndex();
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Toplevels = model,
+            Index = index,
+            Background = new RenderColor(0, 0, 0, 1),
+        };
+
+        var excludedTree = new Basin.Scene.SceneTree(host.Scene.Root);
+        var excludedRect = new Basin.Scene.SceneRect(excludedTree, 40, 40, new RenderColor(1, 0, 0, 1));
+        excludedTree.SetPosition(10, 10);
+        var visibleTree = new Basin.Scene.SceneTree(host.Scene.Root);
+        _ = new Basin.Scene.SceneRect(visibleTree, 40, 40, new RenderColor(0, 1, 0, 1));
+        visibleTree.SetPosition(80, 10);
+
+        var excluded = model.Add("secret", "app.secret");
+        var visible = model.Add("public", "app.public");
+        index.Set(excluded, new Basin.Scene.ToplevelCaptureTrees(excludedTree, null));
+        index.Set(visible, new Basin.Scene.ToplevelCaptureTrees(visibleTree, null));
+        model.SetState(excluded, ToplevelState.ExcludedFromCapture);
+
+        var source = CaptureSource.Output(host.Output);
+        Assert.True(capture.Capture(source, default, host.Target));
+        var hidden = host.Pixel(20, 20);
+        Assert.True((hidden & 0x00FF0000u) >> 16 < 0x20, $"excluded window leaked into the capture: {hidden:X8}");
+        var kept = host.Pixel(90, 20);
+        Assert.True((kept & 0x0000FF00u) >> 8 > 0xD0, $"included window missing from the capture: {kept:X8}");
+        Assert.True(excludedRect.Enabled);
+
+        model.SetState(excluded, ToplevelState.None);
+        Assert.True(capture.Capture(source, default, host.Target));
+        var restored = host.Pixel(20, 20);
+        Assert.True((restored & 0x00FF0000u) >> 16 > 0xD0, $"window still hidden after inclusion: {restored:X8}");
+
+        excludedTree.Destroy();
+        visibleTree.Destroy();
+    }
+
+    [Fact]
+    public void An_excluded_toplevel_refuses_toplevel_capture()
+    {
+        using var host = new CompositorTestHost();
+        var model = new TestToplevelModel();
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Toplevels = model,
+        };
+
+        var id = model.Add("secret", "app.secret", geometry: new Box(0, 0, 60, 50));
+        var source = CaptureSource.Toplevel(id);
+        Assert.True(capture.Supports(source));
+        Assert.True(capture.TryDescribe(source, out _));
+
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        Assert.False(capture.Supports(source));
+        Assert.False(capture.TryDescribe(source, out _));
+        Assert.False(capture.Capture(source, default, host.Target));
+    }
+
+    [Fact]
+    public void An_excluded_toplevel_cancels_export_dmabuf()
+    {
+        using var host = new CompositorTestHost();
+        var model = new TestToplevelModel();
+        var dmabuf = new Basin.Scene.SceneDmabufCapture { Toplevels = model };
+        var id = model.Add("secret", "app.secret");
+
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        Assert.False(dmabuf.TryCurrentFrame(host.Output, out _));
+    }
+
+    [Fact]
+    public void Setting_the_capture_bit_damages_the_outputs_it_touches()
+    {
+        using var host = new CompositorTestHost();
+        var model = new TestToplevelModel();
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Toplevels = model,
+        };
+        var observer = new RecordingDamageObserver();
+        capture.AddDamageObserver(observer);
+
+        var id = model.Add("secret", "app.secret", geometry: new Box(10, 10, 40, 40));
+        Assert.Empty(observer.Damage);
+
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        var damage = Assert.Single(observer.Damage);
+        Assert.Same(host.Output, damage.Output);
+        Assert.Equal(new Box(0, 0, 160, 120), damage.Box);
+
+        observer.Damage.Clear();
+        model.Retitle(id, "still secret");
+        Assert.Empty(observer.Damage);
+
+        model.SetState(id, ToplevelState.None);
+        Assert.Single(observer.Damage);
+    }
+
+    private sealed class RecordingDamageObserver : ICaptureDamageObserver
+    {
+        public List<(IOutput Output, Box Box)> Damage { get; } = [];
+
+        public void OnSourceDamaged(IOutput output, Box damage) => Damage.Add((output, damage));
+
+        public void OnCursorChanged()
+        {
+        }
     }
 }

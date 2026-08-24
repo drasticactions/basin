@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Pixman;
 
 namespace Basin;
@@ -27,6 +28,12 @@ public interface IOutput
     bool AdaptiveSync { get; }
 
     bool SupportsInFence => false;
+
+    OutputConfigurationFeatures Features => OutputConfigurationFeatures.None;
+
+    OutputColorimetry? Colorimetry => null;
+
+    ReadOnlyMemory<byte> EdidBytes => default;
 
     bool TestCommit(OutputState state);
 

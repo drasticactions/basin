@@ -70,11 +70,7 @@ internal sealed partial class Westonia
 
         try
         {
-            var info = new ProcessStartInfo("/bin/sh") { UseShellExecute = false };
-            info.ArgumentList.Add("-c");
-            info.ArgumentList.Add(path);
-            info.Environment["WAYLAND_DISPLAY"] = _host.Socket;
-            _screensaver = Process.Start(info);
+            _screensaver = Basin.Diagnostics.BasinDiagnostics.StartClient(path, _host.Socket);
             _log.LogInformation("started the screensaver: {Path}", path);
         }
         catch (Exception error)
@@ -90,18 +86,7 @@ internal sealed partial class Westonia
             return;
         }
 
-        try
-        {
-            if (!_screensaver.HasExited)
-            {
-                _screensaver.Kill(entireProcessTree: true);
-            }
-        }
-        catch (Exception error) when (error is InvalidOperationException or NotSupportedException)
-        {
-        }
-
-        _screensaver.Dispose();
+        Basin.Diagnostics.BasinDiagnostics.StopClient(_screensaver);
         _screensaver = null;
     }
 }

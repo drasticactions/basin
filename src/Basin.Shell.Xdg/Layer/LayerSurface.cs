@@ -71,10 +71,18 @@ public sealed class LayerSurface
                 PopupAdopted?.Invoke(popup);
             }
         };
-        resource.Destroyed += (_, _) => Unmap(sendClosed: false);
+        void OnSurfaceDestroyed() => Unmap(sendClosed: false);
+        resource.Destroyed += (_, _) =>
+        {
+            Unmap(sendClosed: false);
+            surface.Committed -= OnCommitted;
+            surface.Destroyed -= OnSurfaceDestroyed;
+            surface.ClearRoleObject();
+            Destroyed?.Invoke();
+        };
 
         surface.Committed += OnCommitted;
-        surface.Destroyed += () => Unmap(sendClosed: false);
+        surface.Destroyed += OnSurfaceDestroyed;
     }
 
     public Surface Surface { get; }
@@ -101,9 +109,13 @@ public sealed class LayerSurface
 
     public bool IsMapped => _mapped;
 
+    public bool IsDestroyed => _resource.IsDestroyed;
+
     public event Action? Mapped;
 
     public event Action? Unmapped;
+
+    public event Action? Destroyed;
 
     public event Action? Committed;
 

@@ -19,6 +19,8 @@ public sealed class SeatTouch
 
     public bool HasPoints => _points.Count > 0;
 
+    public TouchRouter? Router { get; internal set; }
+
     public ITouchGrab Grab => _grabs.Count > 0 ? _grabs[^1] : _defaultGrab;
 
     public bool HasGrab => _grabs.Count > 0;

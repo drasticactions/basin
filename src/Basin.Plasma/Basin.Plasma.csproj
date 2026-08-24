@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Plasma</PackageId>
+    <RootNamespace>Basin.Plasma</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>KDE Plasma protocol pack for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../Basin.Effects/Basin.Effects.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)appmenu.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)dpms.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)fake-input.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)idle.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)kde-output-device-v2.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)kde-output-management-v2.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)kde-external-brightness-v1.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)kde-output-order-v1.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)keystate.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)plasma-shell.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)kde-screen-edge-v1.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)kde-lockscreen-overlay-v1.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)server-decoration-palette.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)shadow.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)text-input-unstable-v2.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)slide.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)zkde-screencast-unstable-v1.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+  </ItemGroup>
+
+</Project>

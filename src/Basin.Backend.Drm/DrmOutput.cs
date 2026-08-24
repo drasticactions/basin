@@ -82,8 +82,15 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         ScanoutFormats = ReadInFormats(backend.Device, _planeProps);
         OverlayScanoutFormats = backend.OverlayFormatsFor(crtcIndex);
 
-        var edid = ReadEdid();
+        MaxBitsPerColorRange = ReadMaxBpcRange();
+        var edidBytes = ReadEdidBytes();
+        _edidBytes = edidBytes;
+        var edid = edidBytes.Length > 0 ? EdidInfo.Parse(edidBytes) : new EdidInfo("unknown", "unknown", string.Empty);
         Edid = edid;
+        _wideColorGamutCapable = _connectorProps.Has("Colorspace") &&
+            (TryEnumValue("Colorspace", "BT2020_RGB", out _) || TryEnumValue("Colorspace", "BT2020_YCC", out _)) &&
+            edid.SupportsBt2020 && VendorAllowsColorspace();
+        _highDynamicRangeCapable = _connectorProps.Has("HDR_OUTPUT_METADATA") && edid.SupportsPq && _wideColorGamutCapable;
         Make = edid.Make;
         Model = edid.Model;
         Serial = edid.Serial;
@@ -125,6 +132,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     public EdidInfo Edid { get; }
 
+    public override ReadOnlyMemory<byte> EdidBytes => _edidBytes;
+
+    public (uint Min, uint Max) MaxBitsPerColorRange { get; }
+
     public event Action<ulong, uint, ulong>? PresentedOnScreen;
 
     public override void RequestFrame()
@@ -140,6 +151,96 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     protected override bool SupportsAdaptiveSync =>
         _crtcProps.Has("VRR_ENABLED") && _connectorProps.TryGetValue("vrr_capable", out var capable) && capable != 0;
 
+    protected override bool SupportsRgbRange => _connectorProps.Has("Broadcast RGB");
+
+    protected override bool SupportsMaxBitsPerColor => _connectorProps.Has("max bpc");
+
+    protected override bool SupportsOverscan =>
+        _connectorProps.Has("overscan") ||
+        (_connectorProps.Has("underscan") &&
+         _connectorProps.Has("underscan vborder") &&
+         _connectorProps.Has("underscan hborder"));
+
+    protected override bool SupportsCustomModes => Libxcvt.IsAvailable;
+
+    protected override bool SupportsSharpness => _crtcProps.Has("SHARPNESS_STRENGTH");
+
+    protected override bool SupportsAbmLevel => _connectorProps.Has("adaptive backlight modulation");
+
+    public override Basin.Capabilities.OutputConfigurationFeatures Features
+    {
+        get
+        {
+            var features = Basin.Capabilities.OutputConfigurationFeatures.None;
+            if (SupportsOverscan)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.Overscan;
+            }
+
+            if (SupportsAdaptiveSync)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.Vrr;
+            }
+
+            if (SupportsRgbRange)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.RgbRange;
+            }
+
+            if (SupportsMaxBitsPerColor)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.MaxBitsPerColor;
+            }
+
+            if (SupportsCustomModes)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.CustomModes;
+            }
+
+            if (SupportsSharpness)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.Sharpness;
+            }
+
+            if (SupportsAbmLevel)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.AbmLevel;
+            }
+
+            features |= Basin.Capabilities.OutputConfigurationFeatures.IccProfile;
+            features |= Basin.Capabilities.OutputConfigurationFeatures.HdrIccProfile;
+            if (_wideColorGamutCapable)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.WideColorGamut;
+            }
+
+            if (_highDynamicRangeCapable)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange;
+            }
+
+            if (EdidBytes.Length > 0 && Edid.Chromaticities.HasValue)
+            {
+                features |= Basin.Capabilities.OutputConfigurationFeatures.BuiltInColor;
+            }
+
+            return features;
+        }
+    }
+
+    public override Basin.Capabilities.OutputColorimetry? Colorimetry =>
+        EdidBytes.Length == 0
+            ? null
+            : new Basin.Capabilities.OutputColorimetry
+            {
+                MaxLuminance = Edid.MaxLuminance,
+                MaxFrameAverageLuminance = Edid.MaxFrameAverageLuminance,
+                MinLuminance = Edid.MinLuminance,
+                Chromaticities = Edid.Chromaticities,
+                SupportsPq = Edid.SupportsPq,
+                SupportsBt2020 = Edid.SupportsBt2020,
+            };
+
     public override bool SupportsInFence => _planeProps.Has("IN_FENCE_FD");
 
     protected override bool TestCommitCore(OutputState state)
@@ -150,13 +251,25 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             RejectLayers(layers);
         }
 
-        if ((state.Fields & OutputStateFields.Mode) != 0 && FindNativeMode(state.Mode) is null)
+        if ((state.Fields & OutputStateFields.CustomModes) != 0 && state.CustomModes is { } customModes &&
+            !CustomModesGenerate(customModes))
+        {
+            return false;
+        }
+
+        if ((state.Fields & OutputStateFields.Mode) != 0 && FindNativeMode(state.Mode) is null &&
+            !PendingCustomModeMatches(state, state.Mode))
         {
             return false;
         }
 
         if ((state.Fields & OutputStateFields.Buffer) != 0 && state.Buffer is { } buffer)
         {
+            if (!Enabled && ((state.Fields & OutputStateFields.Enabled) == 0 || !state.Enabled))
+            {
+                return false;
+            }
+
             var mode = (state.Fields & OutputStateFields.Mode) != 0 ? state.Mode : CurrentMode;
             if (buffer.Width != mode.Width || buffer.Height != mode.Height)
             {
@@ -225,12 +338,57 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if ((state.Fields & OutputStateFields.Hdr) != 0)
         {
+            if (!Equals(state.Hdr, _pendingHdr))
+            {
+                _needsModeset = true;
+            }
+
             _pendingHdr = state.Hdr;
             _hdrDirty = true;
         }
 
+        if ((state.Fields & OutputStateFields.RgbRange) != 0 && state.RgbRange != _pendingRgbRange)
+        {
+            _pendingRgbRange = state.RgbRange;
+            _needsModeset = true;
+        }
+
+        if ((state.Fields & OutputStateFields.MaxBitsPerColor) != 0 && state.MaxBitsPerColor != _pendingMaxBpc)
+        {
+            _pendingMaxBpc = state.MaxBitsPerColor;
+            _needsModeset = true;
+        }
+
+        if ((state.Fields & OutputStateFields.Overscan) != 0 && state.Overscan != _pendingOverscan)
+        {
+            _pendingOverscan = state.Overscan;
+            _needsModeset = true;
+        }
+
+        if ((state.Fields & OutputStateFields.CustomModes) != 0 && state.CustomModes is { } customModeList)
+        {
+            RebuildCustomModes(customModeList);
+        }
+
+        if ((state.Fields & OutputStateFields.Sharpness) != 0 && state.Sharpness != _pendingSharpness)
+        {
+            _pendingSharpness = state.Sharpness;
+            _enhancementDirty = true;
+        }
+
+        if ((state.Fields & OutputStateFields.AbmLevel) != 0 && state.AbmLevel != _pendingAbmLevel)
+        {
+            _pendingAbmLevel = state.AbmLevel;
+            _needsModeset = true;
+        }
+
+        if (!Enabled)
+        {
+            return true;
+        }
+
         var colorDirty = _gammaDirty || _ctmDirty || _degammaDirty || _hdrDirty;
-        if (buffer is null && !modeChanged && !_needsModeset && !_cursorDirty && !colorDirty)
+        if (buffer is null && !modeChanged && !_needsModeset && !_cursorDirty && !colorDirty && !_enhancementDirty)
         {
             return true;
         }
@@ -317,6 +475,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             builder.Add(_connectorProps, "connector", "CRTC_ID", CrtcId);
             builder.Add(_crtcProps, "crtc", "MODE_ID", _modeBlobId);
             builder.Add(_crtcProps, "crtc", "ACTIVE", 1);
+            AddConnectorPreferences(builder);
         }
 
         AddPlaneProperties(builder, fbId, _committedMode);
@@ -346,6 +505,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         if (colorDirty)
         {
             AddColorProperties(builder);
+        }
+
+        if (_enhancementDirty || modeset)
+        {
+            AddEnhancementProperties(builder);
+            _enhancementDirty = false;
         }
 
         var flags = modeset
@@ -599,6 +764,118 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         return false;
+    }
+
+    private static readonly bool AllowIntelColorspace =
+        Environment.GetEnvironmentVariable("BASIN_DRM_ALLOW_INTEL_COLORSPACE") == "1";
+
+    private static readonly bool AllowNvidiaColorspace =
+        Environment.GetEnvironmentVariable("BASIN_DRM_ALLOW_NVIDIA_COLORSPACE") == "1";
+
+    private readonly byte[] _edidBytes;
+    private readonly bool _wideColorGamutCapable;
+    private readonly bool _highDynamicRangeCapable;
+
+    private bool VendorAllowsColorspace()
+    {
+        var name = _backend.Device.GetVersion().Name;
+        if (name == "i915")
+        {
+            return AllowIntelColorspace || Environment.OSVersion.Version >= new Version(6, 11);
+        }
+
+        if (name == "nvidia-drm")
+        {
+            return AllowNvidiaColorspace;
+        }
+
+        return true;
+    }
+
+    private Basin.Capabilities.OutputRgbRange _pendingRgbRange;
+    private uint _pendingMaxBpc;
+    private uint _pendingOverscan;
+
+    private void AddConnectorPreferences(DrmAtomicBuilder builder)
+    {
+        if (_connectorProps.Has("Broadcast RGB") &&
+            TryEnumValue("Broadcast RGB", BroadcastRgbName(_pendingRgbRange), out var broadcast))
+        {
+            builder.Add(_connectorProps, "connector", "Broadcast RGB", broadcast);
+        }
+
+        if (_connectorProps.Has("max bpc"))
+        {
+            var (min, max) = MaxBitsPerColorRange;
+            var maxBpc = Math.Clamp(_pendingMaxBpc == 0 ? 10 : _pendingMaxBpc, min, max);
+            builder.Add(_connectorProps, "connector", "max bpc", maxBpc);
+        }
+
+        if (_connectorProps.Has("adaptive backlight modulation") &&
+            TryEnumValue("adaptive backlight modulation", AbmLevelNames[Math.Min(_pendingAbmLevel, 4)], out var abm))
+        {
+            builder.Add(_connectorProps, "connector", "adaptive backlight modulation", abm);
+        }
+
+        if (_connectorProps.Has("overscan"))
+        {
+            builder.Add(_connectorProps, "connector", "overscan", _pendingOverscan);
+        }
+        else if (SupportsOverscan)
+        {
+            var aspect = CurrentMode.Height > 0 ? (double)CurrentMode.Width / CurrentMode.Height : 1.0;
+            var vborder = _pendingOverscan;
+            var hborder = (uint)(vborder * aspect);
+            if (hborder > 128)
+            {
+                vborder = (uint)(128 / aspect);
+                hborder = 128;
+            }
+
+            if (TryEnumValue("underscan", vborder != 0 ? "on" : "off", out var underscan))
+            {
+                builder.Add(_connectorProps, "connector", "underscan", underscan);
+                builder.Add(_connectorProps, "connector", "underscan vborder", vborder);
+                builder.Add(_connectorProps, "connector", "underscan hborder", hborder);
+            }
+        }
+    }
+
+    private uint _pendingSharpness;
+    private uint _pendingAbmLevel;
+    private bool _enhancementDirty;
+
+    private static readonly string[] AbmLevelNames = ["off", "min", "bias min", "bias max", "max"];
+
+    private void AddEnhancementProperties(DrmAtomicBuilder builder)
+    {
+        if (_crtcProps.Has("SHARPNESS_STRENGTH"))
+        {
+            var info = _backend.Device.GetProperty(_crtcProps.IdOf("SHARPNESS_STRENGTH"));
+            var max = info.Values.Count >= 2 ? info.Values[1] : 0;
+            builder.Add(
+                _crtcProps, "crtc", "SHARPNESS_STRENGTH", (ulong)Math.Round(_pendingSharpness * (double)max / 10000.0));
+        }
+
+    }
+
+    private static string BroadcastRgbName(Basin.Capabilities.OutputRgbRange range) => range switch
+    {
+        Basin.Capabilities.OutputRgbRange.Full => "Full",
+        Basin.Capabilities.OutputRgbRange.Limited => "Limited 16:235",
+        _ => "Automatic",
+    };
+
+    private (uint Min, uint Max) ReadMaxBpcRange()
+    {
+        if (!_connectorProps.Has("max bpc"))
+        {
+            return (8, 8);
+        }
+
+        var info = _backend.Device.GetProperty(_connectorProps.IdOf("max bpc"));
+        var values = info.Values;
+        return values.Count >= 2 ? ((uint)values[0], (uint)values[1]) : (8, 8);
     }
 
     private uint _gammaBlobId;
@@ -1301,7 +1578,96 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
+        foreach (var mode in _customModes)
+        {
+            if (mode.HorizontalDisplay != wanted.Width || mode.VerticalDisplay != wanted.Height)
+            {
+                continue;
+            }
+
+            var delta = Math.Abs((long)ToOutputMode(mode).RefreshMilliHz - wanted.RefreshMilliHz);
+            if (delta < bestDelta)
+            {
+                bestDelta = delta;
+                best = mode;
+            }
+        }
+
         return best;
+    }
+
+    private readonly List<DrmModeInfo> _customModes = [];
+
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Constructor)]
+    private static extern DrmModeInfo WrapMode(ref _drmModeModeInfo native);
+
+    private static bool TryBuildCustomMode(OutputMode wanted, out DrmModeInfo built)
+    {
+        built = default;
+        if (!Libxcvt.TryGenerate(wanted.Width, wanted.Height, wanted.RefreshMilliHz, reducedBlanking: true, out var cvt))
+        {
+            return false;
+        }
+
+        var native = default(_drmModeModeInfo);
+        native.clock = (uint)cvt.DotClock;
+        native.hdisplay = (ushort)cvt.HDisplay;
+        native.hsync_start = cvt.HSyncStart;
+        native.hsync_end = cvt.HSyncEnd;
+        native.htotal = cvt.HTotal;
+        native.vdisplay = (ushort)cvt.VDisplay;
+        native.vsync_start = cvt.VSyncStart;
+        native.vsync_end = cvt.VSyncEnd;
+        native.vtotal = cvt.VTotal;
+        native.vrefresh = (uint)Math.Round(wanted.RefreshMilliHz / 1000.0);
+        native.flags = (uint)(cvt.ModeFlags & 0xF);
+        native.type = 1u << 5;
+        built = WrapMode(ref native);
+        return true;
+    }
+
+    private void RebuildCustomModes(IReadOnlyList<OutputMode> wanted)
+    {
+        _customModes.Clear();
+        foreach (var mode in wanted)
+        {
+            if (TryBuildCustomMode(mode, out var built))
+            {
+                _customModes.Add(built);
+            }
+        }
+    }
+
+    private bool CustomModesGenerate(IReadOnlyList<OutputMode> wanted)
+    {
+        foreach (var mode in wanted)
+        {
+            if (!Libxcvt.TryGenerate(mode.Width, mode.Height, mode.RefreshMilliHz, reducedBlanking: true, out _))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool PendingCustomModeMatches(OutputState state, OutputMode wanted)
+    {
+        if ((state.Fields & OutputStateFields.CustomModes) == 0 || state.CustomModes is not { } customs)
+        {
+            return false;
+        }
+
+        foreach (var mode in customs)
+        {
+            if (mode.Width == wanted.Width && mode.Height == wanted.Height &&
+                Math.Abs(mode.RefreshMilliHz - wanted.RefreshMilliHz) < 500)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ModeEquals(OutputMode wanted, DrmModeInfo native) =>
@@ -1319,23 +1685,29 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     private static uint RefreshIntervalNs(DrmModeInfo mode) => ToOutputMode(mode).RefreshIntervalNanoseconds;
 
-    private EdidInfo ReadEdid() => ReadEdid(_backend.Device, _connectorProps);
+    private byte[] ReadEdidBytes() => ReadEdidBytes(_backend.Device, _connectorProps);
 
     internal static EdidInfo ReadEdid(DrmDevice device, DrmPropertyMap connectorProps)
+    {
+        var bytes = ReadEdidBytes(device, connectorProps);
+        return bytes.Length > 0 ? EdidInfo.Parse(bytes) : new EdidInfo("unknown", "unknown", string.Empty);
+    }
+
+    internal static byte[] ReadEdidBytes(DrmDevice device, DrmPropertyMap connectorProps)
     {
         if (connectorProps.TryGetValue("EDID", out var blobId) && blobId != 0)
         {
             try
             {
                 var blob = device.GetPropertyBlob((uint)blobId);
-                return EdidInfo.Parse(blob.Data.Span);
+                return blob.Data.Span.ToArray();
             }
             catch (DrmException)
             {
             }
         }
 
-        return new EdidInfo("unknown", "unknown", string.Empty);
+        return [];
     }
 
     internal static DrmFormatSet ReadInFormats(DrmDevice device, DrmPropertyMap planeProps)

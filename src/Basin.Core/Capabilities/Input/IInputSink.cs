@@ -21,4 +21,14 @@ public interface IInputSink
     bool PointerAxisStop(uint timeMs, uint axis);
 
     bool Frame();
+
+    bool TouchDown(uint timeMs, int id, double x, double y, double width, double height) => false;
+
+    bool TouchMotion(uint timeMs, int id, double x, double y, double width, double height) => false;
+
+    bool TouchUp(uint timeMs, int id) => false;
+
+    bool TouchFrame() => false;
+
+    bool TouchCancel() => false;
 }

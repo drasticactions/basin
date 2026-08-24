@@ -1,3 +1,4 @@
+using Basin;
 using System.Runtime.InteropServices;
 using Basin.Cli;
 using BlurClient.Protocol;
@@ -10,8 +11,6 @@ internal static class Program
 {
     private const uint BodyColor = 0x5F20242C;
     private const int Frame = 12;
-    private const uint ButtonLeft = 0x110;
-
     private static int Main(string[] args)
     {
         var cli = new BasinCommand("Test program for checking blur effects.");
@@ -130,7 +129,7 @@ internal static class Program
             pointer.Motion += (_, e) => (pointerX, pointerY) = (e.SurfaceX.ToDouble(), e.SurfaceY.ToDouble());
             pointer.Button += (_, e) =>
             {
-                if (e.State != WlPointer.ButtonState.Pressed || e.Button != ButtonLeft)
+                if (e.State != WlPointer.ButtonState.Pressed || e.Button != InputCodes.BtnLeft)
                 {
                     return;
                 }

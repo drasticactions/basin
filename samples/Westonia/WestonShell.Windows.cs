@@ -28,6 +28,8 @@ internal sealed partial class WestonShell
 
     public Action? Repaint { get; set; }
 
+    public Action? Restacked { get; set; }
+
     public void Attach(XdgShell shell)
     {
         shell.NewToplevel += OnNewToplevel;
@@ -60,6 +62,7 @@ internal sealed partial class WestonShell
         if (ReferenceEquals(window, _focused))
         {
             window.Tree.RaiseToTop();
+            Restacked?.Invoke();
             return;
         }
 
@@ -73,6 +76,7 @@ internal sealed partial class WestonShell
         window.Tree.RaiseToTop();
         _windows.Remove(window);
         _windows.Insert(0, window);
+        Restacked?.Invoke();
         window.Window.SetActivated(true);
         window.Frame?.SetActive(true);
         KeyboardTarget = null;
@@ -204,6 +208,7 @@ internal sealed partial class WestonShell
             window.Curtain = null;
             window.Window.SetFullscreen(false);
             window.Tree.Reparent(WorkspaceTreeOf?.Invoke(window) ?? _layers.Workspaces);
+            Restacked?.Invoke();
             Restore(window);
         }
 
@@ -216,6 +221,7 @@ internal sealed partial class WestonShell
         var box = OutputBox(window);
         window.Window.SetSize(box.Width, box.Height);
         window.Tree.Reparent(_layers.Fullscreen);
+        Restacked?.Invoke();
         var curtain = window.Curtain is { IsDestroyed: false } existing
             ? existing
             : new SceneRect(_layers.Fullscreen, box.Width, box.Height, new RenderColor(0f, 0f, 0f, 1f));
@@ -295,7 +301,7 @@ internal sealed partial class WestonShell
         _grab.OriginY = window.Y;
         _grab.OriginWidth = geometry.Width;
         _grab.OriginHeight = geometry.Height;
-        window.ResizeAnchor = (_grab.Edges, window.X + geometry.Width, window.Y + geometry.Height);
+        window.ResizeAnchor = new ResizeAnchor(_grab.Edges, window.X + geometry.Width, window.Y + geometry.Height);
         window.Resizing = true;
         window.Window.SetResizing(true);
         Client?.GrabCursor(CursorFor(_grab.Edges));
@@ -376,17 +382,13 @@ internal sealed partial class WestonShell
         }
 
         var geometry = window.Geometry;
-        var x = anchor.Edges.HasFlag(ResizeEdges.Left) ? anchor.Right - geometry.Width : window.X;
-        var y = anchor.Edges.HasFlag(ResizeEdges.Top) ? anchor.Bottom - geometry.Height : window.Y;
+        var (x, y) = anchor.PositionFor(geometry.Width, geometry.Height, window.X, window.Y);
         if (x != window.X || y != window.Y)
         {
             window.MoveTo(x, y);
         }
 
-        if (!window.Resizing)
-        {
-            window.ResizeAnchor = null;
-        }
+        window.ResizeAnchor = ResizeAnchor.AfterCommit(window.ResizeAnchor, window.Resizing);
     }
 
     private int ConstrainY(ShellWindow window, int y, bool clientInitiated)
@@ -574,6 +576,7 @@ internal sealed partial class WestonShell
     {
         window.Kind = ShellWindowKind.Minimized;
         window.Tree.Reparent(_layers.Minimized);
+        Restacked?.Invoke();
         if (ReferenceEquals(_focused, window))
         {
             _focused = null;
@@ -635,13 +638,38 @@ internal sealed partial class WestonShell
             scene.Tree.SetPosition(origin.X + offset.X, origin.Y + offset.Y);
         }
 
+        void Constrain()
+        {
+            var xdg = popup.Parent;
+            while (xdg?.Role is XdgPopupWindow parentPopup)
+            {
+                xdg = parentPopup.Parent;
+            }
+
+            if (xdg?.Role is not XdgToplevelWindow toplevel ||
+                WindowOwning(toplevel.Surface)?.Output is not { } output ||
+                OutputPlacement?.Invoke(output) is not { } box ||
+                !parentScene.Tree.TryMapSceneToLocal(0, 0, out var localX, out var localY))
+            {
+                return;
+            }
+
+            var origin = parent.EffectiveGeometry;
+            var originX = (int)-localX + origin.X;
+            var originY = (int)-localY + origin.Y;
+            popup.Unconstrain(new Box(box.X - originX, box.Y - originY, box.Width, box.Height));
+        }
+
+        Constrain();
         Place();
         popup.Xdg.Committed += Place;
         popup.GeometryChanged += Place;
+        popup.Repositioned += Constrain;
         popup.Destroyed += () =>
         {
             popup.Xdg.Committed -= Place;
             popup.GeometryChanged -= Place;
+            popup.Repositioned -= Constrain;
             _surfaceScenes.Remove(popup.Xdg);
         };
     }

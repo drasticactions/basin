@@ -159,6 +159,13 @@ public static class CommonOptions
         };
     }
 
+    public static Option<int> Outputs(int defaultOutputs = 1) => new("--outputs")
+    {
+        Description = "how many outputs to create",
+        HelpName = "N",
+        DefaultValueFactory = _ => defaultOutputs,
+    };
+
     public static Option<double?> Scale() => new("--scale")
     {
         Description = "output scale, otherwise taken from the output",

@@ -1,3 +1,4 @@
+using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
 using CursorShape = Basin.WindowManager.Protocol.WpCursorShapeDeviceV1.Shape;
 using Microsoft.Extensions.Logging;
@@ -8,8 +9,6 @@ namespace Dinghy;
 internal sealed class Manager
 {
     private const int CascadePadding = 10;
-    private const uint ButtonLeft = 0x110;
-    private const uint ButtonRight = 0x111;
     private const long CloseDoubleClickMs = 400;
 
     private readonly RiverWindowManager _wm;
@@ -423,8 +422,8 @@ internal sealed class Manager
                 _bindings.Add((BindingMode.Default, binding));
             }
 
-            BindPointer(seat, ButtonLeft, main, WmAction.PointerMove);
-            BindPointer(seat, ButtonRight, main, WmAction.PointerResize);
+            BindPointer(seat, InputCodes.BtnLeft, main, WmAction.PointerMove);
+            BindPointer(seat, InputCodes.BtnRight, main, WmAction.PointerResize);
         }
     }
 
@@ -1091,7 +1090,7 @@ internal sealed class Manager
             return;
         }
 
-        if (button != ButtonLeft || _pointerTitlebar is not { } mw)
+        if (button != InputCodes.BtnLeft || _pointerTitlebar is not { } mw)
         {
             return;
         }
@@ -1149,7 +1148,7 @@ internal sealed class Manager
 
         var x = (int)_managerSurfaceX;
         var y = (int)_managerSurfaceY;
-        if (button == ButtonLeft)
+        if (button == InputCodes.BtnLeft)
         {
             if (desktop.IconAt(x, y) is { } icon)
             {
@@ -1176,7 +1175,7 @@ internal sealed class Manager
 
             _wm.RequestManage();
         }
-        else if (button == ButtonRight && desktop.IconAt(x, y) is null)
+        else if (button == InputCodes.BtnRight && desktop.IconAt(x, y) is null)
         {
             if (_menu is not null)
             {

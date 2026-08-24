@@ -1,3 +1,4 @@
+using Basin;
 using System.Runtime.InteropServices;
 using Basin.Cli;
 using Microsoft.Extensions.Logging;
@@ -8,8 +9,6 @@ namespace WorkspacePager;
 
 internal static class Program
 {
-    private const uint ButtonLeft = 0x110;
-    private const uint ButtonRight = 0x111;
     private const int Margin = 10;
     private const int Gap = 8;
     private const int CellWidth = 240;
@@ -277,6 +276,48 @@ internal static class Program
             };
         }
 
+        void ReorderWindows(IReadOnlyList<string> uuids)
+        {
+            var ordered = new List<PlasmaWin>(windows.Count);
+            foreach (var uuid in uuids)
+            {
+                var win = windows.Find(w => w.Uuid == uuid);
+                if (win is not null && !ordered.Contains(win))
+                {
+                    ordered.Add(win);
+                }
+            }
+
+            foreach (var win in windows)
+            {
+                if (!ordered.Contains(win))
+                {
+                    ordered.Add(win);
+                }
+            }
+
+            windows.Clear();
+            windows.AddRange(ordered);
+            needRedraw = true;
+        }
+
+        void RequestStackingOrder()
+        {
+            if (windowManagement is not { } management || !management.SupportsGetStackingOrder)
+            {
+                return;
+            }
+
+            var order = management.GetStackingOrder();
+            var uuids = new List<string>();
+            order.Window += (_, e) => uuids.Add(e.Uuid);
+            order.Done += (_, _) =>
+            {
+                ReorderWindows(uuids);
+                order.Dispose();
+            };
+        }
+
         registry.Global += (_, e) =>
         {
             switch (e.Interface)
@@ -306,8 +347,11 @@ internal static class Program
                     manager.Workspace += (_, we) => WireWorkspace(we.Workspace);
                     break;
                 case "org_kde_plasma_window_management":
-                    windowManagement = registry.Bind<OrgKdePlasmaWindowManagement>(e.Name, Math.Min(16u, e.Version));
+                    windowManagement = registry.Bind<OrgKdePlasmaWindowManagement>(e.Name, Math.Min(20u, e.Version));
                     windowManagement.WindowWithUuid += (_, we) => WireWindow(we.Id, we.Uuid);
+                    windowManagement.StackingOrderUuidChanged += (_, se) =>
+                        ReorderWindows(se.Uuids.Length == 0 ? [] : se.Uuids.Split(';'));
+                    windowManagement.StackingOrderChanged2 += (_, _) => RequestStackingOrder();
                     break;
             }
         };
@@ -333,6 +377,7 @@ internal static class Program
         };
 
         display.Roundtrip();
+        RequestStackingOrder();
 
         if (compositor is null || shm is null || (wmBase is null && layerShell is null))
         {
@@ -485,7 +530,7 @@ internal static class Program
             };
             pointer.Button += (_, e) =>
             {
-                if (e.Button == ButtonLeft && e.State == WlPointer.ButtonState.Pressed)
+                if (e.Button == InputCodes.BtnLeft && e.State == WlPointer.ButtonState.Pressed)
                 {
                     (pressX, pressY) = (pointerX, pointerY);
                     dragMoved = false;
@@ -496,7 +541,7 @@ internal static class Program
                     }
                 }
 
-                if (e.Button == ButtonLeft && e.State == WlPointer.ButtonState.Released && dragWindow is not null)
+                if (e.Button == InputCodes.BtnLeft && e.State == WlPointer.ButtonState.Released && dragWindow is not null)
                 {
                     var grabbed = dragWindow;
                     dragWindow = null;
@@ -533,11 +578,11 @@ internal static class Program
                 }
 
                 var cell = CellAt(pointerX, pointerY);
-                if (e.Button == ButtonLeft)
+                if (e.Button == InputCodes.BtnLeft)
                 {
                     ClickCell(cell);
                 }
-                else if (e.Button == ButtonRight && cell is { Workspace: { } workspace })
+                else if (e.Button == InputCodes.BtnRight && cell is { Workspace: { } workspace })
                 {
                     Console.WriteLine($"REMOVE {workspace.Name}");
                     workspace.Handle.Remove();

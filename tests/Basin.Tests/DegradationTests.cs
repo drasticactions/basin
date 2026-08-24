@@ -120,6 +120,328 @@ public sealed class DegradationTests
     }
 
     [Fact]
+    public void Dpms_without_a_backend_reports_unsupported_and_ignores_set()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.DpmsManager(host.Display, power: null);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinDpmsManager>(host, "org_kde_kwin_dpms_manager", 1);
+        var dpms = proxy.Get(host.Client.Outputs[0]);
+        uint? supported = null;
+        var modes = new List<uint>();
+        var doneCount = 0;
+        dpms.Supported += (_, e) => supported = e.Supported;
+        dpms.ModeEvent += (_, e) => modes.Add(e.Mode);
+        dpms.Done += (_, _) => doneCount++;
+        host.PumpUntil(() => doneCount >= 1);
+
+        Assert.Equal(0u, supported);
+        Assert.Equal([0u], modes);
+
+        dpms.Set(3);
+        host.PumpToServer();
+        host.PumpToClient();
+        Assert.Equal([0u], modes);
+        Assert.Equal(1, doneCount);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Kde_idle_without_a_source_binds_and_never_idles()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.KdeIdleManager(host.Display, host.Loop, idle: null);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinIdle>(host, "org_kde_kwin_idle", 1);
+        var timeout = proxy.GetIdleTimeout(host.Client.Seat!, 10);
+        var idled = 0;
+        timeout.Idle += (_, _) => idled++;
+
+        for (var i = 0; i < 3; i++)
+        {
+            host.PumpToServer();
+            host.Loop.Dispatch(20);
+        }
+
+        host.PumpToClient();
+        Assert.Equal(0, idled);
+
+        timeout.SimulateUserActivity();
+        host.PumpToServer();
+        host.PumpToClient();
+        Assert.Equal(0, idled);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Keystate_without_a_seat_reports_every_key_unlocked()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.KeyStateManager(host.Display, seat: null);
+
+        var events = new List<(uint Key, uint State)>();
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinKeystate>(
+            host, "org_kde_kwin_keystate", 5, p => p.StateChanged += (_, e) => events.Add((e.Key, e.State)));
+
+        proxy.FetchStates();
+        host.PumpToServer();
+        host.PumpToClient();
+
+        Assert.Equal(8, events.Count);
+        Assert.All(events, e => Assert.Equal(0u, e.State));
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Fake_input_without_an_authority_or_sink_accepts_and_injects_nothing()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.FakeInputManager(
+            host.Display, authority: null, sink: null, seat: host.Seat, layout: host.Layout);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinFakeInput>(host, "org_kde_kwin_fake_input", 6);
+        proxy.Authenticate("test", "degradation");
+        proxy.PointerMotion(WlFixed.FromDouble(5), WlFixed.FromDouble(5));
+        proxy.PointerMotionAbsolute(WlFixed.FromDouble(10), WlFixed.FromDouble(10));
+        proxy.Button(0x110, 1);
+        proxy.Button(0x110, 0);
+        proxy.Axis(0, WlFixed.FromDouble(15));
+        proxy.KeyboardKey(30, 1);
+        proxy.KeyboardKey(30, 0);
+        proxy.TouchDown(0, WlFixed.FromDouble(0.5), WlFixed.FromDouble(0.5));
+        proxy.TouchMotion(0, WlFixed.FromDouble(0.6), WlFixed.FromDouble(0.6));
+        proxy.TouchFrame();
+        proxy.TouchUp(0);
+        proxy.TouchCancel();
+        proxy.KeyboardKeysym(0xffe1, 1);
+        host.PumpToServer();
+
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Text_input_v2_without_an_input_method_stays_silent()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.TextInputV2Manager(host.Display, host.Seat, method: null);
+
+        var window = MappedToplevel.Map(host, host.Client);
+        Basin.Plasma.Protocol.ZwpTextInputManagerV2? factory = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "zwp_text_input_manager_v2")
+            {
+                factory = registry.Bind<Basin.Plasma.Protocol.ZwpTextInputManagerV2>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+        var textInput = factory!.GetTextInput(host.Client.Seat!);
+        var entered = 0u;
+        var preedits = 0;
+        textInput.Enter += (_, e) => entered = e.Serial;
+        textInput.PreeditString += (_, _) => preedits++;
+        host.PumpToServer();
+
+        host.Seat.Keyboard.NotifyEnter(window.ServerSurface);
+        host.PumpToClient();
+        Assert.NotEqual(0u, entered);
+
+        textInput.Enable(window.Surface);
+        textInput.SetSurroundingText("text", 4, 4);
+        textInput.UpdateState_(entered, Basin.Plasma.Protocol.ZwpTextInputV2.UpdateState.Enter);
+        host.PumpToServer();
+        host.PumpToClient();
+
+        Assert.Equal(0, preedits);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Appmenu_without_consumer_wiring_records_and_reports_nothing()
+    {
+        using var host = new CompositorTestHost();
+        var toplevels = new TestToplevelModel();
+        using var windows = new PlasmaWindowManager(host.Display, toplevels, workspaces: null);
+        using var manager = new Basin.Plasma.AppMenuManager(host.Display, host.Compositor);
+        var id = toplevels.Add("Editor", "org.kde.kate");
+
+        var window = MappedToplevel.Map(host, host.Client);
+        Basin.Plasma.Protocol.OrgKdeKwinAppmenuManager? factory = null;
+        Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement? management = null;
+        var announced = new List<(uint Id, string Uuid)>();
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            switch (e.Interface)
+            {
+                case "org_kde_kwin_appmenu_manager":
+                    factory = registry.Bind<Basin.Plasma.Protocol.OrgKdeKwinAppmenuManager>(e.Name, 2);
+                    break;
+                case "org_kde_plasma_window_management":
+                    management = registry.Bind<Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement>(e.Name, 20);
+                    management.WindowWithUuid += (_, we) => announced.Add((we.Id, we.Uuid));
+                    break;
+            }
+        };
+        host.PumpToClient();
+        host.PumpToClient();
+        var resource = management!.GetWindowByUuid($"basin-{id}");
+        var menus = 0;
+        resource.ApplicationMenu += (_, _) => menus++;
+        host.PumpToServer();
+
+        var appMenu = factory!.Create(window.Surface);
+        appMenu.SetAddress("org.kde.kate", "/MenuBar");
+        appMenu.Release();
+        host.PumpToClient();
+
+        Assert.Equal(0, menus);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Decoration_palette_without_a_reader_records_and_survives()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.ServerDecorationPaletteManager(host.Display, host.Compositor);
+
+        var window = MappedToplevel.Map(host, host.Client);
+        Basin.Plasma.Protocol.OrgKdeKwinServerDecorationPaletteManager? factory = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "org_kde_kwin_server_decoration_palette_manager")
+            {
+                factory = registry.Bind<Basin.Plasma.Protocol.OrgKdeKwinServerDecorationPaletteManager>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+
+        var palette = factory!.Create(window.Surface);
+        palette.SetPalette("BreezeDark");
+        palette.Release();
+        host.PumpToServer();
+
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Kde_output_management_without_a_backend_fails_the_apply()
+    {
+        using var host = new CompositorTestHost();
+        using var devices = new Basin.Plasma.PlasmaOutputDeviceManager(
+            host.Display, host.Layout, outputs: null, configuration: null);
+        using var management = new Basin.Plasma.PlasmaOutputManagementManager(
+            host.Display, devices, configuration: null);
+
+        var announced = 0;
+        var registry = Bind<Basin.Plasma.Protocol.KdeOutputDeviceRegistryV2>(
+            host, "kde_output_device_registry_v2", 23, proxy => proxy.Output += (_, _) => announced++);
+        host.PumpToClient();
+        Assert.Equal(0, announced);
+
+        var proxy = Bind<Basin.Plasma.Protocol.KdeOutputManagementV2>(host, "kde_output_management_v2", 21);
+        var configuration = proxy.CreateConfiguration();
+        string? reason = null;
+        var failed = false;
+        configuration.FailureReason += (_, e) => reason = e.Reason;
+        configuration.Failed += (_, _) => failed = true;
+        configuration.Apply();
+        host.PumpUntil(() => failed);
+
+        Assert.Equal("output configuration is not supported", reason);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Screencast_without_services_fails_every_stream_kind()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.ScreencastManager(host.Display, null, null, null, null, null);
+
+        var proxy = Bind<Basin.Plasma.Protocol.ZkdeScreencastUnstableV1>(host, "zkde_screencast_unstable_v1", 6);
+        var failures = new List<string>();
+        void Watch(Basin.Plasma.Protocol.ZkdeScreencastStreamUnstableV1 stream) =>
+            stream.Failed += (_, e) => failures.Add(e.Error);
+        Watch(proxy.StreamOutput(host.Client.Outputs[0], 0));
+        Watch(proxy.StreamWindow("basin-1", 0));
+        Watch(proxy.StreamRegion(0, 0, 10, 10, Wayland.WlFixed.FromDouble(1), 0));
+        Watch(proxy.StreamVirtualOutput("cast", 100, 100, Wayland.WlFixed.FromDouble(1), 0));
+        Watch(proxy.StreamVirtualOutputWithDescription("cast", "d", 100, 100, Wayland.WlFixed.FromDouble(1), 0));
+        host.PumpUntil(() => failures.Count == 5);
+
+        Assert.All(failures, failure => Assert.False(string.IsNullOrEmpty(failure)));
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Screencast_with_a_publisher_but_no_capture_fails_only_regions()
+    {
+        using var host = new CompositorTestHost();
+        var publisher = new TestScreencastPublisher();
+        using var manager = new Basin.Plasma.ScreencastManager(host.Display, publisher, null, null, null, null);
+
+        var proxy = Bind<Basin.Plasma.Protocol.ZkdeScreencastUnstableV1>(host, "zkde_screencast_unstable_v1", 6);
+        var created = 0;
+        string? regionFailure = null;
+        var output = proxy.StreamOutput(host.Client.Outputs[0], 0);
+#pragma warning disable CS0618
+        output.Created += (_, _) => created++;
+#pragma warning restore CS0618
+        var region = proxy.StreamRegion(0, 0, 10, 10, Wayland.WlFixed.FromDouble(1), 0);
+        region.Failed += (_, e) => regionFailure = e.Error;
+        host.PumpUntil(() => created == 1 && regionFailure is not null);
+
+        Assert.Equal("capture is not available in this session", regionFailure);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void External_brightness_without_an_output_set_registers_and_asks_nothing()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.ExternalBrightnessManager(host.Display, host.Loop, outputs: null);
+
+        var proxy = Bind<Basin.Plasma.Protocol.KdeExternalBrightnessV1>(host, "kde_external_brightness_v1", 3);
+        var device = proxy.CreateBrightnessControl();
+        var requested = false;
+        device.RequestedBrightness += (_, _) => requested = true;
+        device.SetInternal(1);
+        device.SetEdid(Convert.ToBase64String(new byte[128]));
+        device.SetMaxBrightness(100);
+        device.SetObservedBrightness(50);
+        device.SetUsesDdcCi(1);
+        device.Commit();
+        host.PumpToClient();
+
+        Assert.False(requested);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Kde_output_order_without_an_output_set_sends_done_alone()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.OutputOrderManager(
+            host.Display, new LayoutOutputOrder(outputs: null, layout: null));
+
+        var names = 0;
+        var done = 0;
+        Bind<Basin.Plasma.Protocol.KdeOutputOrderV1>(
+            host, "kde_output_order_v1", 1, p =>
+            {
+                p.Output += (_, _) => names++;
+                p.Done += (_, _) => done++;
+            });
+        host.PumpUntil(() => done >= 1);
+
+        Assert.Equal(0, names);
+        Assert.Equal(1, done);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
     public void Output_management_without_a_backend_cancels_the_configuration()
     {
         using var host = new CompositorTestHost();
@@ -423,6 +745,174 @@ public sealed class DegradationTests
         AssertClientAlive(host);
     }
 
+    [Fact]
+    public void Plasma_windows_without_a_stack_report_an_empty_order_and_the_client_survives()
+    {
+        using var host = new CompositorTestHost();
+        var toplevels = new TestToplevelModel();
+        toplevels.Add("Terminal", "org.foot");
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, null);
+
+        var changed2 = 0;
+        var deprecated = 0;
+        var management = Bind<Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement>(
+            host,
+            "org_kde_plasma_window_management",
+            20,
+            proxy =>
+            {
+                proxy.StackingOrderChanged2 += (_, _) => changed2++;
+                proxy.StackingOrderChanged += (_, _) => deprecated++;
+                proxy.StackingOrderUuidChanged += (_, _) => deprecated++;
+            });
+
+        var order = management.GetStackingOrder();
+        var windows = 0;
+        var done = false;
+        order.Window += (_, _) => windows++;
+        order.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+
+        Assert.Equal(0, windows);
+        Assert.Equal(0, changed2);
+        Assert.Equal(0, deprecated);
+        order.Dispose();
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Plasma_shell_without_a_scene_tracks_and_places_nothing()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.PlasmaShellManager(host.Display, host.Compositor);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdePlasmaShell>(host, "org_kde_plasma_shell", 8);
+        var surface = host.Client.Compositor.CreateSurface();
+        var plasma = proxy.GetSurface(surface);
+        plasma.SetRole((uint)Basin.Plasma.Protocol.OrgKdePlasmaSurface.Role.Panel);
+        plasma.SetPosition(0, 100);
+        var buffer = host.Client.CreateBuffer(160, 20, Fill.Solid(160, 20, 0xFF101010));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 160, 20);
+        surface.Commit();
+        host.PumpToServer();
+
+        Assert.Single(manager.Surfaces);
+        Assert.Equal(Basin.Plasma.PlasmaShellRole.Panel, manager.Surfaces[0].Role);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Lockscreen_overlay_with_no_consumer_reading_it_shows_nothing_while_locked()
+    {
+        using var host = new CompositorTestHost();
+        var allowed = new Basin.Plasma.LockOverlaySurfaces();
+        using var manager = new Basin.Plasma.LockscreenOverlayManager(host.Display, host.Compositor, allowed);
+        var sessionLock = new SessionLockManager(host.Display, host.Compositor);
+
+        var proxy = Bind<Basin.Plasma.Protocol.KdeLockscreenOverlayV1>(host, "kde_lockscreen_overlay_v1", 1);
+        var surface = host.Client.Compositor.CreateSurface();
+        proxy.Allow(surface);
+        host.PumpToServer();
+
+        var windowTree = new Basin.Scene.SceneTree(host.Scene.Root);
+        foreach (var scene in host.SurfaceScenes.ToList())
+        {
+            scene.Destroy();
+        }
+
+        _ = new Basin.Scene.SceneSurface(windowTree, host.Compositor.Surfaces.Single());
+        var buffer = host.Client.CreateBuffer(160, 120, Fill.Solid(160, 120, 0xFF3355FF));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 160, 120);
+        surface.Commit();
+        host.PumpToServer();
+
+        var locker = host.ConnectClient();
+        var lockManager = Bind<Basin.Desktop.Protocol.ExtSessionLockManagerV1>(
+            host, "ext_session_lock_manager_v1", 1, client: locker);
+        var lockProxy = lockManager.Lock();
+        var gotLocked = false;
+        lockProxy.Locked += (_, _) => gotLocked = true;
+        host.PumpUntil(() => gotLocked);
+
+        windowTree.Enabled = false;
+        host.RenderFrame();
+        Assert.Equal(0xFF000000u, host.Pixel(80, 60));
+
+        AssertClientAlive(host);
+        lockProxy.UnlockAndDestroy();
+        host.PumpToServer();
+        sessionLock.Dispose();
+    }
+
+    [Fact]
+    public void Shadow_with_no_effect_wired_tracks_the_buffers_and_the_client_survives()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.ShadowManager(host.Display, host.Compositor);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinShadowManager>(host, "org_kde_kwin_shadow_manager", 2);
+        var surface = host.Client.Compositor.CreateSurface();
+        var shadow = proxy.Create(surface);
+        var buffers = new ClientShmBuffer[8];
+        for (var i = 0; i < 8; i++)
+        {
+            buffers[i] = host.Client.CreateBuffer(8, 8, Fill.Solid(8, 8, 0xFF101010));
+        }
+
+        shadow.AttachLeft(buffers[0].Proxy);
+        shadow.AttachTopLeft(buffers[1].Proxy);
+        shadow.AttachTop(buffers[2].Proxy);
+        shadow.AttachTopRight(buffers[3].Proxy);
+        shadow.AttachRight(buffers[4].Proxy);
+        shadow.AttachBottomRight(buffers[5].Proxy);
+        shadow.AttachBottom(buffers[6].Proxy);
+        shadow.AttachBottomLeft(buffers[7].Proxy);
+        shadow.Commit();
+        surface.Commit();
+        host.PumpToServer();
+
+        var server = host.Compositor.Surfaces.Single();
+        Assert.NotNull(manager.ShadowOf(server));
+
+        shadow.Destroy();
+        surface.Destroy();
+        host.PumpToServer();
+        AssertClientAlive(host);
+    }
+
+    [Fact]
+    public void Slide_with_no_effect_wired_tracks_the_state_and_the_client_survives()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.SlideManager(host.Display, host.Compositor);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinSlideManager>(host, "org_kde_kwin_slide_manager", 1);
+        var surface = host.Client.Compositor.CreateSurface();
+        var slide = proxy.Create(surface);
+        slide.SetLocation((uint)Basin.Plasma.Protocol.OrgKdeKwinSlide.Location.Bottom);
+        slide.SetOffset(12);
+        slide.Commit();
+        surface.Commit();
+        host.PumpToServer();
+
+        var server = host.Compositor.Surfaces.Single();
+        var tracked = manager.SlideOf(server);
+        Assert.NotNull(tracked);
+        Assert.Equal(Basin.Plasma.SlideLocation.Bottom, tracked!.Location);
+        Assert.Equal(12, tracked.Offset);
+
+        proxy.Unset(surface);
+        surface.Commit();
+        host.PumpToServer();
+        Assert.Null(manager.SlideOf(server));
+
+        slide.Release();
+        host.PumpToServer();
+        AssertClientAlive(host);
+    }
+
     private static void AssertClientAlive(CompositorTestHost host)
     {
         host.PumpToServer();
@@ -434,11 +924,13 @@ public sealed class DegradationTests
         Assert.True(done);
     }
 
-    private static T Bind<T>(CompositorTestHost host, string wireInterface, uint version, Action<T>? wire = null)
+    private static T Bind<T>(
+        CompositorTestHost host, string wireInterface, uint version, Action<T>? wire = null,
+        ShmTestClient? client = null)
         where T : WlProxy, IWaylandObject<T>
     {
         T? proxy = null;
-        var registry = host.Client.Display.GetRegistry();
+        var registry = (client ?? host.Client).Display.GetRegistry();
         registry.Global += (_, e) =>
         {
             if (e.Interface == wireInterface)

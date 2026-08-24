@@ -7,7 +7,10 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
     private readonly XdgShell _shell;
     private readonly Dictionary<ulong, XdgToplevelWindow> _windows = [];
     private readonly Dictionary<XdgToplevelWindow, ulong> _ids = [];
-    private readonly Dictionary<ulong, Box> _geometry = [];
+    private readonly Dictionary<ulong, (Box Frame, Box Client)> _geometry = [];
+    private readonly Dictionary<ulong, ToplevelState> _flags = [];
+    private readonly Dictionary<ulong, uint> _pids = [];
+    private readonly Dictionary<ulong, (string Service, string ObjectPath)> _appMenus = [];
     private ulong _nextId;
 
     public XdgToplevelSource(XdgShell shell)
@@ -25,6 +28,12 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
 
     public event Action<XdgToplevelWindow>? ActivateRequested;
 
+    public event Action<XdgToplevelWindow, bool>? NoBorderRequested;
+
+    public event Action<XdgToplevelWindow, bool>? MinimizeRequested;
+
+    public event Action<XdgToplevelWindow, bool>? CaptureExclusionRequested;
+
     public XdgToplevelWindow? WindowFor(ulong localId) => _windows.GetValueOrDefault(localId);
 
     public ulong IdFor(XdgToplevelWindow window)
@@ -33,17 +42,86 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
         return _ids.GetValueOrDefault(window);
     }
 
-    public void SetGeometry(XdgToplevelWindow window, in Box geometry)
+    public void SetGeometry(XdgToplevelWindow window, in Box frame, in Box client)
     {
         ArgumentNullException.ThrowIfNull(window);
         if (_ids.TryGetValue(window, out var id))
         {
-            if (_geometry.TryGetValue(id, out var current) && current == geometry)
+            if (_geometry.TryGetValue(id, out var current) && current.Frame == frame && current.Client == client)
             {
                 return;
             }
 
-            _geometry[id] = geometry;
+            _geometry[id] = (frame, client);
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetDecoration(XdgToplevelWindow window, bool noBorder, bool userCanSet)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        var flags = (noBorder ? ToplevelState.NoBorder : ToplevelState.None) |
+            (userCanSet ? ToplevelState.CanSetNoBorder : ToplevelState.None);
+        UpdateFlags(window, ToplevelState.NoBorder | ToplevelState.CanSetNoBorder, flags);
+    }
+
+    public void SetAppMenu(XdgToplevelWindow window, string serviceName, string objectPath)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(serviceName);
+        ArgumentNullException.ThrowIfNull(objectPath);
+        if (_ids.TryGetValue(window, out var id))
+        {
+            var next = (serviceName, objectPath);
+            if (_appMenus.GetValueOrDefault(id) == next)
+            {
+                return;
+            }
+
+            _appMenus[id] = next;
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetSkipTaskbar(XdgToplevelWindow window, bool skip)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        UpdateFlags(window, ToplevelState.SkipTaskbar, skip ? ToplevelState.SkipTaskbar : ToplevelState.None);
+    }
+
+    public void SetSkipSwitcher(XdgToplevelWindow window, bool skip)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        UpdateFlags(window, ToplevelState.SkipSwitcher, skip ? ToplevelState.SkipSwitcher : ToplevelState.None);
+    }
+
+    public void SetMinimized(XdgToplevelWindow window, bool minimized)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        UpdateFlags(window, ToplevelState.Minimized, minimized ? ToplevelState.Minimized : ToplevelState.None);
+    }
+
+    public void SetExcludedFromCapture(XdgToplevelWindow window, bool excluded)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        UpdateFlags(
+            window,
+            ToplevelState.ExcludedFromCapture,
+            excluded ? ToplevelState.ExcludedFromCapture : ToplevelState.None);
+    }
+
+    private void UpdateFlags(XdgToplevelWindow window, ToplevelState mask, ToplevelState value)
+    {
+        if (_ids.TryGetValue(window, out var id))
+        {
+            var current = _flags.GetValueOrDefault(id);
+            var next = (current & ~mask) | value;
+            if (next == current)
+            {
+                return;
+            }
+
+            _flags[id] = next;
             _observers.Changed(id);
         }
     }
@@ -107,6 +185,18 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
                 window.SetFullscreen(false);
                 window.RequestConfigure();
                 return true;
+            case ToplevelRequestKind.Minimize or ToplevelRequestKind.Unminimize
+                when MinimizeRequested is { } minimize:
+                minimize.Invoke(window, request.Kind == ToplevelRequestKind.Minimize);
+                return true;
+            case ToplevelRequestKind.SetNoBorder or ToplevelRequestKind.UnsetNoBorder
+                when NoBorderRequested is { } noBorder:
+                noBorder.Invoke(window, request.Kind == ToplevelRequestKind.SetNoBorder);
+                return true;
+            case ToplevelRequestKind.ExcludeFromCapture or ToplevelRequestKind.IncludeInCapture
+                when CaptureExclusionRequested is { } exclusion:
+                exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
+                return true;
             default:
                 return false;
         }
@@ -119,13 +209,20 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
         var id = ++_nextId;
         _windows[id] = window;
         _ids[window] = id;
+        _pids[id] = window.Surface.Resource.Client.TryGetCredentials(out var credentials)
+            ? (uint)credentials.Pid
+            : 0;
         window.TitleChanged += () => _observers.Changed(id);
         window.AppIdChanged += () => _observers.Changed(id);
+        window.ParentChanged += () => _observers.Changed(id);
         window.Destroyed += () =>
         {
             _windows.Remove(id);
             _ids.Remove(window);
             _geometry.Remove(id);
+            _flags.Remove(id);
+            _pids.Remove(id);
+            _appMenus.Remove(id);
             _observers.Removed(id);
         };
         _observers.Added(id);
@@ -133,7 +230,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
 
     private ToplevelInfo Describe(ulong id, XdgToplevelWindow window)
     {
-        var state = ToplevelState.None;
+        var state = _flags.GetValueOrDefault(id);
         if (window.HasState(Protocol.XdgToplevel.State.Maximized))
         {
             state |= ToplevelState.Maximized;
@@ -149,12 +246,19 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
             state |= ToplevelState.Activated;
         }
 
+        var (frame, client) = _geometry.GetValueOrDefault(id);
+        var (service, objectPath) = _appMenus.GetValueOrDefault(id, (string.Empty, string.Empty));
         return new ToplevelInfo(
             id,
             window.Title,
             window.AppId,
             state,
             window.Surface,
-            _geometry.GetValueOrDefault(id));
+            frame,
+            client,
+            Pid: _pids.GetValueOrDefault(id),
+            ParentId: window.Parent is { } parent ? _ids.GetValueOrDefault(parent) : 0,
+            AppMenuService: service,
+            AppMenuObjectPath: objectPath);
     }
 }

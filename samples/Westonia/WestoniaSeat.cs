@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Westonia;
 
-internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchHitTester, Basin.Seat.ITouchChrome
+internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
 {
     private readonly Basin.Host.BasinHost _host;
     private readonly Seat _seat;
@@ -22,6 +22,7 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchHitTester, Ba
     private readonly WestonShell _policy;
     private readonly ILogger _log;
     private readonly Basin.Seat.Backends.SeatBinder _binder;
+    private readonly Basin.Seat.Backends.SeatInjector _injector;
     private readonly Basin.Seat.Backends.SeatTouchDriver _touch;
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
     private IUISurface? _routeSurface;
@@ -58,8 +59,14 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchHitTester, Ba
         _pointer.Moved += () => MoveCursor((uint)Environment.TickCount);
 
         _binder = new Basin.Seat.Backends.SeatBinder(_seat, layout, _pointer, cursor);
+        _injector = new Basin.Seat.Backends.SeatInjector(_binder, _seat, layout, _pointer)
+        {
+            Moved = MoveCursor,
+            DeliverButton = OnButton,
+            DeliverKey = OnKey,
+        };
         _touch = new Basin.Seat.Backends.SeatTouchDriver(_binder, _seat);
-        _touch.Router.HitTester = this;
+        _touch.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(scene);
         _touch.Router.Chrome = this;
         _touch.Router.Activity =
             services.Find<Basin.Capabilities.IIdleSource>() as Basin.Seat.SeatIdleSource;
@@ -94,23 +101,13 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchHitTester, Ba
 
     public double PointerY => _y;
 
-    public void CenterPointer()
-    {
-        var bounds = _layout.Bounds;
-        _pointer.Warp(bounds.X + (bounds.Width / 2.0), bounds.Y + (bounds.Height / 2.0));
-    }
+    public void CenterPointer() => _injector.Center();
 
-    public void WarpPointer(double x, double y)
-    {
-        _pointer.Warp(x, y);
-        MoveCursor((uint)Environment.TickCount);
-    }
+    public void WarpPointer(double x, double y) => _injector.Warp(x, y);
 
-    public void InjectButton(uint button, bool pressed) =>
-        OnButton((uint)Environment.TickCount, button, pressed);
+    public void InjectButton(uint button, bool pressed) => _injector.Button(button, pressed);
 
-    public void InjectKey(uint key, bool pressed) =>
-        OnKey((uint)Environment.TickCount, key, pressed);
+    public void InjectKey(uint key, bool pressed) => _injector.Key(key, pressed);
 
     public void Dispose() => _disposed = true;
 
@@ -166,32 +163,6 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchHitTester, Ba
             MoveCursor(time);
         };
         input.PointerScroll += (_, time, axis) => OnAxis(time, axis);
-    }
-
-    bool Basin.Seat.ITouchHitTester.TryHit(double layoutX, double layoutY, out Basin.Seat.TouchHit hit)
-    {
-        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
-        {
-            hit = new Basin.Seat.TouchHit(surface, at.X, at.Y, at.Node);
-            return true;
-        }
-
-        hit = default;
-        return false;
-    }
-
-    bool Basin.Seat.ITouchHitTester.TryMap(
-        object? token, double layoutX, double layoutY, out double localX, out double localY)
-    {
-        if (token is SceneNode { IsDestroyed: false } node &&
-            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
-        {
-            return true;
-        }
-
-        localX = 0;
-        localY = 0;
-        return false;
     }
 
     bool Basin.Seat.ITouchChrome.TryPress(int id, uint timeMs, double x, double y) =>

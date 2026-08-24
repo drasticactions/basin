@@ -9,6 +9,7 @@ internal sealed class DamViews
 {
     private readonly Scene _scene;
     private readonly OutputLayout _layout;
+    private readonly Basin.Desktop.PopupPlacer _popups;
     private readonly Basin.Seat.Seat _seat;
     private readonly OutputDriver _outputs;
     private readonly List<DamView> _views = [];
@@ -18,6 +19,7 @@ internal sealed class DamViews
     {
         _scene = scene;
         _layout = layout;
+        _popups = new Basin.Desktop.PopupPlacer(layout);
         _seat = seat;
         _outputs = outputs;
     }
@@ -278,45 +280,9 @@ internal sealed class DamViews
             return;
         }
 
-        var scene = new SceneSurface(view.Scene.Tree, popup.Surface);
+        var scene = _popups.Attach(popup, view.Scene.Tree);
         _owners[popup.Surface] = view;
-
-        void Place()
-        {
-            var chain = PopupChainOffset(popup);
-            scene.Tree.SetPosition(
-                chain.X + popup.SurfacePosition.X, chain.Y + popup.SurfacePosition.Y);
-        }
-
-        void Constrain()
-        {
-            var chain = PopupChainOffset(popup);
-            var originX = view.Scene.Tree.X + chain.X;
-            var originY = view.Scene.Tree.Y + chain.Y;
-            var output = _layout.OutputAt(originX, originY);
-            var box = output is null ? _layout.Bounds : _layout.BoxOf(output);
-            popup.Unconstrain(new Box(box.X - originX, box.Y - originY, box.Width, box.Height));
-        }
-
-        Constrain();
-        Place();
-        popup.Xdg.Committed += Place;
-        popup.GeometryChanged += Place;
-        popup.Repositioned += Constrain;
-        scene.Destroyed += () =>
-        {
-            popup.Xdg.Committed -= Place;
-            popup.GeometryChanged -= Place;
-            popup.Repositioned -= Constrain;
-            _owners.Remove(popup.Surface);
-        };
-        popup.Destroyed += () =>
-        {
-            if (!scene.IsDestroyed)
-            {
-                scene.Destroy();
-            }
-        };
+        scene.Destroyed += () => _owners.Remove(popup.Surface);
     }
 
     private DamView? RootViewOf(XdgPopupWindow popup)
@@ -339,18 +305,4 @@ internal sealed class DamViews
         return null;
     }
 
-    private static Point PopupChainOffset(XdgPopupWindow popup)
-    {
-        var x = 0;
-        var y = 0;
-        var xdg = popup.Parent;
-        while (xdg?.Role is XdgPopupWindow parent)
-        {
-            x += parent.Geometry.X;
-            y += parent.Geometry.Y;
-            xdg = parent.Parent;
-        }
-
-        return new Point(x, y);
-    }
 }

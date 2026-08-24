@@ -7,7 +7,6 @@ namespace TinyComp;
 
 internal sealed class HostChrome : IDisposable
 {
-    private const uint BtnLeft = 0x110;
     private const uint DoubleClickMillis = 400;
 
     private readonly TinyComp _comp;
@@ -218,7 +217,7 @@ internal sealed class HostChrome : IDisposable
 
     private void OnPointerButton(uint timeMs, uint button, bool pressed)
     {
-        if (button != BtnLeft)
+        if (button != InputCodes.BtnLeft)
         {
             return;
         }

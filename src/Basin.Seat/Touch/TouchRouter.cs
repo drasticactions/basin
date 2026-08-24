@@ -15,6 +15,7 @@ public sealed class TouchRouter
     {
         ArgumentNullException.ThrowIfNull(touch);
         _touch = touch;
+        touch.Router = this;
     }
 
     public ITouchHitTester? HitTester { get; set; }

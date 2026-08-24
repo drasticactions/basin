@@ -72,6 +72,8 @@ public sealed class OutputDriver : IDisposable
 
     public event Action<OutputView, ScanoutChoice>? ScanoutChanged;
 
+    public event Action<OutputView>? HostScaleFollowed;
+
     public event Action<OutputView, double>? ScaleRefused;
 
     public event Action<DrmOutput>? ModesetRefused;
@@ -151,8 +153,31 @@ public sealed class OutputDriver : IDisposable
         Relayout();
         ChooseScanout(view);
         WireView(view);
+        if (Scales.Length == 0 && output is WaylandOutput hosted)
+        {
+            hosted.HostScaleChanged += () => FollowHostScale(view, hosted);
+        }
+
         Added?.Invoke(view);
         return view;
+    }
+
+    private void FollowHostScale(OutputView view, WaylandOutput hosted)
+    {
+        if (Math.Abs(hosted.HostScale - hosted.Scale) < 0.0001)
+        {
+            return;
+        }
+
+        using var hostState = new OutputState();
+        if (!hosted.Commit(hostState.SetScale(hosted.HostScale)))
+        {
+            return;
+        }
+
+        view.Scale = hosted.Scale;
+        Relayout();
+        HostScaleFollowed?.Invoke(view);
     }
 
     public void RemoveView(OutputView view)
@@ -375,6 +400,11 @@ public sealed class OutputDriver : IDisposable
 
     private void Repaint(OutputView view)
     {
+        if (!view.Output.Enabled)
+        {
+            return;
+        }
+
         Frames?.BeginFrame(view.Output, view.Scheduler?.PredictedVblankNanos ?? 0);
         var mode = view.Output.CurrentMode;
         if (mode.Width <= 0 || mode.Height <= 0)
@@ -411,7 +441,11 @@ public sealed class OutputDriver : IDisposable
 
         _frameState.Clear();
         var committed = view.Scene.Commit(
-            _renderer, view.Swapchain, _frameState, new SceneCommitOptions { Background = Background });
+            _renderer, view.Swapchain, _frameState, new SceneCommitOptions
+            {
+                Background = Background,
+                TargetPresentNanos = Math.Max(view.Scheduler!.PredictedVblankNanos, MonotonicClock.Nanos),
+            });
         if (committed)
         {
             view.Scheduler!.NotifyCommitted();

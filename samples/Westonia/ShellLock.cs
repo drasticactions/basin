@@ -20,6 +20,7 @@ internal sealed class ShellLock : IDisposable
     private AvaloniaUISurface? _dialog;
     private UISurfaceNode? _dialogNode;
     private bool _disposed;
+    private bool _shellHoldsLock;
 
     public ShellLock(
         AvaloniaUIHost host,
@@ -49,41 +50,32 @@ internal sealed class ShellLock : IDisposable
 
     public Func<double> Scale { get; set; } = () => 1.0;
 
-    public void AttachSessionLock(SessionLockManager manager)
+    public void AttachSessionLock(SessionLockSceneDriver driver)
     {
-        manager.Locked += () =>
+        driver.Locked += () =>
         {
-            if (IsLocked && !ClientLocked)
+            if (_shellHoldsLock && !ClientLocked)
             {
                 _log.LogWarning("a session lock client arrived while the shell already holds the lock");
             }
 
+            _shellHoldsLock = false;
             ClientLocked = true;
             CloseDialog();
-            _layers.SetLocked(true);
             Changed?.Invoke();
         };
 
-        manager.Unlocked += () =>
+        driver.Unlocked += () =>
         {
             ClientLocked = false;
-            _layers.SetLocked(false);
             Changed?.Invoke();
         };
 
-        manager.Abandoned += () =>
+        driver.Abandoned += () =>
         {
             _log.LogWarning("the session lock client died; the screen stays locked");
             _layers.SetLocked(true);
             Changed?.Invoke();
-        };
-
-        manager.NewLockSurface += surface =>
-        {
-            var scene = new SceneSurface(_layers.Lock, surface.Surface);
-            var box = LayoutOf(surface.Output.Output);
-            scene.Tree.SetPosition(box.X, box.Y);
-            surface.Mapped += () => _shell.Seat?.Keyboard.NotifyEnter(surface.Surface);
         };
     }
 
@@ -96,6 +88,7 @@ internal sealed class ShellLock : IDisposable
             return;
         }
 
+        _shellHoldsLock = true;
         _layers.SetLocked(true);
         _shell.Seat?.Keyboard.NotifyClearFocus();
 
@@ -119,6 +112,7 @@ internal sealed class ShellLock : IDisposable
         }
 
         CloseDialog();
+        _shellHoldsLock = false;
         _layers.SetLocked(false);
         _shell.KeyboardTarget = null;
         Changed?.Invoke();

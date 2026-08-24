@@ -33,6 +33,110 @@ public sealed class ZeroAllocationTests
         NothingAllocated(1000, _ => Frame(host));
     }
 
+    [Fact]
+    public void Shadow_nine_patch_allocates_nothing_over_1000_frames()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.ShadowManager(host.Display, host.Compositor);
+        Basin.Plasma.Protocol.OrgKdeKwinShadowManager? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "org_kde_kwin_shadow_manager")
+            {
+                proxy = registry.Bind<Basin.Plasma.Protocol.OrgKdeKwinShadowManager>(e.Name, 2);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(proxy);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var content = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(content.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var scene = host.SurfaceScenes[0];
+        scene.Tree.SetPosition(40, 30);
+        using var effect = new Basin.Plasma.ShadowEffect(scene, manager);
+
+        var shadow = proxy!.Create(surface);
+        var corner = host.Client.CreateBuffer(16, 16, Fill.Solid(16, 16, 0xFF404040));
+        var edge = host.Client.CreateBuffer(8, 16, Fill.Solid(8, 16, 0xFF303030));
+        var side = host.Client.CreateBuffer(16, 8, Fill.Solid(16, 8, 0xFF303030));
+        shadow.AttachTopLeft(corner.Proxy);
+        shadow.AttachTopRight(corner.Proxy);
+        shadow.AttachBottomLeft(corner.Proxy);
+        shadow.AttachBottomRight(corner.Proxy);
+        shadow.AttachTop(edge.Proxy);
+        shadow.AttachBottom(edge.Proxy);
+        shadow.AttachLeft(side.Proxy);
+        shadow.AttachRight(side.Proxy);
+        shadow.SetLeftOffset(Wayland.WlFixed.FromInt(16));
+        shadow.SetTopOffset(Wayland.WlFixed.FromInt(16));
+        shadow.SetRightOffset(Wayland.WlFixed.FromInt(16));
+        shadow.SetBottomOffset(Wayland.WlFixed.FromInt(16));
+        shadow.Commit();
+        surface.Commit();
+        host.PumpToServer();
+
+        for (var i = 0; i < 20; i++)
+        {
+            Frame(host);
+        }
+
+        NothingAllocated(1000, _ => Frame(host));
+    }
+
+    [Fact]
+    public void Slide_animation_allocates_nothing_over_1000_frames()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.SlideManager(host.Display, host.Compositor);
+        Basin.Plasma.Protocol.OrgKdeKwinSlideManager? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "org_kde_kwin_slide_manager")
+            {
+                proxy = registry.Bind<Basin.Plasma.Protocol.OrgKdeKwinSlideManager>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(proxy);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        host.PumpToServer();
+        var scene = host.SurfaceScenes[0];
+        scene.Tree.SetPosition(40, 30);
+        using var effect = new Basin.Plasma.SlideEffect(scene, manager, _ => host.Layout.Bounds);
+        effect.DurationNanos = 60_000_000_000;
+
+        var slide = proxy!.Create(surface);
+        slide.SetLocation((uint)Basin.Plasma.Protocol.OrgKdeKwinSlide.Location.Bottom);
+        slide.Commit();
+        var content = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(content.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        Assert.True(effect.IsAnimating);
+
+        var millis = 0L;
+        void Round()
+        {
+            effect.Step(new Scene.FrameTick(millis * 1_000_000, 16_666_667));
+            millis += 16;
+            Frame(host);
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Round();
+        }
+
+        NothingAllocated(1000, _ => Round());
+        Assert.True(effect.IsAnimating);
+    }
+
     [Theory]
     [InlineData("gl")]
     [InlineData("vulkan")]
@@ -87,6 +191,35 @@ public sealed class ZeroAllocationTests
         NothingAllocated(1000, _ => DriveCapabilities(host, screenCapture, dmabufCapture, cursorTheme, source));
     }
 
+    [Fact]
+    public void Output_capture_with_an_exclusion_allocates_nothing()
+    {
+        using var host = new CompositorTestHost();
+        var model = new TestToplevelModel();
+        var index = new Scene.ToplevelSceneIndex();
+        var capture = new Scene.SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Toplevels = model,
+            Index = index,
+        };
+        var tree = new Scene.SceneTree(host.Scene.Root);
+        _ = new Scene.SceneRect(tree, 32, 32, new RenderColor(1, 0, 0, 1));
+        var id = model.Add("secret", "app.secret");
+        index.Set(id, new Scene.ToplevelCaptureTrees(tree, null));
+        model.SetState(id, Capabilities.ToplevelState.ExcludedFromCapture);
+
+        Capabilities.IScreenCapture screenCapture = capture;
+        var source = Capabilities.CaptureSource.Output(host.Output);
+        for (var i = 0; i < 20; i++)
+        {
+            _ = screenCapture.Capture(source, default, host.Target);
+        }
+
+        NothingAllocated(1000, round => screenCapture.Capture(source, default, host.Target));
+        tree.Destroy();
+    }
+
     private static void DriveCapabilities(
         CompositorTestHost host,
         Capabilities.IScreenCapture capture,
@@ -101,6 +234,36 @@ public sealed class ZeroAllocationTests
         _ = dmabuf.TryCurrentFrame(host.Output, out _);
         _ = theme.TryResolve("left_ptr", 1, out _);
         _ = theme.TryResolve(Capabilities.CursorShape.Grab, 1, out _);
+    }
+
+    [Fact]
+    public void Surface_presence_tracking_allocates_nothing_over_1000_walks()
+    {
+        using var host = new CompositorTestHost(64, 64);
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(32, 32, Fill.Solid(32, 32, 0xffff0000));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+
+        var announced = 0;
+        var tracker = new SurfacePresenceTracker(host.Layout, (_, _) => announced++);
+        tracker.AddOutput(host.Output, host.OutputGlobal);
+        var presence = new List<SurfaceBox>();
+
+        void Walk(int i)
+        {
+            host.Scene.CollectSurfaces(presence);
+            tracker.Update(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(presence));
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Walk(i);
+        }
+
+        NothingAllocated(1000, Walk);
+        Assert.True(announced >= 1000);
     }
 
     [Fact]

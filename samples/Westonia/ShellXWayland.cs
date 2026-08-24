@@ -31,6 +31,19 @@ internal sealed class ShellXWayland : IDisposable
 
     public int Count => _windows.Count;
 
+    public SceneNode? TreeOf(Surface surface)
+    {
+        foreach (var entry in _windows)
+        {
+            if (ReferenceEquals(entry.Window.Surface, surface))
+            {
+                return entry.Scene.Tree;
+            }
+        }
+
+        return null;
+    }
+
     public Action? Changed { get; set; }
 
     public void Attach(XWaylandWm wm)

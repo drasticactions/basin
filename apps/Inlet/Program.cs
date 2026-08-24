@@ -20,47 +20,13 @@ internal static class Program
 {
     private static readonly RenderColor Background = new(0.06f, 0.06f, 0.08f, 1f);
 
-    private const uint BtnLeft = 0x110;
-
-    private sealed class TouchPolicy : Basin.Seat.ITouchHitTester, Basin.Seat.ITouchPointerTarget
+    private sealed class TouchPolicy : Basin.Seat.ITouchPointerTarget
     {
-        public required Scene Scene { get; init; }
-
-        public required RiverWindowManager Management { get; init; }
-
-        public required Basin.Seat.Seat Seat { get; init; }
-
         public required LayoutPointer Pointer { get; init; }
 
         public required Action<uint> Moved { get; init; }
 
         public required Action<uint, uint, bool> Button { get; init; }
-
-        public bool TryHit(double layoutX, double layoutY, out Basin.Seat.TouchHit hit)
-        {
-            if (!Management.HasPointerOperation(Seat) &&
-                Scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
-            {
-                hit = new Basin.Seat.TouchHit(surface, at.X, at.Y, at.Node);
-                return true;
-            }
-
-            hit = default;
-            return false;
-        }
-
-        public bool TryMap(object? token, double layoutX, double layoutY, out double localX, out double localY)
-        {
-            if (token is SceneNode { IsDestroyed: false } node &&
-                node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
-            {
-                return true;
-            }
-
-            localX = 0;
-            localY = 0;
-            return false;
-        }
 
         void Basin.Seat.ITouchPointerTarget.Warp(uint timeMs, double x, double y)
         {
@@ -80,12 +46,7 @@ internal static class Program
             Basin.Renderers.RendererCatalog.Names, "vulkan"));
         var backendOption = cli.Add(CommonOptions.Backend(
             [BackendKind.Nested, BackendKind.Drm, BackendKind.Headless]));
-        var outputsOption = cli.Add(new Option<int>("--outputs")
-        {
-            Description = "how many outputs to create",
-            HelpName = "N",
-            DefaultValueFactory = _ => 1,
-        });
+        var outputsOption = cli.Add(CommonOptions.Outputs());
         var widthOption = cli.Add(CommonOptions.Width(1280));
         var heightOption = cli.Add(CommonOptions.Height(720));
         var scaleOption = cli.Add(CommonOptions.Scales());
@@ -211,12 +172,8 @@ internal static class Program
         using var renderer = stack.Renderer;
         var deviceAllocator = stack.DeviceAllocator;
 
-        using var host = Basin.Host.BasinHost.Create(new Basin.Host.HostOptions
-        {
-            Backend = drm ? Basin.Host.HostBackend.Drm
-                : nested ? Basin.Host.HostBackend.Nested
-                : Basin.Host.HostBackend.Headless,
-        });
+        using var host = Basin.Host.BasinHost.Create(
+            Basin.Host.HostOptions.ForBackend(drm ? "drm" : nested ? "nested" : "headless"));
         var display = host.Display;
         var socket = host.Socket;
         var loop = host.Loop;
@@ -229,12 +186,7 @@ internal static class Program
 
         var scene = new Scene();
 
-        var backgroundLayer = new SceneTree(scene.Root);
-        var bottomLayer = new SceneTree(scene.Root);
-        var windowTree = new SceneTree(scene.Root);
-        var topLayer = new SceneTree(scene.Root);
-        var overlayLayer = new SceneTree(scene.Root);
-        var lockTree = new SceneTree(scene.Root);
+        var sceneLayers = new SceneLayers(scene.Root);
 
         using var driver = new OutputDriver(host, scene, layout, renderer, deviceAllocator)
         {
@@ -285,7 +237,7 @@ internal static class Program
         var dmabufCapture = capturePack.DmabufCapture;
         var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
 
-        var injectedInput = new InletInputSink();
+        var injectedInput = new Basin.Seat.Backends.HookInputSink();
         using var services = host.CreateServices()
             .Use(layout)
             .With(capturePack)
@@ -303,16 +255,24 @@ internal static class Program
             services.Use<ITabletSource>(tablets);
         }
 
-        services.Install(DesktopPack.For("inlet"));
+        var pack = DesktopPack.For("inlet");
+        if (drmBackend is null)
+        {
+            pack = pack.Without("wp_drm_lease_device_v1");
+        }
+
+        services.Install(pack);
 
         if (renderer.Device is { } renderDevice)
         {
             services.Install(new LinuxDmabufModule(renderer.DmabufTextureFormats, renderDevice.DevicePath));
         }
 
+        Basin.XWayland.XWaylandModule? xwaylandModule = null;
         if (xwayland)
         {
-            services.Install(new Basin.XWayland.XWaylandModule());
+            xwaylandModule = new Basin.XWayland.XWaylandModule();
+            services.Install(xwaylandModule);
         }
 
         services.Freeze();
@@ -333,10 +293,9 @@ internal static class Program
         seat.Keyboard.FocusChanged += surface => textInput?.NotifyFocus(surface);
         var foreignToplevels = services.Require<ForeignToplevelListManager>();
         var toplevels = services.Require<IToplevelModel>();
-        capture.Toplevels = toplevels;
 
         using var management = new RiverWindowManager(
-            display, loop, scene, windowTree, shell, layout, [seat])
+            display, loop, scene, sceneLayers.Windows, shell, layout, [seat])
         {
             ForeignToplevels = foreignToplevels,
             Toplevels = toplevels,
@@ -345,11 +304,11 @@ internal static class Program
             Decorations = services.Require<XdgDecorationManager>(),
             SessionLock = sessionLock,
         };
-        capture.ToplevelContent = id =>
-            toplevels.TryGet(id, out var info) && info.Surface is { } captured &&
-            management.TryCaptureTrees(captured, out var content, out var popups)
-                ? new Basin.Scene.ToplevelCaptureTrees(content, popups)
-                : default;
+        capturePack.Attach(toplevels, surface =>
+            management.TryCaptureTrees(surface, out var content, out var popups)
+                ? new ToplevelCaptureTrees(content, popups)
+                : null);
+        management.Restacked += capturePack.Stack.RaiseChanged;
 
         if (services.Find<Basin.Desktop.ImageCopyCaptureManager>() is { } imageCopy)
         {
@@ -371,48 +330,19 @@ internal static class Program
 
         var color = services.Require<Basin.Desktop.ColorManager>();
         var outputDescription = ImageDescription.Srgb;
-        color.SupportedTransferFunctions =
-            [ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear];
-        color.SupportedPrimaries = [ColorPrimaries.Srgb];
+        Basin.Desktop.SurfaceLutDriver.DeclareSrgb(color);
 
         var luts = new Basin.Color.ColorLutCache(renderer);
-        var lastLutCount = -1;
+        var lutDriver = new Basin.Desktop.SurfaceLutDriver(
+            scene, color, surface => luts.LutFor(color.DescriptionOf(surface), outputDescription));
+        lutDriver.CountChanged += attached => Console.WriteLine($"COLOR luts={attached}");
+        lutDriver.WatchToplevels(shell);
 
-        void RefreshSurfaceLuts()
-        {
-            var attached = scene.AttachLuts(
-                surface => luts.LutFor(color.DescriptionOf(surface), outputDescription));
-            if (attached != lastLutCount)
-            {
-                lastLutCount = attached;
-                Console.WriteLine($"COLOR luts={attached}");
-            }
-        }
-
-        color.SurfaceDescriptionChanged += (_, _) => RefreshSurfaceLuts();
-        shell.NewToplevel += toplevel => toplevel.Xdg.Mapped += RefreshSurfaceLuts;
+        void RefreshSurfaceLuts() => lutDriver.Refresh();
 
         var pointer = new LayoutPointer(layout);
 
         var cursor = new Basin.Desktop.CursorController(layout) { Capture = capture };
-
-        OutputView? ViewOf(IOutput? output)
-        {
-            if (output is null)
-            {
-                return null;
-            }
-
-            foreach (var view in views)
-            {
-                if (ReferenceEquals(view.Output, output))
-                {
-                    return view;
-                }
-            }
-
-            return null;
-        }
 
         if (tablets is not null)
         {
@@ -469,115 +399,51 @@ internal static class Program
             };
         };
 
-        var presence = new List<SceneSurfaceBox>();
+        var presence = new List<SurfaceBox>();
+        var presenceTracker = new SurfacePresenceTracker(layout, fractionalScale.AnnounceScale);
 
         void UpdateSurfacePresence()
         {
             scene.CollectSurfaces(presence);
-            foreach (var (surface, box) in presence)
-            {
-                var preferred = 1.0;
-                foreach (var view in views)
-                {
-                    var outputBox = layout.BoxOf(view.Output);
-                    var overlaps = box.X < outputBox.Right && box.Right > outputBox.X &&
-                                   box.Y < outputBox.Bottom && box.Bottom > outputBox.Y;
-                    surface.SetOutputPresence(view.Global, overlaps);
-                    if (overlaps)
-                    {
-                        preferred = Math.Max(preferred, view.Output.Scale);
-                    }
-                }
-
-                fractionalScale.AnnounceScale(surface, preferred);
-            }
+            presenceTracker.Update(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(presence));
         }
 
         compositor.SurfaceCreated += surface => fractionalScale.AnnounceScale(surface, MaxScale());
 
-        var layers = new List<(LayerSurface Layer, SceneSurface? Scene)>();
-        var layerPopups = new Dictionary<XdgPopupWindow, SceneSurface>();
-        var lockSurfaces = new List<(Basin.Desktop.LockSurface Lock, SceneSurface Scene)>();
-
-        void SetSceneLocked(bool locked)
+        var lockDriver = new Basin.Desktop.SessionLockSceneDriver(
+            sessionLock, seat, sceneLayers.Lock, layout, sceneLayers.SetLocked)
         {
-            backgroundLayer.Enabled = !locked;
-            bottomLayer.Enabled = !locked;
-            windowTree.Enabled = !locked;
-            topLayer.Enabled = !locked;
-            overlayLayer.Enabled = !locked;
-        }
-
-        void ConfigureLockSurfaces()
-        {
-            foreach (var (lockSurface, lockScene) in lockSurfaces)
-            {
-                var box = layout.BoxOf(lockSurface.Output.Output);
-                lockScene.Tree.SetPosition(box.X, box.Y);
-                lockSurface.Configure(box.Width, box.Height);
-            }
-        }
-
-        sessionLock.Locked += () =>
-        {
-            SetSceneLocked(true);
-            seat.Keyboard.NotifyClearFocus();
-            textInput?.NotifyFocus(null);
-            seat.Pointer.NotifyClearFocus();
-            Console.WriteLine("LOCKED");
+            TextInput = textInput,
         };
-        sessionLock.Unlocked += () =>
+        lockDriver.Locked += () => Console.WriteLine("LOCKED");
+        lockDriver.Unlocked += () => Console.WriteLine("UNLOCKED");
+        lockDriver.Abandoned += () => Console.WriteLine("LOCK ABANDONED (staying blanked)");
+        lockDriver.LockSurfaceAdded += (lockSurface, _) =>
         {
-            foreach (var (_, lockScene) in lockSurfaces)
-            {
-                lockScene.Destroy();
-            }
-
-            lockSurfaces.Clear();
-            SetSceneLocked(false);
-            Console.WriteLine("UNLOCKED");
-        };
-        sessionLock.Abandoned += () => Console.WriteLine("LOCK ABANDONED (staying blanked)");
-        sessionLock.NewLockSurface += lockSurface =>
-        {
-            var lockScene = new SceneSurface(lockTree, lockSurface.Surface);
             RefreshSurfaceLuts();
-            var box = layout.BoxOf(lockSurface.Output.Output);
-            lockScene.Tree.SetPosition(box.X, box.Y);
             fractionalScale.AnnounceScale(lockSurface.Surface, lockSurface.Output.Output.Scale);
-            lockSurfaces.Add((lockSurface, lockScene));
-            lockSurface.Mapped += () => seat.Keyboard.NotifyEnter(lockSurface.Surface);
-            lockSurface.Unmapped += () =>
-            {
-                var index = lockSurfaces.FindIndex(entry => entry.Lock == lockSurface);
-                if (index < 0)
-                {
-                    return;
-                }
-
-                lockSurfaces[index].Scene.Destroy();
-                lockSurfaces.RemoveAt(index);
-            };
         };
 
-        void ArrangeLayers()
+        var layerDriver = new Basin.Desktop.LayerShellSceneDriver(layerShell, layout, sceneLayers)
         {
-            foreach (var view in views)
-            {
-                var box = layout.BoxOf(view.Output);
-                var onOutput = layers.Where(entry => entry.Layer.Output?.Output == view.Output).ToList();
-                var usable = Basin.Desktop.LayerArrangement.Arrange(box, onOutput);
-                management.LayerShell.SetNonExclusiveArea(
-                    view.Output, usable with { X = box.X + usable.X, Y = box.Y + usable.Y });
-            }
-        }
+            Accept = _ => management.LayerShell.IsSupported && views.Count > 0,
+            DefaultOutput = _ => ((management.LayerShell.DefaultOutput is { } defaultOutput
+                ? driver.ViewOf(defaultOutput)
+                : null) ?? views[0]).Global,
+        };
+        layerDriver.UsableAreaChanged += (output, usable) =>
+        {
+            var box = layout.BoxOf(output);
+            management.LayerShell.SetNonExclusiveArea(
+                output, usable with { X = box.X + usable.X, Y = box.Y + usable.Y });
+        };
 
         LayerSurface? onDemandFocus = null;
 
         void RefreshLayerFocus()
         {
             LayerSurface? exclusive = null;
-            foreach (var (layer, scene) in layers)
+            foreach (var (layer, scene) in layerDriver.Surfaces)
             {
                 if (scene is null || !layer.IsMapped ||
                     layer.KeyboardInteractivity != Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.KeyboardInteractivity.Exclusive)
@@ -608,152 +474,26 @@ internal static class Program
             management.LayerShell.SetLayerFocus(seat, LayerFocus.None, null);
         }
 
-        layerShell.NewSurface += layer =>
+        layerDriver.Arranged += RefreshLayerFocus;
+        layerDriver.SceneCreated += (_, _) => RefreshSurfaceLuts();
+        layerDriver.Removed += layer =>
         {
-            if (!management.LayerShell.IsSupported || views.Count == 0)
+            if (ReferenceEquals(onDemandFocus, layer))
             {
-                layer.Close();
-                return;
+                onDemandFocus = null;
             }
-
-            layer.Output ??= (ViewOf(management.LayerShell.DefaultOutput) ?? views[0]).Global;
-            layers.Add((layer, null));
-
-            layer.InitialCommit += ArrangeLayers;
-            layer.Mapped += () =>
-            {
-                var tree = layer.Layer switch
-                {
-                    LayerKind.Background => backgroundLayer,
-                    LayerKind.Bottom => bottomLayer,
-                    LayerKind.Top => topLayer,
-                    _ => overlayLayer,
-                };
-                var index = layers.FindIndex(entry => entry.Layer == layer);
-                layers[index] = (layer, new SceneSurface(tree, layer.Surface));
-                ArrangeLayers();
-                RefreshLayerFocus();
-                RefreshSurfaceLuts();
-            };
-            layer.Unmapped += () =>
-            {
-                var index = layers.FindIndex(entry => entry.Layer == layer);
-                if (index < 0)
-                {
-                    return;
-                }
-
-                layers[index].Scene?.Destroy();
-                layers.RemoveAt(index);
-                if (ReferenceEquals(onDemandFocus, layer))
-                {
-                    onDemandFocus = null;
-                }
-
-                ArrangeLayers();
-                RefreshLayerFocus();
-            };
-            layer.Committed += () =>
-            {
-                ArrangeLayers();
-                RefreshLayerFocus();
-            };
-            layer.PopupAdopted += popup =>
-            {
-                var index = layers.FindIndex(entry => entry.Layer == layer);
-                if (index < 0 || layers[index].Scene is not { } layerScene || layer.Output?.Output is not { } output)
-                {
-                    return;
-                }
-
-                WireLayerPopup(popup, layerScene.Tree, output);
-            };
         };
+        layerDriver.TrackPopups(shell);
+        layerDriver.PopupSceneCreated += (_, _, _) => RefreshSurfaceLuts();
 
-        void WireLayerPopup(XdgPopupWindow popup, SceneTree parentTree, IOutput output)
-        {
-            var scene = new SceneSurface(parentTree, popup.Surface);
-            layerPopups[popup] = scene;
-
-            void Place()
-            {
-                var origin = popup.Parent?.Role is XdgPopupWindow ? popup.Parent.EffectiveGeometry : default;
-                scene.Tree.SetPosition(origin.X + popup.SurfacePosition.X, origin.Y + popup.SurfacePosition.Y);
-            }
-
-            void Constrain()
-            {
-                if (!parentTree.TryMapSceneToLocal(0, 0, out var localX, out var localY))
-                {
-                    return;
-                }
-
-                var origin = popup.Parent?.Role is XdgPopupWindow ? popup.Parent.EffectiveGeometry : default;
-                var originX = (int)-localX + origin.X;
-                var originY = (int)-localY + origin.Y;
-                var box = layout.BoxOf(output);
-                popup.Unconstrain(new Box(box.X - originX, box.Y - originY, box.Width, box.Height));
-            }
-
-            Constrain();
-            Place();
-            popup.Xdg.Committed += Place;
-            popup.GeometryChanged += Place;
-            popup.Repositioned += Constrain;
-            scene.Destroyed += () =>
-            {
-                popup.Xdg.Committed -= Place;
-                popup.GeometryChanged -= Place;
-                popup.Repositioned -= Constrain;
-                layerPopups.Remove(popup);
-            };
-            popup.Destroyed += scene.Destroy;
-        }
-
-        shell.NewPopup += popup =>
-        {
-            if (popup.Parent?.Role is not XdgPopupWindow)
-            {
-                return;
-            }
-
-            var root = popup;
-            var chain = popup.Parent;
-            while (chain?.Role is XdgPopupWindow parentPopup)
-            {
-                root = parentPopup;
-                chain = parentPopup.Parent;
-            }
-
-            if (chain is not null)
-            {
-                return;
-            }
-
-            popup.Xdg.Mapped += () =>
-            {
-                if (layerPopups.ContainsKey(popup) ||
-                    popup.Parent?.Role is not XdgPopupWindow parentPopup ||
-                    !layerPopups.TryGetValue(parentPopup, out var parentScene) ||
-                    root.LayerParent?.Output?.Output is not { } output)
-                {
-                    return;
-                }
-
-                WireLayerPopup(popup, parentScene.Tree, output);
-            };
-        };
-
-        ArrangeLayers();
+        layerDriver.Rearrange();
 
         Basin.XWayland.XWaylandServer? xServer = null;
-        if (xwayland)
+        if (xwaylandModule is not null)
         {
-            var shellGlobal = services.Require<Basin.XWayland.XwaylandShellGlobal>();
             xServer = services.Require<Basin.XWayland.XWaylandServer>();
-            xServer.Ready += wmFd =>
+            xwaylandModule.WindowManagerReady += wm =>
             {
-                var wm = new Basin.XWayland.XWaylandWm(wmFd, loop, shellGlobal, seat);
                 management.Adopt(wm);
                 Console.WriteLine($"XWAYLAND WM {xServer.DisplayName}");
             };
@@ -856,10 +596,18 @@ internal static class Program
 
             if (pressed && scene.SurfaceAt(pointer.X, pointer.Y) is { Surface: { } clicked })
             {
-                var onDemand = layers.Find(entry =>
-                    entry.Scene is not null && ReferenceEquals(entry.Layer.Surface, clicked) &&
-                    entry.Layer.KeyboardInteractivity ==
-                        Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.KeyboardInteractivity.OnDemand).Layer;
+                LayerSurface? onDemand = null;
+                foreach (var entry in layerDriver.Surfaces)
+                {
+                    if (entry.Scene is not null && ReferenceEquals(entry.Layer.Surface, clicked) &&
+                        entry.Layer.KeyboardInteractivity ==
+                            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.KeyboardInteractivity.OnDemand)
+                    {
+                        onDemand = entry.Layer;
+                        break;
+                    }
+                }
+
                 if (onDemand is not null)
                 {
                     onDemandFocus = onDemand;
@@ -876,17 +624,26 @@ internal static class Program
         }
 
         var touchBinder = new Basin.Seat.Backends.SeatBinder(seat, layout, pointer, cursor);
+        touchBinder.Key += (timeMs, key, pressed) => DeliverKey(timeMs, key, pressed);
+        touchBinder.Motion += (timeMs, _, _, _, _) => PointerMoved(timeMs);
+        touchBinder.Button += DeliverPointerButton;
+        touchBinder.Axis += (timeMs, axis) =>
+        {
+            seat.Pointer.NotifyAxis(timeMs, axis);
+            seat.Pointer.NotifyFrame();
+        };
+        touchBinder.PointerLeft += () => seat.Pointer.NotifyClearFocus();
         var touchDriver = new Basin.Seat.Backends.SeatTouchDriver(touchBinder, seat);
         var touchPolicy = new TouchPolicy
         {
-            Scene = scene,
-            Management = management,
-            Seat = seat,
             Pointer = pointer,
             Moved = PointerMoved,
             Button = DeliverPointerButton,
         };
-        touchDriver.Router.HitTester = touchPolicy;
+        touchDriver.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(scene)
+        {
+            Suppressed = () => management.HasPointerOperation(seat),
+        };
         touchDriver.AttachPointer(touchPolicy).ClaimWithoutSurface = true;
         touchDriver.Router.Activity =
             services.Find<Basin.Capabilities.IIdleSource>() as Basin.Seat.SeatIdleSource;
@@ -912,6 +669,7 @@ internal static class Program
         driver.Added += view =>
         {
             cursor.AddOutput(view.Output, view.Scene!);
+            presenceTracker.AddOutput(view.Output, view.Global);
             color.SetOutputDescription(view.Global, outputDescription);
             management.AddOutput(view.Global);
             if (view.Output is Basin.Backend.Drm.DrmOutput added)
@@ -926,25 +684,11 @@ internal static class Program
                 Console.WriteLine($"SCALE {view.Output.Name} {view.Output.Scale}");
             }
 
-            if (scales.Length == 0 && view.Output is WaylandOutput hosted)
-            {
-                hosted.HostScaleChanged += () =>
-                {
-                    if (Math.Abs(hosted.HostScale - hosted.Scale) < 0.0001)
-                    {
-                        return;
-                    }
-
-                    using var hostState = new OutputState();
-                    if (!hosted.Commit(hostState.SetScale(hosted.HostScale)))
-                    {
-                        return;
-                    }
-
-                    Console.WriteLine($"SCALE {hosted.Name} {hosted.Scale}");
-                    OnOutputsReconfigured();
-                };
-            }
+        };
+        driver.HostScaleFollowed += view =>
+        {
+            Console.WriteLine($"SCALE {view.Output.Name} {view.Output.Scale}");
+            OnOutputsReconfigured();
         };
         driver.Removed += view =>
         {
@@ -955,11 +699,12 @@ internal static class Program
             }
 
             cursor.RemoveOutput(view.Output);
+            presenceTracker.RemoveOutput(view.Output);
         };
         driver.LayoutChanged += () =>
         {
-            ArrangeLayers();
-            ConfigureLockSurfaces();
+            layerDriver.Rearrange();
+            lockDriver.Reconfigure();
             UpdateSurfacePresence();
         };
 
@@ -1008,101 +753,26 @@ internal static class Program
                 }
             };
 
-            libinput.Key += (device, timeMs, key, pressed) =>
-            {
-                seat.Keyboard.Activate(keyboardDevices.GetValueOrDefault(device));
-                DeliverKey(timeMs, key, pressed);
-            };
-
-            libinput.PointerMotion += (_, timeMs, dx, dy, _, _) =>
-            {
-                pointer.Motion(dx, dy);
-                PointerMoved(timeMs);
-            };
-
-            libinput.PointerMotionAbsolute += (_, timeMs, normalizedX, normalizedY) =>
-            {
-                pointer.MotionAbsolute(null, normalizedX, normalizedY);
-                PointerMoved(timeMs);
-            };
-
-            libinput.PointerButton += (_, timeMs, button, pressed) =>
-                DeliverPointerButton(timeMs, button, pressed);
-
-            libinput.PointerScroll += (_, timeMs, axis) =>
-            {
-                seat.Pointer.NotifyAxis(timeMs, axis);
-                seat.Pointer.NotifyFrame();
-            };
-
-            touchBinder.BindLibinputTouch(libinput);
+            touchBinder.KeyboardFor = device => keyboardDevices.GetValueOrDefault(device);
 
             management.InputManager.SeatCreated += name => Console.WriteLine($"SEAT + {name}");
             management.InputManager.SeatDestroyed += name => Console.WriteLine($"SEAT - {name}");
             management.InputManager.DeviceAssigned += (device, name) =>
                 Console.WriteLine($"ASSIGN {(device as Basin.Backend.Libinput.InputDevice)?.Name} -> {name}");
 
-            libinput.Start();
-        }
-
-        void WireParentKeyboard(WaylandKeyboardDevice parentKeyboard)
-        {
-            Console.WriteLine("INPUT Keyboard host");
-            parentKeyboard.RepeatInfo += (rate, delay) => seat.Keyboard.SetRepeatInfo(rate, delay);
-            parentKeyboard.Key += (timeMs, key, pressed) =>
-            {
-                seat.Keyboard.Activate(null);
-                DeliverKey(timeMs, key, pressed);
-            };
-            parentKeyboard.Modifiers += (depressed, latched, locked, group) =>
-            {
-                seat.Keyboard.Activate(null);
-                seat.Keyboard.NotifyModifiers(depressed, latched, locked, group);
-                management.NotifyModifiers(seat);
-            };
-        }
-
-        void WireParentPointer(WaylandPointerDevice parentPointer)
-        {
-            Console.WriteLine("INPUT Pointer host");
-
-            cursor.AttachParent(parentPointer);
-
-            void MoveTo(uint timeMs, WaylandOutput on, double physicalX, double physicalY)
-            {
-                var (layoutX, layoutY) = layout.ToLayout(on, physicalX, physicalY);
-                pointer.Warp(layoutX, layoutY);
-                PointerMoved(timeMs);
-            }
-
-            parentPointer.Enter += (on, x, y) => MoveTo((uint)Environment.TickCount, on, x, y);
-            parentPointer.Motion += (timeMs, x, y) =>
-            {
-                if (layout.OutputAt(pointer.X, pointer.Y) is WaylandOutput on)
-                {
-                    MoveTo(timeMs, on, x, y);
-                }
-                else if (views[0].Output is WaylandOutput first)
-                {
-                    MoveTo(timeMs, first, x, y);
-                }
-            };
-            parentPointer.Leave += () => seat.Pointer.NotifyClearFocus();
-            parentPointer.Button += (timeMs, button, pressed) =>
-                DeliverPointerButton(timeMs, button, pressed);
-            parentPointer.Axis += (timeMs, axis) =>
-            {
-                seat.Pointer.NotifyAxis(timeMs, axis);
-                seat.Pointer.NotifyFrame();
-            };
+            touchBinder.BindLibinput(libinput);
         }
 
         NestedSeam? seam = null;
         if (parent is not null)
         {
-            parent.KeyboardAdded += WireParentKeyboard;
-            parent.PointerAdded += WireParentPointer;
-            touchBinder.BindParentTouch(parent);
+            parent.KeyboardAdded += parentKeyboard =>
+            {
+                Console.WriteLine("INPUT Keyboard host");
+                parentKeyboard.RepeatInfo += (rate, delay) => seat.Keyboard.SetRepeatInfo(rate, delay);
+            };
+            parent.PointerAdded += _ => Console.WriteLine("INPUT Pointer host");
+            touchBinder.BindParent(parent);
             seam = new NestedSeam(
                 parent,
                 services.Find<Basin.Capabilities.ISelectionStore>(),
@@ -1131,20 +801,11 @@ internal static class Program
             PointerMoved(timeMs);
             return true;
         };
-        injectedInput.OnPointerMotionAbsolute = (timeMs, x, y, extentWidth, extentHeight) =>
+        var injector = new Basin.Seat.Backends.SeatInjector(touchBinder, seat, layout, pointer)
         {
-            var box = layout.Bounds;
-            if (box.Width <= 0 || box.Height <= 0)
-            {
-                return true;
-            }
-
-            pointer.Warp(
-                box.X + (x / extentWidth * box.Width),
-                box.Y + (y / extentHeight * box.Height));
-            PointerMoved(timeMs);
-            return true;
+            Moved = PointerMoved,
         };
+        injectedInput.OnPointerMotionAbsolute = injector.MotionAbsolute;
         injectedInput.OnPointerButton = (timeMs, button, pressed) =>
         {
             DeliverPointerButton(timeMs, button, pressed);
@@ -1152,6 +813,12 @@ internal static class Program
         };
 
         var running = true;
+        driver.Emptied += () => running = false;
+        if (parent is not null)
+        {
+            parent.ParentGone += () => running = false;
+        }
+
         management.ExitSessionRequested += () =>
         {
             Console.WriteLine("EXIT requested by the window manager");
@@ -1168,15 +835,13 @@ internal static class Program
         var interrupt = loop.AddSignal(Signal.Interrupt, _ => running = false);
         var terminate = loop.AddSignal(Signal.Terminate, _ => running = false);
 
-        long PrimaryRendered() => views.Count > 0 ? views[0].Rendered : 0;
-
         var started = Environment.TickCount64;
         var reported = 0L;
-        while (running && (frames == 0 || PrimaryRendered() < frames))
+        while (running && (frames == 0 || driver.PrimaryRendered < frames))
         {
-            if (PrimaryRendered() - reported >= 300)
+            if (driver.PrimaryRendered - reported >= 300)
             {
-                reported = PrimaryRendered();
+                reported = driver.PrimaryRendered;
                 var seconds = (Environment.TickCount64 - started) / 1000.0;
                 Console.WriteLine(
                     $"STATS {reported} frames in {seconds:F1}s ({reported / seconds:F1}/s) " +
@@ -1187,10 +852,7 @@ internal static class Program
             loop.Dispatch(16);
             if (fifo.HasPendingBarriers)
             {
-                foreach (var view in views)
-                {
-                    view.Scheduler?.ScheduleRepaint();
-                }
+                driver.ScheduleAll();
             }
 
             parent?.Flush();
@@ -1201,15 +863,15 @@ internal static class Program
             for (var i = 0; i < views.Count; i++)
             {
                 var path = ScreenshotPath(screenshotPath, i);
-                var shot = views[i].Scene?.LastTarget is { } presented &&
-                    BufferCapture.TryWritePng(presented, renderer, path);
+                var shot = SceneScreenshot.WritePresented(views[i].Scene?.LastTarget, renderer, path)
+                    == ScreenshotOutcome.Written;
                 Console.WriteLine(shot
                     ? $"SHOT {path} after {views[i].Rendered} frames"
                     : $"SHOT failed: no readable presented frame on {views[i].Output.Name} after {views[i].Rendered} frames");
             }
         }
 
-        totalRendered = PrimaryRendered();
+        totalRendered = driver.PrimaryRendered;
 
         startup?.Stop(log);
         interrupt.Remove();

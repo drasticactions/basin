@@ -52,6 +52,10 @@ public sealed class SeatKeyboard : IDisposable
 
     public event Action? ModifiersChanged;
 
+    public KeyboardLeds Leds { get; private set; }
+
+    public event Action? LedsChanged;
+
     public event Action<Surface?>? FocusChanged;
 
     public event Action? KeymapChanged;
@@ -122,6 +126,7 @@ public sealed class SeatKeyboard : IDisposable
         {
             BroadcastKeymap(file);
             _modifiers = device.Modifiers;
+            UpdateLeds();
             Grab.Modifiers();
             ModifiersChanged?.Invoke();
             return;
@@ -214,6 +219,85 @@ public sealed class SeatKeyboard : IDisposable
     }
 
     public XkbKeysym KeysymFor(uint key) => State?.GetKeyOneSym(key + 8) ?? default;
+
+    public bool TryKeycodeForKeysym(uint keysym, out uint keycode, out uint modifiers)
+    {
+        keycode = 0;
+        modifiers = 0;
+        if (Keymap is not { } keymap || State is not { } state)
+        {
+            return false;
+        }
+
+        var layout = state.SerializeLayout(XkbStateComponent.LayoutEffective);
+        foreach (var candidate in keymap.GetKeycodes())
+        {
+            var levels = keymap.GetNumLevelsForKey(candidate, layout);
+            for (var level = 0u; level < levels; level++)
+            {
+                var syms = keymap.GetKeySymsByLevel(candidate, layout, level);
+                for (var i = 0; i < syms.Length; i++)
+                {
+                    if ((uint)syms[i] != keysym)
+                    {
+                        continue;
+                    }
+
+                    var masks = keymap.GetModsForLevel(candidate, layout, level);
+                    if (masks.Length > 0)
+                    {
+                        keycode = candidate - 8;
+                        modifiers = masks[0];
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public IDisposable? OverrideKeymapForKeysym(uint keycode, uint keysym)
+    {
+        if (Keymap is not { } current)
+        {
+            return null;
+        }
+
+        var name = new XkbKeysym(keysym).ToString();
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        var saved = current.AsString(XkbKeymapFormat.TextV1);
+        if (string.IsNullOrEmpty(saved))
+        {
+            return null;
+        }
+
+        var savedModifiers = _modifiers;
+        var custom =
+            "xkb_keymap {\n" +
+            "  xkb_keycodes \"custom\" {\n" +
+            $"    <CSTM> = {keycode + 8};\n" +
+            "  };\n" +
+            "  xkb_types \"(custom)\" { include \"complete\" };\n" +
+            "  xkb_compatibility \"custom\" { include \"complete\" };\n" +
+            "  xkb_symbols \"custom\" {\n" +
+            "    include \"pc+us\"\n" +
+            $"    key <CSTM> {{ [ {name} ] }};\n" +
+            "  };\n" +
+            "};\n";
+        var before = _default.File;
+        SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(custom));
+        if (ReferenceEquals(before, _default.File))
+        {
+            return null;
+        }
+
+        return new KeymapOverrideScope(this, saved, savedModifiers);
+    }
 
     public void StartGrab(IKeyboardGrab grab)
     {
@@ -323,12 +407,24 @@ public sealed class SeatKeyboard : IDisposable
         device.State = compiled?.CreateState();
         device.File = file;
         device.Modifiers = default;
+        device.LedIndices = compiled is { } map
+            ? (map.GetLedIndex(Xkb.XkbNames.LedNum),
+               map.GetLedIndex(Xkb.XkbNames.LedCaps),
+               map.GetLedIndex(Xkb.XkbNames.LedScroll),
+               map.GetLedIndex(Xkb.XkbNames.LedCompose),
+               map.GetLedIndex(Xkb.XkbNames.LedKana))
+            : default;
         if (ReferenceEquals(device, _active))
         {
+            var previousModifiers = _modifiers;
             BroadcastKeymap(file);
             _modifiers = device.Modifiers;
-            Grab.Modifiers();
-            ModifiersChanged?.Invoke();
+            UpdateLeds();
+            if (_modifiers != previousModifiers)
+            {
+                Grab.Modifiers();
+                ModifiersChanged?.Invoke();
+            }
         }
 
         oldState?.Dispose();
@@ -347,10 +443,50 @@ public sealed class SeatKeyboard : IDisposable
     {
         var changed = _modifiers != modifiers;
         _modifiers = modifiers;
+        UpdateLeds();
         if (changed)
         {
             Grab.Modifiers();
             ModifiersChanged?.Invoke();
+        }
+    }
+
+    private void UpdateLeds()
+    {
+        var leds = KeyboardLeds.None;
+        if (_active.State is { } state)
+        {
+            var indices = _active.LedIndices;
+            if (indices.Num is { } num && state.IsLedActive(num))
+            {
+                leds |= KeyboardLeds.NumLock;
+            }
+
+            if (indices.Caps is { } caps && state.IsLedActive(caps))
+            {
+                leds |= KeyboardLeds.CapsLock;
+            }
+
+            if (indices.Scroll is { } scroll && state.IsLedActive(scroll))
+            {
+                leds |= KeyboardLeds.ScrollLock;
+            }
+
+            if (indices.Compose is { } compose && state.IsLedActive(compose))
+            {
+                leds |= KeyboardLeds.Compose;
+            }
+
+            if (indices.Kana is { } kana && state.IsLedActive(kana))
+            {
+                leds |= KeyboardLeds.Kana;
+            }
+        }
+
+        if (leds != Leds)
+        {
+            Leds = leds;
+            LedsChanged?.Invoke();
         }
     }
 
@@ -419,6 +555,26 @@ public sealed class SeatKeyboard : IDisposable
     }
 
     private IEnumerable<SeatClient> AllClients() => _seat.Clients;
+
+    private sealed class KeymapOverrideScope(
+        SeatKeyboard keyboard,
+        string saved,
+        (uint Depressed, uint Latched, uint Locked, uint Group) modifiers) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            keyboard.SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(saved));
+            keyboard.NotifyModifiers(modifiers.Depressed, modifiers.Latched, modifiers.Locked, modifiers.Group);
+        }
+    }
 
     private sealed class DefaultGrab(SeatKeyboard keyboard) : IKeyboardGrab
     {

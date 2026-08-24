@@ -9,8 +9,13 @@ public sealed class PlasmaWindowManagementModule : DesktopModule<PlasmaWindowMan
 
     public override int Version => PlasmaWindowManager.Version;
 
-    public override IReadOnlyList<Type> Capabilities => [typeof(IToplevelModel), typeof(IWorkspaceModel)];
+    public override IReadOnlyList<Type> Capabilities =>
+        [typeof(IToplevelModel), typeof(IWorkspaceModel), typeof(IToplevelStack)];
 
     protected override PlasmaWindowManager Create(BasinServices services) =>
-        new(services.Display, services.Find<IToplevelModel>(), services.Find<IWorkspaceModel>());
+        new(
+            services.Display,
+            services.Find<IToplevelModel>(),
+            services.Find<IWorkspaceModel>(),
+            services.Find<IToplevelStack>());
 }

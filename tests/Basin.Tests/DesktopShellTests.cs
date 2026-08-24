@@ -155,6 +155,97 @@ public sealed class LayerShellProtocolTests
     }
 
     [Fact]
+    public void A_layer_surface_destroyed_before_mapping_raises_Destroyed()
+    {
+        using var host = new CompositorTestHost();
+        var layerShell = new LayerShell(host.Display, host.Compositor);
+        LayerSurface? serverLayer = null;
+        layerShell.NewSurface += layer =>
+        {
+            serverLayer = layer;
+            layer.InitialCommit += () => layer.Configure(160, 40);
+        };
+
+        var client = host.Client;
+        var shellProxy = BindLayerShell(host, client);
+        var surface = client.Compositor.CreateSurface();
+        var layerProxy = shellProxy.GetLayerSurface(surface, client.Outputs[0], Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, "dock");
+        layerProxy.SetSize(0, 40);
+        layerProxy.SetExclusiveZone(40);
+        surface.Commit();
+        host.PumpUntil(() => serverLayer is not null);
+
+        var destroyed = false;
+        var unmapped = false;
+        serverLayer!.Destroyed += () => destroyed = true;
+        serverLayer.Unmapped += () => unmapped = true;
+
+        layerProxy.Destroy();
+        host.PumpToServer();
+
+        Assert.True(destroyed);
+        Assert.False(unmapped);
+        Assert.False(serverLayer.IsMapped);
+        Assert.True(serverLayer.IsDestroyed);
+
+        surface.Dispose();
+        host.PumpToServer();
+        layerShell.Dispose();
+    }
+
+    [Fact]
+    public void A_destroyed_layer_surface_frees_the_role_for_a_new_one()
+    {
+        using var host = new CompositorTestHost();
+        var layerShell = new LayerShell(host.Display, host.Compositor);
+        var serverLayers = new List<LayerSurface>();
+        layerShell.NewSurface += layer =>
+        {
+            serverLayers.Add(layer);
+            layer.InitialCommit += () => layer.Configure(160, 30);
+        };
+
+        var client = host.Client;
+        var shellProxy = BindLayerShell(host, client);
+        var surface = client.Compositor.CreateSurface();
+        var layerProxy = shellProxy.GetLayerSurface(surface, client.Outputs[0], Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, "panel");
+        layerProxy.SetSize(0, 30);
+        layerProxy.Configure += (_, e) => layerProxy.AckConfigure(e.Serial);
+        surface.Commit();
+        host.PumpUntil(() => serverLayers.Count == 1);
+
+        layerProxy.Destroy();
+        surface.Attach(null, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+
+        var secondProxy = shellProxy.GetLayerSurface(surface, client.Outputs[0], Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, "panel");
+        secondProxy.SetSize(0, 40);
+        uint secondSerial = 0;
+        secondProxy.Configure += (_, e) =>
+        {
+            secondSerial = e.Serial;
+            secondProxy.AckConfigure(e.Serial);
+        };
+        surface.Commit();
+        host.PumpUntil(() => secondSerial != 0);
+
+        Assert.Equal(2, serverLayers.Count);
+        var mapped = false;
+        serverLayers[1].Mapped += () => mapped = true;
+        var buffer = client.CreateBuffer(160, 40, Fill.Solid(160, 40, 0xFF285577));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpUntil(() => mapped);
+        Assert.True(serverLayers[1].IsMapped);
+        Assert.False(serverLayers[0].IsMapped);
+
+        surface.Dispose();
+        host.PumpToServer();
+        layerShell.Dispose();
+    }
+
+    [Fact]
     public void Adopted_popup_anchors_to_its_layer_surface()
     {
         using var host = new CompositorTestHost();

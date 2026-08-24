@@ -35,7 +35,7 @@ public sealed class SceneOutput : IDisposable
         _scene = scene;
         Output = output;
         _scale = output.Scale;
-        _projection = OutputProjection.For(output);
+        _projection = ComputeProjection();
         Ring = new DamageRing(output.CurrentMode.Width, output.CurrentMode.Height);
         scene.Damaged += OnSceneDamaged;
         scene.FrameRequested += OnFrameRequested;
@@ -59,6 +59,44 @@ public sealed class SceneOutput : IDisposable
                 DamagePending?.Invoke();
             }
         }
+    }
+
+    public Box? ReplicationSource
+    {
+        get => _replicationSource;
+        set
+        {
+            if (_replicationSource == value)
+            {
+                return;
+            }
+
+            _replicationSource = value;
+            if (value is { } box)
+            {
+                _position = new Point(box.X, box.Y);
+            }
+
+            _projection = ComputeProjection();
+            Ring.AddWhole();
+            DamagePending?.Invoke();
+        }
+    }
+
+    private Box? _replicationSource;
+
+    private OutputProjection ComputeProjection()
+    {
+        if (_replicationSource is not { } box || box.Width <= 0 || box.Height <= 0)
+        {
+            return OutputProjection.For(Output);
+        }
+
+        var mode = Output.CurrentMode;
+        var scale = Math.Min((double)mode.Width / box.Width, (double)mode.Height / box.Height);
+        var originX = -(int)Math.Round((mode.Width - box.Width * scale) / 2);
+        var originY = -(int)Math.Round((mode.Height - box.Height * scale) / 2);
+        return new OutputProjection(scale, OutputTransform.Normal, mode.Width, mode.Height, originX, originY);
     }
 
     public int ScanoutEntryThreshold { get; set; } = 2;
@@ -386,12 +424,12 @@ public sealed class SceneOutput : IDisposable
     {
 
         _scale = Output.Scale;
-        _projection = OutputProjection.For(Output);
+        _projection = ComputeProjection();
         _runsBackdropEffects = renderer.SupportsBackdropEffects;
         Ring.Resize(mode.Width, mode.Height);
         _renderList.Clear();
         _scene.CollectRenderList(_renderList, -_position.X, -_position.Y);
-        _scene.PrepareCaptures(renderer, _renderList, _scale);
+        _scene.PrepareCaptures(renderer, _renderList, _projection.Scale);
 
         if (!Ring.IsEmpty && _runsBackdropEffects && AnyActiveBackdrop())
         {
@@ -403,7 +441,7 @@ public sealed class SceneOutput : IDisposable
             Ring.AddWhole();
         }
 
-        if (_postStages.Count == 0 && !_projection.IsTransformed &&
+        if (_postStages.Count == 0 && !_projection.IsTransformed && _replicationSource is null &&
             options.AllowDirectScanout && _softwareCursor.Buffer is null && TryDirectScanout(state))
         {
             return true;
@@ -419,7 +457,8 @@ public sealed class SceneOutput : IDisposable
         _offloadedNowBoxes.Clear();
         _layers.Clear();
         var sendLayers = false;
-        if (options.AllowPlaneOffload && !_projection.IsTransformed && _softwareCursor.Buffer is null && _postStages.Count == 0)
+        if (options.AllowPlaneOffload && !_projection.IsTransformed && _replicationSource is null &&
+            _softwareCursor.Buffer is null && _postStages.Count == 0)
         {
             SelectOverlayCandidates(mode, options.MaxOffloadLayers);
         }
@@ -1140,10 +1179,10 @@ public sealed class SceneOutput : IDisposable
             DamagePending?.Invoke();
         }
 
-        if (Output.Scale != _scale || Output.Transform != _projection.Transform)
+        if (Output.Scale != _scale || (_replicationSource is null && Output.Transform != _projection.Transform))
         {
             _scale = Output.Scale;
-            _projection = OutputProjection.For(Output);
+            _projection = ComputeProjection();
             Ring.AddWhole();
             DamagePending?.Invoke();
         }

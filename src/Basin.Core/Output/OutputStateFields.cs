@@ -21,4 +21,10 @@ public enum OutputStateFields
     GammaLut = 1 << 12,
     Ctm = 1 << 13,
     DegammaLut = 1 << 14,
+    RgbRange = 1 << 15,
+    MaxBitsPerColor = 1 << 16,
+    Overscan = 1 << 17,
+    CustomModes = 1 << 18,
+    Sharpness = 1 << 19,
+    AbmLevel = 1 << 20,
 }

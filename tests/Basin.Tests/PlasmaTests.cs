@@ -152,6 +152,203 @@ public sealed class PlasmaWindowTests
         return proxy!;
     }
 
+    private sealed class BoundManagement
+    {
+        public Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement Proxy = null!;
+        public readonly List<(uint Id, string Uuid)> Announced = [];
+        public readonly List<string> UuidOrders = [];
+        public readonly List<byte[]> IdOrders = [];
+        public int Changed2;
+    }
+
+    private static BoundManagement BindAt(CompositorTestHost host, uint version)
+    {
+        var bound = new BoundManagement();
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "org_kde_plasma_window_management")
+            {
+                var proxy = registry.Bind<Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement>(e.Name, version);
+                bound.Proxy = proxy;
+                proxy.WindowWithUuid += (_, we) => bound.Announced.Add((we.Id, we.Uuid));
+                proxy.StackingOrderChanged2 += (_, _) => bound.Changed2++;
+                proxy.StackingOrderUuidChanged += (_, se) => bound.UuidOrders.Add(se.Uuids);
+                proxy.StackingOrderChanged += (_, se) => bound.IdOrders.Add(se.Ids);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(bound.Proxy);
+        host.PumpToClient();
+        return bound;
+    }
+
+    [Fact]
+    public void Stacking_order_follows_the_capability()
+    {
+        using var host = new CompositorTestHost();
+        var (toplevels, workspaces, window, _, _) = Populate(host);
+        var stack = new TestToplevelStack();
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, workspaces, stack);
+        var second = toplevels.Add("Editor", "org.vim");
+
+        var bound = BindAt(host, 20);
+        stack.SetOrder(window, second);
+        host.PumpToClient();
+
+        Assert.True(bound.Changed2 >= 1);
+        Assert.Empty(bound.UuidOrders);
+        Assert.Empty(bound.IdOrders);
+    }
+
+    [Fact]
+    public void A_client_below_seventeen_gets_the_deprecated_pair()
+    {
+        using var host = new CompositorTestHost();
+        var (toplevels, workspaces, window, _, _) = Populate(host);
+        var stack = new TestToplevelStack();
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, workspaces, stack);
+        var second = toplevels.Add("Editor", "org.vim");
+
+        var legacy = BindAt(host, 16);
+        var modern = BindAt(host, 20);
+        stack.SetOrder(second, window);
+        host.PumpToClient();
+
+        Assert.Equal($"basin-{second};basin-{window}", legacy.UuidOrders[^1]);
+        Assert.Equal(0, legacy.Changed2);
+        Assert.True(modern.Changed2 >= 1);
+        Assert.Empty(modern.UuidOrders);
+        Assert.Empty(modern.IdOrders);
+    }
+
+    [Fact]
+    public void Get_stacking_order_drains_and_dies()
+    {
+        using var host = new CompositorTestHost();
+        var (toplevels, workspaces, window, _, _) = Populate(host);
+        var stack = new TestToplevelStack();
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, workspaces, stack);
+        var second = toplevels.Add("Editor", "org.vim");
+        stack.SetOrder(window, second);
+
+        var bound = BindAt(host, 20);
+        var order = bound.Proxy.GetStackingOrder();
+        var uuids = new List<string>();
+        var done = false;
+        order.Window += (_, e) => uuids.Add(e.Uuid);
+        order.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+
+        Assert.Equal([$"basin-{window}", $"basin-{second}"], uuids);
+        order.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
+    public void Client_geometry_rides_the_model()
+    {
+        using var host = new CompositorTestHost();
+        var toplevels = new TestToplevelModel();
+        var window = toplevels.Add("Terminal", "org.foot", geometry: new Box(10, 20, 300, 200));
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, null);
+
+        var bound = BindAt(host, 20);
+        var resource = bound.Proxy.GetWindowByUuid($"basin-{window}");
+        var frames = new List<Box>();
+        var clients = new List<Box>();
+        resource.Geometry += (_, e) => frames.Add(new Box(e.X, e.Y, (int)e.Width, (int)e.Height));
+        resource.ClientGeometry += (_, e) => clients.Add(new Box(e.X, e.Y, (int)e.Width, (int)e.Height));
+        host.PumpToClient();
+
+        Assert.Equal(new Box(10, 20, 300, 200), frames[^1]);
+        Assert.Empty(clients);
+
+        toplevels.SetClientGeometry(window, new Box(14, 24, 292, 190));
+        host.PumpToClient();
+
+        Assert.Equal(new Box(14, 24, 292, 190), clients[^1]);
+        Assert.NotEqual(frames[^1], clients[^1]);
+    }
+
+    [Fact]
+    public void Parent_pid_and_resource_name_reach_the_client()
+    {
+        using var host = new CompositorTestHost();
+        var toplevels = new TestToplevelModel();
+        var parent = toplevels.Add("Browser", "org.firefox");
+        var child = toplevels.Add("Dialog", "org.firefox");
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, null);
+
+        var bound = BindAt(host, 20);
+        var parentResource = bound.Proxy.GetWindowByUuid($"basin-{parent}");
+        var childResource = bound.Proxy.GetWindowByUuid($"basin-{child}");
+        var resourceNames = new List<string>();
+        var pids = new List<uint>();
+        var parents = new List<bool>();
+        childResource.ResourceNameChanged += (_, e) => resourceNames.Add(e.ResourceName);
+        childResource.PidChanged += (_, e) => pids.Add(e.Pid);
+        childResource.ParentWindow += (_, e) => parents.Add(e.Parent is not null);
+        host.PumpToClient();
+
+        toplevels.SetIdentity(child, resourceName: "firefox", pid: 4242, parentId: parent);
+        host.PumpToClient();
+
+        Assert.Equal("firefox", resourceNames[^1]);
+        Assert.Equal(4242u, pids[^1]);
+        Assert.True(parents[^1]);
+
+        toplevels.SetIdentity(child, resourceName: "firefox", pid: 4242, parentId: 0);
+        host.PumpToClient();
+        Assert.False(parents[^1]);
+        _ = parentResource;
+    }
+
+    [Fact]
+    public void Border_and_capture_bits_round_trip()
+    {
+        using var host = new CompositorTestHost();
+        var toplevels = new TestToplevelModel();
+        var window = toplevels.Add("Terminal", "org.foot");
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, null);
+
+        var bound = BindAt(host, 20);
+        var resource = bound.Proxy.GetWindowByUuid($"basin-{window}");
+        var noBorder = (uint)Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement.State.NoBorder;
+        var exclude = (uint)Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement.State.ExcludeFromCapture;
+
+        resource.SetState(noBorder, noBorder);
+        resource.SetState(noBorder, 0);
+        resource.SetState(exclude, exclude);
+        resource.SetState(exclude, 0);
+        host.PumpUntil(() => toplevels.Requests.Count == 4);
+
+        Assert.Equal(
+            [
+                (window, ToplevelRequestKind.SetNoBorder),
+                (window, ToplevelRequestKind.UnsetNoBorder),
+                (window, ToplevelRequestKind.ExcludeFromCapture),
+                (window, ToplevelRequestKind.IncludeInCapture),
+            ],
+            toplevels.Requests);
+
+        var masked = BindAt(host, 18);
+        var maskedResource = masked.Proxy.GetWindowByUuid($"basin-{window}");
+        var maskedStates = new List<uint>();
+        maskedResource.StateChanged += (_, e) => maskedStates.Add(e.Flags);
+        var fullStates = new List<uint>();
+        resource.StateChanged += (_, e) => fullStates.Add(e.Flags);
+
+        toplevels.SetState(
+            window,
+            ToplevelState.NoBorder | ToplevelState.CanSetNoBorder | ToplevelState.ExcludedFromCapture);
+        host.PumpToClient();
+
+        var canSet = (uint)Basin.Desktop.Protocol.OrgKdePlasmaWindowManagement.State.CanSetNoBorder;
+        Assert.Equal(0u, maskedStates[^1] & (noBorder | canSet | exclude));
+        Assert.Equal(noBorder | canSet | exclude, fullStates[^1] & (noBorder | canSet | exclude));
+    }
+
     [Fact]
     public void Windows_carry_geometry_and_desktops()
     {

@@ -21,7 +21,16 @@ public sealed class PrivilegedProtocolTests
         var outputManagementLayout = new OutputLayout();
         using var outputManagement = new OutputManagementManager(
             host.Display, outputManagementLayout, new LayoutOutputSet(outputManagementLayout), configuration: null);
+        using var plasmaOutputDevices = new Basin.Plasma.PlasmaOutputDeviceManager(
+            host.Display, outputManagementLayout, new LayoutOutputSet(outputManagementLayout), configuration: null);
+        using var plasmaOutputManagement = new Basin.Plasma.PlasmaOutputManagementManager(
+            host.Display, plasmaOutputDevices, configuration: null);
+        using var externalBrightness = new Basin.Plasma.ExternalBrightnessManager(
+            host.Display, host.Loop, outputs: null);
+        using var outputOrder = new Basin.Plasma.OutputOrderManager(
+            host.Display, new LayoutOutputOrder(outputs: null, layout: null));
         using var outputPower = new OutputPowerManager(host.Display, power: null);
+        using var dpms = new Basin.Plasma.DpmsManager(host.Display, power: null);
         using var gamma = new GammaControlManager(host.Display, gamma: null);
         using var lease = new DrmLeaseManager(host.Display, device: null);
         using var foreignToplevels = new ForeignToplevelManager(host.Display, new TestToplevelModel());
@@ -29,6 +38,13 @@ public sealed class PrivilegedProtocolTests
         using var workspaces = new WorkspaceManager(host.Display);
         using var plasmaDesktops = new PlasmaVirtualDesktopManager(host.Display, model: null);
         using var plasmaWindows = new PlasmaWindowManager(host.Display, toplevels: null, workspaces: null);
+        using var plasmaShell = new Basin.Plasma.PlasmaShellManager(host.Display, host.Compositor);
+        using var screenEdges = new Basin.Plasma.ScreenEdgeManager(host.Display, host.Compositor);
+        using var lockscreenOverlay = new Basin.Plasma.LockscreenOverlayManager(
+            host.Display, host.Compositor, new Basin.Plasma.LockOverlaySurfaces());
+        using var screencast = new Basin.Plasma.ScreencastManager(host.Display, null, null, null, null, null);
+        using var fakeInput = new Basin.Plasma.FakeInputManager(
+            host.Display, authority: null, sink: null, seat: null, layout: null);
         using var virtualKeyboard = new VirtualKeyboardManager(host.Display, sink: null);
         using var virtualPointer = new VirtualPointerManager(host.Display, sink: null);
         using var transientSeat = new TransientSeatManager(host.Display);

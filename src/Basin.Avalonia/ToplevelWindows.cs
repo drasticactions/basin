@@ -1142,6 +1142,7 @@ public sealed class ToplevelWindows : IDisposable
         layer.Mapped += () => OnLayerMapped(layer, entry);
         layer.Committed += () => OnLayerCommitted(layer, entry);
         layer.Unmapped += () => OnLayerUnmapped(layer, entry);
+        layer.Destroyed += () => OnLayerDestroyed(layer, entry);
         layer.Surface.Destroyed += () => OnLayerDestroyed(layer, entry);
     }
 
@@ -1362,6 +1363,11 @@ public sealed class ToplevelWindows : IDisposable
 
         ReleaseHeldInput(entry.Surface);
         _layers.RemoveAll(row => row.Entry.Id == entry.Id);
+        if (entry.SceneSurface is { IsDestroyed: false } sceneSurface)
+        {
+            sceneSurface.Destroy();
+        }
+
         _freeCells.Push(entry.Cell);
         var id = entry.Id;
         RunOnUi(() =>

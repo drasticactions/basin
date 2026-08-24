@@ -1,18 +1,5 @@
-using System.Diagnostics;
-using Avalonia;
-using Basin;
-using Basin.Capabilities;
 using Basin.Cli;
-using Basin.Desktop;
-using Basin.Diagnostics;
-using Basin.Host;
-using Basin.Renderers;
-using Basin.Scene;
-using Basin.Shell.Weston;
-using Basin.Shell.Xdg;
 using Basin.UI.Avalonia;
-using Microsoft.Extensions.Logging;
-using Wayland.Server;
 
 namespace Westonia;
 

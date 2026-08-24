@@ -139,6 +139,55 @@ internal sealed class TestToplevelModel : IToplevelModel
         }
     }
 
+    public void SetIdentity(ulong id, string resourceName = "", uint pid = 0, ulong parentId = 0)
+    {
+        var index = _toplevels.FindIndex(t => t.Id == id);
+        if (index >= 0)
+        {
+            _toplevels[index] = _toplevels[index] with
+            {
+                ResourceName = resourceName,
+                Pid = pid,
+                ParentId = parentId,
+            };
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetAppMenu(ulong id, string serviceName, string objectPath)
+    {
+        var index = _toplevels.FindIndex(t => t.Id == id);
+        if (index >= 0)
+        {
+            _toplevels[index] = _toplevels[index] with
+            {
+                AppMenuService = serviceName,
+                AppMenuObjectPath = objectPath,
+            };
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetState(ulong id, ToplevelState state)
+    {
+        var index = _toplevels.FindIndex(t => t.Id == id);
+        if (index >= 0)
+        {
+            _toplevels[index] = _toplevels[index] with { State = state };
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetClientGeometry(ulong id, Box client)
+    {
+        var index = _toplevels.FindIndex(t => t.Id == id);
+        if (index >= 0)
+        {
+            _toplevels[index] = _toplevels[index] with { ClientGeometry = client };
+            _observers.Changed(id);
+        }
+    }
+
     public void Remove(ulong id)
     {
         _toplevels.RemoveAll(t => t.Id == id);
@@ -179,6 +228,38 @@ internal sealed class TestToplevelModel : IToplevelModel
     {
         Requests.Add((toplevelId, request.Kind));
         return true;
+    }
+}
+
+internal sealed class TestToplevelStack : IToplevelStack
+{
+    private readonly ToplevelStackObservers _observers = new();
+    private readonly List<ulong> _order = [];
+
+    public void AddObserver(IToplevelStackObserver observer) => _observers.Add(observer);
+
+    public void RemoveObserver(IToplevelStackObserver observer) => _observers.Remove(observer);
+
+    public void SetOrder(params ulong[] order)
+    {
+        _order.Clear();
+        _order.AddRange(order);
+        _observers.Changed();
+    }
+
+    public int Enumerate(Span<ulong> toplevels)
+    {
+        if (_order.Count > toplevels.Length)
+        {
+            return -1;
+        }
+
+        for (var i = 0; i < _order.Count; i++)
+        {
+            toplevels[i] = _order[i];
+        }
+
+        return _order.Count;
     }
 }
 
@@ -685,4 +766,175 @@ internal sealed class TestWorkspaceModel : IWorkspaceModel
     }
 
     private WorkspaceEntry Find(ulong id) => _workspaces.Find(w => w.Id == id)!;
+}
+
+internal sealed class TestPreferenceOutput : OutputBase
+{
+    public TestPreferenceOutput(string name = "PREF-1")
+        : base(name)
+    {
+        using var initial = new OutputState();
+        Commit(initial.SetEnabled(true).SetMode(new OutputMode(640, 480, 60_000)));
+    }
+
+    public OutputRgbRange CommittedRgbRange { get; private set; }
+
+    public uint CommittedMaxBpc { get; private set; }
+
+    public uint CommittedOverscan { get; private set; }
+
+    protected override bool SupportsAdaptiveSync => true;
+
+    protected override bool SupportsRgbRange => true;
+
+    protected override bool SupportsMaxBitsPerColor => true;
+
+    protected override bool SupportsOverscan => true;
+
+    protected override bool SupportsCustomModes => true;
+
+    protected override bool SupportsSharpness => true;
+
+    protected override bool SupportsAbmLevel => true;
+
+    public override OutputConfigurationFeatures Features =>
+        OutputConfigurationFeatures.Overscan |
+        OutputConfigurationFeatures.Vrr |
+        OutputConfigurationFeatures.RgbRange |
+        OutputConfigurationFeatures.MaxBitsPerColor |
+        OutputConfigurationFeatures.CustomModes |
+        OutputConfigurationFeatures.Sharpness |
+        OutputConfigurationFeatures.AbmLevel;
+
+    public IReadOnlyList<OutputMode>? CommittedCustomModes { get; private set; }
+
+    public uint CommittedSharpness { get; private set; }
+
+    public uint CommittedAbmLevel { get; private set; }
+
+    protected override bool TestCommitCore(OutputState state) => true;
+
+    protected override bool CommitCore(OutputState state)
+    {
+        if ((state.Fields & OutputStateFields.CustomModes) != 0)
+        {
+            CommittedCustomModes = state.CustomModes;
+        }
+
+        if ((state.Fields & OutputStateFields.Sharpness) != 0)
+        {
+            CommittedSharpness = state.Sharpness;
+        }
+
+        if ((state.Fields & OutputStateFields.AbmLevel) != 0)
+        {
+            CommittedAbmLevel = state.AbmLevel;
+        }
+
+        if ((state.Fields & OutputStateFields.RgbRange) != 0)
+        {
+            CommittedRgbRange = state.RgbRange;
+        }
+
+        if ((state.Fields & OutputStateFields.MaxBitsPerColor) != 0)
+        {
+            CommittedMaxBpc = state.MaxBitsPerColor;
+        }
+
+        if ((state.Fields & OutputStateFields.Overscan) != 0)
+        {
+            CommittedOverscan = state.Overscan;
+        }
+
+        return true;
+    }
+}
+
+internal sealed class TestHdrOutput : OutputBase
+{
+    public TestHdrOutput(string name = "HDR-1")
+        : base(name)
+    {
+        using var initial = new OutputState();
+        Commit(initial.SetEnabled(true).SetMode(new OutputMode(640, 480, 60_000)));
+    }
+
+    public HdrStaticMetadata? CommittedHdr { get; private set; }
+
+    public bool HdrFieldSeen { get; private set; }
+
+    public double[]? CommittedCtm { get; private set; }
+
+    public bool CtmFieldSeen { get; private set; }
+
+    public override OutputConfigurationFeatures Features =>
+        OutputConfigurationFeatures.HighDynamicRange |
+        OutputConfigurationFeatures.WideColorGamut |
+        OutputConfigurationFeatures.IccProfile |
+        OutputConfigurationFeatures.HdrIccProfile |
+        OutputConfigurationFeatures.BuiltInColor;
+
+    public override OutputColorimetry? Colorimetry => new OutputColorimetry
+    {
+        MaxLuminance = 600,
+        MaxFrameAverageLuminance = 400,
+        MinLuminance = 0.05,
+        Chromaticities = (0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.3290),
+        SupportsPq = true,
+        SupportsBt2020 = true,
+    };
+
+    protected override bool TestCommitCore(OutputState state) => true;
+
+    protected override bool CommitCore(OutputState state)
+    {
+        if ((state.Fields & OutputStateFields.Hdr) != 0)
+        {
+            CommittedHdr = state.Hdr;
+            HdrFieldSeen = true;
+        }
+
+        if ((state.Fields & OutputStateFields.Ctm) != 0)
+        {
+            CommittedCtm = state.Ctm;
+            CtmFieldSeen = true;
+        }
+
+        return true;
+    }
+}
+
+internal sealed class TestEdidOutput : OutputBase
+{
+    private readonly byte[] _edid;
+
+    public TestEdidOutput(string name, byte[] edid)
+        : base(name)
+    {
+        _edid = edid;
+        using var initial = new OutputState();
+        Commit(initial.SetEnabled(true).SetMode(new OutputMode(640, 480, 60_000)));
+    }
+
+    public override ReadOnlyMemory<byte> EdidBytes => _edid;
+
+    protected override bool TestCommitCore(OutputState state) => true;
+
+    protected override bool CommitCore(OutputState state) => true;
+}
+
+internal sealed class TestScreencastPublisher : IScreencastPublisher
+{
+    public List<ScreencastRequest> Requests { get; } = [];
+
+    public List<ulong> ClosedStreams { get; } = [];
+
+    public bool TryPublish(in ScreencastRequest request, out ScreencastStreamInfo info)
+    {
+        Requests.Add(request);
+        info = new ScreencastStreamInfo { NodeId = 77 };
+        return true;
+    }
+
+    public void Close(ulong streamId) => ClosedStreams.Add(streamId);
 }

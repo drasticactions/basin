@@ -81,20 +81,13 @@ internal sealed class Dam : IDisposable
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
 
-        _host = Basin.Host.BasinHost.Create(new Basin.Host.HostOptions
-        {
-            Backend = options.Backend switch
-            {
-                BackendKind.Drm => Basin.Host.HostBackend.Drm,
-                BackendKind.Nested => Basin.Host.HostBackend.Nested,
-                _ => Basin.Host.HostBackend.Headless,
-            },
-        });
+        _host = Basin.Host.BasinHost.Create(
+            Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()));
 
         var capturePack = new SceneCapturePack(_scene, _layout);
         capturePack.Capture.Renderer = _renderer;
         var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
-        var inputSink = new DamInputSink();
+        var inputSink = new Basin.Seat.Backends.HookInputSink();
         _services = _host.CreateServices()
             .Use(_layout)
             .With(capturePack)

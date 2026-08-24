@@ -90,6 +90,8 @@ public sealed class RiverWindowManager : IDisposable
 
     public event Action? WindowManagerLost;
 
+    public event Action? Restacked;
+
     public event Action? WindowManagerUnresponsive;
 
     public int DisplayedFullscreenCount { get; private set; }
@@ -1089,6 +1091,7 @@ public sealed class RiverWindowManager : IDisposable
         }
 
         _popupTree.RaiseToTop();
+        Restacked?.Invoke();
     }
 
     private void OnNewPopup(XdgPopupWindow popup)

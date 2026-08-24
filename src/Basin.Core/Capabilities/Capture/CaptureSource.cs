@@ -1,13 +1,18 @@
+using Pixman;
+
 namespace Basin.Capabilities;
 
 public readonly record struct CaptureSource
 {
-    private CaptureSource(CaptureSourceKind kind, IOutput? output, ulong toplevelId, bool overlayCursor)
+    private CaptureSource(CaptureSourceKind kind, IOutput? output, ulong toplevelId, bool overlayCursor,
+        Box layoutBox = default, double scale = 0)
     {
         Kind = kind;
         OutputTarget = output;
         ToplevelId = toplevelId;
         OverlayCursor = overlayCursor;
+        LayoutBox = layoutBox;
+        Scale = scale;
     }
 
     public CaptureSourceKind Kind { get; }
@@ -17,6 +22,10 @@ public readonly record struct CaptureSource
     public ulong ToplevelId { get; }
 
     public bool OverlayCursor { get; }
+
+    public Box LayoutBox { get; }
+
+    public double Scale { get; }
 
     public static CaptureSource Output(IOutput output, bool overlayCursor = false)
     {
@@ -32,4 +41,7 @@ public readonly record struct CaptureSource
         ArgumentNullException.ThrowIfNull(output);
         return new CaptureSource(CaptureSourceKind.Cursor, output, 0, false);
     }
+
+    public static CaptureSource Region(in Box layoutBox, double scale = 0, bool overlayCursor = false) =>
+        new(CaptureSourceKind.Region, null, 0, overlayCursor, layoutBox, scale);
 }

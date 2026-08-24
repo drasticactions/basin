@@ -44,6 +44,7 @@ internal sealed partial class Westonia : IDisposable
     private ShellLock? _lock;
     private ShellAnimations? _animations;
     private ShellXWayland? _xwayland;
+
     private Basin.XWayland.XWaylandServer? _xServer;
     private IEventSource? _idleTimer;
     private StdinCommands? _stdinCommands;
@@ -95,16 +96,11 @@ internal sealed partial class Westonia : IDisposable
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
 
-        _host = Basin.Host.BasinHost.Create(new Basin.Host.HostOptions
-        {
-            Backend = options.Backend switch
+        _host = Basin.Host.BasinHost.Create(
+            Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
             {
-                BackendKind.Drm => Basin.Host.HostBackend.Drm,
-                BackendKind.Nested => Basin.Host.HostBackend.Nested,
-                _ => Basin.Host.HostBackend.Headless,
-            },
-            SocketFd = options.SocketFd,
-        });
+                SocketFd = options.SocketFd,
+            });
 
         var capturePack = new SceneCapturePack(_scene, _layout);
         capturePack.Capture.Renderer = _renderer;
@@ -172,6 +168,10 @@ internal sealed partial class Westonia : IDisposable
             log.LogError("modeset refused by {Output} in every mode", card.Name);
         _outputs.Added += view => Console.WriteLine(
             $"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
+        _presenceTracker = new SurfacePresenceTracker(
+            _layout, (surface, scale) => _fractionalScale?.AnnounceScale(surface, scale));
+        _outputs.Added += view => _presenceTracker.AddOutput(view.Output, view.Global);
+        _outputs.Removed += view => _presenceTracker.RemoveOutput(view.Output);
         _outputs.Added += OnOutputAdded;
         _outputs.Removed += OnOutputRemoved;
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
@@ -284,7 +284,9 @@ internal sealed partial class Westonia : IDisposable
         };
         if (_services.Find<Basin.Desktop.SessionLockManager>() is { } sessionLock)
         {
-            _lock.AttachSessionLock(sessionLock);
+            var lockDriver = new Basin.Desktop.SessionLockSceneDriver(
+                sessionLock, Seat, _layers.Lock, _layout, _layers.SetLocked);
+            _lock.AttachSessionLock(lockDriver);
         }
 
         if (xwaylandModule is not null)
@@ -330,6 +332,13 @@ internal sealed partial class Westonia : IDisposable
         _shell.Seat = Seat;
         _shell.Attach(Shell);
         _shell.Repaint = () => _outputs.ScheduleAll();
+        var toplevels = _services.Require<Basin.Capabilities.IToplevelModel>();
+        capturePack.Attach(toplevels, surface =>
+        {
+            var content = _shell.WindowOwning(surface)?.Tree ?? _xwayland?.TreeOf(surface);
+            return content is null ? null : new ToplevelCaptureTrees(content, null);
+        });
+        _shell.Restacked = capturePack.Stack.RaiseChanged;
         _shell.PointerLocator = () => (_seat.PointerX, _seat.PointerY);
         _shell.OutputAt = (x, y) => _layout.OutputAt(x, y);
         _shell.OutputBoxOf = output => _layout.BoxOf(output);
@@ -401,19 +410,10 @@ internal sealed partial class Westonia : IDisposable
             return;
         }
 
-        var mode = view.Output.CurrentMode;
-        var target = new MemoryBuffer(mode.Width, mode.Height, DrmFormat.Xrgb8888);
-        if (_scene.Render(_renderer, target, new SceneRenderOptions
-            {
-                Background = new RenderColor(0f, 0f, 0f, 1f),
-                Projection = OutputProjection.For(view.Output),
-            }))
+        if (SceneScreenshot.Write(_scene, _renderer, view.Output, path))
         {
-            BufferCapture.WritePng(target, path);
             _log.LogInformation("screenshot written to {Path}", path);
         }
-
-        target.Destroy();
     }
 
     private int RunLoop()
@@ -518,19 +518,9 @@ internal sealed partial class Westonia : IDisposable
     {
         try
         {
-            var info = new ProcessStartInfo("/bin/sh")
-            {
-                UseShellExecute = false,
-            };
-            info.ArgumentList.Add("-c");
-            info.ArgumentList.Add(command);
-            info.Environment["WAYLAND_DISPLAY"] = _host.Socket;
-            if (_xServer?.DisplayName is { Length: > 0 } display)
-            {
-                info.Environment["DISPLAY"] = display;
-            }
-
-            var process = Process.Start(info);
+            var process = _xServer?.DisplayName is { Length: > 0 } display
+                ? BasinDiagnostics.StartClient(command, _host.Socket, [("DISPLAY", display)])
+                : BasinDiagnostics.StartClient(command, _host.Socket);
             if (process is not null)
             {
                 _spawned.Add(process);
@@ -570,7 +560,7 @@ internal sealed partial class Westonia : IDisposable
     {
         foreach (var process in _spawned)
         {
-            process.Dispose();
+            BasinDiagnostics.StopClient(process);
         }
 
         _spawned.Clear();

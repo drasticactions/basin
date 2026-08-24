@@ -19,6 +19,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IDisposable
     private int _preeditEnd;
     private string? _pendingCommit;
     private (uint Before, uint After)? _pendingDelete;
+    private Surface? _activeSurface;
 
     public InputMethodRelay(WlServerDisplay display, Seat.Seat? seat)
     {
@@ -77,6 +78,12 @@ public sealed class InputMethodRelay : ITextInputMethod, IDisposable
 
     public void Activate(Surface surface)
     {
+        if (ReferenceEquals(_activeSurface, surface))
+        {
+            return;
+        }
+
+        _activeSurface = surface;
         if (_method is { IsDestroyed: false } method)
         {
             method.SendActivate();
@@ -85,6 +92,12 @@ public sealed class InputMethodRelay : ITextInputMethod, IDisposable
 
     public void Deactivate(Surface surface)
     {
+        if (!ReferenceEquals(_activeSurface, surface))
+        {
+            return;
+        }
+
+        _activeSurface = null;
         if (_method is { IsDestroyed: false } method)
         {
             method.SendDeactivate();

@@ -425,12 +425,21 @@ public sealed unsafe class XWaylandWm : IDisposable
         RefreshTitle(window);
         var wmClass = GetStringProperty(window.WindowId, 67 , 31 );
         var parts = wmClass.Split('\0', StringSplitOptions.RemoveEmptyEntries);
-        window.Instance = parts.Length > 0 ? parts[0] : string.Empty;
-        window.Class = parts.Length > 1 ? parts[1] : string.Empty;
+        var instance = parts.Length > 0 ? parts[0] : string.Empty;
+        var wmClassName = parts.Length > 1 ? parts[1] : string.Empty;
+        var identityChanged = instance != window.Instance || wmClassName != window.Class;
+        window.Instance = instance;
+        window.Class = wmClassName;
         RefreshProtocols(window);
 
         var transient = Get32Property(window.WindowId, 68 , 33 );
-        window.TransientFor = transient.Length > 0 ? _windows.GetValueOrDefault(transient[0]) : null;
+        var transientFor = transient.Length > 0 ? _windows.GetValueOrDefault(transient[0]) : null;
+        identityChanged |= !ReferenceEquals(transientFor, window.TransientFor);
+        window.TransientFor = transientFor;
+        if (identityChanged)
+        {
+            window.RaisePropertiesChanged();
+        }
 
         var state = Get32Property(window.WindowId, Atom("_NET_WM_STATE"), 4 );
         window.Modal = Array.IndexOf(state, Atom("_NET_WM_STATE_MODAL")) >= 0;

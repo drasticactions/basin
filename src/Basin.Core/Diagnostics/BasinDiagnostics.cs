@@ -21,7 +21,10 @@ public static class BasinDiagnostics
         WaylandDiagnostics.RouteToBasinLog();
     }
 
-    public static Process? StartClient(string? command, string socket)
+    public static Process? StartClient(
+        string? command,
+        string socket,
+        IReadOnlyList<(string Name, string? Value)>? environment = null)
     {
         ArgumentNullException.ThrowIfNull(socket);
         if (string.IsNullOrWhiteSpace(command))
@@ -33,6 +36,21 @@ public static class BasinDiagnostics
         info.ArgumentList.Add("-c");
         info.ArgumentList.Add(command);
         info.Environment["WAYLAND_DISPLAY"] = socket;
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+            {
+                if (value is null)
+                {
+                    info.Environment.Remove(name);
+                }
+                else
+                {
+                    info.Environment[name] = value;
+                }
+            }
+        }
+
         return Process.Start(info);
     }
 

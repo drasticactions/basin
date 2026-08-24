@@ -50,6 +50,45 @@ public sealed class SeatInputTests
     }
 
     [Fact]
+    public void A_keymap_swap_with_an_unchanged_mask_sends_no_modifiers_event()
+    {
+        using var host = new CompositorTestHost();
+        host.Seat.Keyboard.SetKeymap();
+        var client = host.Client;
+        var window = MappedToplevel.Map(host, client);
+
+        var keyboard = client.Seat!.GetKeyboard();
+        var keymaps = 0;
+        var modifiers = 0;
+        var entered = false;
+        keyboard.Keymap += (_, e) =>
+        {
+            keymaps++;
+            LibcClose(e.Fd);
+        };
+        keyboard.Enter += (_, _) => entered = true;
+        keyboard.Modifiers += (_, _) => modifiers++;
+        host.PumpUntil(() => keymaps == 1);
+
+        host.Seat.Keyboard.NotifyEnter(window.ServerSurface);
+        host.PumpUntil(() => entered && modifiers >= 1);
+        var keymapsBefore = keymaps;
+        var modifiersBefore = modifiers;
+
+        host.Seat.Keyboard.SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(TestKeymaps.ScrollLock));
+        host.PumpToClient();
+        host.PumpToClient();
+
+        Assert.Equal(keymapsBefore + 1, keymaps);
+        Assert.Equal(modifiersBefore, modifiers);
+
+        host.Seat.Keyboard.NotifyKey(10, 42, WlKeyboard.KeyState.Pressed);
+        host.PumpUntil(() => modifiers == modifiersBefore + 1);
+        host.Seat.Keyboard.SetKeymap();
+        host.PumpUntil(() => modifiers == modifiersBefore + 2);
+    }
+
+    [Fact]
     public void Pointer_round_trip_with_frames_and_serial_kinds()
     {
         using var host = new CompositorTestHost();

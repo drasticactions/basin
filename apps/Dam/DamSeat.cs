@@ -15,12 +15,9 @@ namespace Dam;
 
 internal sealed class DamSeat :
     IDisposable,
-    ITouchHitTester,
     ITouchPointerTarget,
     ITouchActivitySink
 {
-    private const uint BtnLeft = 0x110;
-
     private static readonly XkbKeysym Escape = XkbKeysym.FromName("Escape");
     private static readonly XkbKeysym SwitchVt1 = XkbKeysym.FromName("XF86Switch_VT_1");
     private static readonly XkbKeysym SwitchVt12 = XkbKeysym.FromName("XF86Switch_VT_12");
@@ -41,6 +38,7 @@ internal sealed class DamSeat :
     private readonly ILogger _log;
 
     private readonly SeatBinder _binder;
+    private readonly SeatInjector _injector;
 
     private readonly SeatTouchDriver _touch;
 
@@ -56,7 +54,7 @@ internal sealed class DamSeat :
         Scene scene,
         OutputLayout layout,
         CursorImageTheme cursorTheme,
-        DamInputSink inputSink,
+        Basin.Seat.Backends.HookInputSink inputSink,
         SeatIdleSource idle,
         bool allowVtSwitch,
         Action stop,
@@ -94,7 +92,7 @@ internal sealed class DamSeat :
         _binder.Axis += OnAxis;
         _binder.PointerLeft += _seat.Pointer.NotifyClearFocus;
         _touch = new SeatTouchDriver(_binder, _seat);
-        _touch.Router.HitTester = this;
+        _touch.Router.HitTester = new SceneTouchHitTester(_scene);
         _touch.Router.Activity = this;
         _touch.AttachPointer(this);
         _touch.Routed += (id, kind, surface) =>
@@ -151,23 +149,14 @@ internal sealed class DamSeat :
             ProcessCursorMotion(timeMs, dx, dy);
             return true;
         };
-        inputSink.OnPointerMotionAbsolute = (timeMs, x, y, extentWidth, extentHeight) =>
+        _injector = new SeatInjector(_binder, _seat, _layout, _pointer)
         {
-            _binder.EnsurePointerCapability();
-            var bounds = _layout.Bounds;
-            if (bounds.Width <= 0 || bounds.Height <= 0)
-            {
-                return true;
-            }
-
-            var previousX = _pointer.X;
-            var previousY = _pointer.Y;
-            _pointer.Warp(
-                bounds.X + (x / extentWidth * bounds.Width),
-                bounds.Y + (y / extentHeight * bounds.Height));
-            ProcessCursorMotion(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
-            return true;
+            Moved = timeMs => ProcessCursorMotion(timeMs),
+            MovedBy = (timeMs, dx, dy) => ProcessCursorMotion(timeMs, dx, dy),
+            DeliverButton = OnButton,
+            DeliverKey = OnKey,
         };
+        inputSink.OnPointerMotionAbsolute = _injector.MotionAbsolute;
         inputSink.OnPointerButton = (timeMs, button, pressed) =>
         {
             OnButton(timeMs, button, pressed);
@@ -186,23 +175,9 @@ internal sealed class DamSeat :
 
     internal TouchRouter TouchRouter => _touch.Router;
 
-    internal void Warp(double x, double y)
-    {
-        _pointer.Warp(x, y);
-        ProcessCursorMotion((uint)Environment.TickCount);
-    }
+    internal void Warp(double x, double y) => _injector.Warp(x, y);
 
-    public void CenterCursor()
-    {
-        var bounds = _layout.Bounds;
-        if (bounds.IsEmpty)
-        {
-            return;
-        }
-
-        _pointer.Warp(bounds.Width / 2.0, bounds.Height / 2.0);
-        _cursor.MoveTo(_pointer.X, _pointer.Y);
-    }
+    public void CenterCursor() => _injector.Center();
 
     private void WireLibinput()
     {
@@ -315,32 +290,6 @@ internal sealed class DamSeat :
     {
         PositionDragIcon();
         _idle.NotifyActivity();
-    }
-
-    bool ITouchHitTester.TryHit(double layoutX, double layoutY, out TouchHit hit)
-    {
-        if (_scene.SurfaceAt(layoutX, layoutY) is { Surface: { } surface } at)
-        {
-            hit = new TouchHit(surface, at.X, at.Y, at.Node);
-            return true;
-        }
-
-        hit = default;
-        return false;
-    }
-
-    bool ITouchHitTester.TryMap(
-        object? token, double layoutX, double layoutY, out double localX, out double localY)
-    {
-        if (token is SceneNode { IsDestroyed: false } node &&
-            node.TryMapSceneToLocal(layoutX, layoutY, out localX, out localY))
-        {
-            return true;
-        }
-
-        localX = 0;
-        localY = 0;
-        return false;
     }
 
     void ITouchPointerTarget.Warp(uint timeMs, double x, double y)

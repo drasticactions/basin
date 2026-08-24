@@ -144,7 +144,7 @@ public sealed class FractionalScaleTests
         Assert.Equal([120u], received);
 
         host.SurfaceScenes[0].Tree.SetPosition(10, 5);
-        var collected = new List<SceneSurfaceBox>();
+        var collected = new List<SurfaceBox>();
         host.Scene.CollectSurfaces(collected);
 
         Assert.Equal(2, collected.Count);

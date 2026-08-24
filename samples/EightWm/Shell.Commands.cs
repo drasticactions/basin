@@ -335,7 +335,7 @@ internal sealed partial class Shell
 
     private void PrintScene()
     {
-        var boxes = new List<Basin.Scene.SceneSurfaceBox>();
+        var boxes = new List<Basin.SurfaceBox>();
         _scene.CollectSurfaces(boxes);
         Console.WriteLine($"SCENE surfaces={boxes.Count}");
         foreach (var entry in boxes)

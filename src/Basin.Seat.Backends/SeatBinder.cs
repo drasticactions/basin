@@ -14,6 +14,7 @@ public sealed class SeatBinder
     private readonly CursorController _cursor;
 
     private int _keyboards;
+    private readonly List<InputDevice> _keyboardDevices = [];
     private int _pointers;
     private int _touchDevices;
     private bool _cursorLoaded;
@@ -36,6 +37,10 @@ public sealed class SeatBinder
     public CursorImageTheme? Theme { get; set; }
 
     public bool AdoptParentKeymap { get; set; }
+
+    public Func<InputDevice, Basin.Capabilities.IInjectedKeyboard?>? KeyboardFor { get; set; }
+
+    public Func<bool>? PointerFrozen { get; set; }
 
     public event Action<InputDevice>? DeviceAdded;
 
@@ -67,6 +72,7 @@ public sealed class SeatBinder
     {
         ArgumentNullException.ThrowIfNull(input);
 
+        BindLibinputLeds(input);
         input.DeviceAdded += device =>
         {
             if (device.HasKeyboard)
@@ -108,18 +114,27 @@ public sealed class SeatBinder
             DeviceRemoved?.Invoke(device);
         };
 
-        input.Key += (_, timeMs, key, pressed) =>
+        input.Key += (device, timeMs, key, pressed) =>
         {
-            _seat.Keyboard.Activate(null);
+            _seat.Keyboard.Activate(KeyboardFor?.Invoke(device));
             Key?.Invoke(timeMs, key, pressed);
         };
         input.PointerMotion += (_, timeMs, dx, dy, unacceleratedDx, unacceleratedDy) =>
         {
-            _pointer.Motion(dx, dy);
+            if (PointerFrozen?.Invoke() != true)
+            {
+                _pointer.Motion(dx, dy);
+            }
+
             Motion?.Invoke(timeMs, dx, dy, unacceleratedDx, unacceleratedDy);
         };
         input.PointerMotionAbsolute += (device, timeMs, normalizedX, normalizedY) =>
         {
+            if (PointerFrozen?.Invoke() == true)
+            {
+                return;
+            }
+
             var previousX = _pointer.X;
             var previousY = _pointer.Y;
             _pointer.MotionAbsolute(OutputFor(device), normalizedX, normalizedY);
@@ -134,6 +149,28 @@ public sealed class SeatBinder
         {
             input.Start();
         }
+    }
+
+    public void BindLibinputLeds(LibinputBackend input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        input.DeviceAdded += device =>
+        {
+            if (device.HasKeyboard)
+            {
+                _keyboardDevices.Add(device);
+                device.UpdateLeds(MapLeds(_seat.Keyboard.Leds));
+            }
+        };
+        input.DeviceRemoved += device =>
+        {
+            if (device.HasKeyboard)
+            {
+                _keyboardDevices.Remove(device);
+            }
+        };
+        _seat.Keyboard.LedsChanged += PushLeds;
     }
 
     public void BindLibinputTouch(LibinputBackend input)
@@ -214,7 +251,7 @@ public sealed class SeatBinder
 
     public void EnsureCursorLoaded()
     {
-        if (_cursorLoaded)
+        if (_cursorLoaded || _cursor.Images is not null)
         {
             return;
         }
@@ -265,6 +302,46 @@ public sealed class SeatBinder
 
     public IOutput? TouchOutput(InputDevice device) =>
         OutputFor(device) ?? (_layout.Outputs.Count > 0 ? _layout.Outputs[0].Output : null);
+
+    private void PushLeds()
+    {
+        var leds = MapLeds(_seat.Keyboard.Leds);
+        foreach (var device in _keyboardDevices)
+        {
+            device.UpdateLeds(leds);
+        }
+    }
+
+    private static Libinput.LibinputLed MapLeds(KeyboardLeds leds)
+    {
+        var mapped = default(Libinput.LibinputLed);
+        if ((leds & KeyboardLeds.NumLock) != 0)
+        {
+            mapped |= Libinput.LibinputLed.NumLock;
+        }
+
+        if ((leds & KeyboardLeds.CapsLock) != 0)
+        {
+            mapped |= Libinput.LibinputLed.CapsLock;
+        }
+
+        if ((leds & KeyboardLeds.ScrollLock) != 0)
+        {
+            mapped |= Libinput.LibinputLed.ScrollLock;
+        }
+
+        if ((leds & KeyboardLeds.Compose) != 0)
+        {
+            mapped |= Libinput.LibinputLed.Compose;
+        }
+
+        if ((leds & KeyboardLeds.Kana) != 0)
+        {
+            mapped |= Libinput.LibinputLed.Kana;
+        }
+
+        return mapped;
+    }
 
     private void UpdateCapabilities()
     {

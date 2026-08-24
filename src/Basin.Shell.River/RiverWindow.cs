@@ -357,10 +357,27 @@ internal sealed class RiverWindow
             return;
         }
 
-        var box = IsDisplayable && !_render.Hidden
-            ? new Box(Tree.X, Tree.Y, Dimensions.Width, Dimensions.Height)
-            : default;
-        source.SetGeometry(toplevel, box);
+        if (!IsDisplayable || _render.Hidden)
+        {
+            source.SetGeometry(toplevel, default, default);
+            return;
+        }
+
+        var client = new Box(Tree.X, Tree.Y, Dimensions.Width, Dimensions.Height);
+        var frame = client;
+        if (_requested.Fullscreen is null && _render.BorderWidth > 0)
+        {
+            var width = _render.BorderWidth;
+            var edges = _render.BorderEdges;
+            var left = (edges & ResizeEdges.Left) != 0 ? width : 0;
+            var right = (edges & ResizeEdges.Right) != 0 ? width : 0;
+            var top = (edges & ResizeEdges.Top) != 0 ? width : 0;
+            var bottom = (edges & ResizeEdges.Bottom) != 0 ? width : 0;
+            frame = new Box(
+                client.X - left, client.Y - top, client.Width + left + right, client.Height + top + bottom);
+        }
+
+        source.SetGeometry(toplevel, frame, client);
     }
 
     internal void DestroyPopups()

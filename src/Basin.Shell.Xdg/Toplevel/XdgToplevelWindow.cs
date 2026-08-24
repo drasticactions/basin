@@ -31,6 +31,7 @@ public sealed class XdgToplevelWindow
         resource.SetParent += (_, e) =>
         {
             Parent = e.Parent is { } parent ? XdgToplevelRegistry.Resolve(parent) : null;
+            ParentChanged?.Invoke();
         };
         resource.SetMinSize += (_, e) => (MinWidth, MinHeight) = (e.Width, e.Height);
         resource.SetMaxSize += (_, e) => (MaxWidth, MaxHeight) = (e.Width, e.Height);
@@ -59,13 +60,15 @@ public sealed class XdgToplevelWindow
             RequestedMaximized = false;
             MaximizeRequested?.Invoke(false);
         };
-        resource.SetFullscreen += (_, _) =>
+        resource.SetFullscreen += (_, e) =>
         {
+            RequestedFullscreenOutput = OutputGlobal.FromResource(e.Output)?.Output;
             RequestedFullscreen = true;
             FullscreenRequested?.Invoke(true);
         };
         resource.UnsetFullscreen += (_, _) =>
         {
+            RequestedFullscreenOutput = null;
             RequestedFullscreen = false;
             FullscreenRequested?.Invoke(false);
         };
@@ -110,6 +113,8 @@ public sealed class XdgToplevelWindow
 
     public bool? RequestedFullscreen { get; private set; }
 
+    public IOutput? RequestedFullscreenOutput { get; private set; }
+
     public bool? RequestedMaximized { get; private set; }
 
     public bool RequestedMinimized { get; private set; }
@@ -117,6 +122,8 @@ public sealed class XdgToplevelWindow
     public XdgWmCapabilities WmCapabilities { get; set; } = XdgWmCapabilities.All;
 
     public event Action? TitleChanged;
+
+    public event Action? ParentChanged;
 
     public event Action? AppIdChanged;
 

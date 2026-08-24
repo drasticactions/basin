@@ -304,7 +304,7 @@ public sealed class ToplevelWindowTests
         var second = Map(0xFF445566);
         harness.PumpUntil(() => harness.Manager.Windows.Count == 2);
 
-        var boxes = new List<Basin.Scene.SceneSurfaceBox>();
+        var boxes = new List<Basin.SurfaceBox>();
         harness.Host.Scene.CollectSurfaces(boxes);
         Assert.Equal(2, boxes.Count);
         var a = boxes[0].Box;

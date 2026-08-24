@@ -62,7 +62,11 @@ internal sealed partial class TinyComp
 
         internal void RaiseChanged() => _observers.Changed();
 
-        internal void RaiseMembersChanged() => _observers.MembersChanged();
+        internal void RaiseMembersChanged()
+        {
+            _observers.MembersChanged();
+            _comp._stack.RaiseChanged();
+        }
 
         public int EnumerateGroups(Span<WorkspaceGroupInfo> groups)
         {
@@ -327,7 +331,7 @@ internal sealed partial class TinyComp
             Id = id,
             Name = string.IsNullOrEmpty(name) ? $"{view.Workspaces.Count + 1}" : name,
             Handle = $"ws-{id}",
-            Tree = new SceneTree(_windowTree),
+            Tree = new SceneTree(_layers.Windows),
         };
         workspace.Tree.Enabled = false;
         view.Workspaces.Insert(index, workspace);
@@ -883,7 +887,7 @@ internal sealed partial class TinyComp
                 if (window.Workspace == workspace)
                 {
                     window.Workspace = fallback?.Active;
-                    window.Tree?.Reparent(fallback?.Active?.Tree ?? _windowTree);
+                    window.Tree?.Reparent(fallback?.Active?.Tree ?? _layers.Windows);
                 }
             }
 
@@ -892,7 +896,7 @@ internal sealed partial class TinyComp
                 if (xwindow.Workspace == workspace)
                 {
                     xwindow.Workspace = fallback?.Active;
-                    xwindow.Tree.Reparent(fallback?.Active?.Tree ?? _windowTree);
+                    xwindow.Tree.Reparent(fallback?.Active?.Tree ?? _layers.Windows);
                 }
             }
 

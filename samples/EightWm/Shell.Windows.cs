@@ -13,7 +13,7 @@ internal sealed partial class Shell
     private readonly CloseQueue _closing = new() { GraceMillis = CloseGraceMillis };
 
     private FractionalScaleManager? _scales;
-    private readonly List<SceneSurfaceBox> _presence = [];
+    private readonly List<SurfaceBox> _presence = [];
     private bool _scalesStale = true;
 
     private void AttachScales()
@@ -237,6 +237,7 @@ internal sealed partial class Shell
 
         app.Slot.Reparent(app.IsTransient ? view.Transients : view.Apps);
         app.Slot.Enabled = true;
+        _capture.Stack.RaiseChanged();
 
         if (app.IsTransient)
         {
@@ -556,6 +557,7 @@ internal sealed partial class Shell
 
         app.SetActivated(true);
         app.Slot.RaiseToTop();
+        _capture.Stack.RaiseChanged();
         HomeOf(app).Host.Activate(app);
         Seat.Keyboard.NotifyEnter(surface);
         _seat.Refocus();
@@ -741,41 +743,19 @@ internal sealed partial class Shell
             return;
         }
 
-        var scene = new SceneSurface(app.Scene.Tree, popup.Surface);
-        _owners[popup.Surface] = app;
-
-        void Place()
+        var scene = _popups.Attach(popup, app.Scene.Tree, constrainBox: () =>
         {
-            var chain = PopupChainOffset(popup);
-            scene.Tree.SetPosition(chain.X + popup.SurfacePosition.X, chain.Y + popup.SurfacePosition.Y);
-        }
-
-        void Constrain()
-        {
-            var cell = app.Cell;
-            var chain = PopupChainOffset(popup);
-            popup.Unconstrain(new Box(-chain.X, -chain.Y, cell.Width, cell.Height));
-        }
-
-        Constrain();
-        Place();
-        popup.Xdg.Committed += Place;
-        popup.GeometryChanged += Place;
-        popup.Repositioned += Constrain;
-        scene.Destroyed += () =>
-        {
-            popup.Xdg.Committed -= Place;
-            popup.GeometryChanged -= Place;
-            popup.Repositioned -= Constrain;
-            _owners.Remove(popup.Surface);
-        };
-        popup.Destroyed += () =>
-        {
-            if (!scene.IsDestroyed)
+            var origin = default(Point);
+            if (app.Scene.Tree.TryMapSceneToLocal(0, 0, out var localX, out var localY))
             {
-                scene.Destroy();
+                origin = new Point((int)-localX, (int)-localY);
             }
-        };
+
+            var cell = app.Cell;
+            return new Box(origin.X, origin.Y, cell.Width, cell.Height);
+        });
+        _owners[popup.Surface] = app;
+        scene.Destroyed += () => _owners.Remove(popup.Surface);
     }
 
     private AppWindow? RootAppOf(XdgPopupWindow popup)
@@ -798,18 +778,4 @@ internal sealed partial class Shell
         return null;
     }
 
-    private static Point PopupChainOffset(XdgPopupWindow popup)
-    {
-        var x = 0;
-        var y = 0;
-        var xdg = popup.Parent;
-        while (xdg?.Role is XdgPopupWindow parent)
-        {
-            x += parent.Geometry.X;
-            y += parent.Geometry.Y;
-            xdg = parent.Parent;
-        }
-
-        return new Point(x, y);
-    }
 }

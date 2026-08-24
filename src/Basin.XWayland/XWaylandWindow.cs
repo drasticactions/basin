@@ -61,6 +61,8 @@ public sealed class XWaylandWindow
 
     public event Action? TitleChanged;
 
+    public event Action? PropertiesChanged;
+
     public event Action? GeometryChanged;
 
     public event Action? DecorationsChanged;
@@ -177,6 +179,8 @@ public sealed class XWaylandWindow
     }
 
     internal void RaiseTitleChanged() => TitleChanged?.Invoke();
+
+    internal void RaisePropertiesChanged() => PropertiesChanged?.Invoke();
 
     internal void RaiseGeometryChanged() => GeometryChanged?.Invoke();
 

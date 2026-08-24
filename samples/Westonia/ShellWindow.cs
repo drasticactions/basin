@@ -41,7 +41,7 @@ internal sealed class ShellWindow
 
     public bool Resizing { get; set; }
 
-    public (ResizeEdges Edges, int Right, int Bottom)? ResizeAnchor { get; set; }
+    public ResizeAnchor? ResizeAnchor { get; set; }
 
     public bool Maximized { get; set; }
 

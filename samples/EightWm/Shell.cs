@@ -31,6 +31,8 @@ internal sealed partial class Shell : IDisposable
     private readonly ShellSeat _seat;
     private readonly List<AppWindow> _apps = [];
     private readonly Dictionary<Surface, AppWindow> _owners = [];
+    private Basin.Desktop.PopupPlacer _popups = null!;
+
     private readonly Dictionary<AppWindow, ShellView> _homes = [];
 
     private Basin.XWayland.XWaylandServer? _xServer;
@@ -73,21 +75,17 @@ internal sealed partial class Shell : IDisposable
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
 
-        _host = Basin.Host.BasinHost.Create(new Basin.Host.HostOptions
-        {
-            Backend = options.Backend switch
+        _host = Basin.Host.BasinHost.Create(
+            Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
             {
-                BackendKind.Drm => Basin.Host.HostBackend.Drm,
-                BackendKind.Nested => Basin.Host.HostBackend.Nested,
-                _ => Basin.Host.HostBackend.Headless,
-            },
-            SocketFd = options.SocketFd,
-        });
+                SocketFd = options.SocketFd,
+            });
 
+        _popups = new Basin.Desktop.PopupPlacer(_layout);
         _capture = new SceneCapturePack(_scene, _layout);
         _capture.Capture.Renderer = _renderer;
         var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
-        var inputSink = new ShellInputSink();
+        var inputSink = new Basin.Seat.Backends.HookInputSink();
         _services = _host.CreateServices()
             .Use(_layout)
             .With(_capture)
@@ -121,6 +119,11 @@ internal sealed partial class Shell : IDisposable
 
         Seat = _services.Require<Basin.Seat.Seat>();
         Shells = _services.Require<XdgShell>();
+        var toplevels = _services.Require<Basin.Capabilities.IToplevelModel>();
+        _capture.Attach(toplevels, surface =>
+            _owners.TryGetValue(surface, out var app)
+                ? new ToplevelCaptureTrees(app.Slot, null)
+                : null);
         var decorations = _services.Require<XdgDecorationManager>();
         decorations.DefaultMode = DecorationMode.ServerSide;
         decorations.ChooseMode = (_, _) => DecorationMode.ServerSide;
@@ -251,7 +254,7 @@ internal sealed partial class Shell : IDisposable
         }
 
         _shotPath = null;
-        Basin.Diagnostics.BufferCapture.TryWritePng(shot, _renderer, path);
+        SceneScreenshot.WritePresented(shot, _renderer, path);
         Console.WriteLine($"SHOT {path}");
     }
 

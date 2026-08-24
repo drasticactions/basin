@@ -1,3 +1,4 @@
+using Basin;
 using Xunit;
 
 namespace Westonia.Tests;
@@ -19,17 +20,17 @@ public sealed class BindingTests
     {
         var state = new ShellModifierState();
 
-        Assert.True(state.Track(EvdevKeys.LeftMeta, pressed: true));
+        Assert.True(state.Track(InputCodes.KeyLeftMeta, pressed: true));
         Assert.True(state.Holds(ShellModifiers.Super));
 
-        Assert.True(state.Track(EvdevKeys.LeftShift, pressed: true));
+        Assert.True(state.Track(InputCodes.KeyLeftShift, pressed: true));
         Assert.True(state.Holds(ShellModifiers.Super | ShellModifiers.Shift));
         Assert.False(state.Exactly(ShellModifiers.Super));
 
-        Assert.True(state.Track(EvdevKeys.LeftShift, pressed: false));
+        Assert.True(state.Track(InputCodes.KeyLeftShift, pressed: false));
         Assert.True(state.Exactly(ShellModifiers.Super));
 
-        Assert.True(state.Track(EvdevKeys.LeftMeta, pressed: false));
+        Assert.True(state.Track(InputCodes.KeyLeftMeta, pressed: false));
         Assert.Equal(ShellModifiers.None, state.Current);
     }
 
@@ -38,13 +39,13 @@ public sealed class BindingTests
     {
         var state = new ShellModifierState();
 
-        state.Track(EvdevKeys.LeftCtrl, pressed: true);
-        state.Track(EvdevKeys.RightCtrl, pressed: true);
-        state.Track(EvdevKeys.LeftCtrl, pressed: false);
+        state.Track(InputCodes.KeyLeftCtrl, pressed: true);
+        state.Track(InputCodes.KeyRightCtrl, pressed: true);
+        state.Track(InputCodes.KeyLeftCtrl, pressed: false);
 
         Assert.True(state.Holds(ShellModifiers.Ctrl));
 
-        state.Track(EvdevKeys.RightCtrl, pressed: false);
+        state.Track(InputCodes.KeyRightCtrl, pressed: false);
         Assert.False(state.Holds(ShellModifiers.Ctrl));
     }
 
@@ -53,7 +54,7 @@ public sealed class BindingTests
     {
         var state = new ShellModifierState();
 
-        Assert.False(state.Track(EvdevKeys.Tab, pressed: true));
+        Assert.False(state.Track(InputCodes.KeyTab, pressed: true));
         Assert.Equal(ShellModifiers.None, state.Current);
     }
 
@@ -61,12 +62,12 @@ public sealed class BindingTests
     public void The_zap_chord_is_ctrl_alt_backspace_and_nothing_else()
     {
         var state = new ShellModifierState();
-        state.Track(EvdevKeys.LeftCtrl, pressed: true);
-        state.Track(EvdevKeys.LeftAlt, pressed: true);
+        state.Track(InputCodes.KeyLeftCtrl, pressed: true);
+        state.Track(InputCodes.KeyLeftAlt, pressed: true);
 
         Assert.True(state.Exactly(ShellModifiers.Ctrl | ShellModifiers.Alt));
 
-        state.Track(EvdevKeys.LeftShift, pressed: true);
+        state.Track(InputCodes.KeyLeftShift, pressed: true);
         Assert.False(state.Exactly(ShellModifiers.Ctrl | ShellModifiers.Alt));
     }
 
@@ -74,14 +75,14 @@ public sealed class BindingTests
     public void Carrying_a_window_avoids_the_tiled_orientation_chord()
     {
         var state = new ShellModifierState();
-        state.Track(EvdevKeys.LeftMeta, pressed: true);
-        state.Track(EvdevKeys.LeftShift, pressed: true);
+        state.Track(InputCodes.KeyLeftMeta, pressed: true);
+        state.Track(InputCodes.KeyLeftShift, pressed: true);
 
         Assert.True(state.Holds(ShellModifiers.Super | ShellModifiers.Shift));
         Assert.False(state.Holds(ShellModifiers.Ctrl));
 
-        state.Track(EvdevKeys.LeftShift, pressed: false);
-        state.Track(EvdevKeys.LeftCtrl, pressed: true);
+        state.Track(InputCodes.KeyLeftShift, pressed: false);
+        state.Track(InputCodes.KeyLeftCtrl, pressed: true);
 
         Assert.True(state.Holds(ShellModifiers.Super | ShellModifiers.Ctrl));
         Assert.False(state.Holds(ShellModifiers.Shift));
@@ -90,7 +91,7 @@ public sealed class BindingTests
     [Fact]
     public void The_workspace_jump_keys_are_six_consecutive_function_keys()
     {
-        Assert.Equal(59u, EvdevKeys.F1);
-        Assert.Equal(64u, EvdevKeys.F1 + 5);
+        Assert.Equal(59u, InputCodes.KeyF1);
+        Assert.Equal(64u, InputCodes.KeyF1 + 5);
     }
 }

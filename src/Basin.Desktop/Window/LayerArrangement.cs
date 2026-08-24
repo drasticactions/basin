@@ -8,16 +8,27 @@ public static class LayerArrangement
     public static Box Arrange(Box outputBox, IReadOnlyList<(LayerSurface Layer, SceneSurface? Scene)> surfaces)
     {
         ArgumentNullException.ThrowIfNull(surfaces);
-        var bare = new LayerSurface[surfaces.Count];
-        for (var i = 0; i < surfaces.Count; i++)
+        var visible = new List<(LayerSurface Layer, SceneSurface? Scene)>(surfaces.Count);
+        foreach (var entry in surfaces)
         {
-            bare[i] = surfaces[i].Layer;
+            if (entry.Scene is { IsDestroyed: false } hidden && !hidden.Tree.Enabled)
+            {
+                continue;
+            }
+
+            visible.Add(entry);
+        }
+
+        var bare = new LayerSurface[visible.Count];
+        for (var i = 0; i < visible.Count; i++)
+        {
+            bare[i] = visible[i].Layer;
         }
 
         var (placements, usable) = LayerLayout.Arrange(outputBox, bare);
         foreach (var placement in placements)
         {
-            var (layer, scene) = surfaces[placement.Index];
+            var (layer, scene) = visible[placement.Index];
             var current = layer.Surface.Current;
             if (!layer.IsMapped ||
                 current.Width != placement.Box.Width || current.Height != placement.Box.Height)

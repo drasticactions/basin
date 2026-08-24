@@ -26,6 +26,10 @@ public sealed class SeatPointer
 
     public double Y { get; private set; }
 
+    public double LayoutX => X + _focusLayoutOffsetX;
+
+    public double LayoutY => Y + _focusLayoutOffsetY;
+
     public IPointerGrab Grab => _grabs.Count > 0 ? _grabs[^1] : _defaultGrab;
 
     public bool HasGrab => _grabs.Count > 0;
@@ -39,6 +43,8 @@ public sealed class SeatPointer
     public event Action<Surface?>? FocusChanged;
 
     public event Action<uint, double, double>? Moved;
+
+    public event Action<uint, bool>? Buttoned;
 
     public bool ValidateEnterSerial(uint serial) => serial != 0 && serial == _lastEnterSerial;
 
@@ -76,6 +82,7 @@ public sealed class SeatPointer
     public uint NotifyButton(uint timeMs, uint button, WlPointer.ButtonState state)
     {
         var serial = Grab.Button(timeMs, button, state);
+        Buttoned?.Invoke(button, state == WlPointer.ButtonState.Pressed);
         if (state == WlPointer.ButtonState.Pressed)
         {
             if (_pressedButtons++ == 0)

@@ -25,6 +25,8 @@ public sealed class KeyboardDevice : Capabilities.IInjectedKeyboard
 
     internal (uint Depressed, uint Latched, uint Locked, uint Group) Modifiers { get; set; }
 
+    internal (uint? Num, uint? Caps, uint? Scroll, uint? Compose, uint? Kana) LedIndices { get; set; }
+
     public object? Tag { get; set; }
 
     public bool SetKeymap(ReadOnlySpan<byte> keymapText) => _owner.SetDeviceKeymap(this, keymapText);

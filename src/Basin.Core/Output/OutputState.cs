@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Pixman;
 
 namespace Basin;
@@ -35,6 +36,18 @@ public sealed class OutputState : IDisposable
     public double[]? Ctm { get; private set; }
 
     public OutputGammaRamps? DegammaLut { get; private set; }
+
+    public OutputRgbRange RgbRange { get; private set; }
+
+    public uint MaxBitsPerColor { get; private set; }
+
+    public uint Overscan { get; private set; }
+
+    public IReadOnlyList<OutputMode>? CustomModes { get; private set; }
+
+    public uint Sharpness { get; private set; }
+
+    public uint AbmLevel { get; private set; }
 
     public OutputState SetEnabled(bool enabled)
     {
@@ -125,6 +138,64 @@ public sealed class OutputState : IDisposable
         return this;
     }
 
+    public OutputState SetRgbRange(OutputRgbRange range)
+    {
+        RgbRange = range;
+        Fields |= OutputStateFields.RgbRange;
+        return this;
+    }
+
+    public OutputState SetMaxBitsPerColor(uint maxBpc)
+    {
+        MaxBitsPerColor = maxBpc;
+        Fields |= OutputStateFields.MaxBitsPerColor;
+        return this;
+    }
+
+    public OutputState SetOverscan(uint percent)
+    {
+        if (percent > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(percent), "overscan is a percentage from 0 to 100");
+        }
+
+        Overscan = percent;
+        Fields |= OutputStateFields.Overscan;
+        return this;
+    }
+
+    public OutputState SetCustomModes(IReadOnlyList<OutputMode> modes)
+    {
+        ArgumentNullException.ThrowIfNull(modes);
+        CustomModes = modes;
+        Fields |= OutputStateFields.CustomModes;
+        return this;
+    }
+
+    public OutputState SetSharpness(uint sharpness)
+    {
+        if (sharpness > 10000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sharpness), "sharpness runs from 0 to 10000");
+        }
+
+        Sharpness = sharpness;
+        Fields |= OutputStateFields.Sharpness;
+        return this;
+    }
+
+    public OutputState SetAbmLevel(uint level)
+    {
+        if (level > 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(level), "the abm level runs from 0 to 4");
+        }
+
+        AbmLevel = level;
+        Fields |= OutputStateFields.AbmLevel;
+        return this;
+    }
+
     public OutputState SetTearing(bool tearing)
     {
         Tearing = tearing;
@@ -159,6 +230,12 @@ public sealed class OutputState : IDisposable
         GammaLut = null;
         Ctm = null;
         DegammaLut = null;
+        RgbRange = OutputRgbRange.Automatic;
+        MaxBitsPerColor = 0;
+        Overscan = 0;
+        CustomModes = null;
+        Sharpness = 0;
+        AbmLevel = 0;
     }
 
     public void Dispose() => Damage.Dispose();

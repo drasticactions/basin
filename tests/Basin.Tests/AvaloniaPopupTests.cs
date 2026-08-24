@@ -211,7 +211,7 @@ public sealed class AvaloniaPopupTests
         Assert.Single(harness.Manager.Windows);
         Assert.Empty(harness.Manager.PopupWindows);
 
-        var boxes = new List<Basin.Scene.SceneSurfaceBox>();
+        var boxes = new List<Basin.SurfaceBox>();
         harness.Host.Scene.CollectSurfaces(boxes);
         Assert.Equal(2, boxes.Count);
 

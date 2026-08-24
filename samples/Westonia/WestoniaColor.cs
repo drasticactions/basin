@@ -13,8 +13,7 @@ internal sealed partial class Westonia
 
     private ColorManager? _color;
     private ColorLutCache? _luts;
-    private Func<Surface, IColorLut?>? _resolveLut;
-    private int _lastLutCount = -1;
+    private SurfaceLutDriver? _lutDriver;
 
     private void WireColor()
     {
@@ -25,35 +24,22 @@ internal sealed partial class Westonia
             return;
         }
 
-        _color.SupportedTransferFunctions =
-            [ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear];
-        _color.SupportedPrimaries = [ColorPrimaries.Srgb];
+        SurfaceLutDriver.DeclareSrgb(_color);
 
         _luts = new ColorLutCache(_renderer);
-        _resolveLut = surface => _luts.LutFor(_color.DescriptionOf(surface), OutputDescription);
-        _color.SurfaceDescriptionChanged += (_, _) => RefreshSurfaceLuts();
+        _lutDriver = new SurfaceLutDriver(
+            _scene, _color, surface => _luts.LutFor(_color.DescriptionOf(surface), OutputDescription));
+        _lutDriver.CountChanged += attached =>
+        {
+            Console.WriteLine($"COLOR luts={attached}");
+            Console.Out.Flush();
+        };
         _color.OutputDescriptionChanged += (global, description) => _cursor.Describe(global.Output, description);
-        Shell.NewToplevel += toplevel => toplevel.Xdg.Mapped += RefreshSurfaceLuts;
+        _lutDriver.WatchToplevels(Shell);
     }
 
     private void DescribeOutput(OutputView view) =>
         _color?.SetOutputDescription(view.Global, OutputDescription);
 
-    internal void RefreshSurfaceLuts()
-    {
-        if (_resolveLut is null)
-        {
-            return;
-        }
-
-        var attached = _scene.AttachLuts(_resolveLut);
-        if (attached == _lastLutCount)
-        {
-            return;
-        }
-
-        _lastLutCount = attached;
-        Console.WriteLine($"COLOR luts={attached}");
-        Console.Out.Flush();
-    }
+    internal void RefreshSurfaceLuts() => _lutDriver?.Refresh();
 }

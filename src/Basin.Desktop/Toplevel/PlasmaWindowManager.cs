@@ -4,13 +4,15 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
-public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver, IDisposable
+public sealed class PlasmaWindowManager : IToplevelObserver, IToplevelStackObserver, IWorkspaceObserver, IDisposable
 {
-    public const int Version = 16;
+    public const int Version = 20;
 
     private readonly WlGlobal _global;
     private readonly IToplevelModel? _toplevels;
     private readonly IWorkspaceModel? _workspaces;
+    private readonly IToplevelStack? _stack;
+    private ulong[] _stackScratch = new ulong[16];
     private readonly List<OrgKdePlasmaWindowManagementResource> _managers = [];
     private readonly Dictionary<ulong, Tracked> _windows = [];
     private List<(ulong WorkspaceId, string Handle, ulong GroupId)> _desktops = [];
@@ -22,17 +24,30 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
         public readonly List<OrgKdePlasmaWindowResource> Resources = [];
         public string? Desktop;
         public Box Box;
+        public Box SentFrame;
+        public Box SentClient;
+        public string? SentResourceName;
+        public uint SentPid;
+        public ulong SentParentId;
+        public string SentAppMenuService = "";
+        public string SentAppMenuObjectPath = "";
     }
 
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close")]
     private static extern int CloseFd(int fd);
 
-    public PlasmaWindowManager(WlServerDisplay display, IToplevelModel? toplevels, IWorkspaceModel? workspaces)
+    public PlasmaWindowManager(
+        WlServerDisplay display,
+        IToplevelModel? toplevels,
+        IWorkspaceModel? workspaces,
+        IToplevelStack? stack = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         _toplevels = toplevels;
         _workspaces = workspaces;
+        _stack = stack;
         _global = display.CreateGlobal(OrgKdePlasmaWindowManagement.Interface, Version, OnBind);
+        _stack?.AddObserver(this);
 
         if (_toplevels is { } model)
         {
@@ -70,6 +85,8 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
 
     public void OnToplevelRemoved(ulong toplevelId) => OnRemoved(toplevelId);
 
+    public void OnToplevelStackChanged() => OnStackChanged();
+
     public void Dispose()
     {
         if (_toplevels is { } model)
@@ -82,6 +99,7 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
             live.RemoveObserver(this);
         }
 
+        _stack?.RemoveObserver(this);
         _global.Dispose();
     }
 
@@ -123,8 +141,139 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
             {
                 resource.SendTitleChanged(info.Title);
                 resource.SendAppIdChanged(info.AppId);
-                resource.SendStateChanged(StateBits(info.State));
+                resource.SendStateChanged(StateBits(info.State, resource.Version));
             }
+        }
+
+        RefreshGeometry(tracked, info);
+        RefreshIdentity(tracked, info);
+    }
+
+    private void RefreshIdentity(Tracked tracked, in ToplevelInfo info)
+    {
+        var resourceName = info.ResourceName.Length > 0 && info.ResourceName != tracked.SentResourceName;
+        var pid = info.Pid != 0 && info.Pid != tracked.SentPid;
+        var parent = info.ParentId != tracked.SentParentId;
+        var appMenu = info.AppMenuService != tracked.SentAppMenuService ||
+            info.AppMenuObjectPath != tracked.SentAppMenuObjectPath;
+        if (!resourceName && !pid && !parent && !appMenu)
+        {
+            return;
+        }
+
+        foreach (var resource in tracked.Resources)
+        {
+            if (resource.IsDestroyed)
+            {
+                continue;
+            }
+
+            if (resourceName && resource.SupportsSendResourceNameChanged)
+            {
+                resource.SendResourceNameChanged(info.ResourceName);
+            }
+
+            if (pid)
+            {
+                resource.SendPidChanged(info.Pid);
+            }
+
+            if (parent)
+            {
+                SendParent(resource, info.ParentId);
+            }
+
+            if (appMenu && resource.SupportsSendApplicationMenu)
+            {
+                resource.SendApplicationMenu(info.AppMenuService, info.AppMenuObjectPath);
+            }
+        }
+
+        if (resourceName)
+        {
+            tracked.SentResourceName = info.ResourceName;
+        }
+
+        if (pid)
+        {
+            tracked.SentPid = info.Pid;
+        }
+
+        if (parent)
+        {
+            tracked.SentParentId = info.ParentId;
+        }
+
+        if (appMenu)
+        {
+            tracked.SentAppMenuService = info.AppMenuService;
+            tracked.SentAppMenuObjectPath = info.AppMenuObjectPath;
+        }
+    }
+
+    private void SendParent(OrgKdePlasmaWindowResource resource, ulong parentId)
+    {
+        if (!resource.SupportsSendParentWindow)
+        {
+            return;
+        }
+
+        OrgKdePlasmaWindowResource? parentResource = null;
+        if (parentId != 0)
+        {
+            if (!_windows.TryGetValue(parentId, out var parent))
+            {
+                return;
+            }
+
+            foreach (var candidate in parent.Resources)
+            {
+                if (!candidate.IsDestroyed && candidate.Client == resource.Client)
+                {
+                    parentResource = candidate;
+                    break;
+                }
+            }
+
+            if (parentResource is null)
+            {
+                return;
+            }
+        }
+
+        resource.SendParentWindow(parentResource);
+    }
+
+    private void RefreshGeometry(Tracked tracked, in ToplevelInfo info)
+    {
+        var frame = info.Geometry.IsEmpty ? tracked.Box : info.Geometry;
+        var client = info.ClientGeometry;
+        foreach (var resource in tracked.Resources)
+        {
+            if (resource.IsDestroyed)
+            {
+                continue;
+            }
+
+            if (!frame.IsEmpty && frame != tracked.SentFrame && resource.SupportsSendGeometry)
+            {
+                resource.SendGeometry(frame.X, frame.Y, (uint)frame.Width, (uint)frame.Height);
+            }
+
+            if (!client.IsEmpty && client != tracked.SentClient && resource.SupportsSendClientGeometry)
+            {
+                resource.SendClientGeometry(client.X, client.Y, (uint)client.Width, (uint)client.Height);
+            }
+        }
+
+        if (!frame.IsEmpty)
+        {
+            tracked.SentFrame = frame;
+        }
+
+        if (!client.IsEmpty)
+        {
+            tracked.SentClient = client;
         }
     }
 
@@ -221,12 +370,7 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
                         continue;
                     }
 
-                    if (box != tracked.Box && placed && resource.Version >= 6)
-                    {
-                        resource.SendGeometry(box.X, box.Y, (uint)box.Width, (uint)box.Height);
-                    }
-
-                    if (desktop != tracked.Desktop && resource.Version >= 8)
+                    if (desktop != tracked.Desktop && resource.SupportsSendVirtualDesktopEntered)
                     {
                         if (tracked.Desktop is { } old)
                         {
@@ -243,6 +387,10 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
 
             tracked.Desktop = desktop;
             tracked.Box = box;
+            if (apply && _toplevels is { } toplevels && toplevels.TryGet(tracked.Id, out var info))
+            {
+                RefreshGeometry(tracked, info);
+            }
         }
     }
 
@@ -274,16 +422,29 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
             WireWindow(tracked, resource);
         };
 
-        manager.SendShowDesktopChanged(0);
-        if (version >= 12)
+        manager.GetStackingOrder += (_, e) =>
         {
-            var uuids = new List<string>(_windows.Count);
-            foreach (var tracked in _windows.Values)
+            var resource = new OrgKdePlasmaStackingOrderResource(client, manager.Version, e.StackingOrder);
+            if (_stack is not null)
             {
-                uuids.Add(tracked.Uuid);
+                var count = EnumerateStack();
+                for (var i = 0; i < count; i++)
+                {
+                    if (_windows.TryGetValue(_stackScratch[i], out var tracked))
+                    {
+                        resource.SendWindow(tracked.Uuid);
+                    }
+                }
             }
 
-            manager.SendStackingOrderUuidChanged(string.Join(';', uuids));
+            resource.SendDone();
+            resource.Destroy();
+        };
+
+        manager.SendShowDesktopChanged(0);
+        if (_stack is not null && !manager.SupportsSendStackingOrderChanged2)
+        {
+            SendDeprecatedStackingOrder(manager, EnumerateStack());
         }
 
         foreach (var tracked in _windows.Values)
@@ -292,9 +453,84 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
         }
     }
 
+    private void OnStackChanged()
+    {
+        if (_stack is null || _managers.Count == 0)
+        {
+            return;
+        }
+
+        var count = EnumerateStack();
+        foreach (var manager in _managers)
+        {
+            if (manager.IsDestroyed)
+            {
+                continue;
+            }
+
+            if (manager.SupportsSendStackingOrderChanged2)
+            {
+                manager.SendStackingOrderChanged2();
+            }
+            else
+            {
+                SendDeprecatedStackingOrder(manager, count);
+            }
+        }
+    }
+
+    private int EnumerateStack()
+    {
+        var count = _stack!.Enumerate(_stackScratch);
+        while (count < 0)
+        {
+            _stackScratch = new ulong[_stackScratch.Length * 2];
+            count = _stack.Enumerate(_stackScratch);
+        }
+
+        return count;
+    }
+
+    private void SendDeprecatedStackingOrder(OrgKdePlasmaWindowManagementResource manager, int count)
+    {
+        if (!manager.SupportsSendStackingOrderChanged)
+        {
+            return;
+        }
+
+        var tracked = 0;
+        for (var i = 0; i < count; i++)
+        {
+            if (_windows.ContainsKey(_stackScratch[i]))
+            {
+                tracked++;
+            }
+        }
+
+        var ids = new byte[tracked * 4];
+        var uuids = new string[tracked];
+        var next = 0;
+        for (var i = 0; i < count; i++)
+        {
+            if (_windows.TryGetValue(_stackScratch[i], out var window))
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+                    ids.AsSpan(next * 4), (uint)window.Id);
+                uuids[next] = window.Uuid;
+                next++;
+            }
+        }
+
+        manager.SendStackingOrderChanged(ids);
+        if (manager.SupportsSendStackingOrderUuidChanged)
+        {
+            manager.SendStackingOrderUuidChanged(string.Join(';', uuids));
+        }
+    }
+
     private static void Announce(OrgKdePlasmaWindowManagementResource manager, Tracked tracked)
     {
-        if (manager.Version >= 13)
+        if (manager.SupportsSendWindowWithUuid)
         {
             manager.SendWindowWithUuid((uint)tracked.Id, tracked.Uuid);
         }
@@ -319,6 +555,13 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
         var id = tracked.Id;
         resource.Close += (_, _) => _toplevels?.Request(id, new ToplevelRequest(ToplevelRequestKind.Close));
         resource.SetState += (_, e) => ApplyState(id, e.Flags, e.State);
+        resource.SendToOutput += (_, e) =>
+        {
+            if (OutputGlobal.FromResource(e.Output)?.Output is { } output)
+            {
+                _toplevels?.Request(id, new ToplevelRequest(ToplevelRequestKind.SendToOutput, output));
+            }
+        };
         resource.RequestEnterVirtualDesktop += (_, e) => MoveTo(e.Id, id);
         resource.RequestEnterNewVirtualDesktop += (_, _) => CreateAndAdopt(id);
         resource.SetVirtualDesktop += (_, e) =>
@@ -333,20 +576,49 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
         {
             resource.SendTitleChanged(info.Title);
             resource.SendAppIdChanged(info.AppId);
-            resource.SendStateChanged(StateBits(info.State));
+            resource.SendStateChanged(StateBits(info.State, resource.Version));
+            var frame = info.Geometry.IsEmpty ? tracked.Box : info.Geometry;
+            if (!frame.IsEmpty && resource.SupportsSendGeometry)
+            {
+                resource.SendGeometry(frame.X, frame.Y, (uint)frame.Width, (uint)frame.Height);
+            }
+
+            if (!info.ClientGeometry.IsEmpty && resource.SupportsSendClientGeometry)
+            {
+                resource.SendClientGeometry(
+                    info.ClientGeometry.X,
+                    info.ClientGeometry.Y,
+                    (uint)info.ClientGeometry.Width,
+                    (uint)info.ClientGeometry.Height);
+            }
+
+            if (info.ResourceName.Length > 0 && resource.SupportsSendResourceNameChanged)
+            {
+                resource.SendResourceNameChanged(info.ResourceName);
+            }
+
+            if (info.Pid != 0)
+            {
+                resource.SendPidChanged(info.Pid);
+            }
+
+            if (info.ParentId != 0)
+            {
+                SendParent(resource, info.ParentId);
+            }
+
+            if (info.AppMenuService.Length > 0 && resource.SupportsSendApplicationMenu)
+            {
+                resource.SendApplicationMenu(info.AppMenuService, info.AppMenuObjectPath);
+            }
         }
 
-        if (tracked.Box.Width > 0 && resource.Version >= 6)
-        {
-            resource.SendGeometry(tracked.Box.X, tracked.Box.Y, (uint)tracked.Box.Width, (uint)tracked.Box.Height);
-        }
-
-        if (tracked.Desktop is { } desktop && resource.Version >= 8)
+        if (tracked.Desktop is { } desktop && resource.SupportsSendVirtualDesktopEntered)
         {
             resource.SendVirtualDesktopEntered(desktop);
         }
 
-        if (resource.Version >= 4)
+        if (resource.SupportsSendInitialState)
         {
             resource.SendInitialState();
         }
@@ -387,6 +659,22 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
                 (state & (uint)OrgKdePlasmaWindowManagement.State.Fullscreen) != 0
                     ? ToplevelRequestKind.Fullscreen
                     : ToplevelRequestKind.Unfullscreen));
+        }
+
+        if ((flags & (uint)OrgKdePlasmaWindowManagement.State.NoBorder) != 0)
+        {
+            model.Request(id, new ToplevelRequest(
+                (state & (uint)OrgKdePlasmaWindowManagement.State.NoBorder) != 0
+                    ? ToplevelRequestKind.SetNoBorder
+                    : ToplevelRequestKind.UnsetNoBorder));
+        }
+
+        if ((flags & (uint)OrgKdePlasmaWindowManagement.State.ExcludeFromCapture) != 0)
+        {
+            model.Request(id, new ToplevelRequest(
+                (state & (uint)OrgKdePlasmaWindowManagement.State.ExcludeFromCapture) != 0
+                    ? ToplevelRequestKind.ExcludeFromCapture
+                    : ToplevelRequestKind.IncludeInCapture));
         }
     }
 
@@ -430,7 +718,7 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
         model.Request(groupId, new WorkspaceRequest(WorkspaceRequestKind.Create, ToplevelId: toplevelId));
     }
 
-    private static uint StateBits(ToplevelState state)
+    private static uint StateBits(ToplevelState state, uint version)
     {
         var bits =
             (uint)OrgKdePlasmaWindowManagement.State.Closeable |
@@ -458,6 +746,34 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IWorkspaceObserver,
         if ((state & ToplevelState.Fullscreen) != 0)
         {
             bits |= (uint)OrgKdePlasmaWindowManagement.State.Fullscreen;
+        }
+
+        if (version >= 2 && (state & ToplevelState.SkipTaskbar) != 0)
+        {
+            bits |= (uint)OrgKdePlasmaWindowManagement.State.Skiptaskbar;
+        }
+
+        if (version >= 9 && (state & ToplevelState.SkipSwitcher) != 0)
+        {
+            bits |= (uint)OrgKdePlasmaWindowManagement.State.Skipswitcher;
+        }
+
+        if (version >= 19)
+        {
+            if ((state & ToplevelState.NoBorder) != 0)
+            {
+                bits |= (uint)OrgKdePlasmaWindowManagement.State.NoBorder;
+            }
+
+            if ((state & ToplevelState.CanSetNoBorder) != 0)
+            {
+                bits |= (uint)OrgKdePlasmaWindowManagement.State.CanSetNoBorder;
+            }
+        }
+
+        if (version >= 20 && (state & ToplevelState.ExcludedFromCapture) != 0)
+        {
+            bits |= (uint)OrgKdePlasmaWindowManagement.State.ExcludeFromCapture;
         }
 
         return bits;

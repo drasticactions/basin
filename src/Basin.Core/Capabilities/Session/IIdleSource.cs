@@ -12,5 +12,7 @@ public interface IIdleSource
 
     event Action? InhibitionChanged;
 
+    void NotifyActivity();
+
     IDisposable Inhibit();
 }

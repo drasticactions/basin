@@ -84,12 +84,12 @@ public readonly struct TransferCharacteristics
         signal = Math.Clamp(signal, 0, 1);
         return _kind switch
         {
-            Kind.Compound24 => Compound24Eotf(signal) * ReferenceLuminance,
-            Kind.Gamma => Math.Pow(signal, _gamma) * ReferenceLuminance,
-            Kind.Linear => signal * ReferenceLuminance,
+            Kind.Compound24 => Compound24Eotf(signal) * MaxLuminance,
+            Kind.Gamma => Math.Pow(signal, _gamma) * MaxLuminance,
+            Kind.Linear => signal * MaxLuminance,
             Kind.Pq => PqEotf(signal),
             Kind.Hlg => Math.Pow(HlgInverseOetf(signal), 1.2) * MaxLuminance,
-            _ => signal * ReferenceLuminance,
+            _ => signal * MaxLuminance,
         };
     }
 
@@ -98,12 +98,12 @@ public readonly struct TransferCharacteristics
         luminance = Math.Max(0, luminance);
         return _kind switch
         {
-            Kind.Compound24 => Compound24InverseEotf(Math.Min(1, luminance / ReferenceLuminance)),
-            Kind.Gamma => Math.Pow(Math.Min(1, luminance / ReferenceLuminance), 1.0 / _gamma),
-            Kind.Linear => Math.Min(1, luminance / ReferenceLuminance),
+            Kind.Compound24 => Compound24InverseEotf(Math.Min(1, luminance / MaxLuminance)),
+            Kind.Gamma => Math.Pow(Math.Min(1, luminance / MaxLuminance), 1.0 / _gamma),
+            Kind.Linear => Math.Min(1, luminance / MaxLuminance),
             Kind.Pq => PqInverseEotf(luminance),
             Kind.Hlg => HlgOetf(Math.Pow(Math.Min(1, luminance / MaxLuminance), 1 / 1.2)),
-            _ => Math.Min(1, luminance / ReferenceLuminance),
+            _ => Math.Min(1, luminance / MaxLuminance),
         };
     }
 

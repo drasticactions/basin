@@ -6,10 +6,6 @@ namespace Westonia;
 
 internal sealed partial class Westonia
 {
-    private const uint BtnLeft = 0x110;
-    private const uint BtnRight = 0x111;
-    private const uint BtnMiddle = 0x112;
-
     private readonly ShellModifierState _modifiers = new();
     private ShellModifiers _bindingModifier = ShellModifiers.Super;
 
@@ -33,7 +29,7 @@ internal sealed partial class Westonia
 
         if (_lock is { IsLocked: true, ClientLocked: false })
         {
-            if (key is EvdevKeys.Escape or 28)
+            if (key is InputCodes.KeyEsc or 28)
             {
                 _lock.Unlock();
                 return true;
@@ -44,7 +40,7 @@ internal sealed partial class Westonia
 
         if (_ini.Shell.AllowZap &&
             _modifiers.Exactly(ShellModifiers.Ctrl | ShellModifiers.Alt) &&
-            key == EvdevKeys.Backspace)
+            key == InputCodes.KeyBackspace)
         {
             _log.LogInformation("terminating on the zap binding");
             Stop();
@@ -53,10 +49,10 @@ internal sealed partial class Westonia
 
         switch (key)
         {
-            case EvdevKeys.BrightnessUp:
+            case InputCodes.KeyBrightnessUp:
                 StepBacklight(+1);
                 return true;
-            case EvdevKeys.BrightnessDown:
+            case InputCodes.KeyBrightnessDown:
                 StepBacklight(-1);
                 return true;
         }
@@ -71,34 +67,34 @@ internal sealed partial class Westonia
 
         switch (key)
         {
-            case EvdevKeys.Tab:
+            case InputCodes.KeyTab:
                 OpenSwitcher();
                 return true;
-            case EvdevKeys.K:
+            case InputCodes.KeyK:
                 _shell.Kill(_shell.Focused);
                 return true;
-            case EvdevKeys.F9:
+            case InputCodes.KeyF9:
                 StepBacklight(-1);
                 return true;
-            case EvdevKeys.F10:
+            case InputCodes.KeyF10:
                 StepBacklight(+1);
                 return true;
-            case EvdevKeys.M when shift:
+            case InputCodes.KeyM when shift:
                 _shell.ToggleMaximized(_shell.Focused);
                 return true;
-            case EvdevKeys.F when shift:
+            case InputCodes.KeyF when shift:
                 _shell.ToggleFullscreen(_shell.Focused);
                 return true;
-            case EvdevKeys.Left when shift:
+            case InputCodes.KeyLeft when shift:
                 _shell.SetTiledOrientation(_shell.Focused, ResizeEdges.Left);
                 return true;
-            case EvdevKeys.Right when shift:
+            case InputCodes.KeyRight when shift:
                 _shell.SetTiledOrientation(_shell.Focused, ResizeEdges.Right);
                 return true;
-            case EvdevKeys.Up when shift:
+            case InputCodes.KeyUp when shift:
                 _shell.SetTiledOrientation(_shell.Focused, ResizeEdges.Top);
                 return true;
-            case EvdevKeys.Down when shift:
+            case InputCodes.KeyDown when shift:
                 _shell.SetTiledOrientation(_shell.Focused, ResizeEdges.Bottom);
                 return true;
         }
@@ -107,10 +103,10 @@ internal sealed partial class Westonia
         {
             switch (key)
             {
-                case EvdevKeys.Tab when shift:
+                case InputCodes.KeyTab when shift:
                     _switcher.Previous();
                     return true;
-                case EvdevKeys.Escape:
+                case InputCodes.KeyEsc:
                     _switcher.Cancel();
                     return true;
             }
@@ -140,22 +136,22 @@ internal sealed partial class Westonia
             var shift = _modifiers.Holds(ShellModifiers.Shift);
             switch (button)
             {
-                case BtnLeft when !shift:
+                case InputCodes.BtnLeft when !shift:
                     _shell.Focus(window);
                     _shell.BeginMove(window, pointer.PointerX, pointer.PointerY, clientInitiated: false);
                     return true;
-                case BtnRight:
-                case BtnLeft when shift:
+                case InputCodes.BtnRight:
+                case InputCodes.BtnLeft when shift:
                     _shell.Focus(window);
                     _shell.BeginResize(window, EdgeFor(window, pointer.PointerX, pointer.PointerY), pointer.PointerX, pointer.PointerY);
                     return true;
-                case BtnMiddle:
+                case InputCodes.BtnMiddle:
                     _log.LogInformation("rotation is not implemented: this compositor has no surface rotation");
                     return true;
             }
         }
 
-        if (button is BtnLeft or BtnRight && window is not null)
+        if (button is InputCodes.BtnLeft or InputCodes.BtnRight && window is not null)
         {
             _shell.Focus(window);
         }
@@ -190,7 +186,7 @@ internal sealed partial class Westonia
 
         if (!pressed)
         {
-            if (button == BtnLeft && frame.HitsClose(x, y))
+            if (button == InputCodes.BtnLeft && frame.HitsClose(x, y))
             {
                 window.Window.Close();
                 return true;
@@ -201,18 +197,18 @@ internal sealed partial class Westonia
 
         _shell.Focus(window);
 
-        if (button == BtnLeft && frame.HitsClose(x, y))
+        if (button == InputCodes.BtnLeft && frame.HitsClose(x, y))
         {
             return true;
         }
 
-        if (button == BtnLeft && frame.EdgeAt(x, y) is var edges && edges != ResizeEdges.None)
+        if (button == InputCodes.BtnLeft && frame.EdgeAt(x, y) is var edges && edges != ResizeEdges.None)
         {
             _shell.BeginResize(window, edges, x, y);
             return true;
         }
 
-        if (button == BtnLeft && frame.HitsTitlebar(x, y))
+        if (button == InputCodes.BtnLeft && frame.HitsTitlebar(x, y))
         {
             _shell.BeginMove(window, x, y, clientInitiated: true);
             return true;
@@ -285,25 +281,25 @@ internal sealed partial class Westonia
 
         switch (key)
         {
-            case EvdevKeys.Up when ctrl:
+            case InputCodes.KeyUp when ctrl:
                 Carry(workspaces.Active - 1);
                 return true;
-            case EvdevKeys.Down when ctrl:
+            case InputCodes.KeyDown when ctrl:
                 Carry(workspaces.Active + 1);
                 return true;
-            case EvdevKeys.Up:
+            case InputCodes.KeyUp:
                 workspaces.Activate(workspaces.Active - 1);
                 RefocusForWorkspace();
                 return true;
-            case EvdevKeys.Down:
+            case InputCodes.KeyDown:
                 workspaces.Activate(workspaces.Active + 1);
                 RefocusForWorkspace();
                 return true;
         }
 
-        if (key >= EvdevKeys.F1 && key < EvdevKeys.F1 + 6)
+        if (key >= InputCodes.KeyF1 && key < InputCodes.KeyF1 + 6)
         {
-            var index = (int)(key - EvdevKeys.F1);
+            var index = (int)(key - InputCodes.KeyF1);
             if (index < workspaces.Count)
             {
                 workspaces.Activate(index);

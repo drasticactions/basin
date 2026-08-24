@@ -23,21 +23,7 @@ internal sealed partial class Shell
     private readonly List<Tile> _tiles = [];
     private readonly List<DesktopEntry> _entries = [];
 
-    internal IUIHost UIHost => _uiHost ??= _renderer switch
-    {
-        Basin.Render.Skia.SkiaGlRenderer skiaGl =>
-            new SkiaGlUIHost(skiaGl.Device, skiaGl.Device.CreateAllocator(), skiaGl.Context),
-        Basin.Render.Gl.GlRenderer gl =>
-            new SkiaGlUIHost(gl.Device, gl.Device.CreateAllocator()),
-        Basin.Render.Skia.SkiaVulkanRenderer skiaVk =>
-            new SkiaVulkanUIHost(skiaVk.Device, skiaVk.Context, skiaVk.Device.CreateAllocator()),
-        Basin.Render.Vulkan.VulkanRenderer vulkan =>
-            new SkiaVulkanUIHost(vulkan.Device, null, vulkan.Device.CreateAllocator()),
-        Basin.Render.Skia.SkiaGraphiteRenderer graphite =>
-            new SkiaGraphiteUIHost(
-                graphite.Device, graphite.Context, graphite.Recorder, graphite.Device.CreateAllocator()),
-        _ => new SkiaUIHost(),
-    };
+    internal IUIHost UIHost => _uiHost ??= SkiaUIHosts.For(_renderer);
 
     internal IconLoader Icons => _icons ??= new IconLoader();
 

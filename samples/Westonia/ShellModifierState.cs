@@ -1,3 +1,5 @@
+using Basin;
+
 namespace Westonia;
 
 public sealed class ShellModifierState
@@ -45,10 +47,10 @@ public sealed class ShellModifierState
 
     private static ShellModifiers FlagOf(uint key) => key switch
     {
-        EvdevKeys.LeftCtrl or EvdevKeys.RightCtrl => ShellModifiers.Ctrl,
-        EvdevKeys.LeftAlt or EvdevKeys.RightAlt => ShellModifiers.Alt,
-        EvdevKeys.LeftShift or EvdevKeys.RightShift => ShellModifiers.Shift,
-        EvdevKeys.LeftMeta or EvdevKeys.RightMeta => ShellModifiers.Super,
+        InputCodes.KeyLeftCtrl or InputCodes.KeyRightCtrl => ShellModifiers.Ctrl,
+        InputCodes.KeyLeftAlt or InputCodes.KeyRightAlt => ShellModifiers.Alt,
+        InputCodes.KeyLeftShift or InputCodes.KeyRightShift => ShellModifiers.Shift,
+        InputCodes.KeyLeftMeta or InputCodes.KeyRightMeta => ShellModifiers.Super,
         _ => ShellModifiers.None,
     };
 }

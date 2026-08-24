@@ -1,3 +1,4 @@
+using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
 using Microsoft.Extensions.Logging;
 using Wayland;
@@ -58,7 +59,6 @@ internal sealed class Manager
     private ulong _nextMinimizeSeq;
 
     private const long DoubleClickMs = 400;
-    private const uint ButtonLeft = 0x110;
     private const double SizeStep = 0.05;
 
     private readonly bool _noConfig;
@@ -1274,7 +1274,7 @@ internal sealed class Manager
     private void OnPointerButton(uint seatName, uint button, bool isPressed)
     {
         _ = seatName;
-        if (button != ButtonLeft)
+        if (button != InputCodes.BtnLeft)
         {
             return;
         }

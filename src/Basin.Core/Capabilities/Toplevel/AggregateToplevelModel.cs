@@ -51,7 +51,11 @@ public sealed class AggregateToplevelModel : IToplevelModel
             for (var j = 0; j < written; j++)
             {
                 var info = toplevels[total + j];
-                toplevels[total + j] = info with { Id = Global(index, info.Id) };
+                toplevels[total + j] = info with
+                {
+                    Id = Global(index, info.Id),
+                    ParentId = info.ParentId == 0 ? 0 : Global(index, info.ParentId),
+                };
             }
 
             total += written;
@@ -68,7 +72,12 @@ public sealed class AggregateToplevelModel : IToplevelModel
             return false;
         }
 
-        info = info with { Id = toplevelId };
+        var index = toplevelId >> SourceShift;
+        info = info with
+        {
+            Id = toplevelId,
+            ParentId = info.ParentId == 0 ? 0 : Global(index, info.ParentId),
+        };
         return true;
     }
 
