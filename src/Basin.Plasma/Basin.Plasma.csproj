@@ -19,6 +19,8 @@
     <PackageReference Include="WaylandSharpest" />
     <PackageReference Include="Tmds.DBus.Protocol" />
     <AdditionalFiles Include="$(PlasmaProtocolsDir)appmenu.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)blur.xml" WaylandNamespace="Basin.Plasma.Protocol" />
+    <AdditionalFiles Include="$(PlasmaProtocolsDir)contrast.xml" WaylandNamespace="Basin.Plasma.Protocol" />
     <AdditionalFiles Include="$(PlasmaProtocolsDir)dpms.xml" WaylandNamespace="Basin.Plasma.Protocol" />
     <AdditionalFiles Include="$(PlasmaProtocolsDir)fake-input.xml" WaylandNamespace="Basin.Plasma.Protocol" />
     <AdditionalFiles Include="$(PlasmaProtocolsDir)idle.xml" WaylandNamespace="Basin.Plasma.Protocol" />

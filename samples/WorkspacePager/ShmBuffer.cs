@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Basin.Cli;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using WorkspacePager.Protocol;
 

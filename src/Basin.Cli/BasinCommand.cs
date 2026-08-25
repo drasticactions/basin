@@ -4,7 +4,7 @@ using System.CommandLine.Help;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
 using System.Globalization;
-using Microsoft.Extensions.Logging;
+using Basin.Diagnostics;
 
 namespace Basin.Cli;
 
@@ -62,13 +62,13 @@ public sealed class BasinCommand
         var status = Command.Parse(args).Invoke();
         if (wanted)
         {
-            Console.WriteLine(baseline.Since(_frames));
+            BasinReport.Line(baseline.Since(_frames));
         }
 
         return status;
     }
 
-    public ILoggerFactory CreateLoggerFactory(ParseResult result, bool trace = false)
+    public void ConfigureLogging(ParseResult result, bool trace = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         var name = result.GetValue(_logLevel)!;
@@ -77,14 +77,14 @@ public sealed class BasinCommand
             name = "debug";
         }
 
-        return BasinLogging.Create(BasinLogging.ParseLevel(name));
+        BasinLogging.RouteToStandardError(BasinLogging.ParseLevel(name));
     }
 
     [Conditional("DEBUG")]
     public void WriteOptions(ParseResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        Console.WriteLine("OPTIONS " + string.Join(' ', _report.Select(entry => entry(result))));
+        BasinReport.Line($"OPTIONS {string.Join(' ', _report.Select(entry => entry(result)))}");
     }
 
     public int Usage(ParseResult result)

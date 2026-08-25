@@ -5,6 +5,7 @@ using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
+using static Basin.Render.Vulkan.VulkanLog;
 
 namespace Basin.Render.Vulkan;
 
@@ -46,7 +47,7 @@ internal sealed unsafe class VulkanInstance : IDisposable
         var haveLayer = validate && OffersLayer(ValidationLayer);
         if (validate && !haveLayer)
         {
-            BasinLog.Warn($"{ValidationVariable} is set but {ValidationLayer} is not installed; running without it");
+            Log.Warn($"{ValidationVariable} is set but {ValidationLayer} is not installed; running without it");
         }
 
         var appName = (byte*)SilkMarshal.StringToPtr("basin");
@@ -117,24 +118,17 @@ internal sealed unsafe class VulkanInstance : IDisposable
             }
 
             var message = SilkMarshal.PtrToString((nint)data->PMessage);
-            if (BasinLog.Sink is null)
+            if ((severity & DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt) != 0)
             {
-                if ((severity & (DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt | DebugUtilsMessageSeverityFlagsEXT.WarningBitExt)) != 0)
-                {
-                    Console.Error.WriteLine($"vulkan: {id}: {message}");
-                }
-            }
-            else if ((severity & DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt) != 0)
-            {
-                BasinLog.Error($"vulkan: {id}: {message}");
+                Log.Error($"{id}: {message}");
             }
             else if ((severity & DebugUtilsMessageSeverityFlagsEXT.WarningBitExt) != 0)
             {
-                BasinLog.Warn($"vulkan: {id}: {message}");
+                Log.Warn($"{id}: {message}");
             }
             else
             {
-                BasinLog.Debug($"vulkan: {id}: {message}");
+                Log.Debug($"{id}: {message}");
             }
         }
         catch

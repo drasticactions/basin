@@ -5,6 +5,7 @@ using Basin.Diagnostics;
 using Basin.Protocol;
 using Wayland;
 using Wayland.Server;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -662,7 +663,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
             }
             else
             {
-                BasinLog.Warn($"dmabuf create rejected: {message}");
+                Log.Warn($"dmabuf create rejected: {message}");
                 _resource.SendFailed();
             }
         }

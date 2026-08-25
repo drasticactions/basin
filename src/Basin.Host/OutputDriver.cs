@@ -38,6 +38,10 @@ public sealed class OutputDriver : IDisposable
 
     public RenderColor Background { get; set; } = new(0f, 0f, 0f, 1f);
 
+    public bool AllowDirectScanout { get; set; } = true;
+
+    public bool AllowPlaneOffload { get; set; } = true;
+
     public int Requested { get; set; } = 1;
 
     public double[] Scales { get; set; } = [];
@@ -444,6 +448,8 @@ public sealed class OutputDriver : IDisposable
             _renderer, view.Swapchain, _frameState, new SceneCommitOptions
             {
                 Background = Background,
+                AllowDirectScanout = AllowDirectScanout,
+                AllowPlaneOffload = AllowPlaneOffload,
                 TargetPresentNanos = Math.Max(view.Scheduler!.PredictedVblankNanos, MonotonicClock.Nanos),
             });
         if (committed)

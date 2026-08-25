@@ -8,8 +8,9 @@ using Basin.Host;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.Seat.Backends;
-using Microsoft.Extensions.Logging;
 using Xkb;
+
+using Basin.Diagnostics;
 
 namespace Dam;
 
@@ -32,10 +33,10 @@ internal sealed class DamSeat :
     private readonly CursorController _cursor;
     private readonly CursorImageTheme _cursorTheme;
     private readonly SeatIdleSource _idle;
-    private readonly RelativePointerManager _relativePointer;
+    private readonly PointerDelivery _delivery;
     private readonly Action _stop;
     private readonly bool _allowVtSwitch;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
 
     private readonly SeatBinder _binder;
     private readonly SeatInjector _injector;
@@ -43,8 +44,9 @@ internal sealed class DamSeat :
     private readonly SeatTouchDriver _touch;
 
     private LibinputBackend? _libinput;
+    private readonly PointerRefresh _pointerRefresh;
     private int _touchId = -1;
-    private SceneSurface? _dragIcon;
+    private readonly DragIconFollower _dragIcon;
 
     public DamSeat(
         Basin.Host.BasinHost host,
@@ -58,7 +60,7 @@ internal sealed class DamSeat :
         SeatIdleSource idle,
         bool allowVtSwitch,
         Action stop,
-        ILogger log)
+        BasinLogger log)
     {
         _host = host;
         _seat = services.Require<Basin.Seat.Seat>();
@@ -79,7 +81,7 @@ internal sealed class DamSeat :
             Capture = services.Find<Basin.Capabilities.IScreenCapture>(),
         };
         _cursor.Shapes.CursorRequested += _cursor.ShowImage;
-        _relativePointer = services.Require<RelativePointerManager>();
+        _delivery = new PointerDelivery(_seat, _cursor) { RelativePointer = services.Require<RelativePointerManager>() };
         _binder = new SeatBinder(_seat, layout, _pointer, _cursor)
         {
             Drm = host.Drm,
@@ -91,7 +93,9 @@ internal sealed class DamSeat :
         _binder.Button += OnButton;
         _binder.Axis += OnAxis;
         _binder.PointerLeft += _seat.Pointer.NotifyClearFocus;
+        _dragIcon = new DragIconFollower(_seat, () => _scene.Root, () => (_pointer.X, _pointer.Y));
         _touch = new SeatTouchDriver(_binder, _seat);
+        _dragIcon.Touch = _touch.Router;
         _touch.Router.HitTester = new SceneTouchHitTester(_scene);
         _touch.Router.Activity = this;
         _touch.AttachPointer(this);
@@ -100,6 +104,7 @@ internal sealed class DamSeat :
             if (kind == TouchTargetKind.Client && _touchId < 0)
             {
                 _touchId = id;
+                _dragIcon.SetTouchSlot(id);
                 if (_touch.Router.TryGetPosition(id, out var x, out var y))
                 {
                     PressCursorButton(true, x, y);
@@ -112,25 +117,8 @@ internal sealed class DamSeat :
         _seat.Keyboard.SetRepeatInfo(25, 600);
         _seat.Pointer.CursorRequested += _cursor.HandleCursorRequest;
 
-        _views.PointerRefocus = () => ProcessCursorMotion((uint)Environment.TickCount);
-
-        _seat.DataDevice.DragStarted += drag =>
-        {
-            if (drag.Icon is { } icon)
-            {
-                _dragIcon = new SceneSurface(_scene.Root, icon);
-                PositionDragIcon();
-            }
-        };
-        _seat.DataDevice.DragEnded += () =>
-        {
-            if (_dragIcon is { IsDestroyed: false } icon)
-            {
-                icon.Destroy();
-            }
-
-            _dragIcon = null;
-        };
+        _pointerRefresh = new PointerRefresh(
+            _scene, _host.Loop, () => ProcessCursorMotion((uint)Environment.TickCount));
 
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
         _outputs.Removed += view => _cursor.RemoveOutput(view.Output);
@@ -215,7 +203,7 @@ internal sealed class DamSeat :
             }
             catch (NotSupportedException)
             {
-                _log.LogDebug("no seat manager to switch sessions");
+                _log.Debug($"no seat manager to switch sessions");
             }
 
             return true;
@@ -228,23 +216,8 @@ internal sealed class DamSeat :
     {
         _cursor.MoveTo(_pointer.X, _pointer.Y);
         var hit = _scene.SurfaceAt(_pointer.X, _pointer.Y);
-        if (hit?.Surface is { } surface)
-        {
-            _seat.Pointer.NotifyMotionAt(timeMs, surface, hit.Value.X, hit.Value.Y, _pointer.X, _pointer.Y);
-            _cursor.SetHover(surface, overClient: true);
-        }
-        else
-        {
-            _seat.Pointer.NotifyClearFocus();
-            _cursor.SetHover(null, overClient: false);
-            _cursor.ShowNamed("left_ptr");
-        }
-
-        if (dx != 0 || dy != 0)
-        {
-            _relativePointer.NotifyMotion(
-                (ulong)timeMs * 1000, dx, dy, unaccelDx ?? dx, unaccelDy ?? dy);
-        }
+        _delivery.Motion(timeMs, hit?.Surface, hit?.X ?? 0, hit?.Y ?? 0, _pointer.X, _pointer.Y);
+        _delivery.Relative(timeMs, dx, dy, unaccelDx, unaccelDy);
 
         PositionDragIcon();
         _idle.NotifyActivity();
@@ -301,30 +274,11 @@ internal sealed class DamSeat :
     void ITouchPointerTarget.Button(uint timeMs, uint button, bool pressed) =>
         OnButton(timeMs, button, pressed);
 
-    private void PositionDragIcon()
-    {
-        if (_touchId >= 0 && !_touch.Router.TryGetPosition(_touchId, out _, out _))
-        {
-            _touchId = -1;
-        }
-
-        if (_dragIcon is not { IsDestroyed: false } icon)
-        {
-            return;
-        }
-
-        if (_touchId >= 0 && _touch.Router.TryGetPosition(_touchId, out var x, out var y))
-        {
-            icon.Tree.SetPosition((int)x, (int)y);
-        }
-        else
-        {
-            icon.Tree.SetPosition((int)_pointer.X, (int)_pointer.Y);
-        }
-    }
+    private void PositionDragIcon() => _dragIcon.Follow();
 
     public void Dispose()
     {
+        _pointerRefresh.Dispose();
         _cursor.Dispose();
         _libinput?.Dispose();
     }

@@ -1,4 +1,5 @@
 using Basin.Diagnostics;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -60,7 +61,7 @@ public sealed unsafe class AvaloniaEglImport
         catch (Exception error) when (
             error is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
         {
-            BasinLog.Info($"avalonia: dmabuf import unavailable on this display: {error.Message}");
+            Log.Info($"dmabuf import unavailable on this display: {error.Message}");
             return null;
         }
     }
@@ -106,7 +107,7 @@ public sealed unsafe class AvaloniaEglImport
 
         if (image == 0)
         {
-            BasinLog.Debug($"eglCreateImageKHR refused a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf, modifier 0x{attributes.Modifier:X}");
+            Log.Debug($"eglCreateImageKHR refused a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf, modifier 0x{attributes.Modifier:X}");
             return null;
         }
 
@@ -121,7 +122,7 @@ public sealed unsafe class AvaloniaEglImport
         var glError = _getError();
         if (glError != GlNoError)
         {
-            BasinLog.Debug($"glEGLImageTargetTexture2DOES failed with 0x{glError:X} on a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf");
+            Log.Debug($"glEGLImageTargetTexture2DOES failed with 0x{glError:X} on a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf");
             _deleteTextures(1, &texture);
             _destroyImage(_display, image);
             return null;

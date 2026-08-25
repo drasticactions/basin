@@ -1,3 +1,4 @@
+using Basin.Cli;
 using SkiaSharp;
 using Svg.Skia;
 
@@ -5,8 +6,6 @@ namespace RetroWm;
 
 internal sealed class IconLoader
 {
-    private static readonly int[] Sizes = [512, 256, 128, 96, 72, 64, 48, 36, 32, 24, 22, 16];
-
     private readonly Dictionary<(string AppId, int SizePx), SKImage?> _cache = [];
 
     public SKImage? Load(string appId, int sizePx)
@@ -33,104 +32,12 @@ internal sealed class IconLoader
     private static SKImage? LoadUncached(string appId, int sizePx)
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var extension in (string[])[".svg", ".png"])
+        var search = new IconSearch
         {
-            var overridePath = Path.Combine(home, ".config", "retro-wm", "icons", appId + extension);
-            if (File.Exists(overridePath) && Rasterize(overridePath, sizePx) is { } fromOverride)
-            {
-                return fromOverride;
-            }
-        }
+            OverrideDirectory = Path.Combine(home, ".config", "retro-wm", "icons"),
+        };
 
-        var iconName = DesktopEntryIcon(appId);
-        if (iconName is null)
-        {
-            return null;
-        }
-
-        if (Path.IsPathRooted(iconName))
-        {
-            return File.Exists(iconName) ? Rasterize(iconName, sizePx) : null;
-        }
-
-        foreach (var dataDir in DataDirs())
-        {
-            var scalable = Path.Combine(dataDir, "icons", "hicolor", "scalable", "apps", iconName + ".svg");
-            if (File.Exists(scalable) && Rasterize(scalable, sizePx) is { } fromScalable)
-            {
-                return fromScalable;
-            }
-
-            foreach (var size in Sizes)
-            {
-                var sized = Path.Combine(dataDir, "icons", "hicolor", $"{size}x{size}", "apps", iconName);
-                foreach (var extension in (string[])[".png", ".svg"])
-                {
-                    if (File.Exists(sized + extension) && Rasterize(sized + extension, sizePx) is { } fromSized)
-                    {
-                        return fromSized;
-                    }
-                }
-            }
-
-            foreach (var extension in (string[])[".png", ".svg"])
-            {
-                var pixmap = Path.Combine(dataDir, "pixmaps", iconName + extension);
-                if (File.Exists(pixmap) && Rasterize(pixmap, sizePx) is { } fromPixmaps)
-                {
-                    return fromPixmaps;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static string? DesktopEntryIcon(string appId)
-    {
-        foreach (var dataDir in DataDirs())
-        {
-            var path = Path.Combine(dataDir, "applications", appId + ".desktop");
-            if (!File.Exists(path))
-            {
-                continue;
-            }
-
-            var inEntry = false;
-            foreach (var line in File.ReadLines(path))
-            {
-                var trimmed = line.Trim();
-                if (trimmed.StartsWith('['))
-                {
-                    inEntry = trimmed == "[Desktop Entry]";
-                    continue;
-                }
-
-                if (inEntry && trimmed.StartsWith("Icon=", StringComparison.Ordinal))
-                {
-                    var value = trimmed["Icon=".Length..].Trim();
-                    return value.Length > 0 ? value : null;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<string> DataDirs()
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        yield return Environment.GetEnvironmentVariable("XDG_DATA_HOME")
-            is { Length: > 0 } dataHome ? dataHome : Path.Combine(home, ".local", "share");
-
-        var dataDirs = Environment.GetEnvironmentVariable("XDG_DATA_DIRS");
-        var list = string.IsNullOrEmpty(dataDirs)
-            ? (string[])["/usr/local/share", "/usr/share"]
-            : dataDirs.Split(':', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var dir in list)
-        {
-            yield return dir;
-        }
+        return search.Find(appId) is { } path ? Rasterize(path, sizePx) : null;
     }
 
     private static SKImage? Rasterize(string path, int sizePx)

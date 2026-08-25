@@ -1,4 +1,5 @@
 using Basin;
+using Basin.Capabilities;
 using Basin.Effects;
 using Basin.Scene;
 using Basin.Shell.Xdg;
@@ -9,10 +10,13 @@ internal sealed class PlasmaHostView
 {
     public PlasmaHostView(XdgToplevelWindow xdg, SceneTree tree, SceneSurface scene)
     {
+        Handle = xdg;
         Xdg = xdg;
         Tree = tree;
         Scene = scene;
     }
+
+    public IToplevelHandle Handle { get; }
 
     public XdgToplevelWindow Xdg { get; }
 
@@ -20,7 +24,7 @@ internal sealed class PlasmaHostView
 
     public SceneSurface Scene { get; }
 
-    public Surface Surface => Xdg.Surface;
+    public Surface Surface => Handle.Surface!;
 
     public bool Maximized { get; set; }
 
@@ -30,30 +34,21 @@ internal sealed class PlasmaHostView
 
     public bool Resizing { get; set; }
 
-    public Frame? Frame { get; set; }
+    public PlasmaFrame? Frame { get; set; }
 
-    public DropShadowEffect? Shadow { get; set; }
+    public PlasmaShadowPair? Shadow { get; set; }
 
     public string? IconName { get; set; }
 
     public ResizeAnchor? ResizeAnchor { get; set; }
 
-    public (int Width, int Height) GeometrySize()
-    {
-        var geometry = Xdg.Xdg.EffectiveGeometry;
-        return (geometry.Width, geometry.Height);
-    }
+    public RestoreGeometry Restore { get; set; }
 
-    public bool IsTransientFor(PlasmaHostView parent)
-    {
-        for (var ancestor = Xdg.Parent; ancestor is not null; ancestor = ancestor.Parent)
-        {
-            if (ReferenceEquals(ancestor, parent.Xdg))
-            {
-                return true;
-            }
-        }
+    public Box? StretchFrom { get; set; }
 
-        return false;
-    }
+    public bool StretchFullscreen { get; set; }
+
+    public (int Width, int Height) GeometrySize() => Handle.NaturalSize;
+
+    public bool IsTransientFor(PlasmaHostView parent) => Handle.IsTransientFor(parent.Handle);
 }

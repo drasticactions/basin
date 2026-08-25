@@ -29,6 +29,34 @@ public sealed class SurfaceLutDriver
         color.SupportedPrimaries = [ColorPrimaries.Srgb];
     }
 
+    public static void Declare(ColorManager color, IEnumerable<ImageDescription> outputs)
+    {
+        ArgumentNullException.ThrowIfNull(color);
+        ArgumentNullException.ThrowIfNull(outputs);
+
+        var transfers = new List<ColorTransferFunction>
+        {
+            ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear,
+        };
+        var primaries = new List<ColorPrimaries> { ColorPrimaries.Srgb };
+
+        foreach (var description in outputs)
+        {
+            if (description.TransferNamed is { } transfer && !transfers.Contains(transfer))
+            {
+                transfers.Add(transfer);
+            }
+
+            if (description.PrimariesNamed is { } named && !primaries.Contains(named))
+            {
+                primaries.Add(named);
+            }
+        }
+
+        color.SupportedTransferFunctions = transfers;
+        color.SupportedPrimaries = primaries;
+    }
+
     public void WatchToplevels(XdgShell shell)
     {
         ArgumentNullException.ThrowIfNull(shell);

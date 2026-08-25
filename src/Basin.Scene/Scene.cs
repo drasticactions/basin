@@ -141,7 +141,11 @@ public sealed partial class Scene
 
     public event Action<SceneNode?, Box>? Damaged;
 
+    public event Action? StructureChanged;
+
     public event Action? FrameRequested;
+
+    internal void NotifyStructureChanged() => StructureChanged?.Invoke();
 
     internal void NotifyFrameRequested() => FrameRequested?.Invoke();
 
@@ -285,7 +289,7 @@ public sealed partial class Scene
     {
         var projection = options.Projection;
         _renderList.Clear();
-        CollectTree(Root, Root.X, Root.Y, Unclipped, _renderList);
+        CollectTree(Root, Root.X - options.OriginX, Root.Y - options.OriginY, Unclipped, _renderList);
         PrepareCaptures(renderer, _renderList, projection.Scale);
 
         var targetBox = new Box(0, 0, target.Width, target.Height);
@@ -834,7 +838,8 @@ public sealed partial class Scene
                         pass.AddBackdropEffect(
                             buffer.BackdropEffect!,
                             new Box(box.X1, box.Y1, box.X2 - box.X1, box.Y2 - box.Y1),
-                            BackdropScratch);
+                            BackdropScratch,
+                            buffer.BackdropKey);
                     }
 
                     break;
@@ -929,7 +934,8 @@ public sealed partial class Scene
         pass.AddBackdropEffect(
             buffer.BackdropEffect!,
             new Box(extents.X1, extents.Y1, extents.X2 - extents.X1, extents.Y2 - extents.Y1),
-            BackdropScratch);
+            BackdropScratch,
+            buffer.BackdropKey);
     }
 
     private static void AddTransformedBackdrop(
@@ -964,7 +970,8 @@ public sealed partial class Scene
         pass.AddBackdropEffect(
             buffer.BackdropEffect!,
             new Box(extents.X1, extents.Y1, extents.X2 - extents.X1, extents.Y2 - extents.Y1),
-            BackdropScratch);
+            BackdropScratch,
+            buffer.BackdropKey);
     }
 
     internal void CollectRenderList(List<RenderEntry> list, int offsetX, int offsetY)
@@ -1058,7 +1065,9 @@ public sealed partial class Scene
                         break;
                     }
 
-                    CollectTree(source, childX, childY, mirrorClip, frame, transformed, alpha, list, mirrorDepth + 1);
+                    CollectTree(
+                        source, childX + mirror.SourceX, childY + mirror.SourceY, mirrorClip, frame, transformed,
+                        alpha, list, mirrorDepth + 1);
                     break;
                 }
 

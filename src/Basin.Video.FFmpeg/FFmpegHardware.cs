@@ -1,4 +1,5 @@
 using Basin.Diagnostics;
+using static Basin.Video.FFmpeg.FFmpegLog;
 
 namespace Basin.Video.FFmpeg;
 
@@ -43,7 +44,7 @@ internal sealed unsafe class FFmpegHardware
             var made = FFmpegNative.av_hwdevice_ctx_create(&device, type, null, 0, 0);
             if (made < 0)
             {
-                BasinLog.Debug($"ffmpeg: no {typeName} device opens here: {FFmpegNative.DescribeError(made)}");
+                Log.Debug($"no {typeName} device opens here: {FFmpegNative.DescribeError(made)}");
                 continue;
             }
 

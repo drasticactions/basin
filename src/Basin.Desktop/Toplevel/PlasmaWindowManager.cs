@@ -9,6 +9,7 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IToplevelStackObser
     public const int Version = 20;
 
     private readonly WlGlobal _global;
+    private readonly CompositorGlobal? _compositor;
     private readonly IToplevelModel? _toplevels;
     private readonly IWorkspaceModel? _workspaces;
     private readonly IToplevelStack? _stack;
@@ -31,6 +32,7 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IToplevelStackObser
         public ulong SentParentId;
         public string SentAppMenuService = "";
         public string SentAppMenuObjectPath = "";
+        public readonly List<(Surface Panel, Box Geometry)> MinimizedGeometry = [];
     }
 
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close")]
@@ -40,9 +42,11 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IToplevelStackObser
         WlServerDisplay display,
         IToplevelModel? toplevels,
         IWorkspaceModel? workspaces,
-        IToplevelStack? stack = null)
+        IToplevelStack? stack = null,
+        CompositorGlobal? compositor = null)
     {
         ArgumentNullException.ThrowIfNull(display);
+        _compositor = compositor;
         _toplevels = toplevels;
         _workspaces = workspaces;
         _stack = stack;
@@ -101,6 +105,60 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IToplevelStackObser
 
         _stack?.RemoveObserver(this);
         _global.Dispose();
+    }
+
+    private void SetMinimizedGeometry(Tracked tracked, Surface panel, in Box geometry)
+    {
+        var entries = tracked.MinimizedGeometry;
+        for (var i = entries.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(entries[i].Panel, panel))
+            {
+                entries.RemoveAt(i);
+            }
+        }
+
+        if (!geometry.IsEmpty)
+        {
+            entries.Add((panel, geometry));
+            panel.Destroyed += () => DropMinimizedGeometry(tracked, panel);
+        }
+
+        PushMinimizedGeometry(tracked);
+    }
+
+    private void DropMinimizedGeometry(Tracked tracked, Surface panel)
+    {
+        var entries = tracked.MinimizedGeometry;
+        var removed = false;
+        for (var i = entries.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(entries[i].Panel, panel))
+            {
+                entries.RemoveAt(i);
+                removed = true;
+            }
+        }
+
+        if (removed)
+        {
+            PushMinimizedGeometry(tracked);
+        }
+    }
+
+    private void PushMinimizedGeometry(Tracked tracked)
+    {
+        var entries = tracked.MinimizedGeometry;
+        if (entries.Count == 0)
+        {
+            _toplevels?.Request(tracked.Id, new ToplevelRequest(ToplevelRequestKind.UnsetMinimizedGeometry));
+            return;
+        }
+
+        var (panel, geometry) = entries[^1];
+        _toplevels?.Request(
+            tracked.Id,
+            new ToplevelRequest(ToplevelRequestKind.SetMinimizedGeometry, null, panel, geometry));
     }
 
     private Tracked Track(ulong id)
@@ -560,6 +618,21 @@ public sealed class PlasmaWindowManager : IToplevelObserver, IToplevelStackObser
             if (OutputGlobal.FromResource(e.Output)?.Output is { } output)
             {
                 _toplevels?.Request(id, new ToplevelRequest(ToplevelRequestKind.SendToOutput, output));
+            }
+        };
+        resource.SetMinimizedGeometry += (_, e) =>
+        {
+            if (_compositor?.ResolveSurface(e.Panel) is { } panel)
+            {
+                SetMinimizedGeometry(
+                    tracked, panel, new Box((int)e.X, (int)e.Y, (int)e.Width, (int)e.Height));
+            }
+        };
+        resource.UnsetMinimizedGeometry += (_, e) =>
+        {
+            if (_compositor?.ResolveSurface(e.Panel) is { } panel)
+            {
+                SetMinimizedGeometry(tracked, panel, default);
             }
         };
         resource.RequestEnterVirtualDesktop += (_, e) => MoveTo(e.Id, id);

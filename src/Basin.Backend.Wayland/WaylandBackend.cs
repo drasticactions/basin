@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Backend.Wayland.Protocol;
 using Basin.Protocol;
 using Wayland;
+using static Basin.Backend.Wayland.WaylandBackendLog;
 
 namespace Basin.Backend.Wayland;
 
@@ -475,61 +476,61 @@ public sealed class WaylandBackend : IDisposable
     {
         if (ParentSeat is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent has no wl_seat; guests keep their own clipboard and take no host input");
             return;
         }
 
         if (ParentDataDeviceManager is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks wl_data_device_manager; guests share a clipboard with each other only");
         }
         else if (ParentDataDeviceManager.Version < 3)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent wl_data_device_manager is version {ParentDataDeviceManager.Version}; drag actions fall back to copy");
         }
 
         if (ParentPrimarySelectionManager is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks zwp_primary_selection_device_manager_v1; middle-click paste works among guests only");
         }
 
         if (ParentPointerConstraints is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks zwp_pointer_constraints_v1; a guest pointer lock cannot confine the host cursor");
         }
 
         if (ParentRelativePointer is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks zwp_relative_pointer_manager_v1; a locked pointer gets deltas from absolute motion");
         }
 
         if (ParentTextInputManager is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks zwp_text_input_manager_v3; guests type without composition from the host's input method");
         }
 
         if (ParentPresentation is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks wp_presentation; guest presentation timestamps stay synthesized");
         }
 
         if (ParentIdleInhibit is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks zwp_idle_inhibit_manager_v1; the host may blank while a guest plays video");
         }
 
         if (ParentActivation is null)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"wayland backend: parent lacks xdg_activation_v1; a guest cannot raise the nested window");
         }
     }
@@ -539,7 +540,7 @@ public sealed class WaylandBackend : IDisposable
         ParentPresentationClockMatches = clockId == PresentationTimeGlobal.ClockMonotonic;
         if (!ParentPresentationClockMatches)
         {
-            Basin.Diagnostics.BasinLog.Warn(
+            Log.Warn(
                 $"wayland backend: parent presents on clock {clockId} rather than CLOCK_MONOTONIC; guest presentation timestamps stay synthesized");
         }
     }

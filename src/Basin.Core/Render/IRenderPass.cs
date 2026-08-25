@@ -10,7 +10,7 @@ public interface IRenderPass
 
     void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options);
 
-    void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null)
+    void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null)
     {
     }
 

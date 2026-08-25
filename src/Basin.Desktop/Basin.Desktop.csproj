@@ -15,6 +15,7 @@
     <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
     <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../Basin.Color/Basin.Color.csproj" />
     <PackageReference Include="WaylandSharpest" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-output/xdg-output-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-session-lock/ext-session-lock-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />

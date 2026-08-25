@@ -1,8 +1,9 @@
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
 using CursorShape = Basin.WindowManager.Protocol.WpCursorShapeDeviceV1.Shape;
-using Microsoft.Extensions.Logging;
 using Wayland;
+
+using Basin.Diagnostics;
 
 namespace Dinghy;
 
@@ -62,11 +63,11 @@ internal sealed class Manager
     private double _managerSurfaceY;
 
     private readonly bool _noConfig;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private Config _config;
     private readonly WmReloadSignal _reload;
 
-    internal Manager(RiverWindowManager wm, bool trace, bool noConfig, ILogger log)
+    internal Manager(RiverWindowManager wm, bool trace, bool noConfig, BasinLogger log)
     {
         _wm = wm;
         _trace = trace;
@@ -1804,7 +1805,7 @@ internal sealed class Manager
     private void OnReload()
     {
         _config = Config.Load(_noConfig, _log);
-        _log.LogInformation("configuration reloaded");
+        _log.Info($"configuration reloaded");
 
         foreach (var (_, binding) in _bindings)
         {
@@ -2631,7 +2632,7 @@ internal sealed class Manager
     {
         if (WmSpawn.Run(argv) is { } failure)
         {
-            _log.LogError("could not spawn '{Command}': {Reason}", argv[0], failure);
+            _log.Error($"could not spawn '{(argv[0])}': {failure}");
         }
     }
 
@@ -2642,18 +2643,12 @@ internal sealed class Manager
             return;
         }
 
-        _log.LogDebug(
-            "manage: {Windows} window(s), {Outputs} output(s), {New} new, {Closed} closed",
-            context.Windows.Count, context.Outputs.Count, context.NewWindows.Count, context.ClosedWindows.Count);
+        _log.Debug($"manage: {context.Windows.Count} window(s), {context.Outputs.Count} output(s), {context.NewWindows.Count} new, {context.ClosedWindows.Count} closed");
         foreach (var mw in _windows)
         {
-            _log.LogDebug(
-                "  {Focused} '{AppId}' at {X},{Y} {Width}x{Height}{State}",
-                ReferenceEquals(mw, _focusStack.Focused) ? '*' : ' ', mw.Window.AppId ?? "?",
-                mw.X, mw.Y, mw.Width, mw.Height,
-                (mw.Hidden ? " hidden" : string.Empty) +
+            _log.Debug($"  {(ReferenceEquals(mw, _focusStack.Focused) ? '*' : ' ')} '{(mw.Window.AppId ?? "?")}' at {mw.X},{mw.Y} {mw.Width}x{mw.Height}{((mw.Hidden ? " hidden" : string.Empty) +
                 (mw.FullscreenOutput is not null ? " fullscreen" : string.Empty) +
-                (mw.Snap is { } snap ? $" snap={snap}" : string.Empty));
+                (mw.Snap is { } snap ? $" snap={snap}" : string.Empty))}");
         }
     }
 }

@@ -2,15 +2,20 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.OpenGL;
+using Avalonia.OpenGL.Surfaces;
 using Avalonia.Platform;
 using Avalonia.Platform.Surfaces;
 using Avalonia.Rendering.Composition;
+using Basin.Capabilities;
+using Pixman;
 
 namespace Basin.UI.Avalonia;
 
-internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformSurface
+internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformSurface, IGlPlatformSurface
 {
     private readonly BasinPlatformContext _context;
+    private readonly IAvaloniaGpuTarget? _gpu;
     private Size _clientSize = new(1, 1);
     private double _renderScaling = 1.0;
     private bool _disposed;
@@ -18,13 +23,18 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
     protected BasinTopLevelImpl(BasinPlatformContext context)
     {
         _context = context;
-        Framebuffer = new BasinFramebuffer();
+        _gpu = context.Gpu?.CreateTarget();
+        Framebuffer = _gpu is null ? new BasinFramebuffer() : null;
         Surfaces = [this];
         MouseDevice = new MouseDevice(new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true));
-        Framebuffer.Configure((int)_clientSize.Width, (int)_clientSize.Height, _renderScaling);
+        Configure((int)_clientSize.Width, (int)_clientSize.Height, _renderScaling);
     }
 
-    public BasinFramebuffer Framebuffer { get; }
+    public BasinFramebuffer? Framebuffer { get; }
+
+    public UISurfaceSize Size => _gpu?.Size ?? Framebuffer!.Size;
+
+    public PixmanRegion32 WholeDamage => _gpu?.WholeDamage ?? Framebuffer!.WholeDamage;
 
     public BasinPlatformContext Context => _context;
 
@@ -121,6 +131,22 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
 
     public IFramebufferRenderTarget CreateFramebufferRenderTarget() => new RenderTarget(this);
 
+    public IGlPlatformSurfaceRenderTarget CreateGlRenderTarget(IGlContext context)
+    {
+        var gpu = _gpu ?? throw new InvalidOperationException("This top-level has no GPU target.");
+        return gpu.CreateRenderTarget(context, OnFramePublished);
+    }
+
+    public bool TryAcquire(out UIFrame frame)
+    {
+        if (_gpu is { } gpu)
+        {
+            return gpu.TryAcquire(out frame);
+        }
+
+        return Framebuffer!.TryAcquire(out frame);
+    }
+
     public bool Resize(int logicalWidth, int logicalHeight, double scale, WindowResizeReason reason)
     {
         if (logicalWidth <= 0 || logicalHeight <= 0 || scale <= 0)
@@ -136,7 +162,7 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
             return true;
         }
 
-        if (!Framebuffer.Configure(logicalWidth, logicalHeight, scale))
+        if (!Configure(logicalWidth, logicalHeight, scale))
         {
             return false;
         }
@@ -166,8 +192,13 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
 
         _disposed = true;
         Closed?.Invoke();
-        Framebuffer.Dispose();
+        _gpu?.Dispose();
+        Framebuffer?.Dispose();
     }
+
+    private bool Configure(int logicalWidth, int logicalHeight, double scale) =>
+        _gpu?.Configure(logicalWidth, logicalHeight, scale)
+        ?? Framebuffer!.Configure(logicalWidth, logicalHeight, scale);
 
     private void OnFramePublished() => Surface?.NotifyFramePublished();
 
@@ -186,7 +217,7 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
             IRenderTarget.RenderTargetSceneInfo sceneInfo,
             out FramebufferLockProperties properties)
         {
-            properties = new FramebufferLockProperties(PreviousFrameIsRetained: _impl.Framebuffer.Produced);
+            properties = new FramebufferLockProperties(PreviousFrameIsRetained: _impl.Framebuffer!.Produced);
             var locked = _impl.Framebuffer.Lock(_impl.OnFramePublished);
             if (locked is null)
             {

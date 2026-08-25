@@ -3,6 +3,7 @@ using Basin.Capabilities;
 using Basin.Scene;
 using Basin.UI.Skia;
 using SkiaSharp;
+using static EightWm.EightWmLog;
 
 namespace EightWm;
 
@@ -53,7 +54,7 @@ internal sealed class ChromeSurface : IDisposable
         catch (InvalidOperationException error)
         {
             _faulted = true;
-            Basin.Diagnostics.BasinLog.Warn($"eight-wm chrome surface faulted: {error.Message}");
+            Log.Warn($"eight-wm chrome surface faulted: {error.Message}");
             return null;
         }
     }

@@ -8,7 +8,6 @@ using Basin.Diagnostics;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using Wayland.Server;
 using Xkb;

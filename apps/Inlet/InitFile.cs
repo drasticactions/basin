@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Inlet;
 
@@ -18,7 +19,7 @@ internal static class InitFile
     [DllImport("libc", SetLastError = true)]
     private static extern int access([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
 
-    public static bool TryResolve(string? command, ILogger log, out string? startup)
+    public static bool TryResolve(string? command, BasinLogger log, out string? startup)
     {
         startup = null;
 
@@ -33,14 +34,14 @@ internal static class InitFile
 
         if (startup is null)
         {
-            log.LogInformation("no init executable, running with no window manager");
+            log.Info($"no init executable, running with no window manager");
             return true;
         }
 
         return !MentionsRiverctl(startup, log);
     }
 
-    private static bool TrySearch(ILogger log, out string? found)
+    private static bool TrySearch(BasinLogger log, out string? found)
     {
         found = null;
 
@@ -69,27 +70,24 @@ internal static class InitFile
             var error = Marshal.GetLastPInvokeError();
             if (error == ErrorAccess && access(path, FileExists) == 0)
             {
-                log.LogError("failed to run init executable {Path}: the file is not executable", path);
+                log.Error($"failed to run init executable {path}: the file is not executable");
                 return false;
             }
 
             if (error is ErrorNoEntry or ErrorNotDirectory)
             {
-                log.LogDebug("no init executable at {Path}", path);
+                log.Debug($"no init executable at {path}");
             }
             else
             {
-                log.LogError(
-                    "failed to run init executable {Path}: {Error}",
-                    path,
-                    Marshal.GetPInvokeErrorMessage(error));
+                log.Error($"failed to run init executable {path}: {(Marshal.GetPInvokeErrorMessage(error))}");
             }
         }
 
         return true;
     }
 
-    private static bool MentionsRiverctl(string command, ILogger log)
+    private static bool MentionsRiverctl(string command, BasinLogger log)
     {
         if (!command.Contains('/'))
         {
@@ -105,15 +103,13 @@ internal static class InitFile
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            log.LogDebug("failed to read the init file {Path}: {Message}", command, e.Message);
+            log.Debug($"failed to read the init file {command}: {e.Message}");
             return false;
         }
 
-        log.LogError(
-            "the init file {Path} contains the string \"riverctl\". Inlet implements the river " +
-            "window-management protocols, which have no riverctl. An init written for river-classic " +
-            "cannot configure Inlet: it must start a window manager instead",
-            command);
+        log.Error($"the init file {command} contains the string \"riverctl\". Inlet implements the river " +
+            $"window-management protocols, which have no riverctl. An init written for river-classic " +
+            $"cannot configure Inlet: it must start a window manager instead");
         return true;
     }
 }

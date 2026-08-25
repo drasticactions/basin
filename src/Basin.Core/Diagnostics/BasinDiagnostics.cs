@@ -12,12 +12,14 @@ public static class BasinDiagnostics
 
     private const int MaxTreeDepth = 8;
 
-    public static bool TraceEnabled { get; } = Environment.GetEnvironmentVariable(TraceVariable) is not null;
+    private static readonly bool TraceRequested = Environment.GetEnvironmentVariable(TraceVariable) is not null;
+
+    public static bool TraceEnabled => TraceRequested || BasinLog.Level == BasinLogLevel.Trace;
 
     public static void RouteToStandardError(BasinLogLevel? level = null)
     {
         BasinLog.Level = level ?? (TraceEnabled ? BasinLogLevel.Debug : BasinLogLevel.Warn);
-        BasinLog.Sink = (severity, message) => Console.Error.WriteLine($"[{severity}] {message}");
+        BasinLog.Sink = new StandardErrorLogSink();
         WaylandDiagnostics.RouteToBasinLog();
     }
 

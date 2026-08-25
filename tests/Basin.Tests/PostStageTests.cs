@@ -121,4 +121,58 @@ public sealed class PostStageTests
         sceneOutput.SetSoftwareCursor(null, 0, 0);
         cursorImage.Destroy();
     }
+
+    [Fact]
+    public void The_feedback_layer_does_not_cost_direct_scanout()
+    {
+        using var host = new CompositorTestHost();
+        using var sceneOutput = new SceneOutput(host.Scene, host.Output) { ScanoutEntryThreshold = 1 };
+        using var swapchain = new Swapchain(new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+
+        var layers = new SceneLayers(host.Scene.Root);
+        var client = DirectScanoutTests.FakeClientBuffer(160, 120);
+        var node = new SceneBuffer(layers.Windows) { IsOpaque = true };
+        node.SetBuffer(client);
+
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        Assert.True(sceneOutput.IsDirectScanout);
+
+        var above = new SceneRect(layers.Top, 8, 8, new RenderColor(1f, 0f, 0f, 1f));
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        Assert.False(sceneOutput.IsDirectScanout);
+        above.Destroy();
+
+        var feedback = new SceneRect(layers.Feedback, 8, 8, new RenderColor(1f, 0f, 0f, 1f));
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        Assert.True(sceneOutput.IsDirectScanout);
+
+        feedback.Destroy();
+        node.Destroy();
+        client.Destroy();
+    }
+
+    [Fact]
+    public void Show_paint_tints_only_what_was_repainted()
+    {
+        using var host = new CompositorTestHost();
+        using var sceneOutput = new SceneOutput(host.Scene, host.Output);
+        using var swapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+
+        _ = new SceneRect(host.Scene.Root, 160, 120, new RenderColor(1f, 1f, 1f, 1f));
+        sceneOutput.AddPostStage(new Basin.Effects.ShowPaintStage { Alpha = 1f });
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+
+        var rect = new SceneRect(host.Scene.Root, 20, 20, new RenderColor(1f, 1f, 1f, 1f));
+        rect.SetPosition(10, 10);
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+
+        var rgba = Basin.Diagnostics.BufferCapture.ReadRgba((MemoryBuffer)state.Buffer!);
+        int Red(int x, int y) => rgba[((y * 160) + x) * 4];
+        Assert.True(Red(20, 20) < 200, "the repainted rectangle is tinted");
+        Assert.True(Red(140, 100) > 240, "the rest of the screen is untouched");
+        rect.Destroy();
+    }
 }

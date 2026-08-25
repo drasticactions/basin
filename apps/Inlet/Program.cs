@@ -11,7 +11,6 @@ using Basin.Host;
 using Basin.Scene;
 using Basin.Shell.River;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
 using Wayland.Server;
 
 namespace Inlet;
@@ -65,9 +64,9 @@ internal static class Program
         return cli.Run(args, result =>
         {
             var backend = result.GetValue(backendOption);
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             var status = Run(
-                loggers.CreateLogger("Inlet"),
+                BasinLog.For("Inlet"),
                 result.GetValue(rendererOption)!,
                 backend.Kind == BackendKind.Drm,
                 backend.Kind == BackendKind.Nested,
@@ -85,32 +84,17 @@ internal static class Program
         });
     }
 
-    private static RenderStack CreateStack(string rendererName, ILogger log)
+    private static RenderStack CreateStack(string rendererName, BasinLogger log)
     {
-        const string renderNode = "/dev/dri/renderD128";
         var name = rendererName;
         return Basin.Renderers.RendererCatalog.CreateWithFallback(
             ref name,
-            File.Exists(renderNode) ? renderNode : null,
-            fallback => Report(log, fallback));
-    }
-
-    private static void Report(ILogger log, Basin.Renderers.RendererFallback fallback)
-    {
-        if (fallback.Reason is null)
-        {
-            log.LogWarning(
-                "{Renderer} requested but no render node was found; using software rendering", fallback.From);
-            return;
-        }
-
-        log.LogWarning(
-            "{Renderer} renderer unavailable ({Reason}); falling back to {Fallback}",
-            fallback.From, fallback.Reason, fallback.To);
+            Basin.Renderers.RendererCatalog.FindRenderNode(),
+            fallback => log.Warn($"{(fallback.Describe())}"));
     }
 
     private static int Run(
-        ILogger log,
+        BasinLogger log,
         string rendererName,
         bool drm,
         bool nested,
@@ -134,10 +118,10 @@ internal static class Program
 
         if (totalRendered >= 0)
         {
-            Console.WriteLine($"FRAMES {totalRendered} LIVE {(BasinCounters.Enabled ? BasinCounters.LiveObjects.ToString() : "untracked")}");
+            BasinReport.Line(Basin.Cli.CompositorLines.Frames(totalRendered));
             if (BasinCounters.Enabled && (BasinCounters.LiveObjects != 0 || BasinCounters.PendingFrees != 0))
             {
-                BasinCounters.WriteCensus(Console.Error);
+                log.Error($"{BasinCounters.CensusReport()}");
             }
         }
 
@@ -145,7 +129,7 @@ internal static class Program
     }
 
     private static int RunCompositor(
-        ILogger log,
+        BasinLogger log,
         string rendererName,
         bool drm,
         bool nested,
@@ -211,10 +195,10 @@ internal static class Program
             return max;
         }
 
-        driver.ModesetRefused += card => log.LogError("modeset refused by {Output}", card.Name);
+        driver.ModesetRefused += card => log.Error($"modeset refused by {card.Name}");
         driver.ScaleRefused += (view, scale) =>
-            log.LogError("scale {Scale} refused by {Output}", scale, view.Output.Name);
-        driver.ScanoutChanged += (view, choice) => Console.WriteLine(choice switch
+            log.Error($"scale {scale} refused by {view.Output.Name}");
+        driver.ScanoutChanged += (view, choice) => BasinReport.Line(choice switch
         {
             ScanoutChoice.DeviceBuffers =>
                 $"SCANOUT {view.Output.Name} device modifiers={view.SwapModifiers.Length}",
@@ -229,24 +213,21 @@ internal static class Program
             libinput = new Basin.Backend.Libinput.LibinputBackend(loop, host.Session!);
         }
 
-        var capturePack = new SceneCapturePack(scene, layout);
+        var colorPack = new Basin.Color.ColorCapabilityPack(layout);
+        var servicePack = new Basin.Desktop.DesktopServicePack(scene, layout, renderer, drmBackend);
+        var capturePack = servicePack.Capture;
         driver.Capture = capturePack;
         var capture = capturePack.Capture;
-        capture.Renderer = renderer;
         capture.Background = Background;
         var dmabufCapture = capturePack.DmabufCapture;
-        var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
+        var cursorTheme = servicePack.CursorTheme;
 
         var injectedInput = new Basin.Seat.Backends.HookInputSink();
         using var services = host.CreateServices()
             .Use(layout)
-            .With(capturePack)
-            .With(new Basin.Desktop.DrmCapabilityPack(renderer, drmBackend))
-            .Use<ICursorTheme>(cursorTheme)
-            .Use<IColorProfileService>(new Basin.Color.Lcms2ColorProfileService())
-            .Use<IInputSink>(injectedInput)
-            .Use<IActivationTokens>(new Basin.Capabilities.Defaults.DefaultActivationTokens())
-            .Use<IBell>(Basin.Capabilities.Defaults.SilentBell.Instance);
+            .With(servicePack)
+            .With(colorPack)
+            .Use<IInputSink>(injectedInput);
 
         Basin.Backend.Libinput.LibinputTabletSource? tablets = null;
         if (libinput is not null)
@@ -255,13 +236,7 @@ internal static class Program
             services.Use<ITabletSource>(tablets);
         }
 
-        var pack = DesktopPack.For("inlet");
-        if (drmBackend is null)
-        {
-            pack = pack.Without("wp_drm_lease_device_v1");
-        }
-
-        services.Install(pack);
+        services.Install(DesktopPack.For("inlet"));
 
         if (renderer.Device is { } renderDevice)
         {
@@ -329,13 +304,19 @@ internal static class Program
         }
 
         var color = services.Require<Basin.Desktop.ColorManager>();
-        var outputDescription = ImageDescription.Srgb;
-        Basin.Desktop.SurfaceLutDriver.DeclareSrgb(color);
+        ImageDescription OutputDescription(IOutput output) => colorPack.Configuration.DescriptionOf(output);
+        void DeclareColor() => Basin.Desktop.SurfaceLutDriver.Declare(
+            color, driver.Views.Select(v => OutputDescription(v.Output)));
+        DeclareColor();
 
         var luts = new Basin.Color.ColorLutCache(renderer);
         var lutDriver = new Basin.Desktop.SurfaceLutDriver(
-            scene, color, surface => luts.LutFor(color.DescriptionOf(surface), outputDescription));
-        lutDriver.CountChanged += attached => Console.WriteLine($"COLOR luts={attached}");
+            scene,
+            color,
+            surface => luts.LutFor(
+                color.DescriptionOf(surface),
+                driver.Views.Count > 0 ? OutputDescription(driver.Views[0].Output) : ImageDescription.Srgb));
+        lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
         lutDriver.WatchToplevels(shell);
 
         void RefreshSurfaceLuts() => lutDriver.Refresh();
@@ -415,9 +396,9 @@ internal static class Program
         {
             TextInput = textInput,
         };
-        lockDriver.Locked += () => Console.WriteLine("LOCKED");
-        lockDriver.Unlocked += () => Console.WriteLine("UNLOCKED");
-        lockDriver.Abandoned += () => Console.WriteLine("LOCK ABANDONED (staying blanked)");
+        lockDriver.Locked += () => BasinReport.Line($"LOCKED");
+        lockDriver.Unlocked += () => BasinReport.Line($"UNLOCKED");
+        lockDriver.Abandoned += () => BasinReport.Line($"LOCK ABANDONED (staying blanked)");
         lockDriver.LockSurfaceAdded += (lockSurface, _) =>
         {
             RefreshSurfaceLuts();
@@ -495,14 +476,14 @@ internal static class Program
             xwaylandModule.WindowManagerReady += wm =>
             {
                 management.Adopt(wm);
-                Console.WriteLine($"XWAYLAND WM {xServer.DisplayName}");
+                BasinReport.Line($"XWAYLAND WM {xServer.DisplayName}");
             };
-            Console.WriteLine($"XWAYLAND {xServer.DisplayName}");
+            BasinReport.Line($"XWAYLAND {xServer.DisplayName}");
         }
 
         var keymapNames = Basin.Seat.SystemKeymap.Read();
         seat.Keyboard.SetKeymap(keymapNames);
-        Console.WriteLine($"KEYMAP {keymapNames.Layout ?? "xkb default"}{(keymapNames.Model is { } m ? $" {m}" : string.Empty)}");
+        BasinReport.Line($"KEYMAP {keymapNames.Layout ?? "xkb default"}{(keymapNames.Model is { } m ? $" {m}" : string.Empty)}");
         seat.Keyboard.ModifiersChanged += () => management.NotifyModifiers(seat);
 
         cursor.Shapes = cursorShapes;
@@ -528,9 +509,7 @@ internal static class Program
         {
             if (cursor.Images is { } images)
             {
-                Console.WriteLine(
-                    $"CURSOR left_ptr {images.Size}px {cursor.DrawnBy} on {cursor.CursorOutput?.Name ?? "nothing"} " +
-                    $"scale {cursor.CursorOutput?.Scale ?? 0}");
+                BasinReport.Line($"CURSOR left_ptr {images.Size}px {cursor.DrawnBy} on {cursor.CursorOutput?.Name ?? "nothing"} " + $"scale {cursor.CursorOutput?.Scale ?? 0}");
             }
         }
 
@@ -623,6 +602,8 @@ internal static class Program
             seat.Pointer.NotifyFrame();
         }
 
+        using var pointerRefresh = new PointerRefresh(scene, loop, () => PointerMoved((uint)Environment.TickCount));
+
         var touchBinder = new Basin.Seat.Backends.SeatBinder(seat, layout, pointer, cursor);
         touchBinder.Key += (timeMs, key, pressed) => DeliverKey(timeMs, key, pressed);
         touchBinder.Motion += (timeMs, _, _, _, _) => PointerMoved(timeMs);
@@ -655,7 +636,7 @@ internal static class Program
             }
             else if (kind == Basin.Seat.TouchTargetKind.Pointer)
             {
-                log.LogDebug("touch {Slot} drives the pointer", slot);
+                log.Debug($"touch {slot} drives the pointer");
             }
         };
 
@@ -663,38 +644,37 @@ internal static class Program
         driver.ModeChanged += view =>
         {
             management.RequestManage();
-            Console.WriteLine($"MODE {view.Output.Name} {view.Width}x{view.Height}");
+            BasinReport.Line($"MODE {view.Output.Name} {view.Width}x{view.Height}");
         };
         driver.Painted += _ => UpdateSurfacePresence();
         driver.Added += view =>
         {
             cursor.AddOutput(view.Output, view.Scene!);
             presenceTracker.AddOutput(view.Output, view.Global);
-            color.SetOutputDescription(view.Global, outputDescription);
+            color.SetOutputDescription(view.Global, OutputDescription(view.Output));
+            DeclareColor();
             management.AddOutput(view.Global);
             if (view.Output is Basin.Backend.Drm.DrmOutput added)
             {
-                Console.WriteLine(
-                    $"OUTPUT{(outputsCreated ? " +" : string.Empty)} {added.Name} " +
-                    $"{added.PreferredMode.Width}x{added.PreferredMode.Height}");
+                BasinReport.Line($"OUTPUT{(outputsCreated ? " + $" : string.Empty)} {added.Name} " + $"{added.PreferredMode.Width}x{added.PreferredMode.Height}");
             }
 
             if (scales.Length > 0 && view.Output.Scale != 1)
             {
-                Console.WriteLine($"SCALE {view.Output.Name} {view.Output.Scale}");
+                BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
             }
 
         };
         driver.HostScaleFollowed += view =>
         {
-            Console.WriteLine($"SCALE {view.Output.Name} {view.Output.Scale}");
+            BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
             OnOutputsReconfigured();
         };
         driver.Removed += view =>
         {
             if (view.Output is Basin.Backend.Drm.DrmOutput card)
             {
-                Console.WriteLine($"OUTPUT - {card.Name}");
+                BasinReport.Line($"OUTPUT - {card.Name}");
                 management.RemoveOutput(card);
             }
 
@@ -712,7 +692,7 @@ internal static class Program
         outputsCreated = true;
         if (drmBackend is not null && views.Count == 0)
         {
-            log.LogError("no connected output");
+            log.Error($"no connected output");
             return 1;
         }
 
@@ -739,7 +719,7 @@ internal static class Program
                     management.XkbConfig.AddKeyboard(device, seat, keyboard);
                 }
 
-                Console.WriteLine($"INPUT {type} {device.Name}");
+                BasinReport.Line($"INPUT {type} {device.Name}");
             }
 
             libinput.DeviceAdded += Register;
@@ -755,10 +735,10 @@ internal static class Program
 
             touchBinder.KeyboardFor = device => keyboardDevices.GetValueOrDefault(device);
 
-            management.InputManager.SeatCreated += name => Console.WriteLine($"SEAT + {name}");
-            management.InputManager.SeatDestroyed += name => Console.WriteLine($"SEAT - {name}");
+            management.InputManager.SeatCreated += name => BasinReport.Line($"SEAT + {name}");
+            management.InputManager.SeatDestroyed += name => BasinReport.Line($"SEAT - {name}");
             management.InputManager.DeviceAssigned += (device, name) =>
-                Console.WriteLine($"ASSIGN {(device as Basin.Backend.Libinput.InputDevice)?.Name} -> {name}");
+                BasinReport.Line($"ASSIGN {(device as Basin.Backend.Libinput.InputDevice)?.Name} -> {name}");
 
             touchBinder.BindLibinput(libinput);
         }
@@ -768,10 +748,10 @@ internal static class Program
         {
             parent.KeyboardAdded += parentKeyboard =>
             {
-                Console.WriteLine("INPUT Keyboard host");
+                BasinReport.Line($"INPUT Keyboard host");
                 parentKeyboard.RepeatInfo += (rate, delay) => seat.Keyboard.SetRepeatInfo(rate, delay);
             };
-            parent.PointerAdded += _ => Console.WriteLine("INPUT Pointer host");
+            parent.PointerAdded += _ => BasinReport.Line($"INPUT Pointer host");
             touchBinder.BindParent(parent);
             seam = new NestedSeam(
                 parent,
@@ -812,51 +792,47 @@ internal static class Program
             return true;
         };
 
-        var running = true;
-        driver.Emptied += () => running = false;
+        var runLoop = new Basin.Host.CompositorRunLoop(host, driver);
+        driver.Emptied += runLoop.Stop;
         if (parent is not null)
         {
-            parent.ParentGone += () => running = false;
+            parent.ParentGone += runLoop.Stop;
         }
 
         management.ExitSessionRequested += () =>
         {
-            Console.WriteLine("EXIT requested by the window manager");
-            running = false;
+            BasinReport.Line($"EXIT requested by the window manager");
+            runLoop.Stop();
         };
-        management.WindowManagerLost += () => Console.WriteLine("WM LOST");
-        management.WindowManagerUnresponsive += () => Console.WriteLine("WM UNRESPONSIVE");
+        management.WindowManagerLost += () => BasinReport.Line($"WM LOST");
+        management.WindowManagerUnresponsive += () => BasinReport.Line($"WM UNRESPONSIVE");
 
-        Console.WriteLine($"SOCKET {socket}");
-        Console.Out.Flush();
+        BasinReport.Line(Basin.Cli.CompositorLines.Socket(socket));
 
         var startup = init is null ? null : InitProcess.Start(init, socket, xServer?.DisplayName, log);
 
-        var interrupt = loop.AddSignal(Signal.Interrupt, _ => running = false);
-        var terminate = loop.AddSignal(Signal.Terminate, _ => running = false);
-
         var started = Environment.TickCount64;
         var reported = 0L;
-        while (running && (frames == 0 || driver.PrimaryRendered < frames))
+        runLoop.Frames = frames;
+        runLoop.Iterating += () =>
         {
-            if (driver.PrimaryRendered - reported >= 300)
+            if (driver.PrimaryRendered - reported < 300)
             {
-                reported = driver.PrimaryRendered;
-                var seconds = (Environment.TickCount64 - started) / 1000.0;
-                Console.WriteLine(
-                    $"STATS {reported} frames in {seconds:F1}s ({reported / seconds:F1}/s) " +
-                    $"manage={management.ManageSequences} render={management.RenderSequences} " +
-                    $"timedout={Transaction.TimedOutCount}");
+                return;
             }
 
-            loop.Dispatch(16);
+            reported = driver.PrimaryRendered;
+            var seconds = (Environment.TickCount64 - started) / 1000.0;
+            BasinReport.Line($"STATS {reported} frames in {seconds:F1}s ({reported / seconds:F1}/s) " + $"manage={management.ManageSequences} render={management.RenderSequences} " + $"timedout={Transaction.TimedOutCount}");
+        };
+        runLoop.Iterated += () =>
+        {
             if (fifo.HasPendingBarriers)
             {
                 driver.ScheduleAll();
             }
-
-            parent?.Flush();
-        }
+        };
+        runLoop.Run();
 
         if (screenshotPath is not null)
         {
@@ -865,7 +841,7 @@ internal static class Program
                 var path = ScreenshotPath(screenshotPath, i);
                 var shot = SceneScreenshot.WritePresented(views[i].Scene?.LastTarget, renderer, path)
                     == ScreenshotOutcome.Written;
-                Console.WriteLine(shot
+                BasinReport.Line(shot
                     ? $"SHOT {path} after {views[i].Rendered} frames"
                     : $"SHOT failed: no readable presented frame on {views[i].Output.Name} after {views[i].Rendered} frames");
             }
@@ -874,8 +850,6 @@ internal static class Program
         totalRendered = driver.PrimaryRendered;
 
         startup?.Stop(log);
-        interrupt.Remove();
-        terminate.Remove();
         driver.Dispose();
         scene.Root.Destroy();
 

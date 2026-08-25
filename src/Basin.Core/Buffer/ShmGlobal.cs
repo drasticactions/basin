@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Diagnostics;
 using Wayland.Server;
 using Wayland.Server.Shm;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -45,7 +46,7 @@ public sealed class ShmGlobal : IDisposable
             effectivePolicy,
             limits,
             extraFormats);
-        BasinLog.Debug($"wl_shm: managed implementation selected ({_managed.Policy})");
+        Log.Debug($"wl_shm: managed implementation selected ({_managed.Policy})");
     }
 
     public ManagedShmGlobal? Managed => _managed;

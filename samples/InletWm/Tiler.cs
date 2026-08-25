@@ -1,5 +1,6 @@
 using Basin.WindowManager;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace InletWm;
 
@@ -14,7 +15,7 @@ internal sealed class Tiler
     private readonly RiverWindowManager _wm;
     private readonly string _terminal;
     private readonly bool _trace;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly List<Tile> _tiles = [];
     private readonly List<Tile> _onOutput = [];
     private readonly List<KeyBinding> _bindings = [];
@@ -27,7 +28,7 @@ internal sealed class Tiler
     private bool _layerDefaultSet;
     private Command _pending;
 
-    internal Tiler(RiverWindowManager wm, string terminal, bool trace, ILogger log)
+    internal Tiler(RiverWindowManager wm, string terminal, bool trace, BasinLogger log)
     {
         _wm = wm;
         _terminal = terminal;
@@ -56,18 +57,11 @@ internal sealed class Tiler
         }
 
         var pointer = context.Seats.Count > 0 ? context.Seats[0].PointerPosition : default;
-        _log.LogDebug(
-            "manage: {Windows} window(s), {Outputs} output(s), {New} new, {Closed} closed, pointer {X},{Y}",
-            context.Windows.Count, context.Outputs.Count, context.NewWindows.Count, context.ClosedWindows.Count,
-            pointer.X, pointer.Y);
+        _log.Debug($"manage: {context.Windows.Count} window(s), {context.Outputs.Count} output(s), {context.NewWindows.Count} new, {context.ClosedWindows.Count} closed, pointer {pointer.X},{pointer.Y}");
         foreach (var tile in _tiles)
         {
             var window = tile.Window;
-            _log.LogDebug(
-                "  {Focused} '{AppId}' proposed {Width}x{Height} at {X},{Y}; window reports {ReportedWidth}x{ReportedHeight}",
-                ReferenceEquals(window, _focused) ? '*' : ' ', window.AppId ?? "?",
-                tile.Frame.Width, tile.Frame.Height, tile.Frame.X, tile.Frame.Y,
-                window.Dimensions.Width, window.Dimensions.Height);
+            _log.Debug($"  {(ReferenceEquals(window, _focused) ? '*' : ' ')} '{(window.AppId ?? "?")}' proposed {tile.Frame.Width}x{tile.Frame.Height} at {tile.Frame.X},{tile.Frame.Y}; window reports {window.Dimensions.Width}x{window.Dimensions.Height}");
         }
     }
 
@@ -116,7 +110,7 @@ internal sealed class Tiler
         {
             if (_trace)
             {
-                _log.LogDebug("interaction: '{AppId}' {Width}x{Height}", window.AppId ?? "?", window.Dimensions.Width, window.Dimensions.Height);
+                _log.Debug($"interaction: '{(window.AppId ?? "?")}' {window.Dimensions.Width}x{window.Dimensions.Height}");
             }
 
             Focus(window);
@@ -390,7 +384,7 @@ internal sealed class Tiler
     {
         if (WmSpawn.Run(_terminal) is { } failure)
         {
-            _log.LogError("could not spawn '{Terminal}': {Reason}", _terminal, failure);
+            _log.Error($"could not spawn '{_terminal}': {failure}");
         }
     }
 

@@ -11,7 +11,6 @@ using Basin.Scene;
 using Basin.Shell.Weston;
 using Basin.Shell.Xdg;
 using Basin.UI.Avalonia;
-using Microsoft.Extensions.Logging;
 using Wayland.Server;
 
 namespace Westonia;
@@ -19,7 +18,7 @@ namespace Westonia;
 internal sealed partial class Westonia : IDisposable
 {
     private readonly WestoniaOptions _options;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly WestonIni _ini;
     private readonly IRenderer _renderer;
     private readonly IAllocator? _deviceAllocator;
@@ -29,6 +28,9 @@ internal sealed partial class Westonia : IDisposable
     private readonly BasinServices _services;
     private readonly ShellLayers _layers;
     private readonly OutputDriver _outputs;
+    private Basin.Color.ColorCapabilityPack _colorPack = null!;
+    private readonly CompositorRunLoop _loop;
+    private readonly BasinGlGpu? _gpu;
     private readonly AvaloniaUIHost _ui;
     private readonly AvaloniaShell _avalonia;
     private readonly WestonShell _shell;
@@ -53,9 +55,8 @@ internal sealed partial class Westonia : IDisposable
     private readonly List<Process> _spawned = [];
     private readonly UIDriver _uiDriver;
     private IEventSource? _clockTimer;
-    private bool _running = true;
 
-    public static int Run(WestoniaOptions options, ILogger log, out long rendered)
+    public static int Run(WestoniaOptions options, BasinLogger log, out long rendered)
     {
         BasinCounters.Reset();
         rendered = 0;
@@ -69,21 +70,20 @@ internal sealed partial class Westonia : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.LogError("{Reason}", error.Message);
+            log.Error($"{error.Message}");
             return 1;
         }
 
-        Console.WriteLine(
-            $"FRAMES {rendered} LIVE {(BasinCounters.Enabled ? BasinCounters.LiveObjects.ToString() : "untracked")}");
+        BasinReport.Line(CompositorLines.Frames(rendered));
         if (BasinCounters.Enabled && (BasinCounters.LiveObjects != 0 || BasinCounters.PendingFrees != 0))
         {
-            BasinCounters.WriteCensus(Console.Error);
+            log.Error($"{BasinCounters.CensusReport()}");
         }
 
         return status;
     }
 
-    internal Westonia(WestoniaOptions options, ILogger log)
+    internal Westonia(WestoniaOptions options, BasinLogger log)
     {
         _options = options;
         _log = log;
@@ -102,9 +102,10 @@ internal sealed partial class Westonia : IDisposable
                 SocketFd = options.SocketFd,
             });
 
-        var capturePack = new SceneCapturePack(_scene, _layout);
-        capturePack.Capture.Renderer = _renderer;
-        var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
+        var capturePack = servicePack.Capture;
+        var cursorTheme = servicePack.CursorTheme;
         _cursor = new Basin.Desktop.CursorController(_layout) { Capture = capturePack.Capture };
         if (_host.Session is { } session && options.Backend == BackendKind.Drm)
         {
@@ -113,20 +114,10 @@ internal sealed partial class Westonia : IDisposable
 
         _services = _host.CreateServices()
             .Use(_layout)
-            .With(capturePack)
-            .With(new DrmCapabilityPack(_renderer, _host.Drm))
-            .Use<ICursorTheme>(cursorTheme)
-            .Use<IActivationTokens>(new Basin.Capabilities.Defaults.DefaultActivationTokens())
-            .Use<IBell>(Basin.Capabilities.Defaults.SilentBell.Instance)
-            .Use<IColorProfileService>(new Basin.Color.Lcms2ColorProfileService());
+            .With(servicePack)
+            .With(_colorPack);
 
-        var pack = DesktopPack.For("westonia");
-        if (_host.Drm is null)
-        {
-            pack = pack.Without("wp_drm_lease_device_v1");
-        }
-
-        _services.Install(pack);
+        _services.Install(DesktopPack.For("westonia"));
 
         Basin.XWayland.XWaylandModule? xwaylandModule = null;
         if (_ini.Core.XWayland || options.XWayland)
@@ -163,11 +154,11 @@ internal sealed partial class Westonia : IDisposable
             NestedName = index => $"westonia-{index + 1}",
             HeadlessMode = new OutputMode(1280, 720, 60_000),
         };
+        _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
         _outputs.ModesetRefused += card =>
-            log.LogError("modeset refused by {Output} in every mode", card.Name);
-        _outputs.Added += view => Console.WriteLine(
-            $"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
+            log.Error($"modeset refused by {card.Name} in every mode");
+        _outputs.Added += view => BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
         _presenceTracker = new SurfacePresenceTracker(
             _layout, (surface, scale) => _fractionalScale?.AnnounceScale(surface, scale));
         _outputs.Added += view => _presenceTracker.AddOutput(view.Output, view.Global);
@@ -199,12 +190,17 @@ internal sealed partial class Westonia : IDisposable
             SyncPopups();
         };
         _screens = new OutputScreens(_outputs, _layout);
+        _gpu = _renderer.Device is { } uiDevice
+            ? BasinGlGpu.TryCreate(
+                uiDevice.DevicePath, uiDevice as Basin.Render.Gl.GlDevice, _renderer.DmabufTextureFormats)
+            : null;
         _ui = BasinPlatform.Start<Shell.ShellApp>(new BasinPlatformOptions
         {
             EventLoop = _host.Loop,
             Screens = _screens,
             Selection = _services.Find<ISelectionStore>(),
             Theme = options.Theme,
+            Gpu = _gpu,
         });
         _avalonia = new AvaloniaShell(_ui, _layers, _ini, log, Spawn, _shellSurfaces)
         {
@@ -241,7 +237,7 @@ internal sealed partial class Westonia : IDisposable
         Seat.Pointer.CursorRequested += _cursor.HandleCursorRequest;
         _cursor.Load(new ShmAllocator(), 64, 64, _ini.Shell.CursorSize);
         cursorTheme.Images = _cursor.Images;
-        Console.WriteLine($"CURSOR {_cursor.Showing} {_cursor.Images?.Size ?? 0}px {_cursor.DrawnBy}");
+        BasinReport.Line($"CURSOR {_cursor.Showing} {_cursor.Images?.Size ?? 0}px {_cursor.DrawnBy}");
         ApplyKeyboardConfig();
         ApplyLibinputConfig();
         ApplyOutputConfig();
@@ -307,7 +303,7 @@ internal sealed partial class Westonia : IDisposable
                 _outputs.ScheduleAll();
             };
             xwaylandModule.WindowManagerReady += wm => _xwayland.Attach(wm);
-            Console.WriteLine($"XWAYLAND {_xServer.DisplayName}");
+            BasinReport.Line($"XWAYLAND {_xServer.DisplayName}");
         }
 
         _animations = new ShellAnimations(_layers, _ini)
@@ -398,7 +394,7 @@ internal sealed partial class Westonia : IDisposable
         ? _layout.BoxOf(_outputs.Views[0].Output)
         : new Box(0, 0, 1280, 720);
 
-    internal void Stop() => _running = false;
+    internal void Stop() => _loop.Stop();
 
     internal void WriteScreenshot() => WriteScreenshot(_options.Screenshot);
 
@@ -412,17 +408,13 @@ internal sealed partial class Westonia : IDisposable
 
         if (SceneScreenshot.Write(_scene, _renderer, view.Output, path))
         {
-            _log.LogInformation("screenshot written to {Path}", path);
+            _log.Info($"screenshot written to {path}");
         }
     }
 
     private int RunLoop()
     {
-        Console.WriteLine($"SOCKET {_host.Socket}");
-        Console.Out.Flush();
-
-        var interrupt = _host.Loop.AddSignal(Signal.Interrupt, _ => Stop());
-        var terminate = _host.Loop.AddSignal(Signal.Terminate, _ => Stop());
+        BasinReport.Line(CompositorLines.Socket(_host.Socket));
 
         _seat?.CenterPointer();
         _uiDriver.Woken += _outputs.ScheduleAll;
@@ -450,21 +442,16 @@ internal sealed partial class Westonia : IDisposable
             Spawn(autolaunch);
         }
 
-        var frames = _options.Frames;
-        while (_running && (frames == 0 || _outputs.PrimaryRendered < frames))
-        {
-            _uiDriver.Pump();
-            _host.Loop.Dispatch(16);
-            _host.Parent?.Flush();
-        }
+        _loop.Iterating += _uiDriver.Pump;
+        _loop.Frames = _options.Frames;
+        _loop.Run();
+        _loop.Iterating -= _uiDriver.Pump;
 
         _uiDriver.Woken -= _outputs.ScheduleAll;
         _stdinCommands?.Stop();
         _stdinCommands = null;
 
         _clockTimer?.Remove();
-        interrupt.Remove();
-        terminate.Remove();
         return 0;
     }
 
@@ -528,32 +515,17 @@ internal sealed partial class Westonia : IDisposable
         }
         catch (Exception error)
         {
-            _log.LogError("cannot start {Command}: {Reason}", command, error.Message);
+            _log.Error($"cannot start {command}: {error.Message}");
         }
     }
 
-    private static RenderStack CreateStack(string rendererName, ILogger log)
+    private static RenderStack CreateStack(string rendererName, BasinLogger log)
     {
-        const string renderNode = "/dev/dri/renderD128";
         var name = rendererName;
         return RendererCatalog.CreateWithFallback(
             ref name,
-            File.Exists(renderNode) ? renderNode : null,
-            fallback => Report(log, fallback));
-    }
-
-    private static void Report(ILogger log, RendererFallback fallback)
-    {
-        if (fallback.Reason is null)
-        {
-            log.LogWarning(
-                "{Renderer} requested but no render node was found; using software rendering", fallback.From);
-            return;
-        }
-
-        log.LogWarning(
-            "{Renderer} renderer unavailable ({Reason}); falling back to {Fallback}",
-            fallback.From, fallback.Reason, fallback.To);
+            RendererCatalog.FindRenderNode(),
+            fallback => log.Warn($"{(fallback.Describe())}"));
     }
 
     public void Dispose()
@@ -579,6 +551,7 @@ internal sealed partial class Westonia : IDisposable
         _shell.Dispose();
         _avalonia.Dispose();
         _ui.Dispose();
+        _gpu?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _services.Dispose();

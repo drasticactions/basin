@@ -1,7 +1,9 @@
+using Basin.Cli;
 using System.Globalization;
-using Microsoft.Extensions.Logging;
 using Tomlyn;
 using Tomlyn.Model;
+
+using Basin.Diagnostics;
 
 namespace EightWm;
 
@@ -33,7 +35,7 @@ internal sealed class Config
 
     public int StartOutput { get; private set; }
 
-    public static Config Load(string? path, ILogger log)
+    public static Config Load(string? path, BasinLogger log)
     {
         var config = new Config();
         if (path == "false")
@@ -42,30 +44,8 @@ internal sealed class Config
         }
 
         var file = path is { Length: > 0 } ? path : DefaultPath();
-        string text;
-        try
+        if (TomlConfig.Read(file, log) is not { } table)
         {
-            if (!File.Exists(file))
-            {
-                return config;
-            }
-
-            text = File.ReadAllText(file);
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            log.LogWarning("cannot read {Path}: {Reason}", file, error.Message);
-            return config;
-        }
-
-        TomlTable table;
-        try
-        {
-            table = Toml.ToModel(text);
-        }
-        catch (TomlException error)
-        {
-            log.LogWarning("{Path} did not parse, keeping defaults: {Reason}", file, error.Message);
             return config;
         }
 
@@ -139,19 +119,9 @@ internal sealed class Config
         return config;
     }
 
-    public static string DefaultPath()
-    {
-        var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrEmpty(configHome) || !Path.IsPathRooted(configHome))
-        {
-            configHome = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-        }
+    public static string DefaultPath() => TomlConfig.DefaultPath("eight-wm");
 
-        return Path.Combine(configHome, "eight-wm", "eight-wm.toml");
-    }
-
-    private static Tile? ReadTile(TomlTable row, ILogger log)
+    private static Tile? ReadTile(TomlTable row, BasinLogger log)
     {
         var name = Text(row, "name");
         var exec = Text(row, "exec");
@@ -161,7 +131,7 @@ internal sealed class Config
         {
             if (DesktopEntries.Find(desktop) is not { } entry)
             {
-                log.LogDebug("no desktop entry named {Desktop}; the tile is dropped", desktop);
+                log.Debug($"no desktop entry named {desktop}; the tile is dropped");
                 return null;
             }
 
@@ -172,7 +142,7 @@ internal sealed class Config
 
         if (name is not { Length: > 0 } || exec is not { Length: > 0 })
         {
-            log.LogWarning("a [[tile]] with no name and no exec is dropped");
+            log.Warn($"a [[tile]] with no name and no exec is dropped");
             return null;
         }
 
@@ -197,13 +167,12 @@ internal sealed class Config
     }
 
     private static bool Flag(TomlTable table, string key, bool fallback) =>
-        table.TryGetValue(key, out var value) && value is bool flag ? flag : fallback;
+        TomlConfig.Flag(table, key, fallback);
 
-    private static string? Text(TomlTable table, string key) =>
-        table.TryGetValue(key, out var value) && value is string text && text.Length > 0 ? text : null;
+    private static string? Text(TomlTable table, string key) => TomlConfig.Text(table, key);
 
     private static int Number(TomlTable table, string key, int fallback) =>
-        table.TryGetValue(key, out var value) && value is long number ? (int)number : fallback;
+        TomlConfig.Number(table, key, fallback);
 
     public static uint ParseColor(string? text, uint fallback)
     {

@@ -1,10 +1,11 @@
 using System.Runtime.Versioning;
 using Basin;
 using Basin.Capabilities;
-using Microsoft.Extensions.Logging;
 using PipeWire;
 using PipeWire.Native;
 using PipeWire.Spa;
+
+using Basin.Diagnostics;
 
 namespace PlasmaHost;
 
@@ -14,7 +15,7 @@ internal sealed class PlasmaHostScreencast : IScreencastPublisher, ICaptureDamag
     private readonly ICompositorEventLoop _loop;
     private readonly IScreenCapture _capture;
     private readonly OutputLayout _layout;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly PipeWireLoop _pwLoop;
     private readonly PipeWireContext _context;
     private readonly PipeWireCore _core;
@@ -26,7 +27,7 @@ internal sealed class PlasmaHostScreencast : IScreencastPublisher, ICaptureDamag
         ICompositorEventLoop loop,
         IScreenCapture capture,
         OutputLayout layout,
-        ILogger log,
+        BasinLogger log,
         PipeWireLoop pwLoop,
         PipeWireContext context,
         PipeWireCore core)
@@ -42,7 +43,7 @@ internal sealed class PlasmaHostScreencast : IScreencastPublisher, ICaptureDamag
     }
 
     internal static PlasmaHostScreencast? TryCreate(
-        ICompositorEventLoop loop, IScreenCapture capture, OutputLayout layout, ILogger log)
+        ICompositorEventLoop loop, IScreenCapture capture, OutputLayout layout, BasinLogger log)
     {
         PipeWireLoop? pwLoop = null;
         PipeWireContext? context = null;
@@ -58,7 +59,7 @@ internal sealed class PlasmaHostScreencast : IScreencastPublisher, ICaptureDamag
         {
             context?.Dispose();
             pwLoop?.Dispose();
-            log.LogWarning("screencast unavailable: {Reason}", error.Message);
+            log.Warn($"screencast unavailable: {error.Message}");
             return null;
         }
     }
@@ -108,8 +109,7 @@ internal sealed class PlasmaHostScreencast : IScreencastPublisher, ICaptureDamag
             NodeId = entry.Stream.NodeId,
             ObjectSerial = entry.Stream.ObjectSerial,
         };
-        _log.LogInformation(
-            "screencast stream {Id}: node {Node} serial {Serial}", request.StreamId, info.NodeId, info.ObjectSerial);
+        _log.Info($"screencast stream {request.StreamId}: node {info.NodeId} serial {info.ObjectSerial}");
         return true;
     }
 

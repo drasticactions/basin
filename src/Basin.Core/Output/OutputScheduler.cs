@@ -1,4 +1,5 @@
 using Basin.Diagnostics;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -49,7 +50,7 @@ public sealed class OutputScheduler : IDisposable
 
         if (_commitInFlight || _timerArmed || _idleQueued)
         {
-            BasinLog.Debug($"scheduler: repaint queued (inFlight={_commitInFlight} timer={_timerArmed})");
+            Log.Debug($"scheduler: repaint queued (inFlight={_commitInFlight} timer={_timerArmed})");
             return;
         }
 
@@ -213,7 +214,7 @@ public sealed class OutputScheduler : IDisposable
                 _leadBoostNanos = Math.Min(Math.Min(_leadBoostNanos, interval) + 3_000_000, interval);
                 _onTimeStreak = 0;
                 _everMissed = true;
-                BasinLog.Debug($"scheduler: missed vblank; lead boost {_leadBoostNanos / 1_000_000} ms");
+                Log.Debug($"scheduler: missed vblank; lead boost {_leadBoostNanos / 1_000_000} ms");
             }
             else if (_leadBoostNanos > 0 && ++_onTimeStreak >= (_everMissed ? 600 : 120))
             {
@@ -225,7 +226,7 @@ public sealed class OutputScheduler : IDisposable
         _commitInFlight = false;
         if (_repaintQueued && !_disposed && !_timerArmed && !_idleQueued)
         {
-            BasinLog.Debug($"scheduler: flip; deadline armed");
+            Log.Debug($"scheduler: flip; deadline armed");
             if (!TryArmDeadline())
             {
                 QueueIdle();
@@ -235,7 +236,7 @@ public sealed class OutputScheduler : IDisposable
 
     private void OnTimer()
     {
-        BasinLog.Debug($"scheduler: timer fired (queued={_repaintQueued})");
+        Log.Debug($"scheduler: timer fired (queued={_repaintQueued})");
         _timerArmed = false;
         Fire();
     }

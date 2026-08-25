@@ -1,5 +1,6 @@
 using Basin.Capabilities;
 using Basin.Diagnostics;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -98,14 +99,14 @@ public sealed class CursorImages : IDisposable
             if (cursor is not null)
             {
                 var frame = cursor.Frame(0);
-                if (Allocate() is { } buffer)
+                if (AllocateFor(frame.Width, frame.Height) is { } buffer)
                 {
                     if (Upload(buffer, frame.Pixels, frame.Width, frame.Height, entry.Lut))
                     {
-                        var clipped = frame.Width > buffer.Width || frame.Height > buffer.Height;
+                        var clipped = frame.Width > _bufferWidth || frame.Height > _bufferHeight;
                         if (clipped)
                         {
-                            BasinLog.Debug(
+                            Log.Debug(
                                 $"cursor {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale} " +
                                 $"and the buffer is {buffer.Width}x{buffer.Height}, so it cannot go on a cursor plane");
                         }
@@ -220,6 +221,18 @@ public sealed class CursorImages : IDisposable
 
     private IBuffer? Allocate() =>
         _allocator.Allocate(_bufferWidth, _bufferHeight, DrmFormat.Argb8888, [DrmFormatSet.ModifierLinear], BufferUse.Cursor);
+
+    private IBuffer? AllocateFor(int width, int height)
+    {
+        if (width <= _bufferWidth && height <= _bufferHeight)
+        {
+            return Allocate();
+        }
+
+        return _allocator.Allocate(
+                width, height, DrmFormat.Argb8888, [DrmFormatSet.ModifierLinear], BufferUse.Cursor)
+            ?? Allocate();
+    }
 
     private static unsafe bool UploadScaled(
         IBuffer buffer, ReadOnlySpan<byte> pixels, int sourceWidth, int sourceHeight, int width, int height,

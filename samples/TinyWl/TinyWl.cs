@@ -8,7 +8,6 @@ using Basin.Diagnostics;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using Wayland.Server;
 using Xkb;
@@ -68,11 +67,11 @@ internal sealed class TinyWl : IDisposable
 
     private readonly IEventSource _interrupt;
 
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
 
     private bool _running = true;
 
-    public TinyWl(bool drm, string? rendererName, ILogger log)
+    public TinyWl(bool drm, string? rendererName, BasinLogger log)
     {
         _log = log;
         _display = WlServerDisplay.Create();
@@ -101,7 +100,7 @@ internal sealed class TinyWl : IDisposable
         var stack = CreateRenderer(ref rendererName, renderNode);
         _renderer = stack.Renderer;
         (_allocator, _modifiers) = ChooseAllocator(stack);
-        _log.LogInformation("{Renderer} renderer, {Presentation} presentation", rendererName, _modifiers.Length > 0 ? "dmabuf" : "shm");
+        _log.Info($"{rendererName} renderer, {(_modifiers.Length > 0 ? "dmabuf" : "shm")} presentation");
 
         if (_renderer.Device is { } device)
         {
@@ -118,7 +117,7 @@ internal sealed class TinyWl : IDisposable
         _cursors = new CursorImages(_cursorAllocator, bufferWidth: 64, bufferHeight: 64, logicalSize: 24);
         if (!_cursors.HasTheme)
         {
-            _log.LogWarning("no xcursor theme found; running without a visible cursor");
+            _log.Warn($"no xcursor theme found; running without a visible cursor");
         }
 
         _seat.Pointer.CursorRequested += OnClientCursor;
@@ -153,7 +152,7 @@ internal sealed class TinyWl : IDisposable
 
     public int Run(string? startupCommand)
     {
-        Console.WriteLine($"tinywl: running Wayland compositor on WAYLAND_DISPLAY={_socket}");
+        BasinReport.Line($"tinywl: running Wayland compositor on WAYLAND_DISPLAY={_socket}");
         using var startup = BasinDiagnostics.StartClient(startupCommand, _socket);
         while (_running)
         {
@@ -476,7 +475,7 @@ internal sealed class TinyWl : IDisposable
 
         if (!handle.Commit(_frameState))
         {
-            _log.LogWarning("{Output} refused its initial state", handle.Name);
+            _log.Warn($"{handle.Name} refused its initial state");
         }
 
         _layout.Add(handle, 0, 0);
@@ -492,7 +491,7 @@ internal sealed class TinyWl : IDisposable
             nested.CloseRequested += () => _running = false;
         }
 
-        _log.LogInformation("output {Output} {Width}x{Height}", handle.Name, handle.CurrentMode.Width, handle.CurrentMode.Height);
+        _log.Info($"output {handle.Name} {handle.CurrentMode.Width}x{handle.CurrentMode.Height}");
         entry.Scheduler.ScheduleRepaint();
 
         if (_outputs.Count == 1 && _drm is not null)
@@ -636,7 +635,7 @@ internal sealed class TinyWl : IDisposable
                 throw;
             }
 
-            _log.LogWarning("{Renderer} renderer unavailable ({Reason}); falling back to pixman", name, error.Message);
+            _log.Warn($"{name} renderer unavailable ({error.Message}); falling back to pixman");
             name = "pixman";
             return Basin.Renderers.RendererCatalog.Create(name, string.Empty);
         }

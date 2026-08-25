@@ -3,6 +3,7 @@ using System.Text;
 using Basin.Diagnostics;
 using Wayland.Server;
 using Xcb.Native;
+using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
@@ -200,7 +201,7 @@ public sealed unsafe class XWaylandWm : IDisposable
             }
             catch (Exception ex)
             {
-                BasinLog.Warn($"xwayland wm event failed: {ex.Message}");
+                Log.Warn($"xwayland wm event failed: {ex.Message}");
             }
 
             Libc.Free(ev);
@@ -474,17 +475,34 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     internal void SetWindowMaximized(XWaylandWindow window, bool maximized)
     {
-        var atoms = stackalloc uint[3];
+        window.MaximizedState = maximized;
+        WriteWindowState(window);
+    }
+
+    internal void SetWindowFullscreen(XWaylandWindow window, bool fullscreen)
+    {
+        window.FullscreenState = fullscreen;
+        WriteWindowState(window);
+    }
+
+    private void WriteWindowState(XWaylandWindow window)
+    {
+        var atoms = stackalloc uint[4];
         uint count = 0;
         if (window.Modal)
         {
             atoms[count++] = Atom("_NET_WM_STATE_MODAL");
         }
 
-        if (maximized)
+        if (window.MaximizedState)
         {
             atoms[count++] = Atom("_NET_WM_STATE_MAXIMIZED_VERT");
             atoms[count++] = Atom("_NET_WM_STATE_MAXIMIZED_HORZ");
+        }
+
+        if (window.FullscreenState)
+        {
+            atoms[count++] = Atom("_NET_WM_STATE_FULLSCREEN");
         }
 
         SetProperty32(window.WindowId, Atom("_NET_WM_STATE"), 4 , atoms, count);

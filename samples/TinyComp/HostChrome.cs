@@ -1,7 +1,6 @@
 using Basin;
 using Basin.Backend.Wayland;
 using Basin.Capabilities;
-using Microsoft.Extensions.Logging;
 
 namespace TinyComp;
 
@@ -141,7 +140,7 @@ internal sealed class HostChrome : IDisposable
         {
             _faulted = true;
             _frame.SetInsets(default);
-            _comp.Log.LogError("host frame fault: {Reason}", e.Message);
+            _comp.Log.Error($"host frame fault: {e.Message}");
         }
     }
 

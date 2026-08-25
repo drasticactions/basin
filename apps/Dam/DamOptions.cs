@@ -6,7 +6,6 @@ using Basin.Host;
 using Basin.Renderers;
 using Basin.Scene;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
 using Wayland.Server;
 
 namespace Dam;

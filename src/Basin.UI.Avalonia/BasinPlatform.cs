@@ -76,8 +76,8 @@ public static class BasinPlatform
             .Bind<PlatformHotkeyConfiguration>().ToConstant(new PlatformHotkeyConfiguration(KeyModifiers.Control))
             .Bind<KeyGestureFormatInfo>().ToConstant(new KeyGestureFormatInfo(meta: "Super"));
 
-        var compositor = new Compositor(null, useUiThreadForSynchronousCommits: true);
-        var context = new BasinPlatformContext(compositor, TryGetFeature) { Screens = screens };
+        var compositor = new Compositor(options.Gpu?.Graphics, useUiThreadForSynchronousCommits: true);
+        var context = new BasinPlatformContext(compositor, TryGetFeature) { Gpu = options.Gpu, Screens = screens };
         AvaloniaLocator.CurrentMutable.Bind<IWindowingPlatform>().ToConstant(new BasinWindowingPlatform(context));
 
         _host = new AvaloniaUIHost(dispatcher, renderTimer, context) { Settings = settings };

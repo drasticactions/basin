@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Diagnostics;
 using Pixman;
 using Wayland.Server.Shm;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -77,7 +78,7 @@ internal sealed class ManagedShmBuffer : BufferBase
                     _address + (nint)rowStart, _stride,
                     (x2 - x1) * bpp, y2 - y1))
             {
-                BasinLog.Warn($"wl_shm: guarded copy faulted (pool truncated?); keeping the previous frame");
+                Log.Warn($"wl_shm: guarded copy faulted (pool truncated?); keeping the previous frame");
                 return;
             }
         }

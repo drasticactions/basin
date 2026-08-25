@@ -1,7 +1,8 @@
 using System.Globalization;
 using Basin;
 using Basin.Capabilities;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -20,10 +21,7 @@ internal sealed partial class Westonia
 
         Seat.Keyboard.SetKeymap(names);
         Seat.Keyboard.SetRepeatInfo(keyboard.RepeatRate, keyboard.RepeatDelay);
-        Console.WriteLine(
-            $"KEYMAP {(named ? "weston.ini" : "system")} layout={names.Layout ?? "default"} " +
-            $"compiled={(Seat.Keyboard.Keymap is null ? "no" : "yes")} " +
-            $"repeat={keyboard.RepeatRate}/{keyboard.RepeatDelay}");
+        BasinReport.Line($"KEYMAP {(named ? "weston.ini" : "system")} layout={names.Layout ?? "default"} " + $"compiled={(Seat.Keyboard.Keymap is null ? "no" : "yes")} " + $"repeat={keyboard.RepeatRate}/{keyboard.RepeatDelay}");
     }
 
     private void ApplyLibinputConfig()
@@ -35,7 +33,7 @@ internal sealed partial class Westonia
 
         if (_services.Find<IInputDeviceConfiguration>() is not { } configuration)
         {
-            _log.LogWarning("[libinput] is set but this session has no input device configuration");
+            _log.Warn($"[libinput] is set but this session has no input device configuration");
             return;
         }
 
@@ -47,15 +45,14 @@ internal sealed partial class Westonia
             {
                 if (SettingFor(key) is not { } setting)
                 {
-                    _log.LogWarning("weston.ini: [libinput] {Key} is not honoured", key);
+                    _log.Warn($"weston.ini: [libinput] {key} is not honoured");
                     continue;
                 }
 
                 var result = configuration.Set(devices[i].Id, setting, ValueFor(setting, value));
                 if (result != InputSettingResult.Success)
                 {
-                    _log.LogInformation(
-                        "[libinput] {Key} on {Device}: {Result}", key, devices[i].Name, result);
+                    _log.Info($"[libinput] {key} on {(devices[i].Name)}: {result}");
                 }
             }
         }
@@ -147,14 +144,12 @@ internal sealed partial class Westonia
 
             if (touched && !view.Output.Commit(state))
             {
-                _log.LogWarning("weston.ini: [output] {Name} refused its configuration", section.Name);
+                _log.Warn($"weston.ini: [output] {section.Name} refused its configuration");
             }
 
             if (section.IccProfile is { Length: > 0 } profile)
             {
-                _log.LogInformation(
-                    "weston.ini: [output] {Name} icc_profile={Profile} is applied through the colour manager",
-                    section.Name, profile);
+                _log.Info($"weston.ini: [output] {section.Name} icc_profile={profile} is applied through the colour manager");
             }
         }
     }
@@ -209,6 +204,6 @@ internal sealed partial class Westonia
 
         var command = _ini.InputMethodArgs is { Length: > 0 } args ? $"{path} {args}" : path;
         Spawn(command);
-        _log.LogInformation("started the input method: {Command}", command);
+        _log.Info($"started the input method: {command}");
     }
 }

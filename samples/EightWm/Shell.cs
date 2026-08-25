@@ -6,7 +6,6 @@ using Basin.Diagnostics;
 using Basin.Renderers;
 using Basin.Scene;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
 using Wayland.Server;
 
 namespace EightWm;
@@ -14,7 +13,7 @@ namespace EightWm;
 internal sealed partial class Shell : IDisposable
 {
     private readonly ShellOptions _options;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
 
     private readonly IRenderer _renderer;
     private readonly IAllocator? _deviceAllocator;
@@ -25,11 +24,15 @@ internal sealed partial class Shell : IDisposable
     private readonly SceneCapturePack _capture;
     private FifoManager? _fifo;
     private readonly OutputDriver _outputs;
+    private Basin.Color.ColorCapabilityPack _colorPack = null!;
+    private readonly CompositorRunLoop _loop;
     private readonly List<ShellView> _shellViews = [];
     private string? _shotPath;
     private int _shotView;
     private readonly ShellSeat _seat;
     private readonly List<AppWindow> _apps = [];
+    private readonly Basin.XWayland.XWaylandSceneDriver _xwayland = new();
+    private readonly Dictionary<Basin.XWayland.XWaylandWindow, AppWindow> _x11Windows = [];
     private readonly Dictionary<Surface, AppWindow> _owners = [];
     private Basin.Desktop.PopupPlacer _popups = null!;
 
@@ -37,9 +40,7 @@ internal sealed partial class Shell : IDisposable
 
     private Basin.XWayland.XWaylandServer? _xServer;
 
-    private bool _running = true;
-
-    public static int Run(ShellOptions options, ILogger log, out long rendered)
+    public static int Run(ShellOptions options, BasinLogger log, out long rendered)
     {
         BasinCounters.Reset();
         rendered = 0;
@@ -52,21 +53,20 @@ internal sealed partial class Shell : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.LogError("{Reason}", error.Message);
+            log.Error($"{error.Message}");
             return 1;
         }
 
-        Console.WriteLine(
-            $"FRAMES {rendered} LIVE {(BasinCounters.Enabled ? BasinCounters.LiveObjects.ToString() : "untracked")}");
+        BasinReport.Line(CompositorLines.Frames(rendered));
         if (BasinCounters.Enabled && (BasinCounters.LiveObjects != 0 || BasinCounters.PendingFrees != 0))
         {
-            BasinCounters.WriteCensus(Console.Error);
+            log.Error($"{BasinCounters.CensusReport()}");
         }
 
         return status;
     }
 
-    internal Shell(ShellOptions options, ILogger log)
+    internal Shell(ShellOptions options, BasinLogger log)
     {
         _options = options;
         _log = log;
@@ -82,27 +82,18 @@ internal sealed partial class Shell : IDisposable
             });
 
         _popups = new Basin.Desktop.PopupPlacer(_layout);
-        _capture = new SceneCapturePack(_scene, _layout);
-        _capture.Capture.Renderer = _renderer;
-        var cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
+        _capture = servicePack.Capture;
+        var cursorTheme = servicePack.CursorTheme;
         var inputSink = new Basin.Seat.Backends.HookInputSink();
         _services = _host.CreateServices()
             .Use(_layout)
-            .With(_capture)
-            .With(new DrmCapabilityPack(_renderer, _host.Drm))
-            .Use<Basin.Capabilities.ICursorTheme>(cursorTheme)
-            .Use<Basin.Capabilities.IColorProfileService>(new Basin.Color.Lcms2ColorProfileService())
-            .Use<Basin.Capabilities.IInputSink>(inputSink)
-            .Use<Basin.Capabilities.IActivationTokens>(new Basin.Capabilities.Defaults.DefaultActivationTokens())
-            .Use<Basin.Capabilities.IBell>(Basin.Capabilities.Defaults.SilentBell.Instance);
+            .With(servicePack)
+            .With(_colorPack)
+            .Use<Basin.Capabilities.IInputSink>(inputSink);
 
-        var pack = DesktopPack.For("eight-wm");
-        if (_host.Drm is null)
-        {
-            pack = pack.Without("wp_drm_lease_device_v1");
-        }
-
-        _services.Install(pack);
+        _services.Install(DesktopPack.For("eight-wm"));
         Basin.XWayland.XWaylandModule? xwayland = null;
         if (OperatingSystem.IsLinux() && _options.XWayland)
         {
@@ -148,25 +139,25 @@ internal sealed partial class Shell : IDisposable
                 nested.SetTitle("eight-wm");
             }
 
-            Console.WriteLine($"OUTPUT {driver.Output.Name} {driver.Output.CurrentMode.Width}x{driver.Output.CurrentMode.Height}");
+            BasinReport.Line($"OUTPUT {driver.Output.Name} {driver.Output.CurrentMode.Width}x{driver.Output.CurrentMode.Height}");
         };
         _outputs.Removed += driver =>
         {
             if (driver.Output is Basin.Backend.Drm.DrmOutput card)
             {
-                Console.WriteLine($"OUTPUT - {card.Name}");
+                BasinReport.Line($"OUTPUT - {card.Name}");
             }
 
             var view = ViewOf(driver);
             _shellViews.Remove(view);
             view.Destroy();
         };
+        _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
         _outputs.ModesetRefused += card =>
-            log.LogError("modeset refused by {Output} in every mode", card.Name);
-        _outputs.ModeChanged += driver => Console.WriteLine(
-            $"MODE {driver.Output.Name} {driver.Width}x{driver.Height}");
-        _outputs.ScanoutChanged += (driver, choice) => Console.WriteLine(choice switch
+            log.Error($"modeset refused by {card.Name} in every mode");
+        _outputs.ModeChanged += driver => BasinReport.Line($"MODE {driver.Output.Name} {driver.Width}x{driver.Height}");
+        _outputs.ScanoutChanged += (driver, choice) => BasinReport.Line(choice switch
         {
             ScanoutChoice.DeviceBuffers =>
                 $"SCANOUT {driver.Output.Name} device modifiers={driver.SwapModifiers.Length}",
@@ -255,7 +246,7 @@ internal sealed partial class Shell : IDisposable
 
         _shotPath = null;
         SceneScreenshot.WritePresented(shot, _renderer, path);
-        Console.WriteLine($"SHOT {path}");
+        BasinReport.Line($"SHOT {path}");
     }
 
     internal ShellOptions Options => _options;
@@ -266,18 +257,15 @@ internal sealed partial class Shell : IDisposable
 
     internal Basin.Host.BasinHost Host => _host;
 
-    internal void Stop() => _running = false;
+    internal void Stop() => _loop.Stop();
 
     private int RunLoop()
     {
         if (_host.Socket.Length > 0)
         {
-            Console.WriteLine($"SOCKET {_host.Socket}");
-            Console.Out.Flush();
+            BasinReport.Line(CompositorLines.Socket(_host.Socket));
         }
 
-        var interrupt = _host.Loop.AddSignal(Signal.Interrupt, _ => Stop());
-        var terminate = _host.Loop.AddSignal(Signal.Terminate, _ => Stop());
         var hangup = _host.Loop.AddSignal(Signal.Hangup, _ => Reload());
         WireStdin();
 
@@ -288,31 +276,10 @@ internal sealed partial class Shell : IDisposable
             Spawn(command);
         }
 
-        var frames = _options.Frames;
-        while (_running && (frames == 0 || _outputs.PrimaryRendered < frames))
-        {
-            _host.Loop.Dispatch(16);
-            if (_fifo is { HasPendingBarriers: true })
-            {
-                foreach (var view in Views)
-                {
-                    view.Scheduler?.ScheduleRepaint();
-                }
-            }
-
-            foreach (var view in Views)
-            {
-                if (view.Background.Enabled && view.Start is { Dirty: true })
-                {
-                    view.Scheduler?.ScheduleRepaint();
-                }
-            }
-
-            _host.Parent?.Flush();
-            ExpireCloseTimers();
-            ExpireSplashes();
-            PollTiles();
-        }
+        _loop.Iterated += OnIterated;
+        _loop.Frames = _options.Frames;
+        _loop.Run();
+        _loop.Iterated -= OnIterated;
 
         if (_options.Screenshot is { Length: > 0 } path && Views.Count > 0)
         {
@@ -323,11 +290,32 @@ internal sealed partial class Shell : IDisposable
         }
 
         DisconnectClients();
-        interrupt.Remove();
-        terminate.Remove();
         hangup.Remove();
         UnwireStdin();
         return 0;
+    }
+
+    private void OnIterated()
+    {
+        if (_fifo is { HasPendingBarriers: true })
+        {
+            foreach (var view in Views)
+            {
+                view.Scheduler?.ScheduleRepaint();
+            }
+        }
+
+        foreach (var view in Views)
+        {
+            if (view.Background.Enabled && view.Start is { Dirty: true })
+            {
+                view.Scheduler?.ScheduleRepaint();
+            }
+        }
+
+        ExpireCloseTimers();
+        ExpireSplashes();
+        PollTiles();
     }
 
     private void DisconnectClients()
@@ -377,32 +365,17 @@ internal sealed partial class Shell : IDisposable
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            _log.LogWarning("cannot start '{Command}': {Reason}", command, error.Message);
+            _log.Warn($"cannot start '{command}': {error.Message}");
         }
     }
 
-    private static RenderStack CreateStack(string rendererName, ILogger log)
+    private static RenderStack CreateStack(string rendererName, BasinLogger log)
     {
-        const string renderNode = "/dev/dri/renderD128";
         var name = rendererName;
         return RendererCatalog.CreateWithFallback(
             ref name,
-            File.Exists(renderNode) ? renderNode : null,
-            fallback => Report(log, fallback));
-    }
-
-    private static void Report(ILogger log, RendererFallback fallback)
-    {
-        if (fallback.Reason is null)
-        {
-            log.LogWarning(
-                "{Renderer} requested but no render node was found; using software rendering", fallback.From);
-            return;
-        }
-
-        log.LogWarning(
-            "{Renderer} renderer unavailable ({Reason}); falling back to {Fallback}",
-            fallback.From, fallback.Reason, fallback.To);
+            RendererCatalog.FindRenderNode(),
+            fallback => log.Warn($"{(fallback.Describe())}"));
     }
 
     public void Dispose()

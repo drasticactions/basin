@@ -4,6 +4,7 @@ using Basin.Render.Skia;
 using Basin.Render.Vulkan;
 using Pixman;
 using SkiaSharp;
+using static Basin.UI.Skia.SkiaUILog;
 
 namespace Basin.UI.Skia;
 
@@ -116,7 +117,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
             _wrapped = target;
             if (_allocator is not null && _wrap.IsCpuReadback)
             {
-                BasinLog.Warn($"skia-vulkan ui: the device refused to render into its own dmabuf ({target.Width}x{target.Height}); chrome will not draw");
+                Log.Warn($"skia-vulkan ui: the device refused to render into its own dmabuf ({target.Width}x{target.Height}); chrome will not draw");
             }
         }
 

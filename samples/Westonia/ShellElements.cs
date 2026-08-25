@@ -5,7 +5,6 @@ using Basin;
 using Basin.Capabilities;
 using Basin.Scene;
 using Basin.UI.Avalonia;
-using Microsoft.Extensions.Logging;
 using Westonia.Shell;
 
 namespace Westonia;

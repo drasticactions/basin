@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using Basin.Cli;
 using Basin.Diagnostics;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Basin.Tests;
 
@@ -30,10 +29,7 @@ internal sealed class DamTestHost : IDisposable
     {
         CompositorTestHost.SkipWithoutWaylandClient();
         BasinCounters.Reset();
-        Console.Out.Write(string.Empty);
-        Console.Error.Write(string.Empty);
-        Console.Out.Flush();
-        Console.Error.Flush();
+        TestLogging.WarmStreams();
 
         Dam = new global::Dam.Dam(
             new global::Dam.DamOptions
@@ -43,7 +39,7 @@ internal sealed class DamTestHost : IDisposable
                 ServerDecorations = serverDecorations,
                 LastOutputOnly = lastOutputOnly,
             },
-            NullLogger.Instance);
+            BasinLogger.None);
         Client = ConnectClient();
     }
 

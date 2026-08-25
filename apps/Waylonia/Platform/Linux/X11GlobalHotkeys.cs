@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using Basin.Avalonia;
 using Basin.Diagnostics;
 using Basin.XWayland;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -23,7 +24,7 @@ internal sealed class X11GlobalHotkeys : IDisposable
             var grabber = X11HotkeyGrabber.TryConnect(host.Loop, display);
             if (grabber is null)
             {
-                BasinLog.Warn($"global hotkeys are off");
+                Log.Warn($"global hotkeys are off");
                 return;
             }
 
@@ -39,7 +40,7 @@ internal sealed class X11GlobalHotkeys : IDisposable
                 }
                 else
                 {
-                    BasinLog.Warn($"hotkey '{hotkey.Chord}' was refused, skipping");
+                    Log.Warn($"hotkey '{hotkey.Chord}' was refused, skipping");
                 }
             }
 
@@ -50,7 +51,7 @@ internal sealed class X11GlobalHotkeys : IDisposable
             }
 
             instance._grabber = grabber;
-            BasinLog.Debug($"{registered} global hotkey(s) registered");
+            Log.Debug($"{registered} global hotkey(s) registered");
         });
         return instance;
     }

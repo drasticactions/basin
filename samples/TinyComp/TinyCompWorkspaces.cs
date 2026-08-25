@@ -3,6 +3,8 @@ using Basin.Capabilities;
 using Basin.Scene;
 using Basin.Seat;
 
+using Basin.Diagnostics;
+
 namespace TinyComp;
 
 internal sealed partial class TinyComp
@@ -90,23 +92,7 @@ internal sealed partial class TinyComp
                 return 0;
             }
 
-            if (view.Workspaces.Count > workspaces.Length)
-            {
-                return -1;
-            }
-
-            for (var i = 0; i < view.Workspaces.Count; i++)
-            {
-                var workspace = view.Workspaces[i];
-                var state = view.Active == workspace ? WorkspaceStateFlags.Active : WorkspaceStateFlags.None;
-                if (workspace.Urgent)
-                {
-                    state |= WorkspaceStateFlags.Urgent;
-                }
-                workspaces[i] = new WorkspaceInfo(workspace.Id, workspace.Name, workspace.Handle, state, workspace.Coordinates);
-            }
-
-            return view.Workspaces.Count;
+            return view.Workspaces.Fill(workspaces);
         }
 
         public int EnumerateMembers(ulong workspaceId, Span<WorkspaceMember> members)
@@ -242,12 +228,9 @@ internal sealed partial class TinyComp
     {
         foreach (var view in _views)
         {
-            foreach (var workspace in view.Workspaces)
+            if (view.Workspaces.ById(id) is { } workspace)
             {
-                if (workspace.Id == id)
-                {
-                    return (view, workspace);
-                }
+                return (view, workspace);
             }
         }
 
@@ -316,6 +299,17 @@ internal sealed partial class TinyComp
     private void InitWorkspaces(OutputView view)
     {
         view.GroupId = ++_workspaceIds;
+        view.Workspaces.IdOf = ws => ws.Id;
+        view.Workspaces.Describe = ws =>
+        {
+            var state = view.Active == ws ? WorkspaceStateFlags.Active : WorkspaceStateFlags.None;
+            if (ws.Urgent)
+            {
+                state |= WorkspaceStateFlags.Urgent;
+            }
+
+            return new WorkspaceInfo(ws.Id, ws.Name, ws.Handle, state, ws.Coordinates);
+        };
         var workspace = NewWorkspace(view, null, view.Workspaces.Count);
         workspace.Tree.Enabled = true;
         view.Active = workspace;
@@ -346,7 +340,7 @@ internal sealed partial class TinyComp
         var workspace = NewWorkspace(view, name, index);
         RenumberWorkspaces(view);
         _workspaceModel.RaiseChanged();
-        Console.WriteLine($"WORKSPACE + {view.Output.Name} {workspace.Name}");
+        BasinReport.Line($"WORKSPACE + {view.Output.Name} {workspace.Name}");
         return workspace;
     }
 
@@ -394,7 +388,7 @@ internal sealed partial class TinyComp
         workspace.Tree.Destroy();
         RenumberWorkspaces(view);
         _workspaceModel.RaiseChanged();
-        Console.WriteLine($"WORKSPACE - {view.Output.Name} {workspace.Name}");
+        BasinReport.Line($"WORKSPACE - {view.Output.Name} {workspace.Name}");
     }
 
     private void RenumberWorkspaces(OutputView view)
@@ -468,7 +462,7 @@ internal sealed partial class TinyComp
         }
 
         _workspaceModel.RaiseChanged();
-        Console.WriteLine($"WORKSPACE {view.Output.Name} {target.Name}");
+        BasinReport.Line($"WORKSPACE {view.Output.Name} {target.Name}");
         if (refocus)
         {
             FocusWorkspaceWindow(target);
@@ -736,7 +730,7 @@ internal sealed partial class TinyComp
             target = NewWorkspace(view, null, at);
             RenumberWorkspaces(view);
             _workspaceModel.RaiseChanged();
-            Console.WriteLine($"WORKSPACE + {view.Output.Name} {target.Name}");
+            BasinReport.Line($"WORKSPACE + {view.Output.Name} {target.Name}");
         }
         else
         {
@@ -812,7 +806,7 @@ internal sealed partial class TinyComp
                 window.MoveTo(window.X - sourceBox.X + targetBox.X, window.Y - sourceBox.Y + targetBox.Y);
             }
 
-            Console.WriteLine($"WORKSPACE {moved} > {target.Name}");
+            BasinReport.Line($"WORKSPACE {moved} > {target.Name}");
             if (refocus && targetView is { } hidden && hidden.Active != target &&
                 (ReferenceEquals(_focused, window) || ReferenceEquals(_focusedX, window)))
             {
@@ -874,7 +868,7 @@ internal sealed partial class TinyComp
         RenumberWorkspaces(source);
         RenumberWorkspaces(target);
         _workspaceModel.RaiseChanged();
-        Console.WriteLine($"WORKSPACE {workspace.Name} > {target.Output.Name}");
+        BasinReport.Line($"WORKSPACE {workspace.Name} > {target.Output.Name}");
     }
 
     private void DropWorkspacesOf(OutputView view)
@@ -922,7 +916,7 @@ internal sealed partial class TinyComp
 
         workspace.Urgent = true;
         _workspaceModel.RaiseChanged();
-        Console.WriteLine($"URGENT {workspace.Name}");
+        BasinReport.Line($"URGENT {workspace.Name}");
     }
 
     private void PrintWorkspaces()
@@ -932,7 +926,7 @@ internal sealed partial class TinyComp
             var view = _views[i];
             var cells = view.Workspaces.Select(ws =>
                 $"[{ws.Name}{(view.Active == ws ? "*" : "")}{(ws.Urgent ? "!" : "")}:{WorkspaceWindowCount(ws)}]");
-            Console.WriteLine($"WS output={i} {string.Join(" ", cells)}");
+            BasinReport.Line($"WS output={i} {string.Join(" ", cells)}");
         }
     }
 }

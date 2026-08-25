@@ -49,12 +49,13 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
+            var log = BasinLog.For("waylonia");
             var configValue = result.GetValue(configOption);
             var config = Config.Load(
                 configValue == "false",
                 configValue == "false" ? null : configValue,
-                loggers.CreateLogger("waylonia"));
+                log);
             var commandText = result.GetValue(command) is { Length: > 0 } parts ? string.Join(' ', parts) : null;
             var listen = result.GetValue(listenOption);
             var ssh = result.GetValue(sshOption);
@@ -67,14 +68,14 @@ internal static class Program
 
             if (listen is not null && ssh is not null)
             {
-                Console.Error.WriteLine("--waypipe-listen accepts a channel and --ssh opens its own");
+                log.Error($"--waypipe-listen accepts a channel and --ssh opens its own");
                 return 1;
             }
 
             var sshCommand = commandText ?? profile?.Command;
             if (listen is not null && commandText is not null)
             {
-                Console.Error.WriteLine("a trailing command spawns a local client and --waypipe-listen waits for a remote one");
+                log.Error($"a trailing command spawns a local client and --waypipe-listen waits for a remote one");
                 return 1;
             }
 
@@ -109,7 +110,7 @@ internal static class Program
                 decoder = Basin.Video.FFmpeg.FFmpegVideoDecoder.TryCreate(videoHardware, out var whyNot);
                 if (decoder is null)
                 {
-                    Console.Error.WriteLine($"--video {video} needs a decoder and none is available: {whyNot}");
+                    log.Error($"--video {video} needs a decoder and none is available: {whyNot}");
                     return 1;
                 }
 
@@ -121,7 +122,7 @@ internal static class Program
                 };
                 if (!decoder.Supports(wanted))
                 {
-                    Console.Error.WriteLine($"the system FFmpeg decodes no {videoCodec}");
+                    log.Error($"the system FFmpeg decodes no {videoCodec}");
                     return 1;
                 }
             }

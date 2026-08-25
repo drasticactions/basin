@@ -1,5 +1,6 @@
 using Basin.Diagnostics;
 using Wayland.Server;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -123,7 +124,7 @@ public sealed class BasinServices : IDisposable
         {
             if (!module.ShouldInstall(this))
             {
-                BasinLog.Info($"{module.WireInterface} not advertised: its capability is absent");
+                Log.Info($"{module.WireInterface} not advertised: its capability is absent");
                 continue;
             }
 
@@ -139,7 +140,7 @@ public sealed class BasinServices : IDisposable
                 if (!_table.ContainsKey(capability) && !_unresolved.Contains(capability))
                 {
                     _unresolved.Add(capability);
-                    BasinLog.Debug($"no implementation for {capability.Name}; protocols consuming it degrade");
+                    Log.Debug($"no implementation for {capability.Name}; protocols consuming it degrade");
                 }
             }
         }

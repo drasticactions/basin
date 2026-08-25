@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Xunit;
 
 namespace Basin.Tests;
@@ -5,10 +6,10 @@ namespace Basin.Tests;
 public sealed class FdBaselineTests
 {
     [Fact]
-    public void Console_writes_inside_a_test_do_not_read_as_leaked_fds()
+    public void Writes_to_the_standard_streams_inside_a_test_do_not_read_as_leaked_fds()
     {
         using var host = new CompositorTestHost();
-        Console.Error.WriteLine("a test that reports something to standard error");
-        Console.Out.WriteLine("a test that reports something to standard output");
+        BasinLog.Error($"a test that reports something to standard error");
+        BasinReport.Line($"a test that reports something to standard output");
     }
 }

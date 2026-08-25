@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Basin.Capabilities;
 using Basin.Diagnostics;
+using static Basin.Video.FFmpeg.FFmpegLog;
 
 namespace Basin.Video.FFmpeg;
 
@@ -59,7 +60,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
             var device = FFmpegNative.av_buffer_ref(hardware.Device);
             if (device == 0)
             {
-                Basin.Diagnostics.BasinLog.Warn($"ffmpeg: the {hardware.Name} device could not be referenced; this stream decodes in software");
+                Log.Warn($"the {hardware.Name} device could not be referenced; this stream decodes in software");
             }
             else
             {
@@ -136,14 +137,14 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
 
         if (sent < 0)
         {
-            BasinLog.Warn($"ffmpeg: a video packet was refused: {FFmpegNative.DescribeError(sent)}");
+            Log.Warn($"a video packet was refused: {FFmpegNative.DescribeError(sent)}");
             return false;
         }
 
         var received = FFmpegNative.avcodec_receive_frame(_context, _frame);
         if (received < 0)
         {
-            BasinLog.Warn(
+            Log.Warn(
                 $"ffmpeg: a packet produced no frame ({FFmpegNative.DescribeError(received)}), and the peer encodes with delay 0, so this is a fault rather than buffering");
             return false;
         }
@@ -156,7 +157,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
             FFmpegNative.av_frame_unref(_frame);
             if (moved < 0)
             {
-                BasinLog.Warn($"ffmpeg: a hardware frame did not transfer to system memory: {FFmpegNative.DescribeError(moved)}");
+                Log.Warn($"a hardware frame did not transfer to system memory: {FFmpegNative.DescribeError(moved)}");
                 return false;
             }
 
@@ -165,7 +166,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
             if (!s_reportedPath)
             {
                 s_reportedPath = true;
-                BasinLog.Info($"ffmpeg: {_codecName} decodes on hardware");
+                Log.Info($"{_codecName} decodes on hardware");
             }
         }
         else if (!s_reportedPath)
@@ -173,7 +174,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
             s_reportedPath = true;
             if (_transferFrame != 0)
             {
-                BasinLog.Warn($"ffmpeg: {_codecName} decodes in software; the device declined the stream");
+                Log.Warn($"{_codecName} decodes in software; the device declined the stream");
             }
         }
 
@@ -182,7 +183,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
         var sourceFormat = *(int*)(frame + layout.FrameFormat);
         if (frameWidth < _width || frameHeight < _height)
         {
-            BasinLog.Warn($"ffmpeg: a {frameWidth}x{frameHeight} frame cannot fill a {_width}x{_height} buffer");
+            Log.Warn($"a {frameWidth}x{frameHeight} frame cannot fill a {_width}x{_height} buffer");
             FFmpegNative.av_frame_unref(frame);
             return false;
         }
@@ -195,7 +196,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
                 ScaleBilinear, 0, 0, null);
             if (scaler == 0)
             {
-                BasinLog.Warn($"ffmpeg: swscale cannot convert format {sourceFormat} to {_destinationFormat}");
+                Log.Warn($"swscale cannot convert format {sourceFormat} to {_destinationFormat}");
                 FFmpegNative.av_frame_unref(frame);
                 return false;
             }
@@ -230,7 +231,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
         FFmpegNative.av_frame_unref(frame);
         if (scaled != _convertedHeight)
         {
-            BasinLog.Warn($"ffmpeg: swscale wrote {scaled} rows of {_convertedHeight}");
+            Log.Warn($"swscale wrote {scaled} rows of {_convertedHeight}");
             return false;
         }
 

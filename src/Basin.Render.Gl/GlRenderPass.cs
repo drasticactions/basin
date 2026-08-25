@@ -41,7 +41,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
     }
 
-    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null)
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
         if (effect is not IGlBackdropEffect glEffect)
@@ -67,6 +67,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             TargetWidth = _target.Width,
             TargetHeight = _target.Height,
             Bounds = bounds,
+            Key = key,
         };
         var recorded = glEffect.Record(in context, out var result);
         BindPassState();

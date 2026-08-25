@@ -85,8 +85,9 @@ Resolving a name means reading KDE's colour-scheme format out of
 `~/.config`, which is a KDE convention a Wayland compositor library will
 not encode. `PlasmaHost` is the consumer that closes the loop: its Breeze
 frame painter resolves the string as a path or as a scheme name in the
-color-schemes directories, reads the `[WM]` colours, and repaints the
-window's frame when the client changes the palette.
+color-schemes directories, reads the colours through KWin's own cascade, and
+repaints the window's frame when the client changes the palette. The rules are
+in [the colour scheme decides the theme](#the-colour-scheme-decides-the-theme).
 
 `org_kde_kwin_appmenu` rides `IToplevelModel`: the address pair lands on
 `ToplevelInfo` and `org_kde_plasma_window_management` reports it, which is
@@ -170,10 +171,39 @@ file over one HDR bit would cost the scale as well. `Apply` clears every field
 the configuration refuses costs the mode and the custom modes on one retry,
 and never the scale.
 
-**Nothing is written back.** basin never writes `kwinoutputconfig.json`. A
-change a client applies over `kde_output_management_v2` lives as long as the
-compositor does. Writing the file means owning KWin's setup generation, and a
-half-written store is worse than none.
+**What a session applies is written back.** A change over
+`kde_output_management_v2` must outlive the compositor, or the display page
+appears to do nothing across a restart. `Snapshot` reads the current state of
+every output the consumer holds, `Record` merges it into the store, and `Save`
+writes the file. The three are the mirror of `EntriesFor`, `Apply` and the
+file itself.
+
+**The write is a merge, never a regeneration.** The reader keeps the raw text
+of the file it read. The writer parses that text into a node tree and edits
+only the rows and the setup that this session covers. A row for a display this
+box has not connected keeps every field, and so does a setup for a
+combination this session is not. A key basin does not model, such as
+`autoBrightnessCurve`, survives untouched. This is what makes writing safe:
+the store cannot lose what the writer does not understand. Keys are written in
+the order Qt writes them, so a file that alternates between a KWin session and
+a basin one shows only the fields that changed.
+
+**A field the output cannot drive is not written.** `Snapshot` puts every
+entry through the same `OutputConfigurationGate.Clear` the read path uses. A
+run on hardware with no HDR therefore leaves the stored HDR bit alone rather
+than replacing it with the default it was forced to. The gate is the reason
+the two directions cannot disagree about which field belongs to which feature.
+
+**A row the file does not have is appended.** The identity fields come from
+the same EDID derivation the reader matches on, and the `uuid` is
+`PlasmaOutputUuid.For`, which is the uuid the KDE protocols already report for
+that output. The setup for the current combination is appended in the same
+way. KWin reads both back.
+
+**Replication is translated in both directions.** The file names a
+replication source by the stored `uuid` of another row, and the protocol names
+it by the uuid `PlasmaOutputUuid.For` gives. The reader maps the row back to
+the output the consumer holds, and the writer maps it forward.
 
 ## The plasma shell
 
@@ -375,6 +405,250 @@ maximized or fullscreen one hides the shadow it has. Textures are cached per
 output scale and per active state, because Breeze draws an inactive window's
 shadow at half strength.
 
+## The frame is Avalonia
+
+PlasmaHost's Breeze decoration was one `IFrameRenderer` painting one surface
+through `Basin.Scene.Frame`. It is four Avalonia surfaces now, placed as
+`UISurfaceNode`s in the window's own scene tree with data-bound models, and
+`IFrameRenderer`, `Frame` and `BreezeFrameRenderer` are gone from the sample.
+
+That is the branch [promotions.md](promotions.md#westonias-window-frame)
+refused for Westonia, taken from the other side. Rather than force a toolkit
+into `Frame`'s one-surface-one-buffer contract, PlasmaHost stops using `Frame`.
+What it buys is the whole synchronous problem: `Frame.Configure` calls the
+renderer's `Draw` and then `TryAcquire` on the next line, which Skia satisfies
+because it paints synchronously and Avalonia cannot, because Avalonia schedules
+a dispatcher operation and would hand back the previous frame forever. Nothing
+here acquires a buffer synchronously, so no seam has to force a toolkit render.
+
+What it gives up is stated plainly. Resize is no longer atomic: four surfaces
+reach the scene independently and there is no `HasPendingFor` to wait on, so a
+strip can lag or lead the client by a frame during a drag. There are four
+Avalonia control roots per framed window rather than one Skia surface. The
+system menu is rewritten as an Avalonia `MenuFlyout`, which becomes a popup
+top-level that `UIDriver` places in the plasma overlay layer and
+`UISurfaceRouter` routes the pointer into.
+
+Hit testing stays the compositor's and stays arithmetic — no toolkit call on
+the input path. `BreezeMetrics` is the one record both halves read: its
+`LayoutButtons` places the buttons on the titlebar's canvas *and* answers which
+button a pointer is over, so the drawn layout and the hit test agree by
+construction rather than by living in one file.
+
+Two positions per strip, not one. The scene node is placed in tree-local
+coordinates and the Avalonia surface in scene coordinates, because Avalonia
+positions a popup from its anchor's screen position. Moving a window moves the
+tree and not the surface, so a move syncs them; without that the window menu
+opens where the window used to be.
+
+The four KWin shells that are QML upstream are Avalonia here too. Overview,
+the grid variant and window view are one class with a mode, because they differ
+only in which windows they collect and whether the desktop bar is drawn. The
+thumbnails are `SceneMirror` nodes above the Avalonia backdrop rather than
+anything the toolkit draws. TilesEditor edits a tile tree PlasmaHost defines,
+and reads and writes kwinrc's `[Tiling][<output>]` entry in KWin's own JSON so
+a layout survives a restart. DesktopChangeOsd is one surface and a timer.
+
+Breeze's two decoration animations are Avalonia property transitions at the
+duration breezerc names, which is what the models being data-bound buys. The
+shadow is outside Avalonia — it is a `DropShadowEffect` in the scene — so it
+crossfades by ramping two effects' opacity between the two textures the cache
+already holds, rather than re-rasterizing per frame.
+
+## The colour scheme decides the theme
+
+KWin has no light mode and no dark mode. It has the user's colour scheme, and
+light or dark is a property of that scheme. PlasmaHost reads the scheme the
+same way and takes no theme flag, because a Plasma session has no such switch
+to honour.
+
+**The default palette is `kdeglobals` itself, not the scheme file.** Applying a
+scheme in System Settings copies its colour groups into `kdeglobals` and
+records the name under `[General] ColorScheme`. KWin's `DecorationPalette`
+opens `kdeglobals` and reads the colours out of it. A consumer that resolves
+the name to `<name>.colors` instead misses every per-user edit. It also falls
+back to hardcoded Breeze light on a machine whose `kdeglobals` carries no
+`ColorScheme` key. PlasmaHost opens `kdeglobals` for the default palette, and
+resolves a name or an absolute path only for the per-window palette a client
+asks for.
+
+**The titlebar colours are a cascade, not `[WM]` alone.** `BreezePalette.Load`
+follows KWin. It reads `[Colors:Header]` when the scheme has that group, with
+`[Colors:Header][Inactive]` for the unfocused titlebar. It reads the legacy
+`[WM]` keys when the scheme has no header set, and `[Colors:Window]` when it
+has neither. Breeze ships both groups and they disagree. Its `[Colors:Header]`
+active background is `222,224,226` and its `[WM] activeBackground` is
+`227,229,231`, which is the *inactive* header colour. A consumer that reads
+`[WM]` first paints every focused window in the colour KWin gives an unfocused
+one.
+
+**Light or dark is one test on one colour.** KWin's overview effect derives
+`lightBackground` from `Math.max(r, g, b) > 0.5` of the scheme's window
+background. `BreezePalette.IsDark` is that test. It decides the Avalonia theme
+variant, and nothing else reads a mode.
+
+**The variant is per window, because the window menu is.** KWin paints the
+window menu in the window's own decoration palette, so a window that asked for
+a dark scheme gets a dark menu in a light session. PlasmaHost sets
+`RequestedThemeVariant` on each frame strip's Avalonia root, and the
+`MenuFlyout` popup inherits it through the anchor. The strips bind explicit
+brushes and do not need the variant themselves. The one Fluent-templated
+control in the chrome is that menu, which is why a hardcoded variant was
+invisible everywhere else.
+
+**The overlays take the scheme's colours too.** Overview, window view and the
+tiles editor paint `Kirigami.Theme.backgroundColor` under KWin, and the desktop
+OSD is a Plasma dialog. None of them is dark by nature. `ShellBrushes` builds
+every overlay brush from `[Colors:Window]` and `[Colors:Selection]`, at the
+alpha each surface already used. The alpha is deliberately unchanged.
+PlasmaHost draws thumbnails over an opaque backdrop where KWin blurs the
+desktop behind a translucent one, so the opacity belongs to this sample's
+compositing rather than to the theme.
+
+**A change arrives over the bus, not from the file.** `KConfigWatcher` is a
+DBus subscriber. A writer that passes `KConfigBase::Notify` emits
+`ConfigChanged` on the `org.kde.kconfig.notify` interface, at a path built from
+the config's file name. The colours KCM does this and a text editor does not,
+so KWin itself never sees a hand-edited `kdeglobals`. `KdeConfigNotify`
+subscribes to that signal for `/kdeglobals` and ignores the body, which is what
+`DecorationPalette::update` does. The signal arrives on the DBus reader thread,
+so it wakes the compositor over a pipe the event loop owns, and the reload runs
+on the compositor thread. A session with no bus keeps the colours it started
+with.
+
+Only `/kdeglobals` is watched. KConfig emits nothing for a config opened by
+absolute path, and a scheme in `~/.local/share/color-schemes` is not in a
+config directory, so no signal can exist for a per-window scheme file. KWin
+watches those files and gets the same silence.
+
+**The switch cross-fades, the way KWin's does.** `BlendChangesStage` in
+`Basin.Effects` is the port of KWin's `BlendChanges` effect, and PlasmaHost
+already built it for the `blend` stdin command. The reload captures the scene
+before it applies the new palette, hands that frame to the stage, and the stage
+fades it out over the new one in 400ms on an InOutCubic curve. That is
+`animationTime(400ms)` and `QEasingCurve::InOutCubic` upstream. KWin starts the
+effect when plasma calls `org.kde.KWin.BlendChanges.start` on the session bus.
+PlasmaHost owns no DBus name, so the notify that changed the colours starts it
+instead.
+
+A reload runs only when the colours moved. A `kdeglobals` notify fires for any
+key in the file, and a fade on an unrelated write is a visible 400ms glitch.
+`ReloadTheme` loads the default palette, compares it to the one in hand, and
+returns when the two are equal. `BreezePalette` is a record struct, so that one
+comparison covers every colour.
+
+**The fade is per output, and getting there took three fixes.**
+`BlendChangesStage` holds one captured frame and `PostContext` carries no output
+identity, so one shared stage can only fade one screen. `PlasmaHostStages` now
+keeps a stage for each `SceneOutput`, creates it on `Attach` and disposes it on
+`Detach`, and builds each output's post-stage list separately. The shared
+`_attached` list is gone. Each output also gets its own live list, so an output
+attached after the first sync is no longer left with no stages at all.
+
+`Scene.Render` always collected from the scene origin, so a capture for the
+second output held the first output's pixels. `SceneRenderOptions` gained
+`OriginX` and `OriginY` in logical scene coordinates, which `Scene.Render`
+subtracts when it collects the tree. That is what `SceneOutput` already did with
+`CollectRenderList(list, -position.X, -position.Y)` — the same offset, reachable
+from outside. `PlasmaHost` passes each output's layout box when it captures, and
+`WriteScreenshot` passes it too, which fixes `shot` on any output that is not at
+the origin. Both `shot` and `shotraw` now take an optional output name, because
+a fade across two screens cannot be checked from one of them.
+
+**A running post stage must damage its output.** The scene does not change while
+a fade runs, so `Ring` stayed empty, `NeedsRepaint` was false, and the post stage
+rendered exactly one frame. The old frame then sat at full opacity for the whole
+duration and cut to the new one at the end. `PlasmaHostStages.NeedsFullRepaint`
+answers whether an animating stage owns the output's pixels, and the sample's
+`BeforeRepaint` handler calls `Ring.AddWhole()` when it does. `BeforeRepaint`
+runs at the top of `SceneOutput.Commit`, before the ring is read, so the damage
+lands on the same frame. Without it the `blend` command had always looked like a
+hold and a cut rather than a fade.
+
+## Restoring a maximized window
+
+A maximized window remembers where it was. `PlasmaHostView.RestoreGeometry`
+holds the frame rectangle from the moment before the window was maximized or
+made fullscreen, and unmaximizing puts it back there and asks for that size
+again. That is what KWin's `geometryRestore` does, and a desktop that drops a
+window somewhere else on restore feels broken in a way users notice
+immediately.
+
+The obvious implementation is the wrong one, and it is worth naming because it
+looks right. Unmaximizing by re-running the initial placement rule lands every
+window in the corner: at the moment the restore is decided the surface still
+carries its *maximized* size, so a placer that centres a window of that size
+inside the usable area computes a negative offset, clamps it, and puts the
+window at the top left. The window then shrinks in place and stays there.
+
+The rectangle is saved once, on the transition out of a normal state, so
+maximize into fullscreen and back out again returns to the maximized geometry
+first and to the original rectangle second, rather than losing it at the first
+step. A window with no saved rectangle -- one that was mapped maximized --
+falls back to the placer, which is the only case where the placer is the right
+answer.
+
+**Dragging the titlebar of a maximized window restores it under the cursor.**
+KWin does this in `Window::handleInteractiveMoveResize`: on a move, if the
+window is maximized and the next geometry differs along a maximized axis, it
+calls `maximize(MaximizeRestore)` and returns, and the next motion places the
+now smaller window. The part that makes it feel right is that
+`interactiveMoveOffset` is a *fraction* of the window, not a pixel offset:
+`nextInteractiveMoveGeometry` puts the top left at
+`anchor - offset * currentSize`, so the pointer keeps the same proportional
+place on a titlebar that just became half as wide.
+
+PlasmaHost's move grab stored the offset in pixels, which is why the window
+could not be pulled loose at all. It is a fraction of the *outer* box now,
+decorations included, as KWin's is of the frame geometry, and the first motion
+of a drag on a maximized window calls `RestoreForDrag`. That unmaximizes,
+places the restored outer box so the same fraction sits under the pointer, and
+hands the stretch its two rectangles, so the window shrinks toward the cursor
+while the drag carries on.
+
+One thing the fraction cannot fix on its own. `SetSize` only asks, so the
+window still reports its maximized size until the client commits, and a
+fraction of that size puts the window hundreds of pixels from the pointer for
+those few frames. The grab therefore keeps the size it expects and distrusts
+the reported one until it changes.
+
+**A drag takes no hold.** The stretch waits for the commit and parks the window
+where it was until then, which is right when the compositor moved a window the
+user was not touching. It is wrong here. The hold pins the drawing to a fixed
+point in space, so a window pulled off the top of the screen stayed drawn at
+full size in the corner until the client got round to acking — a quarter of a
+second of a maximized titlebar sitting at the top while the pointer dragged an
+invisible window away from it. A slow client made it longer and a quick one
+hid it, which is why it only happened sometimes.
+
+`RestoreForDrag` knows the rectangle it just placed, so it does not need the
+commit to tell it. It starts the size animation itself, with no hold, and the
+window leaves the corner on the first frame. That is also what upstream does:
+its `oldGeometry` is the maximized rectangle and its translation carries the
+window from there to the cursor across the animation, rather than waiting and
+then starting.
+
+A window mapped maximized has no saved rectangle. Rather than refuse the drag
+it unmaximizes at its current size, so it comes loose under the cursor and the
+stretch declines because there is nothing to scale.
+
+**A resized strip must be resized on its node, not only on its surface.**
+`UISurfaceNode.Configure` is the call that moves `DestinationWidth` and
+`DestinationHeight`; `AvaloniaUISurface.Configure` only tells the toolkit. The
+frame placer called the second, so between a resize and the toolkit's next
+published frame the node still drew the previous buffer *at its previous size*.
+For a titlebar going from a maximized 1920 to a restored 1031 that is the
+maximized titlebar, drawn full width, sitting where it was. Going through the
+node moves the destination immediately, so the old buffer is scaled into the
+new box for those frames instead.
+
+Nothing about this is specific to the drag. It is every strip resize, and how
+long it shows is how long the toolkit takes to publish — a frame on an idle
+headless run against the software renderer, longer on a real session where the
+chrome renders into a dmabuf and plasmashell is competing for the GPU. That is
+the whole of its "sometimes". `PlasmaShellSurface` carried the same call and
+has the same fix.
+
 ## Sliding surfaces
 
 `org_kde_kwin_slide` asks the compositor to animate a surface in from a
@@ -402,6 +676,106 @@ about the way out. Plasma expects the reverse and KWin does it, so basin
 does it too, and that outgoing slide is basin's choice rather than the
 protocol's. [scene.md](scene.md) carries the buffer hold that choice
 requires and the destroy-cancels rule.
+
+## The backdrop: blur and contrast
+
+KWin 6.7.80 dropped `org_kde_kwin_blur` for `ext-background-effect-v1`, which
+basin implements in `Basin.Desktop`. The KWindowSystem that ships with Plasma
+6.7.4 still binds the KDE one, and `org_kde_kwin_contrast` has no `ext-`
+successor at all, so `Basin.Plasma` carries both.
+
+**The precedence is per surface.** A surface with an `ext-background-effect`
+blur region uses it and its KDE blur region is ignored, because a client that
+has moved to the ext protocol should not be blurred twice through two
+descriptions of the same wish. Contrast has no competitor, so it always
+applies. An unset region on either means the whole surface, which is the
+protocol's own default and is not the same as an empty one — `SurfaceBlur`
+carries `WholeSurface` beside the region rather than letting an empty region
+stand for both.
+
+Both double-buffer twice over, like the shadow and the slide: `set_region`
+stages on the blur or contrast object, `commit` on that object stages it
+against the surface, and the surface's own commit applies it.
+
+Neither is privileged, and neither errors without a backend. The global
+installs, the region is recorded, and `BlurRegionOf` and `ContrastRegionOf`
+return nothing, so a compositor with no GPU blur draws an unblurred panel and
+the client is none the wiser. See
+[protocol-support.md](protocol-support.md).
+
+## What PlasmaHost reads out of kwinrc
+
+One reader, in the shape of the `KdeIni` reader the sample already used for
+`breezerc`.
+
+| File | Group | Key | What it decides |
+|---|---|---|---|
+| `kdeglobals` | `[KDE]` | `AnimationDurationFactor` | Every effect's duration, and zero turns them all off |
+| `kwinrc` | `[Plugins]` | `<name>Enabled` | Whether an effect is built at all, defaulting to that effect's own upstream default |
+| `kwinrc` | `[Effect-blur]` | `BlurStrength`, `NoiseStrength`, `Saturation` | The backdrop |
+| `kwinrc` | `[Effect-glide]` | the eight in and out parameters | glide's poses |
+| `kwinrc` | `[Effect-scale]` | `Duration`, `InScale`, `OutScale` | The open and close zoom |
+| `kwinrc` | `[Effect-fallapart]` | `BlockSize` | The cell size |
+| `kwinrc` | `[Effect-zoom]` | the eight tracking and upscaler keys | The full-screen zoom |
+| `kwinrc` | `[Effect-magnifier]` | `Width`, `Height` | The lens |
+| `kwinrc` | `[Effect-colorblindnesscorrection]` | `Mode`, `Intensity` | The correction |
+| `kwinrc` | `[Effect-diminactive]` | `Strength` | The dim |
+| `kwinrc` | `[Effect-mouseclick]` | `RingLife`, `RingSize`, `RingCount`, `LineWidth` | The click rings |
+| `kwinrc` | `[Effect-shakecursor]` | `TimeInterval`, `Sensitivity`, `Magnification`, `OverMagnification` | The shake |
+| `kwinrc` | `[Effect-startupfeedback]` | `Timeout` | How long the busy indicator waits |
+| `kaccessrc` | `[Bell]` | `VisibleBellPause` | The visual bell, floored at 200ms |
+
+The enablement defaults differ per effect and are each one's own upstream
+`metadata.json` value. scale, squash, maximize, zoom, blendchanges,
+screentransform, shakecursor, systembell and startupfeedback are on; glide,
+sheet, fade,
+fallapart, magiclamp, diminactive, invert, magnifier, showpaint,
+colorblindnesscorrection, mouseclick, mousemark, trackmouse and touchpoints
+are off.
+
+The colour groups in `kdeglobals` are not in this table. `BreezePalette` reads
+them on its own path — see
+[the colour scheme decides the theme](#the-colour-scheme-decides-the-theme).
+
+## Which effect animates a window
+
+Several effects want the same event, and KWin resolves it not by a priority
+list but by each effect's own eligibility test plus its enablement. PlasmaHost
+does the same, and the table is here because it is the part a reader will
+otherwise assume is arbitrary.
+
+| Event | Checked in this order | Eligibility |
+|---|---|---|
+| Open, close | sheet, glide, scale-or-fade | The first enabled one whose test passes takes the window |
+| Close only | fallapart, then the above | fallapart applies to real windows, never to popups or docks |
+| Minimize, restore | magiclamp, then squash | squash refuses without a reported taskbar rectangle |
+| Maximize, restore | stretch | Nothing competes: upstream marks it the sole effect in the `maximize` category |
+
+Sheet goes first because its test — the window is modal — is strictly the
+narrowest. KWin's own order is plugin load order, which is not a thing basin
+can reproduce, so this order is basin's and is written down for that reason.
+
+The eligibility test is transliterated with its class rules:
+
+- `plasmashell` windows are animated only when they carry a decoration. That is
+  KWin's heuristic for telling a settings dialog from a panel, and the two
+  share one window class.
+- `ksmserver`, its logout greeter and `ksplashqml` are never animated here,
+  because the logout and login effects own them upstream.
+
+**The minimize target is a reported rectangle, not a guess.** A taskbar reports
+where a window's entry sits with `org_kde_plasma_window.set_minimized_geometry`,
+relative to the panel that reported it. `PlasmaWindowManager` keeps one entry
+per panel surface, newest wins — which is what KWin's `iconGeometry()` does —
+and pushes it down as a request carrying the panel surface and the panel-local
+box. Only the compositor knows where that panel sits, so PlasmaHost translates
+it through the panel's scene position and answers with
+`SetMinimizedGeometry`. When no panel has reported one, the effect falls back
+to KWin's own rule: the nearest border if the cursor is inside the window, the
+side it is on if not.
+
+Which panel edge a reported icon lies on is inferred the way KWin infers it,
+from the icon's proportions and where its centre sits on its screen.
 
 ## Screencast keeps PipeWire out of the library
 
@@ -489,6 +863,53 @@ A failed apply prints the `failure_reason` string verbatim, which is the
 fastest check of the honesty rule. `kcmshell6 kcm_kscreen` reads the
 properties kscreen-doctor does not. A mode change on a real connector needs a
 DRM run, because neither a nested nor a headless run changes a real mode.
+
+A theme switch is verifiable headless, because the notify signal is an
+ordinary session-bus signal that any writer can emit. Point the run at a
+scratch config, drive it over stdin, and flip the scheme under it:
+
+```sh
+mkdir -p /tmp/kcfg && cp /usr/share/color-schemes/BreezeLight.colors /tmp/kcfg/kdeglobals
+mkfifo /tmp/in && exec 3<>/tmp/in
+XDG_CONFIG_HOME=/tmp/kcfg plasma-host --backend headless --shell false \
+    --renderer pixman < /tmp/in &
+echo "shot /tmp/light.png" >&3
+cp /usr/share/color-schemes/BreezeDark.colors /tmp/kcfg/kdeglobals
+XDG_CONFIG_HOME=/tmp/kcfg kwriteconfig6 --notify --file kdeglobals \
+    --group General --key BasinStamp "$RANDOM"
+echo "shot /tmp/dark.png" >&3
+```
+
+The stamp key is the trap. `kwriteconfig6` writes and notifies only when the
+value changes, and a `.colors` file already carries
+`[General] ColorScheme=BreezeDark`, so the obvious command is silent. Copy the
+colours first and notify with a key that is new.
+
+`kwriteconfig6` is only half of what KDE sends, and the other half is what
+repaints the *clients*. `plasma-apply-colorscheme` emits three things: a
+`BlendChanges.start` method call to `org.kde.KWin`, the `ConfigChanged` signal
+on `/kdeglobals`, and the legacy `notifyChange` signal on `/KGlobalSettings`.
+The compositor's chrome follows the second. A Qt client repaints on the third,
+through plasma-integration, so a client started without
+`QT_QPA_PLATFORMTHEME=kde` stays in its old colours no matter what the
+compositor does. A test that flips the scheme with `kwriteconfig6` therefore
+shows dark window frames around a light Konsole, which looks like a compositor
+bug and is not one. Use `plasma-apply-colorscheme` when the whole session is
+supposed to move, with `QT_QPA_PLATFORM=offscreen` if the shell running it has
+no display of its own.
+
+`shot` and `shotraw` both take an optional output name, and they answer
+different questions. `shot` re-renders the scene, so it never shows a post
+stage. `shotraw` writes the buffer that was presented, which is the only way to
+see the cross-fade at all.
+
+The bus is the other half of a real-session check. `run-plasma.sh` creates its
+private session bus before it starts the compositor, and publishes the display
+to that bus with `dbus-update-activation-environment` once the socket is known.
+It used to create the bus after the compositor, which left the compositor on the
+outer bus while System Settings, plasmashell and the KCMs ran on the private
+one. Every notify then went to a bus nothing was listening on, and changing the
+colour scheme in System Settings did nothing at all.
 
 The appmenu and palette paths have real-client recipes that need no
 plasmashell. Qt exports a window's menu only when the session bus carries

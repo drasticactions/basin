@@ -46,7 +46,7 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public event Action<WindowEdge>? ResizeDragRequested;
 
-    public UISurfaceSize Size => _impl.Framebuffer.Size;
+    public UISurfaceSize Size => _impl.Size;
 
     public object? Content
     {
@@ -95,7 +95,7 @@ public sealed class AvaloniaUISurface : IUISurface
             return false;
         }
 
-        return _impl.Framebuffer.TryAcquire(out frame);
+        return _impl.TryAcquire(out frame);
     }
 
     public void AddObserver(IUISurfaceObserver observer) => _observers.Add(observer);
@@ -105,7 +105,7 @@ public sealed class AvaloniaUISurface : IUISurface
     public bool AcceptsInputAt(double x, double y)
     {
         _thread.Assert();
-        var size = _impl.Framebuffer.Size;
+        var size = _impl.Size;
         return !_disposed && x >= 0 && y >= 0 && x < size.Width && y < size.Height;
     }
 
@@ -304,7 +304,7 @@ public sealed class AvaloniaUISurface : IUISurface
         PositionY = y;
     }
 
-    internal void NotifyFramePublished() => _observers.Damaged(this, _impl.Framebuffer.WholeDamage);
+    internal void NotifyFramePublished() => _observers.Damaged(this, _impl.WholeDamage);
 
     internal void RequestMoveDrag() => MoveDragRequested?.Invoke();
 

@@ -1,6 +1,7 @@
 using System.Text;
 using Basin.Diagnostics;
 using Xcb.Native;
+using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
@@ -73,7 +74,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         if (Libxcb.xcb_connection_has_error(conn) != 0)
         {
-            BasinLog.Warn($"no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
+            Log.Warn($"no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
             Libxcb.xcb_disconnect(conn);
             return null;
         }
@@ -91,7 +92,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         if (Keysym(key) is not { } keysym)
         {
-            BasinLog.Warn($"no X keysym for '{key}'");
+            Log.Warn($"no X keysym for '{key}'");
             return false;
         }
 
@@ -145,7 +146,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         if (binding.Keycodes.Count == 0)
         {
-            BasinLog.Warn($"the keyboard mapping has no keycode for '{binding.Key}'");
+            Log.Warn($"the keyboard mapping has no keycode for '{binding.Key}'");
             return false;
         }
 
@@ -160,7 +161,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
                 {
                     var code = error->error_code;
                     Libc.Free(error);
-                    BasinLog.Warn($"the X server refused the grab for '{binding.Key}' (error {code})");
+                    Log.Warn($"the X server refused the grab for '{binding.Key}' (error {code})");
                     Ungrab(binding);
                     return false;
                 }
@@ -227,7 +228,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
             }
             catch (Exception error)
             {
-                BasinLog.Warn($"hotkey dispatch failed: {error.Message}");
+                Log.Warn($"hotkey dispatch failed: {error.Message}");
             }
 
             Libc.Free(ev);
@@ -237,7 +238,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
         {
             _dead = true;
             _source.Remove();
-            BasinLog.Warn($"the X server connection was lost, global hotkeys are off");
+            Log.Warn($"the X server connection was lost, global hotkeys are off");
             return;
         }
 

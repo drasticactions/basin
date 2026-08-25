@@ -1,5 +1,6 @@
 using Basin.Capabilities;
 using Basin.Diagnostics;
+using static Basin.Video.FFmpeg.FFmpegLog;
 
 namespace Basin.Video.FFmpeg;
 
@@ -24,12 +25,12 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder
             hardware = FFmpegHardware.TryCreate();
             if (hardware is null)
             {
-                BasinLog.Warn($"ffmpeg: no hardware decode device opens on this host; decoding in software");
+                Log.Warn($"no hardware decode device opens on this host; decoding in software");
             }
             else
             {
                 FFmpegNative.HardwarePixelFormat = hardware.PixelFormat;
-                BasinLog.Debug($"ffmpeg: hardware decode over {hardware.Name}");
+                Log.Debug($"hardware decode over {hardware.Name}");
             }
         }
 

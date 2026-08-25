@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Basin.Avalonia;
 using Basin.Diagnostics;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -42,7 +43,7 @@ internal sealed class WindowsGlobalHotkeys : IDisposable
     {
         if (anchor.TryGetPlatformHandle() is not { } handle)
         {
-            BasinLog.Warn($"the anchor window has no Win32 handle, global hotkeys are off");
+            Log.Warn($"the anchor window has no Win32 handle, global hotkeys are off");
             return null;
         }
 
@@ -52,13 +53,13 @@ internal sealed class WindowsGlobalHotkeys : IDisposable
         {
             if (VirtualKey(hotkey.Key) is not { } key)
             {
-                BasinLog.Warn($"hotkey '{hotkey.Chord}': no Windows key code for '{hotkey.Key}', skipping");
+                Log.Warn($"hotkey '{hotkey.Chord}': no Windows key code for '{hotkey.Key}', skipping");
                 continue;
             }
 
             if (!RegisterHotKey(handle.Handle, next, WindowsModifiers(hotkey.Modifiers) | NoRepeatModifier, key))
             {
-                BasinLog.Warn($"hotkey '{hotkey.Chord}' was refused ({Marshal.GetLastPInvokeError()}), skipping");
+                Log.Warn($"hotkey '{hotkey.Chord}' was refused ({Marshal.GetLastPInvokeError()}), skipping");
                 continue;
             }
 
@@ -72,7 +73,7 @@ internal sealed class WindowsGlobalHotkeys : IDisposable
         }
 
         Win32Properties.AddWndProcHookCallback(anchor, instance._hook);
-        BasinLog.Debug($"{instance._bindings.Count} global hotkey(s) registered");
+        Log.Debug($"{instance._bindings.Count} global hotkey(s) registered");
         return instance;
     }
 
@@ -97,7 +98,7 @@ internal sealed class WindowsGlobalHotkeys : IDisposable
             }
             catch (Exception error)
             {
-                BasinLog.Warn($"hotkey dispatch failed: {error.Message}");
+                Log.Warn($"hotkey dispatch failed: {error.Message}");
             }
 
             handled = true;

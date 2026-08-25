@@ -12,8 +12,7 @@ internal sealed class ShellAnimations : IDisposable
 
     private readonly ShellLayers _layers;
     private readonly WestonIni _ini;
-    private readonly List<(ShellWindow Window, TransformStack Stack, OpenCloseAnimation Animation)> _running = [];
-    private readonly List<(SceneSnapshot Snapshot, TransformStack Stack, OpenCloseAnimation Animation)> _closing = [];
+    private readonly OpenCloseRunner _runner = new();
     private SceneRect? _curtain;
     private Spring _sessionFade;
     private bool _fading;
@@ -30,7 +29,7 @@ internal sealed class ShellAnimations : IDisposable
 
     public Action? Changed { get; set; }
 
-    public bool IsRunning => _running.Count > 0 || _closing.Count > 0 || _fading;
+    public bool IsRunning => _runner.IsRunning || _fading;
 
     public void BeginSessionFade(bool toBlack)
     {
@@ -66,15 +65,16 @@ internal sealed class ShellAnimations : IDisposable
             return;
         }
 
-        var snapshot = SceneSnapshot.Capture(window.Tree, parent);
-        snapshot.Tree.SetPosition(window.X, window.Y);
-        var stack = new TransformStack(snapshot.Tree);
         var curve = kind == ShellAnimation.Zoom ? ZoomCurve : FadeCurve;
-        var animation = new OpenCloseAnimation(
-            kind == ShellAnimation.Zoom ? OpenCloseKind.Zoom : OpenCloseKind.Fade,
-            curve);
-        animation.Begin(stack, hiding: true, DurationOf(curve));
-        _closing.Add((snapshot, stack, animation));
+        _runner.BeginClose(window.Tree, parent, (snapshot, stack) =>
+        {
+            snapshot.Tree.SetPosition(window.X, window.Y);
+            var animation = new OpenCloseAnimation(
+                kind == ShellAnimation.Zoom ? OpenCloseKind.Zoom : OpenCloseKind.Fade,
+                curve);
+            animation.Begin(stack, hiding: true, DurationOf(curve));
+            return animation.Step;
+        });
         Changed?.Invoke();
     }
 
@@ -85,24 +85,7 @@ internal sealed class ShellAnimations : IDisposable
             return;
         }
 
-        for (var i = _running.Count - 1; i >= 0; i--)
-        {
-            var entry = _running[i];
-            if (!entry.Animation.Step(entry.Stack, tick))
-            {
-                _running.RemoveAt(i);
-            }
-        }
-
-        for (var i = _closing.Count - 1; i >= 0; i--)
-        {
-            var entry = _closing[i];
-            if (!entry.Animation.Step(entry.Stack, tick))
-            {
-                entry.Snapshot.Dispose();
-                _closing.RemoveAt(i);
-            }
-        }
+        _runner.Step(tick);
 
         if (_fading)
         {
@@ -128,24 +111,20 @@ internal sealed class ShellAnimations : IDisposable
     public void Dispose()
     {
         _disposed = true;
-        foreach (var entry in _closing)
-        {
-            entry.Snapshot.Dispose();
-        }
-
-        _closing.Clear();
-        _running.Clear();
+        _runner.Dispose();
         _curtain?.Destroy();
         _curtain = null;
     }
 
     private void Begin(ShellWindow window, OpenCloseKind kind, bool hiding)
     {
-        var stack = new TransformStack(window.Tree);
         var curve = kind == OpenCloseKind.Zoom ? ZoomCurve : FadeCurve;
-        var animation = new OpenCloseAnimation(kind, curve);
-        animation.Begin(stack, hiding, DurationOf(curve));
-        _running.Add((window, stack, animation));
+        _runner.BeginOpen(window.Tree, stack =>
+        {
+            var animation = new OpenCloseAnimation(kind, curve);
+            animation.Begin(stack, hiding, DurationOf(curve));
+            return animation.Step;
+        });
         Changed?.Invoke();
     }
 

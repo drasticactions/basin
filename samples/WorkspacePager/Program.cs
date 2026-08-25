@@ -1,9 +1,10 @@
 using Basin;
 using System.Runtime.InteropServices;
 using Basin.Cli;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using WorkspacePager.Protocol;
+
+using Basin.Diagnostics;
 
 namespace WorkspacePager;
 
@@ -85,14 +86,13 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
-            return Run(loggers.CreateLogger("WorkspacePager"), result.GetValue(socketOption));
+            cli.ConfigureLogging(result);
+            return Run(BasinLog.For("WorkspacePager"), result.GetValue(socketOption));
         });
     }
 
-    private static int Run(ILogger log, string? socket)
+    private static int Run(BasinLogger log, string? socket)
     {
-        Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
         using var display = socket is null ? WlDisplay.Connect() : WlDisplay.Connect(socket);
         var registry = display.GetRegistry();
 
@@ -381,19 +381,19 @@ internal static class Program
 
         if (compositor is null || shm is null || (wmBase is null && layerShell is null))
         {
-            log.LogError("compositor is missing wl_compositor, wl_shm, or both shells");
+            log.Error($"compositor is missing wl_compositor, wl_shm, or both shells");
             return 1;
         }
 
         if (manager is null)
         {
-            log.LogError("ext_workspace_manager_v1 is not advertised; nothing to page");
+            log.Error($"ext_workspace_manager_v1 is not advertised; nothing to page");
             return 1;
         }
 
         if (windowManagement is null)
         {
-            log.LogWarning("org_kde_plasma_window_management is not advertised; cells stay empty");
+            log.Warn($"org_kde_plasma_window_management is not advertised; cells stay empty");
         }
 
         manager.Done += (_, _) =>
@@ -415,7 +415,7 @@ internal static class Program
                 if (created is not null)
                 {
                     pendingCreate = false;
-                    Console.WriteLine($"ACTIVATE {created.Name}");
+                    BasinReport.Line($"ACTIVATE {created.Name}");
                     created.Handle.Activate();
                     manager!.Commit();
                     display.Flush();
@@ -427,7 +427,7 @@ internal static class Program
                 var text = groups[i].Members.Select(w =>
                     $"[{w.Name}{((w.State & 1) != 0 ? "*" : "")}{((w.State & 2) != 0 ? "!" : "")}" +
                     $":{windows.Count(win => w.Id is { } wsId && win.Desktops.Contains(wsId))}]");
-                Console.WriteLine($"WORKSPACES group={i} {string.Join(" ", text)}");
+                BasinReport.Line($"WORKSPACES group={i} {string.Join(" ", text)}");
             }
 
             needRedraw = true;
@@ -449,7 +449,7 @@ internal static class Program
                 CreatePagerSurface(info);
             }
 
-            Console.WriteLine("MODE layer");
+            BasinReport.Line($"MODE layer");
         }
         else
         {
@@ -465,7 +465,7 @@ internal static class Program
                 xdgSurface.AckConfigure(e.Serial);
                 needRedraw = true;
             };
-            Console.WriteLine("MODE toplevel");
+            BasinReport.Line($"MODE toplevel");
         }
 
         PlasmaWin? dragWindow = null;
@@ -549,7 +549,7 @@ internal static class Program
                     var target = CellAt(pointerX, pointerY);
                     if (dragMoved && target is { IsCreate: true, Group.CanCreate: true })
                     {
-                        Console.WriteLine($"DRAG {grabbed.Uuid} > new");
+                        BasinReport.Line($"DRAG {grabbed.Uuid} > new");
                         grabbed.Window.RequestEnterNewVirtualDesktop();
                         display.Flush();
                         return;
@@ -558,7 +558,7 @@ internal static class Program
                     if (dragMoved && target is { Workspace.Id: { } desktopId } &&
                         !grabbed.Desktops.Contains(desktopId))
                     {
-                        Console.WriteLine($"DRAG {grabbed.Uuid} > {desktopId}");
+                        BasinReport.Line($"DRAG {grabbed.Uuid} > {desktopId}");
                         grabbed.Window.RequestEnterVirtualDesktop(desktopId);
                         display.Flush();
                         return;
@@ -584,7 +584,7 @@ internal static class Program
                 }
                 else if (e.Button == InputCodes.BtnRight && cell is { Workspace: { } workspace })
                 {
-                    Console.WriteLine($"REMOVE {workspace.Name}");
+                    BasinReport.Line($"REMOVE {workspace.Name}");
                     workspace.Handle.Remove();
                     manager!.Commit();
                     display.Flush();
@@ -596,7 +596,7 @@ internal static class Program
         {
             if (cell is { IsCreate: true, Group.CanCreate: true })
             {
-                Console.WriteLine("CREATE");
+                BasinReport.Line($"CREATE");
                 pendingCreate = true;
                 cell.Value.Group.Handle.CreateWorkspace(CreatedName);
                 manager!.Commit();
@@ -604,7 +604,7 @@ internal static class Program
             }
             else if (cell is { Workspace: { } workspace })
             {
-                Console.WriteLine($"ACTIVATE {workspace.Name}");
+                BasinReport.Line($"ACTIVATE {workspace.Name}");
                 workspace.Handle.Activate();
                 manager!.Commit();
                 display.Flush();
@@ -678,7 +678,7 @@ internal static class Program
             if (!drawn)
             {
                 drawn = true;
-                Console.WriteLine($"MAPPED {width}x{height}");
+                BasinReport.Line($"MAPPED {width}x{height}");
             }
         }
 

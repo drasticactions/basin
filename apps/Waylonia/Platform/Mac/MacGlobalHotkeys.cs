@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Basin.Avalonia;
 using Basin.Diagnostics;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -46,7 +47,7 @@ internal sealed unsafe class MacGlobalHotkeys : IDisposable
             GetApplicationEventTarget(), &OnHotkeyEvent, 1, &spec, IntPtr.Zero, out instance._handler);
         if (status != 0)
         {
-            BasinLog.Warn($"the hotkey event handler was refused ({status}), global hotkeys are off");
+            Log.Warn($"the hotkey event handler was refused ({status}), global hotkeys are off");
             return null;
         }
 
@@ -56,7 +57,7 @@ internal sealed unsafe class MacGlobalHotkeys : IDisposable
         {
             if (KeyCode(hotkey.Key) is not { } code)
             {
-                BasinLog.Warn($"hotkey '{hotkey.Chord}': no macOS key code for '{hotkey.Key}', skipping");
+                Log.Warn($"hotkey '{hotkey.Chord}': no macOS key code for '{hotkey.Key}', skipping");
                 continue;
             }
 
@@ -65,7 +66,7 @@ internal sealed unsafe class MacGlobalHotkeys : IDisposable
                 code, CarbonModifiers(hotkey.Modifiers), id, GetApplicationEventTarget(), 0, out var registration);
             if (status != 0)
             {
-                BasinLog.Warn($"hotkey '{hotkey.Chord}' was refused ({status}), skipping");
+                Log.Warn($"hotkey '{hotkey.Chord}' was refused ({status}), skipping");
                 continue;
             }
 
@@ -80,7 +81,7 @@ internal sealed unsafe class MacGlobalHotkeys : IDisposable
             return null;
         }
 
-        BasinLog.Debug($"{instance._bindings.Count} global hotkey(s) registered");
+        Log.Debug($"{instance._bindings.Count} global hotkey(s) registered");
         return instance;
     }
 
@@ -122,7 +123,7 @@ internal sealed unsafe class MacGlobalHotkeys : IDisposable
         }
         catch (Exception error)
         {
-            BasinLog.Warn($"hotkey dispatch failed: {error.Message}");
+            Log.Warn($"hotkey dispatch failed: {error.Message}");
         }
 
         return 0;

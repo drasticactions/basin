@@ -8,7 +8,6 @@ using Basin.Diagnostics;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using Wayland.Server;
 using Xkb;
@@ -35,16 +34,16 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             return Run(
-                loggers.CreateLogger("TinyWl"),
+                BasinLog.For("TinyWl"),
                 result.GetValue(backendOption).Kind == BackendKind.Drm,
                 result.GetValue(rendererOption) is { } name && name != "auto" ? name : null,
                 result.GetValue(startupOption));
         });
     }
 
-    private static int Run(ILogger log, bool drm, string? renderer, string? startupCommand)
+    private static int Run(BasinLogger log, bool drm, string? renderer, string? startupCommand)
     {
         BasinCounters.Reset();
         int status;
@@ -55,13 +54,13 @@ internal static class Program
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.LogError("{Reason}", error.Message);
+            log.Error($"{error.Message}");
             return 1;
         }
 
         if (BasinCounters.LiveObjects != 0)
         {
-            log.LogWarning("{Count} objects still live at exit", BasinCounters.LiveObjects);
+            log.Warn($"{BasinCounters.LiveObjects} objects still live at exit");
         }
 
         return status;

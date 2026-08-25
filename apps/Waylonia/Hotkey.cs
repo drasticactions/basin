@@ -1,21 +1,21 @@
-using Microsoft.Extensions.Logging;
+using Basin.Diagnostics;
 
 namespace Waylonia;
 
 internal sealed record Hotkey(string Chord, HotkeyModifiers Modifiers, string Key, string Command)
 {
-    public static Hotkey? Parse(string chord, string? command, ILogger log)
+    public static Hotkey? Parse(string chord, string? command, BasinLogger log)
     {
         if (command is null)
         {
-            log.LogWarning("hotkey '{Chord}' has no command, skipping", chord);
+            log.Warn($"hotkey '{chord}' has no command, skipping");
             return null;
         }
 
         var tokens = chord.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (tokens.Length == 0)
         {
-            log.LogWarning("hotkey '{Chord}' names no key, skipping", chord);
+            log.Warn($"hotkey '{chord}' names no key, skipping");
             return null;
         }
 
@@ -37,7 +37,7 @@ internal sealed record Hotkey(string Chord, HotkeyModifiers Modifiers, string Ke
                     modifiers |= HotkeyModifiers.Super;
                     break;
                 default:
-                    log.LogWarning("unknown modifier '{Modifier}' in hotkey '{Chord}', skipping", tokens[i], chord);
+                    log.Warn($"unknown modifier '{(tokens[i])}' in hotkey '{chord}', skipping");
                     return null;
             }
         }

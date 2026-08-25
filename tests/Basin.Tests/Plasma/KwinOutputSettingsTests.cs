@@ -68,6 +68,11 @@ public sealed class KwinOutputSettingsTests
         }
 
         public OutputConfigurationFeatures Supported(IOutput output) => Features;
+
+        public readonly Dictionary<IOutput, OutputConfigurationEntry> State = [];
+
+        public bool TryRead(IOutput output, out OutputConfigurationEntry state) =>
+            State.TryGetValue(output, out state);
     }
 
     private static byte[] Edid(ushort product, uint serial, byte week, byte year)
@@ -315,6 +320,276 @@ public sealed class KwinOutputSettingsTests
         Assert.False(KwinOutputSettings.TryParse("not json", out _));
         Assert.False(KwinOutputSettings.TryParse("[]", out _));
     }
+
+
+    [Fact]
+    public void A_change_the_session_applied_is_written_back()
+    {
+        var edid = Edid(28194, 3229677090, 16, 32);
+        var settings = Parse(File(
+            $$"""
+            { "connectorName": "DP-1", "edidIdentifier": "HWV 28194 3229677090 16 2022 0",
+              "edidHash": "{{Hash(edid)}}", "scale": 1, "highDynamicRange": true }
+            """,
+            """
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 0, "position": { "x": 0, "y": 0 }, "priority": 0 } ] }
+            """));
+
+        var output = new StoredOutput("DP-1", edid, OutputConfigurationFeatures.None);
+        using (var state = new OutputState())
+        {
+            Assert.True(output.Commit(state.SetScale(1.7).SetTransform(OutputTransform.Rotate90)));
+        }
+
+        var layout = new OutputLayout();
+        layout.Add(output, 640, 32);
+
+        var configuration = new RecordingConfiguration
+        {
+            Features = OutputConfigurationFeatures.Overscan | OutputConfigurationFeatures.Vrr,
+        };
+        configuration.State[output] = new OutputConfigurationEntry
+        {
+            Output = output,
+            Enabled = true,
+            Overscan = 4,
+            VrrPolicy = OutputVrrPolicy.Always,
+        };
+
+        var path = TempPath();
+        try
+        {
+            Assert.True(settings.Record(KwinOutputSettings.Snapshot([output], configuration, layout)));
+            Assert.True(settings.Save(path));
+            Assert.True(KwinOutputSettings.TryLoad(path, out var reloaded));
+
+            var entry = Assert.Single(reloaded.EntriesFor([output]));
+            Assert.Equal(1.7, entry.Scale);
+            Assert.Equal(OutputTransform.Rotate90, entry.Transform);
+            Assert.Equal(new OutputMode(1920, 1080, 60_000), entry.Mode);
+            Assert.Equal(new Point(640, 32), entry.Position);
+            Assert.Equal(4u, entry.Overscan);
+            Assert.Equal(OutputVrrPolicy.Always, entry.VrrPolicy);
+            Assert.True(entry.HighDynamicRange);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+            output.Destroy();
+        }
+    }
+
+    [Fact]
+    public void A_row_this_session_never_saw_survives_the_write()
+    {
+        var here = Edid(1, 1, 1, 30);
+        var elsewhere = Edid(2, 2, 2, 30);
+        var settings = Parse(File(
+            $$"""
+            { "connectorName": "DP-1", "edidHash": "{{Hash(here)}}", "scale": 1 },
+            { "connectorName": "DP-2", "edidHash": "{{Hash(elsewhere)}}", "scale": 2.5 }
+            """,
+            """
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 0, "position": { "x": 0, "y": 0 }, "priority": 0 } ] },
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 1, "position": { "x": 0, "y": 0 }, "priority": 0 } ] }
+            """));
+
+        var output = new StoredOutput("DP-1", here, OutputConfigurationFeatures.None);
+        var absent = new StoredOutput("DP-2", elsewhere, OutputConfigurationFeatures.None);
+        var layout = new OutputLayout();
+        layout.Add(output, 0, 0);
+
+        var path = TempPath();
+        try
+        {
+            Assert.True(settings.Record(
+                KwinOutputSettings.Snapshot([output], new RecordingConfiguration(), layout)));
+            Assert.True(settings.Save(path));
+            Assert.True(KwinOutputSettings.TryLoad(path, out var reloaded));
+
+            var kept = Assert.Single(reloaded.EntriesFor([absent]));
+            Assert.Equal(2.5, kept.Scale);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+            output.Destroy();
+            absent.Destroy();
+        }
+    }
+
+    [Fact]
+    public void An_output_the_file_never_named_gains_a_row_and_a_setup()
+    {
+        var edid = Edid(17, 17, 17, 30);
+        var settings = Parse(File(
+            """
+            { "connectorName": "DP-9", "scale": 1 }
+            """,
+            """
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 0, "position": { "x": 0, "y": 0 }, "priority": 0 } ] }
+            """));
+
+        var output = new StoredOutput("DP-1", edid, OutputConfigurationFeatures.None);
+        using (var state = new OutputState())
+        {
+            Assert.True(output.Commit(state.SetScale(2)));
+        }
+
+        var layout = new OutputLayout();
+        layout.Add(output, 100, 0);
+
+        var path = TempPath();
+        try
+        {
+            Assert.True(settings.Record(
+                KwinOutputSettings.Snapshot([output], new RecordingConfiguration(), layout)));
+            Assert.True(settings.Save(path));
+            Assert.True(KwinOutputSettings.TryLoad(path, out var reloaded));
+
+            var entry = Assert.Single(reloaded.EntriesFor([output]));
+            Assert.Equal(2, entry.Scale);
+            Assert.Equal(new Point(100, 0), entry.Position);
+            Assert.True(entry.Enabled);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+            output.Destroy();
+        }
+    }
+
+    [Fact]
+    public void A_disabled_output_is_written_back_disabled()
+    {
+        var first = Edid(21, 21, 21, 30);
+        var second = Edid(22, 22, 22, 30);
+        var settings = Parse(File(
+            $$"""
+            { "connectorName": "DP-1", "edidHash": "{{Hash(first)}}", "scale": 1 },
+            { "connectorName": "DP-2", "edidHash": "{{Hash(second)}}", "scale": 1 }
+            """,
+            """
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 0, "position": { "x": 0, "y": 0 }, "priority": 0 },
+                { "enabled": true, "outputIndex": 1, "position": { "x": 1920, "y": 0 }, "priority": 1 } ] }
+            """));
+
+        var left = new StoredOutput("DP-1", first, OutputConfigurationFeatures.None);
+        var right = new StoredOutput("DP-2", second, OutputConfigurationFeatures.None);
+        using (var state = new OutputState())
+        {
+            Assert.True(right.Commit(state.SetEnabled(false)));
+        }
+
+        var layout = new OutputLayout();
+        layout.Add(left, 0, 0);
+
+        var path = TempPath();
+        try
+        {
+            Assert.True(settings.Record(
+                KwinOutputSettings.Snapshot([left, right], new RecordingConfiguration(), layout)));
+            Assert.True(settings.Save(path));
+            Assert.True(KwinOutputSettings.TryLoad(path, out var reloaded));
+
+            var entries = reloaded.EntriesFor([left, right]);
+            Assert.Equal(2, entries.Count);
+            Assert.True(entries[0].Enabled);
+            Assert.False(entries[1].Enabled);
+            Assert.Equal(new Point(1920, 0), entries[1].Position);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+            left.Destroy();
+            right.Destroy();
+        }
+    }
+
+    [Fact]
+    public void The_written_file_keeps_kwins_shape()
+    {
+        var settings = Parse(File(
+            """
+            { "connectorName": "HEADLESS-1", "scale": 1 }
+            """,
+            """
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 0, "position": { "x": 0, "y": 0 }, "priority": 0 } ] }
+            """));
+
+        var output = new StoredOutput("HEADLESS-1", [], OutputConfigurationFeatures.None);
+        var layout = new OutputLayout();
+        layout.Add(output, 0, 0);
+
+        var path = TempPath();
+        try
+        {
+            Assert.True(settings.Record(
+                KwinOutputSettings.Snapshot([output], new RecordingConfiguration(), layout)));
+            Assert.True(settings.Save(path));
+
+            var text = System.IO.File.ReadAllText(path);
+            Assert.StartsWith("[\n    {\n", text, StringComparison.Ordinal);
+            Assert.Contains("\"name\": \"outputs\"", text, StringComparison.Ordinal);
+            Assert.Contains("\"name\": \"setups\"", text, StringComparison.Ordinal);
+            Assert.True(
+                text.IndexOf("\"connectorName\"", StringComparison.Ordinal) <
+                text.IndexOf("\"scale\"", StringComparison.Ordinal));
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+            output.Destroy();
+        }
+    }
+
+    [Fact]
+    public void A_field_this_output_cannot_drive_keeps_its_stored_value()
+    {
+        var edid = Edid(31, 31, 31, 30);
+        var settings = Parse(File(
+            $$"""
+            { "connectorName": "DP-1", "edidHash": "{{Hash(edid)}}", "scale": 1,
+              "highDynamicRange": true, "sharpness": 0.5, "overscan": 6 }
+            """,
+            """
+            { "lidClosed": false, "outputs": [
+                { "enabled": true, "outputIndex": 0, "position": { "x": 0, "y": 0 }, "priority": 0 } ] }
+            """));
+
+        var output = new StoredOutput("DP-1", edid, OutputConfigurationFeatures.None);
+        var layout = new OutputLayout();
+        layout.Add(output, 0, 0);
+
+        var path = TempPath();
+        try
+        {
+            Assert.True(settings.Record(
+                KwinOutputSettings.Snapshot([output], new RecordingConfiguration(), layout)));
+            Assert.True(settings.Save(path));
+            Assert.True(KwinOutputSettings.TryLoad(path, out var reloaded));
+
+            var entry = Assert.Single(reloaded.EntriesFor([output]));
+            Assert.True(entry.HighDynamicRange);
+            Assert.Equal(5000u, entry.Sharpness);
+            Assert.Equal(6u, entry.Overscan);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+            output.Destroy();
+        }
+    }
+
+    private static string TempPath() =>
+        System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), $"basin-kwinoutputconfig-{Guid.NewGuid():n}.json");
 
     private static KwinOutputSettings Parse(string json)
     {

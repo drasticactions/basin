@@ -10,6 +10,7 @@ using Basin.Avalonia;
 using Basin.Cli;
 using Basin.Diagnostics;
 using Basin.Scene;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -52,7 +53,7 @@ internal sealed class WayloniaApp : Application
         _view.HostReady += OnHostReady;
         _view.HostFailed += error =>
         {
-            Console.Error.WriteLine($"the compositor host could not start: {error.Message}");
+            Log.Error($"the compositor host could not start: {error.Message}");
             _ = ShutdownAsync(1);
         };
         _window = new Window
@@ -198,12 +199,12 @@ internal sealed class WayloniaApp : Application
             window.Hide();
         }
 
-        Console.WriteLine($"SOCKET {host.Socket}");
+        BasinReport.Line(CompositorLines.Socket(host.Socket));
         if (_run!.Hotkeys.Count > 0 && _window is { } anchor)
         {
             if (host.Socket.Length == 0 && _run.SshHost is null)
             {
-                BasinLog.Warn($"this session has no local socket, global hotkeys are off");
+                Log.Warn($"this session has no local socket, global hotkeys are off");
             }
             else
             {
@@ -214,7 +215,7 @@ internal sealed class WayloniaApp : Application
 
         if (WayloniaXWayland.DisplayName(host) is { } xdisplay)
         {
-            Console.WriteLine($"XWAYLAND {xdisplay}");
+            BasinReport.Line($"XWAYLAND {xdisplay}");
             Environment.SetEnvironmentVariable("DISPLAY", xdisplay);
         }
 
@@ -234,7 +235,7 @@ internal sealed class WayloniaApp : Application
             _client = BasinDiagnostics.StartClient(command, host.Socket);
             if (_client is null)
             {
-                Console.Error.WriteLine($"failed to start '{command}'");
+                Log.Error($"failed to start '{command}'");
                 _ = ShutdownAsync(1);
             }
         }
@@ -264,7 +265,7 @@ internal sealed class WayloniaApp : Application
                         return;
                     }
 
-                    BasinLog.Info($"the connection to {remote} was gone; opened it again");
+                    Log.Info($"the connection to {remote} was gone; opened it again");
                     UpdateStatus($"reconnecting to {remote}");
                     _ = WatchForwardAsync(remote);
                 }
@@ -274,7 +275,7 @@ internal sealed class WayloniaApp : Application
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            BasinLog.Warn($"hotkey '{hotkey.Chord}': '{hotkey.Command}' failed to start: {error.Message}");
+            Log.Warn($"hotkey '{hotkey.Chord}': '{hotkey.Command}' failed to start: {error.Message}");
             return;
         }
 
@@ -293,7 +294,7 @@ internal sealed class WayloniaApp : Application
     {
         if (_sshDisplayName is not { } displayName)
         {
-            BasinLog.Warn($"'{command}' cannot start on {sshHost}: the remote session is not up");
+            Log.Warn($"'{command}' cannot start on {sshHost}: the remote session is not up");
             return null;
         }
 
@@ -375,7 +376,7 @@ internal sealed class WayloniaApp : Application
             var parsed = System.Net.IPEndPoint.Parse(endpointText);
             if (parsed.Address.Equals(System.Net.IPAddress.Any) || parsed.Address.Equals(System.Net.IPAddress.IPv6Any))
             {
-                Console.Error.WriteLine("a waypipe channel binds an explicit address, never a wildcard");
+                Log.Error($"a waypipe channel binds an explicit address, never a wildcard");
                 _ = ShutdownAsync(1);
                 return;
             }
@@ -400,7 +401,7 @@ internal sealed class WayloniaApp : Application
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine($"the channel listener failed: {error.Message}");
+            Log.Error($"the channel listener failed: {error.Message}");
             _ = ShutdownAsync(1);
             return;
         }
@@ -446,12 +447,12 @@ internal sealed class WayloniaApp : Application
                 {
                     if (failure is null)
                     {
-                        Basin.Diagnostics.BasinLog.Debug($"channel {index} ended");
+                        Log.Debug($"channel {index} ended");
                         UpdateStatus($"channel {index} ended");
                     }
                     else
                     {
-                        Basin.Diagnostics.BasinLog.Warn($"channel {index} ended: {failure.Message}");
+                        Log.Warn($"channel {index} ended: {failure.Message}");
                         UpdateStatus($"channel {index} ended: {failure.Message}");
                     }
                 };
@@ -499,7 +500,7 @@ internal sealed class WayloniaApp : Application
         {
             if (!_shuttingDown)
             {
-                Console.Error.WriteLine($"the channel listener failed: {error.Message}");
+                Log.Error($"the channel listener failed: {error.Message}");
                 _ = ShutdownAsync(1);
             }
         }
@@ -542,17 +543,17 @@ internal sealed class WayloniaApp : Application
             var complaint = remove.StandardError.ReadToEndAsync();
             if (remove.WaitForExit(2000) && remove.ExitCode != 0)
             {
-                BasinLog.Debug($"{remoteSocket} may still exist on {sshHost}: {complaint.Result.Trim()}");
+                Log.Debug($"{remoteSocket} may still exist on {sshHost}: {complaint.Result.Trim()}");
             }
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            BasinLog.Warn($"{remoteSocket} could not be removed from {sshHost}: {error.Message}");
+            Log.Warn($"{remoteSocket} could not be removed from {sshHost}: {error.Message}");
         }
     }
 
     [Conditional("DEBUG")]
-    private static void Protocol(string line) => Console.WriteLine(line);
+    private static void Protocol(string line) => BasinReport.Line(line);
 
     private sealed class Relay(string name)
     {
@@ -585,7 +586,7 @@ internal sealed class WayloniaApp : Application
 
             foreach (var line in kept)
             {
-                BasinLog.Error($"{name}: {line}");
+                Log.Error($"{name}: {line}");
             }
         }
     }
@@ -599,7 +600,7 @@ internal sealed class WayloniaApp : Application
 
         if (command is null)
         {
-            BasinLog.Info($"holding the channel to {sshHost} open; clients attach as they start");
+            Log.Info($"holding the channel to {sshHost} open; clients attach as they start");
             UpdateStatus($"connected to {sshHost}, waiting for a client");
             await WatchForwardAsync(sshHost);
             return;
@@ -623,11 +624,11 @@ internal sealed class WayloniaApp : Application
         {
             if (_ssh!.HasExited)
             {
-                BasinLog.Error($"ssh to {sshHost} exited with {_ssh.ExitCode} before the channel arrived");
+                Log.Error($"ssh to {sshHost} exited with {_ssh.ExitCode} before the channel arrived");
             }
             else
             {
-                BasinLog.Error($"no channel arrived from {sshHost} within 30 seconds");
+                Log.Error($"no channel arrived from {sshHost} within 30 seconds");
             }
 
             _sshRelay?.Report();
@@ -673,7 +674,7 @@ internal sealed class WayloniaApp : Application
                 }
                 catch (Exception error)
                 {
-                    Console.Error.WriteLine($"the channel listener failed: {error.Message}");
+                    Log.Error($"the channel listener failed: {error.Message}");
                     _ = ShutdownAsync(1);
                     return false;
                 }
@@ -733,14 +734,14 @@ internal sealed class WayloniaApp : Application
         }
         catch (Exception error)
         {
-            BasinLog.Error($"ssh could not start: {error.Message}");
+            Log.Error($"ssh could not start: {error.Message}");
             _ = ShutdownAsync(1);
             return false;
         }
 
         if (_ssh is null)
         {
-            BasinLog.Error($"ssh could not start");
+            Log.Error($"ssh could not start");
             _ = ShutdownAsync(1);
             return false;
         }
@@ -762,12 +763,12 @@ internal sealed class WayloniaApp : Application
 
         if (_attachedTotal > 0)
         {
-            BasinLog.Info($"the connection to {sshHost} ended; a hotkey opens it again");
+            Log.Info($"the connection to {sshHost} ended; a hotkey opens it again");
             UpdateStatus($"disconnected from {sshHost}");
             return;
         }
 
-        BasinLog.Error($"ssh to {sshHost} exited with {ssh.ExitCode}");
+        Log.Error($"ssh to {sshHost} exited with {ssh.ExitCode}");
         _sshRelay?.Report();
         _ = ShutdownAsync(ssh.ExitCode == 0 ? 0 : 1);
     }
@@ -780,7 +781,7 @@ internal sealed class WayloniaApp : Application
             return;
         }
 
-        BasinLog.Warn($"'{command}' exited with {client.ExitCode}");
+        Log.Warn($"'{command}' exited with {client.ExitCode}");
         relay.Report();
     }
 
@@ -804,7 +805,7 @@ internal sealed class WayloniaApp : Application
 
         BufferCapture.WritePng(shot, path);
         shot.Destroy();
-        Console.WriteLine($"SCREENSHOT {path}");
+        BasinReport.Line($"SCREENSHOT {path}");
     }
 
     private async Task ShutdownAsync(int status)
@@ -915,13 +916,12 @@ internal sealed class WayloniaApp : Application
             await view.ShutdownAsync();
         }
 
-        Protocol(
-            $"FRAMES {Rendered} LIVE {(BasinCounters.Enabled ? BasinCounters.LiveObjects.ToString() : "untracked")}");
+        Protocol(CompositorLines.Frames(Rendered));
         if (BasinCounters.Enabled && (BasinCounters.LiveObjects != 0 || BasinCounters.PendingFrees != 0))
         {
-            Console.Error.WriteLine(
+            Log.Error(
                 $"teardown not clean (live={BasinCounters.LiveObjects} pendingFrees={BasinCounters.PendingFrees})");
-            Console.Error.WriteLine(BasinCounters.CensusReport());
+            Log.Error($"{BasinCounters.CensusReport()}");
             _exitStatus = 1;
         }
 

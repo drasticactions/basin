@@ -2,6 +2,8 @@ using System.Globalization;
 using Basin.Cli;
 using Xunit;
 
+using Basin.Diagnostics;
+
 namespace Basin.Tests;
 
 public sealed class AllocationReportTests
@@ -75,7 +77,7 @@ public sealed class AllocationReportTests
         {
             var status = command.Run(args, _ =>
             {
-                Console.WriteLine("BODY");
+                BasinReport.Line($"BODY");
                 command.ReportFrames(frames);
                 return 0;
             });

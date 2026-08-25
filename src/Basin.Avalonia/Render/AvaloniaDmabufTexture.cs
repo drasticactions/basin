@@ -1,5 +1,6 @@
 using Basin.Render.Skia;
 using SkiaSharp;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -65,7 +66,7 @@ internal sealed class AvaloniaDmabufTexture : ISkiaTexture
 
         if (image is null)
         {
-            Basin.Diagnostics.BasinLog.Debug(
+            Log.Debug(
                 $"dmabuf texture rejected by skia: {attributes.Width}x{attributes.Height} fmt={attributes.Format}");
             SkiaCensus.Release(backend);
             egl.Destroy(native.Texture, native.Image);

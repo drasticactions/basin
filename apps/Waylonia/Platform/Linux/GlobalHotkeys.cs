@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using Basin.Avalonia;
 using Basin.Diagnostics;
 using Basin.XWayland;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -24,7 +25,7 @@ internal static class GlobalHotkeys
             return X11GlobalHotkeys.Start(hotkeys, view, host, launch);
         }
 
-        BasinLog.Warn($"this host has neither WAYLAND_DISPLAY nor DISPLAY, global hotkeys are off");
+        Log.Warn($"this host has neither WAYLAND_DISPLAY nor DISPLAY, global hotkeys are off");
         return null;
     }
 }

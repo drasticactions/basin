@@ -2,15 +2,16 @@ using System.Diagnostics;
 using Basin;
 using Basin.Backend.Libinput;
 using Basin.Cli;
+using Basin.Effects;
 using Basin.Backend.Wayland;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 using Basin.Capabilities;
 using Basin.UI.Skia;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Wayland;
 using Wayland.Server;
+
+using Basin.Diagnostics;
 
 namespace TinyComp;
 
@@ -47,10 +48,13 @@ internal sealed partial class TinyComp :
     private readonly DrmFormat _swapFormat = DrmFormat.Xrgb8888;
     private ulong[] _swapModifiers = [];
     private readonly Scene _scene = new();
+    private PointerRefresh? _pointerRefresh;
     private SceneLayers _layers = null!;
     private readonly EffectsPolicy _effects;
     private readonly string? _postKind;
-    private MagnifyStage? _magnify;
+    private MagnifierStage? _magnify;
+    private InvertStage? _invert;
+    private IPixelShader? _invertShader;
     private LayerShell _layerShell = null!;
     private Basin.Desktop.SessionLockManager _sessionLock = null!;
     private Basin.Desktop.SessionLockSceneDriver _lockDriver = null!;
@@ -97,12 +101,14 @@ internal sealed partial class TinyComp :
     private Basin.XWayland.XWaylandServer? _xwayland;
     private Basin.XWayland.XWaylandWm? _xwm;
     private readonly List<XWindow> _xwindows = [];
+    private readonly Basin.XWayland.XWaylandSceneDriver _xSceneDriver = new();
     private Basin.Desktop.TearingControlManager _tearing = null!;
     private Basin.Desktop.ContentTypeManager _contentType = null!;
     private IOutputConfiguration? _outputConfiguration;
     private Basin.Color.ColorOutputConfiguration? _colorConfiguration;
+    private Basin.Color.ColorCapabilityPack _colorPack = null!;
     private Basin.Plasma.OrientationSensor? _orientationSensor;
-    private Basin.Plasma.AutoRotateOutputConfiguration? _autoRotate;
+    private Basin.Capabilities.Defaults.LayoutOutputConfiguration? _layoutConfiguration;
     private Basin.Desktop.FifoManager _fifo = null!;
     private Basin.Capabilities.IFrameClock _frameClock = null!;
     private Basin.Desktop.IdleManager _idle = null!;
@@ -125,7 +131,7 @@ internal sealed partial class TinyComp :
     private CrossDeviceImportCache? _blitCache;
     private readonly List<Window> _windows = [];
     private readonly string _socket;
-    private SceneSurface? _dragIcon;
+    private Basin.Seat.Backends.DragIconFollower _dragIcon = null!;
     private Window? _focused;
     private XWindow? _focusedX;
     private DragMode _mode;
@@ -135,7 +141,7 @@ internal sealed partial class TinyComp :
     private ResizeEdges _grabEdges;
     private double _cursorX, _cursorY;
     private double _lastRawX, _lastRawY;
-    private bool _running = true;
+    private readonly Basin.Host.CompositorRunLoop _runLoop;
     private readonly long _frames;
     private readonly bool _fullRepaint;
     private readonly bool _offload;
@@ -165,9 +171,9 @@ internal sealed partial class TinyComp :
     private readonly string? _channelEndpoint;
     private Basin.Transport.Waypipe.WaypipeChannel? _channel;
 
-    public TinyComp(int outputCount, string rendererName = "vulkan", bool drm = false, bool fullRepaint = false, bool damageTint = false, double[]? scales = null, bool offload = false, double? nightLight = null, bool hdr = false, FrameStyle frameStyle = FrameStyle.Beos, bool noTransactions = false, int socketFd = -1, ILogger? log = null, bool wobbly = false, string? openAnimation = null, string? post = null, string? closeAnimation = null, bool switcher = false, int cornerRadius = 0, long frameLimit = 0, bool managedTransport = false, string? channelEndpoint = null)
+    public TinyComp(int outputCount, string rendererName = "vulkan", bool drm = false, bool fullRepaint = false, bool damageTint = false, double[]? scales = null, bool offload = false, double? nightLight = null, bool hdr = false, FrameStyle frameStyle = FrameStyle.Beos, bool noTransactions = false, int socketFd = -1, BasinLogger log = default, bool wobbly = false, string? openAnimation = null, string? post = null, string? closeAnimation = null, bool switcher = false, int cornerRadius = 0, long frameLimit = 0, bool managedTransport = false, string? channelEndpoint = null)
     {
-        _log = log ?? NullLogger.Instance;
+        _log = log;
         _frames = frameLimit;
         _effects = new EffectsPolicy(wobbly, openAnimation, closeAnimation, switcher);
         _postKind = post;
@@ -190,6 +196,12 @@ internal sealed partial class TinyComp :
         _channelEndpoint = channelEndpoint;
         _display = _host.Display;
         _socket = _host.Socket;
+        _runLoop = new Basin.Host.CompositorRunLoop(_host)
+        {
+            DispatchTimeoutMillis = -1,
+            FlushParentFirst = true,
+            RenderedFrames = () => Rendered,
+        };
 
         if (TraceEnabled)
         {
@@ -201,14 +213,15 @@ internal sealed partial class TinyComp :
         {
             if (client.TryGetCredentials(out var credentials))
             {
-                Basin.Diagnostics.BasinLog.Info($"client connected: pid={credentials.Pid} uid={credentials.Uid}");
+                _log.Info($"client connected: pid={credentials.Pid} uid={credentials.Uid}");
             }
             else
             {
-                Basin.Diagnostics.BasinLog.Info($"client connected: no local process behind it");
+                _log.Info($"client connected: no local process behind it");
             }
         };
         _layers = new SceneLayers(_scene.Root);
+        _pointerRefresh = new PointerRefresh(_scene, _loop, RefreshPointer);
 
         var forcedCard = Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE");
         IReadOnlyList<DrmDeviceInfo> drmDevices = [];
@@ -228,11 +241,11 @@ internal sealed partial class TinyComp :
                     try
                     {
                         _blitters.Add(new Basin.Render.Vulkan.VulkanDeviceBlitter(node));
-                        Console.WriteLine($"BLIT {node} ({device.Driver})");
+                        BasinReport.Line($"BLIT {node} ({device.Driver})");
                     }
                     catch (Exception e) when (e is InvalidOperationException or DllNotFoundException)
                     {
-                        Console.WriteLine($"BLIT {node} unavailable: {e.Message}");
+                        BasinReport.Line($"BLIT {node} unavailable: {e.Message}");
                     }
                 }
             }
@@ -269,8 +282,7 @@ internal sealed partial class TinyComp :
         {
             _backend = _host.Parent!;
 
-            const string renderNode = "/dev/dri/renderD128";
-            var stack = CreateStack(ref rendererName, File.Exists(renderNode) ? renderNode : null);
+            var stack = CreateStack(ref rendererName, Basin.Renderers.RendererCatalog.FindRenderNode());
             _renderer = stack.Renderer;
 
             if (stack.DeviceAllocator is { } gbm)
@@ -279,19 +291,19 @@ internal sealed partial class TinyComp :
                 if (_swapModifiers.Length > 0)
                 {
                     _allocator = gbm;
-                    _log.LogInformation("{Renderer} zero-copy: {Count} modifiers for {Format}", rendererName, _swapModifiers.Length, _swapFormat);
+                    _log.Info($"{rendererName} zero-copy: {_swapModifiers.Length} modifiers for {_swapFormat}");
                 }
                 else
                 {
                     gbm.Dispose();
                     _allocator = new ShmAllocator();
-                    _log.LogInformation("{Renderer} rendering with shm-copy presentation (no common dmabuf format with parent)", rendererName);
+                    _log.Info($"{rendererName} rendering with shm-copy presentation (no common dmabuf format with parent)");
                 }
             }
             else
             {
                 _allocator = new ShmAllocator();
-                _log.LogInformation("{Renderer} rendering with shm-copy presentation", rendererName);
+                _log.Info($"{rendererName} rendering with shm-copy presentation");
             }
         }
 
@@ -299,17 +311,19 @@ internal sealed partial class TinyComp :
         _luts = new Basin.Color.ColorLutCache(_renderer);
         _effects.SlideEnabled = rendererName != "pixman";
 
-        var capturePack = new SceneCapturePack(_scene, _layout);
+        var servicePack = new Basin.Desktop.DesktopServicePack(_scene, _layout, _renderer, _drm);
+        var capturePack = servicePack.Capture;
         _capture = capturePack.Capture;
         _dmabufCapture = capturePack.DmabufCapture;
         _captureIndex = capturePack.Index;
         _stack = capturePack.Stack;
-        var drmPack = new Basin.Desktop.DrmCapabilityPack(_renderer, _drm);
-        _gamma = drmPack.Gamma;
-        _cursorTheme = new Basin.Capabilities.Defaults.CursorImageTheme();
-        _colorConfiguration = new Basin.Color.ColorOutputConfiguration(
-            new Basin.Capabilities.Defaults.LayoutOutputConfiguration(_layout));
+        _gamma = servicePack.Drm.Gamma;
+        _cursorTheme = servicePack.CursorTheme;
         _orientationSensor = new Basin.Plasma.OrientationSensor(_loop);
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        _layoutConfiguration = _colorPack.Layout;
+        _layoutConfiguration.Orientation = _orientationSensor;
+        _colorConfiguration = _colorPack.Configuration;
         _colorConfiguration.EdrChanged += output =>
         {
             if (_views.FirstOrDefault(v => v.Output == output) is { } edrView)
@@ -318,16 +332,10 @@ internal sealed partial class TinyComp :
                 edrView.Scheduler?.ScheduleRepaint();
             }
         };
-        _autoRotate = new Basin.Plasma.AutoRotateOutputConfiguration(_colorConfiguration, _orientationSensor);
         _services = _host.CreateServices()
             .Use(_layout)
-            .With(capturePack)
-            .With(drmPack)
-            .Use<IOutputConfiguration>(_autoRotate)
-            .Use<Basin.Capabilities.ICursorTheme>(_cursorTheme)
-            .Use<Basin.Capabilities.IColorProfileService>(new Basin.Color.Lcms2ColorProfileService())
-            .Use<Basin.Capabilities.IActivationTokens>(new Basin.Capabilities.Defaults.DefaultActivationTokens())
-            .Use<Basin.Capabilities.IBell>(Basin.Capabilities.Defaults.SilentBell.Instance);
+            .With(_colorPack)
+            .With(servicePack);
 
         if (_backend is { SupportsTextInput: true } textInputParent)
         {
@@ -384,13 +392,13 @@ internal sealed partial class TinyComp :
 
         if (_renderer is Basin.Render.Vulkan.VulkanRenderer vulkanRenderer)
         {
-            var vulkanBlur = new VulkanBlurEffect(vulkanRenderer.Device);
+            var vulkanBlur = new VulkanBackdropBlur(vulkanRenderer.Device);
             _blurEffect = vulkanBlur;
             _services.Use<Basin.Capabilities.IBackgroundEffects>(vulkanBlur);
         }
         else if (_renderer is Basin.Render.Gl.GlRenderer glRenderer)
         {
-            var glBlur = new GlBlurEffect(glRenderer.Device);
+            var glBlur = new GlBackdropBlur(glRenderer.Device);
             _blurEffect = glBlur;
             _services.Use<Basin.Capabilities.IBackgroundEffects>(glBlur);
         }
@@ -400,7 +408,7 @@ internal sealed partial class TinyComp :
             _fireShader = _renderer.CompilePixelShader(Basin.Effects.FireShader.Source, Basin.Effects.FireShader.Uniforms);
             if (_fireShader is null)
             {
-                _log.LogWarning("{Renderer} compiles no pixel shader dialect; fire-gpu falls back to the particle mesh", rendererName);
+                _log.Warn($"{rendererName} compiles no pixel shader dialect; fire-gpu falls back to the particle mesh");
             }
 
             _effects.FireShaderHandle = _fireShader;
@@ -411,7 +419,7 @@ internal sealed partial class TinyComp :
             _cornerShader = _renderer.CompilePixelShader(CornerShader.Source, CornerShader.Uniforms);
             if (_cornerShader is null)
             {
-                _log.LogWarning("{Renderer} compiles no pixel shader dialect; --corner-radius is ignored", rendererName);
+                _log.Warn($"{rendererName} compiles no pixel shader dialect; --corner-radius is ignored");
             }
             else
             {
@@ -424,10 +432,6 @@ internal sealed partial class TinyComp :
         var xwayland = new Basin.XWayland.XWaylandModule();
         _xwaylandModule = xwayland;
         var desktopPack = Basin.Desktop.DesktopPack.For("tinycomp");
-        if (_drm is null)
-        {
-            desktopPack = desktopPack.Without("wp_drm_lease_device_v1");
-        }
 
         LinuxDmabufModule? dmabufModule = null;
         if (_renderer.Device is { } dmabufDevice)
@@ -458,6 +462,7 @@ internal sealed partial class TinyComp :
 
         _compositor = _services.Require<CompositorGlobal>();
         _seat = _services.Require<Basin.Seat.Seat>();
+        _grabOrigin = new Basin.Shell.Xdg.GrabOrigin(_seat, () => (_cursorX, _cursorY));
         _shell = _services.Require<XdgShell>();
 
         _services.Find<Basin.Desktop.LinuxDrmSyncobjManager>()?.DeclareRenderer(_renderer);
@@ -538,11 +543,11 @@ internal sealed partial class TinyComp :
         _shortcutsInhibit = _services.Require<Basin.Desktop.KeyboardShortcutsInhibitManager>();
         _services.Require<Basin.Desktop.VirtualKeyboardManager>().KeymapSubmitted +=
             (fd, _) => fd.Close();
-        _services.Require<Basin.Desktop.SystemBellManager>().Rang += _ => Console.WriteLine("BELL");
+        _services.Require<Basin.Desktop.SystemBellManager>().Rang += _ => BasinReport.Line($"BELL");
         var transientSeats = _services.Require<Basin.Desktop.TransientSeatManager>();
         transientSeats.SeatRequested += request =>
             request.Create(seat => new Basin.Desktop.SceneSeatInput(seat, _scene, _layout));
-        transientSeats.SeatCreated += seat => Console.WriteLine($"SEAT {seat.Name}");
+        transientSeats.SeatCreated += seat => BasinReport.Line($"SEAT {seat.Name}");
         _kdeDecorations = _services.Require<Basin.Desktop.KdeServerDecorationManager>();
         _backgroundEffects = _services.Require<Basin.Desktop.BackgroundEffectManager>();
         _kdeDecorations.ModeRequested += (surface, mode) =>
@@ -551,17 +556,14 @@ internal sealed partial class TinyComp :
             (toplevel, name) => FindWindow(toplevel)?.SetIconName(name);
         _color = _services.Require<Basin.Desktop.ColorManager>();
         _compositor.SurfaceCreated += surface => surface.Destroyed += UpdateEdrDemand;
-        if (!_hdr)
-        {
-            Basin.Desktop.SurfaceLutDriver.DeclareSrgb(_color);
-        }
+        DeclareColor();
 
         _lutDriver = new Basin.Desktop.SurfaceLutDriver(
             _scene, _color,
             surface => _luts.LutFor(
                 _color.DescriptionOf(surface),
                 _views.Count > 0 ? _views[0].ColorDescription : Basin.Capabilities.ImageDescription.Srgb));
-        _lutDriver.CountChanged += attached => Console.WriteLine($"COLOR luts={attached}");
+        _lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
         _color.SurfaceDescriptionChanged += (_, _) => UpdateEdrDemand();
 
         _tearing = _services.Require<Basin.Desktop.TearingControlManager>();
@@ -573,9 +575,12 @@ internal sealed partial class TinyComp :
         xwayland.WindowManagerReady += wm =>
         {
             _xwm = wm;
-            wm.WindowMapped += OnXWindowMapped;
-            wm.OverrideRedirectMapped += OnXOverrideRedirect;
-            wm.ActivationRequested += ActivateXWindow;
+            _xSceneDriver.ManagedParent = ManagedXParent;
+            _xSceneDriver.OverrideRedirectParent = _ => new SceneTree(_layers.Overlay);
+            _xSceneDriver.Adopted += OnXAdopted;
+            _xSceneDriver.Removed += OnXRemoved;
+            _xSceneDriver.ActivationRequested += ActivateXWindow;
+            _xSceneDriver.Attach(wm);
             if (xwayland.Toplevels is { } xToplevels)
             {
                 xToplevels.NoBorderRequested += (xwin, noBorder) =>
@@ -584,10 +589,10 @@ internal sealed partial class TinyComp :
                     xToplevels.SetExcludedFromCapture(xwin, excluded);
             }
 
-            Console.WriteLine($"XWAYLAND WM {_xwayland.DisplayName}");
+            BasinReport.Line($"XWAYLAND WM {_xwayland.DisplayName}");
         };
         _xwayland.Exited += () => _xwm = null;
-        Console.WriteLine($"XWAYLAND {_xwayland.DisplayName}");
+        BasinReport.Line($"XWAYLAND {_xwayland.DisplayName}");
         _display.SetGlobalFilter((client, _, interfaceName) =>
             !Basin.Desktop.PrivilegedProtocols.Contains(interfaceName) || IsTrusted(client));
         _textInput = _services.Require<Basin.Desktop.TextInputManager>();
@@ -633,7 +638,7 @@ internal sealed partial class TinyComp :
 
             _drm.OutputAdded += output =>
             {
-                Console.WriteLine($"OUTPUT + {output.Name}");
+                BasinReport.Line($"OUTPUT + {output.Name}");
                 AddDrmOutput(output);
                 Relayout();
             };
@@ -662,7 +667,7 @@ internal sealed partial class TinyComp :
         {
             _backend!.RenderDevice = _renderer.Device;
 
-            _backend.ParentGone += () => _running = false;
+            _backend.ParentGone += () => _runLoop.Stop();
             _backend.PointerAdded += WirePointer;
             _backend.KeyboardAdded += WireKeyboard;
             SetupTouch();
@@ -693,7 +698,7 @@ internal sealed partial class TinyComp :
 
         var keymapNames = Basin.Seat.SystemKeymap.Read();
         _seat.Keyboard.SetKeymap(keymapNames);
-        Console.WriteLine($"KEYMAP {keymapNames.Layout ?? "xkb default"}{(keymapNames.Model is { } model ? $" {model}" : string.Empty)}");
+        BasinReport.Line($"KEYMAP {keymapNames.Layout ?? "xkb default"}{(keymapNames.Model is { } model ? $" {model}" : string.Empty)}");
 
         _compositor.SurfaceCreated += surface => surface.Committed += () =>
         {
@@ -731,19 +736,19 @@ internal sealed partial class TinyComp :
         _shell.NewPopup += WirePopup;
         WireSessions();
         WireStdin();
-        _seat.DataDevice.DragStarted += OnDragStarted;
-        _seat.DataDevice.DragEnded += () =>
+        _dragIcon = new Basin.Seat.Backends.DragIconFollower(
+            _seat, () => _layers.Overlay, () => (_cursorX, _cursorY))
         {
-            _dragIcon?.Destroy();
-            _dragIcon = null;
+            Touch = _touchDriver?.Router,
         };
+        _dragIcon.Created += _ => RefreshSurfaceLuts();
     }
 
     public long Rendered => _views.Count > 0 ? _views[0].Rendered : 0;
 
     public int Run()
     {
-        Console.WriteLine(_socket.Length > 0 ? $"SOCKET {_socket}" : "SOCKET (inherited)");
+        BasinReport.Line(CompositorLines.Socket(_socket));
 
         if (_channelEndpoint is { } endpoint)
         {
@@ -755,33 +760,24 @@ internal sealed partial class TinyComp :
                 File.Delete(endpoint);
             }
 
-            Console.WriteLine($"CHANNEL {endpoint}");
+            BasinReport.Line($"CHANNEL {endpoint}");
             _channel = Basin.Transport.Waypipe.WaypipeChannel.Listen(address);
-            _channel.Ended += failure => _log.LogInformation(
-                "channel ended{Reason}", failure is null ? string.Empty : $": {failure.Message}");
+            _channel.Ended += failure => _log.Info($"channel ended{(failure is null ? string.Empty : $": {failure.Message}")}");
             var remote = _display.CreateClient(_channel.Transport);
             var globals = _channel.Globals;
             _display.SetGlobalFilter((client, _, interfaceName) =>
                 client != remote || globals.Carries(interfaceName));
-            _log.LogInformation("channel attached; replaying it as one client");
+            _log.Info($"channel attached; replaying it as one client");
         }
 
-        var interrupt = _loop.AddSignal(Signal.Interrupt, _ => _running = false);
-        var terminate = _loop.AddSignal(Signal.Terminate, _ => _running = false);
-
-        while (_running && (_frames == 0 || Rendered < _frames))
-        {
-            _backend?.Flush();
-            _loop.Dispatch(-1);
-        }
-
-        interrupt.Remove();
-        terminate.Remove();
+        _runLoop.Frames = _frames;
+        _runLoop.Run();
         return 0;
     }
 
     public void Dispose()
     {
+        _pointerRefresh?.Dispose();
         _stdinCommands?.Stop();
         _stdinCommands = null;
         _channel?.Dispose();
@@ -820,7 +816,7 @@ internal sealed partial class TinyComp :
         _protocolTrace?.Dispose();
         _tablets?.Dispose();
         _input?.Dispose();
-        _autoRotate?.Dispose();
+        _layoutConfiguration?.Dispose();
         _orientationSensor?.Dispose();
         _blitCache?.Dispose();
         foreach (var blitter in _blitters)
@@ -841,6 +837,7 @@ internal sealed partial class TinyComp :
         (_blurEffect as IDisposable)?.Dispose();
         _cornerShader?.Dispose();
         _fireShader?.Dispose();
+        _invertShader?.Dispose();
         _allocator?.Dispose();
         _frameState.Dispose();
         _seam?.Dispose();
@@ -868,18 +865,21 @@ internal sealed partial class TinyComp :
     private RenderStack CreateStack(ref string rendererName, string? renderNodePath) =>
         Basin.Renderers.RendererCatalog.CreateWithFallback(ref rendererName, renderNodePath, ReportFallback);
 
-    private void ReportFallback(Basin.Renderers.RendererFallback fallback)
-    {
-        if (fallback.Reason is null)
-        {
-            _log.LogWarning("{Renderer} requested but no render node was found; using software rendering", fallback.From);
-            return;
-        }
+    private Basin.Capabilities.ImageDescription DescriptionOf(IOutput output) =>
+        _colorConfiguration is { } configuration
+            ? configuration.DescriptionOf(output)
+            : Basin.Capabilities.ImageDescription.Srgb;
 
-        _log.LogWarning(
-            "{Renderer} renderer unavailable ({Reason}); falling back to {Fallback}",
-            fallback.From, fallback.Reason, fallback.To);
+    private void DeclareColor()
+    {
+        if (_color is { } color)
+        {
+            Basin.Desktop.SurfaceLutDriver.Declare(color, _views.Select(v => DescriptionOf(v.Output)));
+        }
     }
+
+    private void ReportFallback(Basin.Renderers.RendererFallback fallback) =>
+        _log.Warn($"{(fallback.Describe())}");
 
     private double ScaleFor(int index) =>
         _scales.Length == 0 ? 1 : _scales[Math.Min(index, _scales.Length - 1)];
@@ -911,9 +911,9 @@ internal sealed partial class TinyComp :
 
         _layout.Add(output, 0, 0);
         Relayout();
-        output.CloseRequested += () => _running = false;
+        output.CloseRequested += () => _runLoop.Stop();
         output.Committed += _ => OnOutputChanged(view);
-        output.Committed += _ => { if (!_probed && output.CurrentMode.Width > 0) { _probed = true; Console.WriteLine($"PROBE decorated={output.Decorated} hostFrame={(output.HostFrame is null ? "none" : "yes")} insets={(output.HostFrame is null ? "-" : output.HostFrame.Insets.ToString())} mode={output.CurrentMode.Width}x{output.CurrentMode.Height}"); } };
+        output.Committed += _ => { if (!_probed && output.CurrentMode.Width > 0) { _probed = true; BasinReport.Line($"PROBE decorated={output.Decorated} hostFrame={(output.HostFrame is null ? "none" : "yes")} insets={(output.HostFrame is null ? "-" : output.HostFrame.Insets.ToString())} mode={output.CurrentMode.Width}x{output.CurrentMode.Height}"); } };
         WireRepaint(view);
         _cursor.AddOutput(view.Output, view.SceneOutput);
 
@@ -924,7 +924,7 @@ internal sealed partial class TinyComp :
                 return;
             }
 
-            var chrome = new HostChrome(this, frame, renderer, $"basin — {output.Name}", () => _running = false);
+            var chrome = new HostChrome(this, frame, renderer, $"basin — {output.Name}", () => _runLoop.Stop());
             _hostChrome.Add(chrome);
             output.Committed += chrome.OnOutputChanged;
         };
@@ -973,11 +973,14 @@ internal sealed partial class TinyComp :
 
         if (_postKind == "invert")
         {
-            view.SceneOutput.AddPostStage(new InvertStage(_renderer));
+            _invertShader ??= _renderer.CompilePixelShader(InvertShader.Source, InvertShader.Uniforms);
+            _invert ??= new InvertStage(_invertShader);
+            view.SceneOutput.AddPostStage(_invert);
         }
         else if (_postKind == "magnify")
         {
-            _magnify ??= new MagnifyStage();
+            _magnify ??= new MagnifierStage();
+            _magnify.TargetZoom = 2.0;
             view.SceneOutput.AddPostStage(_magnify);
         }
 
@@ -1039,12 +1042,12 @@ internal sealed partial class TinyComp :
 
     private static readonly bool TraceEnabled = Basin.Diagnostics.BasinDiagnostics.TraceEnabled;
 
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
 
-    internal ILogger Log => _log;
+    internal BasinLogger Log => _log;
 
     private void Trace(string message) =>
-        _log.LogDebug("T{Tick} {Message}", Environment.TickCount64 % 1_000_000, message);
+        _log.Debug($"T{(Environment.TickCount64 % 1_000_000)} {message}");
 
     private void Repaint(OutputView view)
     {
@@ -1094,6 +1097,10 @@ internal sealed partial class TinyComp :
         {
             magnify.CenterX = _cursorX;
             magnify.CenterY = _cursorY;
+            if (magnify.Step(new FrameTick(options.TargetPresentNanos, 0)))
+            {
+                view.Scheduler?.ScheduleRepaint();
+            }
         }
 
         _frameState.Clear();
@@ -1170,7 +1177,7 @@ internal sealed partial class TinyComp :
             SceneTree => "tree",
             _ => node.GetType().Name,
         };
-        _log.LogDebug("DBG {Indent}{Info} at ({X},{Y}) enabled={Enabled}", new string(' ', depth * 2), info, node.X, node.Y, node.Enabled);
+        _log.Debug($"DBG {(new string(' ', depth * 2))}{info} at ({node.X},{node.Y}) enabled={node.Enabled}");
         if (node is SceneTree tree)
         {
             foreach (var child in tree.Children)
@@ -1376,7 +1383,7 @@ internal sealed partial class TinyComp :
 
     private void RemoveDrmOutput(Basin.Backend.Drm.DrmOutput output)
     {
-        Console.WriteLine($"OUTPUT - {output.Name}");
+        BasinReport.Line($"OUTPUT - {output.Name}");
         var view = _views.FirstOrDefault(v => v.Output == output);
         if (view is not null)
         {
@@ -1405,7 +1412,7 @@ internal sealed partial class TinyComp :
             _secondaryBackends.Add(backend);
             var allocator = new Basin.Backend.Drm.DumbAllocator(backend);
             _secondaryAllocators.Add(allocator);
-            Console.WriteLine($"CARD + {device.CardPath} ({device.Driver})");
+            BasinReport.Line($"CARD + {device.CardPath} ({device.Driver})");
             foreach (var output in backend.Outputs)
             {
                 AddDrmOutput(output, allocator, secondary: true);
@@ -1413,7 +1420,7 @@ internal sealed partial class TinyComp :
 
             backend.OutputAdded += output =>
             {
-                Console.WriteLine($"OUTPUT + {output.Name}");
+                BasinReport.Line($"OUTPUT + {output.Name}");
                 AddDrmOutput(output, allocator, secondary: true);
                 Relayout();
             };
@@ -1421,7 +1428,7 @@ internal sealed partial class TinyComp :
         }
         catch (Exception e) when (e is InvalidOperationException or IOException)
         {
-            Console.WriteLine($"CARD {device.CardPath} not adopted: {e.Message}");
+            BasinReport.Line($"CARD {device.CardPath} not adopted: {e.Message}");
         }
     }
 
@@ -1445,7 +1452,7 @@ internal sealed partial class TinyComp :
         if (view.Allocator is not Basin.Backend.Drm.DumbAllocator &&
             !view.Allocator!.CanScanOut(output, view.SwapModifiers, DrmFormat.Xrgb8888))
         {
-            Basin.Diagnostics.BasinLog.Warn(
+            _log.Warn(
                 $"{output.Name}: the renderer shares no scanout format with this plane; " +
                 $"presenting through CPU-mapped buffers, which reads the whole framebuffer back every frame");
             view.Allocator = new Basin.Backend.Drm.DumbAllocator(_drm!);
@@ -1457,12 +1464,9 @@ internal sealed partial class TinyComp :
             _swapModifiers = view.SwapModifiers;
         }
 
-        Console.WriteLine($"OUTPUT {output.Name} {output.Description} {output.PreferredMode.Width}x{output.PreferredMode.Height} scanout-modifiers={view.SwapModifiers.Length}{(secondary ? " secondary" : "")}");
+        BasinReport.Line($"OUTPUT {output.Name} {output.Description} {output.PreferredMode.Width}x{output.PreferredMode.Height} scanout-modifiers={view.SwapModifiers.Length}{(secondary ? " secondary" : "")}");
 
         var driveHdr = _hdr && output.Edid.SupportsPq;
-        view.ColorDescription = driveHdr
-            ? Basin.Color.OutputDescriptions.Hdr10(output.Edid.MaxLuminance, output.Edid.MinLuminance)
-            : Basin.Capabilities.ImageDescription.Srgb;
         if (driveHdr && _colorConfiguration is { } colorConfiguration &&
             (colorConfiguration.Supported(output) &
              Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange) != 0)
@@ -1470,11 +1474,13 @@ internal sealed partial class TinyComp :
             colorConfiguration.Seed(output, new Basin.Color.OutputColorState { HighDynamicRange = true });
         }
 
+        view.ColorDescription = DescriptionOf(output);
+        DeclareColor();
         _color.SetOutputDescription(view.Global, view.ColorDescription);
         RefreshSurfaceLuts();
         if (driveHdr)
         {
-            Console.WriteLine($"HDR {output.Name} PQ peak={output.Edid.MaxLuminance:F0}cd/m2 bt2020={output.Edid.SupportsBt2020}");
+            BasinReport.Line($"HDR {output.Name} PQ peak={output.Edid.MaxLuminance:F0}cd/m2 bt2020={output.Edid.SupportsBt2020}");
         }
 
         _frameState.Clear();
@@ -1523,18 +1529,19 @@ internal sealed partial class TinyComp :
     {
         input.SwitchToggled += (_, switchEvent) =>
         {
-            if (switchEvent.Switch == Libinput.LibinputSwitchType.TabletMode && _autoRotate is { } autoRotate)
+            if (switchEvent.Switch == Libinput.LibinputSwitchType.TabletMode &&
+                _layoutConfiguration is { } layoutConfiguration)
             {
-                autoRotate.TabletMode = switchEvent.State == Libinput.LibinputSwitchState.On;
+                layoutConfiguration.TabletMode = switchEvent.State == Libinput.LibinputSwitchState.On;
             }
         };
 
         input.DeviceAdded += device =>
         {
-            Console.WriteLine($"INPUT + {device.Name}");
+            BasinReport.Line($"INPUT + {device.Name}");
             ConfigureTouchpad(device);
         };
-        input.DeviceRemoved += device => Console.WriteLine($"INPUT - {device.Name}");
+        input.DeviceRemoved += device => BasinReport.Line($"INPUT - {device.Name}");
         _touchBinder!.Key += (time, key, pressed) =>
         {
             _idle.NotifyActivity();
@@ -1631,7 +1638,7 @@ internal sealed partial class TinyComp :
     private Basin.Seat.Backends.SeatBinder? _touchBinder;
     private Basin.Seat.Backends.SeatTouchDriver? _touchDriver;
     private Basin.Seat.TouchMoveResize? _touchMoveResize;
-    private int? _frameTouchSlot;
+    private readonly Basin.Shell.Xdg.GrabOrigin _grabOrigin;
     private (Frame Frame, IGrabTarget Owner)? _touchFramePress;
 
     private void SetupTouch()
@@ -1644,6 +1651,7 @@ internal sealed partial class TinyComp :
         };
         _touchDriver = new Basin.Seat.Backends.SeatTouchDriver(_touchBinder, _seat);
         _touchMoveResize = _touchDriver.MoveResize;
+        _grabOrigin.Touch = _touchMoveResize;
         _touchMoveResize.Handler = this;
         _touchSwipeGesture.Handler = this;
         _touchDriver.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(_scene);
@@ -1698,9 +1706,9 @@ internal sealed partial class TinyComp :
             FocusFrameOwner(frameHit.Owner);
             PrepareMenu(frameHit);
             _touchFramePress = frameHit;
-            _frameTouchSlot = id;
+            _grabOrigin.FrameTouchSlot = id;
             frameHit.Frame.TouchDown(x - frameHit.Owner.X, y - frameHit.Owner.Y, id, timeMs);
-            _frameTouchSlot = null;
+            _grabOrigin.FrameTouchSlot = null;
             if (frameHit.Frame.IsMenuOpen)
             {
                 _openMenu = frameHit.Frame;
@@ -1711,7 +1719,7 @@ internal sealed partial class TinyComp :
 
         if (TryRingResize(x, y, TouchRingMargin, TouchCornerZone, out var ringEdges, out var ringWindow, out var ringXWindow))
         {
-            _frameTouchSlot = id;
+            _grabOrigin.FrameTouchSlot = id;
             if (ringWindow is not null)
             {
                 FocusWindow(ringWindow);
@@ -1723,7 +1731,7 @@ internal sealed partial class TinyComp :
                 BeginResize(ringXWindow, ringEdges);
             }
 
-            _frameTouchSlot = null;
+            _grabOrigin.FrameTouchSlot = null;
             return true;
         }
 
@@ -1845,7 +1853,7 @@ internal sealed partial class TinyComp :
     private void LoadCursorTheme()
     {
         _touchBinder!.EnsureCursorLoaded();
-        Console.WriteLine($"CURSOR left_ptr {_cursor.Images?.Size ?? 0}px {_cursor.DrawnBy}");
+        BasinReport.Line($"CURSOR left_ptr {_cursor.Images?.Size ?? 0}px {_cursor.DrawnBy}");
     }
 
     internal void SetHostChromeCursor(string name) => _cursor.ShowNamed(name);
@@ -1911,44 +1919,47 @@ internal sealed partial class TinyComp :
         }
     }
 
-    private void OnXWindowMapped(Basin.XWayland.XWaylandWindow window)
+    private SceneTree ManagedXParent(Basin.XWayland.XWaylandWindow window)
     {
-        if (window.Surface is null)
-        {
-            return;
-        }
-
         if (window.X == 0 && window.Y == 0)
         {
             var slot = (_windows.Count + _xwindows.Count) % 8;
             window.Configure(60 + slot * 30, 60 + slot * 30, window.Width, window.Height);
         }
 
-        var workspace = CurrentWorkspace();
-        var xwindow = new XWindow(this, window, workspace?.Tree ?? _layers.Windows, framable: true)
-        {
-            Workspace = workspace,
-        };
-        _xwindows.Add(xwindow);
-        window.GeometryChanged += xwindow.Layout;
-        window.DecorationsChanged += xwindow.UpdateDecorations;
-        window.Unmapped += () => RemoveXWindow(xwindow);
-        window.Destroyed += () => RemoveXWindow(xwindow);
-        FocusXWindow(xwindow);
+        _pendingXWorkspace = CurrentWorkspace();
+        return new SceneTree(_pendingXWorkspace?.Tree ?? _layers.Windows);
     }
 
-    private void OnXOverrideRedirect(Basin.XWayland.XWaylandWindow window)
+    private Workspace? _pendingXWorkspace;
+
+    private void OnXAdopted(Basin.XWayland.XWaylandWindow window, SceneSurface scene, bool managed)
     {
-        if (window.Surface is null)
+        var xwindow = new XWindow(this, window, scene, framable: managed);
+        if (managed)
         {
-            return;
+            xwindow.Workspace = _pendingXWorkspace;
+            _pendingXWorkspace = null;
         }
 
-        var xwindow = new XWindow(this, window, _layers.Overlay, framable: false);
         _xwindows.Add(xwindow);
         window.GeometryChanged += xwindow.Layout;
-        window.Unmapped += () => RemoveXWindow(xwindow);
-        window.Destroyed += () => RemoveXWindow(xwindow);
+        if (managed)
+        {
+            window.DecorationsChanged += xwindow.UpdateDecorations;
+            FocusXWindow(xwindow);
+        }
+    }
+
+    private void OnXRemoved(Basin.XWayland.XWaylandWindow window, SceneSurface scene)
+    {
+        foreach (var xwindow in _xwindows.ToArray())
+        {
+            if (ReferenceEquals(xwindow.XWin, window))
+            {
+                RemoveXWindow(xwindow);
+            }
+        }
     }
 
     private void RemoveXWindow(XWindow xwindow)
@@ -2082,7 +2093,7 @@ internal sealed partial class TinyComp :
         _scene.Root.SetPosition(-box.X, -box.Y);
         if (!_scene.Render(_renderer, target, SceneOptions(view.Output)))
         {
-            Console.WriteLine("SHOT render failed");
+            BasinReport.Line($"SHOT render failed");
         }
 
         MaybeScreenshot(view);
@@ -2122,7 +2133,7 @@ internal sealed partial class TinyComp :
         if (workspace.Tiled.Count < 2)
         {
             workspace.Tiled.Clear();
-            Console.WriteLine("TILE needs two windows");
+            BasinReport.Line($"TILE needs two windows");
             return;
         }
 
@@ -2132,14 +2143,14 @@ internal sealed partial class TinyComp :
         workspace.TileArea = new Box(origin.X + usable.X, origin.Y + usable.Y, usable.Width, usable.Height);
         workspace.SplitFraction = 0.5;
         ApplySplit(workspace);
-        Console.WriteLine($"TILED {workspace.Tiled[0].Toplevel.AppId} | {workspace.Tiled[1].Toplevel.AppId} transactions={_useTransactions}");
+        BasinReport.Line($"TILED {workspace.Tiled[0].Toplevel.AppId} | {workspace.Tiled[1].Toplevel.AppId} transactions={_useTransactions}");
     }
 
     internal void SetSplit(double fraction)
     {
         if (CurrentWorkspace() is not { Tiled.Count: 2 } workspace)
         {
-            Console.WriteLine("SPLIT needs a tiled pair");
+            BasinReport.Line($"SPLIT needs a tiled pair");
             return;
         }
 
@@ -2333,7 +2344,7 @@ internal sealed partial class TinyComp :
 
         if (!restore.State.CanRestorePosition(_layout.Id))
         {
-            Console.WriteLine($"RESTORE {restore.Name}: outputs moved, placing fresh");
+            BasinReport.Line($"RESTORE {restore.Name}: outputs moved, placing fresh");
             return false;
         }
 
@@ -2343,7 +2354,7 @@ internal sealed partial class TinyComp :
             RestoreWorkspace(window, restore.State.Geometry, workspaceName);
         }
 
-        Console.WriteLine($"RESTORE {restore.Name} at {restore.State.Geometry.X},{restore.State.Geometry.Y}");
+        BasinReport.Line($"RESTORE {restore.Name} at {restore.State.Geometry.X},{restore.State.Geometry.Y}");
         return true;
     }
 
@@ -2361,8 +2372,17 @@ internal sealed partial class TinyComp :
         if (window.Workspace != target)
         {
             MoveWindowToWorkspace(window, target);
-            Console.WriteLine($"RESTORE workspace {name}");
+            BasinReport.Line($"RESTORE workspace {name}");
         }
+    }
+
+    internal void PlaceCascade(IGrabTarget window)
+    {
+        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var origin = _layout.BoxOf(view.Output);
+        var usable = view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea;
+        var slot = _windows.Count % 8;
+        window.MoveTo(origin.X + usable.X + 40 + (slot * 30), origin.Y + usable.Y + 40 + (slot * 30));
     }
 
     internal void OnWindowMapped(Window window)
@@ -2374,21 +2394,17 @@ internal sealed partial class TinyComp :
             !window.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen) &&
             !window.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized))
         {
-            var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
-            var origin = _layout.BoxOf(view.Output);
-            var usable = view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea;
-            var slot = _windows.Count % 8;
-            window.MoveTo(origin.X + usable.X + 40 + slot * 30, origin.Y + usable.Y + 40 + slot * 30);
+            PlaceCascade(window);
         }
 
         if (window.Workspace is { } mapped && ViewOf(mapped)?.Active != mapped)
         {
-            Console.WriteLine($"MAPPED {window.Toplevel.AppId} hidden");
+            BasinReport.Line($"MAPPED {window.Toplevel.AppId} hidden");
         }
         else
         {
             FocusWindow(window);
-            Console.WriteLine($"MAPPED {window.Toplevel.AppId}");
+            BasinReport.Line($"MAPPED {window.Toplevel.AppId}");
         }
 
         _workspaceModel.RaiseMembersChanged();
@@ -2396,7 +2412,7 @@ internal sealed partial class TinyComp :
 
     internal void OnWindowGone(Window window)
     {
-        Console.WriteLine($"UNMAPPED {window.Toplevel.AppId}");
+        BasinReport.Line($"UNMAPPED {window.Toplevel.AppId}");
         _windows.Remove(window);
         var workspace = window.Workspace;
         window.Workspace = null;
@@ -2472,7 +2488,7 @@ internal sealed partial class TinyComp :
 
         _mode = DragMode.Move;
         _grabWindow = window;
-        var (x, y) = GrabPosition(serial);
+        var (x, y) = _grabOrigin.For(serial);
         _grabX = x - window.X;
         _grabY = y - window.Y;
         _effects.OnMoveGrab(window.EffectTree, _grabX, _grabY);
@@ -2483,27 +2499,10 @@ internal sealed partial class TinyComp :
         _mode = DragMode.Resize;
         _grabWindow = window;
         _grabEdges = edges;
-        (_grabX, _grabY) = GrabPosition(serial);
+        (_grabX, _grabY) = _grabOrigin.For(serial);
         var (width, height) = window.GeometrySize;
         _grabStart = new Box(window.X, window.Y, width, height);
         window.SetResizing(true);
-    }
-
-    private (double X, double Y) GrabPosition(uint? serial)
-    {
-        if (_frameTouchSlot is { } frameSlot &&
-            _touchMoveResize!.TryBeginContact(frameSlot, out var frameX, out var frameY))
-        {
-            return (frameX, frameY);
-        }
-
-        if (_touchMoveResize is { } drag && drag.TryBegin(serial, out var pointX, out var pointY))
-        {
-            return (pointX, pointY);
-        }
-
-        _seat.Pointer.NotifyClearFocus();
-        return (_cursorX, _cursorY);
     }
 
     private void WirePopup(XdgPopupWindow popup)
@@ -2718,7 +2717,7 @@ internal sealed partial class TinyComp :
     {
         _lockDriver = new Basin.Desktop.SessionLockSceneDriver(
             _sessionLock, _seat, _layers.Lock, _layout, _layers.SetLocked);
-        _lockDriver.Locked += () => Console.WriteLine("LOCKED");
+        _lockDriver.Locked += () => BasinReport.Line($"LOCKED");
         _lockDriver.Unlocked += () =>
         {
             if (_focused is { } focused)
@@ -2726,9 +2725,9 @@ internal sealed partial class TinyComp :
                 _seat.Keyboard.NotifyEnter(focused.Toplevel.Surface);
             }
 
-            Console.WriteLine("UNLOCKED");
+            BasinReport.Line($"UNLOCKED");
         };
-        _lockDriver.Abandoned += () => Console.WriteLine("LOCK ABANDONED (staying blanked)");
+        _lockDriver.Abandoned += () => BasinReport.Line($"LOCK ABANDONED (staying blanked)");
         _lockDriver.LockSurfaceAdded += (lockSurface, _) =>
         {
             RefreshSurfaceLuts();
@@ -2825,6 +2824,17 @@ internal sealed partial class TinyComp :
 
         UpdateHoverCursor(x, y);
         RouteMotion(time, x, y);
+    }
+
+    private void RefreshPointer()
+    {
+        if (_mode != DragMode.None || _touchMoveResize is { Dragging: true } || ActiveLock() is not null)
+        {
+            return;
+        }
+
+        UpdateHoverCursor(_cursorX, _cursorY);
+        RouteMotion((uint)Environment.TickCount, _cursorX, _cursorY);
     }
 
     private bool DragTo(double x, double y)
@@ -2929,7 +2939,7 @@ internal sealed partial class TinyComp :
 
     private void RouteMotion(uint time, double x, double y)
     {
-        _dragIcon?.Tree.SetPosition((int)x, (int)y);
+        _dragIcon.Follow();
 
         Window? dragged = null;
         if (_toplevelDrags.Attachment is { } attached && FindWindow(attached.Toplevel) is { Tree: not null } window)
@@ -3448,7 +3458,7 @@ internal sealed partial class TinyComp :
             case ["where"]:
                 foreach (var window in _windows)
                 {
-                    Console.WriteLine($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")}");
+                    BasinReport.Line($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")}");
                 }
 
                 break;
@@ -3458,7 +3468,7 @@ internal sealed partial class TinyComp :
                     if (target.Tree is not null)
                     {
                         target.Tree.ClipBox = new Box(int.Parse(cx), int.Parse(cy), int.Parse(cw), int.Parse(ch));
-                        Console.WriteLine($"CLIP {index} {target.Tree.ClipBox}");
+                        BasinReport.Line($"CLIP {index} {target.Tree.ClipBox}");
                     }
                 }
 
@@ -3499,15 +3509,12 @@ internal sealed partial class TinyComp :
                 DumpTree(_scene.Root, 0);
                 break;
             case ["stats"]:
-                Console.WriteLine($"STATS transactions={_useTransactions} timedout={Transaction.TimedOutCount}");
-                Console.WriteLine(
-                    $"STATS cursor theme={(_cursor.Images?.HasTheme == true ? _cursor.Images.Size.ToString() : "none")} " +
-                    $"showing={_cursor.Showing} " +
-                    $"on={(_cursor.CursorOutput?.Name ?? "none")}");
+                BasinReport.Line($"STATS transactions={_useTransactions} timedout={Transaction.TimedOutCount}");
+                BasinReport.Line($"STATS cursor theme={(_cursor.Images?.HasTheme == true ? _cursor.Images.Size.ToString() : "none")} " + $"showing={_cursor.Showing} " + $"on={(_cursor.CursorOutput?.Name ?? "none")}");
                 foreach (var view in _views)
                 {
                     var so = view.SceneOutput;
-                    Console.WriteLine(so is null
+                    BasinReport.Line(so is null
                         ? $"STATS {view.Output.Name} full-repaint scale={view.Output.Scale}"
                         : $"STATS {view.Output.Name} scanout={so.ScanoutCommits} composed={so.ComposedCommits} skipped={so.SkippedCommits} direct={so.IsDirectScanout} offload={so.OffloadedLayers}/{so.OffloadCommits} swcursor={_cursor.IsSoftwareOn(view.Output)} scale={view.Output.Scale}");
                     if (so is not null)
@@ -3516,7 +3523,7 @@ internal sealed partial class TinyComp :
                         {
                             if (so.DeclinedFor(reason) > 0)
                             {
-                                Console.WriteLine($"STATS   declined {reason} {so.DeclinedFor(reason)}");
+                                BasinReport.Line($"STATS   declined {reason} {so.DeclinedFor(reason)}");
                             }
                         }
                     }
@@ -3525,19 +3532,19 @@ internal sealed partial class TinyComp :
                 break;
             case ["nightlight", "off"]:
                 ApplyNightLight(null);
-                Console.WriteLine("NIGHTLIGHT off");
+                BasinReport.Line($"NIGHTLIGHT off");
                 break;
             case ["nightlight", var kelvin]:
                 ApplyNightLight(double.Parse(kelvin));
-                Console.WriteLine($"NIGHTLIGHT {kelvin}K");
+                BasinReport.Line($"NIGHTLIGHT {kelvin}K");
                 break;
             case ["gc"]:
                 var now = GC.GetAllocatedBytesForCurrentThread();
-                Console.WriteLine($"GC {now - _gcMark} bytes since last mark");
+                BasinReport.Line($"GC {now - _gcMark} bytes since last mark");
                 _gcMark = now;
                 break;
             case ["quit"]:
-                _running = false;
+                _runLoop.Stop();
                 break;
         }
     }
@@ -3548,7 +3555,7 @@ internal sealed partial class TinyComp :
 
     private void DumpPresented(OutputView view, string path)
     {
-        Console.WriteLine(SceneScreenshot.WritePresented(view.LastPresentedBuffer, _renderer, path) switch
+        BasinReport.Line(SceneScreenshot.WritePresented(view.LastPresentedBuffer, _renderer, path) switch
         {
             ScreenshotOutcome.NoFrame => "SHOTRAW unavailable (nothing presented yet)",
             ScreenshotOutcome.Unreadable => "SHOTRAW unavailable (presented buffer not importable)",
@@ -3567,7 +3574,7 @@ internal sealed partial class TinyComp :
         _shotPath = null;
         if (SceneScreenshot.Write(_scene, _renderer, path, view.Width, view.Height, SceneOptions(view.Output)))
         {
-            Console.WriteLine($"SHOT {path}");
+            BasinReport.Line($"SHOT {path}");
         }
     }
 
@@ -3580,7 +3587,7 @@ internal sealed partial class TinyComp :
         switch (key)
         {
             case InputCodes.KeyEsc:
-                _running = false;
+                _runLoop.Stop();
                 return true;
 
             case InputCodes.KeyEnter:
@@ -3590,7 +3597,7 @@ internal sealed partial class TinyComp :
                 }
                 catch (Exception e)
                 {
-                    _log.LogError("spawn failed: {Reason}", e.Message);
+                    _log.Error($"spawn failed: {e.Message}");
                 }
 
                 return true;
@@ -3806,11 +3813,11 @@ internal sealed partial class TinyComp :
         using var state = new OutputState();
         if (!view.Output.Commit(state.SetScale(scale)))
         {
-            _log.LogWarning("scale {Scale} refused by {Output}", scale, view.Output.Name);
+            _log.Warn($"scale {scale} refused by {view.Output.Name}");
             return;
         }
 
-        Console.WriteLine($"SCALE {view.Output.Name} {view.Output.Scale}");
+        BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
         Relayout();
         RefreshOutputLayout();
     }
@@ -3880,9 +3887,7 @@ internal sealed partial class TinyComp :
         foreach (var entry in entries)
         {
             var box = _layout.BoxOf(entry.Output);
-            Console.WriteLine(
-                $"CONFIGURED {entry.Output.Name} enabled={(entry.Enabled ? "yes" : "no")} " +
-                $"{box.Width}x{box.Height}+{box.X}+{box.Y} scale {entry.Output.Scale}");
+            BasinReport.Line($"CONFIGURED {entry.Output.Name} enabled={(entry.Enabled ? "yes" : "no")} " + $"{box.Width}x{box.Height}+{box.X}+{box.Y} scale {entry.Output.Scale}");
         }
     }
 
@@ -3921,16 +3926,6 @@ internal sealed partial class TinyComp :
             {
                 view.Scheduler?.ScheduleRepaint();
             }
-        }
-    }
-
-    private void OnDragStarted(Basin.Seat.DragEvent drag)
-    {
-        if (drag.Icon is { } icon)
-        {
-            _dragIcon = new SceneSurface(_layers.Overlay, icon) { InputEnabled = false };
-            RefreshSurfaceLuts();
-            _dragIcon.Tree.SetPosition((int)_cursorX, (int)_cursorY);
         }
     }
 
@@ -3986,9 +3981,13 @@ internal sealed partial class TinyComp :
 
         public ulong GroupId { get; set; }
 
-        public List<Workspace> Workspaces { get; } = [];
+        public Basin.Capabilities.WorkspaceSet<Workspace> Workspaces { get; } = new();
 
-        public Workspace? Active { get; set; }
+        public Workspace? Active
+        {
+            get => Workspaces.Active;
+            set => Workspaces.Active = value;
+        }
     }
 
     internal interface IGrabTarget
@@ -4015,16 +4014,16 @@ internal sealed partial class TinyComp :
         private FrameCornerRig? _cornerRig;
         private bool _active;
         private bool _maximized;
-        private (int X, int Y, int Width, int Height) _restore;
+        private RestoreGeometry _restore;
 
-        public XWindow(TinyComp comp, Basin.XWayland.XWaylandWindow xwin, SceneTree parent, bool framable)
+        public XWindow(TinyComp comp, Basin.XWayland.XWaylandWindow xwin, SceneSurface scene, bool framable)
         {
             _comp = comp;
             XWin = xwin;
             Framable = framable;
-            Tree = new SceneTree(parent);
+            Tree = scene.Tree.Parent!;
             Tree.SetPosition(xwin.X, xwin.Y);
-            SceneSurface = new SceneSurface(Tree, xwin.Surface!);
+            SceneSurface = scene;
             comp.RefreshSurfaceLuts();
             comp.ApplyCorners(SceneSurface);
             xwin.TitleChanged += Layout;
@@ -4178,7 +4177,7 @@ internal sealed partial class TinyComp :
                 TouchSlop = TouchGripSlop,
             };
             _frame.Requested += OnFrameAction;
-            _frame.Faulted += e => _comp.Log.LogError("frame fault {Window}: {Reason}", XWin.Class, e.Message);
+            _frame.Faulted += e => _comp.Log.Error($"frame fault {XWin.Class}: {e.Message}");
             SceneSurface.Tree.RaiseToTop();
             Layout();
             if (_comp._cornerRadius > 0)
@@ -4245,13 +4244,22 @@ internal sealed partial class TinyComp :
             if (_maximized)
             {
                 _maximized = false;
-                ResizeTo(_restore.X, _restore.Y, _restore.Width, _restore.Height, ResizeEdges.None);
+                if (_restore.TryGet(out var saved))
+                {
+                    _restore = RestoreGeometry.None;
+                    ResizeTo(saved.X, saved.Y, saved.Width, saved.Height, ResizeEdges.None);
+                }
+                else
+                {
+                    _comp.PlaceCascade(this);
+                }
+
                 return;
             }
 
             var view = _comp._views.FirstOrDefault(v => _comp._layout.OutputAt(_comp._cursorX, _comp._cursorY) == v.Output)
                 ?? _comp._views[0];
-            _restore = (XWin.X, XWin.Y, XWin.Width, XWin.Height);
+            _restore = _restore.Saving(new Box(XWin.X, XWin.Y, XWin.Width, XWin.Height));
             _maximized = true;
             ApplyMaximizeGeometry(view);
         }
@@ -4483,7 +4491,7 @@ internal sealed partial class TinyComp :
             _resizeAnchor = ResizeAnchor.AfterCommit(_resizeAnchor, _resizing);
         }
 
-        private (int X, int Y, int Width, int Height) _maximizeRestore;
+        private RestoreGeometry _maximizeRestore;
 
         public void ToggleMaximize() =>
             ApplyMaximize(!Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized));
@@ -4493,8 +4501,18 @@ internal sealed partial class TinyComp :
             Toplevel.SetMaximized(maximized);
             if (!maximized)
             {
-                MoveTo(_maximizeRestore.X, _maximizeRestore.Y);
-                Toplevel.SetSize(_maximizeRestore.Width, _maximizeRestore.Height);
+                if (_maximizeRestore.TryGet(out var saved))
+                {
+                    _maximizeRestore = RestoreGeometry.None;
+                    MoveTo(saved.X, saved.Y);
+                    Toplevel.SetSize(saved.Width, saved.Height);
+                }
+                else
+                {
+                    Toplevel.SetSize(0, 0);
+                    _comp.PlaceCascade(this);
+                }
+
                 return;
             }
 
@@ -4502,7 +4520,7 @@ internal sealed partial class TinyComp :
             var view = comp._views.FirstOrDefault(v => comp._layout.OutputAt(comp._cursorX, comp._cursorY) == v.Output)
                 ?? comp._views[0];
             var geometry = Toplevel.Xdg.EffectiveGeometry;
-            _maximizeRestore = (X, Y, geometry.Width, geometry.Height);
+            _maximizeRestore = _maximizeRestore.Saving(new Box(X, Y, geometry.Width, geometry.Height));
             ApplyMaximizeGeometry(view);
         }
 
@@ -4574,7 +4592,7 @@ internal sealed partial class TinyComp :
                 TouchSlop = TouchGripSlop,
             };
             _frame.Requested += OnFrameAction;
-            _frame.Faulted += e => _comp.Log.LogError("frame fault {Window}: {Reason}", Toplevel.AppId, e.Message);
+            _frame.Faulted += e => _comp.Log.Error($"frame fault {Toplevel.AppId}: {e.Message}");
             SceneSurface?.Tree.RaiseToTop();
             LayoutDecorations();
             ReportGeometry();

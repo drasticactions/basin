@@ -1,47 +1,32 @@
-using Basin;
-using Basin.Capabilities;
 using Basin.Scene;
-using Basin.UI.Skia;
-using Microsoft.Extensions.Logging;
+using Basin.UI.Avalonia;
 
 namespace PlasmaHost;
 
 internal sealed class PlasmaHostFrames : IDisposable
 {
-    private readonly BreezeTheme _theme;
-    private readonly IUIHost _uiHost;
-    private readonly ILogger _log;
+    private readonly AvaloniaUIHost _uiHost;
+    private readonly UISurfaceIndex _index;
+    private readonly BreezeIcons _icons = new();
 
-    public PlasmaHostFrames(IRenderer renderer, ILogger log)
+    public PlasmaHostFrames(AvaloniaUIHost uiHost, UISurfaceIndex index, BreezeTheme theme)
     {
-        _log = log;
-        _theme = new BreezeTheme();
-        _uiHost = SkiaUIHosts.For(renderer);
-        Capability = new BreezeFrameRenderer(_theme);
-        Shadows = new PlasmaHostShadows(BreezeFrameRenderer.CornerRadius);
+        _uiHost = uiHost;
+        _index = index;
+        Theme = theme;
+        Shadows = new PlasmaHostShadows(BreezeMetrics.CornerRadius);
     }
 
-    public IFrameRenderer Capability { get; }
+    public BreezeTheme Theme { get; }
 
     public PlasmaHostShadows Shadows { get; }
 
-    public SceneTree? MenuLayer { get; set; }
-
-    public Frame Create(SceneTree parent, string label)
-    {
-        var frame = new Frame(_uiHost, new BreezeFrameRenderer(_theme), parent)
-        {
-            MenuLayer = MenuLayer,
-            TouchSlop = 12,
-        };
-        frame.Faulted += e => _log.LogError("frame fault {Window}: {Reason}", label, e.Message);
-        return frame;
-    }
+    public PlasmaFrame Create(SceneTree parent) =>
+        new(_uiHost, Theme, _icons, parent, _index) { TouchSlop = 12 };
 
     public void Dispose()
     {
         Shadows.Dispose();
-        _uiHost.Dispose();
-        _theme.Dispose();
+        _icons.Dispose();
     }
 }

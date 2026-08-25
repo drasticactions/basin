@@ -1,6 +1,8 @@
 using Basin.Seat;
 using Xkb;
 
+using Basin.Diagnostics;
+
 namespace EightWm;
 
 internal sealed partial class Shell
@@ -208,7 +210,7 @@ internal sealed partial class Shell
         if (text.Length == 0)
         {
             ShowApps(view, false);
-            Console.WriteLine("FILTER none");
+            BasinReport.Line($"FILTER none");
             return;
         }
 
@@ -224,7 +226,7 @@ internal sealed partial class Shell
         start.SetApps(matches);
         start.AppsVisible = true;
         start.AppsPan.Reset(0);
-        Console.WriteLine($"FILTER {text} matches={matches.Count}");
+        BasinReport.Line($"FILTER {text} matches={matches.Count}");
     }
 
     internal HotCorner CornerAt(ShellView view, double localX, double localY)
@@ -294,7 +296,7 @@ internal sealed partial class Shell
 
         var from = _corner;
         _corner = HotCorner.None;
-        Console.WriteLine($"CORNER {from} slide");
+        BasinReport.Line($"CORNER {from} slide");
         if (onLeft)
         {
             DockSwitcher(view, true);

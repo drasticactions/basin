@@ -49,14 +49,14 @@ public sealed class AvaloniaUIHost : IUIHost
 
     public event Action<IUISurface>? PopupDismissed;
 
-    public UITargetKind Produces => UITargetKind.Memory;
+    public UITargetKind Produces => _context.Gpu is null ? UITargetKind.Memory : UITargetKind.Dmabuf;
 
     public long? NextDueMillis => _disposed ? null : _dispatcher.NextDueMillis;
 
     public IUISurface? CreateSurface(in UISurfaceOptions options)
     {
         _thread.Assert();
-        if (_disposed || options.Target != UITargetKind.Memory)
+        if (_disposed || (options.Target & Produces) == 0)
         {
             return null;
         }

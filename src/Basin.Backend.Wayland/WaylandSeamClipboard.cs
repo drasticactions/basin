@@ -1,6 +1,7 @@
 using Basin.Backend.Wayland.Protocol;
 using Basin.Capabilities;
 using Wayland;
+using static Basin.Backend.Wayland.WaylandBackendLog;
 
 namespace Basin.Backend.Wayland;
 
@@ -247,7 +248,7 @@ internal sealed class WaylandSeamClipboard : WaylandSeamSelectionBridge
             if (!_localOnlyWarned)
             {
                 _localOnlyWarned = true;
-                Basin.Diagnostics.BasinLog.Info(
+                Log.Info(
                     $"wayland backend: a guest drag began with the pointer outside every window; it stays inside this compositor");
             }
 
@@ -259,7 +260,7 @@ internal sealed class WaylandSeamClipboard : WaylandSeamSelectionBridge
             if (!_serialWarned)
             {
                 _serialWarned = true;
-                Basin.Diagnostics.BasinLog.Info(
+                Log.Info(
                     $"wayland backend: a guest drag stays inside this window; the parent issued no button serial to start one with");
             }
 

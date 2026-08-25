@@ -501,7 +501,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         }
     }
 
-    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null)
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
         if (effect is not IVulkanBackdropEffect vulkanEffect)
@@ -550,6 +550,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             Backdrop = entry.TwoPassTarget ? entry.BlendView : entry.SrgbView,
             TargetExtent = new Extent2D((uint)_target.Width, (uint)_target.Height),
             Bounds = bounds,
+            Key = key,
         };
         var recorded = vulkanEffect.Record(in context, out var result);
 

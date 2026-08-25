@@ -3,6 +3,7 @@ using Avalonia.Media;
 using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Basin.Diagnostics;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -46,7 +47,7 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
         }
         catch (Exception error)
         {
-            BasinLog.Error($"avalonia: frame dropped: {error}");
+            Log.Error($"frame dropped: {error}");
         }
     }
 

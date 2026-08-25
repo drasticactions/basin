@@ -3,8 +3,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Basin.Cli;
 using BasinChurn.Protocol;
-using Microsoft.Extensions.Logging;
 using Wayland;
+
+using Basin.Diagnostics;
 
 namespace BasinChurn;
 
@@ -42,9 +43,9 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             return Run(
-                loggers.CreateLogger("BasinChurn"),
+                BasinLog.For("BasinChurn"),
                 result.GetValue(socketOption),
                 result.GetValue(seedOption),
                 Math.Max(1, result.GetValue(windowsOption)),
@@ -53,7 +54,7 @@ internal static class Program
         });
     }
 
-    private static int Run(ILogger log, string? socket, int seed, int maxWindows, int rate, int seconds)
+    private static int Run(BasinLogger log, string? socket, int seed, int maxWindows, int rate, int seconds)
     {
         using var display = socket is null ? WlDisplay.Connect() : WlDisplay.Connect(socket);
         var registry = display.GetRegistry();
@@ -85,7 +86,7 @@ internal static class Program
 
         if (compositor is null || shm is null || wmBase is null)
         {
-            log.LogError("compositor is missing wl_compositor, wl_shm or xdg_wm_base");
+            log.Error($"compositor is missing wl_compositor, wl_shm or xdg_wm_base");
             return 1;
         }
 
@@ -109,7 +110,7 @@ internal static class Program
         var delay = 1000 / rate;
         var actions = 0L;
 
-        Console.WriteLine($"CHURN seed={seed} windows={maxWindows} rate={rate}");
+        BasinReport.Line($"CHURN seed={seed} windows={maxWindows} rate={rate}");
 
         while (running && Stopwatch.GetTimestamp() < deadline)
         {
@@ -151,7 +152,7 @@ internal static class Program
         }
 
         display.Roundtrip();
-        Console.WriteLine($"CHURN done actions={actions}");
+        BasinReport.Line($"CHURN done actions={actions}");
         return 0;
     }
 

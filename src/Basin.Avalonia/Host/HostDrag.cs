@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Basin.Diagnostics;
 using Basin.Seat;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -222,7 +223,7 @@ public sealed class HostDrag : IDisposable
                 stream.Write(buffer, 0, (int)got);
             }
 
-            BasinLog.Warn($"avalonia: a drag source stalled; the host drag carries nothing");
+            Log.Warn($"a drag source stalled; the host drag carries nothing");
             return null;
         }
         finally

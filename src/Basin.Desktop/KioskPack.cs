@@ -26,5 +26,8 @@ public static class KioskPack
             new CursorShapeModule(),
             new IdleModule(),
             new KdeServerDecorationModule(),
+            new ColorManagementModule(),
+            new ColorRepresentationModule(),
+            new AlphaModifierModule(),
         ]);
 }

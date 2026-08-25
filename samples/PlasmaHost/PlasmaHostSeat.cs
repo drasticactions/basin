@@ -8,6 +8,7 @@ using Basin.Scene;
 using Basin.Seat;
 using Basin.Seat.Backends;
 using Xkb;
+using static PlasmaHost.PlasmaHostLog;
 
 namespace PlasmaHost;
 
@@ -35,25 +36,30 @@ internal sealed class PlasmaHostSeat :
     private readonly LayoutPointer _pointer;
     private readonly CursorController _cursor;
     private readonly SeatIdleSource? _idle;
-    private readonly RelativePointerManager? _relativePointer;
+    private readonly PointerDelivery _delivery;
     private readonly Action _stop;
     private readonly SeatBinder _binder;
     private readonly SeatInjector _injector;
     private readonly SeatTouchDriver _touch;
     private LibinputBackend? _libinput;
     private Basin.Session.ISession? _session;
-    private SceneSurface? _dragIcon;
+    private readonly DragIconFollower _dragIcon;
     private DragMode _mode;
     private PlasmaHostView? _grabView;
     private double _grabX;
     private double _grabY;
+    private double _grabFractionX;
+    private double _grabFractionY;
+    private Box _grabOuter;
+    private Box _grabStale;
     private Basin.Shell.Xdg.ResizeEdges _grabEdges;
     private Box _grabStart;
-    private (Basin.Scene.Frame Frame, PlasmaHostView Owner)? _frameHover;
-    private (Basin.Scene.Frame Frame, PlasmaHostView Owner)? _framePress;
-    private (Basin.Scene.Frame Frame, PlasmaHostView Owner)? _touchFramePress;
-    private int? _frameTouchSlot;
-    private Basin.Scene.Frame? _openMenu;
+    private (PlasmaFrame Frame, PlasmaHostView Owner)? _frameHover;
+    private (PlasmaFrame Frame, PlasmaHostView Owner)? _framePress;
+    private (PlasmaFrame Frame, PlasmaHostView Owner)? _touchFramePress;
+    private readonly Basin.Shell.Xdg.GrabOrigin _grabOrigin;
+    private readonly UISurfaceRouter _router;
+    private PlasmaFrame? _openMenu;
     private bool _menuHovering;
 
     public PlasmaHostSeat(
@@ -65,9 +71,11 @@ internal sealed class PlasmaHostSeat :
         OutputLayout layout,
         CursorImageTheme cursorTheme,
         Basin.Seat.Backends.HookInputSink inputSink,
+        UISurfaceIndex uiSurfaces,
         Action stop)
     {
         _host = host;
+        _router = new UISurfaceRouter(scene, uiSurfaces);
         _seat = services.Require<Basin.Seat.Seat>();
         _windows = windows;
         _scene = scene;
@@ -82,7 +90,7 @@ internal sealed class PlasmaHostSeat :
             Capture = services.Find<IScreenCapture>(),
         };
         _cursor.Shapes.CursorRequested += _cursor.ShowImage;
-        _relativePointer = services.Find<RelativePointerManager>();
+        _delivery = new PointerDelivery(_seat, _cursor) { RelativePointer = services.Find<RelativePointerManager>() };
         _binder = new SeatBinder(_seat, layout, _pointer, _cursor)
         {
             Drm = host.Drm,
@@ -93,7 +101,16 @@ internal sealed class PlasmaHostSeat :
         _binder.Button += OnButton;
         _binder.Axis += OnAxis;
         _binder.PointerLeft += _seat.Pointer.NotifyClearFocus;
+        _dragIcon = new DragIconFollower(_seat, () => _scene.Root, () => (_pointer.X, _pointer.Y));
         _touch = new SeatTouchDriver(_binder, _seat);
+        _dragIcon.Touch = _touch.Router;
+        _grabOrigin = new Basin.Shell.Xdg.GrabOrigin(_seat, () => (_pointer.X, _pointer.Y))
+        {
+            Touch = _touch.MoveResize,
+        };
+        _binder.TouchDown += (_, id, x, y) => TouchBegan?.Invoke(id, x, y);
+        _binder.TouchMotion += (_, id, x, y) => TouchMoved?.Invoke(id, x, y);
+        _binder.TouchUp += (_, id) => TouchEnded?.Invoke(id);
         _touch.Router.HitTester = new SceneTouchHitTester(_scene);
         _touch.Router.Activity = this;
         _touch.Router.Chrome = this;
@@ -112,24 +129,6 @@ internal sealed class PlasmaHostSeat :
         _seat.Keyboard.SetKeymap(SystemKeymap.Read());
         _seat.Keyboard.SetRepeatInfo(25, 600);
         _seat.Pointer.CursorRequested += _cursor.HandleCursorRequest;
-
-        _seat.DataDevice.DragStarted += drag =>
-        {
-            if (drag.Icon is { } icon)
-            {
-                _dragIcon = new SceneSurface(_scene.Root, icon);
-                PositionDragIcon();
-            }
-        };
-        _seat.DataDevice.DragEnded += () =>
-        {
-            if (_dragIcon is { IsDestroyed: false } icon)
-            {
-                icon.Destroy();
-            }
-
-            _dragIcon = null;
-        };
 
         outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
         outputs.Removed += view => _cursor.RemoveOutput(view.Output);
@@ -192,7 +191,7 @@ internal sealed class PlasmaHostSeat :
         catch (Exception error) when (
             error is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException or IOException)
         {
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"headless run without a seat ({error.Message}); input stays on injected commands");
         }
 
@@ -200,6 +199,14 @@ internal sealed class PlasmaHostSeat :
         _binder.EnsureCursorLoaded();
         _cursor.MoveTo(_pointer.X, _pointer.Y);
     }
+
+    public CursorController CursorController => _cursor;
+
+    public Action<int, double, double>? TouchBegan { get; set; }
+
+    public Action<int, double, double>? TouchMoved { get; set; }
+
+    public Action<int>? TouchEnded { get; set; }
 
     public CursorImage? CursorSprite
     {
@@ -219,21 +226,34 @@ internal sealed class PlasmaHostSeat :
 
     public double PointerY => _pointer.Y;
 
-    public void Warp(double x, double y) => _injector.Warp(x, y);
+    public void RefreshPointer() => ProcessCursorMotion((uint)Environment.TickCount);
 
-    public void InjectButton(uint button, bool pressed) => _injector.Button(button, pressed);
+    public StdinInputCommands StdinCommands => _stdinCommands ??= new StdinInputCommands(_injector);
 
-    public void InjectKey(uint key, bool pressed) => _injector.Key(key, pressed);
+    private StdinInputCommands? _stdinCommands;
 
     public void CenterCursor() => _injector.Center();
+
+    public Func<XkbKeysym, bool>? Binding { get; set; }
+
+    public Func<double, double, bool>? OverlayMotion { get; set; }
+
+    public Func<double, double, uint, bool, bool>? OverlayButton { get; set; }
+
+    public bool ModActive(string name) => _seat.Keyboard.State?.IsModActive(name) == true;
 
     private void OnKey(uint timeMs, uint key, bool pressed)
     {
         _idle?.NotifyActivity();
-        if (pressed && _seat.Keyboard.State?.IsModActive("Mod1") == true &&
-            _seat.Keyboard.KeysymFor(key) == Escape)
+        var symbol = _seat.Keyboard.KeysymFor(key);
+        if (pressed && ModActive("Mod1") && symbol == Escape)
         {
             _stop();
+            return;
+        }
+
+        if (pressed && Binding?.Invoke(symbol) == true)
+        {
             return;
         }
 
@@ -250,14 +270,22 @@ internal sealed class PlasmaHostSeat :
             return;
         }
 
-        var hit = _scene.NodeAt(_pointer.X, _pointer.Y);
-        if (_openMenu is { } menu && hit is { Node: { } menuNode } && menu.OwnsMenuNode(menuNode))
+        if (OverlayMotion?.Invoke(_pointer.X, _pointer.Y) == true)
         {
             LeaveFrameHover(except: null);
-            _seat.Pointer.NotifyClearFocus();
-            _cursor.SetHover(null, overClient: false);
+            _delivery.ClearFocus();
+            PositionDragIcon();
+            _idle?.NotifyActivity();
+            return;
+        }
+
+        var hit = _scene.NodeAt(_pointer.X, _pointer.Y);
+        if (_openMenu is not null && MenuSurfaceAt(_pointer.X, _pointer.Y) is not null)
+        {
+            LeaveFrameHover(except: null);
+            _delivery.ClearFocus(showDefaultCursor: false);
             _menuHovering = true;
-            menu.MenuPointerMotion(hit.Value.X, hit.Value.Y);
+            _router.PointerMotion(timeMs, _pointer.X, _pointer.Y);
             _cursor.ShowNamed("left_ptr");
         }
         else
@@ -265,26 +293,23 @@ internal sealed class PlasmaHostSeat :
             if (_menuHovering)
             {
                 _menuHovering = false;
-                _openMenu?.MenuPointerLeave();
+                _router.PointerLeave();
             }
 
             if (TryRingResize(_pointer.X, _pointer.Y, RingMargin, CornerZone, out var hoverEdges, out _))
             {
                 LeaveFrameHover(except: null);
-                _seat.Pointer.NotifyClearFocus();
-                _cursor.SetHover(null, overClient: false);
+                _delivery.ClearFocus(showDefaultCursor: false);
                 _cursor.ShowNamed(Basin.Shell.Xdg.ResizeRing.CursorFor(hoverEdges));
             }
             else if (hit?.Surface is { } surface)
             {
                 LeaveFrameHover(except: null);
-                _seat.Pointer.NotifyMotionAt(timeMs, surface, hit.Value.X, hit.Value.Y, _pointer.X, _pointer.Y);
-                _cursor.SetHover(surface, overClient: true);
+                _delivery.Motion(timeMs, surface, hit.Value.X, hit.Value.Y, _pointer.X, _pointer.Y);
             }
             else
             {
-                _seat.Pointer.NotifyClearFocus();
-                _cursor.SetHover(null, overClient: false);
+                _delivery.ClearFocus(showDefaultCursor: false);
                 if (hit is { Node: { } hoverNode } && _windows.FindFrame(hoverNode) is { } frameHover)
                 {
                     LeaveFrameHover(except: frameHover.Frame);
@@ -302,11 +327,7 @@ internal sealed class PlasmaHostSeat :
             }
         }
 
-        if (dx != 0 || dy != 0)
-        {
-            _relativePointer?.NotifyMotion(
-                (ulong)timeMs * 1000, dx, dy, unaccelDx ?? dx, unaccelDy ?? dy);
-        }
+        _delivery.Relative(timeMs, dx, dy, unaccelDx, unaccelDy);
 
         PositionDragIcon();
         _idle?.NotifyActivity();
@@ -329,19 +350,20 @@ internal sealed class PlasmaHostSeat :
             ProcessCursorMotion(timeMs);
         }
 
+        if (OverlayButton?.Invoke(_pointer.X, _pointer.Y, button, pressed) == true)
+        {
+            return;
+        }
+
         if (_openMenu is { } menu)
         {
-            var menuHit = _scene.NodeAt(_pointer.X, _pointer.Y);
-            if (menuHit is { Node: { } menuNode } && menu.OwnsMenuNode(menuNode))
+            if (MenuSurfaceAt(_pointer.X, _pointer.Y) is { } menuSurface)
             {
-                if (button == InputCodes.BtnLeft)
+                _router.PointerButton(timeMs, button, pressed, menuSurface);
+                if (!menu.IsMenuOpen)
                 {
-                    menu.MenuPointerButton(menuHit.Value.X, menuHit.Value.Y, pressed);
-                    if (!menu.IsMenuOpen)
-                    {
-                        _openMenu = null;
-                        _menuHovering = false;
-                    }
+                    _openMenu = null;
+                    _menuHovering = false;
                 }
 
                 return;
@@ -356,7 +378,6 @@ internal sealed class PlasmaHostSeat :
         if (button == InputCodes.BtnLeft && !pressed && _framePress is { } held)
         {
             _framePress = null;
-            PrepareMenu(held);
             held.Frame.PointerButton(
                 _pointer.X - held.Owner.Tree.X, _pointer.Y - held.Owner.Tree.Y, pressed: false, timeMs);
             if (held.Frame.IsMenuOpen)
@@ -386,7 +407,6 @@ internal sealed class PlasmaHostSeat :
             frameHit.Owner.Tree.RaiseToTop();
             _windows.Focus(frameHit.Owner);
             _framePress = frameHit;
-            PrepareMenu(frameHit);
             frameHit.Frame.PointerButton(
                 _pointer.X - frameHit.Owner.Tree.X, _pointer.Y - frameHit.Owner.Tree.Y, pressed: true, timeMs);
             return;
@@ -402,7 +422,6 @@ internal sealed class PlasmaHostSeat :
             {
                 rightHit.Owner.Tree.RaiseToTop();
                 _windows.Focus(rightHit.Owner);
-                PrepareMenu(rightHit);
                 rightHit.Frame.OpenMenu(localX, localY);
                 _openMenu = rightHit.Frame.IsMenuOpen ? rightHit.Frame : null;
             }
@@ -427,9 +446,12 @@ internal sealed class PlasmaHostSeat :
 
         _mode = DragMode.Move;
         _grabView = view;
-        var (x, y) = GrabPosition(serial);
-        _grabX = x - view.Tree.X;
-        _grabY = y - view.Tree.Y;
+        var (x, y) = _grabOrigin.For(serial);
+        var outer = _windows.OuterBox(view);
+        _grabFractionX = outer.Width > 0 ? (x - outer.X) / outer.Width : 0;
+        _grabFractionY = outer.Height > 0 ? (y - outer.Y) / outer.Height : 0;
+        _grabOuter = outer;
+        _grabStale = default;
     }
 
     private void BeginResize(PlasmaHostView view, Basin.Shell.Xdg.ResizeEdges edges, uint? serial)
@@ -442,26 +464,10 @@ internal sealed class PlasmaHostSeat :
         _mode = DragMode.Resize;
         _grabView = view;
         _grabEdges = edges;
-        (_grabX, _grabY) = GrabPosition(serial);
+        (_grabX, _grabY) = _grabOrigin.For(serial);
         var (width, height) = view.GeometrySize();
         _grabStart = new Box(view.Tree.X, view.Tree.Y, width, height);
         _windows.SetResizing(view, true);
-    }
-
-    private (double X, double Y) GrabPosition(uint? serial)
-    {
-        if (_frameTouchSlot is { } slot && _touch.MoveResize.TryBeginContact(slot, out var frameX, out var frameY))
-        {
-            return (frameX, frameY);
-        }
-
-        if (_touch.MoveResize.TryBegin(serial, out var pointX, out var pointY))
-        {
-            return (pointX, pointY);
-        }
-
-        _seat.Pointer.NotifyClearFocus();
-        return (_pointer.X, _pointer.Y);
     }
 
     private bool DragTo(double x, double y)
@@ -469,7 +475,7 @@ internal sealed class PlasmaHostSeat :
         switch (_mode)
         {
             case DragMode.Move when _grabView is { } view:
-                _windows.MoveView(view, (int)(x - _grabX), (int)(y - _grabY));
+                MoveDrag(view, x, y);
                 return true;
 
             case DragMode.Resize when _grabView is { } view:
@@ -481,6 +487,30 @@ internal sealed class PlasmaHostSeat :
             default:
                 return false;
         }
+    }
+
+    private void MoveDrag(PlasmaHostView view, double x, double y)
+    {
+        var live = _windows.OuterBox(view);
+        if (view.Maximized)
+        {
+            _grabStale = live;
+            _grabOuter = _windows.RestoreForDrag(view, x, y, _grabFractionX, _grabFractionY);
+            return;
+        }
+
+        if (_grabStale.IsEmpty || live.Width != _grabStale.Width || live.Height != _grabStale.Height)
+        {
+            _grabStale = default;
+            _grabOuter = live;
+        }
+
+        var insetX = view.Tree.X - live.X;
+        var insetY = view.Tree.Y - live.Y;
+        _windows.MoveView(
+            view,
+            (int)Math.Round(x - (_grabFractionX * _grabOuter.Width)) + insetX,
+            (int)Math.Round(y - (_grabFractionY * _grabOuter.Height)) + insetY);
     }
 
     private void EndDrag()
@@ -513,11 +543,10 @@ internal sealed class PlasmaHostSeat :
         {
             frameHit.Owner.Tree.RaiseToTop();
             _windows.Focus(frameHit.Owner);
-            PrepareMenu(frameHit);
             _touchFramePress = frameHit;
-            _frameTouchSlot = id;
+            _grabOrigin.FrameTouchSlot = id;
             frameHit.Frame.TouchDown(x - frameHit.Owner.Tree.X, y - frameHit.Owner.Tree.Y, id, timeMs);
-            _frameTouchSlot = null;
+            _grabOrigin.FrameTouchSlot = null;
             if (frameHit.Frame.IsMenuOpen)
             {
                 _openMenu = frameHit.Frame;
@@ -531,9 +560,9 @@ internal sealed class PlasmaHostSeat :
         {
             ringView.Tree.RaiseToTop();
             _windows.Focus(ringView);
-            _frameTouchSlot = id;
+            _grabOrigin.FrameTouchSlot = id;
             BeginResize(ringView, ringEdges, serial: null);
-            _frameTouchSlot = null;
+            _grabOrigin.FrameTouchSlot = null;
             return true;
         }
 
@@ -618,21 +647,33 @@ internal sealed class PlasmaHostSeat :
         return false;
     }
 
-    private void PrepareMenu((Basin.Scene.Frame Frame, PlasmaHostView Owner) hit)
-    {
-        hit.Frame.MenuOrigin = new Point(hit.Owner.Tree.X, hit.Owner.Tree.Y);
-        var output = _layout.OutputAt(_pointer.X, _pointer.Y);
-        hit.Frame.MenuConstraint = output is null ? _layout.Bounds : _layout.BoxOf(output);
-    }
-
     private void DismissOpenMenu()
     {
         _openMenu?.DismissMenu();
         _openMenu = null;
         _menuHovering = false;
+        _router.PointerLeave();
     }
 
-    private void LeaveFrameHover(Basin.Scene.Frame? except)
+    private IUISurface? MenuSurfaceAt(double x, double y)
+    {
+        if (_router.SurfaceAt(x, y) is not { } hit)
+        {
+            return null;
+        }
+
+        foreach (var view in _windows.Views)
+        {
+            if (view.Frame?.OwnsSurface(hit.Surface) == true)
+            {
+                return null;
+            }
+        }
+
+        return hit.Surface;
+    }
+
+    private void LeaveFrameHover(PlasmaFrame? except)
     {
         if (_frameHover is { } hover && hover.Frame != except)
         {
@@ -648,13 +689,7 @@ internal sealed class PlasmaHostSeat :
         _idle?.NotifyActivity();
     }
 
-    private void PositionDragIcon()
-    {
-        if (_dragIcon is { IsDestroyed: false } icon)
-        {
-            icon.Tree.SetPosition((int)_pointer.X, (int)_pointer.Y);
-        }
-    }
+    private void PositionDragIcon() => _dragIcon.Follow();
 
     void ITouchPointerTarget.Warp(uint timeMs, double x, double y)
     {

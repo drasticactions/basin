@@ -1,6 +1,7 @@
 using Wayland;
 using Wayland.Server;
 using Wayland.Server.Shm;
+using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
@@ -72,7 +73,7 @@ public sealed class ManagedShmGlobal : IDisposable
             }
         }
 
-        Diagnostics.BasinLog.Warn(
+        Log.Warn(
             $"wl_shm: the guarded-copy primitive is unavailable (seccomp?); falling back to direct access");
         return false;
     }

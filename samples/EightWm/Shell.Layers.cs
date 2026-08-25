@@ -3,6 +3,8 @@ using Basin.Desktop;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 
+using Basin.Diagnostics;
+
 namespace EightWm;
 
 internal sealed partial class Shell
@@ -24,12 +26,12 @@ internal sealed partial class Shell
         {
             var view = ViewOfOutput(layer.Output) ?? PrimaryView;
             Relayout(view);
-            Console.WriteLine($"LAYER + {layer.Namespace} {layer.Layer}");
+            BasinReport.Line($"LAYER + {layer.Namespace} {layer.Layer}");
         };
         _layerDriver.Removed += layer =>
         {
             _layerRelayout = ViewOfOutput(layer.Output) ?? PrimaryView;
-            Console.WriteLine($"LAYER - {layer.Namespace}");
+            BasinReport.Line($"LAYER - {layer.Namespace}");
         };
         _layerDriver.Arranged += () =>
         {

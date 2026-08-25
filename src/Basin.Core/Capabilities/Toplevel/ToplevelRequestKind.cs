@@ -15,4 +15,6 @@ public enum ToplevelRequestKind
     ExcludeFromCapture,
     IncludeInCapture,
     SendToOutput,
+    SetMinimizedGeometry,
+    UnsetMinimizedGeometry,
 }

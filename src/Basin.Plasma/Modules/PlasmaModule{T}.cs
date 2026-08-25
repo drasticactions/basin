@@ -17,7 +17,7 @@ public abstract class PlasmaModule<T> : IProtocolModule
 
     public T? Manager { get; private set; }
 
-    public IDisposable Install(BasinServices services)
+    public virtual IDisposable Install(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
         Manager = Create(services);

@@ -20,5 +20,7 @@ public sealed class BasinPlatformOptions
 
     public IUIScreenSource? Screens { get; set; }
 
+    public IAvaloniaGpu? Gpu { get; set; }
+
     public UIThemeVariant Theme { get; set; } = UIThemeVariant.Light;
 }

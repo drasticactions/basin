@@ -39,6 +39,24 @@ internal static class KdeIni
         return null;
     }
 
+    public static bool GroupExists(string path, string group)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        foreach (var raw in File.ReadLines(path))
+        {
+            if (raw.Trim() == $"[{group}]")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static string ConfigPath(string name)
     {
         var home = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");

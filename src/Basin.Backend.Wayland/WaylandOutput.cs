@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Backend.Wayland.Protocol;
 using Basin.Protocol;
 using Wayland;
+using static Basin.Backend.Wayland.WaylandBackendLog;
 
 namespace Basin.Backend.Wayland;
 
@@ -120,7 +121,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
                 if (!pendingDecorated && !declineLogged)
                 {
                     declineLogged = true;
-                    Basin.Diagnostics.BasinLog.Info(
+                    Log.Info(
                         $"{Name}: parent kept client-side decorations; the window is framed only if the consumer draws one");
                 }
             };
@@ -319,7 +320,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
             {
                 _hostFrameWarned = true;
                 var missing = _backend.ParentSubcompositor is null ? "wl_subcompositor" : "wp_viewporter";
-                Basin.Diagnostics.BasinLog.Info(
+                Log.Info(
                     $"{Name}: parent draws no decorations and lacks {missing}; the window stays bare");
             }
 
@@ -458,7 +459,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         if (!_scaleWarned)
         {
             _scaleWarned = true;
-            Basin.Diagnostics.BasinLog.Warn(
+            Log.Warn(
                 $"{Name}: parent lacks wp_viewporter; fractional scale {Scale} presents 1:1 (window grows)");
         }
 
@@ -631,7 +632,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         if (_syncobjSurface is null)
         {
             _syncobjSurface = manager.GetSurface(_surface);
-            Basin.Diagnostics.BasinLog.Info(
+            Log.Info(
                 $"{Name}: presenting with explicit sync (linux-drm-syncobj-v1)");
         }
 
@@ -711,7 +712,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         }
 
         _syncobjWarned = true;
-        Basin.Diagnostics.BasinLog.Warn(
+        Log.Warn(
             $"wayland backend: presenting without explicit sync — {reason}. On a driver that does not maintain a dmabuf's implicit fences this shows as tearing or corruption.");
     }
 

@@ -3,8 +3,9 @@ using Basin.Capabilities;
 using Basin.Render.Skia;
 using Basin.Scene;
 using Basin.UI.Skia;
-using Microsoft.Extensions.Logging;
 using SkiaSharp;
+
+using Basin.Diagnostics;
 
 namespace EightWm;
 
@@ -74,7 +75,7 @@ internal sealed partial class Shell
         }
 
         RelayoutAll();
-        Console.WriteLine($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
+        BasinReport.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
     }
 
     internal void ApplyRules(AppWindow app)
@@ -365,7 +366,7 @@ internal sealed partial class Shell
             }
 
             start.Invalidate();
-            Console.WriteLine($"SELECT {tile.Name} {(tile.Selected ? "on" : "off")}");
+            BasinReport.Line($"SELECT {tile.Name} {(tile.Selected ? "on" : "off")}");
             return;
         }
 
@@ -387,7 +388,7 @@ internal sealed partial class Shell
             var target = Math.Clamp(index + (start.Slide.Travel > 0 ? 1 : -1), 0, group.Tiles.Count);
             group.Tiles.Insert(target, tile);
             start.SetTiles(AllTilesOf(start), _config.GroupOrder);
-            Console.WriteLine($"REORDER {tile.Name} {index}->{target}");
+            BasinReport.Line($"REORDER {tile.Name} {index}->{target}");
             return;
         }
     }
@@ -418,7 +419,7 @@ internal sealed partial class Shell
         start.AppsVisible = visible;
         start.AppsPan.Reset(0);
         Animate(ref view.StartMotion, view.BackgroundFrame, Animation.EnterPage, offsetScale: view.Scale);
-        Console.WriteLine($"APPS {(visible ? "on" : "off")}");
+        BasinReport.Line($"APPS {(visible ? "on" : "off")}");
     }
 
     internal void ToggleZoom(ShellView view, bool zoomOut, double centerX = -1, double centerY = -1)
@@ -441,14 +442,14 @@ internal sealed partial class Shell
             start.SetZoomNow(zoomOut);
         }
 
-        Console.WriteLine($"ZOOM {(zoomOut ? "out" : "in")}");
+        BasinReport.Line($"ZOOM {(zoomOut ? "out" : "in")}");
     }
 
     private void ZoomToGroup(ShellView view, StartScreen start, TileGroup group)
     {
         ToggleZoom(view, zoomOut: false);
         start.Pan.Reset(-group.Box.X);
-        Console.WriteLine($"ZOOM group={group.Name}");
+        BasinReport.Line($"ZOOM group={group.Name}");
     }
 
     private readonly double[] _snapScratch = new double[64];
@@ -490,7 +491,7 @@ internal sealed partial class Shell
 
             if (process.ExitCode != 0 || output.Length == 0)
             {
-                _log.LogDebug("tile {Name} poll gave nothing", tile.Name);
+                _log.Debug($"tile {tile.Name} poll gave nothing");
                 process.Dispose();
                 continue;
             }
@@ -561,7 +562,7 @@ internal sealed partial class Shell
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            _log.LogDebug("tile {Name} cannot run '{Command}': {Reason}", tile.Name, command, error.Message);
+            _log.Debug($"tile {tile.Name} cannot run '{command}': {error.Message}");
         }
     }
 
@@ -590,7 +591,7 @@ internal sealed partial class Shell
     {
         ShowSplash(view, tile.Name, tile.Color);
         Spawn(tile.Exec);
-        Console.WriteLine($"LAUNCH {tile.Name}");
+        BasinReport.Line($"LAUNCH {tile.Name}");
     }
 
     internal const long SplashTimeoutMillis = 10_000;
@@ -668,7 +669,7 @@ internal sealed partial class Shell
         {
             if (view.Splash is { Enabled: true } && now >= view.SplashDeadlineMillis)
             {
-                Console.WriteLine($"SPLASH timeout {view.SplashTitle}");
+                BasinReport.Line($"SPLASH timeout {view.SplashTitle}");
                 DismissSplash(view, crossFade: false);
             }
         }

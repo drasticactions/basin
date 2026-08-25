@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Basin.Scene;
 using Basin.Shell.Xdg;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -405,7 +406,7 @@ public sealed class ToplevelWindows : IDisposable
         }
 
         entry.WindowCreated = true;
-        Basin.Diagnostics.BasinLog.Debug($"toplevel mapped: {entry.Width}x{entry.Height} '{toplevel.Title}'");
+        Log.Debug($"toplevel mapped: {entry.Width}x{entry.Height} '{toplevel.Title}'");
         var serverSide = _decorations is not null
             && _decorations.TryGetPreference(toplevel, out var preference)
             && (preference ?? DecorationMode.ServerSide) != DecorationMode.ClientSide;
@@ -511,7 +512,7 @@ public sealed class ToplevelWindows : IDisposable
         var followHost = converged || !HasFrameMargins(entry.Toplevel);
         entry.WindowWidth = windowWidth;
         entry.WindowHeight = windowHeight;
-        Basin.Diagnostics.BasinLog.Debug($"toplevel commit: geometry {geometry.X},{geometry.Y} {width}x{height} window {windowWidth}x{windowHeight} followHost={followHost}");
+        Log.Debug($"toplevel commit: geometry {geometry.X},{geometry.Y} {width}x{height} window {windowWidth}x{windowHeight} followHost={followHost}");
         if (followHost)
         {
             entry.SettleTimer?.UpdateTimer(0);
@@ -547,19 +548,19 @@ public sealed class ToplevelWindows : IDisposable
 
         var windowWidth = entry.WindowWidth;
         var windowHeight = entry.WindowHeight;
-        Basin.Diagnostics.BasinLog.Debug($"toplevel settle: window {windowWidth}x{windowHeight}");
+        Log.Debug($"toplevel settle: window {windowWidth}x{windowHeight}");
         RunOnUi(() => WindowOf(entry)?.ApplyClientSize(windowWidth, windowHeight));
     }
 
     private void OnUnmapped(Entry entry)
     {
-        Basin.Diagnostics.BasinLog.Debug($"toplevel unmapped: '{entry.Toplevel?.Title}'");
+        Log.Debug($"toplevel unmapped: '{entry.Toplevel?.Title}'");
         RunOnUi(() => WindowOf(entry)?.ApplyVisible(false));
     }
 
     private void OnDestroyed(Entry entry)
     {
-        Basin.Diagnostics.BasinLog.Debug($"toplevel destroyed: '{entry.Toplevel?.Title}'");
+        Log.Debug($"toplevel destroyed: '{entry.Toplevel?.Title}'");
         entry.SettleTimer?.Remove();
         entry.SettleTimer = null;
         ReleaseHeldInput(entry.Surface);
@@ -1255,7 +1256,7 @@ public sealed class ToplevelWindows : IDisposable
         var remapped = entry.WindowCreated;
         entry.WindowCreated = true;
         entry.Band = band;
-        Basin.Diagnostics.BasinLog.Debug(
+        Log.Debug(
             $"layer {(remapped ? "remapped" : "mapped")}: '{layer.Namespace}' id={id} {layer.Layer} " +
             $"keyboard={layer.KeyboardInteractivity} anchor={layer.Anchor} zone={layer.ExclusiveZone} " +
             $"{entry.Width}x{entry.Height} inputInfinite={layer.Surface.Current.InputIsInfinite} " +
@@ -1335,7 +1336,7 @@ public sealed class ToplevelWindows : IDisposable
 
     private void OnLayerUnmapped(LayerSurface layer, Entry entry)
     {
-        Basin.Diagnostics.BasinLog.Debug($"layer unmapped: '{layer.Namespace}' id={entry.Id}");
+        Log.Debug($"layer unmapped: '{layer.Namespace}' id={entry.Id}");
         ReleaseHeldInput(entry.Surface);
         if (ReferenceEquals(_host.Seat.Keyboard.Focus, entry.Surface))
         {
@@ -1359,7 +1360,7 @@ public sealed class ToplevelWindows : IDisposable
             return;
         }
 
-        Basin.Diagnostics.BasinLog.Debug($"layer destroyed: '{layer.Namespace}' id={entry.Id}");
+        Log.Debug($"layer destroyed: '{layer.Namespace}' id={entry.Id}");
 
         ReleaseHeldInput(entry.Surface);
         _layers.RemoveAll(row => row.Entry.Id == entry.Id);

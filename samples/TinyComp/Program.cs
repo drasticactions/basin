@@ -1,7 +1,8 @@
 using System.CommandLine;
 using Basin.Cli;
 using Basin.Render.Pixman;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace TinyComp;
 
@@ -85,9 +86,9 @@ internal static class Program
         return cli.Run(args, result =>
         {
             var chosen = result.GetValue(backend);
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             var status = Run(
-                loggers,
+                BasinLog.For("TinyComp"),
                 result.GetValue(outputs),
                 result.GetValue(renderer)!,
                 chosen.Kind == BackendKind.Drm,
@@ -121,7 +122,7 @@ internal static class Program
     }
 
     private static int Run(
-        ILoggerFactory loggers,
+        BasinLogger log,
         int outputCount,
         string rendererName,
         bool drm,
@@ -145,7 +146,7 @@ internal static class Program
         string? channelEndpoint,
         out long renderedFrames)
     {
-        using var comp = new TinyComp(outputCount, rendererName, drm, fullRepaint, damageTint, scales, offload, nightLight, hdr, frameStyle, noTransactions, socketFd, loggers.CreateLogger("TinyComp"), wobbly, openAnimation, post, closeAnimation, switcher, cornerRadius, frames, managedTransport, channelEndpoint);
+        using var comp = new TinyComp(outputCount, rendererName, drm, fullRepaint, damageTint, scales, offload, nightLight, hdr, frameStyle, noTransactions, socketFd, log, wobbly, openAnimation, post, closeAnimation, switcher, cornerRadius, frames, managedTransport, channelEndpoint);
         var status = comp.Run();
         renderedFrames = comp.Rendered;
         return status;

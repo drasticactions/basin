@@ -12,4 +12,5 @@ public readonly record struct ToplevelInfo(
     uint Pid = 0,
     ulong ParentId = 0,
     string AppMenuService = "",
-    string AppMenuObjectPath = "");
+    string AppMenuObjectPath = "",
+    Box MinimizedGeometry = default);

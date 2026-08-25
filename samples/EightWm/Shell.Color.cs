@@ -3,13 +3,14 @@ using Basin.Capabilities;
 using Basin.Color;
 using Basin.Desktop;
 
+using Basin.Diagnostics;
+
 namespace EightWm;
 
 internal sealed partial class Shell
 {
     private ColorManager? _color;
     private ColorLutCache? _luts;
-    private ImageDescription _outputDescription = ImageDescription.Srgb;
     private Func<Surface, IColorLut?>? _resolveLut;
     private int _lutCount = -1;
 
@@ -22,9 +23,7 @@ internal sealed partial class Shell
 
         _color = color;
         _luts = new ColorLutCache(_renderer);
-        color.SupportedTransferFunctions =
-            [ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear];
-        color.SupportedPrimaries = [ColorPrimaries.Srgb];
+        DeclareColor();
         color.SurfaceDescriptionChanged += (_, _) => RefreshLuts();
         color.OutputDescriptionChanged += (global, description) =>
             _seat.DescribeCursor(global.Output, description);
@@ -38,9 +37,23 @@ internal sealed partial class Shell
         }
     }
 
+    private ImageDescription DescriptionOf(IOutput output) => _colorPack.Configuration.DescriptionOf(output);
+
+    private ImageDescription PrimaryDescription() =>
+        Views.Count > 0 ? DescriptionOf(Views[0].Output) : ImageDescription.Srgb;
+
+    private void DeclareColor()
+    {
+        if (_color is { } color)
+        {
+            SurfaceLutDriver.Declare(color, Views.Select(v => DescriptionOf(v.Output)));
+        }
+    }
+
     private void DescribeOutput(ShellView view)
     {
-        _color?.SetOutputDescription(view.Global, _outputDescription);
+        _color?.SetOutputDescription(view.Global, DescriptionOf(view.Output));
+        DeclareColor();
         RefreshLuts();
     }
 
@@ -51,7 +64,7 @@ internal sealed partial class Shell
             return;
         }
 
-        _resolveLut ??= surface => luts.LutFor(color.DescriptionOf(surface), _outputDescription);
+        _resolveLut ??= surface => luts.LutFor(color.DescriptionOf(surface), PrimaryDescription());
         var attached = _scene.AttachLuts(_resolveLut);
         if (attached == _lutCount)
         {
@@ -59,6 +72,6 @@ internal sealed partial class Shell
         }
 
         _lutCount = attached;
-        Console.WriteLine($"COLOR luts={attached}");
+        BasinReport.Line($"COLOR luts={attached}");
     }
 }

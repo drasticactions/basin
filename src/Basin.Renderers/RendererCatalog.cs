@@ -14,6 +14,11 @@ public static class RendererCatalog
         "impeller",
     ];
 
+    public const string DefaultRenderNodePath = "/dev/dri/renderD128";
+
+    public static string? FindRenderNode() =>
+        File.Exists(DefaultRenderNodePath) ? DefaultRenderNodePath : null;
+
     public static bool NeedsGpu(string name) =>
         name is "gl" or "vulkan" or "skia-gl" or "skia-vulkan" or "skia-graphite" or "impeller";
 

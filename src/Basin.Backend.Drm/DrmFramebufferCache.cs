@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Diagnostics;
 using Drm;
 using Drm.Native;
+using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
@@ -73,7 +74,7 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
             : Libdrm.drmModeAddFB2(device.Fd, (uint)buffer.Width, (uint)buffer.Height, (uint)format, planeHandles, planePitches, planeOffsets, &fbId, 0);
         if (result != 0)
         {
-            BasinLog.Debug($"AddFB2 failed for {buffer.Width}x{buffer.Height} {format} modifier 0x{attributes.Modifier:X} planes {attributes.PlaneCount} (errno {Marshal.GetLastPInvokeError()})");
+            Log.Debug($"AddFB2 failed for {buffer.Width}x{buffer.Height} {format} modifier 0x{attributes.Modifier:X} planes {attributes.PlaneCount} (errno {Marshal.GetLastPInvokeError()})");
             return 0;
         }
 
@@ -110,7 +111,7 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
             uint handle;
             if (Libdrm.drmPrimeFDToHandle(device.Fd, attributes.Fds[plane], &handle) != 0)
             {
-                BasinLog.Debug($"prime import failed for {buffer.Width}x{buffer.Height} plane {plane} (errno {Marshal.GetLastPInvokeError()})");
+                Log.Debug($"prime import failed for {buffer.Width}x{buffer.Height} plane {plane} (errno {Marshal.GetLastPInvokeError()})");
                 CloseHandles(imported);
                 return null;
             }

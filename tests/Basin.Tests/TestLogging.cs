@@ -5,15 +5,21 @@ namespace Basin.Tests;
 
 internal static class TestLogging
 {
+    private static readonly StandardErrorLogSink Sink = new();
+
     [ModuleInitializer]
     internal static void Install()
     {
-        Console.Out.Write(string.Empty);
-        Console.Error.Write(string.Empty);
         BasinLog.Level = Environment.GetEnvironmentVariable("BASIN_TRACE") is null
             ? BasinLogLevel.Warn
             : BasinLogLevel.Debug;
-        BasinLog.Sink = static (level, message) =>
-            Console.Error.WriteLine($"[{level.ToString().ToLowerInvariant()}] basin: {message}");
+        BasinLog.Sink = Sink;
+        WarmStreams();
+    }
+
+    internal static void WarmStreams()
+    {
+        BasinReport.Flush();
+        Sink.Flush();
     }
 }

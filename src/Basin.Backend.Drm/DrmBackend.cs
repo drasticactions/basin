@@ -4,6 +4,7 @@ using Basin.Session;
 using Drm;
 using Liftoff;
 using Udev;
+using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
@@ -76,6 +77,8 @@ public sealed class DrmBackend : IDisposable
 
     internal LiftoffDevice? Liftoff { get; private set; }
 
+    internal LiftoffDevice? LiftoffProbe { get; private set; }
+
     private readonly List<(uint PossibleCrtcs, DrmFormatSet Formats)> _overlayPlanes = [];
 
     internal DrmFormatSet OverlayFormatsFor(int crtcIndex)
@@ -122,14 +125,14 @@ public sealed class DrmBackend : IDisposable
         }
         else
         {
-            BasinLog.Debug($"{DevicePath}: no cursor size reported, using {CursorSize.Width}x{CursorSize.Height}");
+            Log.Debug($"{DevicePath}: no cursor size reported, using {CursorSize.Width}x{CursorSize.Height}");
         }
 
         Framebuffers = new DrmFramebufferCache(Device) { IsScanningOut = IsBufferOnScreen };
         RenderNodePath = FindRenderNode(DevicePath);
         DriverName = ReadDriverName();
         CursorRidesWithFrame = DriverName is "nvidia-drm" or "nvidia";
-        BasinLog.Debug(
+        Log.Debug(
             $"{DevicePath}: driver {DriverName ?? "unknown"}; cursor plane " +
             $"{(CursorRidesWithFrame ? "rides with a frame commit while a layer scans out" : "commits on its own")}");
 
@@ -162,6 +165,8 @@ public sealed class DrmBackend : IDisposable
         _drmSource?.Remove();
         Liftoff?.Dispose();
         Liftoff = null;
+        LiftoffProbe?.Dispose();
+        LiftoffProbe = null;
         if (Device is not null)
         {
             RestoreCrtcState();
@@ -263,7 +268,7 @@ public sealed class DrmBackend : IDisposable
             var primary = FindPlane(crtcIndex, 1 );
             if (primary is null)
             {
-                BasinLog.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}; connector stays dark");
+                Log.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}; connector stays dark");
                 continue;
             }
 
@@ -297,7 +302,7 @@ public sealed class DrmBackend : IDisposable
             var primary = FindPlane(crtcIndex, 1 );
             if (primary is null)
             {
-                BasinLog.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}; not offered for leasing");
+                Log.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}; not offered for leasing");
                 continue;
             }
 
@@ -327,15 +332,20 @@ public sealed class DrmBackend : IDisposable
         try
         {
             Liftoff = LiftoffDevice.Create(Device.Fd);
+            LiftoffProbe = LiftoffDevice.Create(Device.Fd);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
-            BasinLog.Info($"libliftoff not available; overlay plane offload disabled");
+            Liftoff?.Dispose();
+            Liftoff = null;
+            Log.Info($"libliftoff not available; overlay plane offload disabled");
             return;
         }
         catch (LiftoffException e)
         {
-            BasinLog.Warn($"{DevicePath}: liftoff device creation failed ({e.Message}); overlay plane offload disabled");
+            Liftoff?.Dispose();
+            Liftoff = null;
+            Log.Warn($"{DevicePath}: liftoff device creation failed ({e.Message}); overlay plane offload disabled");
             return;
         }
 
@@ -344,11 +354,11 @@ public sealed class DrmBackend : IDisposable
         {
             if (priority == LiftoffLogPriority.Error)
             {
-                BasinLog.Warn($"liftoff: {message}");
+                Log.Warn($"liftoff: {message}");
             }
             else
             {
-                BasinLog.Debug($"liftoff: {message}");
+                Log.Debug($"liftoff: {message}");
             }
         });
 
@@ -364,12 +374,13 @@ public sealed class DrmBackend : IDisposable
             try
             {
                 Liftoff.CreatePlane(planeId);
+                LiftoffProbe!.CreatePlane(planeId);
                 overlays++;
                 _overlayPlanes.Add((Device.GetPlane(planeId).PossibleCrtcs, DrmOutput.ReadInFormats(Device, props)));
             }
             catch (LiftoffException e)
             {
-                BasinLog.Warn($"plane {planeId}: liftoff registration failed ({e.Message})");
+                Log.Warn($"plane {planeId}: liftoff registration failed ({e.Message})");
             }
         }
 
@@ -377,11 +388,13 @@ public sealed class DrmBackend : IDisposable
         {
             Liftoff.Dispose();
             Liftoff = null;
-            BasinLog.Info($"{DevicePath}: no overlay planes; plane offload disabled");
+            LiftoffProbe?.Dispose();
+            LiftoffProbe = null;
+            Log.Info($"{DevicePath}: no overlay planes; plane offload disabled");
             return;
         }
 
-        BasinLog.Info($"{DevicePath}: libliftoff managing {overlays} overlay plane(s)");
+        Log.Info($"{DevicePath}: libliftoff managing {overlays} overlay plane(s)");
     }
 
     private uint? FindPlane(int crtcIndex, ulong planeType)
@@ -473,7 +486,7 @@ public sealed class DrmBackend : IDisposable
         }
         catch (UdevException e)
         {
-            BasinLog.Warn($"udev monitor unavailable ({e.Message}); connector hotplug disabled");
+            Log.Warn($"udev monitor unavailable ({e.Message}); connector hotplug disabled");
         }
     }
 
@@ -541,7 +554,7 @@ public sealed class DrmBackend : IDisposable
             }
             catch (DrmException e)
             {
-                BasinLog.Warn($"console restore for CRTC {crtcId} failed ({e.Message}); a VT switch will repaint it");
+                Log.Warn($"console restore for CRTC {crtcId} failed ({e.Message}); a VT switch will repaint it");
             }
         }
     }

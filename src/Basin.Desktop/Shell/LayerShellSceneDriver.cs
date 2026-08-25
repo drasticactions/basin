@@ -32,14 +32,12 @@ public sealed class LayerShellSceneDriver
 
     public Func<LayerSurface, OutputGlobal?>? DefaultOutput { get; set; }
 
-    /// <summary>The box a popup rooted at this layer surface is unconstrained into.</summary>
     public Func<LayerSurface, Box>? PopupBounds { get; set; }
 
     public IReadOnlyList<(LayerSurface Layer, SceneSurface? Scene)> Surfaces => _surfaces;
 
     public event Action<LayerSurface, SceneSurface>? SceneCreated;
 
-    /// <summary>Raised when a popup rooted at a layer surface gains a scene node.</summary>
     public event Action<LayerSurface, XdgPopupWindow, SceneSurface>? PopupSceneCreated;
 
     public event Action<LayerSurface>? Removed;
@@ -60,7 +58,6 @@ public sealed class LayerShellSceneDriver
         };
     }
 
-    /// <summary>The layer surface a popup chain hangs from, or null when it hangs from a toplevel.</summary>
     public static LayerSurface? RootLayerOf(XdgPopupWindow popup)
     {
         ArgumentNullException.ThrowIfNull(popup);
@@ -80,7 +77,6 @@ public sealed class LayerShellSceneDriver
         return root.LayerParent;
     }
 
-    /// <summary>Follows popups nested under a layer surface's own popups. Call once with the xdg shell.</summary>
     public void TrackPopups(XdgShell shell)
     {
         ArgumentNullException.ThrowIfNull(shell);
@@ -93,7 +89,6 @@ public sealed class LayerShellSceneDriver
         shell.NewPopup += OnNewPopup;
     }
 
-    /// <summary>The scene node a mapped layer surface holds, or null while it is unmapped.</summary>
     public SceneSurface? SceneOf(LayerSurface layer)
     {
         ArgumentNullException.ThrowIfNull(layer);

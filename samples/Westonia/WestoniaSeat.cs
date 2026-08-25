@@ -5,7 +5,8 @@ using Basin.Desktop;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.UI.Avalonia;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -20,11 +21,12 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
     private readonly AvaloniaShell _shell;
     private readonly UISurfaceRouter _router;
     private readonly WestonShell _policy;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly Basin.Seat.Backends.SeatBinder _binder;
     private readonly Basin.Seat.Backends.SeatInjector _injector;
     private readonly Basin.Seat.Backends.SeatTouchDriver _touch;
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
+    private readonly PointerRefresh _pointerRefresh;
     private IUISurface? _routeSurface;
     private ButtonRoute _route;
     private int _buttonsDown;
@@ -43,7 +45,7 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
         UISurfaceIndex index,
         WestonShell policy,
         Basin.Backend.Libinput.LibinputBackend? input,
-        ILogger log)
+        BasinLogger log)
     {
         _host = host;
         _seat = services.Require<Seat>();
@@ -57,6 +59,7 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
         _input = input;
         _pointer = new LayoutPointer(layout);
         _pointer.Moved += () => MoveCursor((uint)Environment.TickCount);
+        _pointerRefresh = new PointerRefresh(scene, host.Loop, RefreshPointer);
 
         _binder = new Basin.Seat.Backends.SeatBinder(_seat, layout, _pointer, cursor);
         _injector = new Basin.Seat.Backends.SeatInjector(_binder, _seat, layout, _pointer)
@@ -83,7 +86,7 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
             WireLibinput(input);
             _binder.BindLibinputTouch(input);
             input.Start();
-            _log.LogInformation("libinput started on seat {Seat}", host.Session?.SeatName ?? "seat0");
+            _log.Info($"libinput started on seat {(host.Session?.SeatName ?? "seat0")}");
         }
     }
 
@@ -103,13 +106,18 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
 
     public void CenterPointer() => _injector.Center();
 
-    public void WarpPointer(double x, double y) => _injector.Warp(x, y);
+    public Basin.Seat.Backends.StdinInputCommands StdinCommands =>
+        _stdinCommands ??= new Basin.Seat.Backends.StdinInputCommands(_injector);
 
-    public void InjectButton(uint button, bool pressed) => _injector.Button(button, pressed);
+    private Basin.Seat.Backends.StdinInputCommands? _stdinCommands;
 
-    public void InjectKey(uint key, bool pressed) => _injector.Key(key, pressed);
+    public void Dispose()
+    {
+        _disposed = true;
+        _pointerRefresh.Dispose();
+    }
 
-    public void Dispose() => _disposed = true;
+    private void RefreshPointer() => MoveCursor((uint)Environment.TickCount);
 
     private void WireParentPointer(WaylandPointerDevice pointer)
     {
@@ -148,8 +156,8 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
 
     private void WireLibinput(Basin.Backend.Libinput.LibinputBackend input)
     {
-        input.DeviceAdded += device => Console.WriteLine($"INPUT + {device.Name}");
-        input.DeviceRemoved += device => Console.WriteLine($"INPUT - {device.Name}");
+        input.DeviceAdded += device => BasinReport.Line($"INPUT + {device.Name}");
+        input.DeviceRemoved += device => BasinReport.Line($"INPUT - {device.Name}");
         input.Key += (_, time, key, pressed) => OnKey(time, key, pressed);
         input.PointerButton += (_, time, button, pressed) => OnButton(time, button, pressed);
         input.PointerMotion += (_, time, dx, dy, _, _) =>

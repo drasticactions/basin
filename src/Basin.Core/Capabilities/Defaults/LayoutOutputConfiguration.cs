@@ -1,6 +1,6 @@
 namespace Basin.Capabilities.Defaults;
 
-public sealed class LayoutOutputConfiguration : IOutputConfiguration
+public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposable
 {
     private const OutputConfigurationFeatures DrivableMask =
         OutputConfigurationFeatures.Overscan |
@@ -15,6 +15,10 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
     private readonly Dictionary<IOutput, Parked> _parked = [];
     private readonly Dictionary<IOutput, OutputConfigurationEntry> _committed = [];
     private readonly Dictionary<IOutput, Action> _recorded = [];
+    private readonly Dictionary<IOutput, OutputAutoRotatePolicy> _policies = [];
+    private readonly Dictionary<IOutput, OutputTransform> _manual = [];
+    private IOrientationSource? _orientation;
+    private bool _tabletMode;
 
     private sealed record Parked(Point Position, Action OnDestroyed);
 
@@ -25,6 +29,53 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
     }
 
     public event Action<IReadOnlyList<OutputConfigurationEntry>>? Applied;
+
+    public IOrientationSource? Orientation
+    {
+        get => _orientation;
+        set
+        {
+            if (ReferenceEquals(_orientation, value))
+            {
+                return;
+            }
+
+            if (_orientation is { } previous)
+            {
+                previous.Changed -= Reevaluate;
+            }
+
+            _orientation = value;
+            if (value is { } next)
+            {
+                next.Changed += Reevaluate;
+            }
+
+            Reevaluate();
+        }
+    }
+
+    public bool TabletMode
+    {
+        get => _tabletMode;
+        set
+        {
+            if (_tabletMode != value)
+            {
+                _tabletMode = value;
+                Reevaluate();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_orientation is { } sensor)
+        {
+            sensor.Changed -= Reevaluate;
+            _orientation = null;
+        }
+    }
 
     public bool Test(IReadOnlyList<OutputConfigurationEntry> entries)
     {
@@ -71,6 +122,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
             Record(entry);
         }
 
+        Reevaluate();
         Applied?.Invoke(entries);
         return true;
     }
@@ -78,18 +130,88 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
     public OutputConfigurationFeatures Supported(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
-        return output.Features & DrivableMask;
+        var features = output.Features & DrivableMask;
+        if (_orientation is { IsAvailable: true } && InternalConnectors.IsInternal(output))
+        {
+            features |= OutputConfigurationFeatures.AutoRotate;
+        }
+
+        return features;
     }
 
     public bool TryRead(IOutput output, out OutputConfigurationEntry state)
     {
         ArgumentNullException.ThrowIfNull(output);
-        return _committed.TryGetValue(output, out state);
+        var any = _committed.TryGetValue(output, out state);
+        if (_policies.TryGetValue(output, out var policy))
+        {
+            if (!any)
+            {
+                state = new OutputConfigurationEntry { Output = output, Enabled = output.Enabled };
+                any = true;
+            }
+
+            state = state with { AutoRotate = policy };
+        }
+
+        return any;
+    }
+
+    private bool RotationActive(IOutput output) =>
+        _orientation is { IsAvailable: true } && InternalConnectors.IsInternal(output) &&
+        _policies.GetValueOrDefault(output, OutputAutoRotatePolicy.Never) switch
+        {
+            OutputAutoRotatePolicy.Always => true,
+            OutputAutoRotatePolicy.InTabletMode => _tabletMode,
+            _ => false,
+        };
+
+    private void Reevaluate()
+    {
+        if (_orientation is not { } sensor)
+        {
+            return;
+        }
+
+        var anyActive = false;
+        foreach (var (output, _) in _policies)
+        {
+            if (RotationActive(output))
+            {
+                anyActive = true;
+                if (sensor.Orientation is { } orientation && output.Enabled && output.Transform != orientation)
+                {
+                    using var state = new OutputState();
+                    _ = output.Commit(state.SetTransform(orientation));
+                }
+            }
+            else
+            {
+                var manual = _manual.GetValueOrDefault(output, OutputTransform.Normal);
+                if (output.Enabled && output.Transform != manual)
+                {
+                    using var state = new OutputState();
+                    _ = output.Commit(state.SetTransform(manual));
+                }
+            }
+        }
+
+        sensor.SetEnabled(anyActive);
     }
 
     private void Record(in OutputConfigurationEntry entry)
     {
         var output = entry.Output;
+        if (entry.Transform is { } rotated && !RotationActive(output))
+        {
+            _manual[output] = rotated;
+        }
+
+        if (entry.AutoRotate is { } autoRotate)
+        {
+            _policies[output] = autoRotate;
+        }
+
         var current = _committed.TryGetValue(output, out var existing)
             ? existing
             : new OutputConfigurationEntry { Output = output, Enabled = entry.Enabled };
@@ -141,6 +263,8 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration
             {
                 _committed.Remove(output);
                 _recorded.Remove(output);
+                _policies.Remove(output);
+                _manual.Remove(output);
             }
 
             _recorded[output] = OnDestroyed;

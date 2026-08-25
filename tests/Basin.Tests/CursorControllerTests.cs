@@ -327,4 +327,29 @@ public sealed class CursorControllerTests
 
         Assert.Equal(variants, cursor.Images.VariantCount);
     }
+
+    [Fact]
+    public void Magnification_re_rasterizes_the_theme_and_leaves_the_plane()
+    {
+        using var host = new CompositorTestHost();
+        using var backend = new HeadlessBackend(host.Loop);
+        var output = Output(backend);
+        var layout = new OutputLayout();
+        layout.Add(output, 0, 0);
+
+        using var cursor = new CursorController(layout);
+        cursor.AddOutput(output, null);
+        cursor.Load(new ShmAllocator(), 64, 64);
+        Assert.SkipWhen(cursor.Images?.HasTheme != true, "no xcursor theme installed");
+
+        Assert.Equal(24, cursor.Images!.Size);
+
+        cursor.Magnification = 3;
+        Assert.Equal(3, cursor.Magnification);
+        Assert.Equal(72, cursor.Images.Size);
+
+        cursor.Magnification = 0.25;
+        Assert.Equal(1, cursor.Magnification);
+        Assert.Equal(24, cursor.Images.Size);
+    }
 }

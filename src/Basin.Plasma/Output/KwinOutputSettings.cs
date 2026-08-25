@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Basin.Capabilities;
 
 namespace Basin.Plasma;
@@ -10,6 +11,10 @@ public sealed class KwinOutputSettings
 
     private readonly List<Stored> _outputs;
     private readonly List<Setup> _setups;
+    private readonly string _text;
+    private JsonArray? _tree;
+    private JsonArray? _rows;
+    private JsonArray? _layouts;
 
     private sealed record Stored
     {
@@ -80,15 +85,16 @@ public sealed class KwinOutputSettings
 
     private readonly record struct Identity(string Identifier, string Hash, string ConnectorName);
 
-    private KwinOutputSettings(List<Stored> outputs, List<Setup> setups)
+    private KwinOutputSettings(List<Stored> outputs, List<Setup> setups, string text)
     {
         _outputs = outputs;
         _setups = setups;
+        _text = text;
     }
 
     public int Count => _outputs.Count;
 
-    public static string? Locate()
+    public static string DefaultPath()
     {
         var home = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
         if (string.IsNullOrEmpty(home))
@@ -96,7 +102,12 @@ public sealed class KwinOutputSettings
             home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
         }
 
-        var candidate = Path.Combine(home, FileName);
+        return Path.Combine(home, FileName);
+    }
+
+    public static string? Locate()
+    {
+        var candidate = DefaultPath();
         if (File.Exists(candidate))
         {
             return candidate;
@@ -127,14 +138,14 @@ public sealed class KwinOutputSettings
             return TryLoad(path, out settings);
         }
 
-        settings = new KwinOutputSettings([], []);
+        settings = new KwinOutputSettings([], [], string.Empty);
         return false;
     }
 
     public static bool TryLoad(string path, out KwinOutputSettings settings)
     {
         ArgumentNullException.ThrowIfNull(path);
-        settings = new KwinOutputSettings([], []);
+        settings = new KwinOutputSettings([], [], string.Empty);
         try
         {
             return File.Exists(path) && TryParse(File.ReadAllText(path), out settings);
@@ -148,7 +159,7 @@ public sealed class KwinOutputSettings
     public static bool TryParse(string json, out KwinOutputSettings settings)
     {
         ArgumentNullException.ThrowIfNull(json);
-        settings = new KwinOutputSettings([], []);
+        settings = new KwinOutputSettings([], [], string.Empty);
         JsonDocument document;
         try
         {
@@ -195,7 +206,7 @@ public sealed class KwinOutputSettings
                 }
             }
 
-            settings = new KwinOutputSettings(stored, parsed);
+            settings = new KwinOutputSettings(stored, parsed, json);
             return stored.Count > 0;
         }
     }
@@ -231,7 +242,7 @@ public sealed class KwinOutputSettings
                 {
                     Enabled = placed.Enabled,
                     Position = placed.Position,
-                    ReplicationSourceUuid = placed.ReplicationSource,
+                    ReplicationSourceUuid = ReplicaOf(placed.ReplicationSource, indices, outputs),
                 };
                 if (placed.Priority is { } priority)
                 {
@@ -803,5 +814,573 @@ public sealed class KwinOutputSettings
         var manufactureWeek = week == 0xff ? 0 : week;
         var manufactureYear = week == 0xff ? 0 : year + 1990;
         return $"{new string(manufacturer)} {product} {serial} {manufactureWeek} {manufactureYear} {modelYear}";
+    }
+
+    public static IReadOnlyList<OutputConfigurationEntry> Snapshot(
+        IReadOnlyList<IOutput> outputs,
+        IOutputConfiguration configuration,
+        OutputLayout? layout = null,
+        IOutputOrder? order = null)
+    {
+        ArgumentNullException.ThrowIfNull(outputs);
+        ArgumentNullException.ThrowIfNull(configuration);
+        var priorities = Priorities(outputs, order);
+        var entries = new List<OutputConfigurationEntry>(outputs.Count);
+        for (var i = 0; i < outputs.Count; i++)
+        {
+            var output = outputs[i];
+            if (!configuration.TryRead(output, out var entry) || entry.Output != output)
+            {
+                entry = new OutputConfigurationEntry { Output = output, Enabled = output.Enabled };
+            }
+
+            entry = entry with
+            {
+                Output = output,
+                Enabled = output.Enabled,
+                Mode = output.CurrentMode,
+                Scale = output.Scale,
+                Transform = output.Transform,
+            };
+
+            if (layout is { } placed && placed.Contains(output))
+            {
+                var box = placed.BoxOf(output);
+                entry = entry with { Position = new Point(box.X, box.Y) };
+            }
+
+            if (priorities is not null)
+            {
+                entry = entry with { Priority = priorities[i] };
+            }
+
+            OutputConfigurationGate.Clear(ref entry, configuration.Supported(output));
+            entries.Add(entry);
+        }
+
+        return entries;
+    }
+
+    public bool Record(IReadOnlyList<OutputConfigurationEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        if (entries.Count == 0 || !Materialize())
+        {
+            return false;
+        }
+
+        var identities = new Identity[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
+        {
+            identities[i] = IdentityOf(entries[i].Output);
+        }
+
+        var indices = new int[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
+        {
+            indices[i] = Match(identities, i);
+            if (indices[i] < 0)
+            {
+                indices[i] = Append(identities[i], entries[i].Output);
+            }
+        }
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            if (_rows![indices[i]] is JsonObject row)
+            {
+                WriteRow(row, entries[i]);
+            }
+        }
+
+        WriteSetup(entries, indices);
+        return true;
+    }
+
+    public bool Save(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (_tree is not { } root)
+        {
+            return false;
+        }
+
+        var temporary = path + ".basin";
+        try
+        {
+            if (Path.GetDirectoryName(path) is { Length: > 0 } directory)
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            using (var stream = File.Create(temporary))
+            {
+                using var writer = new Utf8JsonWriter(
+                    stream, new JsonWriterOptions { Indented = true, IndentSize = 4 });
+                WriteSorted(writer, root);
+            }
+
+            File.Move(temporary, path, true);
+            return true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            return false;
+        }
+    }
+
+    private static uint[]? Priorities(IReadOnlyList<IOutput> outputs, IOutputOrder? order)
+    {
+        if (order is null)
+        {
+            return null;
+        }
+
+        var scratch = new IOutput[outputs.Count == 0 ? 1 : outputs.Count];
+        var count = order.Enumerate(scratch);
+        while (count < 0)
+        {
+            scratch = new IOutput[scratch.Length * 2];
+            count = order.Enumerate(scratch);
+        }
+
+        var priorities = new uint[outputs.Count];
+        for (var i = 0; i < outputs.Count; i++)
+        {
+            priorities[i] = 0;
+            for (var j = 0; j < count; j++)
+            {
+                if (ReferenceEquals(scratch[j], outputs[i]))
+                {
+                    priorities[i] = (uint)j;
+                    break;
+                }
+            }
+        }
+
+        return priorities;
+    }
+
+    private bool Materialize()
+    {
+        if (_tree is not null)
+        {
+            return true;
+        }
+
+        JsonArray? root = null;
+        if (_text.Length > 0)
+        {
+            try
+            {
+                root = JsonNode.Parse(_text) as JsonArray;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        root ??= [];
+        _rows = Group(root, "outputs");
+        _layouts = Group(root, "setups");
+        if (_rows.Count != _outputs.Count)
+        {
+            return false;
+        }
+
+        _tree = root;
+        return true;
+    }
+
+    private static JsonArray Group(JsonArray root, string name)
+    {
+        foreach (var element in root)
+        {
+            if (element is JsonObject group && group["name"]?.GetValueKind() == JsonValueKind.String &&
+                group["name"]!.GetValue<string>() == name && group["data"] is JsonArray data)
+            {
+                return data;
+            }
+        }
+
+        var created = new JsonArray();
+        root.Add((JsonNode)new JsonObject { ["data"] = created, ["name"] = name });
+        return created;
+    }
+
+    private int Append(in Identity identity, IOutput output)
+    {
+        var row = new JsonObject { ["connectorName"] = identity.ConnectorName };
+        if (identity.Identifier.Length > 0)
+        {
+            row["edidIdentifier"] = identity.Identifier;
+        }
+
+        if (identity.Hash.Length > 0)
+        {
+            row["edidHash"] = identity.Hash;
+        }
+
+        var uuid = PlasmaOutputUuid.For(output);
+        row["uuid"] = uuid;
+        _rows!.Add((JsonNode)row);
+        _outputs.Add(new Stored
+        {
+            Identifier = identity.Identifier,
+            Hash = identity.Hash,
+            ConnectorName = identity.ConnectorName,
+            Uuid = uuid,
+            Usable = true,
+        });
+
+        return _outputs.Count - 1;
+    }
+
+    private static void WriteRow(JsonObject row, in OutputConfigurationEntry entry)
+    {
+        if (entry.Mode is { } mode)
+        {
+            row["mode"] = ModeObject(mode, row["mode"] as JsonObject);
+        }
+
+        Number(row, "scale", entry.Scale);
+        Text(row, "transform", TransformName(entry.Transform));
+        Number(row, "overscan", entry.Overscan);
+        Text(row, "rgbRange", RgbRangeName(entry.RgbRange));
+        Text(row, "vrrPolicy", VrrPolicyName(entry.VrrPolicy));
+        Flag(row, "highDynamicRange", entry.HighDynamicRange);
+        Number(row, "sdrBrightness", entry.SdrBrightnessNits);
+        Flag(row, "wideColorGamut", entry.WideColorGamut);
+        Text(row, "autoRotation", AutoRotateName(entry.AutoRotate));
+        Text(row, "iccProfilePath", entry.IccProfilePath);
+        Text(row, "hdrIccProfilePath", entry.HdrIccProfilePath);
+        WriteOverrides(row, entry.BrightnessOverrides);
+        Number(row, "sdrGamutWideness", Ratio(entry.SdrGamutWideness));
+        Text(row, "colorProfileSource", ProfileSourceName(entry.ColorProfileSource));
+        Text(row, "hdrColorProfileSource", ProfileSourceName(entry.HdrColorProfileSource));
+        Number(row, "brightness", Ratio(entry.Brightness));
+        Text(row, "colorPowerTradeoff", TradeoffName(entry.ColorPowerTradeoff));
+        Flag(row, "allowDdcCi", entry.DdcCiAllowed);
+        Number(row, "maxBitsPerColor", entry.MaxBitsPerColor);
+        Text(row, "edrPolicy", EdrPolicyName(entry.EdrPolicy));
+        Number(row, "sharpness", Ratio(entry.Sharpness));
+        Flag(row, "automaticBrightness", entry.AutoBrightness);
+        Number(row, "abmLevel", entry.AbmLevel);
+        if (entry.CustomModes is { } custom)
+        {
+            var modes = new JsonArray();
+            foreach (var candidate in custom)
+            {
+                modes.Add((JsonNode)ModeObject(candidate, null));
+            }
+
+            row["customModes"] = modes;
+        }
+    }
+
+    private void WriteSetup(IReadOnlyList<OutputConfigurationEntry> entries, int[] indices)
+    {
+        var setup = FindLayout(indices);
+        if (setup is null)
+        {
+            setup = new JsonObject { ["lidClosed"] = false, ["outputs"] = new JsonArray() };
+            _layouts!.Add((JsonNode)setup);
+        }
+
+        if (setup["outputs"] is not JsonArray placements)
+        {
+            placements = [];
+            setup["outputs"] = placements;
+        }
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var placement = FindPlacement(placements, indices[i]);
+            if (placement is null)
+            {
+                placement = new JsonObject { ["outputIndex"] = indices[i] };
+                placements.Add((JsonNode)placement);
+            }
+
+            var entry = entries[i];
+            placement["enabled"] = entry.Enabled;
+            if (entry.Position is { } position)
+            {
+                placement["position"] = new JsonObject { ["x"] = position.X, ["y"] = position.Y };
+            }
+            else if (placement["position"] is not JsonObject)
+            {
+                placement["position"] = new JsonObject { ["x"] = 0, ["y"] = 0 };
+            }
+
+            placement["priority"] = entry.Enabled ? (int)(entry.Priority ?? 0) : -1;
+            placement["replicationSource"] = ReplicaSource(entry.ReplicationSourceUuid, entries, indices);
+        }
+    }
+
+    private string ReplicaSource(string? uuid, IReadOnlyList<OutputConfigurationEntry> entries, int[] indices)
+    {
+        if (uuid is not { Length: > 0 })
+        {
+            return string.Empty;
+        }
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            if (PlasmaOutputUuid.For(entries[i].Output) == uuid)
+            {
+                return _outputs[indices[i]].Uuid;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private JsonObject? FindLayout(int[] indices)
+    {
+        foreach (var element in _layouts!)
+        {
+            if (element is not JsonObject setup || setup["outputs"] is not JsonArray placements ||
+                placements.Count != indices.Length)
+            {
+                continue;
+            }
+
+            var matched = 0;
+            foreach (var index in indices)
+            {
+                if (FindPlacement(placements, index) is not null)
+                {
+                    matched++;
+                }
+            }
+
+            if (matched == indices.Length)
+            {
+                return setup;
+            }
+        }
+
+        return null;
+    }
+
+    private static JsonObject? FindPlacement(JsonArray placements, int index)
+    {
+        foreach (var element in placements)
+        {
+            if (element is JsonObject placement && placement["outputIndex"]?.GetValueKind() == JsonValueKind.Number &&
+                placement["outputIndex"]!.GetValue<int>() == index)
+            {
+                return placement;
+            }
+        }
+
+        return null;
+    }
+
+    private static JsonObject ModeObject(OutputMode mode, JsonObject? existing)
+    {
+        var written = new JsonObject
+        {
+            ["width"] = mode.Width,
+            ["height"] = mode.Height,
+            ["refreshRate"] = mode.RefreshMilliHz,
+        };
+        if (existing is not null && Int(existing, "width") == mode.Width && Int(existing, "height") == mode.Height &&
+            Int(existing, "refreshRate") == mode.RefreshMilliHz && Int(existing, "flags") is { } flags)
+        {
+            written["flags"] = flags;
+        }
+
+        return written;
+    }
+
+    private static void WriteOverrides(JsonObject row, OutputBrightnessOverrides? overrides)
+    {
+        if (overrides is not { } values)
+        {
+            return;
+        }
+
+        Bound(row, "maxPeakBrightnessOverride", values.MaxPeakBrightness >= 50 ? values.MaxPeakBrightness : null);
+        Bound(
+            row,
+            "maxAverageBrightnessOverride",
+            values.MaxFrameAverageBrightness >= 50 ? values.MaxFrameAverageBrightness : null);
+        Bound(row, "minBrightnessOverride", values.MinBrightness >= 0 ? values.MinBrightness / 10_000.0 : null);
+    }
+
+    private static void Bound(JsonObject row, string name, double? value)
+    {
+        if (value is { } number)
+        {
+            row[name] = number;
+        }
+        else
+        {
+            row.Remove(name);
+        }
+    }
+
+    private static double? Ratio(uint? value) => value is { } number ? Math.Clamp(number, 0, 10_000) / 10_000.0 : null;
+
+    private static void Number(JsonObject row, string name, double? value)
+    {
+        if (value is { } number)
+        {
+            row[name] = number;
+        }
+    }
+
+    private static void Number(JsonObject row, string name, uint? value)
+    {
+        if (value is { } number)
+        {
+            row[name] = number;
+        }
+    }
+
+    private static void Flag(JsonObject row, string name, bool? value)
+    {
+        if (value is { } flag)
+        {
+            row[name] = flag;
+        }
+    }
+
+    private static void Text(JsonObject row, string name, string? value)
+    {
+        if (value is not null)
+        {
+            row[name] = value;
+        }
+    }
+
+    private static int? Int(JsonObject row, string name) =>
+        row[name] is { } value && value.GetValueKind() == JsonValueKind.Number ? value.GetValue<int>() : null;
+
+    private static string? TransformName(OutputTransform? transform) => transform switch
+    {
+        OutputTransform.Normal => "Normal",
+        OutputTransform.Rotate90 => "Rotated90",
+        OutputTransform.Rotate180 => "Rotated180",
+        OutputTransform.Rotate270 => "Rotated270",
+        OutputTransform.Flipped => "Flipped",
+        OutputTransform.Flipped90 => "Flipped90",
+        OutputTransform.Flipped180 => "Flipped180",
+        OutputTransform.Flipped270 => "Flipped270",
+        _ => null,
+    };
+
+    private static string? RgbRangeName(OutputRgbRange? range) => range switch
+    {
+        OutputRgbRange.Automatic => "Automatic",
+        OutputRgbRange.Limited => "Limited",
+        OutputRgbRange.Full => "Full",
+        _ => null,
+    };
+
+    private static string? VrrPolicyName(OutputVrrPolicy? policy) => policy switch
+    {
+        OutputVrrPolicy.Never => "Never",
+        OutputVrrPolicy.Automatic => "Automatic",
+        OutputVrrPolicy.Always => "Always",
+        _ => null,
+    };
+
+    private static string? AutoRotateName(OutputAutoRotatePolicy? policy) => policy switch
+    {
+        OutputAutoRotatePolicy.Never => "Never",
+        OutputAutoRotatePolicy.InTabletMode => "InTabletMode",
+        OutputAutoRotatePolicy.Always => "Always",
+        _ => null,
+    };
+
+    private static string? ProfileSourceName(OutputColorProfileSource? source) => source switch
+    {
+        OutputColorProfileSource.Srgb => "sRGB",
+        OutputColorProfileSource.Icc => "ICC",
+        OutputColorProfileSource.Edid => "EDID",
+        _ => null,
+    };
+
+    private static string? TradeoffName(OutputColorPowerTradeoff? tradeoff) => tradeoff switch
+    {
+        OutputColorPowerTradeoff.Efficiency => "PreferEfficiency",
+        OutputColorPowerTradeoff.Accuracy => "PreferAccuracy",
+        _ => null,
+    };
+
+    private static string? EdrPolicyName(OutputEdrPolicy? policy) => policy switch
+    {
+        OutputEdrPolicy.Never => "never",
+        OutputEdrPolicy.Always => "always",
+        _ => null,
+    };
+
+    private static void WriteSorted(Utf8JsonWriter writer, JsonNode? node)
+    {
+        switch (node)
+        {
+            case null:
+                writer.WriteNullValue();
+                return;
+            case JsonObject element:
+                writer.WriteStartObject();
+                var names = new List<string>(element.Count);
+                foreach (var (name, _) in element)
+                {
+                    names.Add(name);
+                }
+
+                names.Sort(StringComparer.Ordinal);
+                foreach (var name in names)
+                {
+                    writer.WritePropertyName(name);
+                    WriteSorted(writer, element[name]);
+                }
+
+                writer.WriteEndObject();
+                return;
+            case JsonArray array:
+                writer.WriteStartArray();
+                foreach (var item in array)
+                {
+                    WriteSorted(writer, item);
+                }
+
+                writer.WriteEndArray();
+                return;
+            default:
+                node.WriteTo(writer);
+                return;
+        }
+    }
+
+    private string? ReplicaOf(string? source, int[] indices, IReadOnlyList<IOutput> outputs)
+    {
+        if (source is not { Length: > 0 })
+        {
+            return null;
+        }
+
+        for (var i = 0; i < indices.Length; i++)
+        {
+            if (indices[i] >= 0 && _outputs[indices[i]].Uuid == source)
+            {
+                return PlasmaOutputUuid.For(outputs[i]);
+            }
+        }
+
+        return null;
     }
 }

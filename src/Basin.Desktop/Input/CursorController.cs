@@ -2,6 +2,7 @@ using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Scene;
 using Basin.Seat;
+using static Basin.Desktop.DesktopLog;
 
 namespace Basin.Desktop;
 
@@ -28,6 +29,7 @@ public sealed class CursorController : IDisposable
     private double _parentScale = 1;
 
     private IOutput? _cursorOn;
+    private double _magnification = 1.0;
     private bool _software;
     private double _x, _y;
 
@@ -39,6 +41,30 @@ public sealed class CursorController : IDisposable
     }
 
     public IScreenCapture? Capture { get; set; }
+
+    public double Magnification
+    {
+        get => _magnification;
+        set
+        {
+            var next = Math.Max(1.0, value);
+            if (Math.Abs(next - _magnification) < 1e-6)
+            {
+                return;
+            }
+
+            _magnification = next;
+            ReloadForScale();
+            if (_clientSurface is not null)
+            {
+                TakeClientCursor();
+            }
+            else
+            {
+                Present(force: true);
+            }
+        }
+    }
 
     public CursorImages? Images => _images;
 
@@ -67,7 +93,7 @@ public sealed class CursorController : IDisposable
         };
         if (!_images.HasTheme)
         {
-            BasinLog.Warn($"no cursor theme found. XCURSOR_PATH, ~/.local/share/icons, ~/.icons, /usr/share/icons and /usr/share/pixmaps hold none, so no cursor can be drawn");
+            Log.Warn($"no cursor theme found. XCURSOR_PATH, ~/.local/share/icons, ~/.icons, /usr/share/icons and /usr/share/pixmaps hold none, so no cursor can be drawn");
             return;
         }
 
@@ -75,7 +101,7 @@ public sealed class CursorController : IDisposable
         ShowNamed("left_ptr");
         if (_images.Named("left_ptr") is null)
         {
-            BasinLog.Warn($"the cursor theme has no left_ptr or default at {_images.Size}px, or its buffer could not be allocated at {bufferWidth}x{bufferHeight}");
+            Log.Warn($"the cursor theme has no left_ptr or default at {_images.Size}px, or its buffer could not be allocated at {bufferWidth}x{bufferHeight}");
         }
     }
 
@@ -546,11 +572,11 @@ public sealed class CursorController : IDisposable
             scale = Math.Max(scale, entry.Output.Scale);
         }
 
-        return scale;
+        return scale * _magnification;
     }
 
     private CursorKey KeyFor(IOutput output) =>
-        new(output.Scale, _descriptions.TryGetValue(output, out var description) ? description : null);
+        new(output.Scale * _magnification, _descriptions.TryGetValue(output, out var description) ? description : null);
 
     private CursorKey KeyAt(double x, double y) =>
         DrivenAt(x, y) is { } output ? KeyFor(output)
@@ -561,10 +587,10 @@ public sealed class CursorController : IDisposable
     {
         if (DrivenAt(x, y) is { } output)
         {
-            return output.Scale;
+            return output.Scale * _magnification;
         }
 
-        return _outputs.Count > 0 ? _outputs[0].Output.Scale : 1.0;
+        return (_outputs.Count > 0 ? _outputs[0].Output.Scale : 1.0) * _magnification;
     }
 
     private IOutput? DrivenAt(double x, double y)

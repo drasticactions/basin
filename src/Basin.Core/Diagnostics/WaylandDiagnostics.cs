@@ -5,6 +5,8 @@ namespace Basin.Diagnostics;
 
 public static class WaylandDiagnostics
 {
+    private static readonly BasinLogger Log = BasinLog.For("wayland");
+
     private static bool _routed;
 
     public static void RouteToBasinLog()
@@ -17,8 +19,8 @@ public static class WaylandDiagnostics
         _routed = true;
         try
         {
-            WaylandLog.SetHandler(WaylandLogSide.Server, static message => BasinLog.Warn($"libwayland: {message}"));
-            WaylandLog.SetHandler(WaylandLogSide.Client, static message => BasinLog.Warn($"libwayland-client: {message}"));
+            WaylandLog.SetHandler(WaylandLogSide.Server, static message => Log.Warn($"libwayland: {message}"));
+            WaylandLog.SetHandler(WaylandLogSide.Client, static message => Log.Warn($"libwayland-client: {message}"));
         }
         catch (DllNotFoundException)
         {
@@ -36,7 +38,7 @@ public static class WaylandDiagnostics
             if (BasinLog.IsEnabled(BasinLogLevel.Debug))
             {
                 var line = message.ToString();
-                BasinLog.Debug($"{line}");
+                Log.Debug($"{line}");
             }
         });
     }

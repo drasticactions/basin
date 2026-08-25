@@ -13,6 +13,7 @@ internal sealed class DamViews
     private readonly Basin.Seat.Seat _seat;
     private readonly OutputDriver _outputs;
     private readonly List<DamView> _views = [];
+    private readonly Basin.XWayland.XWaylandSceneDriver _xwayland = new();
     private readonly Dictionary<Surface, DamView> _owners = [];
 
     public DamViews(Scene scene, OutputLayout layout, Basin.Seat.Seat seat, OutputDriver outputs)
@@ -25,8 +26,6 @@ internal sealed class DamViews
     }
 
     public IReadOnlyList<DamView> Views => _views;
-
-    public Action? PointerRefocus { get; set; }
 
     public DamView? FocusedView
     {
@@ -66,57 +65,44 @@ internal sealed class DamViews
 
     public void AttachXWayland(Basin.XWayland.XWaylandWm wm)
     {
-        wm.WindowMapped += window => OnX11Mapped(window, managed: true);
-        wm.OverrideRedirectMapped += window => OnX11Mapped(window, managed: false);
+        _xwayland.ManagedParent = _ => _scene.Root;
+        _xwayland.OverrideRedirectParent = _ => _scene.Root;
+        _xwayland.Adopted += OnX11Adopted;
+        _xwayland.Removed += OnX11Removed;
+        _xwayland.Attach(wm);
     }
 
-    private void OnX11Mapped(Basin.XWayland.XWaylandWindow window, bool managed)
+    private void OnX11Adopted(Basin.XWayland.XWaylandWindow window, SceneSurface scene, bool managed)
     {
-        if (window.Surface is not { } surface)
-        {
-            return;
-        }
-
-        var scene = new SceneSurface(_scene.Root, surface);
         var view = new DamView(window, scene);
         if (managed)
         {
             Position(view);
         }
-        else
-        {
-            scene.Tree.SetPosition(window.X, window.Y);
-        }
 
         _views.Insert(0, view);
-        _owners[surface] = view;
-
-        void Cleanup()
-        {
-            window.Unmapped -= OnUnmapped;
-            window.Destroyed -= OnDestroyed;
-            _views.Remove(view);
-            _owners.Remove(surface);
-            if (!scene.IsDestroyed)
-            {
-                scene.Destroy();
-            }
-        }
-
-        void OnUnmapped() => Cleanup();
-
-        void OnDestroyed()
-        {
-            Cleanup();
-            if (_views.Count > 0)
-            {
-                Focus(_views[0]);
-            }
-        }
-
-        window.Unmapped += OnUnmapped;
-        window.Destroyed += OnDestroyed;
+        _owners[window.Surface!] = view;
         Focus(view);
+    }
+
+    private void OnX11Removed(Basin.XWayland.XWaylandWindow window, SceneSurface scene)
+    {
+        for (var i = _views.Count - 1; i >= 0; i--)
+        {
+            if (!ReferenceEquals(_views[i].X11, window))
+            {
+                continue;
+            }
+
+            var view = _views[i];
+            _views.RemoveAt(i);
+            _owners.Remove(view.Surface);
+        }
+
+        if (_views.Count > 0)
+        {
+            Focus(_views[0]);
+        }
     }
 
     public DamView? OwnerOf(Surface? surface)
@@ -162,7 +148,6 @@ internal sealed class DamViews
         }
 
         _seat.Keyboard.NotifyEnter(view.Surface);
-        PointerRefocus?.Invoke();
     }
 
     public void PositionAll()

@@ -1,5 +1,6 @@
 using Basin.Diagnostics;
 using Silk.NET.Vulkan;
+using static Basin.Render.Vulkan.VulkanLog;
 
 namespace Basin.Render.Vulkan;
 
@@ -87,7 +88,7 @@ internal sealed unsafe class VulkanDmabufTexture : ITexture, IVulkanRetired
         }
         catch (InvalidOperationException failure)
         {
-            BasinLog.Warn(
+            Log.Warn(
                 $"dmabuf import rejected: {failure.Message} (format=0x{(uint)attributes.Format:X8} modifier=0x{attributes.Modifier:X} planes={attributes.PlaneCount} {attributes.Width}x{attributes.Height})");
             return null;
         }

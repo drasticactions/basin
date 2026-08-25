@@ -11,6 +11,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
     private readonly Dictionary<ulong, ToplevelState> _flags = [];
     private readonly Dictionary<ulong, uint> _pids = [];
     private readonly Dictionary<ulong, (string Service, string ObjectPath)> _appMenus = [];
+    private readonly Dictionary<ulong, Box> _minimized = [];
     private ulong _nextId;
 
     public XdgToplevelSource(XdgShell shell)
@@ -34,6 +35,8 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
 
     public event Action<XdgToplevelWindow, bool>? CaptureExclusionRequested;
 
+    public event Action<XdgToplevelWindow, Surface?, Box>? MinimizedGeometryRequested;
+
     public XdgToplevelWindow? WindowFor(ulong localId) => _windows.GetValueOrDefault(localId);
 
     public ulong IdFor(XdgToplevelWindow window)
@@ -53,6 +56,29 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
             }
 
             _geometry[id] = (frame, client);
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetMinimizedGeometry(XdgToplevelWindow window, in Box geometry)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (_ids.TryGetValue(window, out var id))
+        {
+            if (_minimized.GetValueOrDefault(id) == geometry)
+            {
+                return;
+            }
+
+            if (geometry.IsEmpty)
+            {
+                _minimized.Remove(id);
+            }
+            else
+            {
+                _minimized[id] = geometry;
+            }
+
             _observers.Changed(id);
         }
     }
@@ -193,6 +219,13 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
                 when NoBorderRequested is { } noBorder:
                 noBorder.Invoke(window, request.Kind == ToplevelRequestKind.SetNoBorder);
                 return true;
+            case ToplevelRequestKind.SetMinimizedGeometry or ToplevelRequestKind.UnsetMinimizedGeometry
+                when MinimizedGeometryRequested is { } minimizedGeometry:
+                minimizedGeometry.Invoke(
+                    window,
+                    request.Surface,
+                    request.Kind == ToplevelRequestKind.SetMinimizedGeometry ? request.Geometry : default);
+                return true;
             case ToplevelRequestKind.ExcludeFromCapture or ToplevelRequestKind.IncludeInCapture
                 when CaptureExclusionRequested is { } exclusion:
                 exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
@@ -223,6 +256,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
             _flags.Remove(id);
             _pids.Remove(id);
             _appMenus.Remove(id);
+            _minimized.Remove(id);
             _observers.Removed(id);
         };
         _observers.Added(id);
@@ -259,6 +293,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
             Pid: _pids.GetValueOrDefault(id),
             ParentId: window.Parent is { } parent ? _ids.GetValueOrDefault(parent) : 0,
             AppMenuService: service,
-            AppMenuObjectPath: objectPath);
+            AppMenuObjectPath: objectPath,
+            MinimizedGeometry: _minimized.GetValueOrDefault(id));
     }
 }

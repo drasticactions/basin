@@ -76,7 +76,7 @@ internal sealed class ShellSwitcher : IDisposable
         var height = (_order.Count * EntryHeight) + Padding;
         _surface = _host.CreateSurface(new UISurfaceOptions
         {
-            Target = UITargetKind.Memory,
+            Target = _host.Produces,
             Width = Width,
             Height = height,
             Scale = Scale?.Invoke() ?? 1.0,

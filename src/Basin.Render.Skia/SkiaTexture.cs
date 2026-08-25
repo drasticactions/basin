@@ -1,5 +1,6 @@
 using Basin.Diagnostics;
 using SkiaSharp;
+using static Basin.Render.Skia.SkiaLog;
 
 namespace Basin.Render.Skia;
 
@@ -65,7 +66,7 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
         {
             if (Warned.Add(view.Format))
             {
-                BasinLog.Warn(
+                Log.Warn(
                     $"skia: fourcc 0x{(uint)view.Format:x8} has no raster colour type, so surfaces using it stay blank");
             }
 

@@ -35,11 +35,20 @@ public sealed class KioskPackTests
         "ext_idle_notifier_v1",
     ];
 
+    private static readonly string[] ColorGlobals =
+    [
+        "wp_color_manager_v1",
+        "wp_color_representation_manager_v1",
+        "wp_alpha_modifier_v1",
+    ];
+
+    private static string[] Expected => [.. CageGlobals, .. ColorGlobals];
+
     [Fact]
-    public void KioskPack_advertises_exactly_cages_globals()
+    public void KioskPack_advertises_cages_globals_and_colour()
     {
         var wireInterfaces = KioskPack.Default.Select(m => m.WireInterface).Order().ToArray();
-        Assert.Equal(CageGlobals.Order().ToArray(), wireInterfaces);
+        Assert.Equal(Expected.Order().ToArray(), wireInterfaces);
     }
 
     [Fact]
@@ -82,7 +91,7 @@ public sealed class KioskPackTests
         {
             services.Install(KioskPack.Default);
             services.Freeze();
-            Assert.Equal(CageGlobals.Order().ToArray(), services.Modules.Keys.Order().ToArray());
+            Assert.Equal(Expected.Order().ToArray(), services.Modules.Keys.Order().ToArray());
         }
 
         Assert.SkipWhen(!BasinCounters.Enabled, "lifetime tracking is compiled out in this configuration");

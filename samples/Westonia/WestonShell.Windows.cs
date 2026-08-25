@@ -127,11 +127,7 @@ internal sealed partial class WestonShell
 
         if (maximized)
         {
-            var geometry = window.Geometry;
-            window.SavedX = window.X;
-            window.SavedY = window.Y;
-            window.SavedWidth = geometry.Width;
-            window.SavedHeight = geometry.Height;
+            SaveRestore(window);
             window.Maximized = true;
             window.Window.SetMaximized(true);
             ApplyMaximized(window);
@@ -154,19 +150,26 @@ internal sealed partial class WestonShell
         window.MoveTo(area.X, area.Y);
     }
 
+    private static void SaveRestore(ShellWindow window)
+    {
+        var geometry = window.Geometry;
+        window.Restore = window.Restore.Saving(new Box(window.X, window.Y, geometry.Width, geometry.Height));
+    }
+
     private void Restore(ShellWindow window)
     {
-        if (window.SavedWidth <= 0 || window.SavedHeight <= 0)
+        if (!window.Restore.TryGet(out var saved))
         {
             var area = WorkArea?.Invoke(window.Output) ?? new Box(0, 0, 800, 600);
-            window.SavedWidth = area.Width / 2;
-            window.SavedHeight = area.Height / 2;
-            window.SavedX = area.X + ((area.Width - window.SavedWidth) / 2);
-            window.SavedY = area.Y + ((area.Height - window.SavedHeight) / 2);
+            var width = area.Width / 2;
+            var height = area.Height / 2;
+            saved = new Box(
+                area.X + ((area.Width - width) / 2), area.Y + ((area.Height - height) / 2), width, height);
         }
 
-        window.Window.SetSize(window.SavedWidth, window.SavedHeight);
-        window.MoveTo(window.SavedX, window.SavedY);
+        window.Restore = RestoreGeometry.None;
+        window.Window.SetSize(saved.Width, saved.Height);
+        window.MoveTo(saved.X, saved.Y);
     }
 
     public void ToggleFullscreen(ShellWindow? window)
@@ -186,11 +189,7 @@ internal sealed partial class WestonShell
 
         if (fullscreen)
         {
-            var geometry = window.Geometry;
-            window.SavedX = window.X;
-            window.SavedY = window.Y;
-            window.SavedWidth = geometry.Width;
-            window.SavedHeight = geometry.Height;
+            SaveRestore(window);
             window.Fullscreen = true;
             window.Kind = ShellWindowKind.Fullscreen;
             window.Window.SetFullscreen(true);
@@ -209,7 +208,14 @@ internal sealed partial class WestonShell
             window.Window.SetFullscreen(false);
             window.Tree.Reparent(WorkspaceTreeOf?.Invoke(window) ?? _layers.Workspaces);
             Restacked?.Invoke();
-            Restore(window);
+            if (window.Maximized)
+            {
+                ApplyMaximized(window);
+            }
+            else
+            {
+                Restore(window);
+            }
         }
 
         window.Window.RequestConfigure();
@@ -615,10 +621,6 @@ internal sealed partial class WestonShell
         var x = area.X + Math.Max(0, (area.Width - geometry.Width) / 2);
         var y = area.Y + Math.Max(0, (area.Height - geometry.Height) / 2);
         window.MoveTo(x, y);
-        window.SavedX = x;
-        window.SavedY = y;
-        window.SavedWidth = geometry.Width;
-        window.SavedHeight = geometry.Height;
     }
 
     private void OnNewPopup(XdgPopupWindow popup)

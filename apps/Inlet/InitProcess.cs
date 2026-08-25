@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Inlet;
 
@@ -76,11 +77,11 @@ internal sealed class InitProcess
     [DllImport("libc", SetLastError = true)]
     private static extern int kill(int pid, int signal);
 
-    public static void RaiseFileLimit(ILogger log)
+    public static void RaiseFileLimit(BasinLogger log)
     {
         if (getrlimit(ResourceOpenFiles, out var original) != 0)
         {
-            log.LogError("getrlimit failed, using the system default file descriptor limit");
+            log.Error($"getrlimit failed, using the system default file descriptor limit");
             return;
         }
 
@@ -88,19 +89,17 @@ internal sealed class InitProcess
         var raised = Raised(original);
         if (setrlimit(ResourceOpenFiles, in raised) != 0)
         {
-            log.LogError(
-                "setrlimit failed, using the system default file descriptor limit of {Limit}",
-                original.Current);
+            log.Error($"setrlimit failed, using the system default file descriptor limit of {original.Current}");
             _originalOpenFiles = null;
             return;
         }
 
-        log.LogInformation("raised the file descriptor limit of the Inlet process to {Limit}", raised.Current);
+        log.Info($"raised the file descriptor limit of the Inlet process to {raised.Current}");
     }
 
-    public static InitProcess? Start(string command, string socket, string? display, ILogger log)
+    public static InitProcess? Start(string command, string socket, string? display, BasinLogger log)
     {
-        log.LogInformation("running init executable '{Command}'", command);
+        log.Info($"running init executable '{command}'");
 
         var attributes = Marshal.AllocHGlobal(AttrBytes);
         var mask = Marshal.AllocHGlobal(SigsetBytes);
@@ -114,7 +113,7 @@ internal sealed class InitProcess
         {
             if (posix_spawnattr_init(attributes) != 0)
             {
-                log.LogError("failed to run the init executable: posix_spawnattr_init failed");
+                log.Error($"failed to run the init executable: posix_spawnattr_init failed");
                 return null;
             }
 
@@ -136,9 +135,7 @@ internal sealed class InitProcess
             var error = posix_spawn(out var pid, "/bin/sh", IntPtr.Zero, attributes, argv, envp);
             if (error != 0)
             {
-                log.LogError(
-                    "failed to run the init executable: {Error}",
-                    Marshal.GetPInvokeErrorMessage(error));
+                log.Error($"failed to run the init executable: {(Marshal.GetPInvokeErrorMessage(error))}");
                 return null;
             }
 
@@ -164,13 +161,11 @@ internal sealed class InitProcess
         }
     }
 
-    public void Stop(ILogger log)
+    public void Stop(BasinLogger log)
     {
         if (kill(-_pgid, SignalTerminate) != 0)
         {
-            log.LogError(
-                "failed to stop the init process group: {Error}",
-                Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError()));
+            log.Error($"failed to stop the init process group: {(Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError()))}");
         }
     }
 
@@ -203,7 +198,7 @@ internal sealed class InitProcess
     private static bool LowerFileLimit() =>
         _originalOpenFiles is { } original && setrlimit(ResourceOpenFiles, in original) == 0;
 
-    private static void RaiseFileLimitAgain(ILogger log)
+    private static void RaiseFileLimitAgain(BasinLogger log)
     {
         if (_originalOpenFiles is not { } original)
         {
@@ -213,7 +208,7 @@ internal sealed class InitProcess
         var raised = Raised(original);
         if (setrlimit(ResourceOpenFiles, in raised) != 0)
         {
-            log.LogError("failed to raise the file descriptor limit of the Inlet process again");
+            log.Error($"failed to raise the file descriptor limit of the Inlet process again");
         }
     }
 

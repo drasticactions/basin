@@ -15,6 +15,8 @@ internal sealed class BasinPlatformContext
 
     public Compositor Compositor { get; }
 
+    public IAvaloniaGpu? Gpu { get; internal init; }
+
     public AvaloniaUIHost? Host { get; internal set; }
 
     public IScreenImpl? Screens { get; internal set; }

@@ -10,6 +10,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
     private readonly Dictionary<ulong, (Box Frame, Box Client)> _geometry = [];
     private readonly Dictionary<ulong, ToplevelState> _flags = [];
     private readonly Dictionary<ulong, uint> _pids = [];
+    private readonly Dictionary<ulong, Box> _minimized = [];
     private ulong _nextId;
 
     public XWaylandToplevelSource(XWaylandWm wm)
@@ -28,6 +29,8 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
     public event Action<XWaylandWindow, bool>? NoBorderRequested;
 
     public event Action<XWaylandWindow, bool>? CaptureExclusionRequested;
+
+    public event Action<XWaylandWindow, Surface?, Box>? MinimizedGeometryRequested;
 
     public XWaylandWindow? WindowFor(ulong localId) => _windows.GetValueOrDefault(localId);
 
@@ -48,6 +51,29 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             }
 
             _geometry[id] = (frame, client);
+            _observers.Changed(id);
+        }
+    }
+
+    public void SetMinimizedGeometry(XWaylandWindow window, in Box geometry)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (_ids.TryGetValue(window, out var id))
+        {
+            if (_minimized.GetValueOrDefault(id) == geometry)
+            {
+                return;
+            }
+
+            if (geometry.IsEmpty)
+            {
+                _minimized.Remove(id);
+            }
+            else
+            {
+                _minimized[id] = geometry;
+            }
+
             _observers.Changed(id);
         }
     }
@@ -132,6 +158,13 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
                 when NoBorderRequested is { } noBorder:
                 noBorder.Invoke(window, request.Kind == ToplevelRequestKind.SetNoBorder);
                 return true;
+            case ToplevelRequestKind.SetMinimizedGeometry or ToplevelRequestKind.UnsetMinimizedGeometry
+                when MinimizedGeometryRequested is { } minimizedGeometry:
+                minimizedGeometry.Invoke(
+                    window,
+                    request.Surface,
+                    request.Kind == ToplevelRequestKind.SetMinimizedGeometry ? request.Geometry : default);
+                return true;
             case ToplevelRequestKind.ExcludeFromCapture or ToplevelRequestKind.IncludeInCapture
                 when CaptureExclusionRequested is { } exclusion:
                 exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
@@ -163,6 +196,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             _geometry.Remove(id);
             _flags.Remove(id);
             _pids.Remove(id);
+            _minimized.Remove(id);
             _observers.Removed(id);
         };
         _observers.Added(id);
@@ -194,6 +228,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             client,
             window.Instance,
             pid,
-            window.TransientFor is { } transient ? _ids.GetValueOrDefault(transient) : 0);
+            window.TransientFor is { } transient ? _ids.GetValueOrDefault(transient) : 0,
+            MinimizedGeometry: _minimized.GetValueOrDefault(id));
     }
 }

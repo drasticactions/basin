@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Basin.Diagnostics;
+using static Basin.Video.FFmpeg.FFmpegLog;
 
 namespace Basin.Video.FFmpeg;
 
@@ -161,7 +162,7 @@ internal static unsafe class FFmpegNative
 
         av_log_set_level(LogWarning);
         av_log_set_callback((nint)(delegate* unmanaged[Cdecl]<nint, int, byte*, byte*, void>)&LogCallback);
-        BasinLog.Debug(
+        Log.Debug(
             $"ffmpeg: decode over {avcodecName} {avcodecMajor}, {avutilName} {avutilMajor}, {swscaleName} {swscaleMajor}");
         return null;
     }
@@ -275,11 +276,11 @@ internal static unsafe class FFmpegNative
 
             if (level <= LogError)
             {
-                BasinLog.Error($"ffmpeg: {text}");
+                Log.Error($"{text}");
             }
             else
             {
-                BasinLog.Warn($"ffmpeg: {text}");
+                Log.Warn($"{text}");
             }
         }
         catch (Exception)

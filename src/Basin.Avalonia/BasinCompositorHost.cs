@@ -3,6 +3,7 @@ using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Shell.Xdg;
 using Wayland.Server;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -91,7 +92,7 @@ public sealed class BasinCompositorHost : IDisposable
         var node = import.RenderNodePath ?? "/dev/dri/renderD128";
         if (!File.Exists(node))
         {
-            BasinLog.Info($"avalonia: no render node for dmabuf feedback; the global stays withheld");
+            Log.Info($"no render node for dmabuf feedback; the global stays withheld");
             return;
         }
 
@@ -101,7 +102,7 @@ public sealed class BasinCompositorHost : IDisposable
             import.Formats,
             node,
             compositor: Services.Require<CompositorGlobal>());
-        BasinLog.Info($"avalonia: dmabuf advertised with {import.Formats.Count} format rows on {node}");
+        Log.Info($"dmabuf advertised with {import.Formats.Count} format rows on {node}");
     }
 
     public HostScreens Screens { get; }
@@ -240,7 +241,7 @@ public sealed class BasinCompositorHost : IDisposable
         {
             Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
-        BasinLog.Debug($"avalonia: XDG_RUNTIME_DIR is unset; sockets bind under {directory}");
+        Log.Debug($"XDG_RUNTIME_DIR is unset; sockets bind under {directory}");
         return directory;
     }
 }

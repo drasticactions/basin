@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using Basin.Diagnostics;
 using Tmds.DBus.Protocol;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -48,7 +49,7 @@ internal sealed class PortalGlobalHotkeys : IDisposable
         {
             if (DBusAddress.Session is not { } address)
             {
-                BasinLog.Warn($"this session has no D-Bus session bus, global hotkeys are off");
+                Log.Warn($"this session has no D-Bus session bus, global hotkeys are off");
                 return;
             }
 
@@ -74,13 +75,13 @@ internal sealed class PortalGlobalHotkeys : IDisposable
             var sessionResponse = await CreateSessionAsync(connection, sender);
             if (sessionResponse.Code != 0)
             {
-                BasinLog.Warn($"the desktop refused a global shortcuts session (response {sessionResponse.Code}), global hotkeys are off");
+                Log.Warn($"the desktop refused a global shortcuts session (response {sessionResponse.Code}), global hotkeys are off");
                 return;
             }
 
             if (!sessionResponse.Results.TryGetValue("session_handle", out var handle))
             {
-                BasinLog.Warn($"the portal reply carried no session handle, global hotkeys are off");
+                Log.Warn($"the portal reply carried no session handle, global hotkeys are off");
                 return;
             }
 
@@ -103,26 +104,26 @@ internal sealed class PortalGlobalHotkeys : IDisposable
             var bindResponse = await BindShortcutsAsync(connection, sender, session);
             if (bindResponse.Code != 0)
             {
-                BasinLog.Warn($"the desktop refused the shortcut list (response {bindResponse.Code}), global hotkeys are off");
+                Log.Warn($"the desktop refused the shortcut list (response {bindResponse.Code}), global hotkeys are off");
                 return;
             }
 
-            BasinLog.Debug($"{_hotkeys.Count} global hotkey(s) bound through the desktop portal");
+            Log.Debug($"{_hotkeys.Count} global hotkey(s) bound through the desktop portal");
         }
         catch (DBusErrorReplyException error) when (error.ErrorName.Contains("ServiceUnknown"))
         {
-            BasinLog.Warn($"xdg-desktop-portal is not running, global hotkeys are off");
+            Log.Warn($"xdg-desktop-portal is not running, global hotkeys are off");
         }
         catch (DBusErrorReplyException error) when (
             error.ErrorName.Contains("UnknownInterface") || error.ErrorName.Contains("UnknownMethod"))
         {
-            BasinLog.Warn($"this desktop has no GlobalShortcuts portal backend, global hotkeys are off");
+            Log.Warn($"this desktop has no GlobalShortcuts portal backend, global hotkeys are off");
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
             if (!_disposed)
             {
-                BasinLog.Warn($"the global shortcuts portal failed: {error.Message}");
+                Log.Warn($"the global shortcuts portal failed: {error.Message}");
             }
         }
     }
@@ -135,7 +136,7 @@ internal sealed class PortalGlobalHotkeys : IDisposable
         }
         catch (DBusErrorReplyException error)
         {
-            BasinLog.Warn($"no app id was registered ({error.ErrorMessage}), the desktop may refuse global shortcuts");
+            Log.Warn($"no app id was registered ({error.ErrorMessage}), the desktop may refuse global shortcuts");
         }
     }
 

@@ -1,6 +1,6 @@
 namespace Basin.XWayland;
 
-public sealed class XWaylandWindow
+public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 {
     private readonly XWaylandWm _wm;
 
@@ -165,6 +165,33 @@ public sealed class XWaylandWindow
     public void Activate() => _wm.ActivateWindow(this);
 
     public void SetMaximized(bool maximized) => _wm.SetWindowMaximized(this, maximized);
+
+    public void SetFullscreen(bool fullscreen) => _wm.SetWindowFullscreen(this, fullscreen);
+
+    internal bool MaximizedState { get; set; }
+
+    internal bool FullscreenState { get; set; }
+
+    string Basin.Capabilities.IToplevelHandle.AppId => Class;
+
+    Basin.Capabilities.IToplevelHandle? Basin.Capabilities.IToplevelHandle.Parent => TransientFor;
+
+    (int Width, int Height) Basin.Capabilities.IToplevelHandle.NaturalSize
+    {
+        get
+        {
+            var current = Surface?.Current;
+            return (current?.Width ?? 0, current?.Height ?? 0);
+        }
+    }
+
+    void Basin.Capabilities.IToplevelHandle.SetActivated(bool activated)
+    {
+        if (activated)
+        {
+            Activate();
+        }
+    }
 
     public void Close() => _wm.CloseWindow(this);
 

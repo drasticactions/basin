@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Basin.Cli;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Dam;
 
@@ -67,7 +68,7 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result, trace: result.GetValue(debugOption));
+            cli.ConfigureLogging(result, trace: result.GetValue(debugOption));
             var options = new DamOptions
             {
                 Backend = result.GetValue(backendOption).Kind,
@@ -79,7 +80,7 @@ internal static class Program
                 Frames = result.GetValue(framesOption),
                 Application = result.GetValue(applicationArgument) ?? [],
             };
-            var status = Dam.Run(options, loggers.CreateLogger("Dam"), out var rendered);
+            var status = Dam.Run(options, BasinLog.For("Dam"), out var rendered);
             cli.ReportFrames(rendered);
             return status;
         });

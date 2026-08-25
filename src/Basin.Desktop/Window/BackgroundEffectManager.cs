@@ -21,7 +21,7 @@ public sealed class BackgroundEffectManager : IDisposable
     public BackgroundEffectManager(WlServerDisplay display, CompositorGlobal compositor, IBackgroundEffects? effects)
     {
         _compositor = compositor;
-        _effects = effects?.Supported ?? BackgroundEffects.None;
+        _effects = (effects?.Supported ?? BackgroundEffects.None) & BackgroundEffects.Blur;
         _global = display.CreateGlobal(ExtBackgroundEffectManagerV1.Interface, Version, OnBind);
     }
 

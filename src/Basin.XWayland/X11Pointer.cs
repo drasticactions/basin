@@ -1,6 +1,7 @@
 using System.Text;
 using Basin.Diagnostics;
 using Xcb.Native;
+using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
@@ -42,7 +43,7 @@ public sealed unsafe class X11Pointer : IDisposable
 
         if (Libxcb.xcb_connection_has_error(conn) != 0)
         {
-            BasinLog.Warn($"no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
+            Log.Warn($"no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
             Libxcb.xcb_disconnect(conn);
             return null;
         }

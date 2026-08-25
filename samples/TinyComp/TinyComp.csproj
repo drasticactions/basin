@@ -42,9 +42,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="../../assets/fonts/NotoSansCJK-Regular.ttc" LogicalName="NotoSansCJK-Regular.ttc" />
-    <EmbeddedResource Include="shaders/blur.vert.spv" LogicalName="blur.vert.spv" />
-    <EmbeddedResource Include="shaders/blur_down.frag.spv" LogicalName="blur_down.frag.spv" />
-    <EmbeddedResource Include="shaders/blur_up.frag.spv" LogicalName="blur_up.frag.spv" />
     <EmbeddedResource Include="shaders/corners.frag.spv" LogicalName="corners.frag.spv" />
     <EmbeddedResource Include="shaders/corners_outer.frag.spv" LogicalName="corners_outer.frag.spv" />
   </ItemGroup>

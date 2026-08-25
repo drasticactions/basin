@@ -17,5 +17,6 @@ public sealed class PlasmaWindowManagementModule : DesktopModule<PlasmaWindowMan
             services.Display,
             services.Find<IToplevelModel>(),
             services.Find<IWorkspaceModel>(),
-            services.Find<IToplevelStack>());
+            services.Find<IToplevelStack>(),
+            services.Find<CompositorGlobal>());
 }

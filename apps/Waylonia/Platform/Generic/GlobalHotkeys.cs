@@ -1,5 +1,6 @@
 using Basin.Avalonia;
 using Basin.Diagnostics;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -12,7 +13,7 @@ internal static class GlobalHotkeys
         BasinCompositorHost host,
         Action<Hotkey> launch)
     {
-        BasinLog.Warn($"global hotkeys are not implemented on this host, the [hotkeys] table is ignored");
+        Log.Warn($"global hotkeys are not implemented on this host, the [hotkeys] table is ignored");
         return null;
     }
 }

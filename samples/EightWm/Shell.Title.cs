@@ -1,6 +1,8 @@
 using Basin;
 using Basin.Seat;
 
+using Basin.Diagnostics;
+
 namespace EightWm;
 
 internal sealed partial class Shell
@@ -55,7 +57,7 @@ internal sealed partial class Shell
             visible ? Animation.ShowEdgeUi : Animation.HideEdgeUi,
             offsetScale: -EdgeTravel(AppTitleBar.BarHeight));
         title.Draw();
-        Console.WriteLine($"TITLE {(visible ? "on" : "off")}");
+        BasinReport.Line($"TITLE {(visible ? "on" : "off")}");
         if (!title.Motion.IsRunning)
         {
             SettleTitle(view, title);
@@ -270,7 +272,7 @@ internal sealed partial class Shell
 
         var picked = DragScaleOf(app);
         var zone = DropZone(from, localX, localY);
-        Console.WriteLine($"TITLE drop {zone} {app.AppId}");
+        BasinReport.Line($"TITLE drop {zone} {app.AppId}");
         switch (zone)
         {
             case EdgeSwipeZone.Bottom:

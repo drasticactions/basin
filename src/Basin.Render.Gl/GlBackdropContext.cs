@@ -11,4 +11,6 @@ public readonly record struct GlBackdropContext
     public required int TargetHeight { get; init; }
 
     public required Box Bounds { get; init; }
+
+    public object? Key { get; init; }
 }

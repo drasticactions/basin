@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using K4os.Compression.LZ4;
 using Wayland.Server.Shm;
 using ZstdSharp;
+using static Basin.Transport.Waypipe.WaypipeLog;
 
 namespace Basin.Transport.Waypipe;
 
@@ -362,7 +363,7 @@ public sealed class WaypipeEngine : IDisposable
 
         var image = CreateImage(remoteId, slice, declaredSize: null);
         _decodeSessions[remoteId] = _options.VideoDecoder!.Open(codec, image.Width, image.Height, image.Format);
-        Basin.Diagnostics.BasinLog.Debug(
+        Log.Debug(
             $"remote id {remoteId} is a {codec} stream into a {image.Width}x{image.Height} host region");
     }
 
@@ -383,7 +384,7 @@ public sealed class WaypipeEngine : IDisposable
 
         if (!session.Decode(packet, image.Pixels, image.Stride))
         {
-            Basin.Diagnostics.BasinLog.Warn($"a video packet for remote id {remoteId} produced no frame");
+            Log.Warn($"a video packet for remote id {remoteId} produced no frame");
         }
     }
 

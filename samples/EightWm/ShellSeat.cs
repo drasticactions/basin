@@ -8,8 +8,9 @@ using Basin.Host;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.Seat.Backends;
-using Microsoft.Extensions.Logging;
 using Xkb;
+
+using Basin.Diagnostics;
 
 namespace EightWm;
 
@@ -32,17 +33,18 @@ internal sealed partial class ShellSeat :
     private readonly CursorController _cursor;
     private readonly CursorImageTheme _cursorTheme;
     private readonly SeatIdleSource _idle;
-    private readonly RelativePointerManager _relativePointer;
+    private readonly PointerDelivery _delivery;
     private readonly EdgeSwipeGesture _edgeGesture = new();
     private readonly SeatTouchDriver _touch;
     private ShellView? _edgeView;
     private bool _pointerEdge;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
 
     private readonly SeatBinder _binder;
     private readonly SeatInjector _injector;
 
     private LibinputBackend? _libinput;
+    private readonly PointerRefresh _pointerRefresh;
 
     public ShellSeat(
         Basin.Host.BasinHost host,
@@ -53,7 +55,7 @@ internal sealed partial class ShellSeat :
         OutputLayout layout,
         CursorImageTheme cursorTheme,
         Basin.Seat.Backends.HookInputSink inputSink,
-        ILogger log)
+        BasinLogger log)
     {
         _host = host;
         _shell = shell;
@@ -72,17 +74,15 @@ internal sealed partial class ShellSeat :
         };
         _cursor.Shapes.CursorRequested += _cursor.ShowImage;
         _cursor.ColorProfiles = services.Find<Basin.Capabilities.IColorProfileService>();
-        _relativePointer = services.Require<RelativePointerManager>();
+        _delivery = new PointerDelivery(_seat, _cursor) { RelativePointer = services.Require<RelativePointerManager>() };
         _idle = (services.Find<IIdleSource>() as SeatIdleSource)!;
         _binder = new SeatBinder(_seat, layout, _pointer, _cursor)
         {
             Drm = host.Drm,
             Theme = cursorTheme,
         };
-        _binder.DeviceAdded += device => Console.WriteLine(
-            $"INPUT + {device.Name} keyboard={device.HasKeyboard} pointer={device.HasPointer} " +
-            $"touch={device.HasTouch}");
-        _binder.DeviceRemoved += device => Console.WriteLine($"INPUT - {device.Name}");
+        _binder.DeviceAdded += device => BasinReport.Line($"INPUT + {device.Name} keyboard={device.HasKeyboard} pointer={device.HasPointer} " + $"touch={device.HasTouch}");
+        _binder.DeviceRemoved += device => BasinReport.Line($"INPUT - {device.Name}");
         _binder.Key += OnKey;
         _binder.ModifiersChanged += _idle.NotifyActivity;
         _binder.Motion += (timeMs, dx, dy, unaccelDx, unaccelDy) =>
@@ -90,6 +90,7 @@ internal sealed partial class ShellSeat :
         _binder.Button += OnButton;
         _binder.Axis += OnAxis;
         _binder.PointerLeft += _seat.Pointer.NotifyClearFocus;
+        _pointerRefresh = new PointerRefresh(_scene, host.Loop, Refocus);
         _touch = new SeatTouchDriver(_binder, _seat);
         _edgeGesture.Handler = this;
         _touch.Router.Gestures = _edgeGesture;
@@ -261,7 +262,7 @@ internal sealed partial class ShellSeat :
             }
             catch (NotSupportedException)
             {
-                _log.LogDebug("no seat manager to switch sessions");
+                _log.Debug($"no seat manager to switch sessions");
             }
 
             return true;
@@ -341,22 +342,8 @@ internal sealed partial class ShellSeat :
             return;
         }
 
-        if (hit?.Surface is { } surface)
-        {
-            _seat.Pointer.NotifyMotionAt(timeMs, surface, hit.Value.X, hit.Value.Y, _pointer.X, _pointer.Y);
-            _cursor.SetHover(surface, overClient: true);
-        }
-        else
-        {
-            _seat.Pointer.NotifyClearFocus();
-            _cursor.SetHover(null, overClient: false);
-            _cursor.ShowNamed("left_ptr");
-        }
-
-        if (dx != 0 || dy != 0)
-        {
-            _relativePointer.NotifyMotion((ulong)timeMs * 1000, dx, dy, unaccelDx ?? dx, unaccelDy ?? dy);
-        }
+        _delivery.Motion(timeMs, hit?.Surface, hit?.X ?? 0, hit?.Y ?? 0, _pointer.X, _pointer.Y);
+        _delivery.Relative(timeMs, dx, dy, unaccelDx, unaccelDy);
 
         _idle.NotifyActivity();
     }
@@ -644,6 +631,7 @@ internal sealed partial class ShellSeat :
 
     public void Dispose()
     {
+        _pointerRefresh.Dispose();
         _cursor.Dispose();
         _libinput?.Dispose();
     }

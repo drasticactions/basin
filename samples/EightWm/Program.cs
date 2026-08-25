@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Basin.Cli;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace EightWm;
 
@@ -62,7 +63,7 @@ internal static class Program
         return cli.Run(args, result =>
         {
             var chosen = result.GetValue(backend);
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             var explicitly = new HashSet<string>(StringComparer.Ordinal);
             void Note<T>(string name, Option<T> option)
             {
@@ -98,7 +99,7 @@ internal static class Program
                 Explicit = explicitly,
             };
 
-            var status = Shell.Run(options, loggers.CreateLogger("EightWm"), out var rendered);
+            var status = Shell.Run(options, BasinLog.For("EightWm"), out var rendered);
             cli.ReportFrames(rendered);
             return status;
         });

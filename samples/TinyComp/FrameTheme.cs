@@ -1,5 +1,6 @@
 using System.Reflection;
 using Basin;
+using Basin.Cli;
 using Basin.Render.Skia;
 using Basin.Capabilities;
 using Basin.UI.Skia;
@@ -9,6 +10,12 @@ namespace TinyComp;
 
 internal sealed class FrameTheme : IDisposable
 {
+    private static readonly IconSearch IconPngs = new()
+    {
+        Extensions = [".png"],
+        Sizes = [48, 32],
+    };
+
     private readonly Dictionary<string, SKImage?> _icons = [];
     private bool _disposed;
 
@@ -101,18 +108,8 @@ internal sealed class FrameTheme : IDisposable
         }
 
         SKImage? image = null;
-        foreach (var path in (ReadOnlySpan<string>)
-        [
-            $"/usr/share/icons/hicolor/48x48/apps/{name}.png",
-            $"/usr/share/icons/hicolor/32x32/apps/{name}.png",
-            $"/usr/share/pixmaps/{name}.png",
-        ])
+        if (IconPngs.Find(name) is { } path)
         {
-            if (!File.Exists(path))
-            {
-                continue;
-            }
-
             using var bitmap = SKBitmap.Decode(path);
             if (bitmap is not null)
             {
@@ -122,8 +119,6 @@ internal sealed class FrameTheme : IDisposable
                     image = SkiaCensus.Track(decoded);
                 }
             }
-
-            break;
         }
 
         _icons[name] = image;

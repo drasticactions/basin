@@ -1,8 +1,10 @@
+using Basin.Cli;
 using System.Text.RegularExpressions;
 using Basin.WindowManager;
-using Microsoft.Extensions.Logging;
 using Tomlyn;
 using Tomlyn.Model;
+
+using Basin.Diagnostics;
 
 namespace RetroWm;
 
@@ -18,7 +20,7 @@ internal sealed class Config
 
     public IReadOnlyList<HotkeyBinding> Hotkeys { get; private set; } = [];
 
-    public static Config Load(bool skipFile, ILogger log)
+    public static Config Load(bool skipFile, BasinLogger log)
     {
         var config = new Config();
         Theme.Reset();
@@ -27,39 +29,9 @@ internal sealed class Config
             return config;
         }
 
-        var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrEmpty(configHome) || !Path.IsPathRooted(configHome))
+        var path = TomlConfig.DefaultPath("retro-wm");
+        if (TomlConfig.Read(path, log) is not { } table)
         {
-            configHome = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".config");
-        }
-
-        var path = Path.Combine(configHome, "retro-wm", "retro-wm.toml");
-        string text;
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return config;
-            }
-
-            text = File.ReadAllText(path);
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            log.LogWarning("cannot read {Path}: {Reason}", path, error.Message);
-            return config;
-        }
-
-        TomlTable table;
-        try
-        {
-            table = Toml.ToModel(text);
-        }
-        catch (TomlException error)
-        {
-            log.LogWarning("{Path} did not parse, keeping defaults: {Reason}", path, error.Message);
             return config;
         }
 
@@ -178,7 +150,7 @@ internal sealed class Config
         return parts.Length > 0 ? parts : null;
     }
 
-    private static Rule? ParseRule(TomlTable table, ILogger log)
+    private static Rule? ParseRule(TomlTable table, BasinLogger log)
     {
         static string[]? Strings(TomlTable table, params string[] keys)
         {
@@ -212,7 +184,7 @@ internal sealed class Config
                 }
                 catch (ArgumentException error)
                 {
-                    log.LogWarning("rule pattern '{Pattern}' is invalid: {Reason}", pattern, error.Message);
+                    log.Warn($"rule pattern '{pattern}' is invalid: {error.Message}");
                 }
             }
 
@@ -250,7 +222,7 @@ internal sealed class Config
         };
     }
 
-    private static HotkeyBinding? ParseHotkey(string chord, object value, ILogger log)
+    private static HotkeyBinding? ParseHotkey(string chord, object value, BasinLogger log)
     {
         WmAction? action = null;
         string[]? command = null;
@@ -268,7 +240,7 @@ internal sealed class Config
             };
             if (command.Length == 0)
             {
-                log.LogWarning("hotkey '{Chord}' names no action and no command, skipping", chord);
+                log.Warn($"hotkey '{chord}' names no action and no command, skipping");
                 return null;
             }
         }
@@ -303,7 +275,7 @@ internal sealed class Config
                     modifiers |= Modifiers.Mod5;
                     break;
                 default:
-                    log.LogWarning("unknown modifier '{Modifier}' in hotkey '{Chord}', skipping", tokens[i], chord);
+                    log.Warn($"unknown modifier '{(tokens[i])}' in hotkey '{chord}', skipping");
                     return null;
             }
         }
@@ -311,7 +283,7 @@ internal sealed class Config
         var keysym = Keysym.FromName(tokens[^1]);
         if (keysym == Keysym.NoSymbol)
         {
-            log.LogWarning("unknown keysym '{Keysym}' in hotkey '{Chord}', skipping", tokens[^1], chord);
+            log.Warn($"unknown keysym '{(tokens[^1])}' in hotkey '{chord}', skipping");
             return null;
         }
 

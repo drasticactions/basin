@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using Basin.Cli;
 using BlurClient.Protocol;
-using Microsoft.Extensions.Logging;
 using Wayland;
 
 namespace BlurClient;

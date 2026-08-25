@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Basin.Avalonia;
 using Basin.Diagnostics;
 using Basin.Shell.Xdg;
+using static Waylonia.WayloniaLog;
 
 namespace Waylonia;
 
@@ -52,7 +53,7 @@ internal sealed class CursorScreenPolicy : IAvaloniaShellPolicy
 
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Position = position;
-        BasinLog.Debug($"placed '{info.Title}' on '{screen.DisplayName ?? "?"}' at {position.X},{position.Y}");
+        Log.Debug($"placed '{info.Title}' on '{screen.DisplayName ?? "?"}' at {position.X},{position.Y}");
     }
 
     internal static string? Containing(IReadOnlyCollection<HostScreenInfo> screens, PixelPoint point)
@@ -80,7 +81,7 @@ internal sealed class CursorScreenPolicy : IAvaloniaShellPolicy
         var key = Containing(screens, cursor);
         if (key is not null)
         {
-            BasinLog.Debug($"a layer surface named no output, taking '{key}' under the pointer");
+            Log.Debug($"a layer surface named no output, taking '{key}' under the pointer");
         }
 
         return key;

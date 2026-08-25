@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using Basin.Diagnostics;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -28,7 +29,7 @@ internal sealed class BasinInputChannel
                 if (!_reportedGrowth)
                 {
                     _reportedGrowth = true;
-                    BasinLog.Info($"avalonia: the input ring grew to {_events.Length} entries");
+                    Log.Info($"the input ring grew to {_events.Length} entries");
                 }
             }
 

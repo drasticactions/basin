@@ -5,7 +5,6 @@ using Basin.Cli;
 using Basin.Diagnostics;
 using Basin.Render.Pixman;
 using Basin.Scene;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using Wayland.Server;
 
@@ -28,10 +27,11 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
+            var log = BasinLog.For("BasinHeadless");
             if (result.GetValue(client) is not null && result.GetValue(channel) is not null)
             {
-                Console.Error.WriteLine("--client spawns a local client and --waypipe-listen waits for a remote one");
+                log.Error($"--client spawns a local client and --waypipe-listen waits for a remote one");
                 return 1;
             }
 
@@ -39,12 +39,12 @@ internal static class Program
                 result.GetValue(transport).Kind == TransportKind.LibWayland &&
                 result.GetResult(transport) is { Implicit: false })
             {
-                Console.Error.WriteLine("--waypipe-listen replays its channel over the managed transport");
+                log.Error($"--waypipe-listen replays its channel over the managed transport");
                 return 1;
             }
 
             var status = Run(
-                loggers.CreateLogger("BasinHeadless"),
+                log,
                 result.GetValue(frames),
                 result.GetValue(client),
                 result.GetValue(screenshot),
@@ -71,7 +71,7 @@ internal static class Program
     };
 
     private static int Run(
-        ILogger log,
+        BasinLogger log,
         long frames,
         string? clientCommand,
         string? screenshotPath,
@@ -93,7 +93,7 @@ internal static class Program
                 video.EndsWith(",hw", StringComparison.Ordinal), out var whyNot);
             if (decoder is null)
             {
-                log.LogError("--video {Codec} needs a decoder and none is available: {Reason}", video, whyNot);
+                log.Error($"--video {video} needs a decoder and none is available: {whyNot}");
                 renderedFrames = 0;
                 return 1;
             }
@@ -158,12 +158,11 @@ internal static class Program
 
         if (socket.Length > 0)
         {
-            log.LogInformation(
-                "listening on {Socket} (800x600@60, software). WAYLAND_DISPLAY={Socket} <client>", socket, socket);
+            log.Info($"listening on {socket} (800x600@60, software). WAYLAND_DISPLAY={socket} <client>");
         }
         else
         {
-            log.LogInformation("no local socket on this host (800x600@60, software); a client arrives over a channel");
+            log.Info($"no local socket on this host (800x600@60, software); a client arrives over a channel");
         }
 
         var client = BasinDiagnostics.StartClient(clientCommand, socket);
@@ -183,8 +182,7 @@ internal static class Program
                 File.Delete(channelEndpoint);
             }
 
-            log.LogInformation(
-                "waiting for a waypipe channel on {Endpoint}, replayed over the managed transport", endpoint);
+            log.Info($"waiting for a waypipe channel on {endpoint}, replayed over the managed transport");
             channel = Basin.Transport.Waypipe.WaypipeChannel.Listen(
                 endpoint,
                 compress switch
@@ -199,10 +197,9 @@ internal static class Program
                     AcceptsVideo = videoCodec != "none",
                     VideoDecoder = decoder,
                 });
-            channel.Ended += failure => log.LogInformation(
-                "channel ended{Reason}", failure is null ? string.Empty : $": {failure.Message}");
+            channel.Ended += failure => log.Info($"channel ended{(failure is null ? string.Empty : $": {failure.Message}")}");
             display.CreateClient(channel.Transport);
-            log.LogInformation("channel attached; replaying it as one client");
+            log.Info($"channel attached; replaying it as one client");
         }
 
         var interrupt = loop.AddSignal(Signal.Interrupt, _ => running = false);
@@ -213,7 +210,7 @@ internal static class Program
             loop.Dispatch(frames == 0 ? -1 : 16);
             if (client is not null && client.HasExited)
             {
-                log.LogError("client exited prematurely with code {Code}", client.ExitCode);
+                log.Error($"client exited prematurely with code {client.ExitCode}");
                 renderedFrames = rendered;
                 return 1;
             }
@@ -224,7 +221,7 @@ internal static class Program
         if (screenshotPath is not null)
         {
             BufferCapture.WritePng(target, screenshotPath);
-            log.LogInformation("screenshot written to {Path} after {Count} frames", screenshotPath, rendered);
+            log.Info($"screenshot written to {screenshotPath} after {rendered} frames");
         }
 
         if (channel is not null)
@@ -255,22 +252,24 @@ internal static class Program
         scene.Root.Destroy();
         frameState.Dispose();
 
-        Console.WriteLine(
-            $"FRAMES {rendered} LIVE {(BasinCounters.Enabled ? BasinCounters.LiveObjects.ToString() : "untracked")}");
+        BasinReport.Line(CompositorLines.Frames(rendered));
 
         if (frames > 0)
         {
             if (BasinCounters.LiveObjects != 0 || BasinCounters.PendingFrees != 0 || buffers.Count != 0)
             {
-                log.LogError(
-                    "teardown not clean (live={Live} pendingFrees={PendingFrees} buffers={Buffers})",
-                    BasinCounters.LiveObjects, BasinCounters.PendingFrees, buffers.Count);
+                log.Error($"teardown not clean (live={BasinCounters.LiveObjects} pendingFrees={BasinCounters.PendingFrees} buffers={buffers.Count})");
                 return 1;
             }
 
-            log.LogInformation(BasinCounters.Enabled
-                ? "OK: {Count} frames, teardown clean"
-                : "OK: {Count} frames, buffers released (lifetime tracking compiled out)", rendered);
+            if (BasinCounters.Enabled)
+            {
+                log.Info($"OK: {rendered} frames, teardown clean");
+            }
+            else
+            {
+                log.Info($"OK: {rendered} frames, buffers released (lifetime tracking compiled out)");
+            }
         }
 
         return 0;

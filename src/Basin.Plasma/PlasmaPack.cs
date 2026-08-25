@@ -18,6 +18,8 @@ public static class PlasmaPack
         new PlasmaShellModule(),
         new ScreenEdgeModule(),
         new LockscreenOverlayModule(),
+        new BlurModule(),
+        new ContrastModule(),
         new ShadowModule(),
         new SlideModule(),
         new ScreencastModule(),

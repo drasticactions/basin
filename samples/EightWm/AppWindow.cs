@@ -1,4 +1,5 @@
 using Basin;
+using Basin.Capabilities;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 
@@ -8,6 +9,7 @@ internal sealed class AppWindow : IShellApp, IClosable
 {
     public AppWindow(XdgToplevelWindow xdg, SceneTree slot, SceneTransform frame, SceneSurface scene)
     {
+        Handle = xdg;
         Xdg = xdg;
         Slot = slot;
         Frame = frame;
@@ -16,11 +18,14 @@ internal sealed class AppWindow : IShellApp, IClosable
 
     public AppWindow(Basin.XWayland.XWaylandWindow x11, SceneTree slot, SceneTransform frame, SceneSurface scene)
     {
+        Handle = x11;
         X11 = x11;
         Slot = slot;
         Frame = frame;
         Scene = scene;
     }
+
+    public IToplevelHandle Handle { get; }
 
     public SceneTree Slot { get; }
 
@@ -34,15 +39,15 @@ internal sealed class AppWindow : IShellApp, IClosable
 
     public SceneSurface Scene { get; }
 
-    public Surface? Surface => Xdg is { } xdg ? xdg.Surface : X11?.Surface;
+    public Surface? Surface => Handle.Surface;
 
-    public string Title => Xdg is { } xdg ? xdg.Title : X11?.Title ?? string.Empty;
+    public string Title => Handle.Title;
 
-    public string AppId => Xdg is { } xdg ? xdg.AppId : X11?.Class ?? string.Empty;
+    public string AppId => Handle.AppId;
 
-    public bool IsTransient => Xdg is { } xdg ? xdg.Parent is not null : X11?.TransientFor is not null;
+    public bool IsTransient => Handle.Parent is not null;
 
-    public bool WantsFocus => X11 is null || X11.WantsFocus;
+    public bool WantsFocus => Handle.WantsFocus;
 
     public int MinWidth { get; set; }
 
@@ -72,29 +77,9 @@ internal sealed class AppWindow : IShellApp, IClosable
         }
     }
 
-    public (int Width, int Height) NaturalSize()
-    {
-        if (Xdg is { } xdg)
-        {
-            var geometry = xdg.Xdg.EffectiveGeometry;
-            return (geometry.Width, geometry.Height);
-        }
+    public (int Width, int Height) NaturalSize() => Handle.NaturalSize;
 
-        var current = X11?.Surface?.Current;
-        return (current?.Width ?? 0, current?.Height ?? 0);
-    }
-
-    public void SetActivated(bool activated)
-    {
-        if (Xdg is { } xdg)
-        {
-            xdg.SetActivated(activated);
-        }
-        else if (activated)
-        {
-            X11!.Activate();
-        }
-    }
+    public void SetActivated(bool activated) => Handle.SetActivated(activated);
 
     public const int ParkGap = 64;
 
@@ -123,15 +108,14 @@ internal sealed class AppWindow : IShellApp, IClosable
         IsParked = false;
         Slot.SetPosition(box.X, box.Y);
         Slot.ClipBox = new Box(0, 0, box.Width, box.Height);
-        if (Xdg is { } xdg)
+        Handle.Configure(box.X, box.Y, box.Width, box.Height);
+        if (Xdg is not null)
         {
-            xdg.SetSize(box.Width, box.Height);
-            xdg.SetFullscreen(true);
+            Handle.SetFullscreen(true);
         }
         else
         {
-            X11!.Configure(box.X, box.Y, box.Width, box.Height);
-            X11.SetMaximized(true);
+            Handle.SetMaximized(true);
         }
     }
 
@@ -152,15 +136,5 @@ internal sealed class AppWindow : IShellApp, IClosable
             cell.Y + Math.Max(0, (cell.Height - height) / 2));
     }
 
-    public void RequestClose()
-    {
-        if (Xdg is { } xdg)
-        {
-            xdg.Close();
-        }
-        else
-        {
-            X11!.Close();
-        }
-    }
+    public void RequestClose() => Handle.Close();
 }

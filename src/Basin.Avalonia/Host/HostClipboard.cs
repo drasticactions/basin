@@ -4,6 +4,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Basin.Capabilities;
 using Basin.Diagnostics;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -81,7 +82,7 @@ public sealed class HostClipboard : IDisposable
                 return;
             }
 
-            BasinLog.Debug($"clipboard: mirroring '{mime}' to the host over the client's channel");
+            Log.Debug($"clipboard: mirroring '{mime}' to the host over the client's channel");
             _ = Task.Run(() => Mirror(Decode(inbound.ReadToEnd(timeout))));
             return;
         }
@@ -106,7 +107,7 @@ public sealed class HostClipboard : IDisposable
             return;
         }
 
-        BasinLog.Debug($"clipboard: mirroring '{mime}' to the host");
+        Log.Debug($"clipboard: mirroring '{mime}' to the host");
         _ = Task.Run(() => Mirror(ReadAllText(readFd, timeout)));
     }
 
@@ -116,7 +117,7 @@ public sealed class HostClipboard : IDisposable
     {
         if (text is null)
         {
-            BasinLog.Debug($"clipboard: the client source produced nothing");
+            Log.Debug($"clipboard: the client source produced nothing");
             return;
         }
 
@@ -124,7 +125,7 @@ public sealed class HostClipboard : IDisposable
         {
             _lastText = text;
             var clipboard = _hostClipboard();
-            BasinLog.Debug($"clipboard: {text.Length} bytes to the host clipboard ({(clipboard is null ? "absent" : "present")})");
+            Log.Debug($"clipboard: {text.Length} bytes to the host clipboard ({(clipboard is null ? "absent" : "present")})");
             _ = clipboard?.SetTextAsync(text);
         });
     }
@@ -202,7 +203,7 @@ public sealed class HostClipboard : IDisposable
                 stream.Write(buffer, 0, (int)got);
             }
 
-            BasinLog.Warn($"avalonia: clipboard source stalled; the host clipboard keeps its old contents");
+            Log.Warn($"clipboard source stalled; the host clipboard keeps its old contents");
             return null;
         }
         finally

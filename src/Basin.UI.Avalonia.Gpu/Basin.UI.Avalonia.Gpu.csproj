@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Basin.UI.Avalonia.Gpu</PackageId>
+    <RootNamespace>Basin.UI.Avalonia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>Avalonia GPU target for Basin, rendering compositor chrome into a dmabuf through EGL.</Description>
+    <BasinAvaloniaBackend>true</BasinAvaloniaBackend>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+
+</Project>

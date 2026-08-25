@@ -1,8 +1,9 @@
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using CursorShape = Basin.WindowManager.Protocol.WpCursorShapeDeviceV1.Shape;
+
+using Basin.Diagnostics;
 
 namespace RetroWm;
 
@@ -10,7 +11,7 @@ internal sealed class Manager
 {
     private readonly RiverWindowManager _wm;
     private readonly bool _trace;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly WlCompositor? _compositor;
     private readonly WlShm? _shm;
     private readonly OutputScales? _scales;
@@ -65,7 +66,7 @@ internal sealed class Manager
     private Config _config;
     private readonly WmReloadSignal _reload;
 
-    internal Manager(RiverWindowManager wm, bool trace, bool noConfig, ILogger log)
+    internal Manager(RiverWindowManager wm, bool trace, bool noConfig, BasinLogger log)
     {
         _wm = wm;
         _trace = trace;
@@ -1091,7 +1092,7 @@ internal sealed class Manager
     private void OnReload()
     {
         _config = Config.Load(_noConfig, _log);
-        _log.LogInformation("configuration reloaded");
+        _log.Info($"configuration reloaded");
 
         foreach (var (_, binding) in _bindings)
         {
@@ -2538,7 +2539,7 @@ internal sealed class Manager
     {
         if (WmSpawn.Run(argv) is { } failure)
         {
-            _log.LogError("could not spawn '{Command}': {Reason}", argv[0], failure);
+            _log.Error($"could not spawn '{(argv[0])}': {failure}");
         }
     }
 
@@ -2549,21 +2550,14 @@ internal sealed class Manager
             return;
         }
 
-        _log.LogDebug(
-            "manage: {Windows} window(s), {Outputs} output(s), {New} new, {Closed} closed, workspace {Workspace}",
-            context.Windows.Count, context.Outputs.Count, context.NewWindows.Count, context.ClosedWindows.Count,
-            _workspace + 1);
+        _log.Debug($"manage: {context.Windows.Count} window(s), {context.Outputs.Count} output(s), {context.NewWindows.Count} new, {context.ClosedWindows.Count} closed, workspace {(_workspace + 1)}");
         foreach (var mw in _windows)
         {
-            _log.LogDebug(
-                "  {Focused} '{AppId}' at {X},{Y} {Width}x{Height}{State}",
-                ReferenceEquals(mw, _focusStack.Focused) ? '*' : ' ', mw.Window.AppId ?? "?",
-                mw.X, mw.Y, mw.Width, mw.Height,
-                (mw.Workspace != _workspace ? $" ws={mw.Workspace + 1}" : string.Empty) +
+            _log.Debug($"  {(ReferenceEquals(mw, _focusStack.Focused) ? '*' : ' ')} '{(mw.Window.AppId ?? "?")}' at {mw.X},{mw.Y} {mw.Width}x{mw.Height}{((mw.Workspace != _workspace ? $" ws={mw.Workspace + 1}" : string.Empty) +
                 (mw.Iconized ? " iconized" : string.Empty) +
                 (mw.Zoomed ? " zoomed" : string.Empty) +
                 (mw.FullscreenOutput is not null ? " fullscreen" : string.Empty) +
-                (mw.IsDialog ? " dialog" : string.Empty));
+                (mw.IsDialog ? " dialog" : string.Empty))}");
         }
     }
 

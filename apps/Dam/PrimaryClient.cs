@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Basin;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Dam;
 
@@ -99,27 +100,27 @@ internal sealed class PrimaryClient : IDisposable
     [DllImport("libc", SetLastError = true)]
     private static extern int setgid(uint gid);
 
-    public static bool DropPermissions(ILogger log)
+    public static bool DropPermissions(BasinLogger log)
     {
         if (getuid() == 0 || getgid() == 0)
         {
-            log.LogInformation("running as root user, this is dangerous");
+            log.Info($"running as root user, this is dangerous");
             return true;
         }
 
         if (getuid() != geteuid() || getgid() != getegid())
         {
-            log.LogInformation("setuid/setgid bit detected, dropping permissions");
+            log.Info($"setuid/setgid bit detected, dropping permissions");
             if (setgid(getgid()) != 0 || setuid(getuid()) != 0)
             {
-                log.LogError("unable to drop root, refusing to start");
+                log.Error($"unable to drop root, refusing to start");
                 return false;
             }
         }
 
         if (setgid(0) != -1 || setuid(0) != -1)
         {
-            log.LogError("unable to drop root (it can be restored after setuid), refusing to start");
+            log.Error($"unable to drop root (it can be restored after setuid), refusing to start");
             return false;
         }
 
@@ -132,12 +133,12 @@ internal sealed class PrimaryClient : IDisposable
         string? display,
         ICompositorEventLoop loop,
         Action onHangup,
-        ILogger log)
+        BasinLogger log)
     {
         var fds = stackalloc int[2];
         if (pipe(fds) != 0)
         {
-            log.LogError("unable to create pipe");
+            log.Error($"unable to create pipe");
             return null;
         }
 
@@ -158,7 +159,7 @@ internal sealed class PrimaryClient : IDisposable
             if (posix_spawnattr_init(attributes) != 0 || !(attributesReady = true) ||
                 posix_spawn_file_actions_init(actions) != 0 || !(actionsReady = true))
             {
-                log.LogError("failed to spawn the application: posix_spawn setup failed");
+                log.Error($"failed to spawn the application: posix_spawn setup failed");
                 close(readFd);
                 close(writeFd);
                 return null;
@@ -178,9 +179,7 @@ internal sealed class PrimaryClient : IDisposable
             var error = posix_spawnp(out var pid, application[0], actions, attributes, argv, envp);
             if (error != 0)
             {
-                log.LogError(
-                    "failed to spawn '{Application}': {Error}",
-                    application[0], Marshal.GetPInvokeErrorMessage(error));
+                log.Error($"failed to spawn '{(application[0])}': {(Marshal.GetPInvokeErrorMessage(error))}");
                 close(readFd);
                 close(writeFd);
                 return null;
@@ -198,7 +197,7 @@ internal sealed class PrimaryClient : IDisposable
                 onHangup();
             });
 
-            log.LogDebug("application spawned with pid {Pid}", pid);
+            log.Debug($"application spawned with pid {pid}");
             return client;
         }
         finally

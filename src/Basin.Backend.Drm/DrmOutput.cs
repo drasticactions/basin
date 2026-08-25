@@ -2,6 +2,7 @@ using Basin.Diagnostics;
 using Drm;
 using Drm.Native;
 using Liftoff;
+using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
@@ -27,8 +28,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     private readonly DrmAtomicBuilder _testBuilder = new();
     private readonly List<LiftoffLayer> _liftoffLayers = [];
+    private readonly List<LiftoffLayer> _liftoffProbeLayers = [];
     private readonly List<uint> _layerFbIds = [];
     private LiftoffOutput? _liftoffOutput;
+    private LiftoffOutput? _liftoffProbeOutput;
     private bool _liftoffActive;
 
     private List<BufferLock> _layerScanout = [];
@@ -97,15 +100,18 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         Description = $"{edid.Make} {edid.Model} ({connector.Name})";
         _cursorRetry = backend.Loop.AddTimer(OnCursorRetry);
         _queuedFlush = backend.Loop.AddTimer(OnQueuedFlush);
-        if (backend.Liftoff is { } liftoff)
+        if (backend.Liftoff is { } liftoff && backend.LiftoffProbe is { } probe)
         {
             try
             {
                 _liftoffOutput = liftoff.CreateOutput(crtcId);
+                _liftoffProbeOutput = probe.CreateOutput(crtcId);
             }
             catch (LiftoffException e)
             {
-                BasinLog.Warn($"{Name}: liftoff output unavailable ({e.Message}); overlay offload disabled");
+                _liftoffOutput = null;
+                _liftoffProbeOutput = null;
+                Log.Warn($"{Name}: liftoff output unavailable ({e.Message}); overlay offload disabled");
             }
         }
     }
@@ -284,7 +290,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if (layers is not null && CanOffloadLayers(state))
         {
-            _ = ApplyLayers(layers, _testBuilder, out _);
+            _ = ApplyLayers(layers, _testBuilder, _liftoffProbeOutput!, _liftoffProbeLayers, out _);
             ReleaseStagedFences();
         }
 
@@ -410,7 +416,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             fbId = _backend.Framebuffers.GetOrAdd(buffer, true);
             if (fbId == 0)
             {
-                BasinLog.Warn($"{Name}: buffer not scanout-capable; frame dropped");
+                Log.Warn($"{Name}: buffer not scanout-capable; frame dropped");
                 return false;
             }
         }
@@ -453,7 +459,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
             else if (layers is not null)
             {
-                if (ApplyLayers(layers, builder, out var anyAccepted))
+                if (ApplyLayers(layers, builder, _liftoffOutput, _liftoffLayers, out var anyAccepted))
                 {
                     _liftoffActive |= anyAccepted;
                     layersDirty = true;
@@ -593,6 +599,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     private OutputState? _queuedFrame;
     private BufferLock _queuedFrameLock;
+    private readonly List<OutputLayer> _queuedLayers = [];
+    private readonly List<OutputLayer> _queuedLayerPool = [];
+    private readonly List<BufferLock> _queuedLayerLocks = [];
+    private bool _queuedLayersHeld;
     private int _queuedFenceFd = -1;
     private long _lastFrameCommitTick;
 
@@ -611,7 +621,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
-        BasinLog.Debug($"{Name}: frame queued behind pending flip");
+        Log.Debug($"{Name}: frame queued behind pending flip");
         _lastFrameCommitTick = Environment.TickCount64;
         _queuedFlush?.UpdateTimer((int)(2 * RefreshMs()));
         ReleaseQueuedFence();
@@ -633,9 +643,63 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             _queuedFrame.SetInFence(fence);
         }
 
+        if ((fields & OutputStateFields.Layers) != 0 && state.Layers is { } layerList)
+        {
+            ReleaseQueuedLayers();
+            while (_queuedLayerPool.Count < layerList.Count)
+            {
+                _queuedLayerPool.Add(new OutputLayer());
+            }
+
+            for (var i = 0; i < layerList.Count; i++)
+            {
+                var source = layerList[i];
+                var copy = _queuedLayerPool[i];
+                copy.Buffer = source.Buffer;
+                copy.SrcBox = source.SrcBox;
+                copy.DstBox = source.DstBox;
+                copy.Alpha = source.Alpha;
+                copy.Opaque = source.Opaque;
+                copy.Accepted = false;
+                copy.InFenceFd = source.InFenceFd >= 0 ? RenderFences.DuplicateFence(source.InFenceFd) : -1;
+                if (source.Buffer is { } layerBuffer)
+                {
+                    _queuedLayerLocks.Add(layerBuffer.Lock());
+                }
+
+                _queuedLayers.Add(copy);
+            }
+
+            _queuedLayersHeld = true;
+            _queuedFrame.SetLayers(_queuedLayers);
+        }
+        else if (_queuedLayersHeld)
+        {
+            _queuedFrame.SetLayers(_queuedLayers);
+        }
+
         _queuedFrameLock.Dispose();
         _queuedFrameLock = buffer.Lock();
         return true;
+    }
+
+    private void ReleaseQueuedLayers()
+    {
+        for (var i = 0; i < _queuedLayers.Count; i++)
+        {
+            RenderFences.CloseFence(_queuedLayers[i].InFenceFd);
+            _queuedLayers[i].InFenceFd = -1;
+            _queuedLayers[i].Buffer = null;
+        }
+
+        _queuedLayers.Clear();
+        foreach (var held in _queuedLayerLocks)
+        {
+            held.Dispose();
+        }
+
+        _queuedLayerLocks.Clear();
+        _queuedLayersHeld = false;
     }
 
     private void ReleaseQueuedFence()
@@ -654,6 +718,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _ = CommitCore(_queuedFrame);
         _queuedFrame.Clear();
         ReleaseQueuedFence();
+        ReleaseQueuedLayers();
         _queuedFrameLock.Dispose();
         _queuedFrameLock = default;
     }
@@ -663,6 +728,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _queuedFlush?.UpdateTimer(0);
         _queuedFrame?.Clear();
         ReleaseQueuedFence();
+        ReleaseQueuedLayers();
         _queuedFrameLock.Dispose();
         _queuedFrameLock = default;
     }
@@ -955,7 +1021,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if (lut.Red.Length != expectedSize || lut.Green.Length != expectedSize || lut.Blue.Length != expectedSize)
         {
-            BasinLog.Warn($"{Name}: gamma ramps sized {lut.Red.Length}, CRTC takes {expectedSize}; ignored");
+            Log.Warn($"{Name}: gamma ramps sized {lut.Red.Length}, CRTC takes {expectedSize}; ignored");
             return;
         }
 
@@ -1107,7 +1173,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
         catch (DrmException e)
         {
-            BasinLog.Warn($"{Name}: {what} rejected by TEST_ONLY ({e.Message}); staged properties:\n{builder}");
+            Log.Warn($"{Name}: {what} rejected by TEST_ONLY ({e.Message}); staged properties:\n{builder}");
             return false;
         }
 
@@ -1116,7 +1182,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             var t1 = MonotonicClock.Nanos;
             _backend.Device.AtomicCommit(builder.Request, flags, (nint)CrtcId);
             var t2 = MonotonicClock.Nanos;
-            BasinLog.Debug($"drm: {what} issue={t2 / 1_000_000} testMs={(t1 - t0) / 1_000_000.0:F1} ioctlMs={(t2 - t1) / 1_000_000.0:F1}");
+            Log.Debug($"{what} issue={t2 / 1_000_000} testMs={(t1 - t0) / 1_000_000.0:F1} ioctlMs={(t2 - t1) / 1_000_000.0:F1}");
             return true;
         }
         catch (DrmException e) when (e.Errno == 16 )
@@ -1125,7 +1191,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
         catch (DrmException e)
         {
-            BasinLog.Warn($"{Name}: {what} failed after TEST_ONLY passed ({e.Message}); requesting a full modeset; staged properties:\n{builder}");
+            Log.Warn($"{Name}: {what} failed after TEST_ONLY passed ({e.Message}); requesting a full modeset; staged properties:\n{builder}");
             _needsModeset = true;
             return false;
         }
@@ -1169,7 +1235,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         var timeNs = seconds * 1_000_000_000ul + microseconds * 1_000ul;
-        BasinLog.Debug($"drm: flip kernel={timeNs / 1_000_000} dispatch={MonotonicClock.Nanos / 1_000_000}");
+        Log.Debug($"flip kernel={timeNs / 1_000_000} dispatch={MonotonicClock.Nanos / 1_000_000}");
         PresentedOnScreen?.Invoke(timeNs, RefreshIntervalNs(_committedMode), sequence);
         EmitFrame();
     }
@@ -1285,14 +1351,14 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         var sinceFrame = Environment.TickCount64 - _lastFrameCommitTick;
         if (sinceFrame < 2 * refreshMs)
         {
-            BasinLog.Debug($"{Name}: cursor rides with the next frame commit");
+            Log.Debug($"{Name}: cursor rides with the next frame commit");
             _cursorRetry?.UpdateTimer((int)(2 * refreshMs - sinceFrame));
             return;
         }
 
         if (_backend.CursorRidesWithFrame && _layerScanout.Count > 0)
         {
-            BasinLog.Debug($"{Name}: cursor waits for a frame commit while {_layerScanout.Count} layer(s) scan out");
+            Log.Debug($"{Name}: cursor waits for a frame commit while {_layerScanout.Count} layer(s) scan out");
             _cursorAwaitingFrame = true;
             _cursorRetry?.UpdateTimer((int)refreshMs);
             return;
@@ -1382,24 +1448,37 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _stagedFences.Clear();
     }
 
-    private bool ApplyLayers(IReadOnlyList<OutputLayer> layers, DrmAtomicBuilder builder, out bool anyAccepted)
+    private static bool CropsDccContent(OutputLayer layer, IBuffer buffer)
+    {
+        if (layer.SrcBox.IsEmpty || layer.SrcBox == new FBox(0, 0, buffer.Width, buffer.Height))
+        {
+            return false;
+        }
+
+        return buffer.TryGetDmabuf(out var attributes) &&
+            attributes.Modifier >> 56 == 0x02 &&
+            (attributes.Modifier & (1UL << 13)) != 0;
+    }
+
+    private bool ApplyLayers(
+        IReadOnlyList<OutputLayer> layers, DrmAtomicBuilder builder,
+        LiftoffOutput output, List<LiftoffLayer> pool, out bool anyAccepted)
     {
         anyAccepted = false;
-        var output = _liftoffOutput!;
         builder.Reset();
-        while (_liftoffLayers.Count < layers.Count)
+        while (pool.Count < layers.Count)
         {
-            _liftoffLayers.Add(output.CreateLayer());
+            pool.Add(output.CreateLayer());
         }
 
         _layerFbIds.Clear();
         for (var i = 0; i < layers.Count; i++)
         {
             var layer = layers[i];
-            var target = _liftoffLayers[i];
+            var target = pool[i];
             var dst = layer.DstBox;
             uint fbId = 0;
-            if (layer.Buffer is { } buffer && !dst.IsEmpty)
+            if (layer.Buffer is { } buffer && !dst.IsEmpty && !CropsDccContent(layer, buffer))
             {
                 fbId = _backend.Framebuffers.GetOrAdd(buffer, layer.Opaque);
             }
@@ -1433,21 +1512,21 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             target.SetAlpha(layer.Alpha >= 1f ? (ushort)0xFFFF : (ushort)Math.Clamp(layer.Alpha * 0xFFFF, 0, 0xFFFF));
         }
 
-        for (var i = layers.Count; i < _liftoffLayers.Count; i++)
+        for (var i = layers.Count; i < pool.Count; i++)
         {
-            _liftoffLayers[i].Disable();
+            pool[i].Disable();
         }
 
         if (!output.TryApply(builder.Request, DrmAtomicCommitFlags.None, out var errno))
         {
-            BasinLog.Warn($"{Name}: liftoff apply failed (errno {errno}); all layers composited");
+            Log.Warn($"{Name}: liftoff apply failed (errno {errno}); all layers composited");
             return false;
         }
 
         var acceptedCount = 0;
         for (var i = 0; i < layers.Count; i++)
         {
-            var accepted = _layerFbIds[i] != 0 && !_liftoffLayers[i].NeedsComposition;
+            var accepted = _layerFbIds[i] != 0 && !pool[i].NeedsComposition;
             layers[i].Accepted = accepted;
             anyAccepted |= accepted;
             if (accepted)
@@ -1456,7 +1535,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
-        BasinLog.Debug($"{Name}: liftoff placed {acceptedCount}/{layers.Count} layers");
+        Log.Debug($"{Name}: liftoff {(ReferenceEquals(output, _liftoffProbeOutput) ? "probe" : "commit")} placed {acceptedCount}/{layers.Count} layers");
         return true;
     }
 
@@ -1475,7 +1554,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         var flags = allowModeset ? DrmAtomicCommitFlags.AllowModeset : DrmAtomicCommitFlags.None;
         if (!_liftoffOutput.TryApply(builder.Request, flags, out var errno))
         {
-            BasinLog.Warn($"{Name}: liftoff layer disable failed (errno {errno})");
+            Log.Warn($"{Name}: liftoff layer disable failed (errno {errno})");
         }
 
         _liftoffActive = false;
@@ -1517,6 +1596,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _liftoffOutput?.Dispose();
         _liftoffOutput = null;
         _liftoffLayers.Clear();
+        _liftoffProbeOutput?.Dispose();
+        _liftoffProbeOutput = null;
+        _liftoffProbeLayers.Clear();
         ReleaseLayerLocks();
         _testBuilder.Dispose();
         _cursorRetry?.Remove();

@@ -13,4 +13,14 @@ public enum EasingKind
     CubicBezier,
 
     Spring,
+
+    InCurve,
+
+    OutCurve,
+
+    InCubic,
+
+    OutCubic,
+
+    InOutCubic,
 }

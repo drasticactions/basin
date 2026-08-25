@@ -1,6 +1,8 @@
-using Microsoft.Extensions.Logging;
+using Basin.Cli;
 using Tomlyn;
 using Tomlyn.Model;
+
+using Basin.Diagnostics;
 
 namespace Waylonia;
 
@@ -31,7 +33,7 @@ internal sealed class Config
 
     public IReadOnlyList<Hotkey> Hotkeys { get; private set; } = [];
 
-    public static Config Load(bool skipFile, string? path, ILogger log)
+    public static Config Load(bool skipFile, string? path, BasinLogger log)
     {
         var config = new Config();
         if (skipFile)
@@ -40,48 +42,15 @@ internal sealed class Config
         }
 
         var explicitPath = path is not null;
-        if (path is null)
+        path ??= TomlConfig.DefaultPath("waylonia");
+        if (!explicitPath && !File.Exists(path))
         {
-            var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-            if (string.IsNullOrEmpty(configHome) || !Path.IsPathRooted(configHome))
-            {
-                configHome = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".config");
-            }
-
-            path = Path.Combine(configHome, "waylonia", "waylonia.toml");
-        }
-
-        string text;
-        try
-        {
-            if (!File.Exists(path))
-            {
-                if (!explicitPath)
-                {
-                    WritePlaceholder(path, log);
-                }
-
-                return config;
-            }
-
-            text = File.ReadAllText(path);
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            log.LogWarning("cannot read {Path}: {Reason}", path, error.Message);
+            WritePlaceholder(path, log);
             return config;
         }
 
-        TomlTable table;
-        try
+        if (TomlConfig.Read(path, log) is not { } table)
         {
-            table = Toml.ToModel(text);
-        }
-        catch (TomlException error)
-        {
-            log.LogWarning("{Path} did not parse, keeping defaults: {Reason}", path, error.Message);
             return config;
         }
 
@@ -89,11 +58,7 @@ internal sealed class Config
         {
             if (value is TomlTable && name is not ("host" or "hosts" or "hotkeys"))
             {
-                log.LogWarning(
-                    "{Path} has an unknown section '[{Name}]', ignoring it; a remote host profile is [hosts.{Name}]",
-                    path,
-                    name,
-                    name);
+                log.Warn($"{path} has an unknown section '[{name}]', ignoring it; a remote host profile is [hosts.{name}]");
             }
         }
 
@@ -111,9 +76,7 @@ internal sealed class Config
             }
             else
             {
-                log.LogWarning(
-                    "Invalid --video, ignoring '{Name}'",
-                    videoCodec);
+                log.Warn($"Invalid --video, ignoring '{videoCodec}'");
             }
         }
 
@@ -147,7 +110,7 @@ internal sealed class Config
                     || destination is not string sshDestination
                     || sshDestination.Length == 0)
                 {
-                    log.LogWarning("host profile '{Name}' has no ssh destination, skipping", name);
+                    log.Warn($"host profile '{name}' has no ssh destination, skipping");
                     continue;
                 }
 
@@ -177,7 +140,7 @@ internal sealed class Config
         return config;
     }
 
-    private static void WritePlaceholder(string path, ILogger log)
+    private static void WritePlaceholder(string path, BasinLogger log)
     {
         const string placeholder = """
             # The waypipe channel compression: "lz4", "zstd" or "none".
@@ -226,18 +189,18 @@ internal sealed class Config
             using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
             using var writer = new StreamWriter(stream);
             writer.Write(placeholder);
-            log.LogInformation("wrote a placeholder config to {Path}", path);
+            log.Info($"wrote a placeholder config to {path}");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            log.LogWarning("cannot write a placeholder config to {Path}: {Reason}", path, error.Message);
+            log.Warn($"cannot write a placeholder config to {path}: {error.Message}");
         }
     }
 
     private static bool Toggle(TomlTable table, string key, bool fallback) =>
-        table.TryGetValue(key, out var value) && value is bool enabled ? enabled : fallback;
+        TomlConfig.Flag(table, key, fallback);
 
-    private static string? Compression(TomlTable table, string key, ILogger log)
+    private static string? Compression(TomlTable table, string key, BasinLogger log)
     {
         if (!table.TryGetValue(key, out var value) || value is not string name)
         {
@@ -249,7 +212,7 @@ internal sealed class Config
             return name;
         }
 
-        log.LogWarning("compress takes lz4, zstd or none, ignoring '{Name}'", name);
+        log.Warn($"compress takes lz4, zstd or none, ignoring '{name}'");
         return null;
     }
 

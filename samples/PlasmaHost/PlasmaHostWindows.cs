@@ -46,6 +46,22 @@ internal sealed class PlasmaHostWindows
 
     public event Action<PlasmaHostView>? ViewMapped;
 
+    public event Action<PlasmaHostView>? ViewRemoved;
+
+    public Func<PlasmaHostView, bool>? OnCurrentDesktop { get; set; }
+
+    public Func<PlasmaHostView, bool, bool>? MinimizeAnimation { get; set; }
+
+    public Func<PlasmaHostView, Box, Box, bool>? MaximizeRequested { get; set; }
+
+    public Func<PlasmaHostView, Box, Box, bool>? MaximizeAnimation { get; set; }
+
+    public Func<PlasmaHostView, Box, Box, bool>? FullscreenStretchRequested { get; set; }
+
+    public Func<PlasmaHostView, Box, Box, bool>? FullscreenAnimation { get; set; }
+
+    public Action? FocusChanged { get; set; }
+
     public event Action<SceneSurface>? SceneCreated;
 
     public event Action<PlasmaHostView, uint?>? MoveGrabRequested;
@@ -134,7 +150,7 @@ internal sealed class PlasmaHostWindows
     public Box UsableArea(IOutput output) =>
         _usable.TryGetValue(output, out var box) ? box : _placement.UsableArea(output);
 
-    public (Frame Frame, PlasmaHostView Owner)? FindFrame(SceneNode node)
+    public (PlasmaFrame Frame, PlasmaHostView Owner)? FindFrame(SceneNode node)
     {
         foreach (var view in _views)
         {
@@ -176,19 +192,6 @@ internal sealed class PlasmaHostWindows
         }
 
         return false;
-    }
-
-    public (Frame Frame, PlasmaHostView Owner)? FindMenu(SceneNode node)
-    {
-        foreach (var view in _views)
-        {
-            if (view.Frame is { } frame && frame.OwnsMenuNode(node))
-            {
-                return (frame, view);
-            }
-        }
-
-        return null;
     }
 
     public void SetIconName(XdgToplevelWindow window, string? name)
@@ -247,6 +250,37 @@ internal sealed class PlasmaHostWindows
         _views.Remove(view);
         _views.Insert(0, view);
         _seat.Keyboard.NotifyEnter(view.Surface);
+        RestackFullscreen();
+        FocusChanged?.Invoke();
+    }
+
+    private void RestackFullscreen()
+    {
+        var focused = FocusedView;
+        var demoted = false;
+        foreach (var view in _views)
+        {
+            if (view.Xdg.RequestedFullscreen != true)
+            {
+                continue;
+            }
+
+            if (ReferenceEquals(view, focused))
+            {
+                view.Tree.Reparent(_placement.Layers.Top);
+                view.Tree.RaiseToTop();
+            }
+            else if (!ReferenceEquals(view.Tree.Parent, _placement.Windows))
+            {
+                view.Tree.Reparent(_placement.Windows);
+                demoted = true;
+            }
+        }
+
+        if (demoted && focused is not null && focused.Xdg.RequestedFullscreen != true)
+        {
+            focused.Tree.RaiseToTop();
+        }
     }
 
     private void Activate(Surface surface)
@@ -402,6 +436,7 @@ internal sealed class PlasmaHostWindows
             {
                 ApplyResizeAnchor(mapped);
                 LayoutDecorations(mapped);
+                StretchOnCommit(mapped);
                 ReportGeometry(mapped);
             }
         };
@@ -411,6 +446,7 @@ internal sealed class PlasmaHostWindows
             {
                 gone.Tree.Enabled = false;
                 _views.Remove(gone);
+                ViewRemoved?.Invoke(gone);
                 _owners.Remove(window.Surface);
                 gone.Frame?.Dispose();
                 gone.Frame = null;
@@ -435,6 +471,7 @@ internal sealed class PlasmaHostWindows
             if (view is { } gone)
             {
                 _views.Remove(gone);
+                ViewRemoved?.Invoke(gone);
                 _owners.Remove(window.Surface);
                 gone.Frame?.Dispose();
                 gone.Frame = null;
@@ -487,7 +524,7 @@ internal sealed class PlasmaHostWindows
             return;
         }
 
-        var frame = _frames.Create(view.Tree, view.Xdg.AppId ?? view.Xdg.Title ?? "toplevel");
+        var frame = _frames.Create(view.Tree);
         frame.Requested += action => OnFrameAction(view, action);
         view.Frame = frame;
         view.Shadow ??= _frames.Shadows.Create(view.Tree);
@@ -512,13 +549,8 @@ internal sealed class PlasmaHostWindows
             return;
         }
 
-        var scale = ScaleAt(view);
-        if (!frame.HasPendingFor(geometry, scale))
-        {
-            frame.Configure(geometry, scale, BuildState(view));
-        }
-
-        frame.Commit();
+        frame.Configure(geometry, ScaleAt(view), BuildState(view));
+        frame.SyncPositions();
     }
 
     private void LayoutShadow(PlasmaHostView view)
@@ -537,7 +569,11 @@ internal sealed class PlasmaHostWindows
             return;
         }
 
-        shadow.Texture = _frames?.Shadows.TextureFor(ScaleAt(view), view.Active);
+        var scale = ScaleAt(view);
+        shadow.SetTextures(
+            _frames?.Shadows.TextureFor(scale, active: true),
+            _frames?.Shadows.TextureFor(scale, active: false));
+        shadow.SetActive(view.Active, BreezeAnimations.Duration.Ticks * 100);
         var insets = FrameInsetsOf(view);
         shadow.SetGeometry(new Box(
             geometry.X - insets.Left,
@@ -596,7 +632,8 @@ internal sealed class PlasmaHostWindows
         }
 
         view.Minimized = minimized;
-        view.Tree.Enabled = !minimized;
+        var animated = MinimizeAnimation?.Invoke(view, minimized) ?? false;
+        view.Tree.Enabled = (!minimized || animated) && (OnCurrentDesktop?.Invoke(view) ?? true);
         _source?.SetMinimized(view.Xdg, minimized);
         if (minimized)
         {
@@ -619,6 +656,7 @@ internal sealed class PlasmaHostWindows
     public void MoveView(PlasmaHostView view, int x, int y)
     {
         view.Tree.SetPosition(x, y);
+        view.Frame?.SyncPositions();
         ReportGeometry(view);
     }
 
@@ -735,28 +773,136 @@ internal sealed class PlasmaHostWindows
 
     public void SetMaximized(PlasmaHostView view, bool maximized)
     {
+        var insets = FrameInsetsOf(view);
+        var (width, height) = view.GeometrySize();
+        var from = Outer(new Box(view.Tree.X, view.Tree.Y, width, height), insets);
+
         view.Maximized = maximized;
+        Box content;
         if (maximized)
         {
-            ApplyMaximizedGeometry(view);
+            SaveRestoreGeometry(view);
+            content = ApplyMaximizedGeometry(view);
             view.Xdg.SetMaximized(true);
         }
         else
         {
-            view.Xdg.SetSize(0, 0);
+            content = ApplyRestoreGeometry(view);
             view.Xdg.SetMaximized(false);
-            Place(view);
+        }
+
+        if (!content.IsEmpty)
+        {
+            view.StretchFrom = from;
+            view.StretchFullscreen = false;
+            MaximizeRequested?.Invoke(
+                view, from, Outer(new Box(view.Tree.X, view.Tree.Y, width, height), insets));
         }
     }
 
-    private void ApplyMaximizedGeometry(PlasmaHostView view)
+    private void StretchOnCommit(PlasmaHostView view)
+    {
+        if (view.StretchFrom is not { } from)
+        {
+            return;
+        }
+
+        var (width, height) = view.GeometrySize();
+        var to = Outer(new Box(view.Tree.X, view.Tree.Y, width, height), FrameInsetsOf(view));
+        if (to.Width == from.Width && to.Height == from.Height)
+        {
+            return;
+        }
+
+        view.StretchFrom = null;
+        if (view.StretchFullscreen)
+        {
+            view.StretchFullscreen = false;
+            FullscreenAnimation?.Invoke(view, from, to);
+        }
+        else
+        {
+            MaximizeAnimation?.Invoke(view, from, to);
+        }
+    }
+
+    public Box OuterBox(PlasmaHostView view)
+    {
+        var (width, height) = view.GeometrySize();
+        return Outer(new Box(view.Tree.X, view.Tree.Y, width, height), FrameInsetsOf(view));
+    }
+
+    public Box RestoreForDrag(PlasmaHostView view, double pointerX, double pointerY, double fractionX, double fractionY)
+    {
+        var insets = FrameInsetsOf(view);
+        var from = OuterBox(view);
+        if (!view.Restore.TryGet(out var saved))
+        {
+            var (width, height) = view.GeometrySize();
+            saved = new Box(view.Tree.X, view.Tree.Y, width, height);
+        }
+
+        var restored = Outer(saved, insets);
+        var outerX = (int)Math.Round(pointerX - (fractionX * restored.Width));
+        var outerY = (int)Math.Round(pointerY - (fractionY * restored.Height));
+
+        view.Maximized = false;
+        view.Restore = RestoreGeometry.None;
+        view.Tree.SetPosition(outerX + insets.Left, outerY + insets.Top);
+        view.Xdg.SetSize(saved.Width, saved.Height);
+        view.Xdg.SetMaximized(false);
+        view.Xdg.RequestConfigure();
+        view.Frame?.SyncPositions();
+
+        var target = new Box(outerX, outerY, restored.Width, restored.Height);
+        MaximizeRequested?.Invoke(view, from, from);
+        MaximizeAnimation?.Invoke(view, from, target);
+        return target;
+    }
+
+    public Box LocalFrame(PlasmaHostView view)
+    {
+        var insets = FrameInsetsOf(view);
+        var (width, height) = view.GeometrySize();
+        return Outer(new Box(0, 0, width, height), insets);
+    }
+
+    private static Box Outer(in Box content, in FrameInsets insets) => new(
+        content.X - insets.Left,
+        content.Y - insets.Top,
+        content.Width + insets.Left + insets.Right,
+        content.Height + insets.Top + insets.Bottom);
+
+    private static void SaveRestoreGeometry(PlasmaHostView view)
+    {
+        var (width, height) = view.GeometrySize();
+        view.Restore = view.Restore.Saving(new Box(view.Tree.X, view.Tree.Y, width, height));
+    }
+
+    private Box ApplyRestoreGeometry(PlasmaHostView view)
+    {
+        if (!view.Restore.TryGet(out var saved))
+        {
+            view.Xdg.SetSize(0, 0);
+            Place(view);
+            return default;
+        }
+
+        view.Restore = RestoreGeometry.None;
+        view.Tree.SetPosition(saved.X, saved.Y);
+        view.Xdg.SetSize(saved.Width, saved.Height);
+        return saved;
+    }
+
+    private Box ApplyMaximizedGeometry(PlasmaHostView view)
     {
         var usable = UsableAreaAt(view.Tree.X, view.Tree.Y);
         var insets = FrameInsetsOf(view);
+        var width = Math.Max(usable.Width - insets.Left - insets.Right, 1);
+        var height = Math.Max(usable.Height - insets.Top - insets.Bottom, 1);
         view.Tree.SetPosition(usable.X + insets.Left, usable.Y + insets.Top);
-        view.Xdg.SetSize(
-            Math.Max(usable.Width - insets.Left - insets.Right, 1),
-            Math.Max(usable.Height - insets.Top - insets.Bottom, 1));
+        view.Xdg.SetSize(width, height);
+        return new Box(usable.X + insets.Left, usable.Y + insets.Top, width, height);
     }
 
     private Box FullscreenBox(XdgToplevelWindow window, double fallbackX, double fallbackY)
@@ -767,18 +913,41 @@ internal sealed class PlasmaHostWindows
 
     private void SetFullscreen(PlasmaHostView view, bool fullscreen)
     {
+        var changed = view.Xdg.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen) != fullscreen;
+        var insets = FrameInsetsOf(view);
+        var (width, height) = view.GeometrySize();
+        var from = Outer(new Box(view.Tree.X, view.Tree.Y, width, height), insets);
+
+        Box content;
         if (fullscreen)
         {
+            if (!view.Maximized)
+            {
+                SaveRestoreGeometry(view);
+            }
+
             var box = FullscreenBox(view.Xdg, view.Tree.X, view.Tree.Y);
             view.Tree.SetPosition(box.X, box.Y);
             view.Xdg.SetSize(box.Width, box.Height);
+            view.Tree.Reparent(_placement.Layers.Top);
+            view.Tree.RaiseToTop();
+            content = box;
         }
         else
         {
-            view.Xdg.SetSize(0, 0);
+            view.Tree.Reparent(_placement.Windows);
+            view.Tree.RaiseToTop();
+            content = view.Maximized ? ApplyMaximizedGeometry(view) : ApplyRestoreGeometry(view);
         }
 
         view.Xdg.SetFullscreen(fullscreen);
+        if (changed && !content.IsEmpty)
+        {
+            view.StretchFrom = from;
+            view.StretchFullscreen = true;
+            FullscreenStretchRequested?.Invoke(
+                view, from, Outer(new Box(view.Tree.X, view.Tree.Y, width, height), insets));
+        }
     }
 
     private void OnNewPopup(XdgPopupWindow popup)
@@ -847,14 +1016,14 @@ internal sealed class PlasmaHostWindows
     {
         foreach (var view in _views)
         {
-            if (view.Maximized)
-            {
-                continue;
-            }
-
             if (view.Xdg.RequestedFullscreen == true)
             {
                 SetFullscreen(view, true);
+                continue;
+            }
+
+            if (view.Maximized)
+            {
                 continue;
             }
 
@@ -895,7 +1064,7 @@ internal sealed class PlasmaHostWindows
     {
         foreach (var view in _views)
         {
-            if (view.Maximized)
+            if (view.Maximized && view.Xdg.RequestedFullscreen != true)
             {
                 ApplyMaximizedGeometry(view);
             }

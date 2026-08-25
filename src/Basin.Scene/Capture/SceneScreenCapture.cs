@@ -427,19 +427,13 @@ public sealed class SceneScreenCapture : IScreenCapture
             return false;
         }
 
-        _scene.Root.SetPosition(-originX, -originY);
-        try
+        return _scene.Render(renderer, target, new SceneRenderOptions
         {
-            return _scene.Render(renderer, target, new SceneRenderOptions
-            {
-                Background = Background,
-                Projection = projection,
-            });
-        }
-        finally
-        {
-            _scene.Root.SetPosition(0, 0);
-        }
+            Background = Background,
+            Projection = projection,
+            OriginX = originX,
+            OriginY = originY,
+        });
     }
 
     private bool TryToplevelBox(ulong toplevelId, out Box box, out double scale)

@@ -27,13 +27,7 @@ internal sealed class ShellWindow
 
     public int Y { get; set; }
 
-    public int SavedX { get; set; }
-
-    public int SavedY { get; set; }
-
-    public int SavedWidth { get; set; }
-
-    public int SavedHeight { get; set; }
+    public RestoreGeometry Restore { get; set; }
 
     public int Workspace { get; set; }
 

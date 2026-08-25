@@ -12,7 +12,7 @@ public sealed record OutputColorState
 
     public uint SdrGamutWideness { get; init; }
 
-    public OutputColorProfileSource Source { get; init; } = OutputColorProfileSource.Srgb;
+    public OutputColorProfileSource Source { get; init; } = OutputColorProfileSource.Edid;
 
     public string? IccProfilePath { get; init; }
 

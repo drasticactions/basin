@@ -6,6 +6,8 @@ using Xkb;
 using Wayland;
 using Wayland.Server;
 
+using Basin.Diagnostics;
+
 namespace EightWm;
 
 internal sealed partial class Shell
@@ -143,7 +145,7 @@ internal sealed partial class Shell
                 break;
 
             case ["cursor"]:
-                Console.WriteLine($"CURSOR {_seat.CursorState}");
+                BasinReport.Line($"CURSOR {_seat.CursorState}");
                 break;
 
             case ["touch", var tx, var ty]:
@@ -200,11 +202,7 @@ internal sealed partial class Shell
                 break;
 
             case ["settings"]:
-                Console.WriteLine(
-                    $"SETTINGS hot_corners={(HotCornersOn ? "on" : "off")} " +
-                    $"animations={(AnimationsOn ? "on" : "off")} edge_band={EdgeBandNow} " +
-                    $"min_width={MinWidthNow} max_cells={Configuration.MaxCells} " +
-                    $"start_output={StartOutputNow} rules={Configuration.Rules.Count}");
+                BasinReport.Line($"SETTINGS hot_corners={(HotCornersOn ? "on" : "off")} " + $"animations={(AnimationsOn ? "on" : "off")} edge_band={EdgeBandNow} " + $"min_width={MinWidthNow} max_cells={Configuration.MaxCells} " + $"start_output={StartOutputNow} rules={Configuration.Rules.Count}");
                 break;
 
             case ["quit"]:
@@ -212,7 +210,7 @@ internal sealed partial class Shell
                 break;
 
             default:
-                Console.WriteLine($"ERR unknown command '{line}'");
+                BasinReport.Line($"ERR unknown command '{line}'");
                 break;
         }
     }
@@ -229,7 +227,7 @@ internal sealed partial class Shell
         var app = ResolveApp(which, view);
         if (app is null)
         {
-            Console.WriteLine($"ERR no app '{which}'");
+            BasinReport.Line($"ERR no app '{which}'");
             return;
         }
 
@@ -240,7 +238,7 @@ internal sealed partial class Shell
             _ => Number(side),
         };
 
-        Console.WriteLine(Snap(app, view, at) ? $"SNAP {app.AppId} {at}" : $"ERR no room for '{which}'");
+        BasinReport.Line(Snap(app, view, at) ? $"SNAP {app.AppId} {at}" : $"ERR no room for '{which}'");
     }
 
     private void SplitCommand(double fraction)
@@ -249,13 +247,12 @@ internal sealed partial class Shell
         var app = view.Host.Previous();
         if (app is null)
         {
-            Console.WriteLine("ERR nothing to split with");
+            BasinReport.Line($"ERR nothing to split with");
             return;
         }
 
         var at = view.Host.SlotCount;
-        Console.WriteLine(
-            Snap(app, view, at, fraction <= 0 || fraction >= 1 ? 0.5 : fraction)
+        BasinReport.Line(Snap(app, view, at, fraction <= 0 || fraction >= 1 ? 0.5 : fraction)
                 ? $"SNAP {app.AppId} {at}"
                 : "ERR no room to split");
     }
@@ -265,14 +262,14 @@ internal sealed partial class Shell
         var view = CommandView;
         if (index < 0 || index >= view.Host.Cells.Count)
         {
-            Console.WriteLine($"ERR no cell {index}");
+            BasinReport.Line($"ERR no cell {index}");
             return;
         }
 
         var app = view.Host.Cells[index];
         view.Host.Eject(app);
         Relayout(view);
-        Console.WriteLine($"EJECT {app.AppId}");
+        BasinReport.Line($"EJECT {app.AppId}");
     }
 
     private AppWindow? ResolveApp(string which, ShellView view)
@@ -298,33 +295,26 @@ internal sealed partial class Shell
         for (var i = 0; i < Views.Count; i++)
         {
             var view = Views[i];
-            Console.WriteLine(
-                $"CHROME output={i} box={view.Box.Width}x{view.Box.Height} scale={view.Scale} " +
-                $"dim={State(view.Dim.Enabled)} splash={State(view.Splash is { Enabled: true })}");
+            BasinReport.Line($"CHROME output={i} box={view.Box.Width}x{view.Box.Height} scale={view.Scale} " + $"dim={State(view.Dim.Enabled)} splash={State(view.Splash is { Enabled: true })}");
             if (view.Charms is { } charms)
             {
-                Console.WriteLine(
-                    $"  charms {State(charms.Visible)} retired={charms.IsRetired} " +
-                    $"clock={charms.ClockShown} paneshown={charms.PaneShown} hot={charms.Hot} " +
-                    $"pane={State(charms.OpenPane != Charm.None)} " +
-                    $"bar={Fmt(charms.BarBox)} panebox={Fmt(charms.PaneBox)}");
+                BasinReport.Line($"  charms {State(charms.Visible)} retired={charms.IsRetired} " + $"clock={charms.ClockShown} paneshown={charms.PaneShown} hot={charms.Hot} " + $"pane={State(charms.OpenPane != Charm.None)} " + $"bar={Fmt(charms.BarBox)} panebox={Fmt(charms.PaneBox)}");
             }
 
             if (view.Title is { } title)
             {
-                Console.WriteLine(
-                    $"  title {State(title.Visible)} box={Fmt(title.Box)} close={Fmt(title.CloseBox)}");
+                BasinReport.Line($"  title {State(title.Visible)} box={Fmt(title.Box)} close={Fmt(title.CloseBox)}");
             }
 
             if (view.Switcher is { } rail)
             {
-                Console.WriteLine($"  rail {State(view.SwitcherDocked)} box={Fmt(rail.Box)}");
+                BasinReport.Line($"  rail {State(view.SwitcherDocked)} box={Fmt(rail.Box)}");
             }
 
             if (view.Start is { } start)
             {
                 start.Layout();
-                Console.WriteLine($"  start grid={start.Grid.Width}x{start.Grid.Height} rows={start.Grid.Rows}");
+                BasinReport.Line($"  start grid={start.Grid.Width}x{start.Grid.Height} rows={start.Grid.Rows}");
             }
         }
     }
@@ -337,19 +327,15 @@ internal sealed partial class Shell
     {
         var boxes = new List<Basin.SurfaceBox>();
         _scene.CollectSurfaces(boxes);
-        Console.WriteLine($"SCENE surfaces={boxes.Count}");
+        BasinReport.Line($"SCENE surfaces={boxes.Count}");
         foreach (var entry in boxes)
         {
-            Console.WriteLine(
-                $"  surface {entry.Box.X},{entry.Box.Y} {entry.Box.Width}x{entry.Box.Height} " +
-                $"buffer={(entry.Surface.Current.Buffer is null ? "none" : "yes")}");
+            BasinReport.Line($"  surface {entry.Box.X},{entry.Box.Y} {entry.Box.Width}x{entry.Box.Height} " + $"buffer={(entry.Surface.Current.Buffer is null ? "none" : "yes")}");
         }
 
         foreach (var app in _apps)
         {
-            Console.WriteLine(
-                $"  app {app.AppId} cell={app.Cell.X},{app.Cell.Y},{app.Cell.Width}x{app.Cell.Height} " +
-                $"slot={app.Slot.X},{app.Slot.Y} enabled={app.Slot.Enabled} parked={app.IsParked}");
+            BasinReport.Line($"  app {app.AppId} cell={app.Cell.X},{app.Cell.Y},{app.Cell.Width}x{app.Cell.Height} " + $"slot={app.Slot.X},{app.Slot.Y} enabled={app.Slot.Enabled} parked={app.IsParked}");
         }
     }
 
@@ -365,8 +351,7 @@ internal sealed partial class Shell
                 ? $" vacant={view.Host.VacantSlot}:{view.Host.VacantArea.X},{view.Host.VacantArea.Y}," +
                   $"{view.Host.VacantArea.Width}x{view.Host.VacantArea.Height}"
                 : string.Empty;
-            Console.WriteLine(
-                $"CELLS output={i} portrait={(view.IsPortrait ? "yes" : "no")} widths=[{widths}] {boxes}{vacant}");
+            BasinReport.Line($"CELLS output={i} portrait={(view.IsPortrait ? "yes" : "no")} widths=[{widths}] {boxes}{vacant}");
         }
     }
 
@@ -375,22 +360,18 @@ internal sealed partial class Shell
         var view = CommandView;
         if (view.Start is not { } start)
         {
-            Console.WriteLine("ERR no start screen");
+            BasinReport.Line($"ERR no start screen");
             return;
         }
 
         start.Layout();
-        Console.WriteLine(
-            $"TILES groups={start.Grid.Groups.Count} rows={start.Grid.Rows} width={start.Grid.Width} " +
-            $"pan={start.Pan.Offset:F0} axis={start.Pan.Axis} apps={start.AppsPan.Offset:F0}");
+        BasinReport.Line($"TILES groups={start.Grid.Groups.Count} rows={start.Grid.Rows} width={start.Grid.Width} " + $"pan={start.Pan.Offset:F0} axis={start.Pan.Axis} apps={start.AppsPan.Offset:F0}");
         var index = 0;
         foreach (var group in start.Grid.Groups)
         {
             foreach (var tile in group.Tiles)
             {
-                Console.WriteLine(
-                    $"TILE {index} group={group.Name} name={tile.Name} " +
-                    $"box={tile.Box.X},{tile.Box.Y},{tile.Box.Width}x{tile.Box.Height}");
+                BasinReport.Line($"TILE {index} group={group.Name} name={tile.Name} " + $"box={tile.Box.X},{tile.Box.Y},{tile.Box.Width}x{tile.Box.Height}");
                 index++;
             }
         }
@@ -401,7 +382,7 @@ internal sealed partial class Shell
         var view = CommandView;
         if (view.Start is not { } start)
         {
-            Console.WriteLine("ERR no start screen");
+            BasinReport.Line($"ERR no start screen");
             return;
         }
 
@@ -422,7 +403,7 @@ internal sealed partial class Shell
             }
         }
 
-        Console.WriteLine($"ERR no tile {which}");
+        BasinReport.Line($"ERR no tile {which}");
     }
 
     private void TitleGrabCommand()
@@ -431,13 +412,12 @@ internal sealed partial class Shell
         ShowTitle(view, true);
         if (view.Title is not { Visible: true } title)
         {
-            Console.WriteLine("ERR no titlebar");
+            BasinReport.Line($"ERR no titlebar");
             return;
         }
 
         var box = title.Box;
-        Console.WriteLine(
-            TitlePress(view, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0), ShellSeat.PointerTouchId)
+        BasinReport.Line(TitlePress(view, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0), ShellSeat.PointerTouchId)
                 ? "TITLE grab"
                 : "ERR the titlebar refused the press");
     }
@@ -452,7 +432,7 @@ internal sealed partial class Shell
             : TitleMove(view, x, y, ShellSeat.PointerTouchId);
         if (!handled)
         {
-            Console.WriteLine("ERR no titlebar drag in flight");
+            BasinReport.Line($"ERR no titlebar drag in flight");
         }
     }
 
@@ -462,7 +442,7 @@ internal sealed partial class Shell
         ShowTitle(view, true);
         if (view.Title is not { Visible: true } title)
         {
-            Console.WriteLine("ERR no titlebar");
+            BasinReport.Line($"ERR no titlebar");
             return;
         }
 
@@ -471,7 +451,7 @@ internal sealed partial class Shell
         var startY = box.Y + (box.Height / 2.0);
         if (!TitlePress(view, startX, startY, ShellSeat.PointerTouchId))
         {
-            Console.WriteLine("ERR the titlebar refused the press");
+            BasinReport.Line($"ERR the titlebar refused the press");
             return;
         }
 
@@ -500,7 +480,7 @@ internal sealed partial class Shell
         };
         if (edge == Basin.Seat.ScreenEdge.None)
         {
-            Console.WriteLine($"ERR no edge '{side}'");
+            BasinReport.Line($"ERR no edge '{side}'");
             return;
         }
 
@@ -510,8 +490,7 @@ internal sealed partial class Shell
     private void PrintSwitcher()
     {
         var view = CommandView;
-        Console.WriteLine(
-            $"SWITCHER docked={(view.SwitcherDocked ? "yes" : "no")} entries={view.Switcher?.Count ?? 0}");
+        BasinReport.Line($"SWITCHER docked={(view.SwitcherDocked ? "yes" : "no")} entries={view.Switcher?.Count ?? 0}");
     }
 
     private void CharmCommand(string which)
@@ -519,14 +498,14 @@ internal sealed partial class Shell
         var view = CommandView;
         if (!Enum.TryParse<Charm>(which, ignoreCase: true, out var charm) || charm == Charm.None)
         {
-            Console.WriteLine($"ERR no charm '{which}'");
+            BasinReport.Line($"ERR no charm '{which}'");
             return;
         }
 
         ShowCharms(view, true);
         if (!ActivateCharm(view, charm))
         {
-            Console.WriteLine($"ERR charm '{which}' did nothing");
+            BasinReport.Line($"ERR charm '{which}' did nothing");
         }
     }
 
@@ -567,7 +546,7 @@ internal sealed partial class Shell
         {
             if (KeycodeOf(modifier) is not { } code)
             {
-                Console.WriteLine($"ERR no key '{modifier}'");
+                BasinReport.Line($"ERR no key '{modifier}'");
                 return;
             }
 
@@ -578,7 +557,7 @@ internal sealed partial class Shell
         {
             if (KeycodeOf(name) is not { } code)
             {
-                Console.WriteLine($"ERR no key '{name}'");
+                BasinReport.Line($"ERR no key '{name}'");
                 return;
             }
 
@@ -595,7 +574,7 @@ internal sealed partial class Shell
             _seat.InjectKey(codes[i], pressed: false);
         }
 
-        Console.WriteLine($"KEY {chord}");
+        BasinReport.Line($"KEY {chord}");
     }
 
     private uint? KeycodeOf(string name)
@@ -622,7 +601,7 @@ internal sealed partial class Shell
         var view = CommandView;
         if (view.Start is not { } start)
         {
-            Console.WriteLine("ERR no start screen");
+            BasinReport.Line($"ERR no start screen");
             return;
         }
 
@@ -642,12 +621,12 @@ internal sealed partial class Shell
                 var y = tile.Box.Y + (tile.Box.Height * fractionY) + StartScreen.TopPadding;
                 start.Pressed = tile;
                 start.SetContact(x, y);
-                Console.WriteLine($"PRESS {tile.Name} at {fractionX},{fractionY}");
+                BasinReport.Line($"PRESS {tile.Name} at {fractionX},{fractionY}");
                 return;
             }
         }
 
-        Console.WriteLine($"ERR no tile {which}");
+        BasinReport.Line($"ERR no tile {which}");
     }
 
     private void ReleaseCommand()
@@ -655,7 +634,7 @@ internal sealed partial class Shell
         if (CommandView.Start is { } start)
         {
             start.Pressed = null;
-            Console.WriteLine("RELEASE");
+            BasinReport.Line($"RELEASE");
         }
     }
 
@@ -664,7 +643,7 @@ internal sealed partial class Shell
         var view = CommandView;
         if (view.Start is not { } start)
         {
-            Console.WriteLine("ERR no start screen");
+            BasinReport.Line($"ERR no start screen");
             return;
         }
 
@@ -682,12 +661,12 @@ internal sealed partial class Shell
 
                 tile.Selected = !tile.Selected;
                 start.Invalidate();
-                Console.WriteLine($"SELECT {tile.Name} {(tile.Selected ? "on" : "off")}");
+                BasinReport.Line($"SELECT {tile.Name} {(tile.Selected ? "on" : "off")}");
                 return;
             }
         }
 
-        Console.WriteLine($"ERR no tile {which}");
+        BasinReport.Line($"ERR no tile {which}");
     }
 
     private void PrintMru()
@@ -697,8 +676,7 @@ internal sealed partial class Shell
             var view = Views[i];
             var cells = string.Join(',', view.Host.Cells.Select(app => app.AppId));
             var mru = string.Join(',', view.Host.Mru.Select(app => app.AppId));
-            Console.WriteLine(
-                $"MRU output={i} start={(view.StartVisible ? "on" : "off")} cells=[{cells}] mru=[{mru}]");
+            BasinReport.Line($"MRU output={i} start={(view.StartVisible ? "on" : "off")} cells=[{cells}] mru=[{mru}]");
         }
     }
 }

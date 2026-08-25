@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using Wayland.Server;
+using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
@@ -337,7 +338,7 @@ public sealed unsafe class XWaylandServer : IDisposable
 
         _pid = pid;
         _running = true;
-        Basin.Diagnostics.BasinLog.Info($"Xwayland {DisplayName} spawned (pid {pid})");
+        Log.Info($"Xwayland {DisplayName} spawned (pid {pid})");
 
         var readFd = displayPipe[0];
         _displayFdSource = _loop.AddFd(readFd, FdReadiness.Readable, (_, _) =>
@@ -368,7 +369,7 @@ public sealed unsafe class XWaylandServer : IDisposable
     {
         int status;
         _ = waitpid(_pid, &status, 1 );
-        Basin.Diagnostics.BasinLog.Warn($"Xwayland {DisplayName} exited; relaunching on next X client");
+        Log.Warn($"Xwayland {DisplayName} exited; relaunching on next X client");
         TearDownProcessState();
         CrashCount++;
         Exited?.Invoke();
@@ -399,7 +400,7 @@ public sealed unsafe class XWaylandServer : IDisposable
             _ = usleep(10_000);
         }
 
-        Basin.Diagnostics.BasinLog.Warn($"Xwayland {DisplayName} ignored SIGTERM; killing");
+        Log.Warn($"Xwayland {DisplayName} ignored SIGTERM; killing");
         _ = kill(pid, Sigkill);
         _ = waitpid(pid, &status, 0);
     }

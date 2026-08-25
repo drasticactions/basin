@@ -746,6 +746,30 @@ public sealed class DegradationTests
     }
 
     [Fact]
+    public void Kde_blur_without_a_backend_records_the_region_and_the_client_survives()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new Basin.Plasma.BlurManager(host.Display, host.Compositor, effects: null);
+        var window = MappedToplevel.Map(host, host.Client);
+
+        var proxy = Bind<Basin.Plasma.Protocol.OrgKdeKwinBlurManager>(host, "org_kde_kwin_blur_manager", 1);
+        var blur = proxy.Create(window.Surface);
+        var region = host.Client.Compositor.CreateRegion();
+        region.Add(0, 0, 10, 10);
+        blur.SetRegion(region);
+        region.Destroy();
+        blur.Commit();
+        window.Surface.Commit();
+        host.PumpToServer();
+
+        var recorded = manager.BlurOf(window.ServerSurface);
+        Assert.NotNull(recorded);
+        Assert.False(recorded!.WholeSurface);
+        Assert.Null(manager.BlurRegionOf(window.ServerSurface));
+        AssertClientAlive(host);
+    }
+
+    [Fact]
     public void Plasma_windows_without_a_stack_report_an_empty_order_and_the_client_survives()
     {
         using var host = new CompositorTestHost();

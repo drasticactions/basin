@@ -10,10 +10,8 @@ internal sealed class EffectsPolicy
     private readonly OpenCloseKind? _openKind;
     private readonly string? _closeKind;
     private readonly bool _switcherEnabled;
-    private readonly List<(object Owner, SceneSnapshot Snapshot, TransformStack Stack, OpenCloseAnimation? Animation, FireEffect? Fire, IDisposable? Attachment)> _closings = [];
-    private readonly Dictionary<SceneTree, TransformStack> _stacks = [];
+    private readonly OpenCloseRunner _runner = new();
     private readonly Dictionary<SceneTree, (TransformStack Stack, WobblyEffect Wobbly)> _wobblies = [];
-    private readonly List<(SceneTree Tree, TransformStack Stack, OpenCloseAnimation Animation)> _openings = [];
     private readonly SwitcherEffect _switcher = new();
     private readonly List<TransformStack> _switcherStacks = [];
     private readonly SlideTransition _slide = new();
@@ -43,13 +41,13 @@ internal sealed class EffectsPolicy
     public void SlideWorkspaces(SceneTree outgoing, SceneTree incoming, in Box area, int direction, Action done)
     {
         _slideDone = done;
-        _slide.Begin(StackFor(outgoing), StackFor(incoming), area, direction);
+        _slide.Begin(_runner.StackFor(outgoing), _runner.StackFor(incoming), area, direction);
     }
 
     public void DragWorkspaces(SceneTree outgoing, SceneTree? incoming, in Box area, int direction)
     {
         _slideDone = null;
-        _slide.BeginInteractive(StackFor(outgoing), incoming is null ? null : StackFor(incoming), area, direction);
+        _slide.BeginInteractive(_runner.StackFor(outgoing), incoming is null ? null : _runner.StackFor(incoming), area, direction);
     }
 
     public double SlideProgress
@@ -77,7 +75,7 @@ internal sealed class EffectsPolicy
         _switcherStacks.Clear();
         foreach (var tree in trees)
         {
-            _switcherStacks.Add(StackFor(tree));
+            _switcherStacks.Add(_runner.StackFor(tree));
         }
 
         if (_switcherStacks.Count > 0)
@@ -94,54 +92,36 @@ internal sealed class EffectsPolicy
         _switcherStacks.Clear();
     }
 
-    private TransformStack StackFor(SceneTree tree)
-    {
-        if (!_stacks.TryGetValue(tree, out var stack))
-        {
-            stack = new TransformStack(tree);
-            _stacks[tree] = stack;
-        }
-
-        return stack;
-    }
-
     public void OnClosing(object owner, SceneTree? source, SceneTree parent, IDisposable? attachment = null)
     {
-        if (_closeKind is null || source is null || source.IsDestroyed)
+        if (_closeKind is null)
         {
             attachment?.Dispose();
             return;
         }
 
-        CancelClosing(owner);
-        var snapshot = SceneSnapshot.Capture(source, parent);
-        var stack = new TransformStack(snapshot.Tree);
-        if (_closeKind is "fire" or "fire-gpu")
-        {
-            var fire = new FireEffect { Shader = FireShaderHandle };
-            fire.Begin(stack, hiding: true, 450_000_000);
-            _closings.Add((owner, snapshot, stack, null, fire, attachment));
-        }
-        else
-        {
-            var animation = new OpenCloseAnimation(_closeKind == "zoom" ? OpenCloseKind.Zoom : OpenCloseKind.Fade);
-            animation.Begin(stack, hiding: true, 250_000_000);
-            _closings.Add((owner, snapshot, stack, animation, null, attachment));
-        }
+        _runner.BeginClose(
+            source,
+            parent,
+            (_, stack) =>
+            {
+                if (_closeKind is "fire" or "fire-gpu")
+                {
+                    var fire = new FireEffect { Shader = FireShaderHandle };
+                    fire.Begin(stack, hiding: true, 450_000_000);
+                    return fire.Step;
+                }
+
+                var animation = new OpenCloseAnimation(
+                    _closeKind == "zoom" ? OpenCloseKind.Zoom : OpenCloseKind.Fade);
+                animation.Begin(stack, hiding: true, 250_000_000);
+                return animation.Step;
+            },
+            owner,
+            attachment);
     }
 
-    public void CancelClosing(object owner)
-    {
-        for (var i = _closings.Count - 1; i >= 0; i--)
-        {
-            if (ReferenceEquals(_closings[i].Owner, owner))
-            {
-                _closings[i].Snapshot.Destroy();
-                _closings[i].Attachment?.Dispose();
-                _closings.RemoveAt(i);
-            }
-        }
-    }
+    public void CancelClosing(object owner) => _runner.CancelClose(owner);
 
     public void OnMoveGrab(SceneTree? tree, double localX, double localY)
     {
@@ -152,7 +132,7 @@ internal sealed class EffectsPolicy
 
         if (!_wobblies.TryGetValue(tree, out var entry))
         {
-            var stack = StackFor(tree);
+            var stack = _runner.StackFor(tree);
             var wobbly = new WobblyEffect();
             wobbly.Attach(stack);
             entry = (stack, wobbly);
@@ -173,15 +153,17 @@ internal sealed class EffectsPolicy
 
     public void OnMapped(SceneTree? tree)
     {
-        if (_openKind is not { } kind || tree is null || tree.IsDestroyed)
+        if (_openKind is not { } kind)
         {
             return;
         }
 
-        var stack = StackFor(tree);
-        var animation = new OpenCloseAnimation(kind);
-        animation.Begin(stack, hiding: false, 250_000_000);
-        _openings.Add((tree, stack, animation));
+        _runner.BeginOpen(tree, stack =>
+        {
+            var animation = new OpenCloseAnimation(kind);
+            animation.Begin(stack, hiding: false, 250_000_000);
+            return animation.Step;
+        });
     }
 
     public bool Step(in FrameTick tick)
@@ -201,26 +183,7 @@ internal sealed class EffectsPolicy
             }
         }
 
-        for (var i = _openings.Count - 1; i >= 0; i--)
-        {
-            var (tree, stack, animation) = _openings[i];
-            if (tree.IsDestroyed || !animation.Step(stack, tick))
-            {
-                _openings.RemoveAt(i);
-            }
-        }
-
-        for (var i = _closings.Count - 1; i >= 0; i--)
-        {
-            var (_, snapshot, stack, animation, fire, attachment) = _closings[i];
-            var running = fire is not null ? fire.Step(stack, tick) : animation!.Step(stack, tick);
-            if (!running)
-            {
-                snapshot.Destroy();
-                attachment?.Dispose();
-                _closings.RemoveAt(i);
-            }
-        }
+        _runner.Step(tick);
 
         if (_switcher.IsActive)
         {
@@ -241,12 +204,12 @@ internal sealed class EffectsPolicy
 
     private bool _lastMoving;
 
-    private bool Running => _slide.IsAnimating || _switcher.IsActive || _openings.Count > 0 || _closings.Count > 0;
+    private bool Running => _slide.IsAnimating || _switcher.IsActive || _runner.IsRunning;
 
     private void PruneDead()
     {
         List<SceneTree>? dead = null;
-        foreach (var tree in _stacks.Keys)
+        foreach (var tree in _wobblies.Keys)
         {
             if (tree.IsDestroyed)
             {
@@ -258,7 +221,6 @@ internal sealed class EffectsPolicy
         {
             foreach (var tree in dead)
             {
-                _stacks.Remove(tree);
                 _wobblies.Remove(tree);
             }
         }

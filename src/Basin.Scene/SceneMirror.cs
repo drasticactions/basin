@@ -8,6 +8,8 @@ public sealed class SceneMirror : SceneNode
     private Scene? _registered;
     private int _width;
     private int _height;
+    private int _sourceX;
+    private int _sourceY;
 
     public SceneMirror(SceneTree parent, SceneTree source, int width, int height)
         : base(parent)
@@ -44,6 +46,18 @@ public sealed class SceneMirror : SceneNode
             Register();
             DamageSubtree();
         }
+    }
+
+    public int SourceX
+    {
+        get => _sourceX;
+        set => Resize(ref _sourceX, value);
+    }
+
+    public int SourceY
+    {
+        get => _sourceY;
+        set => Resize(ref _sourceY, value);
     }
 
     public int Width

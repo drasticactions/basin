@@ -208,7 +208,7 @@ internal sealed class ShellFrame : IDisposable
         {
             var created = _host.CreateSurface(new UISurfaceOptions
             {
-                Target = UITargetKind.Memory,
+                Target = _host.Produces,
                 Width = local.Width,
                 Height = local.Height,
                 Scale = scale,

@@ -41,6 +41,7 @@
     <ProjectReference Include="../../src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
     <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Skia" />

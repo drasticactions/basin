@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Tmds.DBus.Protocol;
+using static Basin.Plasma.PlasmaLog;
 
 namespace Basin.Plasma;
 
@@ -93,7 +95,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         {
             if (DBusAddress.System is not { } address)
             {
-                BasinLog.Debug($"this session has no system bus, auto rotate is off");
+                Log.Debug($"this session has no system bus, auto rotate is off");
                 return;
             }
 
@@ -132,7 +134,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         {
             if (!_disposed)
             {
-                BasinLog.Debug($"iio-sensor-proxy is not reachable, auto rotate is off ({error.Message})");
+                Log.Debug($"iio-sensor-proxy is not reachable, auto rotate is off ({error.Message})");
             }
         }
     }
@@ -177,7 +179,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         {
             if (!_disposed)
             {
-                BasinLog.Warn($"the accelerometer claim failed ({error.Message})");
+                Log.Warn($"the accelerometer claim failed ({error.Message})");
             }
         }
     }

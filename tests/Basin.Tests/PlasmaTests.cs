@@ -471,4 +471,37 @@ public sealed class PlasmaWindowTests
         host.PumpUntil(() => unmapped);
         Assert.Empty(announced);
     }
+
+    [Fact]
+    public void Minimized_geometry_reaches_the_model_and_the_newest_panel_wins()
+    {
+        using var host = new CompositorTestHost();
+        var toplevels = new TestToplevelModel();
+        var window = toplevels.Add("Terminal", "org.foot");
+        using var manager = new PlasmaWindowManager(host.Display, toplevels, null, null, host.Compositor);
+
+        var bound = BindAt(host, 20);
+        var resource = bound.Proxy.GetWindowByUuid($"basin-{window}");
+        var first = host.Client.Compositor.CreateSurface();
+        var second = host.Client.Compositor.CreateSurface();
+        host.PumpToServer();
+
+        resource.SetMinimizedGeometry(first, 4, 8, 60, 20);
+        host.PumpUntil(() => toplevels.RequestLog.Count == 1);
+        Assert.Equal(ToplevelRequestKind.SetMinimizedGeometry, toplevels.RequestLog[^1].Request.Kind);
+        Assert.Equal(new Box(4, 8, 60, 20), toplevels.RequestLog[^1].Request.Geometry);
+        Assert.NotNull(toplevels.RequestLog[^1].Request.Surface);
+
+        resource.SetMinimizedGeometry(second, 100, 8, 60, 20);
+        host.PumpUntil(() => toplevels.RequestLog.Count == 2);
+        Assert.Equal(new Box(100, 8, 60, 20), toplevels.RequestLog[^1].Request.Geometry);
+
+        resource.UnsetMinimizedGeometry(second);
+        host.PumpUntil(() => toplevels.RequestLog.Count == 3);
+        Assert.Equal(new Box(4, 8, 60, 20), toplevels.RequestLog[^1].Request.Geometry);
+
+        resource.UnsetMinimizedGeometry(first);
+        host.PumpUntil(() => toplevels.RequestLog.Count == 4);
+        Assert.Equal(ToplevelRequestKind.UnsetMinimizedGeometry, toplevels.RequestLog[^1].Request.Kind);
+    }
 }

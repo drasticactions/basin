@@ -92,6 +92,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+address_file=$(mktemp -t plasma-dbus-XXXXXX)
+dbus-daemon --session --fork --print-address=3 --print-pid=4 \
+    3>"$address_file" 4>"$address_file.pid"
+export DBUS_SESSION_BUS_ADDRESS=$(cat "$address_file")
+dbus_pid=$(cat "$address_file.pid")
+rm -f "$address_file" "$address_file.pid"
+echo "session bus at $DBUS_SESSION_BUS_ADDRESS"
+
 socket=
 case "$compositor" in
     plasma-host)
@@ -196,13 +204,9 @@ export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-/etc/xdg}"
 unset DISPLAY
 
-address_file=$(mktemp -t plasma-dbus-XXXXXX)
-dbus-daemon --session --fork --print-address=3 --print-pid=4 \
-    3>"$address_file" 4>"$address_file.pid"
-export DBUS_SESSION_BUS_ADDRESS=$(cat "$address_file")
-dbus_pid=$(cat "$address_file.pid")
-rm -f "$address_file" "$address_file.pid"
-echo "session bus at $DBUS_SESSION_BUS_ADDRESS"
+dbus-update-activation-environment \
+    WAYLAND_DISPLAY QT_QPA_PLATFORM XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
+    XDG_DATA_DIRS XDG_CONFIG_DIRS XDG_RUNTIME_DIR >/dev/null 2>&1 || true
 
 if [ "$powerdevil" -eq 1 ]; then
     /usr/lib/org_kde_powerdevil >/dev/null 2>&1 &

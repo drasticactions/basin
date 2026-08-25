@@ -1,5 +1,6 @@
 using System.Globalization;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -63,7 +64,7 @@ public sealed class WestonIni
         return null;
     }
 
-    public static WestonIni Load(string? path, ILogger? log = null)
+    public static WestonIni Load(string? path, BasinLogger log = default)
     {
         var ini = new WestonIni();
         var resolved = Locate(path);
@@ -76,7 +77,7 @@ public sealed class WestonIni
         ini.ParseLines(File.ReadAllLines(resolved));
         foreach (var refusal in ini.Refusals)
         {
-            log?.LogWarning("{Refusal}", refusal);
+            log.Warn($"{refusal}");
         }
 
         return ini;

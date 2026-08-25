@@ -5,8 +5,9 @@ using Basin;
 using Basin.Capabilities;
 using Basin.Scene;
 using Basin.UI.Avalonia;
-using Microsoft.Extensions.Logging;
 using Westonia.Shell;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -17,7 +18,7 @@ internal sealed class AvaloniaShell : IDisposable
     private readonly AvaloniaUIHost _host;
     private readonly ShellLayers _layers;
     private readonly WestonIni _ini;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly Dictionary<IOutput, ShellElements> _elements = [];
     private readonly Bitmap? _backgroundImage;
     private readonly UISurfaceIndex _index;
@@ -28,7 +29,7 @@ internal sealed class AvaloniaShell : IDisposable
         AvaloniaUIHost host,
         ShellLayers layers,
         WestonIni ini,
-        ILogger log,
+        BasinLogger log,
         Action<string> spawn,
         UISurfaceIndex index)
     {
@@ -207,9 +208,9 @@ internal sealed class AvaloniaShell : IDisposable
         (byte)(value >> 8),
         (byte)value);
 
-    private static Bitmap? LoadBackground(string? path, ILogger log) => LoadIcon(path, log) as Bitmap;
+    private static Bitmap? LoadBackground(string? path, BasinLogger log) => LoadIcon(path, log) as Bitmap;
 
-    private static IImage? LoadIcon(string? path, ILogger log)
+    private static IImage? LoadIcon(string? path, BasinLogger log)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(path))
         {
@@ -222,7 +223,7 @@ internal sealed class AvaloniaShell : IDisposable
         }
         catch (Exception error)
         {
-            log.LogWarning("cannot load {Path}: {Reason}", path, error.Message);
+            log.Warn($"cannot load {path}: {error.Message}");
             return null;
         }
     }

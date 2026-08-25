@@ -250,6 +250,43 @@ public sealed class PlaneOffloadTests
     }
 
     [Fact]
+    public void Layer_demoted_by_the_real_commit_is_recomposited()
+    {
+        using var host = new CompositorTestHost();
+        var output = LitPlaneOutput();
+        using var sceneOutput = new SceneOutput(host.Scene, output) { OffloadEntryThreshold = 1 };
+        using var swapchain = new Swapchain(new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+
+        _ = new SceneRect(host.Scene.Root, 160, 120, new RenderColor(1, 0, 0, 1));
+        var client = DirectScanoutTests.FakeClientBuffer(40, 40);
+        var node = new SceneBuffer(host.Scene.Root);
+        node.SetBuffer(client);
+        node.SetPosition(10, 10);
+
+        var judgeCalls = 0;
+        output.Accept = (_, _) => judgeCalls++ == 0;
+        var pending = false;
+        sceneOutput.DamagePending += () => pending = true;
+
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        Assert.Equal(0, sceneOutput.OffloadedLayers);
+        Assert.Equal(0, sceneOutput.OffloadCommits);
+        Assert.True(pending);
+        Assert.True(sceneOutput.NeedsRepaint);
+
+        output.Accept = (_, _) => false;
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        Assert.Equal(0, sceneOutput.OffloadedLayers);
+        Assert.Empty(output.LastCommittedLayers!);
+        Assert.False(sceneOutput.NeedsRepaint);
+
+        node.Destroy();
+        client.Destroy();
+        output.Destroy();
+    }
+
+    [Fact]
     public void Implicit_modifier_dmabufs_are_never_offered_as_layers()
     {
         using var host = new CompositorTestHost();

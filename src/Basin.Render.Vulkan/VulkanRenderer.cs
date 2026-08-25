@@ -1,6 +1,7 @@
 using Basin.Diagnostics;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
+using static Basin.Render.Vulkan.VulkanLog;
 
 namespace Basin.Render.Vulkan;
 
@@ -265,7 +266,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
         catch (InvalidOperationException e)
         {
-            Basin.Diagnostics.BasinLog.Warn($"vulkan: shm import rejected: {e.Message}");
+            Log.Warn($"shm import rejected: {e.Message}");
             return null;
         }
     }

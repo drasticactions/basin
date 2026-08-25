@@ -17,8 +17,8 @@ internal sealed class PlasmaHostShadows : IDisposable
 
     public bool Enabled => _options is not null;
 
-    public DropShadowEffect? Create(SceneTree parent) =>
-        _options is null ? null : new DropShadowEffect(parent);
+    public PlasmaShadowPair? Create(SceneTree parent) =>
+        _options is null ? null : new PlasmaShadowPair(parent);
 
     public DropShadowTexture? TextureFor(double scale, bool active)
     {

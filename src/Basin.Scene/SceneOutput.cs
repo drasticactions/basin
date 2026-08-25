@@ -47,6 +47,8 @@ public sealed class SceneOutput : IDisposable
 
     public DamageRing Ring { get; }
 
+    private readonly PixmanRegion32 _postDamage = new();
+
     public Point Position
     {
         get => _position;
@@ -263,6 +265,7 @@ public sealed class SceneOutput : IDisposable
         _scratch.Dispose();
         _planeScratch.Dispose();
         _difference.Dispose();
+        _postDamage.Dispose();
         _compositedAbove.Dispose();
         foreach (var region in _regionPool)
         {
@@ -438,6 +441,7 @@ public sealed class SceneOutput : IDisposable
 
         if (!Ring.IsEmpty && _postStages.Count > 0)
         {
+            Ring.GetBufferDamage(1, _postDamage);
             Ring.AddWhole();
         }
 
@@ -498,6 +502,7 @@ public sealed class SceneOutput : IDisposable
                     return false;
                 }
 
+                ReconcileOffloadedLayers();
                 _planeContentChanged = false;
                 _planeCommitRequested = false;
                 PlaneOnlyCommits++;
@@ -566,6 +571,7 @@ public sealed class SceneOutput : IDisposable
         swapchain?.Presented(target);
         LastTarget = target;
         Ring.Commit();
+        ReconcileOffloadedLayers();
         _planeContentChanged = false;
         ComposedCommits++;
         if (_offloadedNow.Count > 0)
@@ -789,6 +795,28 @@ public sealed class SceneOutput : IDisposable
         }
     }
 
+    private void ReconcileOffloadedLayers()
+    {
+        var demoted = false;
+        for (var i = _offloadedNow.Count - 1; i >= 0; i--)
+        {
+            if (_layers[_layers.Count - 1 - i].Accepted)
+            {
+                continue;
+            }
+
+            Ring.Add(_offloadedNowBoxes[i]);
+            _offloadedNow.RemoveAt(i);
+            _offloadedNowBoxes.RemoveAt(i);
+            demoted = true;
+        }
+
+        if (demoted)
+        {
+            DamagePending?.Invoke();
+        }
+    }
+
     private void DamageBetween(in Box before, in Box after)
     {
         _scratch.Reset(new PixmanBox32(before.X, before.Y, before.Right, before.Bottom));
@@ -944,7 +972,7 @@ public sealed class SceneOutput : IDisposable
 
             (texture as IRefreshableTexture)?.MarkDirty();
             var pass = renderer.BeginBufferPass(stageTarget, new RenderPassOptions());
-            _postStages[i].Render(pass, texture, new PostContext(mode.Width, mode.Height, tick));
+            _postStages[i].Render(pass, texture, new PostContext(mode.Width, mode.Height, tick, _postDamage));
             if (last)
             {
                 DrawSoftwareCursor(renderer, pass);
@@ -1263,6 +1291,11 @@ public sealed class SceneOutput : IDisposable
         for (var i = _renderList.Count - 1; i >= 0; i--)
         {
             var entry = _renderList[i];
+            if (ExcludedFromScanout(entry.Node))
+            {
+                continue;
+            }
+
             var bounds = EntryBounds(entry.Node);
             if (bounds.IsEmpty)
             {
@@ -1297,6 +1330,19 @@ public sealed class SceneOutput : IDisposable
         }
 
         return null;
+    }
+
+    private static bool ExcludedFromScanout(SceneNode node)
+    {
+        for (var tree = node as SceneTree ?? node.Parent; tree is not null; tree = tree.Parent)
+        {
+            if (tree.ExcludeFromScanout)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void OnSceneDamaged(SceneNode? source, Box box)

@@ -2,8 +2,9 @@ using Basin;
 using System.Runtime.InteropServices;
 using Basin.Cli;
 using BlurClient.Protocol;
-using Microsoft.Extensions.Logging;
 using Wayland;
+
+using Basin.Diagnostics;
 
 namespace BlurClient;
 
@@ -20,16 +21,16 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             return Run(
-                loggers.CreateLogger("BlurClient"),
+                BasinLog.For("BlurClient"),
                 result.GetValue(socketOption),
                 result.GetValue(widthOption),
                 result.GetValue(heightOption));
         });
     }
 
-    private static int Run(ILogger log, string? socket, int width, int height)
+    private static int Run(BasinLogger log, string? socket, int width, int height)
     {
         using var display = socket is null ? WlDisplay.Connect() : WlDisplay.Connect(socket);
         var registry = display.GetRegistry();
@@ -68,13 +69,13 @@ internal static class Program
 
         if (compositor is null || shm is null || wmBase is null)
         {
-            log.LogError("compositor is missing wl_compositor, wl_shm or xdg_wm_base");
+            log.Error($"compositor is missing wl_compositor, wl_shm or xdg_wm_base");
             return 1;
         }
 
         if (effects is null)
         {
-            log.LogWarning("ext_background_effect_manager_v1 is not advertised; the window will be plain translucent");
+            log.Warn($"ext_background_effect_manager_v1 is not advertised; the window will be plain translucent");
         }
 
         wmBase.Ping += (_, e) => wmBase.Pong(e.Serial);
@@ -95,7 +96,7 @@ internal static class Program
             effect.SetBlurRegion(region);
             region.Destroy();
             display.Roundtrip();
-            Console.WriteLine($"CAPABILITIES {capabilities} (1 = blur promised)");
+            BasinReport.Line($"CAPABILITIES {capabilities} (1 = blur promised)");
         }
 
         var closed = false;
@@ -171,7 +172,7 @@ internal static class Program
             if (!drawn)
             {
                 drawn = true;
-                Console.WriteLine($"MAPPED {width}x{height}");
+                BasinReport.Line($"MAPPED {width}x{height}");
             }
         }
 

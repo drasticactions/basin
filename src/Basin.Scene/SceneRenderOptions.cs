@@ -24,4 +24,8 @@ public readonly record struct SceneRenderOptions
         get => _projection;
         init => _projection = value;
     }
+
+    public int OriginX { get; init; }
+
+    public int OriginY { get; init; }
 }

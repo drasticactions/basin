@@ -302,10 +302,7 @@ public sealed class WaypipeDmabufChannelTests
     [Fact]
     public void A_lying_slice_ends_the_channel_and_leaves_the_fd_table_at_baseline()
     {
-        Console.Out.Write(string.Empty);
-        Console.Error.Write(string.Empty);
-        Console.Out.Flush();
-        Console.Error.Flush();
+        TestLogging.WarmStreams();
         using (var warm = new ChannelCompositor(gpu: true))
         {
         }

@@ -294,7 +294,9 @@ public abstract class SceneNode
         }
     }
 
-    protected internal void DamageSubtree()
+    protected internal void DamageSubtree() => DamageSubtree(structural: true);
+
+    private void DamageSubtree(bool structural)
     {
         if (!ComposeToRoot(
                 checkVisibility: true, out var x, out var y, out var toScene, out var transformed, out var owner,
@@ -304,10 +306,15 @@ public abstract class SceneNode
             return;
         }
 
+        if (structural)
+        {
+            scene.NotifyStructureChanged();
+        }
+
         if (deformerAncestor is { } deformed)
         {
             deformed.InvalidateCapture();
-            deformed.DamageSubtree();
+            deformed.DamageSubtree(structural: false);
             return;
         }
 
@@ -352,7 +359,7 @@ public abstract class SceneNode
         if (deformerAncestor is { } deformed)
         {
             deformed.InvalidateCapture();
-            deformed.DamageSubtree();
+            deformed.DamageSubtree(structural: false);
             return;
         }
 

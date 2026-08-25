@@ -1,4 +1,5 @@
 using Silk.NET.Vulkan;
+using static Basin.Render.Vulkan.VulkanLog;
 
 namespace Basin.Render.Vulkan;
 
@@ -33,7 +34,7 @@ public sealed unsafe class VulkanDeviceImage : IDisposable
         }
         catch (InvalidOperationException failure)
         {
-            Basin.Diagnostics.BasinLog.Warn(
+            Log.Warn(
                 $"dmabuf import rejected: {failure.Message} (format=0x{(uint)attributes.Format:X8} modifier=0x{attributes.Modifier:X} planes={attributes.PlaneCount} {attributes.Width}x{attributes.Height})");
             return null;
         }

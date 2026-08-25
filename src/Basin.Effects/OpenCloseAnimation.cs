@@ -17,12 +17,38 @@ public sealed class OpenCloseAnimation
 
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    public double InScale { get; set; } = 0.6;
+
+    public double OutScale { get; set; } = 0.6;
+
     public bool IsHiding => _hiding;
 
     public void Begin(TransformStack stack, bool hiding, in FrameTick now, long durationNanos)
     {
         Begin(stack, hiding, durationNanos);
         _timeline.Anchor(now);
+    }
+
+    public bool Begin(TransformStack stack, bool hiding, in FrameTick now, AnimationDuration duration)
+    {
+        if (!Begin(stack, hiding, duration))
+        {
+            return false;
+        }
+
+        _timeline.Anchor(now);
+        return true;
+    }
+
+    public bool Begin(TransformStack stack, bool hiding, AnimationDuration duration)
+    {
+        if (duration.IsDisabled)
+        {
+            return false;
+        }
+
+        Begin(stack, hiding, duration.Nanos);
+        return true;
     }
 
     public void Begin(TransformStack stack, bool hiding, long durationNanos)
@@ -81,7 +107,8 @@ public sealed class OpenCloseAnimation
         if (_kind == OpenCloseKind.Zoom)
         {
             var bounds = node.ContentBounds;
-            var scale = 0.6 + (0.4 * visible);
+            var rest = Math.Clamp(_hiding ? OutScale : InScale, 0, 1);
+            var scale = rest + ((1 - rest) * visible);
             var centerX = bounds.X + (bounds.Width / 2.0);
             var centerY = bounds.Y + (bounds.Height / 2.0);
             node.Matrix = RenderTransform.Multiply(

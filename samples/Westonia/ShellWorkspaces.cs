@@ -10,7 +10,7 @@ internal sealed class ShellWorkspaces : IWorkspaceModel, IDisposable
     private readonly WorkspaceObservers _observers = new();
     private readonly ShellLayers _layers;
     private readonly WestonShell _shell;
-    private readonly List<SceneTree> _trees = [];
+    private readonly WorkspaceSet<SceneTree> _trees = new();
     private int _active;
     private Spring _slide;
     private int _slideFrom = -1;
@@ -22,6 +22,17 @@ internal sealed class ShellWorkspaces : IWorkspaceModel, IDisposable
         _layers = layers;
         _shell = shell;
         Count = Math.Max(1, count);
+        _trees.IdOf = tree => (ulong)(_trees.IndexOf(tree) + 1);
+        _trees.Describe = tree =>
+        {
+            var index = _trees.IndexOf(tree);
+            return new WorkspaceInfo(
+                (ulong)(index + 1),
+                (index + 1).ToString(),
+                $"westonia-workspace-{index + 1}",
+                index == _active ? WorkspaceStateFlags.Active : WorkspaceStateFlags.None,
+                [(uint)index]);
+        };
         for (var i = 0; i < Count; i++)
         {
             _trees.Add(new SceneTree(layers.Workspaces) { Enabled = i == 0 });
@@ -54,6 +65,7 @@ internal sealed class ShellWorkspaces : IWorkspaceModel, IDisposable
 
         _slideFrom = _active;
         _active = index;
+        _trees.Active = _trees[index];
         _slideHeight = Math.Max(1, OutputHeight?.Invoke() ?? 720);
         _trees[_slideFrom].Enabled = true;
         _trees[_active].Enabled = true;
@@ -129,18 +141,7 @@ internal sealed class ShellWorkspaces : IWorkspaceModel, IDisposable
             return 0;
         }
 
-        var count = Math.Min(Count, workspaces.Length);
-        for (var i = 0; i < count; i++)
-        {
-            workspaces[i] = new WorkspaceInfo(
-                (ulong)(i + 1),
-                (i + 1).ToString(),
-                $"westonia-workspace-{i + 1}",
-                i == _active ? WorkspaceStateFlags.Active : WorkspaceStateFlags.None,
-                [(uint)i]);
-        }
-
-        return count;
+        return _trees.Fill(workspaces);
     }
 
     public int EnumerateGroupOutputs(ulong groupId, Span<IOutput> outputs)
@@ -214,7 +215,5 @@ internal sealed class ShellWorkspaces : IWorkspaceModel, IDisposable
                 tree.Destroy();
             }
         }
-
-        _trees.Clear();
     }
 }

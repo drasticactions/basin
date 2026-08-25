@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Drm.Native;
+using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
@@ -38,7 +39,7 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
         var fd = OpenPath(_backend.DevicePath, OpenReadWrite | OpenCloexec);
         if (fd < 0)
         {
-            BasinLog.Warn(
+            Log.Warn(
                 $"{_backend.DevicePath}: cannot open a lease enumeration fd " +
                 $"(errno {Marshal.GetLastPInvokeError()}); clients see a card they cannot enumerate");
             return -1;
@@ -46,7 +47,7 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
 
         if (Libdrm.drmIsMaster(fd) != 0 && Libdrm.drmDropMaster(fd) != 0)
         {
-            BasinLog.Warn($"{_backend.DevicePath}: lease enumeration fd is master and will not drop it; withholding it");
+            Log.Warn($"{_backend.DevicePath}: lease enumeration fd is master and will not drop it; withholding it");
             _ = CloseFd(fd);
             return -1;
         }
@@ -87,14 +88,14 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
 
         if (fd < 0)
         {
-            BasinLog.Warn($"{_backend.DevicePath}: lease of {objectIds.Length} object(s) refused ({fd})");
+            Log.Warn($"{_backend.DevicePath}: lease of {objectIds.Length} object(s) refused ({fd})");
             return false;
         }
 
         leaseFd = fd;
         lesseeId = id;
         _leases.Add((id, ConnectorsOf(objectIds)));
-        BasinLog.Info($"{_backend.DevicePath}: leased {objectIds.Length} object(s) to lessee {id}");
+        Log.Info($"{_backend.DevicePath}: leased {objectIds.Length} object(s) to lessee {id}");
         return true;
     }
 
@@ -166,7 +167,7 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
         var rc = Libdrm.drmModeRevokeLease(_backend.Device.Fd, lesseeId);
         if (rc != 0)
         {
-            BasinLog.Debug($"{_backend.DevicePath}: revoking lessee {lesseeId} returned {rc}");
+            Log.Debug($"{_backend.DevicePath}: revoking lessee {lesseeId} returned {rc}");
         }
     }
 

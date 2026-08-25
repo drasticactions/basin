@@ -67,4 +67,62 @@ public static class Projection
             Corner(bounds.X, bounds.Bottom),
             Corner(bounds.Right, bounds.Bottom));
     }
+
+    public static (double X, double Y) FrustumPoint(in Box rect, double localX, double localY, double z)
+    {
+        var depth = 1.1 - (0.001 * z);
+        if (Math.Abs(depth) < 1e-9)
+        {
+            depth = depth < 0 ? -1e-9 : 1e-9;
+        }
+
+        var width = rect.Width == 0 ? 1 : rect.Width;
+        var height = rect.Height == 0 ? 1 : rect.Height;
+        var ndcX = 1.1 * ((2.0 * localX / width) - 1.0) / depth;
+        var ndcY = 1.1 * ((2.0 * localY / height) - 1.0) / depth;
+        return (rect.X + (width / 2.0) + (width / 2.0 * ndcX), rect.Y + (height / 2.0) + (height / 2.0 * ndcY));
+    }
+
+    public static RenderTransform Frustum(in Box rect, FrustumEdge edge, double angleDegrees, double distance)
+    {
+        var radians = angleDegrees * Math.PI / 180.0;
+        var sin = Math.Sin(radians);
+        var cos = Math.Cos(radians);
+        var width = (double)rect.Width;
+        var height = (double)rect.Height;
+        var box = rect;
+
+        (double X, double Y) Corner(double x, double y)
+        {
+            double qx = x, qy = y, qz;
+            switch (edge)
+            {
+                case FrustumEdge.Right:
+                    qx = ((x - width) * cos) + width;
+                    qz = ((x - width) * sin) - distance;
+                    break;
+                case FrustumEdge.Bottom:
+                    qy = ((y - height) * cos) + height;
+                    qz = ((y - height) * sin) - distance;
+                    break;
+                case FrustumEdge.Left:
+                    qx = x * cos;
+                    qz = (-x * sin) - distance;
+                    break;
+                default:
+                    qy = y * cos;
+                    qz = (-y * sin) - distance;
+                    break;
+            }
+
+            return FrustumPoint(box, qx, qy, qz);
+        }
+
+        return MapRect(
+            rect,
+            Corner(0, 0),
+            Corner(width, 0),
+            Corner(0, height),
+            Corner(width, height));
+    }
 }

@@ -1,7 +1,8 @@
 using System.CommandLine;
 using Basin.Cli;
 using Basin.WindowManager;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Dinghy;
 
@@ -22,9 +23,9 @@ internal static class Program
         return cli.Run(args, result =>
         {
             var trace = result.GetValue(traceOption);
-            using var loggers = cli.CreateLoggerFactory(result, trace);
+            cli.ConfigureLogging(result, trace);
             return Run(
-                loggers.CreateLogger("Dinghy"),
+                BasinLog.For("Dinghy"),
                 result.GetValue(socketOption),
                 !result.GetValue(configOption),
                 trace,
@@ -32,7 +33,7 @@ internal static class Program
         });
     }
 
-    private static int Run(ILogger log, string? socket, bool noConfig, bool trace, int exitAfter)
+    private static int Run(BasinLogger log, string? socket, bool noConfig, bool trace, int exitAfter)
     {
         if (socket is { Length: > 0 })
         {
@@ -46,7 +47,7 @@ internal static class Program
         }
         catch (InvalidOperationException error)
         {
-            log.LogError("{Reason}", error.Message);
+            log.Error($"{error.Message}");
             return 1;
         }
 
@@ -57,7 +58,7 @@ internal static class Program
             wm.Unavailable += () =>
             {
                 refused = true;
-                log.LogError("the compositor refused window management — another window manager is already running.");
+                log.Error($"the compositor refused window management — another window manager is already running.");
             };
 
             var reached = false;
@@ -70,21 +71,19 @@ internal static class Program
                     if (seen >= exitAfter && !reached)
                     {
                         reached = true;
-                        log.LogInformation("managed {Count} window(s), stopping", seen);
+                        log.Info($"managed {seen} window(s), stopping");
                         wm.Stop();
                     }
                 };
             }
 
-            log.LogInformation(
-                "managing with protocol version {Version}; bindings v{BindingsVersion}, layer shell {LayerShell}",
-                wm.Version, wm.Bindings.Version, wm.LayerShell is null ? "absent" : "present");
+            log.Info($"managing with protocol version {wm.Version}; bindings v{wm.Bindings.Version}, layer shell {(wm.LayerShell is null ? "absent" : "present")}");
 
             wm.Run();
 
             if (exitAfter > 0 && !reached)
             {
-                log.LogError("the session ended before {Count} window(s) were managed.", exitAfter);
+                log.Error($"the session ended before {exitAfter} window(s) were managed.");
                 return 1;
             }
 

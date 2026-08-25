@@ -1,57 +1,109 @@
-using SkiaSharp;
+using Avalonia.Media;
 
 namespace PlasmaHost;
 
 internal readonly record struct BreezePalette(
-    SKColor ActiveBackground,
-    SKColor ActiveForeground,
-    SKColor InactiveBackground,
-    SKColor InactiveForeground,
-    SKColor Negative,
-    SKColor Focus)
+    Color ActiveBackground,
+    Color ActiveForeground,
+    Color InactiveBackground,
+    Color InactiveForeground,
+    Color Negative,
+    Color Focus,
+    Color WindowBackground,
+    Color WindowForeground,
+    Color WindowForegroundInactive,
+    Color Highlight)
 {
+    private const string HeaderGroup = "Colors:Header";
+    private const string HeaderInactiveGroup = "Colors:Header][Inactive";
+    private const string WindowGroup = "Colors:Window";
+    private const string SelectionGroup = "Colors:Selection";
+    private const string LegacyGroup = "WM";
+
     public static BreezePalette Fallback { get; } = new(
-        new SKColor(227, 229, 231),
-        new SKColor(35, 38, 41),
-        new SKColor(239, 240, 241),
-        new SKColor(112, 125, 138),
-        new SKColor(218, 68, 83),
-        new SKColor(61, 174, 233));
+        Color.FromRgb(222, 224, 226),
+        Color.FromRgb(35, 38, 41),
+        Color.FromRgb(239, 240, 241),
+        Color.FromRgb(35, 38, 41),
+        Color.FromRgb(218, 68, 83),
+        Color.FromRgb(61, 174, 233),
+        Color.FromRgb(239, 240, 241),
+        Color.FromRgb(35, 38, 41),
+        Color.FromRgb(112, 125, 138),
+        Color.FromRgb(61, 174, 233));
+
+    public bool IsDark =>
+        Math.Max(Math.Max(WindowBackground.R, WindowBackground.G), WindowBackground.B) <= 127;
 
     public static BreezePalette Load(string? palette)
     {
-        var path = ResolvePath(palette);
-        if (path is null)
+        var fallback = Fallback;
+        var path = ResolvePath(palette) ?? KdeIni.ConfigPath("kdeglobals");
+        var window = ReadColor(path, WindowGroup, "BackgroundNormal") ?? fallback.WindowBackground;
+        var windowForeground = ReadColor(path, WindowGroup, "ForegroundNormal") ?? fallback.WindowForeground;
+        var windowInactive =
+            ReadColor(path, WindowGroup, "ForegroundInactive") ?? fallback.WindowForegroundInactive;
+        var highlight = ReadColor(path, SelectionGroup, "BackgroundNormal") ?? fallback.Highlight;
+
+        Color activeBackground;
+        Color activeForeground;
+        Color inactiveBackground;
+        Color inactiveForeground;
+        Color negative;
+        Color focus;
+        if (KdeIni.GroupExists(path, HeaderGroup))
         {
-            return Fallback;
+            activeBackground = ReadColor(path, HeaderGroup, "BackgroundNormal") ?? fallback.ActiveBackground;
+            activeForeground = ReadColor(path, HeaderGroup, "ForegroundNormal") ?? fallback.ActiveForeground;
+            inactiveBackground = ReadColor(path, HeaderInactiveGroup, "BackgroundNormal") ?? activeBackground;
+            inactiveForeground = ReadColor(path, HeaderInactiveGroup, "ForegroundNormal") ?? activeForeground;
+            negative = ReadColor(path, HeaderGroup, "ForegroundNegative") ?? fallback.Negative;
+            focus = ReadColor(path, HeaderGroup, "DecorationFocus") ?? fallback.Focus;
+        }
+        else if (KdeIni.GroupExists(path, LegacyGroup))
+        {
+            activeBackground = ReadColor(path, LegacyGroup, "activeBackground") ?? highlight;
+            activeForeground = ReadColor(path, LegacyGroup, "activeForeground")
+                ?? ReadColor(path, SelectionGroup, "ForegroundNormal")
+                ?? Colors.White;
+            inactiveBackground = ReadColor(path, LegacyGroup, "inactiveBackground") ?? activeBackground;
+            inactiveForeground = ReadColor(path, LegacyGroup, "inactiveForeground") ?? Darker(activeForeground);
+            negative = ReadColor(path, WindowGroup, "ForegroundNegative") ?? fallback.Negative;
+            focus = ReadColor(path, WindowGroup, "DecorationFocus") ?? fallback.Focus;
+        }
+        else
+        {
+            activeBackground = window;
+            activeForeground = windowForeground;
+            inactiveBackground = window;
+            inactiveForeground = windowInactive;
+            negative = ReadColor(path, WindowGroup, "ForegroundNegative") ?? fallback.Negative;
+            focus = ReadColor(path, WindowGroup, "DecorationFocus") ?? fallback.Focus;
         }
 
-        var fallback = Fallback;
         return new BreezePalette(
-            ReadColor(path, "WM", "activeBackground") ?? fallback.ActiveBackground,
-            ReadColor(path, "WM", "activeForeground") ?? fallback.ActiveForeground,
-            ReadColor(path, "WM", "inactiveBackground") ?? fallback.InactiveBackground,
-            ReadColor(path, "WM", "inactiveForeground") ?? fallback.InactiveForeground,
-            ReadColor(path, "Colors:Window", "ForegroundNegative") ?? fallback.Negative,
-            ReadColor(path, "Colors:Window", "DecorationFocus") ?? fallback.Focus);
+            activeBackground,
+            activeForeground,
+            inactiveBackground,
+            inactiveForeground,
+            negative,
+            focus,
+            window,
+            windowForeground,
+            windowInactive,
+            highlight);
     }
 
     private static string? ResolvePath(string? palette)
     {
-        if (palette is { Length: > 0 } && Path.IsPathRooted(palette))
-        {
-            return File.Exists(palette) ? palette : null;
-        }
-
-        var name = palette;
-        if (string.IsNullOrEmpty(name))
-        {
-            name = KdeIni.ReadEntry(KdeIni.ConfigPath("kdeglobals"), "General", "ColorScheme");
-        }
-
-        if (string.IsNullOrEmpty(name))
+        if (string.IsNullOrEmpty(palette) || palette == "kdeglobals")
         {
             return null;
+        }
+
+        if (Path.IsPathRooted(palette))
+        {
+            return File.Exists(palette) ? palette : null;
         }
 
         var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
@@ -66,7 +118,7 @@ internal readonly record struct BreezePalette(
             "/usr/share/color-schemes",
         ])
         {
-            var candidate = Path.Combine(directory, $"{name}.colors");
+            var candidate = Path.Combine(directory, $"{palette}.colors");
             if (File.Exists(candidate))
             {
                 return candidate;
@@ -76,7 +128,10 @@ internal readonly record struct BreezePalette(
         return null;
     }
 
-    private static SKColor? ReadColor(string path, string group, string key)
+    private static Color Darker(Color color) =>
+        Color.FromRgb((byte)(color.R / 2), (byte)(color.G / 2), (byte)(color.B / 2));
+
+    private static Color? ReadColor(string path, string group, string key)
     {
         var value = KdeIni.ReadEntry(path, group, key);
         if (value is null)
@@ -93,6 +148,6 @@ internal readonly record struct BreezePalette(
             return null;
         }
 
-        return new SKColor(r, g, b);
+        return Color.FromRgb(r, g, b);
     }
 }

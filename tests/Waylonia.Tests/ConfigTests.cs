@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Waylonia;
 using Xunit;
+
+using Basin.Diagnostics;
 
 namespace Waylonia.Tests;
 
@@ -17,7 +18,7 @@ public sealed class ConfigTests : IDisposable
         return path;
     }
 
-    private static Config Load(string path) => Config.Load(false, path, NullLogger.Instance);
+    private static Config Load(string path) => Config.Load(false, path, BasinLogger.None);
 
     [Fact]
     public void Every_top_level_key_reaches_the_config()
@@ -150,7 +151,7 @@ public sealed class ConfigTests : IDisposable
     {
         Directory.CreateDirectory(_directory);
         var path = Path.Combine(_directory, "absent.toml");
-        var config = Config.Load(false, path, NullLogger.Instance);
+        var config = Config.Load(false, path, BasinLogger.None);
 
         Assert.False(File.Exists(path));
         Assert.Null(config.Socket);
@@ -164,7 +165,7 @@ public sealed class ConfigTests : IDisposable
             compress = "none"
             """);
 
-        var config = Config.Load(true, path, NullLogger.Instance);
+        var config = Config.Load(true, path, BasinLogger.None);
 
         Assert.Null(config.Socket);
         Assert.Null(config.Compress);
@@ -178,13 +179,13 @@ public sealed class ConfigTests : IDisposable
         Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", _directory);
         try
         {
-            var config = Config.Load(false, null, NullLogger.Instance);
+            var config = Config.Load(false, null, BasinLogger.None);
             var path = Path.Combine(_directory, "waylonia", "waylonia.toml");
 
             Assert.True(File.Exists(path));
             Assert.Null(config.Socket);
 
-            var reloaded = Config.Load(false, null, NullLogger.Instance);
+            var reloaded = Config.Load(false, null, BasinLogger.None);
             Assert.Null(reloaded.Socket);
             Assert.Null(reloaded.Compress);
             Assert.Null(reloaded.Command);

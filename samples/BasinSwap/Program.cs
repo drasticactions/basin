@@ -23,7 +23,7 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             var status = Run(
                 result.GetValue(frames),
                 result.GetValue(client),
@@ -90,7 +90,7 @@ internal static class Program
             }
         };
 
-        Console.WriteLine($"SOCKET {socket}");
+        BasinReport.Line(Basin.Cli.CompositorLines.Socket(socket));
         using var client = Spawn(clientCommand, socket);
         while (running)
         {
@@ -104,13 +104,13 @@ internal static class Program
         if (ok)
         {
             BufferCapture.WritePng(shot, screenshotPath);
-            Console.WriteLine($"SCREENSHOT {screenshotPath} (through {capture.GetType().Name})");
+            BasinReport.Line($"SCREENSHOT {screenshotPath} (through {capture.GetType().Name})");
         }
 
         shot.Destroy();
         BasinDiagnostics.StopClient(client);
         target.Destroy();
-        Console.WriteLine($"CAPTURES {capture.Captures} CLIPBOARD {clipboard.History} BELLS {bell.Rings}");
+        BasinReport.Line($"CAPTURES {capture.Captures} CLIPBOARD {clipboard.History} BELLS {bell.Rings}");
         return ok ? 0 : 1;
     }
 

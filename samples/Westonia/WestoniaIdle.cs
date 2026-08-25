@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Basin;
 using Basin.Capabilities;
-using Microsoft.Extensions.Logging;
 
 namespace Westonia;
 
@@ -11,13 +10,13 @@ internal sealed partial class Westonia
     {
         if (_ini.Core.IdleTimeSeconds <= 0)
         {
-            _log.LogInformation("idle locking is off: [core] idle-time is zero");
+            _log.Info($"idle locking is off: [core] idle-time is zero");
             return;
         }
 
         if (_services.Find<IIdleSource>() is not { } idle)
         {
-            _log.LogWarning("no idle source; the idle timer will not fire");
+            _log.Warn($"no idle source; the idle timer will not fire");
             return;
         }
 
@@ -71,11 +70,11 @@ internal sealed partial class Westonia
         try
         {
             _screensaver = Basin.Diagnostics.BasinDiagnostics.StartClient(path, _host.Socket);
-            _log.LogInformation("started the screensaver: {Path}", path);
+            _log.Info($"started the screensaver: {path}");
         }
         catch (Exception error)
         {
-            _log.LogError("cannot start the screensaver {Path}: {Reason}", path, error.Message);
+            _log.Error($"cannot start the screensaver {path}: {error.Message}");
         }
     }
 

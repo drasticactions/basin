@@ -76,10 +76,7 @@ internal sealed class CompositorTestHost : IDisposable
         BasinCounters.Reset();
 
         _fdAllowance = DriverFdResidue.For(renderer);
-        Console.Out.Write(string.Empty);
-        Console.Error.Write(string.Empty);
-        Console.Out.Flush();
-        Console.Error.Flush();
+        TestLogging.WarmStreams();
         _fdBaseline = FdSnapshot.Take();
         var stack = RendererCatalog.Create(renderer, RenderNodePath);
         Renderer = stack.Renderer;
@@ -456,7 +453,7 @@ internal sealed class CompositorTestHost : IDisposable
     {
         if (Marshal.GetExceptionPointers() != IntPtr.Zero)
         {
-            Console.Error.WriteLine($"teardown not clean while the test itself was already failing: {message}");
+            BasinLog.Error($"teardown not clean while the test itself was already failing: {message}");
             return;
         }
 

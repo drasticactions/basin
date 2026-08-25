@@ -12,6 +12,8 @@ public class SceneTree : SceneNode
 
     public List<SceneNode> Children { get; } = [];
 
+    public bool ExcludeFromScanout { get; set; }
+
     internal Scene? Owner { get; set; }
 
     internal List<SceneMirror>? Mirrors { get; set; }

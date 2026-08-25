@@ -5,7 +5,6 @@ using Basin.Cli;
 using Basin.Diagnostics;
 using Basin.Render.Pixman;
 using Basin.Scene;
-using Microsoft.Extensions.Logging;
 using Wayland;
 using Wayland.Server;
 

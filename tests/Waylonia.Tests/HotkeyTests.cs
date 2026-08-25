@@ -1,13 +1,14 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Waylonia;
 using Xunit;
+
+using Basin.Diagnostics;
 
 namespace Waylonia.Tests;
 
 public sealed class HotkeyTests
 {
     private static Hotkey? Parse(string chord, string? command = "foot") =>
-        Hotkey.Parse(chord, command, NullLogger.Instance);
+        Hotkey.Parse(chord, command, BasinLogger.None);
 
     [Theory]
     [InlineData("ctrl+t", nameof(HotkeyModifiers.Ctrl))]

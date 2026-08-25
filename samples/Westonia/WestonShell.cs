@@ -1,7 +1,8 @@
 using Basin;
 using Basin.Scene;
 using Basin.Shell.Weston;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -9,7 +10,7 @@ internal sealed partial class WestonShell : IDisposable
 {
     private readonly ShellLayers _layers;
     private readonly WestonIni _ini;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly Dictionary<IOutput, SceneSurface> _clientBackgrounds = [];
     private readonly Dictionary<IOutput, SceneSurface> _clientPanels = [];
     private readonly Dictionary<IOutput, SceneSurface> _screensavers = [];
@@ -18,7 +19,7 @@ internal sealed partial class WestonShell : IDisposable
     private bool _desktopReady;
     private bool _disposed;
 
-    public WestonShell(ShellLayers layers, WestonIni ini, ILogger log)
+    public WestonShell(ShellLayers layers, WestonIni ini, BasinLogger log)
     {
         _layers = layers;
         _ini = ini;
@@ -114,7 +115,7 @@ internal sealed partial class WestonShell : IDisposable
     public void DesktopReady()
     {
         _desktopReady = true;
-        _log.LogInformation("the shell reports the desktop is ready");
+        _log.Info($"the shell reports the desktop is ready");
     }
 
     public void AdoptScreensaverSurface(IOutput output, Surface surface)

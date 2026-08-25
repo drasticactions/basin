@@ -3,8 +3,9 @@ using Basin.Capabilities;
 using Basin.Desktop;
 using Basin.Scene;
 using Basin.UI.Avalonia;
-using Microsoft.Extensions.Logging;
 using Westonia.Shell;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -14,7 +15,7 @@ internal sealed class ShellLock : IDisposable
     private readonly ShellLayers _layers;
     private readonly WestonShell _shell;
     private readonly WestonIni _ini;
-    private readonly ILogger _log;
+    private readonly BasinLogger _log;
     private readonly Func<Box> _area;
     private readonly UISurfaceIndex _index;
     private AvaloniaUISurface? _dialog;
@@ -27,7 +28,7 @@ internal sealed class ShellLock : IDisposable
         ShellLayers layers,
         WestonShell shell,
         WestonIni ini,
-        ILogger log,
+        BasinLogger log,
         Func<Box> area,
         UISurfaceIndex index)
     {
@@ -56,7 +57,7 @@ internal sealed class ShellLock : IDisposable
         {
             if (_shellHoldsLock && !ClientLocked)
             {
-                _log.LogWarning("a session lock client arrived while the shell already holds the lock");
+                _log.Warn($"a session lock client arrived while the shell already holds the lock");
             }
 
             _shellHoldsLock = false;
@@ -73,7 +74,7 @@ internal sealed class ShellLock : IDisposable
 
         driver.Abandoned += () =>
         {
-            _log.LogWarning("the session lock client died; the screen stays locked");
+            _log.Warn($"the session lock client died; the screen stays locked");
             _layers.SetLocked(true);
             Changed?.Invoke();
         };
@@ -95,7 +96,7 @@ internal sealed class ShellLock : IDisposable
         if (_shell.Client is { } client)
         {
             client.PrepareLockSurface();
-            _log.LogInformation("asked the shell client for a lock surface");
+            _log.Info($"asked the shell client for a lock surface");
             Changed?.Invoke();
             return;
         }
@@ -129,7 +130,7 @@ internal sealed class ShellLock : IDisposable
         var box = _area();
         _dialog = _host.CreateSurface(new UISurfaceOptions
         {
-            Target = UITargetKind.Memory,
+            Target = _host.Produces,
             Width = box.Width,
             Height = box.Height,
             Scale = Scale(),

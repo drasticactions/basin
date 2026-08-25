@@ -1,5 +1,6 @@
 using Basin.Diagnostics;
 using Pixman;
+using static Basin.Scene.SceneLog;
 
 namespace Basin.Scene;
 
@@ -90,14 +91,17 @@ public sealed class SceneBuffer : SceneNode
 
     public IBackdropEffect? BackdropEffect => _backdropEffect;
 
+    public object? BackdropKey { get; private set; }
+
     internal PixmanRegion32? BackdropRegion => _backdropRegion;
 
     internal bool HasActiveBackdrop => _backdropEffect is not null && _backdropRegion is { IsEmpty: false };
 
-    public void SetBackdropEffect(IBackdropEffect? effect, PixmanRegion32? region)
+    public void SetBackdropEffect(IBackdropEffect? effect, PixmanRegion32? region, object? key = null)
     {
         var wasActive = HasActiveBackdrop;
         _backdropEffect = effect;
+        BackdropKey = key;
         if (effect is null || region is null || region.IsEmpty)
         {
             _backdropRegion?.Clear();
@@ -326,7 +330,7 @@ public sealed class SceneBuffer : SceneNode
                 ForgetTextureWhenBufferDies(conversion.Buffer);
                 if (buffer.TryGetDmabuf(out var foreign))
                 {
-                    Basin.Diagnostics.BasinLog.Info(
+                    Log.Info(
                         $"cross-device conversion: {buffer.Width}x{buffer.Height} modifier 0x{foreign.Modifier:X} now renders via a linear copy");
                 }
 
@@ -400,7 +404,7 @@ public sealed class SceneBuffer : SceneNode
         }
 
         _importFailed = true;
-        Basin.Diagnostics.BasinLog.Warn(
+        Log.Warn(
             $"buffer {buffer.Width}x{buffer.Height} is not importable by the renderer; content dropped");
     }
 

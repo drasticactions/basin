@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
     <PackageReference Include="xcb-dotnet" />
     <PackageReference Include="WaylandSharpest" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xwayland-shell/xwayland-shell-v1.xml" WaylandNamespace="Basin.XWayland.Protocol" />

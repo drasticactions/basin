@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Basin.Cli;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace Westonia;
 
@@ -35,7 +36,7 @@ internal static class Program
         return cli.Run(args, result =>
         {
             var chosen = result.GetValue(backend);
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             var configValue = result.GetValue(config);
             var options = new WestoniaOptions
             {
@@ -54,7 +55,7 @@ internal static class Program
                 NoConfig = string.Equals(configValue, "false", StringComparison.OrdinalIgnoreCase),
             };
 
-            var status = Westonia.Run(options, loggers.CreateLogger("Westonia"), out var rendered);
+            var status = Westonia.Run(options, BasinLog.For("Westonia"), out var rendered);
             cli.ReportFrames(rendered);
             return status;
         });

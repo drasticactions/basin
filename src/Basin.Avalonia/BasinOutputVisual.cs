@@ -3,6 +3,7 @@ using Avalonia.Media;
 using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Basin.Diagnostics;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -48,7 +49,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         catch (Exception error)
         {
             _failed = true;
-            BasinLog.Error($"avalonia: the compositor host could not start: {error}");
+            Log.Error($"the compositor host could not start: {error}");
             _hostFailed?.Invoke(error);
             return;
         }
@@ -79,7 +80,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             if (feature is null && !_reportedNoLease)
             {
                 _reportedNoLease = true;
-                BasinLog.Error($"avalonia: no Skia lease on this backend; nothing is composited");
+                Log.Error($"no Skia lease on this backend; nothing is composited");
             }
 
             BasinVisualFrame.Commit(host, _view, feature, CompositionNow);
@@ -91,7 +92,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
         catch (Exception error)
         {
-            BasinLog.Error($"avalonia: frame dropped: {error}");
+            Log.Error($"frame dropped: {error}");
         }
     }
 
@@ -118,7 +119,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             }
             catch (Exception error)
             {
-                BasinLog.Error($"avalonia: wake dispatch failed: {error}");
+                Log.Error($"wake dispatch failed: {error}");
             }
 
             return;
@@ -143,7 +144,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             }
             catch (Exception error)
             {
-                BasinLog.Error($"avalonia: posted work failed: {error}");
+                Log.Error($"posted work failed: {error}");
             }
 
             return;
@@ -181,7 +182,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
         catch (Exception error)
         {
-            BasinLog.Error($"avalonia: idle dispatch failed: {error}");
+            Log.Error($"idle dispatch failed: {error}");
         }
     }
 

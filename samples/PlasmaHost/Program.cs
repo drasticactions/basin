@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Basin.Cli;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace PlasmaHost;
 
@@ -30,7 +31,7 @@ internal static class Program
 
         return cli.Run(args, result =>
         {
-            using var loggers = cli.CreateLoggerFactory(result);
+            cli.ConfigureLogging(result);
             var shellValue = result.GetValue(shell);
             var options = new PlasmaHostOptions
             {
@@ -45,7 +46,7 @@ internal static class Program
                     ? null
                     : shellValue,
             };
-            var status = PlasmaHost.Run(options, loggers.CreateLogger("PlasmaHost"), out var rendered);
+            var status = PlasmaHost.Run(options, BasinLog.For("PlasmaHost"), out var rendered);
             cli.ReportFrames(rendered);
             return status;
         });

@@ -2,6 +2,8 @@ using System.Globalization;
 using Basin;
 using Basin.Scene;
 
+using Basin.Diagnostics;
+
 namespace EightWm;
 
 internal sealed partial class Shell
@@ -50,7 +52,7 @@ internal sealed partial class Shell
 
         UpdateClock(view);
         charms.Draw();
-        Console.WriteLine($"CHARMS {(visible ? "on" : "off")}");
+        BasinReport.Line($"CHARMS {(visible ? "on" : "off")}");
         UpdateDim(view, charms);
         if (!charms.BarMotion.IsRunning && !charms.ClockMotion.IsRunning && !charms.PaneMotion.IsRunning)
         {
@@ -69,7 +71,7 @@ internal sealed partial class Shell
         Animate(
             ref charms.PaneMotion, view.CharmsPaneFrame, Animation.HidePanel,
             offsetScale: PanelTravel(CharmsBar.PaneWidth));
-        Console.WriteLine($"PANE off {charms.OpenPane}");
+        BasinReport.Line($"PANE off {charms.OpenPane}");
         UpdateDim(view, charms);
         if (!charms.PaneMotion.IsRunning)
         {
@@ -177,7 +179,7 @@ internal sealed partial class Shell
             ref charms.PaneMotion, view.CharmsPaneFrame, Animation.ShowPanel,
             offsetScale: PanelTravel(CharmsBar.PaneWidth));
         charms.Draw();
-        Console.WriteLine($"CHARM {charm}");
+        BasinReport.Line($"CHARM {charm}");
         ShowCharms(view, false, keepPane: true);
         return true;
     }

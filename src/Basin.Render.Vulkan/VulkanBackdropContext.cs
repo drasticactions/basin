@@ -13,4 +13,6 @@ public readonly struct VulkanBackdropContext
     public required Extent2D TargetExtent { get; init; }
 
     public required Box Bounds { get; init; }
+
+    public object? Key { get; init; }
 }

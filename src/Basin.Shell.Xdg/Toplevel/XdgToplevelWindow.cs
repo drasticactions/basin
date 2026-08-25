@@ -4,7 +4,7 @@ using Wayland;
 
 namespace Basin.Shell.Xdg;
 
-public sealed class XdgToplevelWindow
+public sealed class XdgToplevelWindow : IToplevelHandle
 {
     public const string RoleName = "xdg_toplevel";
 
@@ -140,6 +140,21 @@ public sealed class XdgToplevelWindow
     public event Action<int, int>? ShowWindowMenuRequested;
 
     public event Action? Destroyed;
+
+    IToplevelHandle? IToplevelHandle.Parent => Parent;
+
+    bool IToplevelHandle.WantsFocus => true;
+
+    (int Width, int Height) IToplevelHandle.NaturalSize
+    {
+        get
+        {
+            var geometry = Xdg.EffectiveGeometry;
+            return (geometry.Width, geometry.Height);
+        }
+    }
+
+    void IToplevelHandle.Configure(int x, int y, int width, int height) => SetSize(width, height);
 
     public void SetActivated(bool activated) => SetState(XdgToplevel.State.Activated, activated);
 

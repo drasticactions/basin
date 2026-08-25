@@ -1,7 +1,8 @@
 using System.CommandLine;
 using Basin.Cli;
 using Basin.WindowManager;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace InletWm;
 
@@ -30,9 +31,9 @@ internal static class Program
         return cli.Run(args, result =>
         {
             var trace = result.GetValue(traceOption);
-            using var loggers = cli.CreateLoggerFactory(result, trace);
+            cli.ConfigureLogging(result, trace);
             return Run(
-                loggers.CreateLogger("InletWm"),
+                BasinLog.For("InletWm"),
                 result.GetValue(socketOption),
                 result.GetValue(terminalOption)!,
                 trace,
@@ -40,7 +41,7 @@ internal static class Program
         });
     }
 
-    private static int Run(ILogger log, string? socket, string terminal, bool trace, int exitAfter)
+    private static int Run(BasinLogger log, string? socket, string terminal, bool trace, int exitAfter)
     {
         RiverWindowManager wm;
         try
@@ -49,7 +50,7 @@ internal static class Program
         }
         catch (InvalidOperationException error)
         {
-            log.LogError("{Reason}", error.Message);
+            log.Error($"{error.Message}");
             return 1;
         }
 
@@ -60,7 +61,7 @@ internal static class Program
             wm.Unavailable += () =>
             {
                 refused = true;
-                log.LogError("the compositor refused window management, another window manager is already running.");
+                log.Error($"the compositor refused window management, another window manager is already running.");
             };
 
             var reached = false;
@@ -73,15 +74,13 @@ internal static class Program
                     if (seen >= exitAfter && !reached)
                     {
                         reached = true;
-                        log.LogInformation("laid out {Count} window(s), stopping", seen);
+                        log.Info($"laid out {seen} window(s), stopping");
                         wm.Stop();
                     }
                 };
             }
 
-            log.LogInformation(
-                "managing with protocol version {Version}; bindings v{BindingsVersion}, layer shell {LayerShell}",
-                wm.Version, wm.Bindings.Version, wm.LayerShell is null ? "absent" : "present");
+            log.Info($"managing with protocol version {wm.Version}; bindings v{wm.Bindings.Version}, layer shell {(wm.LayerShell is null ? "absent" : "present")}");
 
             if (trace)
             {
@@ -103,7 +102,7 @@ internal static class Program
 
             if (exitAfter > 0 && !reached)
             {
-                log.LogError("the session ended before {Count} window(s) were laid out.", exitAfter);
+                log.Error($"the session ended before {exitAfter} window(s) were laid out.");
                 return 1;
             }
 
@@ -111,9 +110,9 @@ internal static class Program
         }
     }
 
-    private static void ReportLatency(ILogger log, RiverWindowManager wm)
+    private static void ReportLatency(BasinLogger log, RiverWindowManager wm)
     {
-        log.LogDebug("manage {Latency}", wm.ManageLatency);
-        log.LogDebug("render {Latency}", wm.RenderLatency);
+        log.Debug($"manage {wm.ManageLatency}");
+        log.Debug($"render {wm.RenderLatency}");
     }
 }

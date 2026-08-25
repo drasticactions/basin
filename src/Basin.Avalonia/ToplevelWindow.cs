@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Basin.Scene;
 using Basin.Shell.Xdg;
+using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
@@ -394,7 +395,7 @@ public sealed class ToplevelWindow : Window
             return;
         }
 
-        Basin.Diagnostics.BasinLog.Debug($"client resize: edges={edges}");
+        Log.Debug($"client resize: edges={edges}");
 
         foreach (var button in _pressedButtons)
         {
@@ -516,7 +517,7 @@ public sealed class ToplevelWindow : Window
 
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && EdgeAt(e.GetPosition(this)) is { } edge)
         {
-            Basin.Diagnostics.BasinLog.Debug($"host resize: edge={edge}");
+            Log.Debug($"host resize: edge={edge}");
             Send(InputKind.PointerLeave);
             _gesturePointer = null;
             _resizing = true;
@@ -694,7 +695,7 @@ public sealed class ToplevelWindow : Window
             }
 
             var size = ClientSize;
-            Basin.Diagnostics.BasinLog.Debug($"host resized: client size {size.Width}x{size.Height} state {WindowState}");
+            Log.Debug($"host resized: client size {size.Width}x{size.Height} state {WindowState}");
             _manager.HostResized(_id, Math.Max(1, (int)Math.Round(size.Width)), Math.Max(1, (int)Math.Round(size.Height)), WindowState);
         }
         else if (e.Property == WindowStateProperty)

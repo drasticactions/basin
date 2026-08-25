@@ -2,7 +2,8 @@ using Basin;
 using Basin.Desktop;
 using Basin.Scene;
 using Basin.Shell.Xdg;
-using Microsoft.Extensions.Logging;
+
+using Basin.Diagnostics;
 
 namespace EightWm;
 
@@ -254,7 +255,7 @@ internal sealed partial class Shell
         }
 
         Focus(app);
-        Console.WriteLine($"APP + {app.AppId} {app.Title}");
+        BasinReport.Line($"APP + {app.AppId} {app.Title}");
     }
 
     private void Unmap(AppWindow app)
@@ -297,7 +298,7 @@ internal sealed partial class Shell
         }
 
         Relayout(view);
-        Console.WriteLine($"APP - {app.AppId}");
+        BasinReport.Line($"APP - {app.AppId}");
     }
 
     private Box CellOfParent(AppWindow app, ShellView view)
@@ -560,7 +561,6 @@ internal sealed partial class Shell
         _capture.Stack.RaiseChanged();
         HomeOf(app).Host.Activate(app);
         Seat.Keyboard.NotifyEnter(surface);
-        _seat.Refocus();
     }
 
     internal void Show(AppWindow app)
@@ -602,7 +602,7 @@ internal sealed partial class Shell
         view.StartVisible = true;
         Relayout(view);
         Animate(ref view.StartMotion, view.BackgroundFrame, Animation.EnterPage, offsetScale: view.Scale);
-        Console.WriteLine("START on");
+        BasinReport.Line($"START on");
     }
 
     internal void CloseFocused()
@@ -626,7 +626,7 @@ internal sealed partial class Shell
         view.Host.Forget(app);
         view.Switcher?.Forget(app);
         Relayout(view);
-        Console.WriteLine($"CLOSE {app.AppId}");
+        BasinReport.Line($"CLOSE {app.AppId}");
     }
 
     private readonly List<IClosable> _killScratch = [];
@@ -651,89 +651,75 @@ internal sealed partial class Shell
     {
         if (!app.IsAttributable)
         {
-            _log.LogDebug("no pid for the X11 window {AppId}; it is not killed", app.AppId);
+            _log.Debug($"no pid for the X11 window {app.AppId}; it is not killed");
             return;
         }
 
         var pid = app.Pid;
         if (pid <= 0)
         {
-            _log.LogDebug("no credentials for {AppId}; it is not killed", app.AppId);
+            _log.Debug($"no credentials for {app.AppId}; it is not killed");
             return;
         }
 
-        _log.LogDebug(
-            "{AppId} did not close in {Grace}ms; killing pid {Pid}", app.AppId, _closing.GraceMillis, pid);
+        _log.Debug($"{app.AppId} did not close in {_closing.GraceMillis}ms; killing pid {pid}");
         try
         {
             System.Diagnostics.Process.GetProcessById(pid).Kill(entireProcessTree: false);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
         {
-            _log.LogDebug("pid {Pid} was gone already", pid);
+            _log.Debug($"pid {pid} was gone already");
         }
     }
 
     internal void AttachXWayland(Basin.XWayland.XWaylandWm wm)
     {
-        wm.WindowMapped += window => OnX11Mapped(window, managed: true);
-        wm.OverrideRedirectMapped += window => OnX11Mapped(window, managed: false);
+        _xwayland.ManagedParent = _ => NewX11Slot(_scene.Root);
+        _xwayland.OverrideRedirectParent = _ => NewX11Slot(PlacementView().Apps);
+        _xwayland.Adopted += OnX11Adopted;
+        _xwayland.Removed += OnX11Removed;
+        _xwayland.Attach(wm);
     }
 
-    private void OnX11Mapped(Basin.XWayland.XWaylandWindow window, bool managed)
+    private static SceneTree NewX11Slot(SceneTree parent) => new SceneTransform(new SceneTree(parent));
+
+    private void OnX11Adopted(Basin.XWayland.XWaylandWindow window, SceneSurface scene, bool managed)
     {
-        if (window.Surface is not { } surface)
+        var frame = (SceneTransform)scene.Tree.Parent!;
+        var app = new AppWindow(window, frame.Parent!, frame, scene);
+        _x11Windows[window] = app;
+        if (managed)
+        {
+            Map(app);
+            return;
+        }
+
+        app.Slot.SetPosition(window.X, window.Y);
+        _owners[window.Surface!] = app;
+    }
+
+    private void OnX11Removed(Basin.XWayland.XWaylandWindow window, SceneSurface scene)
+    {
+        if (!_x11Windows.Remove(window, out var app))
         {
             return;
         }
 
-        var slot = new SceneTree(_scene.Root);
-        var frame = new SceneTransform(slot);
-        var scene = new SceneSurface(frame, surface);
-        var app = new AppWindow(window, slot, frame, scene);
-
-        if (!managed)
-        {
-            slot.Reparent(PlacementView().Apps);
-            slot.SetPosition(window.X, window.Y);
-            _owners[surface] = app;
-            void Drop()
-            {
-                _owners.Remove(surface);
-                if (!scene.IsDestroyed)
-                {
-                    scene.Destroy();
-                }
-
-                if (!slot.IsDestroyed)
-                {
-                    slot.Destroy();
-                }
-            }
-
-            window.Unmapped += Drop;
-            window.Destroyed += Drop;
-            return;
-        }
-
-        Map(app);
-        void Cleanup()
+        if (_apps.Contains(app))
         {
             Unmap(app);
             _closing.Forget(app);
-            if (!scene.IsDestroyed)
-            {
-                scene.Destroy();
-            }
-
-            if (!slot.IsDestroyed)
-            {
-                slot.Destroy();
-            }
+        }
+        else
+        {
+            _owners.Remove(window.Surface!);
         }
 
-        window.Unmapped += Cleanup;
-        window.Destroyed += Cleanup;
+        if (!app.Slot.IsDestroyed)
+        {
+            app.Slot.Destroy();
+        }
     }
 
     private void OnNewPopup(XdgPopupWindow popup)

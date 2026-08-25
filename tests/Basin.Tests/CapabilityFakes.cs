@@ -108,6 +108,8 @@ internal sealed class TestToplevelModel : IToplevelModel
 
     public List<(ulong Id, ToplevelRequestKind Kind)> Requests { get; } = [];
 
+    public List<(ulong Id, ToplevelRequest Request)> RequestLog { get; } = [];
+
     public ulong Add(string title, string appId, Surface? surface = null, Box geometry = default)
     {
         var id = (ulong)_toplevels.Count + 1;
@@ -227,6 +229,7 @@ internal sealed class TestToplevelModel : IToplevelModel
     public bool Request(ulong toplevelId, in ToplevelRequest request)
     {
         Requests.Add((toplevelId, request.Kind));
+        RequestLog.Add((toplevelId, request));
         return true;
     }
 }
