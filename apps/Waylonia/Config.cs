@@ -12,6 +12,8 @@ internal sealed class Config
 
     public bool? Gpu { get; private set; }
 
+    public bool? Audio { get; private set; }
+
     public string? Video { get; private set; }
 
     public string? Socket { get; private set; }
@@ -66,6 +68,11 @@ internal sealed class Config
         if (table.TryGetValue("gpu", out var gpu) && gpu is bool gpuEnabled)
         {
             config.Gpu = gpuEnabled;
+        }
+
+        if (table.TryGetValue("audio", out var audio) && audio is bool audioEnabled)
+        {
+            config.Audio = audioEnabled;
         }
 
         if (table.TryGetValue("video", out var video) && video is string videoCodec)
@@ -154,6 +161,12 @@ internal sealed class Config
             # decode them here with the system FFmpeg. Implies gpu. Append
             # ",hw" to decode on this host's GPU when it has a device.
             #video = "h264"
+
+            # Play the remote session's sound on this host. It is captured
+            # from a sink of its own on the remote and streamed over the same
+            # ssh connection, which costs about 384 kB/s. Off by default,
+            # because a local client already plays to this host's sound server.
+            #audio = true
 
             # The Wayland socket name to bind, where the platform has one.
             #socket = "wayland-9"

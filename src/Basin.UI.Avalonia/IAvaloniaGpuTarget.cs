@@ -17,5 +17,7 @@ public interface IAvaloniaGpuTarget : IDisposable
 
     bool TryAcquire(out UIFrame frame);
 
+    void Trim(long nowMillis);
+
     IGlPlatformSurfaceRenderTarget CreateRenderTarget(IGlContext context, Action onFramePublished);
 }

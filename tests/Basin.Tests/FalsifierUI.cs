@@ -60,6 +60,8 @@ internal sealed class FalsifierUISurface : IUISurface
 
     public UISurfaceSize Size => new(_width, _height, _scale);
 
+    public int NextFenceFd { get; set; } = -1;
+
     private readonly UISurfaceObservers _observers = new();
 
     public void AddObserver(IUISurfaceObserver observer) => _observers.Add(observer);
@@ -141,7 +143,9 @@ internal sealed class FalsifierUISurface : IUISurface
         }
 
         _front = _target;
-        frame = new UIFrame(_front.Lock(), damage: null);
+        var fence = NextFenceFd;
+        NextFenceFd = -1;
+        frame = new UIFrame(_front.Lock(), damage: null, fence);
         return true;
     }
 

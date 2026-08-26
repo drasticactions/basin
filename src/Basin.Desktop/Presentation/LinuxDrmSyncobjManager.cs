@@ -54,6 +54,66 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
     public long UnexportableAcquires { get; private set; }
 
+    public long DeferredReleases { get; private set; }
+
+    private void SignalRelease(IBuffer buffer, DrmSyncobjTimeline timeline, ulong point)
+    {
+        var reads = OutstandingReads(buffer);
+        if (reads < 0)
+        {
+            timeline.Signal(point);
+            return;
+        }
+
+        DeferredReleases++;
+        if (!timeline.ImportSyncFileAt(point, reads))
+        {
+            timeline.Signal(point);
+        }
+
+        RenderFences.CloseFence(reads);
+    }
+
+    private static int OutstandingReads(IBuffer buffer)
+    {
+        if (!buffer.TryGetDmabuf(out var attributes))
+        {
+            return -1;
+        }
+
+        var merged = -1;
+        for (var plane = 0; plane < attributes.PlaneCount; plane++)
+        {
+            var fence = RenderFences.ExportDmabufSyncFile(attributes.Fds[plane], forWrite: true);
+            if (fence < 0)
+            {
+                continue;
+            }
+
+            if (RenderFences.WaitSyncFile(fence, 0))
+            {
+                RenderFences.CloseFence(fence);
+                continue;
+            }
+
+            if (merged < 0)
+            {
+                merged = fence;
+                continue;
+            }
+
+            var combined = RenderFences.MergeSyncFiles(merged, fence);
+            RenderFences.CloseFence(fence);
+            if (combined >= 0)
+            {
+                RenderFences.CloseFence(merged);
+                merged = combined;
+            }
+        }
+
+        return merged;
+    }
+
     private const long MaterializeTimeoutNs = 100_000_000;
 
     public void Dispose() => _global.Dispose();
@@ -276,7 +336,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
                     handler = () =>
                     {
                         buffer.Released -= handler;
-                        releaseTimeline.Signal(releasePoint);
+                        _owner.SignalRelease(buffer, releaseTimeline, releasePoint);
                         releaseTimeline.Release();
                     };
                     buffer.Released += handler;

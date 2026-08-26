@@ -98,6 +98,14 @@ public sealed class AvaloniaUISurface : IUISurface
         return _impl.TryAcquire(out frame);
     }
 
+    internal void Trim(long nowMillis)
+    {
+        if (!_disposed)
+        {
+            _impl.Trim(nowMillis);
+        }
+    }
+
     public void AddObserver(IUISurfaceObserver observer) => _observers.Add(observer);
 
     public void RemoveObserver(IUISurfaceObserver observer) => _observers.Remove(observer);

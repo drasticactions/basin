@@ -168,6 +168,7 @@ public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
         _height = size.Height;
         _scale = size.Scale;
         _node.SetBuffer(frame.Buffer);
+        _node.AcquireFenceFd = frame.AcquireFenceFd;
         _node.SourceBox = OutputScaling.ToPhysical(new Box(0, 0, size.Width, size.Height), size.Scale);
         _node.DestinationWidth = size.Width;
         _node.DestinationHeight = size.Height;
@@ -210,6 +211,7 @@ public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
         _index?.Remove(this);
         _surface?.RemoveObserver(this);
         _node.SetBuffer(null);
+        _node.AcquireFenceFd = -1;
         if (_hasShown)
         {
             _shown.Dispose();

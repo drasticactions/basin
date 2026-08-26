@@ -87,7 +87,9 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
 
         var allocated = _allocator is null
             ? new MemoryBuffer(physical.Width, physical.Height, DrmFormat.Argb8888)
-            : _allocator.Allocate(physical.Width, physical.Height, DrmFormat.Argb8888, _modifiers, BufferUse.Render);
+            : _allocator.Allocate(
+                physical.Width, physical.Height, DrmFormat.Argb8888, _modifiers,
+                BufferUse.Render | BufferUse.Scanout);
         if (allocated is null)
         {
             return false;

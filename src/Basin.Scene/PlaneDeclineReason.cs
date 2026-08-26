@@ -12,6 +12,8 @@ public enum PlaneDeclineReason
 
     ImplicitModifier,
 
+    UnscannableLayout,
+
     Clipped,
 
     OffOutput,

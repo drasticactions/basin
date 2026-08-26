@@ -153,6 +153,65 @@ public sealed class UISurfaceNodeTests
         scene.Root.Destroy();
     }
 
+    [Fact]
+    public void A_frame_with_an_acquire_fence_hands_it_to_the_scene_node()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "sync_file fds are a Linux object");
+        var scene = new Scene.Scene();
+        using var host = new FalsifierUIHost();
+        var surface = (FalsifierUISurface)host.CreateSurface(new UISurfaceOptions
+        {
+            Target = UITargetKind.Memory,
+            Width = 16,
+            Height = 16,
+            Scale = 1.0,
+        })!;
+
+        var node = new UISurfaceNode(scene.Root, surface);
+        Assert.Equal(-1, node.Node.AcquireFenceFd);
+
+        var first = OpenFence();
+        surface.NextFenceFd = first;
+        Paint(surface);
+        Assert.True(node.Publish());
+        Assert.Equal(first, node.Node.AcquireFenceFd);
+        Assert.True(IsOpen(first));
+
+        var second = OpenFence();
+        surface.NextFenceFd = second;
+        Paint(surface);
+        Assert.Equal(second, node.Node.AcquireFenceFd);
+        Assert.False(IsOpen(first), "the frame it replaced owned the fence it carried");
+
+        node.Dispose();
+        Assert.Equal(-1, node.Node.AcquireFenceFd);
+        Assert.False(IsOpen(second));
+        surface.Dispose();
+        scene.Root.Destroy();
+    }
+
+    [Fact]
+    public void A_frame_that_carries_no_fence_closes_none()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "sync_file fds are a Linux object");
+        var empty = default(UIFrame);
+        Assert.Equal(-1, empty.AcquireFenceFd);
+        empty.Dispose();
+        Assert.True(IsOpen(0), "an unfenced frame must not close descriptor zero");
+    }
+
+    private static int OpenFence()
+    {
+        var fd = memfd_create("basin-test-fence", 0);
+        Assert.True(fd >= 0);
+        return fd;
+    }
+
+    private static bool IsOpen(int fd) => File.Exists($"/proc/self/fd/{fd}");
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int memfd_create(string name, uint flags);
+
     private static void Paint(FalsifierUISurface surface)
     {
         surface.BeginPixels();

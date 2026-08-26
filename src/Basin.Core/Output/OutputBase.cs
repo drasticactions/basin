@@ -185,6 +185,8 @@ public abstract class OutputBase : IOutput
 
     public virtual bool SupportsInFence => false;
 
+    public virtual bool CanScanout(DrmFormat format, ulong modifier, bool overlay) => true;
+
     private static void RejectAllLayers(OutputState state)
     {
         if ((state.Fields & OutputStateFields.Layers) == 0 || state.Layers is null)

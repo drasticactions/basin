@@ -38,6 +38,24 @@ internal static class Program
             Description = "read this file instead of ~/.config/waylonia/waylonia.toml; false skips the file.",
         });
         var gpuOption = cli.Add(CommonOptions.Gpu());
+        var audioOption = cli.Add(new Option<bool>("--audio")
+        {
+            Description = "play the remote session's sound on this host. Off by default.",
+        });
+        var audioFormatOption = cli.Add(new Option<string>("--audio-format")
+        {
+            Description = "the format the remote session's sound is sent in: f32 or s16.",
+            HelpName = "NAME",
+            DefaultValueFactory = _ => "f32",
+            Hidden = true,
+        });
+        audioFormatOption.Validators.Add(result =>
+        {
+            if (result.GetValueOrDefault<string>() is not ("f32" or "s16"))
+            {
+                result.AddError("--audio-format takes f32 or s16");
+            }
+        });
         var videoOption = cli.Add(CommonOptions.Video());
         var compressOption = cli.Add(CommonOptions.Compress());
         var command = new Argument<string[]>("command")
@@ -98,6 +116,13 @@ internal static class Program
                 ? config.Gpu ?? false
                 : result.GetValue(gpuOption);
 
+            var audio = Waylonia.Audio.WayloniaAudio.Wanted(
+                result.GetResult(audioOption) is null or { Implicit: true }
+                    ? config.Audio ?? false
+                    : result.GetValue(audioOption),
+                ssh,
+                listen);
+
             var video = result.GetResult(videoOption) is null or { Implicit: true }
                 ? config.Video ?? "none"
                 : result.GetValue(videoOption)!;
@@ -142,6 +167,8 @@ internal static class Program
                     _ => Basin.Transport.Waypipe.WaypipeCompression.Lz4,
                 },
                 gpu,
+                audio,
+                result.GetValue(audioFormatOption)!,
                 videoCodec == "none" ? null : videoCodec,
                 decoder,
                 config.XWayland,

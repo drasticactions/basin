@@ -316,11 +316,14 @@ internal sealed class WayloniaApp : Application
         }
 
         info.ArgumentList.Add(sshHost);
+        var pulse = _run!.Audio && _sshSinkName is { } sinkName
+            ? $"PULSE_SINK={sinkName} PIPEWIRE_NODE={sinkName} "
+            : string.Empty;
         info.ArgumentList.Add(
             $"d=\"$XDG_RUNTIME_DIR/{displayName}\"; i=0; " +
             $"while [ ! -S \"$d\" ] && [ $i -lt 50 ]; do sleep 0.2; i=$((i+1)); done; " +
             $"if [ -s {_sshXDisplayFile} ]; then DISPLAY=$(cat {_sshXDisplayFile}); export DISPLAY; fi; " +
-            $"WAYLAND_DISPLAY={displayName} sh -c '{quoted}'");
+            $"{pulse}WAYLAND_DISPLAY={displayName} sh -c '{quoted}'");
         var started = Process.Start(info);
         if (started is null)
         {
@@ -364,6 +367,8 @@ internal sealed class WayloniaApp : Application
     private string? _sshDisplayName;
     private string? _sshXDisplayFile;
     private string? _sshControlPath;
+    private string? _sshSinkName;
+    private Audio.WayloniaAudio? _audio;
     private string? _forwardTarget;
     private int _attachedTotal;
     private DispatcherTimer? _channelPump;
@@ -555,7 +560,7 @@ internal sealed class WayloniaApp : Application
     [Conditional("DEBUG")]
     private static void Protocol(string line) => BasinReport.Line(line);
 
-    private sealed class Relay(string name)
+    internal sealed class Relay(string name)
     {
         private const int Kept = 20;
         private readonly Queue<string> _lines = new(Kept);
@@ -644,6 +649,7 @@ internal sealed class WayloniaApp : Application
         _sshRemoteSocket = $"/tmp/waylonia-{Environment.ProcessId}.sock";
         _sshDisplayName = $"waylonia-{Environment.ProcessId}";
         _sshXDisplayFile = $"/tmp/waylonia-x-{Environment.ProcessId}";
+        _sshSinkName = $"waylonia-{Environment.ProcessId}";
         var compress = _run!.Compression switch
         {
             Basin.Transport.Waypipe.WaypipeCompression.None => "none",
@@ -654,14 +660,23 @@ internal sealed class WayloniaApp : Application
         var videoArgument = _run.Video is { } codec ? $"--video={codec} " : string.Empty;
         var xwayland = _run.XWayland
             ? "if command -v xwayland-satellite >/dev/null 2>&1; then w=--xwls; else w=; fi; "
+              + "export XCURSOR_SIZE=\"${XCURSOR_SIZE:-24}\"; "
             : "w=; ";
+        var sink = _run.Audio
+            ? $"m=$(pactl load-module module-null-sink sink_name={_sshSinkName} " +
+              $"sink_properties=device.description=Waylonia 2>/dev/null) || m=; "
+            : string.Empty;
+        var unloadSink = _run.Audio ? "[ -n \"$m\" ] && pactl unload-module \"$m\"; " : string.Empty;
         var remote =
             $"d=\"$XDG_RUNTIME_DIR/{_sshDisplayName}\"; rm -f \"$d\" {_sshXDisplayFile}; " +
             xwayland +
+            sink +
             $"waypipe --compress {compress} {gpuArgument}{videoArgument}--socket {_sshRemoteSocket} " +
             $"--display {_sshDisplayName} $w server -- " +
             $"sh -c 'printf %s \"$DISPLAY\" > {_sshXDisplayFile}; exec cat >/dev/null'; " +
-            $"status=$?; rm -f {_sshRemoteSocket} \"$d\" {_sshXDisplayFile}; exit $status";
+            $"status=$?; rm -f {_sshRemoteSocket} \"$d\" {_sshXDisplayFile}; " +
+            unloadSink +
+            "exit $status";
 
         if (_forwardTarget is null)
         {
@@ -749,6 +764,11 @@ internal sealed class WayloniaApp : Application
         _sshRelay = new Relay("ssh");
         _sshRelay.Watch(_ssh.StandardOutput);
         _sshRelay.Watch(_ssh.StandardError);
+        if (_run.Audio && _audio is null && _sshSinkName is { } audioSink)
+        {
+            _audio = Audio.WayloniaAudio.TryStart(sshHost, _sshControlPath, audioSink, _run.AudioFormat);
+        }
+
         return true;
     }
 
@@ -856,6 +876,8 @@ internal sealed class WayloniaApp : Application
         }
 
         _channelPump?.Stop();
+        _audio?.Dispose();
+        _audio = null;
         if (_ssh is { } ssh)
         {
             RemoveRemoteSocket();

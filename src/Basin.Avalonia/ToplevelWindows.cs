@@ -64,6 +64,9 @@ public sealed class ToplevelWindows : IDisposable
     private readonly Action? _requestFrame;
     private readonly Basin.Desktop.FractionalScaleManager? _fractional;
     private int _pointerEntryId;
+    private Surface? _cursorSurface;
+    private Action? _cursorCommitted;
+    private Action? _cursorDestroyed;
 
     public ToplevelWindows(
         BasinCompositorHost host,
@@ -302,6 +305,7 @@ public sealed class ToplevelWindows : IDisposable
 
     private void OnCursorRequested(global::Basin.Seat.CursorRequest request)
     {
+        ReleaseCursorSurface();
         var id = _pointerEntryId;
         if (request.Surface is not { } cursorSurface)
         {
@@ -309,13 +313,39 @@ public sealed class ToplevelWindows : IDisposable
             return;
         }
 
-        var cursor = AvaloniaCursor.FromSurface(cursorSurface, request.HotspotX, request.HotspotY);
-        if (cursor is null)
+        Log.Debug($"cursor surface: buffer {cursorSurface.Current.Buffer?.Width}x{cursorSurface.Current.Buffer?.Height} scale {cursorSurface.Current.Scale} logical {cursorSurface.Current.Width}x{cursorSurface.Current.Height} hotspot {request.HotspotX},{request.HotspotY}");
+        var hotspotX = request.HotspotX;
+        var hotspotY = request.HotspotY;
+        _cursorSurface = cursorSurface;
+        _cursorCommitted = () => ApplyCursorSurface(id, cursorSurface, hotspotX, hotspotY);
+        _cursorDestroyed = ReleaseCursorSurface;
+        cursorSurface.Committed += _cursorCommitted;
+        cursorSurface.Destroyed += _cursorDestroyed;
+        ApplyCursorSurface(id, cursorSurface, hotspotX, hotspotY);
+    }
+
+    private void ApplyCursorSurface(int id, Surface surface, int hotspotX, int hotspotY)
+    {
+        if (AvaloniaCursor.FromSurface(surface, hotspotX, hotspotY) is not { } cursor)
         {
             return;
         }
 
         RunOnUi(() => ApplyCursorTo(id, cursor));
+    }
+
+    private void ReleaseCursorSurface()
+    {
+        if (_cursorSurface is not { } surface)
+        {
+            return;
+        }
+
+        surface.Committed -= _cursorCommitted;
+        surface.Destroyed -= _cursorDestroyed;
+        _cursorSurface = null;
+        _cursorCommitted = null;
+        _cursorDestroyed = null;
     }
 
     private void ApplyCursorTo(int id, global::Avalonia.Input.Cursor cursor)
@@ -1689,6 +1719,7 @@ public sealed class ToplevelWindows : IDisposable
         }
 
         _disposed = true;
+        ReleaseCursorSurface();
         _host.Shell.NewToplevel -= OnNewToplevel;
         if (_layerShell is not null)
         {

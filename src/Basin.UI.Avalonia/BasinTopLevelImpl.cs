@@ -147,6 +147,8 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
         return Framebuffer!.TryAcquire(out frame);
     }
 
+    public void Trim(long nowMillis) => _gpu?.Trim(nowMillis);
+
     public bool Resize(int logicalWidth, int logicalHeight, double scale, WindowResizeReason reason)
     {
         if (logicalWidth <= 0 || logicalHeight <= 0 || scale <= 0)

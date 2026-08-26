@@ -69,7 +69,8 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
             return false;
         }
 
-        var allocated = _allocator.Allocate(physical.Width, physical.Height, DrmFormat.Argb8888, [], BufferUse.Render);
+        var allocated = _allocator.Allocate(
+            physical.Width, physical.Height, DrmFormat.Argb8888, [], BufferUse.Render | BufferUse.Scanout);
         if (allocated is null)
         {
             return false;
@@ -122,13 +123,26 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         var entry = _wraps[_target!];
         entry.Canvas.Restore();
         _context.Flush(submit: true, synchronous: false);
-        _device.Gl.Flush();
+        PublishWriteFence();
         _drawing = false;
         _produced = true;
         if (ReferenceEquals(_target, _front))
         {
             _observers.Damaged(this, _wholeDamage);
         }
+    }
+
+    private void PublishWriteFence()
+    {
+        var fence = _target!.TryGetDmabuf(out var attributes) ? _device.ExportFence() : -1;
+        if (fence < 0)
+        {
+            _device.Gl.Finish();
+            return;
+        }
+
+        RenderFences.PublishFenceTo(attributes, forWrite: true, fence);
+        RenderFences.CloseFence(fence);
     }
 
     public bool TryAcquire(out UIFrame frame)

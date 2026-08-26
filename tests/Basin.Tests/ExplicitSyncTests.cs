@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using Basin.Backend.Drm;
 using Basin.Desktop;
@@ -226,6 +227,7 @@ public sealed class ExplicitSyncTests : IDisposable
 
         Assert.Equal(2, manager.ExplicitCommits);
         Assert.True(release.Wait(1, 1_000_000_000));
+        Assert.Equal(0, manager.DeferredReleases);
 
         acquire.Release();
         release.Release();
@@ -288,6 +290,94 @@ public sealed class ExplicitSyncTests : IDisposable
         acquireProxy.Dispose();
         releaseProxy.Dispose();
         host.PumpToServer();
+    }
+
+    [Fact]
+    public void A_dmabuf_release_point_signals_once_the_compositor_has_stopped_reading()
+    {
+        RequireDrm();
+        CompositorTestHost.SkipUnlessRunnable("gl");
+        using var host = new CompositorTestHost(renderer: "gl");
+        using var device = new Basin.Render.Gl.GlDevice(CompositorTestHost.RenderNodePath);
+        using var allocator = device.CreateAllocator();
+        var modifiers = allocator.Formats.ModifiersOf(DrmFormat.Argb8888).ToArray();
+        var allocated = allocator.Allocate(64, 64, DrmFormat.Argb8888, modifiers, BufferUse.Render);
+        Assert.SkipWhen(allocated is null, "the device would not allocate a renderable buffer");
+        Assert.True(allocated!.TryGetDmabuf(out var planes));
+
+        using var manager = new LinuxDrmSyncobjManager(host.Display, host.Compositor, new Basin.Backend.Drm.DrmSyncDevice(_drmFd));
+        var window = MappedToplevel.Map(host, host.Client);
+
+        Basin.Desktop.Protocol.WpLinuxDrmSyncobjManagerV1? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "wp_linux_drm_syncobj_manager_v1")
+            {
+                proxy = registry.Bind<Basin.Desktop.Protocol.WpLinuxDrmSyncobjManagerV1>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+
+        var acquire = DrmSyncobjTimeline.Create(_drmFd);
+        var release = DrmSyncobjTimeline.Create(_drmFd);
+        var acquireFd = acquire.ExportFd();
+        var releaseFd = release.ExportFd();
+        var acquireProxy = proxy!.ImportTimeline(acquireFd);
+        var releaseProxy = proxy.ImportTimeline(releaseFd);
+        close(acquireFd);
+        close(releaseFd);
+        var syncSurface = proxy.GetSurface(window.Surface);
+        host.PumpToServer();
+
+        var parameters = host.Client.Dmabuf!.CreateParams();
+        parameters.Add(
+            planes.Fds[0], 0, (uint)planes.Offsets[0], (uint)planes.Strides[0],
+            (uint)(planes.Modifier >> 32), (uint)(planes.Modifier & 0xFFFFFFFF));
+        WlBuffer? created = null;
+        var refused = false;
+        parameters.Created += (_, e) => created = e.Buffer;
+        parameters.Failed += (_, _) => refused = true;
+        parameters.Create(64, 64, (uint)DrmFormat.Argb8888, 0);
+        host.PumpUntil(() => created is not null || refused);
+        Assert.SkipWhen(refused, "the compositor would not take a buffer from this device");
+
+        acquire.Signal(1);
+        syncSurface.SetAcquirePoint(acquireProxy, 0, 1);
+        syncSurface.SetReleasePoint(releaseProxy, 0, 1);
+        window.Surface.Attach(created, 0, 0);
+        window.Surface.Damage(0, 0, 64, 64);
+        window.Surface.Commit();
+        host.PumpToServer();
+        Assert.True(window.ServerSurface.Current.Buffer!.TryGetDmabuf(out _), "the commit must land as a real dmabuf");
+
+        acquire.Signal(2);
+        var next = host.Client.CreateBuffer(64, 64, Fill.Solid(64, 64, 0xFF00FF00));
+        syncSurface.SetAcquirePoint(acquireProxy, 0, 2);
+        syncSurface.SetReleasePoint(releaseProxy, 0, 2);
+        window.Surface.Attach(next.Proxy, 0, 0);
+        window.Surface.Damage(0, 0, 64, 64);
+        window.Surface.Commit();
+        host.PumpToServer();
+
+        Assert.True(
+            release.Wait(1, 1_000_000_000),
+            "an idle dmabuf carries only signaled fences, so its release point must not be held back");
+        Assert.Equal(0, manager.DeferredReleases);
+
+        var outstanding = RenderFences.ExportDmabufSyncFile(planes.Fds[0], forWrite: true);
+        Assert.True(outstanding >= 0, "deferring a release point needs the dmabuf sync_file ioctls");
+        RenderFences.CloseFence(outstanding);
+
+        acquire.Release();
+        release.Release();
+        syncSurface.Dispose();
+        created!.Dispose();
+        parameters.Dispose();
+        acquireProxy.Dispose();
+        releaseProxy.Dispose();
+        host.PumpToServer();
+        (allocated as BufferBase)?.Destroy();
     }
 
     [Fact]

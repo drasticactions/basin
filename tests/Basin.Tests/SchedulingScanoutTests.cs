@@ -181,6 +181,11 @@ public sealed class PlaneOffloadTests
     {
         public Func<OutputLayer, int, bool>? Accept { get; set; }
 
+        public Func<DrmFormat, ulong, bool, bool>? Scannable { get; set; }
+
+        public override bool CanScanout(DrmFormat format, ulong modifier, bool overlay) =>
+            Scannable?.Invoke(format, modifier, overlay) ?? true;
+
         public IReadOnlyList<OutputLayer>? LastCommittedLayers { get; private set; }
 
         protected override bool SupportsLayers => true;
@@ -664,6 +669,7 @@ public sealed class PlaneOffloadTests
     [Theory]
     [InlineData("shm", PlaneDeclineReason.NoDmabuf)]
     [InlineData("implicit", PlaneDeclineReason.ImplicitModifier)]
+    [InlineData("unscannable", PlaneDeclineReason.UnscannableLayout)]
     [InlineData("clipped", PlaneDeclineReason.Clipped)]
     [InlineData("covered", PlaneDeclineReason.CoveredFromAbove)]
     [InlineData("refused", PlaneDeclineReason.BackendRefused)]
@@ -703,6 +709,11 @@ public sealed class PlaneOffloadTests
             }
 
             output.Accept = (_, _) => setup != "refused";
+            if (setup == "unscannable")
+            {
+                output.Scannable = (_, _, _) => false;
+            }
+
             RunAndAssert();
         }
         finally

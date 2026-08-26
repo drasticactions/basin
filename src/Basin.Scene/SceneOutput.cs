@@ -672,6 +672,11 @@ public sealed class SceneOutput : IDisposable
             return PlaneDeclineReason.ImplicitModifier;
         }
 
+        if (!Output.CanScanout(attributes.Format, attributes.Modifier, overlay: true))
+        {
+            return PlaneDeclineReason.UnscannableLayout;
+        }
+
         if (!CoversWholeNode(entry, physical))
         {
             return PlaneDeclineReason.Clipped;
@@ -1320,7 +1325,8 @@ public sealed class SceneOutput : IDisposable
                 buffer.SourceBox == default &&
                 buffer.Buffer is { } content &&
                 content.Width == mode.Width && content.Height == mode.Height &&
-                content.TryGetDmabuf(out _) &&
+                content.TryGetDmabuf(out var scanoutAttributes) &&
+                Output.CanScanout(scanoutAttributes.Format, scanoutAttributes.Modifier, overlay: false) &&
                 (buffer.AcquireFenceFd < 0 || Output.SupportsInFence))
             {
                 return buffer;

@@ -23,6 +23,8 @@ internal sealed record WayloniaRun(
     string? SshCommand,
     Basin.Transport.Waypipe.WaypipeCompression Compression,
     bool Gpu,
+    bool Audio,
+    string AudioFormat,
     string? Video,
     Basin.Capabilities.IVideoDecoder? VideoDecoder,
     bool XWayland,

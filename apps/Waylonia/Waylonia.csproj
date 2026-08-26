@@ -40,6 +40,7 @@
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
     <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="JAJ.Packages.MiniAudioEx" />
     <PackageReference Include="Tomlyn" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Wayland" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />

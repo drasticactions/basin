@@ -84,6 +84,12 @@ public sealed class AvaloniaUIHost : IUIHost
         _dispatcher.Pump();
         _renderTimer.Fire(_clock.Elapsed);
         _dispatcher.Pump();
+
+        var now = _clock.ElapsedMilliseconds;
+        for (var i = 0; i < _surfaces.Count; i++)
+        {
+            _surfaces[i].Trim(now);
+        }
     }
 
     public void Dispose()

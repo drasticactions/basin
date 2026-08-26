@@ -29,6 +29,8 @@ public interface IOutput
 
     bool SupportsInFence => false;
 
+    bool CanScanout(DrmFormat format, ulong modifier, bool overlay) => true;
+
     OutputConfigurationFeatures Features => OutputConfigurationFeatures.None;
 
     OutputColorimetry? Colorimetry => null;

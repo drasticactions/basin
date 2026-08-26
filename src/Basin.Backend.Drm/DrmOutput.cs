@@ -132,6 +132,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     public DrmFormatSet OverlayScanoutFormats { get; }
 
+    public override bool CanScanout(DrmFormat format, ulong modifier, bool overlay)
+    {
+        var formats = overlay ? OverlayScanoutFormats : ScanoutFormats;
+        return formats.Count == 0 || formats.Contains(format, modifier);
+    }
+
     public uint GammaLutSize { get; }
 
     public uint DegammaLutSize { get; }
@@ -444,6 +450,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         builder.Reset();
 
         var layers = (state.Fields & OutputStateFields.Layers) != 0 ? state.Layers : null;
+        if (layers is null && state != _queuedFrame && _queuedFrame is { Fields: not 0 } superseded &&
+            (superseded.Fields & OutputStateFields.Layers) != 0)
+        {
+            layers = superseded.Layers;
+        }
+
         var layersDirty = false;
         if (_liftoffOutput is not null)
         {

@@ -35,6 +35,14 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void Audio_is_off_unless_the_file_turns_it_on()
+    {
+        Assert.Null(Load(Write("compress = \"none\"")).Audio);
+        Assert.True(Load(Write("audio = true")).Audio);
+        Assert.False(Load(Write("audio = false")).Audio);
+    }
+
+    [Fact]
     public void A_command_array_joins_into_one_line()
     {
         var config = Load(Write("""
