@@ -33,7 +33,8 @@ public sealed class ToplevelWindow : Window
         };
         background.Children.Add(_view);
         Content = background;
-        Title = info.Title.Length > 0 ? info.Title : info.AppId.Length > 0 ? info.AppId : "Wayland";
+        _clientTitle = info.Title.Length > 0 ? info.Title : info.AppId.Length > 0 ? info.AppId : "Wayland";
+        Title = _clientTitle;
         Width = info.Width;
         Height = info.Height;
         SizeToContent = SizeToContent.Manual;
@@ -100,11 +101,18 @@ public sealed class ToplevelWindow : Window
         PointerReleased += OnHostPointerReleased;
         PointerWheelChanged += OnHostPointerWheel;
         PointerCaptureLost += OnHostPointerCaptureLost;
-        KeyDown += OnHostKeyDown;
-        KeyUp += OnHostKeyUp;
+        AddHandler(
+            global::Avalonia.Input.InputElement.KeyDownEvent,
+            OnHostKeyDown,
+            global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AddHandler(
+            global::Avalonia.Input.InputElement.KeyUpEvent,
+            OnHostKeyUp,
+            global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
         PositionChanged += (_, _) => TrackScreen();
         Opened += (_, _) =>
         {
+            ApplyHostResizable();
             TrackScreen();
             _manager.HostScaleChanged(_id, RenderScaling, ScaleIsAuthoritative);
             foreach (var delay in (int[])[100, 500, 1500])
@@ -573,11 +581,39 @@ public sealed class ToplevelWindow : Window
         }
 
         var code = AvaloniaKeyMap.EvdevFor(e.PhysicalKey);
-        if (code != 0 && _pressedKeys.Add(code))
+        if (code == 0)
+        {
+            return;
+        }
+
+        if (KeyFilter is { } filter && filter(code, true))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_pressedKeys.Add(code))
         {
             Send(InputKind.Key, code: code, pressed: true);
             e.Handled = true;
         }
+    }
+
+    public Func<uint, bool, bool>? KeyFilter { get; set; }
+
+    public void InjectKey(uint code, bool pressed)
+    {
+        if (code == 0)
+        {
+            return;
+        }
+
+        if (pressed ? !_pressedKeys.Add(code) : !_pressedKeys.Remove(code))
+        {
+            return;
+        }
+
+        Send(InputKind.Key, code: code, pressed: pressed);
     }
 
     private void ReleasePressedKeys()
@@ -598,14 +634,41 @@ public sealed class ToplevelWindow : Window
         }
 
         var code = AvaloniaKeyMap.EvdevFor(e.PhysicalKey);
-        if (code != 0 && _pressedKeys.Remove(code))
+        if (code == 0)
+        {
+            return;
+        }
+
+        if (KeyFilter is { } filter && filter(code, false))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_pressedKeys.Remove(code))
         {
             Send(InputKind.Key, code: code, pressed: false);
             e.Handled = true;
         }
     }
 
-    internal void ApplyTitle(string title) => Title = title;
+    private string _clientTitle = "Wayland";
+    private string? _titleOverride;
+
+    internal void ApplyTitle(string title)
+    {
+        _clientTitle = title;
+        if (_titleOverride is null)
+        {
+            Title = title;
+        }
+    }
+
+    public void OverrideTitle(string? title)
+    {
+        _titleOverride = title;
+        Title = title ?? _clientTitle;
+    }
 
     internal void ApplyClientSize(int width, int height)
     {
@@ -645,6 +708,18 @@ public sealed class ToplevelWindow : Window
             ? []
             : [WindowTransparencyLevel.Transparent];
         Background = serverSide ? Background : null;
+        ApplyHostResizable();
+    }
+
+    private void ApplyHostResizable()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var resizable = CanResize && (MaxWidth > MinWidth || MaxHeight > MinHeight);
+        MacResizable.Apply(TryGetPlatformHandle(), resizable);
     }
 
     internal async Task CloseFromCompositorAsync()

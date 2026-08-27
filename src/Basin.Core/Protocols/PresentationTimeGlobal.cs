@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Basin.Protocol;
 using Wayland;
 using Wayland.Server;
@@ -9,6 +8,7 @@ public sealed class PresentationTimeGlobal : IDisposable
 {
     public const int Version = 2;
     public const uint ClockMonotonic = 1;
+    public const uint ClockRealtime = 0;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
@@ -21,6 +21,13 @@ public sealed class PresentationTimeGlobal : IDisposable
     }
 
     public void Dispose() => _global.Dispose();
+
+    public uint ClockId { get; set; } = ClockMonotonic;
+
+    public WireClockClients? WireClock { get; set; }
+
+    public ulong NowNanoseconds =>
+        (ulong)(ClockId == ClockRealtime ? RealtimeClock.Nanos : MonotonicClock.Nanos);
 
     public void Sampled(Surface surface)
     {
@@ -60,6 +67,11 @@ public sealed class PresentationTimeGlobal : IDisposable
         }
 
         var shown = feedback.TakeShown();
+        if (WireClock is { } wire && wire.Contains(surface.Resource.Client))
+        {
+            timeNanoseconds = WireClockClients.ToWire(timeNanoseconds);
+        }
+
         shown?.SendPresented(output, timeNanoseconds, refreshNanoseconds, sequence, flags);
     }
 
@@ -98,7 +110,7 @@ public sealed class PresentationTimeGlobal : IDisposable
 
     internal void PresentAllNowCore(IOutput output)
     {
-        var timeNanoseconds = (ulong)(Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency));
+        var timeNanoseconds = NowNanoseconds;
         PresentAllCore(
             output, timeNanoseconds, output.CurrentMode.RefreshIntervalNanoseconds, 0, PresentedFlags.Vsync);
     }
@@ -128,7 +140,7 @@ public sealed class PresentationTimeGlobal : IDisposable
     private void OnBind(WlClient client, uint version, uint id)
     {
         var presentation = new WpPresentationResource(client, version, id);
-        presentation.SendClockId(ClockMonotonic);
+        presentation.SendClockId(ClockId);
 
         presentation.Feedback += (_, e) =>
         {

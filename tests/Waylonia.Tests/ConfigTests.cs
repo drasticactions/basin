@@ -84,12 +84,14 @@ public sealed class ConfigTests : IDisposable
         Assert.True(defaults.Clipboard);
         Assert.True(defaults.Drag);
         Assert.True(defaults.FollowCursor);
+        Assert.True(defaults.GtkDpi);
 
         var config = Load(Write("""
             [host]
             xwayland = false
             drag = false
             follow-cursor = false
+            gtk-dpi = false
             """));
 
         Assert.False(config.XWayland);
@@ -97,6 +99,7 @@ public sealed class ConfigTests : IDisposable
         Assert.True(config.Clipboard);
         Assert.False(config.Drag);
         Assert.False(config.FollowCursor);
+        Assert.False(config.GtkDpi);
     }
 
     [Fact]

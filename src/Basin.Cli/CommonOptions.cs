@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Globalization;
 using Basin.Diagnostics;
 
 namespace Basin.Cli;
@@ -7,6 +8,8 @@ namespace Basin.Cli;
 public static class CommonOptions
 {
     private static readonly string[] LogLevelNames = ["trace", "debug", "info", "warn", "error"];
+
+    private const string VideoBitsPerFrame = "bpf=";
 
     private const string RendererVariable = "BASIN_RENDERER";
 
@@ -229,9 +232,10 @@ public static class CommonOptions
     {
         var option = new Option<string>("--video")
         {
-            Description = "decode per-buffer video from the channel peer: h264, vp9, av1 or none, "
-                + "Include ',hw' suffix for decoding on GPU.",
-            HelpName = "CODEC[,hw]",
+            Description = "decode per-buffer video from the channel peer: h264, vp9, av1 or none. "
+                + "',hw' decodes on this host's GPU; ',hwenc'/',swenc' and ',hwdec'/',swdec' say "
+                + "where the peer encodes and decodes, and ',bpf=B' the bits per frame it targets.",
+            HelpName = "CODEC[,OPTION...]",
             DefaultValueFactory = _ => "none",
         };
 
@@ -239,15 +243,126 @@ public static class CommonOptions
         {
             if (!IsVideoChoice(result.GetValueOrDefault<string>()))
             {
-                result.AddError("Invalid --video, ignoring.");
+                result.AddError(
+                    "--video takes none, h264, vp9 or av1, each with any of ',hw', "
+                    + "',hwenc'/',swenc', ',hwdec'/',swdec' and ',bpf=B', where B is a "
+                    + "positive number such as 7.5e5");
             }
         });
 
         return option;
     }
 
-    public static bool IsVideoChoice(string? value) =>
-        value is "none" or "h264" or "vp9" or "av1" or "h264,hw" or "vp9,hw" or "av1,hw";
+    public static bool IsVideoChoice(string? value)
+    {
+        if (value is null)
+        {
+            return false;
+        }
+
+        var parts = value.Split(',');
+        if (parts[0] is not ("none" or "h264" or "vp9" or "av1"))
+        {
+            return false;
+        }
+
+        if (parts[0] == "none")
+        {
+            return parts.Length == 1;
+        }
+
+        var hardware = false;
+        var encoder = false;
+        var decoder = false;
+        var bits = false;
+        for (var i = 1; i < parts.Length; i++)
+        {
+            if (parts[i] == "hw")
+            {
+                if (hardware)
+                {
+                    return false;
+                }
+
+                hardware = true;
+            }
+            else if (parts[i] is "hwenc" or "swenc")
+            {
+                if (encoder)
+                {
+                    return false;
+                }
+
+                encoder = true;
+            }
+            else if (parts[i] is "hwdec" or "swdec")
+            {
+                if (decoder)
+                {
+                    return false;
+                }
+
+                decoder = true;
+            }
+            else if (parts[i].StartsWith(VideoBitsPerFrame, StringComparison.Ordinal))
+            {
+                if (bits || !float.TryParse(
+                        parts[i].AsSpan(VideoBitsPerFrame.Length),
+                        NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent,
+                        CultureInfo.InvariantCulture,
+                        out var perFrame) || !float.IsFinite(perFrame) || perFrame <= 0)
+                {
+                    return false;
+                }
+
+                bits = true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static string? VideoRemoteSetting(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        string? remote = null;
+        foreach (var part in value.Split(','))
+        {
+            if (part is "hwenc" or "swenc" or "hwdec" or "swdec"
+                || part.StartsWith(VideoBitsPerFrame, StringComparison.Ordinal))
+            {
+                remote = remote is null ? part : remote + "," + part;
+            }
+        }
+
+        return remote;
+    }
+
+    public static bool VideoDecodesOnGpu(string? value)
+    {
+        if (value is null)
+        {
+            return false;
+        }
+
+        foreach (var part in value.Split(','))
+        {
+            if (part == "hw")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public static Option<string?> Client() => new("--client")
     {

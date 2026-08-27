@@ -18,6 +18,7 @@
     <ProjectReference Include="../Basin.Color/Basin.Color.csproj" />
     <PackageReference Include="WaylandSharpest" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-output/xdg-output-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/fullscreen-shell/fullscreen-shell-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-session-lock/ext-session-lock-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-screencopy-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-data-control-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />

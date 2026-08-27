@@ -126,6 +126,51 @@ public sealed class HostedSessionTests
         Assert.Equal(30, done);
     }
 
+    private sealed class RecordingSink : Capabilities.IFrameSink
+    {
+        public List<IOutput> Begun { get; } = [];
+
+        public List<IOutput> Ended { get; } = [];
+
+        public long LastPresentedNanos { get; private set; } = -1;
+
+        public void BeginFrame(IOutput output, long predictedVblankNanos) => Begun.Add(output);
+
+        public void EndFrame(IOutput output, long presentedNanos)
+        {
+            Ended.Add(output);
+            LastPresentedNanos = presentedNanos;
+        }
+    }
+
+    [Fact]
+    public void The_frame_clock_is_ended_for_every_output_that_composited()
+    {
+        using var host = new CompositorTestHost();
+        using var hosted = new Hosted(host, outputs: 2);
+        var clock = new Capabilities.Defaults.FrameClock();
+        var sink = new RecordingSink();
+        clock.Add(sink);
+        hosted.Session.Frames = clock;
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Solid(64, 48, 0xFF204080));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 64, 48);
+        surface.Commit();
+        host.Client.Display.Flush();
+
+        Assert.Equal(2, hosted.Tick());
+        Assert.Equal(2, sink.Begun.Count);
+        Assert.Equal(2, sink.Ended.Count);
+        Assert.Equal(0, sink.LastPresentedNanos);
+
+        sink.Ended.Clear();
+        hosted.Session.BeginFrame();
+        hosted.Session.EndFrame();
+        Assert.Empty(sink.Ended);
+    }
+
     [Fact]
     public void A_commit_outside_a_frame_still_composites()
     {

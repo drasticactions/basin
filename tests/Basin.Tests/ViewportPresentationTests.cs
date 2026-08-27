@@ -141,6 +141,42 @@ public sealed class ViewporterTests
 public sealed class PresentationTests
 {
     [Fact]
+    public void A_wire_clock_client_is_served_the_wall_clock_and_told_the_monotonic_one()
+    {
+        using var host = new CompositorTestHost();
+        var client = host.Client;
+        var surface = client.Compositor.CreateSurface();
+        var buffer = client.CreateBuffer(4, 4, Fill.Solid(4, 4, 0xFF123456));
+
+        var feedback = client.Presentation!.Feedback(surface);
+        ulong presentedTime = 0;
+        var presented = false;
+        feedback.Presented += (_, e) =>
+        {
+            presentedTime = (((ulong)e.TvSecHi << 32) | e.TvSecLo) * 1_000_000_000 + e.TvNsec;
+            presented = true;
+        };
+
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToClient();
+        Assert.Equal(PresentationTimeGlobal.ClockMonotonic, client.PresentationClockId);
+
+        var wire = new WireClockClients();
+        host.Presentation.WireClock = wire;
+        wire.Add(host.SurfaceScenes[0].Surface.Resource.Client);
+
+        var monotonic = (ulong)MonotonicClock.Nanos;
+        host.Presentation.Presented(
+            host.SurfaceScenes[0].Surface, host.Output, monotonic, 16_666_666, 1, PresentedFlags.Vsync);
+        host.PumpUntil(() => presented);
+
+        var offset = RealtimeClock.Nanos - MonotonicClock.Nanos;
+        Assert.InRange(
+            (long)presentedTime - (long)monotonic, offset - 1_000_000_000, offset + 1_000_000_000);
+    }
+
+    [Fact]
     public void Committed_feedback_reports_presentation()
     {
         using var host = new CompositorTestHost();

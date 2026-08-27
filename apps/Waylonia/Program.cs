@@ -18,6 +18,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        HostSession.Capture();
         var cli = new BasinCommand("Runs a Wayland application inside an Avalonia window.");
         var frames = cli.Add(CommonOptions.Frames());
         var screenshot = cli.Add(CommonOptions.Screenshot());
@@ -56,6 +57,17 @@ internal static class Program
                 result.AddError("--audio-format takes f32 or s16");
             }
         });
+        var desktopOption = cli.Add(new Option<string?>("--desktop")
+        {
+            Description = "run a whole Linux desktop in one window. A [desktops.NAME] profile in the config " +
+                $"file matches first; otherwise a built-in recipe: {DesktopRecipes.Names}.",
+            HelpName = "NAME",
+        });
+        var desktopSizeOption = cli.Add(new Option<string?>("--desktop-size")
+        {
+            Description = "the screen window's initial size, WxH. The default is 80% of its screen.",
+            HelpName = "WxH",
+        });
         var videoOption = cli.Add(CommonOptions.Video());
         var compressOption = cli.Add(CommonOptions.Compress());
         var command = new Argument<string[]>("command")
@@ -84,6 +96,65 @@ internal static class Program
                 ssh = named.Ssh;
             }
 
+            var desktopName = result.GetValue(desktopOption);
+            DesktopRecipe? recipe = null;
+            IReadOnlyList<string> desktopEnv = [];
+            (int Width, int Height)? desktopSize = null;
+            DesktopProfile? desktopProfile = null;
+            if (desktopName is not null)
+            {
+                if (commandText is not null)
+                {
+                    log.Error($"--desktop is the command; a trailing command runs beside it");
+                    return 1;
+                }
+
+                config.Desktops.TryGetValue(desktopName, out desktopProfile);
+                var recipeName = desktopProfile?.Recipe ?? desktopName;
+                var found = DesktopRecipes.Find(recipeName);
+                if (found is null && recipeName != "custom")
+                {
+                    log.Error($"--desktop {desktopName} names no recipe; the built-in ones are {DesktopRecipes.Names}");
+                    return 1;
+                }
+
+                var desktopCommand = desktopProfile?.Command ?? found?.Command;
+                if (desktopCommand is null)
+                {
+                    log.Error($"[desktops.{desktopName}] has recipe = \"custom\" and no command");
+                    return 1;
+                }
+
+                recipe = (found ?? new DesktopRecipe(
+                    desktopName, desktopCommand, desktopName.ToUpperInvariant(),
+                    [], Bus: true, Gpu: true, Video: null, SoftwareFallback: false))
+                    with { Command = desktopCommand };
+                desktopEnv = desktopProfile?.Env ?? [];
+                if (ParseSize(result.GetValue(desktopSizeOption) ?? desktopProfile?.Size) is { } size)
+                {
+                    desktopSize = size;
+                }
+                else if ((result.GetValue(desktopSizeOption) ?? desktopProfile?.Size) is { } bad)
+                {
+                    log.Error($"--desktop-size takes WxH, not '{bad}'");
+                    return 1;
+                }
+
+                if (ssh is null && desktopProfile?.Host is { } desktopHost)
+                {
+                    ssh = config.Hosts.TryGetValue(desktopHost, out var hostProfile)
+                        ? hostProfile.Ssh
+                        : desktopHost;
+                    profile ??= config.Hosts.GetValueOrDefault(desktopHost);
+                }
+
+                if (ssh is null && !OperatingSystem.IsLinux())
+                {
+                    log.Error($"--desktop with no --ssh runs the session on this machine, which needs Linux");
+                    return 1;
+                }
+            }
+
             if (listen is not null && ssh is not null)
             {
                 log.Error($"--waypipe-listen accepts a channel and --ssh opens its own");
@@ -91,18 +162,29 @@ internal static class Program
             }
 
             var sshCommand = commandText ?? profile?.Command;
+            if (recipe is not null)
+            {
+                sshCommand = null;
+            }
+
+            if (recipe is not null && listen is not null)
+            {
+                log.Error($"--desktop starts the session and --waypipe-listen waits for one someone else started");
+                return 1;
+            }
+
             if (listen is not null && commandText is not null)
             {
                 log.Error($"a trailing command spawns a local client and --waypipe-listen waits for a remote one");
                 return 1;
             }
 
-            if (ssh is null && listen is null)
+            if (ssh is null && listen is null && recipe is null)
             {
                 commandText ??= config.Command;
             }
 
-            if (MissingClientSource(
+            if (recipe is null && MissingClientSource(
                 OperatingSystem.IsLinux(), OperatingSystem.IsWindows(), ssh, listen, commandText))
             {
                 return cli.Usage(result);
@@ -113,7 +195,7 @@ internal static class Program
                 : result.GetValue(compressOption)!;
 
             var gpu = result.GetResult(gpuOption) is null or { Implicit: true }
-                ? config.Gpu ?? false
+                ? desktopProfile?.Gpu ?? recipe?.Gpu ?? config.Gpu ?? false
                 : result.GetValue(gpuOption);
 
             var audio = Waylonia.Audio.WayloniaAudio.Wanted(
@@ -124,10 +206,11 @@ internal static class Program
                 listen);
 
             var video = result.GetResult(videoOption) is null or { Implicit: true }
-                ? config.Video ?? "none"
+                ? desktopProfile?.Video ?? recipe?.Video ?? config.Video ?? "none"
                 : result.GetValue(videoOption)!;
             var videoCodec = video.Split(',')[0];
-            var videoHardware = video.EndsWith(",hw", StringComparison.Ordinal);
+            var videoHardware = CommonOptions.VideoDecodesOnGpu(video);
+            var videoRemote = CommonOptions.VideoRemoteSetting(video);
             Basin.Capabilities.IVideoDecoder? decoder = null;
             if (videoCodec != "none")
             {
@@ -169,17 +252,41 @@ internal static class Program
                 gpu,
                 audio,
                 result.GetValue(audioFormatOption)!,
-                videoCodec == "none" ? null : videoCodec,
+                videoCodec == "none"
+                    ? null
+                    : videoRemote is null ? videoCodec : $"{videoCodec},{videoRemote}",
                 decoder,
                 config.XWayland,
                 config.Tray,
                 config.Clipboard,
                 config.Drag,
                 config.FollowCursor,
-                config.Hotkeys));
+                config.GtkDpi,
+                config.Hotkeys,
+                recipe,
+                desktopEnv,
+                desktopSize,
+                config.CaptureChord));
             cli.ReportFrames(WayloniaApp.Rendered);
             return status;
         });
+    }
+
+    internal static (int Width, int Height)? ParseSize(string? text)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+
+        var parts = text.Split('x', 'X');
+        return parts.Length == 2
+            && int.TryParse(parts[0], out var width)
+            && int.TryParse(parts[1], out var height)
+            && width > 0
+            && height > 0
+            ? (width, height)
+            : null;
     }
 
     internal static bool MissingClientSource(

@@ -11,7 +11,10 @@ public sealed class OutputGlobal : IDisposable
     private readonly WlGlobal _global;
     private readonly IOutput _output;
     private readonly List<WlOutputResource> _resources = [];
+    private readonly Dictionary<WlClient, ClientView> _overrides = [];
     private bool _disposed;
+
+    private readonly record struct ClientView(OutputMode Mode, int Scale);
 
     public OutputGlobal(WlServerDisplay display, IOutput output)
     {
@@ -51,6 +54,53 @@ public sealed class OutputGlobal : IDisposable
         }
     }
 
+    public void SetClientOverride(WlClient client, OutputMode mode, int scale)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        if (_disposed)
+        {
+            return;
+        }
+
+        var view = new ClientView(mode, Math.Max(1, scale));
+        if (_overrides.TryGetValue(client, out var existing))
+        {
+            if (existing == view)
+            {
+                return;
+            }
+        }
+        else
+        {
+            client.Destroyed += () => _overrides.Remove(client);
+        }
+
+        _overrides[client] = view;
+        ResendTo(client);
+    }
+
+    public void ClearClientOverride(WlClient client)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        if (!_overrides.Remove(client) || _disposed)
+        {
+            return;
+        }
+
+        ResendTo(client);
+    }
+
+    private void ResendTo(WlClient client)
+    {
+        foreach (var resource in _resources)
+        {
+            if (resource.Client == client)
+            {
+                SendState(resource, sendName: false, sendDescription: false);
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -59,6 +109,7 @@ public sealed class OutputGlobal : IDisposable
         }
 
         _disposed = true;
+        _overrides.Clear();
         _output.Committed -= OnOutputCommitted;
         if (ByOutput.TryGetValue(_output, out var current) && current == this)
         {
@@ -149,12 +200,13 @@ public sealed class OutputGlobal : IDisposable
             _output.Model,
             (WlOutput.Transform)_output.Transform);
 
-        var mode = _output.CurrentMode;
+        var overridden = _overrides.TryGetValue(resource.Client, out var view);
+        var mode = overridden ? view.Mode : _output.CurrentMode;
         resource.SendMode(WlOutput.Mode.Current | WlOutput.Mode.Preferred, mode.Width, mode.Height, mode.RefreshMilliHz);
 
         if (resource.Version >= 2)
         {
-            resource.SendScale(OutputScaling.CeilScale(_output.Scale));
+            resource.SendScale(overridden ? view.Scale : OutputScaling.CeilScale(_output.Scale));
         }
 
         if (resource.Version >= 4)

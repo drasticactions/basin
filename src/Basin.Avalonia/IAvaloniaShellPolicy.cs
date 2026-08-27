@@ -14,4 +14,6 @@ public interface IAvaloniaShellPolicy
     string? ChooseScreen(IReadOnlyCollection<HostScreenInfo> screens);
 
     void CloseRequested(XdgToplevelWindow toplevel, int requests);
+
+    ScreenSurfaceKind Classify(ToplevelInfo info) => ScreenSurfaceKind.Application;
 }

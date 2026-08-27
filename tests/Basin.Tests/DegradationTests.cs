@@ -937,6 +937,24 @@ public sealed class DegradationTests
         AssertClientAlive(host);
     }
 
+    [Fact]
+    public void Fullscreen_shell_without_an_output_presents_nothing()
+    {
+        using var host = new CompositorTestHost();
+        var empty = new OutputLayout();
+        using var shell = new FullscreenShellGlobal(host.Display, host.Compositor, empty);
+
+        var proxy = Bind<Basin.Desktop.Protocol.ZwpFullscreenShellV1>(host, "zwp_fullscreen_shell_v1", 1);
+        var surface = host.Client.Compositor.CreateSurface();
+        proxy.PresentSurface(
+            surface, Basin.Desktop.Protocol.ZwpFullscreenShellV1.PresentMethod.Default, output: null);
+        host.PumpToServer();
+
+        Assert.Null(shell.PresentedSurface);
+        Assert.Single(shell.BoundClients);
+        AssertClientAlive(host);
+    }
+
     private static void AssertClientAlive(CompositorTestHost host)
     {
         host.PumpToServer();

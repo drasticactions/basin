@@ -38,6 +38,7 @@ public static class BasinDiagnostics
         info.ArgumentList.Add("-c");
         info.ArgumentList.Add(command);
         info.Environment["WAYLAND_DISPLAY"] = socket;
+        info.Environment["XDG_SESSION_TYPE"] = "wayland";
         if (environment is not null)
         {
             foreach (var (name, value) in environment)

@@ -34,6 +34,8 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         _clock?.Add(this);
     }
 
+    public WireClockClients? WireClock { get; set; }
+
     public void BeginFrame(IOutput output, long predictedVblankNanos) =>
         Release(predictedVblankNanos > 0 ? predictedVblankNanos : MonotonicClock.Nanos);
 
@@ -93,7 +95,13 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         }
 
         var seconds = ((ulong)e.TvSecHi << 32) | e.TvSecLo;
-        surface.SetCommitTime((long)(seconds * 1_000_000_000) + e.TvNsec);
+        var timestamp = (long)(seconds * 1_000_000_000) + e.TvNsec;
+        if (WireClock is { } wire && wire.Contains(surface.Resource.Client))
+        {
+            timestamp = WireClockClients.FromWire(timestamp);
+        }
+
+        surface.SetCommitTime(timestamp);
         ArmTimer();
     }
 

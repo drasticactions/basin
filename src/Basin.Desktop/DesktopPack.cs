@@ -17,6 +17,7 @@ public static class DesktopPack
         List<IProtocolModule> modules =
         [
             new XdgOutputModule(),
+            new FullscreenShellModule(),
             new SessionLockModule(),
             new ScreencopyModule(),
             new ImageCaptureSourceModule(),

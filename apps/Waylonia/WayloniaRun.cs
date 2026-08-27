@@ -32,4 +32,9 @@ internal sealed record WayloniaRun(
     bool Clipboard,
     bool Drag,
     bool FollowCursor,
-    IReadOnlyList<Hotkey> Hotkeys);
+    bool GtkDpi,
+    IReadOnlyList<Hotkey> Hotkeys,
+    DesktopRecipe? Desktop = null,
+    IReadOnlyList<string>? DesktopEnv = null,
+    (int Width, int Height)? DesktopSize = null,
+    string CaptureChord = "double:RightControl");

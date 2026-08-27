@@ -30,6 +30,13 @@ internal sealed class Config
 
     public bool FollowCursor { get; private set; } = true;
 
+    public bool GtkDpi { get; private set; } = true;
+
+    public string CaptureChord { get; private set; } = "double:RightControl";
+
+    public IReadOnlyDictionary<string, DesktopProfile> Desktops { get; private set; } =
+        new Dictionary<string, DesktopProfile>();
+
     public IReadOnlyDictionary<string, HostProfile> Hosts { get; private set; } =
         new Dictionary<string, HostProfile>();
 
@@ -58,7 +65,7 @@ internal sealed class Config
 
         foreach (var (name, value) in table)
         {
-            if (value is TomlTable && name is not ("host" or "hosts" or "hotkeys"))
+            if (value is TomlTable && name is not ("host" or "hosts" or "hotkeys" or "desktops"))
             {
                 log.Warn($"{path} has an unknown section '[{name}]', ignoring it; a remote host profile is [hosts.{name}]");
             }
@@ -101,6 +108,13 @@ internal sealed class Config
             config.Clipboard = Toggle(hostTable, "clipboard", config.Clipboard);
             config.Drag = Toggle(hostTable, "drag", config.Drag);
             config.FollowCursor = Toggle(hostTable, "follow-cursor", config.FollowCursor);
+            config.GtkDpi = Toggle(hostTable, "gtk-dpi", config.GtkDpi);
+            if (hostTable.TryGetValue("capture-chord", out var chord)
+                && chord is string chordText
+                && chordText.Trim().Length > 0)
+            {
+                config.CaptureChord = chordText.Trim();
+            }
         }
 
         if (table.TryGetValue("hosts", out var hosts) && hosts is TomlTable hostsTable)
@@ -128,6 +142,30 @@ internal sealed class Config
             }
 
             config.Hosts = parsed;
+        }
+
+        if (table.TryGetValue("desktops", out var desktops) && desktops is TomlTable desktopsTable)
+        {
+            var parsed = new Dictionary<string, DesktopProfile>();
+            foreach (var (name, value) in desktopsTable)
+            {
+                if (value is not TomlTable profileTable)
+                {
+                    continue;
+                }
+
+                parsed[name] = new DesktopProfile(
+                    name,
+                    Text(profileTable, "recipe"),
+                    Text(profileTable, "host"),
+                    Text(profileTable, "size"),
+                    CommandText(profileTable, "command"),
+                    Assignments(profileTable, "env"),
+                    profileTable.TryGetValue("gpu", out var desktopGpu) && desktopGpu is bool flag ? flag : null,
+                    Text(profileTable, "video"));
+            }
+
+            config.Desktops = parsed;
         }
 
         if (table.TryGetValue("hotkeys", out var hotkeys) && hotkeys is TomlTable hotkeyTable)
@@ -159,8 +197,10 @@ internal sealed class Config
 
             # Ask the remote waypipe to encode buffer updates as video, and
             # decode them here with the system FFmpeg. Implies gpu. Append
-            # ",hw" to decode on this host's GPU when it has a device.
-            #video = "h264"
+            # ",hw" to decode on this host's GPU when it has a device, and
+            # ",hwenc", ",swenc", ",hwdec", ",swdec" or ",bpf=B" to say where
+            # the remote encodes and decodes, and at how many bits per frame.
+            #video = "h264,hw,hwenc,bpf=7.5e5"
 
             # Play the remote session's sound on this host. It is captured
             # from a sink of its own on the remote and streamed over the same
@@ -184,12 +224,32 @@ internal sealed class Config
             # Open each new client window on the screen the pointer is on, rather
             # than wherever the host desktop would put it.
             #follow-cursor = true
+            # Read an --ssh session's GTK settings through a staged copy whose
+            # gtk-xft-dpi is 96, so a remote desktop's own display scaling does
+            # not size GTK windows twice. Off leaves the remote config alone.
+            #gtk-dpi = true
 
             # Remote-session profiles:
             #[hosts.dev]
             #ssh = "user@devbox"
             #command = "tmux new -A -s main"
             #compress = "none"
+
+            # Take the host's own keyboard and pointer for a nested desktop.
+            # A double tap of one modifier within 400 ms toggles it.
+            #capture-chord = "double:RightControl"
+
+            # Whole-desktop sessions. --desktop NAME matches one of these
+            # first, then a built-in recipe name: sway, niri, plasma, cosmic
+            # or xfce.
+            #[desktops.plasma]
+            #recipe = "plasma"
+            #host = "lab"
+            #size = "1920x1080"
+            #command = "startplasma-wayland"
+            #env = ["QT_QPA_PLATFORM=wayland"]
+            #gpu = false
+            #video = "none"
 
             # Host-global hotkeys.
             #[hotkeys]
@@ -227,6 +287,29 @@ internal sealed class Config
 
         log.Warn($"compress takes lz4, zstd or none, ignoring '{name}'");
         return null;
+    }
+
+    private static string? Text(TomlTable table, string key) =>
+        table.TryGetValue(key, out var value) && value is string text && text.Trim().Length > 0
+            ? text.Trim()
+            : null;
+
+    private static IReadOnlyList<string> Assignments(TomlTable table, string key)
+    {
+        if (!table.TryGetValue(key, out var value))
+        {
+            return [];
+        }
+
+        return value switch
+        {
+            string single when single.Trim().Length > 0 => [single.Trim()],
+            TomlArray array => array.OfType<string>()
+                .Select(static part => part.Trim())
+                .Where(static part => part.Length > 0)
+                .ToArray(),
+            _ => [],
+        };
     }
 
     private static string? CommandText(TomlTable table, string key) =>

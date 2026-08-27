@@ -7,4 +7,5 @@ using Basin.Shell.Xdg;
 
 namespace Basin.Avalonia;
 
-public sealed record ToplevelInfo(string Title, string AppId, int Width, int Height);
+public sealed record ToplevelInfo(
+    string Title, string AppId, int Width, int Height, Wayland.Server.WlClient? Client = null);

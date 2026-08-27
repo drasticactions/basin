@@ -57,29 +57,35 @@ public sealed class LayerWindow : Window
             ReleasePressedKeys();
             Send(InputKind.FocusOut);
         };
-        KeyDown += (_, e) =>
-        {
-            if (e.Key == global::Avalonia.Input.Key.ImeProcessed)
+        AddHandler(
+            global::Avalonia.Input.InputElement.KeyDownEvent,
+            (object? _, global::Avalonia.Input.KeyEventArgs e) =>
             {
-                return;
-            }
+                if (e.Key == global::Avalonia.Input.Key.ImeProcessed)
+                {
+                    return;
+                }
 
-            var code = AvaloniaKeyMap.EvdevFor(e.PhysicalKey);
-            if (code != 0 && _pressedKeys.Add(code))
+                var code = AvaloniaKeyMap.EvdevFor(e.PhysicalKey);
+                if (code != 0 && _pressedKeys.Add(code))
+                {
+                    Send(InputKind.Key, code: code, pressed: true);
+                    e.Handled = true;
+                }
+            },
+            global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AddHandler(
+            global::Avalonia.Input.InputElement.KeyUpEvent,
+            (object? _, global::Avalonia.Input.KeyEventArgs e) =>
             {
-                Send(InputKind.Key, code: code, pressed: true);
-                e.Handled = true;
-            }
-        };
-        KeyUp += (_, e) =>
-        {
-            var code = AvaloniaKeyMap.EvdevFor(e.PhysicalKey);
-            if (code != 0 && _pressedKeys.Remove(code))
-            {
-                Send(InputKind.Key, code: code, pressed: false);
-                e.Handled = true;
-            }
-        };
+                var code = AvaloniaKeyMap.EvdevFor(e.PhysicalKey);
+                if (code != 0 && _pressedKeys.Remove(code))
+                {
+                    Send(InputKind.Key, code: code, pressed: false);
+                    e.Handled = true;
+                }
+            },
+            global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
         PointerEntered += (_, e) => SendPointer(InputKind.PointerEnter, e);
         PointerMoved += (_, e) => SendPointer(
             e.Pointer.Type == global::Avalonia.Input.PointerType.Touch ? InputKind.TouchMotion : InputKind.PointerMotion, e);

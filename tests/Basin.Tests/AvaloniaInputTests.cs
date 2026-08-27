@@ -248,15 +248,27 @@ public sealed class AvaloniaInputTests
         Assert.Equal((30u, true), keys[0]);
         Assert.Equal((30u, false), keys[1]);
 
-        window.KeyPressQwerty(PhysicalKey.ShiftLeft, RawInputModifiers.Shift);
-        window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.Shift);
+        window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Tab, RawInputModifiers.None);
         harness.PumpUntil(() => keys.Count == 4);
-        Assert.Equal((42u, true), keys[2]);
-        Assert.Equal((30u, true), keys[3]);
+        Assert.Equal((15u, true), keys[2]);
+        Assert.Equal((15u, false), keys[3]);
+
+        window.KeyPressQwerty(PhysicalKey.ShiftLeft, RawInputModifiers.Shift);
+        window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.Shift);
+        harness.PumpUntil(() => keys.Count == 6);
+        Assert.Equal((42u, true), keys[4]);
+        Assert.Equal((15u, true), keys[5]);
+        window.KeyReleaseQwerty(PhysicalKey.Tab, RawInputModifiers.Shift);
+        harness.PumpUntil(() => keys.Count == 7);
+
+        window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.Shift);
+        harness.PumpUntil(() => keys.Count == 8);
+        Assert.Equal((30u, true), keys[7]);
         harness.PumpUntil(() => (depressed & 1) != 0);
         window.KeyReleaseQwerty(PhysicalKey.A, RawInputModifiers.Shift);
         window.KeyReleaseQwerty(PhysicalKey.ShiftLeft, RawInputModifiers.None);
-        harness.PumpUntil(() => keys.Count == 6);
+        harness.PumpUntil(() => keys.Count == 10);
         harness.PumpUntil(() => (depressed & 1) == 0);
 
         pointerProxy.Release();

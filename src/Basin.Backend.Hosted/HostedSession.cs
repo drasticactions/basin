@@ -9,6 +9,7 @@ public sealed class HostedSession : IDisposable
     private readonly WlServerDisplay _display;
     private readonly ICompositorEventLoop _loop;
     private readonly List<SceneOutput> _outputs = [];
+    private readonly List<SceneOutput> _presented = [];
     private readonly OutputState _state = new();
     private bool _inFrame;
     private bool _disposed;
@@ -84,6 +85,7 @@ public sealed class HostedSession : IDisposable
         }
 
         _inFrame = true;
+        _presented.Clear();
         var refresh = _outputs.Count > 0 ? _outputs[0].Output.CurrentMode.RefreshIntervalNanoseconds : 0;
         var tick = new FrameTick(targetPresentNanos, refresh);
 
@@ -111,6 +113,10 @@ public sealed class HostedSession : IDisposable
         if (composited)
         {
             Composited++;
+            if (!_presented.Contains(output))
+            {
+                _presented.Add(output);
+            }
         }
 
         return composited;
@@ -125,6 +131,15 @@ public sealed class HostedSession : IDisposable
         }
 
         _inFrame = false;
+        if (Frames is { } frames)
+        {
+            foreach (var output in _presented)
+            {
+                frames.EndFrame(output.Output, 0);
+            }
+        }
+
+        _presented.Clear();
         _loop.DispatchIdle();
         _display.FlushClients();
     }

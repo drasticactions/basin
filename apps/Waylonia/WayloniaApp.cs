@@ -30,6 +30,8 @@ internal sealed class WayloniaApp : Application
     private Window? _window;
     private TrayIcon? _tray;
     private IDisposable? _globalHotkeys;
+    private DesktopShellPolicy? _desktop;
+    private CaptureToggle? _capture;
     private readonly List<Process> _launched = [];
     private bool _shuttingDown;
 
@@ -130,10 +132,32 @@ internal sealed class WayloniaApp : Application
             ExtraModules = _xwayland is { } xwayland ? [xwayland] : null,
         });
         _windows = new ToplevelWindows(host, action => _view!.Post(action), requestFrame: () => _view?.RequestFrame());
-        if (_run.FollowCursor)
+        _desktop = new DesktopShellPolicy(
+            _run.FollowCursor ? new CursorScreenPolicy() : new AvaloniaShellPolicy())
         {
-            _windows.Policy = new CursorScreenPolicy();
+            Size = _run.DesktopSize,
+        };
+        if (host.Services.Find<Basin.Desktop.FullscreenShellGlobal>() is { } fullscreenShell)
+        {
+            _desktop.BoundClients = () => fullscreenShell.BoundClients;
         }
+
+        if (_run.WaypipeListen is not null || _run.SshHost is not null)
+        {
+            _wireClock = new WireClockClients();
+            if (host.Services.Find<PresentationTimeGlobal>() is { } presentation)
+            {
+                presentation.WireClock = _wireClock;
+            }
+
+            if (host.Services.Find<Basin.Desktop.CommitTimingManager>() is { } timing)
+            {
+                timing.WireClock = _wireClock;
+            }
+        }
+
+        _windows.Policy = _desktop;
+        _windows.ScreenWindowChanged += OnScreenWindowChanged;
 
         _windows.CountChanged += count => UpdateStatus($"{count} client window(s) on {host.Socket}");
         if (_run.Drag)
@@ -200,17 +224,22 @@ internal sealed class WayloniaApp : Application
         }
 
         BasinReport.Line(CompositorLines.Socket(host.Socket));
-        if (_run!.Hotkeys.Count > 0 && _window is { } anchor)
+        StartGlobalHotkeys(host);
+        if (_windows is { } windows
+            && CaptureChord.Parse(_run!.CaptureChord, BasinLog.For("waylonia")) is { } chord)
         {
-            if (host.Socket.Length == 0 && _run.SshHost is null)
+            _capture = new CaptureToggle(chord, windows, _view!, host, arm =>
             {
-                Log.Warn($"this session has no local socket, global hotkeys are off");
-            }
-            else
-            {
-                _globalHotkeys = GlobalHotkeys.TryStart(
-                    _run.Hotkeys, anchor, _view!, host, hotkey => LaunchHotkey(host, hotkey));
-            }
+                if (arm)
+                {
+                    StartGlobalHotkeys(host);
+                }
+                else
+                {
+                    _globalHotkeys?.Dispose();
+                    _globalHotkeys = null;
+                }
+            });
         }
 
         if (WayloniaXWayland.DisplayName(host) is { } xdisplay)
@@ -221,7 +250,21 @@ internal sealed class WayloniaApp : Application
 
         UpdateStatus($"waiting for clients on {host.Socket}");
 
-        if (_run!.WaypipeListen is { } endpoint)
+        if (_run!.Desktop is { } recipe)
+        {
+            var screen = HostCursor.TryGetPosition() is { } cursor && _window?.Screens is { } screens
+                ? screens.ScreenFromPoint(cursor) ?? screens.Primary
+                : _window?.Screens?.Primary;
+            var scaling = screen?.Scaling is > 0 ? screen.Scaling : 1.0;
+            var size = _run.DesktopSize ?? DesktopShellPolicy.DefaultSize(screen, scaling);
+            if (_desktop is not null)
+            {
+                _desktop.Size = size;
+            }
+
+            _ = LaunchDesktopAsync(host, recipe);
+        }
+        else if (_run!.WaypipeListen is { } endpoint)
         {
             _ = AcceptChannelAsync(host, endpoint);
         }
@@ -290,7 +333,89 @@ internal sealed class WayloniaApp : Application
             : $"started '{hotkey.Command}' on {remote}");
     }
 
-    private Process? StartRemoteClient(string sshHost, string command)
+    private void OnScreenWindowChanged(Basin.Avalonia.ToplevelWindow? window)
+    {
+        if (window is null)
+        {
+            _capture?.Detach();
+            UpdateStatus("the desktop window is gone");
+            return;
+        }
+
+        var title = window.Title ?? "desktop";
+        if (_run!.Desktop is { } recipe)
+        {
+            title = _run.SshHost is { } host ? $"{recipe.Name} @ {host}" : recipe.Name;
+            window.OverrideTitle(title);
+        }
+
+        _capture?.Attach(window, title);
+        UpdateStatus($"the desktop window is up");
+    }
+
+    private void StartGlobalHotkeys(BasinCompositorHost host)
+    {
+        if (_globalHotkeys is not null || _run!.Hotkeys.Count == 0 || _window is not { } anchor)
+        {
+            return;
+        }
+
+        if (host.Socket.Length == 0 && _run.SshHost is null)
+        {
+            Log.Warn($"this session has no local socket, global hotkeys are off");
+            return;
+        }
+
+        _globalHotkeys = GlobalHotkeys.TryStart(
+            _run.Hotkeys, anchor, _view!, host, hotkey => LaunchHotkey(host, hotkey));
+    }
+
+    private async Task LaunchDesktopAsync(BasinCompositorHost host, DesktopRecipe recipe)
+    {
+        var environment = DesktopSession.Environment(recipe, _run!.DesktopEnv ?? [], _run.Gpu);
+        if (_run.SshHost is not { } sshHost)
+        {
+            var local = DesktopSession.Wrapper(recipe, host.Socket, recipe.Command, environment);
+            Log.Debug($"starting the {recipe.Name} session on this machine");
+            _client = BasinDiagnostics.StartClient(local, host.Socket, [("DISPLAY", null)]);
+            if (_client is null)
+            {
+                Log.Error($"the {recipe.Name} session failed to start");
+                _ = ShutdownAsync(1);
+                return;
+            }
+
+            if (_desktop is not null)
+            {
+                _desktop.DeclaredPid = _client.Id;
+            }
+
+            UpdateStatus($"starting {recipe.Name}");
+            return;
+        }
+
+        if (!StartForward(host, sshHost))
+        {
+            return;
+        }
+
+        var wrapper = DesktopSession.Wrapper(recipe, _sshDisplayName!, recipe.Command, environment);
+        if (StartRemoteClient(sshHost, wrapper, exportDisplay: false) is { } started)
+        {
+            _launched.Add(started);
+        }
+
+        UpdateStatus($"starting {recipe.Name} on {sshHost}");
+        await WatchForwardAsync(sshHost);
+    }
+
+    private const string RemoteRuntimeDir =
+        "if [ -z \"$XDG_RUNTIME_DIR\" ] || [ ! -d \"$XDG_RUNTIME_DIR\" ]; then " +
+        "r=/run/user/$(id -u); " +
+        "if [ ! -d \"$r\" ]; then r=/tmp/waylonia-run-$(id -u); mkdir -p \"$r\" && chmod 700 \"$r\"; fi; " +
+        "XDG_RUNTIME_DIR=$r; export XDG_RUNTIME_DIR; fi; ";
+
+    private Process? StartRemoteClient(string sshHost, string command, bool exportDisplay = true)
     {
         if (_sshDisplayName is not { } displayName)
         {
@@ -319,11 +444,19 @@ internal sealed class WayloniaApp : Application
         var pulse = _run!.Audio && _sshSinkName is { } sinkName
             ? $"PULSE_SINK={sinkName} PIPEWIRE_NODE={sinkName} "
             : string.Empty;
+        var gtkConfig = _sshConfigDir is { } configDir
+            ? $"if [ -d {configDir} ]; then XDG_CONFIG_HOME={configDir}; export XDG_CONFIG_HOME; fi; "
+            : string.Empty;
+        var display = exportDisplay
+            ? $"if [ -s {_sshXDisplayFile} ]; then DISPLAY=$(cat {_sshXDisplayFile}); export DISPLAY; fi; "
+            : string.Empty;
         info.ArgumentList.Add(
+            RemoteRuntimeDir +
             $"d=\"$XDG_RUNTIME_DIR/{displayName}\"; i=0; " +
             $"while [ ! -S \"$d\" ] && [ $i -lt 50 ]; do sleep 0.2; i=$((i+1)); done; " +
-            $"if [ -s {_sshXDisplayFile} ]; then DISPLAY=$(cat {_sshXDisplayFile}); export DISPLAY; fi; " +
-            $"{pulse}WAYLAND_DISPLAY={displayName} sh -c '{quoted}'");
+            display +
+            gtkConfig +
+            $"{pulse}XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY={displayName} sh -c '{quoted}'");
         var started = Process.Start(info);
         if (started is null)
         {
@@ -358,6 +491,7 @@ internal sealed class WayloniaApp : Application
         }
     }
 
+    private WireClockClients? _wireClock;
     private readonly List<Basin.Transport.Waypipe.WaypipeChannel> _channels = [];
     private LinuxDmabufGlobal? _channelDmabuf;
     private System.Net.Sockets.Socket? _channelListener;
@@ -366,6 +500,7 @@ internal sealed class WayloniaApp : Application
     private string? _sshRemoteSocket;
     private string? _sshDisplayName;
     private string? _sshXDisplayFile;
+    private string? _sshConfigDir;
     private string? _sshControlPath;
     private string? _sshSinkName;
     private Audio.WayloniaAudio? _audio;
@@ -477,6 +612,12 @@ internal sealed class WayloniaApp : Application
                     var channelDmabuf = _channelDmabuf;
                     var remote = host.Display.CreateClient(channel.Transport);
                     channelClients.Add(remote);
+                    _wireClock?.Add(remote);
+                    if (_run!.Desktop is not null && _desktop is { HasClaimed: false })
+                    {
+                        _desktop.Declare(remote);
+                    }
+
                     host.Display.SetGlobalFilter((client, wlGlobal, name) =>
                     {
                         var isChannel = channelClients.Contains(client);
@@ -535,8 +676,10 @@ internal sealed class WayloniaApp : Application
         }
 
         info.ArgumentList.Add(sshHost);
+        var removeConfig = _sshConfigDir is { } configDir ? $"; rm -rf {configDir}" : string.Empty;
         info.ArgumentList.Add(
-            $"rm -f {remoteSocket} {_sshXDisplayFile} \"$XDG_RUNTIME_DIR/{_sshDisplayName}\"");
+            RemoteRuntimeDir +
+            $"rm -f {remoteSocket} {_sshXDisplayFile} \"$XDG_RUNTIME_DIR/{_sshDisplayName}\"{removeConfig}");
         try
         {
             using var remove = Process.Start(info);
@@ -649,6 +792,7 @@ internal sealed class WayloniaApp : Application
         _sshRemoteSocket = $"/tmp/waylonia-{Environment.ProcessId}.sock";
         _sshDisplayName = $"waylonia-{Environment.ProcessId}";
         _sshXDisplayFile = $"/tmp/waylonia-x-{Environment.ProcessId}";
+        _sshConfigDir = _run!.GtkDpi ? $"/tmp/waylonia-config-{Environment.ProcessId}" : null;
         _sshSinkName = $"waylonia-{Environment.ProcessId}";
         var compress = _run!.Compression switch
         {
@@ -667,14 +811,30 @@ internal sealed class WayloniaApp : Application
               $"sink_properties=device.description=Waylonia 2>/dev/null) || m=; "
             : string.Empty;
         var unloadSink = _run.Audio ? "[ -n \"$m\" ] && pactl unload-module \"$m\"; " : string.Empty;
+        var gtkConfig = _sshConfigDir is { } configDir
+            ? $"c=\"${{XDG_CONFIG_HOME:-$HOME/.config}}\"; g={configDir}; rm -rf \"$g\"; " +
+              "if mkdir -p \"$g\" 2>/dev/null; then " +
+              "for e in \"$c\"/* \"$c\"/.[!.]*; do " +
+              "if [ -e \"$e\" ]; then ln -s \"$e\" \"$g/${e##*/}\"; fi; done; " +
+              "for v in 3.0 4.0; do rm -f \"$g/gtk-$v\"; mkdir -p \"$g/gtk-$v\"; " +
+              "for e in \"$c/gtk-$v\"/*; do " +
+              "if [ -e \"$e\" ]; then ln -s \"$e\" \"$g/gtk-$v/${e##*/}\"; fi; done; " +
+              "if [ -f \"$c/gtk-$v/settings.ini\" ]; then rm -f \"$g/gtk-$v/settings.ini\"; " +
+              "sed \"s/^gtk-xft-dpi[[:space:]]*=.*/gtk-xft-dpi=98304/\" " +
+              "\"$c/gtk-$v/settings.ini\" > \"$g/gtk-$v/settings.ini\"; fi; done; fi; "
+            : string.Empty;
+        var removeGtkConfig = _sshConfigDir is { } staged ? $"rm -rf {staged}; " : string.Empty;
         var remote =
+            RemoteRuntimeDir +
             $"d=\"$XDG_RUNTIME_DIR/{_sshDisplayName}\"; rm -f \"$d\" {_sshXDisplayFile}; " +
             xwayland +
+            gtkConfig +
             sink +
             $"waypipe --compress {compress} {gpuArgument}{videoArgument}--socket {_sshRemoteSocket} " +
             $"--display {_sshDisplayName} $w server -- " +
             $"sh -c 'printf %s \"$DISPLAY\" > {_sshXDisplayFile}; exec cat >/dev/null'; " +
             $"status=$?; rm -f {_sshRemoteSocket} \"$d\" {_sshXDisplayFile}; " +
+            removeGtkConfig +
             unloadSink +
             "exit $status";
 
@@ -837,6 +997,8 @@ internal sealed class WayloniaApp : Application
 
         _shuttingDown = true;
         _exitStatus = status;
+        _capture?.Dispose();
+        _capture = null;
         _globalHotkeys?.Dispose();
         _globalHotkeys = null;
         HostCursor.Close();

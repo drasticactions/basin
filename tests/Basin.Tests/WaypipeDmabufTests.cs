@@ -195,7 +195,7 @@ public sealed class WaypipeDmabufTests
         var carrying = new WaypipeGlobals(carriesDmabuf: true);
         Assert.True(carrying.Carries("zwp_linux_dmabuf_v1"));
         Assert.Null(carrying.WhyWithheld("zwp_linux_dmabuf_v1"));
-        Assert.False(carrying.Carries("wp_presentation"));
+        Assert.True(carrying.Carries("wp_presentation"));
         Assert.False(carrying.Carries("wp_linux_drm_syncobj_manager_v1"));
         Assert.False(carrying.Carries("wp_drm_lease_device_v1"));
         Assert.True(carrying.Carries("xdg_wm_base"));

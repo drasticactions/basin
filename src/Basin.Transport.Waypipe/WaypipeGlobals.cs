@@ -40,7 +40,6 @@ public sealed class WaypipeGlobals
 
     private static readonly Dictionary<string, string> Refused = new(StringComparer.Ordinal)
     {
-        ["wp_presentation"] = "the peer translates presentation clocks and refuses a monotonic timestamp",
         ["wp_linux_drm_syncobj_manager_v1"] = "the channel carries no explicit-sync timelines",
         ["zwp_linux_explicit_synchronization_v1"] = "the channel carries no explicit-sync timelines",
         ["wp_drm_lease_device_v1"] = "there is no local device for a remote client to lease",

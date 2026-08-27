@@ -56,13 +56,18 @@ public sealed class ToplevelWindows : IDisposable
         public double Scale;
         public string? ScreenKey;
         public (int Left, int Top, int Right, int Bottom) Insets;
-        public (int X, int Y) ViewOrigin => ClientDecorated ? (0, 0) : (Geometry.X, Geometry.Y);
+        public ScreenSurfaceKind Kind;
+        public OutputGlobal? OverriddenOutput;
+        public bool IsScreen => Kind == ScreenSurfaceKind.Screen;
+        public (int X, int Y) ViewOrigin => ClientDecorated && !IsScreen ? (0, 0) : (Geometry.X, Geometry.Y);
     }
 
     private readonly BasinInputChannel _input = new();
     private readonly TouchPoints _touchPoints = new();
     private readonly Action? _requestFrame;
     private readonly Basin.Desktop.FractionalScaleManager? _fractional;
+    private readonly Basin.Desktop.XdgOutputManager? _xdgOutputs;
+    private readonly Basin.Desktop.PointerConstraintsManager? _constraints;
     private int _pointerEntryId;
     private Surface? _cursorSurface;
     private Action? _cursorCommitted;
@@ -83,11 +88,14 @@ public sealed class ToplevelWindows : IDisposable
         if (OperatingSystem.IsMacOS())
         {
             MacFullscreenSize.Install();
+            MacZoomButton.Install();
         }
 
         Policy = policy ?? new AvaloniaShellPolicy();
         _decorations = host.Services.Find<XdgDecorationManager>();
         _fractional = host.Services.Find<Basin.Desktop.FractionalScaleManager>();
+        _xdgOutputs = host.Services.Find<Basin.Desktop.XdgOutputManager>();
+        _constraints = host.Services.Find<Basin.Desktop.PointerConstraintsManager>();
         if (_decorations is not null)
         {
             _decorations.DefaultMode = DecorationMode.ServerSide;
@@ -376,6 +384,8 @@ public sealed class ToplevelWindows : IDisposable
 
     public event Action? WindowActivatedOnHost;
 
+    public event Action<ToplevelWindow?>? ScreenWindowChanged;
+
     internal void NotifyActivatedUi() => WindowActivatedOnHost?.Invoke();
 
     public Task CloseAllAsync()
@@ -437,14 +447,24 @@ public sealed class ToplevelWindows : IDisposable
 
         entry.WindowCreated = true;
         Log.Debug($"toplevel mapped: {entry.Width}x{entry.Height} '{toplevel.Title}'");
-        var serverSide = _decorations is not null
-            && _decorations.TryGetPreference(toplevel, out var preference)
-            && (preference ?? DecorationMode.ServerSide) != DecorationMode.ClientSide;
+        entry.Kind = Policy.Classify(new ToplevelInfo(
+            toplevel.Title, toplevel.AppId, entry.Width, entry.Height, toplevel.Surface.Resource.Client));
+        var serverSide = entry.IsScreen
+            || (_decorations is not null
+                && _decorations.TryGetPreference(toplevel, out var preference)
+                && (preference ?? DecorationMode.ServerSide) != DecorationMode.ClientSide);
+        if (entry.IsScreen)
+        {
+            _decorations?.SetMode(toplevel, DecorationMode.ServerSide);
+        }
+
         entry.ClientDecorated = !serverSide;
         var current = toplevel.Surface.Current;
         entry.WindowWidth = entry.ClientDecorated ? Math.Max(1, current.Width) : entry.Width;
         entry.WindowHeight = entry.ClientDecorated ? Math.Max(1, current.Height) : entry.Height;
-        var info = new ToplevelInfo(toplevel.Title, toplevel.AppId, entry.WindowWidth, entry.WindowHeight);
+        var info = new ToplevelInfo(
+            toplevel.Title, toplevel.AppId, entry.WindowWidth, entry.WindowHeight,
+            toplevel.Surface.Resource.Client);
         var ownerId = OwnerIdOf(toplevel);
         var marginWidth = Math.Max(0, entry.WindowWidth - entry.Width);
         var marginHeight = Math.Max(0, entry.WindowHeight - entry.Height);
@@ -454,23 +474,35 @@ public sealed class ToplevelWindows : IDisposable
             entry.NormalMarginHeight = marginHeight;
         }
 
-        var minimum = serverSide
-            ? (toplevel.MinWidth, toplevel.MinHeight)
-            : (toplevel.MinWidth > 0 ? toplevel.MinWidth + marginWidth : 0,
-                toplevel.MinHeight > 0 ? toplevel.MinHeight + marginHeight : 0);
-        var maximum = serverSide
-            ? (toplevel.MaxWidth, toplevel.MaxHeight)
-            : (toplevel.MaxWidth > 0 ? toplevel.MaxWidth + marginWidth : 0,
-                toplevel.MaxHeight > 0 ? toplevel.MaxHeight + marginHeight : 0);
+        var minimum = entry.IsScreen
+            ? (0, 0)
+            : serverSide
+                ? (toplevel.MinWidth, toplevel.MinHeight)
+                : (toplevel.MinWidth > 0 ? toplevel.MinWidth + marginWidth : 0,
+                    toplevel.MinHeight > 0 ? toplevel.MinHeight + marginHeight : 0);
+        var maximum = entry.IsScreen
+            ? (0, 0)
+            : serverSide
+                ? (toplevel.MaxWidth, toplevel.MaxHeight)
+                : (toplevel.MaxWidth > 0 ? toplevel.MaxWidth + marginWidth : 0,
+                    toplevel.MaxHeight > 0 ? toplevel.MaxHeight + marginHeight : 0);
         entry.Insets = InsetsOf(entry, geometry, entry.WindowWidth, entry.WindowHeight);
         var insets = entry.Insets;
         var id = entry.Id;
+        var isScreen = entry.IsScreen;
+        ApplyScreenOutput(entry, entry.Width, entry.Height);
         RunOnUi(() =>
         {
             var window = new ToplevelWindow(this, id, info, serverSide, minimum, maximum);
             window.ApplyResizeInsets(insets);
             _windows[id] = window;
             Policy.PlaceWindow(window, info);
+            if (isScreen)
+            {
+                _screenWindowId = id;
+                ScreenWindowChanged?.Invoke(window);
+            }
+
             if (ownerId is { } owner && _windows.TryGetValue(owner, out var ownerWindow))
             {
                 window.Show(ownerWindow);
@@ -478,6 +510,11 @@ public sealed class ToplevelWindows : IDisposable
             else
             {
                 window.Show();
+            }
+
+            if (isScreen && OperatingSystem.IsMacOS())
+            {
+                MacZoomButton.UseFullScreen(window.TryGetPlatformHandle());
             }
 
             CountChanged?.Invoke(_windows.Count);
@@ -585,6 +622,7 @@ public sealed class ToplevelWindows : IDisposable
     private void OnUnmapped(Entry entry)
     {
         Log.Debug($"toplevel unmapped: '{entry.Toplevel?.Title}'");
+        ClearScreenOutput(entry);
         RunOnUi(() => WindowOf(entry)?.ApplyVisible(false));
     }
 
@@ -593,13 +631,25 @@ public sealed class ToplevelWindows : IDisposable
         Log.Debug($"toplevel destroyed: '{entry.Toplevel?.Title}'");
         entry.SettleTimer?.Remove();
         entry.SettleTimer = null;
+        ClearScreenOutput(entry);
         ReleaseHeldInput(entry.Surface);
         _entries.Remove(entry.Id);
         _freeCells.Push(entry.Cell);
+        var wasScreen = entry.IsScreen;
         RunOnUi(() =>
         {
             if (_windows.Remove(entry.Id, out var window))
             {
+                if (wasScreen && _screenWindowId == entry.Id)
+                {
+                    _screenWindowId = 0;
+                    ScreenWindowChanged?.Invoke(null);
+                    if (OperatingSystem.IsMacOS())
+                    {
+                        MacZoomButton.Forget(window.TryGetPlatformHandle());
+                    }
+                }
+
                 _ = window.CloseFromCompositorAsync();
                 CountChanged?.Invoke(_windows.Count);
             }
@@ -612,6 +662,12 @@ public sealed class ToplevelWindows : IDisposable
         {
             if (ReferenceEquals(entry.Toplevel, toplevel))
             {
+                if (entry.IsScreen)
+                {
+                    _decorations?.SetMode(toplevel, DecorationMode.ServerSide);
+                    return;
+                }
+
                 var serverSide = mode != DecorationMode.ClientSide;
                 entry.ClientDecorated = !serverSide;
                 entry.WindowWidth = 0;
@@ -634,7 +690,7 @@ public sealed class ToplevelWindows : IDisposable
     private static (int Left, int Top, int Right, int Bottom) InsetsOf(
         Entry entry, Box geometry, int windowWidth, int windowHeight)
     {
-        if (!entry.ClientDecorated || entry.Toplevel is not { } toplevel || !HasFrameMargins(toplevel))
+        if (entry.IsScreen || !entry.ClientDecorated || entry.Toplevel is not { } toplevel || !HasFrameMargins(toplevel))
         {
             return default;
         }
@@ -691,7 +747,7 @@ public sealed class ToplevelWindows : IDisposable
         });
     }
 
-    private static void ResizeCore(Entry entry, int width, int height, WindowState state)
+    private void ResizeCore(Entry entry, int width, int height, WindowState state)
     {
         if (state is WindowState.Normal or WindowState.Maximized or WindowState.FullScreen)
         {
@@ -722,6 +778,7 @@ public sealed class ToplevelWindows : IDisposable
             entry.RequestedWidth = width;
             entry.RequestedHeight = height;
             toplevel.SetSize(width, height);
+            ApplyScreenOutput(entry, width, height);
             toplevel.RequestConfigure();
         }
         else if (entry.Foreign is { } foreign)
@@ -857,6 +914,7 @@ public sealed class ToplevelWindows : IDisposable
 
             entry.Scale = value;
             AnnounceScaleTree(entry.Surface, value);
+            ApplyScreenOutput(entry);
         });
     }
 
@@ -891,6 +949,8 @@ public sealed class ToplevelWindows : IDisposable
                 {
                     entry.Scale = _host.Screens.ScalingOf(key);
                 }
+
+                ApplyScreenOutput(entry);
             }
         });
     }
@@ -1705,6 +1765,92 @@ public sealed class ToplevelWindows : IDisposable
     internal void HostDragDrop() => _post(() => _drag?.DropFromHost());
 
     internal void HostDragLeave() => _post(() => _drag?.LeaveFromHost());
+
+    private void ApplyScreenOutput(Entry entry, int logicalWidth, int logicalHeight)
+    {
+        if (!entry.IsScreen)
+        {
+            return;
+        }
+
+        var key = entry.ScreenKey ?? _host.Screens.DefaultKey;
+        var global = key is null ? null : _host.Screens.GlobalFor(key);
+        if (global is null)
+        {
+            ClearScreenOutput(entry);
+            return;
+        }
+
+        if (entry.OverriddenOutput is { } previous && !ReferenceEquals(previous, global))
+        {
+            ClearScreenOutput(entry);
+        }
+
+        var client = entry.Surface.Resource.Client;
+        var scale = entry.Scale > 0 ? entry.Scale : key is null ? 1.0 : _host.Screens.ScalingOf(key);
+        var width = Math.Max(1, logicalWidth);
+        var height = Math.Max(1, logicalHeight);
+        var mode = new OutputMode(
+            Math.Max(1, (int)Math.Round(width * scale)),
+            Math.Max(1, (int)Math.Round(height * scale)),
+            global.Output.CurrentMode.RefreshMilliHz);
+        global.SetClientOverride(client, mode, OutputScaling.CeilScale(scale));
+        var box = _host.Layout.BoxOf(global.Output);
+        _xdgOutputs?.SetClientOverride(client, global, new Box(box.X, box.Y, width, height));
+        entry.OverriddenOutput = global;
+    }
+
+    private void ApplyScreenOutput(Entry entry) => ApplyScreenOutput(
+        entry,
+        entry.RequestedWidth > 0 ? entry.RequestedWidth : entry.Width,
+        entry.RequestedHeight > 0 ? entry.RequestedHeight : entry.Height);
+
+    private void ClearScreenOutput(Entry entry)
+    {
+        if (entry.OverriddenOutput is not { } global)
+        {
+            return;
+        }
+
+        entry.OverriddenOutput = null;
+        if (!entry.Surface.IsDestroyed)
+        {
+            var client = entry.Surface.Resource.Client;
+            global.ClearClientOverride(client);
+            _xdgOutputs?.ClearClientOverride(client, global);
+        }
+    }
+
+    public bool InputCaptured { get; private set; }
+
+    public void CaptureInput(bool captured)
+    {
+        _post(() =>
+        {
+            InputCaptured = captured;
+            foreach (var entry in _entries.Values)
+            {
+                if (!entry.IsScreen || _constraints?.ConstraintFor(entry.Surface) is not { } constraint)
+                {
+                    continue;
+                }
+
+                if (captured)
+                {
+                    constraint.Activate();
+                }
+                else
+                {
+                    constraint.Deactivate();
+                }
+            }
+        });
+    }
+
+    private int _screenWindowId;
+
+    public ToplevelWindow? ScreenWindow =>
+        _screenWindowId != 0 && _windows.TryGetValue(_screenWindowId, out var window) ? window : null;
 
     private void RunOnUi(Action action) => Dispatcher.UIThread.Post(action);
 

@@ -11,6 +11,7 @@ public sealed class XdgOutputManager : IDisposable
     private readonly WlGlobal _global;
     private readonly OutputLayout _layout;
     private readonly List<Entry> _outputs = [];
+    private readonly Dictionary<(WlClient Client, OutputGlobal Output), Box> _overrides = [];
 
     public XdgOutputManager(WlServerDisplay display, OutputLayout layout)
     {
@@ -19,9 +20,59 @@ public sealed class XdgOutputManager : IDisposable
         layout.Changed += OnLayoutChanged;
     }
 
+    public void SetClientOverride(WlClient client, OutputGlobal output, Box logical)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(output);
+        var key = (client, output);
+        if (_overrides.TryGetValue(key, out var existing) && existing == logical)
+        {
+            return;
+        }
+
+        if (!_overrides.ContainsKey(key))
+        {
+            client.Destroyed += () => _overrides.Remove(key);
+        }
+
+        _overrides[key] = logical;
+        Resend(client, output);
+    }
+
+    public void ClearClientOverride(WlClient client, OutputGlobal output)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(output);
+        if (!_overrides.Remove((client, output)))
+        {
+            return;
+        }
+
+        Resend(client, output);
+    }
+
+    private void Resend(WlClient client, OutputGlobal output)
+    {
+        foreach (var entry in _outputs)
+        {
+            if (entry.Resource.Client == client && ReferenceEquals(entry.Output, output))
+            {
+                entry.Box = BoxFor(entry.Resource, entry.Output);
+                SendBox(entry);
+                SendDone(entry);
+            }
+        }
+    }
+
+    private Box BoxFor(ZxdgOutputV1Resource resource, OutputGlobal output) =>
+        _overrides.TryGetValue((resource.Client, output), out var logical)
+            ? logical
+            : _layout.BoxOf(output.Output);
+
     public void Dispose()
     {
         _layout.Changed -= OnLayoutChanged;
+        _overrides.Clear();
         _global.Dispose();
     }
 
@@ -37,7 +88,7 @@ public sealed class XdgOutputManager : IDisposable
                 return;
             }
 
-            var entry = new Entry(resource, output, _layout.BoxOf(output.Output));
+            var entry = new Entry(resource, output, BoxFor(resource, output));
             _outputs.Add(entry);
             resource.Destroyed += (_, _) => _outputs.RemoveAll(candidate => candidate.Resource == resource);
             SendBox(entry);
@@ -55,7 +106,7 @@ public sealed class XdgOutputManager : IDisposable
     {
         foreach (var entry in _outputs)
         {
-            var box = _layout.BoxOf(entry.Output.Output);
+            var box = BoxFor(entry.Resource, entry.Output);
             if (box == entry.Box)
             {
                 continue;
