@@ -1,7 +1,5 @@
 <Solution>
-  <Folder Name="/apps/">
-    <Project Path="apps/Waylonia/Waylonia.csproj" />
-  </Folder>
+
   <Folder Name="/samples/">
     <Project Path="samples/BasinHeadless/BasinHeadless.csproj" />
     <Project Path="samples/BasinSwap/BasinSwap.csproj" />
@@ -63,7 +61,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Basin.Tests/Basin.Tests.csproj" />
     <Project Path="tests/BasinChurn/BasinChurn.csproj" />
-    <Project Path="tests/Waylonia.Tests/Waylonia.Tests.csproj" />
     <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
   </Folder>
 </Solution>

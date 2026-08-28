@@ -46,7 +46,7 @@ rid=
 out=
 destination=
 dry=0
-excluded=(apps/Waylonia samples/BlurClient samples/WorkspacePager)
+excluded=(samples/BlurClient samples/WorkspacePager)
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -145,7 +145,7 @@ else
     for wanted in "${projects[@]}"; do
         if ! path=$(resolve_program "$wanted"); then
             echo "unknown program '$wanted':" >&2
-            ( cd "$root" && ls -d apps/*/ samples/*/ | sed 's:/$::; s:^:  :' ) >&2
+            ( cd "$root" && ls -d apps/*/ samples/*/ 2>/dev/null | sed 's:/$::; s:^:  :' ) >&2
             exit 1
         fi
 

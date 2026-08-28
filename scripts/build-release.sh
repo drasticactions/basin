@@ -9,7 +9,6 @@ projects=()
 version=
 rid=
 out="$root/artifacts"
-waylonia=apps/Waylonia
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -32,7 +31,7 @@ if [ ${#projects[@]} -eq 0 ]; then
         project=${directory#"$root"/}
         project=${project%/}
         candidates=("$directory"*.csproj)
-        if [ "$project" != "$waylonia" ] && [ -f "${candidates[0]}" ]; then
+        if [ -f "${candidates[0]}" ]; then
             projects+=("$project")
         fi
     done
@@ -41,15 +40,7 @@ else
     for wanted in "${projects[@]}"; do
         if ! path=$(resolve_program "$wanted"); then
             echo "unknown program '$wanted':" >&2
-            ( cd "$root" && ls -d apps/*/ samples/*/ | sed 's:/$::; s:^:  :' ) >&2
-            exit 1
-        fi
-
-        if [ "$path" = "$waylonia" ]; then
-            case "$(host_rid)" in
-                win-*) echo "waylonia is packaged by scripts/build-waylonia.ps1" >&2 ;;
-                *) echo "waylonia is packaged by scripts/build-waylonia.sh" >&2 ;;
-            esac
+            ( cd "$root" && ls -d apps/*/ samples/*/ 2>/dev/null | sed 's:/$::; s:^:  :' ) >&2
             exit 1
         fi
 
