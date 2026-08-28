@@ -1038,7 +1038,14 @@ public sealed class ToplevelWindows : IDisposable
     {
         foreach (var entry in _entries.Values)
         {
-            if (entry.Toplevel?.Xdg == popup.Parent || entry.Popup?.Xdg == popup.Parent)
+            if (popup.Parent is { } parent)
+            {
+                if (entry.Toplevel?.Xdg == parent || entry.Popup?.Xdg == parent)
+                {
+                    return entry.Id;
+                }
+            }
+            else if (popup.LayerParent is { } layer && ReferenceEquals(entry.Layer, layer))
             {
                 return entry.Id;
             }
@@ -1131,7 +1138,7 @@ public sealed class ToplevelWindows : IDisposable
 
         var anchorX = parentOffset.X + position.X - popupGeometry.X;
         var anchorY = parentOffset.Y + position.Y - popupGeometry.Y;
-        var rootId = RootToplevelIdOf(parentId);
+        var rootId = RootHostWindowIdOf(parentId);
         var id = entry.Id;
         RunOnUi(() =>
         {
@@ -1148,7 +1155,7 @@ public sealed class ToplevelWindows : IDisposable
             }
 
             window.PlaceAt(parentView, anchorX, anchorY);
-            if (rootId is { } root && _windows.TryGetValue(root, out var rootWindow) &&
+            if (rootId is { } root && RootHostWindow(root) is { } rootWindow &&
                 rootWindow.Screens.ScreenFromTopLevel(rootWindow) is { } screen)
             {
                 var viewOrigin = parentView.PointToScreen(default);
@@ -1169,11 +1176,11 @@ public sealed class ToplevelWindows : IDisposable
         });
     }
 
-    private int? RootToplevelIdOf(int? entryId)
+    private int? RootHostWindowIdOf(int? entryId)
     {
         while (entryId is { } id && _entries.TryGetValue(id, out var entry))
         {
-            if (entry.Toplevel is not null)
+            if (entry.Toplevel is not null || entry.Layer is not null)
             {
                 return id;
             }
@@ -1578,6 +1585,16 @@ public sealed class ToplevelWindows : IDisposable
         }
 
         return 0;
+    }
+
+    private global::Avalonia.Controls.Window? RootHostWindow(int id)
+    {
+        if (_windows.TryGetValue(id, out var window))
+        {
+            return window;
+        }
+
+        return _layerWindows.TryGetValue(id, out var layer) ? layer : null;
     }
 
     private global::Avalonia.Controls.Control? WindowOrPopupView(int id)
