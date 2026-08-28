@@ -825,13 +825,6 @@ internal static class Program
             var seconds = (Environment.TickCount64 - started) / 1000.0;
             BasinReport.Line($"STATS {reported} frames in {seconds:F1}s ({reported / seconds:F1}/s) " + $"manage={management.ManageSequences} render={management.RenderSequences} " + $"timedout={Transaction.TimedOutCount}");
         };
-        runLoop.Iterated += () =>
-        {
-            if (fifo.HasPendingBarriers)
-            {
-                driver.ScheduleAll();
-            }
-        };
         runLoop.Run();
 
         if (screenshotPath is not null)

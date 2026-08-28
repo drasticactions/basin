@@ -174,6 +174,11 @@ public sealed class FifoManager : IDisposable, IFrameSink
 
     private void ArmGuard()
     {
+        foreach (var output in _hooked)
+        {
+            output.RequestRepaint();
+        }
+
         if (!_guardArmed)
         {
             _guardArmed = true;

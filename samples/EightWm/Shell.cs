@@ -297,13 +297,6 @@ internal sealed partial class Shell : IDisposable
 
     private void OnIterated()
     {
-        if (_fifo is { HasPendingBarriers: true })
-        {
-            foreach (var view in Views)
-            {
-                view.Scheduler?.ScheduleRepaint();
-            }
-        }
 
         foreach (var view in Views)
         {

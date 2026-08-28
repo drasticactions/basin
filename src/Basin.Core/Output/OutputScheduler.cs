@@ -28,6 +28,7 @@ public sealed class OutputScheduler : IDisposable
         _output = output;
         _timer = loop.AddTimer(OnTimer);
         output.Frame += OnFrame;
+        output.RepaintRequested += ScheduleRepaint;
         output.Destroyed += Dispose;
     }
 
@@ -112,6 +113,7 @@ public sealed class OutputScheduler : IDisposable
         if (!_disposed)
         {
             _disposed = true;
+            _output.RepaintRequested -= ScheduleRepaint;
             _output.Frame -= OnFrame;
             _timer.Remove();
         }

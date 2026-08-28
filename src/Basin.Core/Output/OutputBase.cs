@@ -37,6 +37,10 @@ public abstract class OutputBase : IOutput
 
     public event Action? Frame;
 
+    public event Action? RepaintRequested;
+
+    public void RequestRepaint() => RepaintRequested?.Invoke();
+
     public event Action<OutputStateFields>? Committed;
 
     public event Action? Destroyed;

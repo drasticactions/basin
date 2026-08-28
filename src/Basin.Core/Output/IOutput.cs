@@ -37,11 +37,15 @@ public interface IOutput
 
     ReadOnlyMemory<byte> EdidBytes => default;
 
+    void RequestRepaint();
+
     bool TestCommit(OutputState state);
 
     bool Commit(OutputState state);
 
     event Action? Frame;
+
+    event Action? RepaintRequested;
 
     event Action<OutputStateFields>? Committed;
 
