@@ -2,23 +2,19 @@
 #
 # install-programs.sh [OPTIONS] [NAME...]
 #
-# Publishes the sample compositors, the window managers, Inlet and Dam with
-# NativeAOT, then copies each binary and the native libraries beside it into
-# one directory. The default is ~/.local/bin, and an existing file of the
-# same name is overwritten.
+# Publishes the sample compositors and the window managers with NativeAOT,
+# then copies each binary and the native libraries beside it into one
+# directory. The default is ~/.local/bin, and an existing file of the same
+# name is overwritten.
 #
 # Naming programs installs those instead, by name or by path. A name is the
 # binary's, which is the project's assembly name rather than its directory:
-# retro-wm, not RetroWm. The client samples and Waylonia are not in the
-# default set, and a name still installs any of them.
+# retro-wm, not RetroWm. The client samples are not in the default set,
+# and a name still installs either of them.
 #
 # The version defaults to 0.1.0-local.g<commit>, with .dirty when tracked
 # files differ from the commit, so an installed binary never claims a version
 # CI can also mint.
-#
-# Waylonia installs for the host only. A release of it is one run of
-# build-waylonia.sh on each of the three platforms it runs on, and a macOS
-# install here is the host's own slice rather than the universal binary.
 #
 # A .desktop file in a publish is installed into the desktop database under
 # $XDG_DATA_HOME instead, because that is where a portal reads it.
@@ -56,7 +52,7 @@ while [ $# -gt 0 ]; do
         --ssh) destination=${2:?--ssh needs a value}; shift 2 ;;
         -n|--dry-run) dry=1; shift ;;
         -h|--help)
-            sed -n '3,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '3,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         -*)

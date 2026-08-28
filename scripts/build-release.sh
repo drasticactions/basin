@@ -1,5 +1,28 @@
 #!/usr/bin/env bash
 #
+# build-release.sh [OPTIONS] [NAME...]
+#
+# Publishes every program under apps/ and samples/ with NativeAOT, and zips
+# one folder per program into artifacts/. The folder is named
+# <binary>-<version>-<rid>, and it holds the binary, the native libraries
+# beside it and the LICENSE.
+#
+# A zipped sample is a hand test on another box rather than a release
+# artifact. CI uploads only the programs its own publish step names.
+#
+# The set is discovered rather than listed, because a list is a second place
+# to remember a new program. Naming programs publishes those instead, by name
+# or by path. A name is the binary's, which is the project's assembly name
+# rather than its directory: retro-wm, not RetroWm.
+#
+# The version defaults to 0.1.0-local.g<commit>, with .dirty when tracked
+# files differ from the commit, so a hand-built binary never claims a version
+# CI can also mint.
+#
+#   --version V   version to stamp, default 0.1.0-local.g<commit>
+#   --rid RID     runtime identifier, default the host's
+#   --out DIR     where the zips are written, default artifacts/
+#
 
 set -euo pipefail
 
@@ -15,6 +38,10 @@ while [ $# -gt 0 ]; do
         --version) version=${2:?--version needs a value}; shift 2 ;;
         --rid) rid=${2:?--rid needs a value}; shift 2 ;;
         --out) out=${2:?--out needs a value}; shift 2 ;;
+        -h|--help)
+            sed -n '3,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
         -*)
             echo "unknown argument '$1'" >&2
             exit 1
