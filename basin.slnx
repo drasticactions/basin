@@ -1,14 +1,15 @@
 <Solution>
   <Folder Name="/apps/">
-    <Project Path="apps/Dam/Dam.csproj" />
-    <Project Path="apps/Inlet/Inlet.csproj" />
     <Project Path="apps/Waylonia/Waylonia.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/BasinHeadless/BasinHeadless.csproj" />
     <Project Path="samples/BasinSwap/BasinSwap.csproj" />
     <Project Path="samples/BlurClient/BlurClient.csproj" />
+    <Project Path="samples/Dam/Dam.csproj" />
+    <Project Path="samples/Dinghy/Dinghy.csproj" />
     <Project Path="samples/EightWm/EightWm.csproj" />
+    <Project Path="samples/Inlet/Inlet.csproj" />
     <Project Path="samples/InletWm/InletWm.csproj" />
     <Project Path="samples/PlasmaHost/PlasmaHost.csproj" />
     <Project Path="samples/RetroWm/RetroWm.csproj" />

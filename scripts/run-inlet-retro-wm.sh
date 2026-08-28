@@ -27,7 +27,7 @@ done
 
 if [ "$build" -eq 1 ]; then
     echo "building inlet and retro-wm (Debug)"
-    dotnet build "$root/apps/Inlet" -c Debug --nologo -v quiet
+    dotnet build "$root/samples/Inlet" -c Debug --nologo -v quiet
     dotnet build "$root/samples/RetroWm" -c Debug --nologo -v quiet
 fi
 
@@ -35,7 +35,7 @@ find_binary() {
     find "$1/bin/Debug" -maxdepth 2 -mindepth 2 -name "$2" -type f -perm -u+x 2>/dev/null | head -1
 }
 
-inlet=$(find_binary "$root/apps/Inlet" inlet)
+inlet=$(find_binary "$root/samples/Inlet" inlet)
 retrowm=$(find_binary "$root/samples/RetroWm" retro-wm)
 if [ -z "$inlet" ] || [ -z "$retrowm" ]; then
     echo "no Debug build found; run without --no-build" >&2

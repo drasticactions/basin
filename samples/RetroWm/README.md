@@ -12,7 +12,7 @@ dotnet build samples/RetroWm
 ## Running
 
 RetroWm needs a compositor that speaks the river window-management protocols,
-which means [Inlet](../../apps/Inlet) or river itself.
+which means [Inlet](../Inlet) or river itself.
 
 With river:
 
@@ -24,7 +24,7 @@ With Inlet, in two terminals — Inlet prints `SOCKET wayland-N` once it is
 listening:
 
 ```sh
-dotnet run --project apps/Inlet -- --outputs 1
+dotnet run --project samples/Inlet -- --outputs 1
 dotnet run --project samples/RetroWm -- --socket wayland-N
 ```
 
