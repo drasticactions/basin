@@ -20,6 +20,7 @@ public sealed class OutputScheduler : IDisposable
     private long _leadBoostNanos = long.MaxValue;
     private int _onTimeStreak;
     private bool _everMissed;
+    private bool _pacedFromLastFrame;
     private bool _disposed;
 
     public OutputScheduler(ICompositorEventLoop loop, IOutput output)
@@ -33,6 +34,8 @@ public sealed class OutputScheduler : IDisposable
     }
 
     public event Action? Repaint;
+
+    public long MissedVblanks { get; private set; }
 
     public int RenderAheadMillis { get; set; } = 7;
 
@@ -210,12 +213,14 @@ public sealed class OutputScheduler : IDisposable
         if (_commitInFlight && _lastFireNanos > 0 && interval > 0)
         {
             var late = _lastFrameNanos - _lastFireNanos > interval + (interval >> 2);
-            var skipped = previousFrame > 0 && _lastFrameNanos - previousFrame > interval + (interval >> 1);
+            var skipped = _pacedFromLastFrame && previousFrame > 0 &&
+                _lastFrameNanos - previousFrame > interval + (interval >> 1);
             if (late || skipped)
             {
                 _leadBoostNanos = Math.Min(Math.Min(_leadBoostNanos, interval) + 3_000_000, interval);
                 _onTimeStreak = 0;
                 _everMissed = true;
+                MissedVblanks++;
                 Log.Debug($"scheduler: missed vblank; lead boost {_leadBoostNanos / 1_000_000} ms");
             }
             else if (_leadBoostNanos > 0 && ++_onTimeStreak >= (_everMissed ? 600 : 120))
@@ -226,6 +231,7 @@ public sealed class OutputScheduler : IDisposable
         }
 
         _commitInFlight = false;
+        _pacedFromLastFrame = _repaintQueued;
         if (_repaintQueued && !_disposed && !_timerArmed && !_idleQueued)
         {
             Log.Debug($"scheduler: flip; deadline armed");

@@ -150,6 +150,49 @@ public sealed class OutputSchedulerTests
         fast.Destroy();
         slow.Destroy();
     }
+
+    [Fact]
+    public void An_idle_gap_between_flips_is_not_a_missed_vblank()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = new OutputScheduler(host.Loop, host.Output);
+        scheduler.Repaint += () => { };
+
+        scheduler.ScheduleRepaint();
+        host.Loop.Dispatch(0);
+        scheduler.NotifyCommitted();
+        host.Output.StepFrame();
+
+        System.Threading.Thread.Sleep(40);
+
+        scheduler.ScheduleRepaint();
+        host.Loop.Dispatch(0);
+        scheduler.NotifyCommitted();
+        host.Output.StepFrame();
+
+        Assert.Equal(0, scheduler.MissedVblanks);
+    }
+
+    [Fact]
+    public void A_cycle_lost_while_a_repaint_was_pending_is_a_missed_vblank()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = new OutputScheduler(host.Loop, host.Output);
+        scheduler.Repaint += () => { };
+
+        scheduler.ScheduleRepaint();
+        host.Loop.Dispatch(0);
+        scheduler.NotifyCommitted();
+        scheduler.ScheduleRepaint();
+        host.Output.StepFrame();
+
+        System.Threading.Thread.Sleep(40);
+
+        scheduler.NotifyCommitted();
+        host.Output.StepFrame();
+
+        Assert.True(scheduler.MissedVblanks > 0, "a lost cycle under a pending repaint must still count");
+    }
 }
 
 public sealed class OutputLayerTests
