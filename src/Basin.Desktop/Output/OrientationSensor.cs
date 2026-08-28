@@ -2,9 +2,9 @@ using System.Runtime.InteropServices;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Tmds.DBus.Protocol;
-using static Basin.Plasma.PlasmaLog;
+using static Basin.Desktop.DesktopLog;
 
-namespace Basin.Plasma;
+namespace Basin.Desktop;
 
 public sealed class OrientationSensor : IOrientationSource, IDisposable
 {

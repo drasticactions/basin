@@ -9,12 +9,10 @@
     <Project Path="samples/EightWm/EightWm.csproj" />
     <Project Path="samples/Inlet/Inlet.csproj" />
     <Project Path="samples/InletWm/InletWm.csproj" />
-    <Project Path="samples/PlasmaHost/PlasmaHost.csproj" />
     <Project Path="samples/RetroWm/RetroWm.csproj" />
     <Project Path="samples/TinyComp/TinyComp.csproj" />
     <Project Path="samples/TinyWl/TinyWl.csproj" />
     <Project Path="samples/Westonia/Westonia.csproj" />
-    <Project Path="samples/WorkspacePager/WorkspacePager.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
@@ -27,7 +25,6 @@
     <Project Path="src/Basin.Core/Basin.Core.csproj" />
     <Project Path="src/Basin.Desktop/Basin.Desktop.csproj" />
     <Project Path="src/Basin.Host/Basin.Host.csproj" />
-    <Project Path="src/Basin.Plasma/Basin.Plasma.csproj" />
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
     <Project Path="src/Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
     <Project Path="src/Basin.Render.Gl/Basin.Render.Gl.csproj" />

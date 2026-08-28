@@ -83,8 +83,6 @@ internal sealed partial class TinyComp :
     private readonly Basin.Capabilities.Defaults.CursorImageTheme _cursorTheme;
     private readonly Basin.Backend.Drm.DrmOutputGamma _gamma;
     private readonly XdgToplevelSource _xdgToplevels;
-    private Basin.Plasma.AppMenuManager _appMenus = null!;
-    private Basin.Plasma.ServerDecorationPaletteManager _palettes = null!;
     private readonly Basin.Capabilities.IToplevelModel _toplevels;
     private readonly Basin.Seat.SeatIdleSource? _idleSource;
     private Basin.Desktop.CursorShapeManager _cursorShapes = null!;
@@ -107,7 +105,7 @@ internal sealed partial class TinyComp :
     private IOutputConfiguration? _outputConfiguration;
     private Basin.Color.ColorOutputConfiguration? _colorConfiguration;
     private Basin.Color.ColorCapabilityPack _colorPack = null!;
-    private Basin.Plasma.OrientationSensor? _orientationSensor;
+    private Basin.Desktop.OrientationSensor? _orientationSensor;
     private Basin.Capabilities.Defaults.LayoutOutputConfiguration? _layoutConfiguration;
     private Basin.Desktop.FifoManager _fifo = null!;
     private Basin.Capabilities.IFrameClock _frameClock = null!;
@@ -319,7 +317,7 @@ internal sealed partial class TinyComp :
         _stack = capturePack.Stack;
         _gamma = servicePack.Drm.Gamma;
         _cursorTheme = servicePack.CursorTheme;
-        _orientationSensor = new Basin.Plasma.OrientationSensor(_loop);
+        _orientationSensor = new Basin.Desktop.OrientationSensor(_loop);
         _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
         _layoutConfiguration = _colorPack.Layout;
         _layoutConfiguration.Orientation = _orientationSensor;
@@ -444,7 +442,6 @@ internal sealed partial class TinyComp :
 
         _services
             .Install(desktopPack)
-            .Install(Basin.Plasma.PlasmaPack.Default)
             .Install(xwayland);
         if (dmabufModule is not null)
         {
@@ -473,15 +470,6 @@ internal sealed partial class TinyComp :
         }
 
         _xdgToplevels = _services.Require<XdgToplevelSource>();
-        _appMenus = _services.Require<Basin.Plasma.AppMenuManager>();
-        _palettes = _services.Require<Basin.Plasma.ServerDecorationPaletteManager>();
-        _appMenus.AddressChanged += (surface, service, path) =>
-        {
-            if (FindWindow(surface) is { } menuWindow)
-            {
-                _xdgToplevels.SetAppMenu(menuWindow.Toplevel, service, path);
-            }
-        };
         _toplevels = _services.Require<Basin.Capabilities.IToplevelModel>();
         capturePack.Attach(_toplevels, surface =>
         {
@@ -728,10 +716,6 @@ internal sealed partial class TinyComp :
             }
 
             _ = new Window(this, toplevel);
-            if (_appMenus.MenuOf(toplevel.Surface) is { } menu)
-            {
-                _xdgToplevels.SetAppMenu(toplevel, menu.ServiceName, menu.ObjectPath);
-            }
         };
         _shell.NewPopup += WirePopup;
         WireSessions();
@@ -3868,7 +3852,7 @@ internal sealed partial class TinyComp :
 
             replicaView.ReplicaSource = uuid.Length > 0
                 ? _views.FirstOrDefault(v =>
-                    v != replicaView && Basin.Plasma.PlasmaOutputUuid.For(v.Output) == uuid)
+                    v != replicaView && Basin.Desktop.OutputUuid.For(v.Output) == uuid)
                 : null;
             replicaView.Scheduler?.ScheduleRepaint();
         }
@@ -4701,7 +4685,6 @@ internal sealed partial class TinyComp :
             Fullscreen = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen),
             Resizing = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Resizing),
             Capabilities = FrameCapabilities.Maximize,
-            Palette = _comp._palettes.PaletteOf(Toplevel.Surface)?.Palette,
         };
 
         private void OnFrameAction(FrameAction action)

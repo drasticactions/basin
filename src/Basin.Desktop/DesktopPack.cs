@@ -33,8 +33,6 @@ public static class DesktopPack
             new ForeignToplevelModule(),
             new ForeignToplevelListModule(),
             new WorkspaceModule(),
-            new PlasmaVirtualDesktopModule(),
-            new PlasmaWindowManagementModule(),
             new RelativePointerModule(),
             new PointerConstraintsModule(),
             new PointerGesturesModule(),

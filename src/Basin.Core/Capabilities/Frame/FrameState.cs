@@ -17,6 +17,4 @@ public readonly record struct FrameState
     public bool Resizing { get; init; }
 
     public FrameCapabilities Capabilities { get; init; }
-
-    public string? Palette { get; init; }
 }

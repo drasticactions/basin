@@ -17,6 +17,7 @@
     <ProjectReference Include="../Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
     <ProjectReference Include="../Basin.Color/Basin.Color.csproj" />
     <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-output/xdg-output-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/fullscreen-shell/fullscreen-shell-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-session-lock/ext-session-lock-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
@@ -53,8 +54,6 @@
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-foreign/xdg-foreign-unstable-v2.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/xdg-system-bell/xdg-system-bell-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(PlasmaProtocolsDir)server-decoration.xml" WaylandNamespace="Basin.Desktop.Protocol" />
-    <AdditionalFiles Include="$(PlasmaProtocolsDir)org-kde-plasma-virtual-desktop.xml" WaylandNamespace="Basin.Desktop.Protocol" />
-    <AdditionalFiles Include="$(PlasmaProtocolsDir)plasma-window-management.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/security-context/security-context-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/text-input/text-input-unstable-v1.xml" WaylandNamespace="Basin.Desktop.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/text-input/text-input-unstable-v3.xml" WaylandNamespace="Basin.Desktop.Protocol" />

@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Basin.Plasma;
+namespace Basin.Desktop;
 
-public static class PlasmaOutputUuid
+public static class OutputUuid
 {
     public static string For(IOutput output)
     {

@@ -1,7 +1,0 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:shell="using:PlasmaHost.Shell"
-             x:Class="PlasmaHost.Shell.BreezeEdgeView"
-             x:DataType="shell:BreezeEdgeModel">
-  <Border x:Name="Chrome" Background="{Binding Background}" />
-</UserControl>

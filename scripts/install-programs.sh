@@ -42,7 +42,7 @@ rid=
 out=
 destination=
 dry=0
-excluded=(samples/BlurClient samples/WorkspacePager)
+excluded=(samples/BlurClient)
 
 while [ $# -gt 0 ]; do
     case "$1" in
