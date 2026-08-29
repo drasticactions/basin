@@ -241,7 +241,6 @@ public sealed class BackdropEffectSeamTests
         target.Destroy();
     }
 
-
     [Fact]
     public void Gl_composites_the_effect_result_into_the_region()
     {

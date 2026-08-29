@@ -139,7 +139,14 @@ public sealed class FullscreenShellGlobal : IDisposable
         }
     }
 
-    private IOutput? FirstOutput => _layout.Outputs.Count > 0 ? _layout.Outputs[0].Output : null;
+    private IOutput? FirstOutput
+    {
+        get
+        {
+            var outputs = _layout.Outputs;
+            return outputs.Length > 0 ? outputs[0].Output : null;
+        }
+    }
 
     private void Present(IOutput output, Surface surface, ZwpFullscreenShellModeFeedbackV1Resource? feedback)
     {

@@ -16,7 +16,7 @@ public sealed class DumbDrmBuffer : BufferBase
         Format = format;
     }
 
-    public DrmFormat Format { get; }
+    public override DrmFormat Format { get; }
 
     internal uint GemHandle => _dumb.Handle;
 

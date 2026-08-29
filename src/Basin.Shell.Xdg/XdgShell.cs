@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Basin.Shell.Xdg.Protocol;
 using Wayland;
 using Wayland.Server;
@@ -98,14 +100,6 @@ public sealed class XdgShell : IDisposable
 
     private void WirePositioner(XdgPositionerResource resource)
     {
-        void Update(Func<XdgPositionerRules, XdgPositionerRules> edit)
-        {
-            if (_positioners.TryGetValue(resource, out var rules))
-            {
-                _positioners[resource] = edit(rules);
-            }
-        }
-
         resource.SetSize += (_, e) =>
         {
             if (e.Width <= 0 || e.Height <= 0)
@@ -114,7 +108,11 @@ public sealed class XdgShell : IDisposable
                 return;
             }
 
-            Update(r => r with { Width = e.Width, Height = e.Height });
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { Width = e.Width, Height = e.Height };
+            }
         };
         resource.SetAnchorRect += (_, e) =>
         {
@@ -124,14 +122,56 @@ public sealed class XdgShell : IDisposable
                 return;
             }
 
-            Update(r => r with { AnchorRect = new Box(e.X, e.Y, e.Width, e.Height) });
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { AnchorRect = new Box(e.X, e.Y, e.Width, e.Height) };
+            }
         };
-        resource.SetAnchor += (_, e) => Update(r => r with { Anchor = e.Anchor });
-        resource.SetGravity += (_, e) => Update(r => r with { Gravity = e.Gravity });
-        resource.SetConstraintAdjustment += (_, e) => Update(r => r with { ConstraintAdjustment = e.ConstraintAdjustment });
-        resource.SetOffset += (_, e) => Update(r => r with { OffsetX = e.X, OffsetY = e.Y });
-        resource.SetReactive += (_, _) => Update(r => r with { Reactive = true });
+        resource.SetAnchor += (_, e) =>
+        {
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { Anchor = e.Anchor };
+            }
+        };
+        resource.SetGravity += (_, e) =>
+        {
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { Gravity = e.Gravity };
+            }
+        };
+        resource.SetConstraintAdjustment += (_, e) =>
+        {
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { ConstraintAdjustment = e.ConstraintAdjustment };
+            }
+        };
+        resource.SetOffset += (_, e) =>
+        {
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { OffsetX = e.X, OffsetY = e.Y };
+            }
+        };
+        resource.SetReactive += (_, _) =>
+        {
+            ref var rules = ref RulesOf(resource);
+            if (!Unsafe.IsNullRef(ref rules))
+            {
+                rules = rules with { Reactive = true };
+            }
+        };
     }
+
+    private ref XdgPositionerRules RulesOf(XdgPositionerResource resource) =>
+        ref CollectionsMarshal.GetValueRefOrNullRef(_positioners, resource);
 
     internal bool TryGetPositioner(XdgPositionerResource? resource, out XdgPositionerRules rules)
     {

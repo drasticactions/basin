@@ -113,22 +113,22 @@ public sealed class Surface
         Current.FrameCallbacks.Clear();
     }
 
-    private readonly HashSet<OutputGlobal> _enteredOutputs = [];
+    private HashSet<OutputGlobal>? _enteredOutputs;
 
     public void SetOutputPresence(OutputGlobal output, bool inside)
     {
-        if (_destroyed || inside == _enteredOutputs.Contains(output))
+        if (_destroyed || inside == (_enteredOutputs?.Contains(output) ?? false))
         {
             return;
         }
 
         if (inside)
         {
-            _enteredOutputs.Add(output);
+            (_enteredOutputs ??= []).Add(output);
         }
         else
         {
-            _enteredOutputs.Remove(output);
+            _enteredOutputs?.Remove(output);
         }
 
         foreach (var resource in output.ResourcesOf(Resource.Client))
@@ -146,7 +146,8 @@ public sealed class Surface
         OutputPresenceChanged?.Invoke();
     }
 
-    public IReadOnlyCollection<OutputGlobal> EnteredOutputs => _enteredOutputs;
+    public IReadOnlyCollection<OutputGlobal> EnteredOutputs =>
+        _enteredOutputs ?? (IReadOnlyCollection<OutputGlobal>)Array.Empty<OutputGlobal>();
 
     public event Action? OutputPresenceChanged;
 
@@ -155,9 +156,12 @@ public sealed class Surface
         get
         {
             var scale = 0.0;
-            foreach (var output in _enteredOutputs)
+            if (_enteredOutputs is { } entered)
             {
-                scale = Math.Max(scale, output.Output.Scale);
+                foreach (var output in entered)
+                {
+                    scale = Math.Max(scale, output.Output.Scale);
+                }
             }
 
             return scale;
@@ -212,6 +216,15 @@ public sealed class Surface
         width = Math.Min(width, int.MaxValue - Math.Max(0, x));
         height = Math.Min(height, int.MaxValue - Math.Max(0, y));
         target.UnionRect(target, x, y, (uint)width, (uint)height);
+        if (field == SurfaceStateFields.SurfaceDamage)
+        {
+            Pending.SurfaceDamageRects.Add(x, y, width, height);
+        }
+        else
+        {
+            Pending.BufferDamageRects.Add(x, y, width, height);
+        }
+
         Pending.Committed |= field;
     }
 
@@ -233,7 +246,11 @@ public sealed class Surface
 
     private void OnSetOpaqueRegion(WlRegionResource? regionResource)
     {
-        Pending.Opaque.Clear();
+        if (Pending.HasOpaque)
+        {
+            Pending.Opaque.Clear();
+        }
+
         if (_owner.ResolveRegion(regionResource) is { } region)
         {
             Pending.Opaque.Copy(region.Pixman);
@@ -244,7 +261,11 @@ public sealed class Surface
 
     private void OnSetInputRegion(WlRegionResource? regionResource)
     {
-        Pending.Input.Clear();
+        if (Pending.HasInput)
+        {
+            Pending.Input.Clear();
+        }
+
         if (_owner.ResolveRegion(regionResource) is { } region)
         {
             Pending.Input.Copy(region.Pixman);
@@ -444,7 +465,7 @@ public sealed class Surface
         }
     }
 
-    private readonly List<Subsurface> _commitScratch = [];
+    private List<Subsurface>? _commitScratch;
 
     internal Basin.Protocol.WpViewportResource? ViewportResource { get; set; }
 
@@ -479,23 +500,30 @@ public sealed class Surface
         ValidateViewportSource();
         SyncGuardedShadows();
 
-        _commitScratch.Clear();
-        _commitScratch.AddRange(SubsurfacesBelow);
-        _commitScratch.AddRange(SubsurfacesAbove);
+        if (SubsurfacesBelow.Count == 0 && SubsurfacesAbove.Count == 0)
+        {
+            Committed?.Invoke();
+            return;
+        }
 
-        foreach (var child in _commitScratch)
+        var scratch = _commitScratch ??= [];
+        scratch.Clear();
+        scratch.AddRange(SubsurfacesBelow);
+        scratch.AddRange(SubsurfacesAbove);
+
+        foreach (var child in scratch)
         {
             child.ApplyPendingPlacement();
         }
 
         Committed?.Invoke();
 
-        foreach (var child in _commitScratch)
+        foreach (var child in scratch)
         {
             child.OnParentCommitted();
         }
 
-        _commitScratch.Clear();
+        scratch.Clear();
     }
 
     private List<ManagedShmBuffer>? _guardedShadows;

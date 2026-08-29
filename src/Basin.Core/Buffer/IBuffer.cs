@@ -8,6 +8,8 @@ public partial interface IBuffer
 
     int LockCount { get; }
 
+    DrmFormat Format { get; }
+
     bool IsDestroyed { get; }
 
     BufferLock Lock();

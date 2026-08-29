@@ -10,6 +10,8 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
 {
     private readonly Dictionary<IBuffer, Entry> _entries = [];
     private readonly List<(IBuffer Buffer, Entry Entry)> _orphans = [];
+    private readonly List<IBuffer> _dead = [];
+    private Action? _drop;
 
     internal Func<IBuffer, bool>? IsScanningOut { get; set; }
 
@@ -30,7 +32,8 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
         {
             entry = Import(buffer) ?? new Entry();
             _entries[buffer] = entry;
-            buffer.Destroyed += () => Drop(buffer);
+            _drop ??= DropDestroyed;
+            buffer.Destroyed += _drop;
         }
 
         if (!opaque || entry.PlaneHandles.Length == 0 || !buffer.TryGetDmabuf(out var attributes))
@@ -130,6 +133,29 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
             PlaneHandles = perPlane,
             ImportedHandles = imported.ToArray(),
         };
+    }
+
+    private void DropDestroyed()
+    {
+        foreach (var pair in _entries)
+        {
+            if (pair.Key.IsDestroyed)
+            {
+                _dead.Add(pair.Key);
+            }
+        }
+
+        foreach (var buffer in _dead)
+        {
+            if (_drop is { } drop)
+            {
+                buffer.Destroyed -= drop;
+            }
+
+            Drop(buffer);
+        }
+
+        _dead.Clear();
     }
 
     private void Drop(IBuffer buffer)

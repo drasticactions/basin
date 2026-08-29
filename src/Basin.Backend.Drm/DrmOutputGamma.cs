@@ -16,10 +16,28 @@ public sealed class DrmOutputGamma : IOutputGamma
             return false;
         }
 
+        var applied = ramps;
+        if (BaselineFor(drm) is { } baseline && ramps.Red.Length == baseline.Red.Length)
+        {
+            var size = baseline.Red.Length;
+            var composed = new OutputGammaRamps(new ushort[size], new ushort[size], new ushort[size]);
+            for (var i = 0; i < size; i++)
+            {
+                composed.Red[i] = baseline.Red[RampIndex(ramps.Red[i], size)];
+                composed.Green[i] = baseline.Green[RampIndex(ramps.Green[i], size)];
+                composed.Blue[i] = baseline.Blue[RampIndex(ramps.Blue[i], size)];
+            }
+
+            applied = composed;
+        }
+
         using var state = new OutputState();
-        state.SetGammaLut(ramps);
+        state.SetGammaLut(applied);
         return drm.Commit(state);
     }
+
+    private static int RampIndex(ushort value, int size) =>
+        (int)Math.Round(value * (double)(size - 1) / ushort.MaxValue);
 
     public bool Reset(IOutput output)
     {

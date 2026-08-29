@@ -18,6 +18,12 @@ public static class Colorimetry
         return Multiply(fromXyz, Multiply(adapt, toXyz));
     }
 
+    public static double[] RgbToXyzD50(in Chromaticities c)
+    {
+        var adapt = BradfordAdaptation(WhiteXyz(c.Wx, c.Wy), [0.9642, 1.0, 0.8249]);
+        return Multiply(adapt, RgbToXyz(c));
+    }
+
     public static double[] RgbToXyz(in Chromaticities c)
     {
         double[] primaries =

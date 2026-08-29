@@ -13,6 +13,8 @@ internal sealed class ManagedShmBuffer : BufferBase
     private readonly nint _address;
     private readonly int _stride;
     private readonly DrmFormat _format;
+
+    public override DrmFormat Format => _format;
     private readonly bool _writable;
     private readonly ISharedMemory? _guard;
     private PixmanRegion32? _dirty;

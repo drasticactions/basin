@@ -99,12 +99,37 @@ public sealed class CursorImages : IDisposable
             if (cursor is not null)
             {
                 var frame = cursor.Frame(0);
-                if (AllocateFor(frame.Width, frame.Height) is { } buffer)
+                var oversized = frame.Width > _bufferWidth || frame.Height > _bufferHeight;
+                if (oversized && Allocate() is { } scaled)
+                {
+                    var factor = Math.Min(
+                        _bufferWidth / (double)frame.Width, _bufferHeight / (double)frame.Height);
+                    var width = Math.Max(1, (int)Math.Round(frame.Width * factor));
+                    var height = Math.Max(1, (int)Math.Round(frame.Height * factor));
+                    if (UploadScaled(scaled, frame.Pixels, frame.Width, frame.Height, width, height, entry.Lut))
+                    {
+                        Log.Debug(
+                            $"cursor {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale} " +
+                            $"and the buffer is {scaled.Width}x{scaled.Height}, so it is scaled to fit the cursor plane");
+
+                        image = new CursorImage(
+                            scaled,
+                            width,
+                            height,
+                            (int)Math.Round(frame.HotspotX * factor),
+                            (int)Math.Round(frame.HotspotY * factor));
+                    }
+                    else
+                    {
+                        (scaled as BufferBase)?.Destroy();
+                    }
+                }
+
+                if (image is null && AllocateFor(frame.Width, frame.Height) is { } buffer)
                 {
                     if (Upload(buffer, frame.Pixels, frame.Width, frame.Height, entry.Lut))
                     {
-                        var clipped = frame.Width > _bufferWidth || frame.Height > _bufferHeight;
-                        if (clipped)
+                        if (oversized)
                         {
                             Log.Debug(
                                 $"cursor {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale} " +
@@ -117,7 +142,7 @@ public sealed class CursorImages : IDisposable
                             Math.Min(frame.Height, buffer.Height),
                             frame.HotspotX,
                             frame.HotspotY,
-                            clipped);
+                            oversized);
                     }
                     else
                     {

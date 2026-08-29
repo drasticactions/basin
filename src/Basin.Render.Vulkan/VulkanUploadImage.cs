@@ -13,15 +13,24 @@ public sealed unsafe class VulkanUploadImage : IDisposable
     private bool _uploaded;
     private bool _transitioned;
 
-    private int _dirtyX0;
-    private int _dirtyY0;
-    private int _dirtyX1;
-    private int _dirtyY1;
+    private DamageRects _dirty;
+    private CopyRegions _copies;
+    private int _copyCount;
 
-    private int _copyX;
-    private int _copyY;
-    private int _copyWidth;
-    private int _copyHeight;
+    private struct CopyRegion
+    {
+        public int X;
+        public int Y;
+        public int Width;
+        public int Height;
+        public ulong Offset;
+    }
+
+    [System.Runtime.CompilerServices.InlineArray(DamageRects.Capacity)]
+    private struct CopyRegions
+    {
+        private CopyRegion _element0;
+    }
 
     public VulkanUploadImage(VulkanDevice device, IBuffer buffer)
     {
@@ -168,10 +177,8 @@ public sealed unsafe class VulkanUploadImage : IDisposable
     public void MarkDirty()
     {
         _uploaded = false;
-        _dirtyX0 = 0;
-        _dirtyY0 = 0;
-        _dirtyX1 = Width;
-        _dirtyY1 = Height;
+        _dirty.Clear();
+        _dirty.Add(0, 0, Width, Height);
     }
 
     public void MarkDirty(in Box damage)
@@ -187,18 +194,19 @@ public sealed unsafe class VulkanUploadImage : IDisposable
 
         if (_uploaded)
         {
-            _dirtyX0 = x0;
-            _dirtyY0 = y0;
-            _dirtyX1 = x1;
-            _dirtyY1 = y1;
+            _dirty.Clear();
             _uploaded = false;
-            return;
         }
 
-        _dirtyX0 = Math.Min(_dirtyX0, x0);
-        _dirtyY0 = Math.Min(_dirtyY0, y0);
-        _dirtyX1 = Math.Max(_dirtyX1, x1);
-        _dirtyY1 = Math.Max(_dirtyY1, y1);
+        _dirty.Add(x0, y0, x1 - x0, y1 - y0);
+    }
+
+    public ulong UploadedBytes { get; private set; }
+
+    private ulong AlignRegion(ulong bytes)
+    {
+        var alignment = (ulong)(_bytesPerPixel * 4);
+        return (bytes + alignment - 1) / alignment * alignment;
     }
 
     public bool PrepareUpload(VulkanStagingPool staging)
@@ -208,12 +216,21 @@ public sealed unsafe class VulkanUploadImage : IDisposable
             return true;
         }
 
-        var x = _dirtyX0;
-        var y = _dirtyY0;
-        var width = _dirtyX1 - _dirtyX0;
-        var height = _dirtyY1 - _dirtyY0;
-        var rowBytes = (ulong)(width * _bytesPerPixel);
-        var span = staging.Allocate(rowBytes * (ulong)height, (ulong)_bytesPerPixel);
+        var count = _dirty.Count;
+        if (count == 0)
+        {
+            _uploaded = true;
+            return true;
+        }
+
+        ulong total = 0;
+        for (var i = 0; i < count; i++)
+        {
+            var box = _dirty[i];
+            total += AlignRegion((ulong)(box.Width * _bytesPerPixel) * (ulong)box.Height);
+        }
+
+        var span = staging.Allocate(total, (ulong)(_bytesPerPixel * 4));
         if (!span.IsValid)
         {
             return _uploaded;
@@ -226,29 +243,44 @@ public sealed unsafe class VulkanUploadImage : IDisposable
 
         try
         {
-            var source = view.Data + (nint)y * view.Stride + (nint)(x * _bytesPerPixel);
+            ulong offset = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var box = _dirty[i];
+                var rowBytes = (ulong)(box.Width * _bytesPerPixel);
+                var source = view.Data + (nint)box.Y * view.Stride + (nint)(box.X * _bytesPerPixel);
+                var destination = (byte*)span.Mapped + offset;
 
-            if (width == Width && (ulong)view.Stride == rowBytes)
-            {
-                System.Buffer.MemoryCopy((void*)source, span.Mapped, rowBytes * (ulong)height, rowBytes * (ulong)height);
-            }
-            else
-            {
-                for (var row = 0; row < height; row++)
+                if (box.Width == Width && (ulong)view.Stride == rowBytes)
                 {
-                    System.Buffer.MemoryCopy(
-                        (void*)(source + (nint)row * view.Stride),
-                        (byte*)span.Mapped + (ulong)row * rowBytes,
-                        rowBytes,
-                        rowBytes);
+                    System.Buffer.MemoryCopy((void*)source, destination, rowBytes * (ulong)box.Height, rowBytes * (ulong)box.Height);
                 }
+                else
+                {
+                    for (var row = 0; row < box.Height; row++)
+                    {
+                        System.Buffer.MemoryCopy(
+                            (void*)(source + (nint)row * view.Stride),
+                            destination + (ulong)row * rowBytes,
+                            rowBytes,
+                            rowBytes);
+                    }
+                }
+
+                _copies[i] = new CopyRegion
+                {
+                    X = box.X,
+                    Y = box.Y,
+                    Width = box.Width,
+                    Height = box.Height,
+                    Offset = offset,
+                };
+                offset += AlignRegion(rowBytes * (ulong)box.Height);
+                UploadedBytes += rowBytes * (ulong)box.Height;
             }
 
             _span = span;
-            _copyX = x;
-            _copyY = y;
-            _copyWidth = width;
-            _copyHeight = height;
+            _copyCount = count;
             NeedsGpuCopy = true;
             _uploaded = true;
             return true;
@@ -282,16 +314,22 @@ public sealed unsafe class VulkanUploadImage : IDisposable
             PipelineStageFlags.TransferBit,
             0, 0, null, 0, null, 1, &toTransfer);
 
-        var copy = new BufferImageCopy
+        var regions = stackalloc BufferImageCopy[DamageRects.Capacity];
+        for (var i = 0; i < _copyCount; i++)
         {
-            BufferOffset = _span.Offset,
-            BufferRowLength = (uint)_copyWidth,
-            BufferImageHeight = (uint)_copyHeight,
-            ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, 0, 0, 1),
-            ImageOffset = new Offset3D(_copyX, _copyY, 0),
-            ImageExtent = new Extent3D((uint)_copyWidth, (uint)_copyHeight, 1),
-        };
-        vk.CmdCopyBufferToImage(commands, _span.Buffer, Image, ImageLayout.TransferDstOptimal, 1, &copy);
+            var region = _copies[i];
+            regions[i] = new BufferImageCopy
+            {
+                BufferOffset = _span.Offset + region.Offset,
+                BufferRowLength = (uint)region.Width,
+                BufferImageHeight = (uint)region.Height,
+                ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, 0, 0, 1),
+                ImageOffset = new Offset3D(region.X, region.Y, 0),
+                ImageExtent = new Extent3D((uint)region.Width, (uint)region.Height, 1),
+            };
+        }
+
+        vk.CmdCopyBufferToImage(commands, _span.Buffer, Image, ImageLayout.TransferDstOptimal, (uint)_copyCount, regions);
 
         var toGeneral = new ImageMemoryBarrier
         {

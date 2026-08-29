@@ -33,7 +33,7 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
         }
     }
 
-    public DrmFormat Format => _attributes.Format;
+    public override DrmFormat Format => _attributes.Format;
 
     public ulong Modifier => _attributes.Modifier;
 

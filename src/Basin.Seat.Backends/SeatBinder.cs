@@ -300,8 +300,16 @@ public sealed class SeatBinder
         return null;
     }
 
-    public IOutput? TouchOutput(InputDevice device) =>
-        OutputFor(device) ?? (_layout.Outputs.Count > 0 ? _layout.Outputs[0].Output : null);
+    public IOutput? TouchOutput(InputDevice device)
+    {
+        if (OutputFor(device) is { } known)
+        {
+            return known;
+        }
+
+        var outputs = _layout.Outputs;
+        return outputs.Length > 0 ? outputs[0].Output : null;
+    }
 
     private void PushLeds()
     {
@@ -399,7 +407,7 @@ public sealed class SeatBinder
             {
                 MoveTo(timeMs, on, x, y);
             }
-            else if (_layout.Outputs.Count > 0 && _layout.Outputs[0].Output is WaylandOutput first)
+            else if (_layout.Outputs is { Length: > 0 } outputs && outputs[0].Output is WaylandOutput first)
             {
                 MoveTo(timeMs, first, x, y);
             }

@@ -28,7 +28,7 @@ public sealed class SeatdSession : ISession
         catch (SeatdException e)
         {
             throw new InvalidOperationException(
-                "No seat manager is available: {e.Message}", e);
+                $"No seat manager is available: {e.Message}", e);
         }
 
         for (var i = 0; i < 100 && !seat.IsActive; i++)

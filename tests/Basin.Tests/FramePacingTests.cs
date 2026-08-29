@@ -249,6 +249,77 @@ public sealed class FifoTests
     }
 
     [Fact]
+    public void A_recreated_fifo_object_keeps_the_surface_latched()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new FifoManager(host.Display, host.Compositor, host.Layout, host.Loop);
+
+        var client = host.Client;
+        var surface = client.Compositor.CreateSurface();
+        Surface? server = null;
+        host.Compositor.SurfaceCreated += s => server ??= s;
+        var proxy = BindFifo(host, client);
+        var first = proxy.GetFifo(surface);
+
+        Paint(client, surface, 10);
+        first.SetBarrier();
+        surface.Commit();
+        host.PumpUntil(() => server?.Current.Width == 10);
+
+        Paint(client, surface, 20);
+        first.WaitBarrier();
+        surface.Commit();
+        host.PumpToServer();
+        Assert.True(server!.HasParkedCommits);
+
+        first.Destroy();
+        var second = proxy.GetFifo(surface);
+        host.PumpToServer();
+
+        host.Output.StepFrame();
+        host.Output.StepFrame();
+        Assert.Equal(20, server.Current.Width);
+        Assert.False(server.HasParkedCommits);
+
+        Paint(client, surface, 30);
+        second.SetBarrier();
+        surface.Commit();
+        host.PumpToServer();
+        Assert.Equal(30, server.Current.Width);
+    }
+
+    [Fact]
+    public void Destroying_the_fifo_object_still_drains_its_parked_updates()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new FifoManager(host.Display, host.Compositor, host.Layout, host.Loop);
+
+        var client = host.Client;
+        var surface = client.Compositor.CreateSurface();
+        Surface? server = null;
+        host.Compositor.SurfaceCreated += s => server ??= s;
+        var fifo = BindFifo(host, client).GetFifo(surface);
+
+        Paint(client, surface, 10);
+        fifo.SetBarrier();
+        surface.Commit();
+        host.PumpUntil(() => server?.Current.Width == 10);
+
+        Paint(client, surface, 20);
+        fifo.WaitBarrier();
+        surface.Commit();
+        host.PumpToServer();
+        Assert.True(server!.HasParkedCommits);
+
+        fifo.Destroy();
+        host.PumpToServer();
+        host.Output.StepFrame();
+        host.Output.StepFrame();
+        Assert.Equal(20, server.Current.Width);
+        Assert.False(server.HasParkedCommits);
+    }
+
+    [Fact]
     public void A_second_fifo_object_for_one_surface_is_a_protocol_error()
     {
         using var host = new CompositorTestHost();

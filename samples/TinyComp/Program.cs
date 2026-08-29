@@ -38,11 +38,26 @@ internal static class Program
         });
         var offload = cli.Add(new Option<bool>("--offload")
         {
-            Description = "hand what it can to overlay planes",
+            Description = "hand what it can to overlay planes; --offload false keeps everything composited",
+            DefaultValueFactory = _ => true,
         });
         var hdr = cli.Add(new Option<bool>("--hdr")
         {
             Description = "drive the outputs in HDR where they support it",
+        });
+        var colorSource = cli.Add(new Option<string>("--color-source")
+        {
+            Description = "what the outputs are described as: edid | srgb | icc:PATH",
+            HelpName = "NAME",
+            DefaultValueFactory = _ => "edid",
+        });
+        colorSource.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>();
+            if (value is not ("edid" or "srgb") && !value.StartsWith("icc:", StringComparison.Ordinal))
+            {
+                result.AddError($"--color-source must be edid, srgb or icc:PATH, not '{value}'");
+            }
         });
         var nightLight = cli.Add(new Option<double?>("--night-light")
         {
@@ -98,6 +113,16 @@ internal static class Program
                 result.GetValue(offload),
                 result.GetValue(nightLight),
                 result.GetValue(hdr),
+                result.GetValue(colorSource) switch
+                {
+                    "srgb" => Basin.Capabilities.OutputColorProfileSource.Srgb,
+                    var icc when icc!.StartsWith("icc:", StringComparison.Ordinal) =>
+                        Basin.Capabilities.OutputColorProfileSource.Icc,
+                    _ => Basin.Capabilities.OutputColorProfileSource.Edid,
+                },
+                result.GetValue(colorSource) is { } source && source.StartsWith("icc:", StringComparison.Ordinal)
+                    ? source["icc:".Length..]
+                    : null,
                 result.GetValue(frame) switch
                 {
                     "flat" => FrameStyle.Flat,
@@ -132,6 +157,8 @@ internal static class Program
         bool offload,
         double? nightLight,
         bool hdr,
+        Basin.Capabilities.OutputColorProfileSource colorSource,
+        string? iccProfile,
         FrameStyle frameStyle,
         bool noTransactions,
         int socketFd,
@@ -146,7 +173,7 @@ internal static class Program
         string? channelEndpoint,
         out long renderedFrames)
     {
-        using var comp = new TinyComp(outputCount, rendererName, drm, fullRepaint, damageTint, scales, offload, nightLight, hdr, frameStyle, noTransactions, socketFd, log, wobbly, openAnimation, post, closeAnimation, switcher, cornerRadius, frames, managedTransport, channelEndpoint);
+        using var comp = new TinyComp(outputCount, rendererName, drm, fullRepaint, damageTint, scales, offload, nightLight, hdr, colorSource, frameStyle, noTransactions, socketFd, log, wobbly, openAnimation, post, closeAnimation, switcher, cornerRadius, frames, managedTransport, channelEndpoint, iccProfile);
         var status = comp.Run();
         renderedFrames = comp.Rendered;
         return status;

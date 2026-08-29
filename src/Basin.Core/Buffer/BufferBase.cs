@@ -23,13 +23,26 @@ public abstract class BufferBase : IBuffer
 
     public int LockCount => _lockCount;
 
+    public virtual DrmFormat Format => DrmFormat.Invalid;
+
     public bool IsDestroyed => _destroyed;
 
     protected bool IsStorageFreed => _storageFreed;
 
-    public event Action? Released;
+    private ActionSet _released;
+    private ActionSet _destroyedHandlers;
 
-    public event Action? Destroyed;
+    public event Action? Released
+    {
+        add => _released.Add(value);
+        remove => _released.Remove(value);
+    }
+
+    public event Action? Destroyed
+    {
+        add => _destroyedHandlers.Add(value);
+        remove => _destroyedHandlers.Remove(value);
+    }
 
     public BufferLock Lock()
     {
@@ -50,7 +63,7 @@ public abstract class BufferBase : IBuffer
         _lockCount--;
         if (_lockCount == 0)
         {
-            Released?.Invoke();
+            _released.Raise();
             if (_destroyed)
             {
                 FreeStorage();
@@ -67,7 +80,7 @@ public abstract class BufferBase : IBuffer
         }
 
         _destroyed = true;
-        Destroyed?.Invoke();
+        _destroyedHandlers.Raise();
         if (_lockCount == 0)
         {
             FreeStorage();

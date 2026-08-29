@@ -37,17 +37,21 @@ public static class SurfaceCommit
             if (targetIsCurrent)
             {
                 target.SurfaceDamage.Copy(pending.SurfaceDamage);
+                target.SurfaceDamageRects = pending.SurfaceDamageRects;
             }
             else
             {
                 target.SurfaceDamage.UnionWith(pending.SurfaceDamage);
+                target.SurfaceDamageRects.Add(in pending.SurfaceDamageRects);
             }
 
             pending.SurfaceDamage.Clear();
+            pending.SurfaceDamageRects.Clear();
         }
         else if (targetIsCurrent)
         {
             target.SurfaceDamage.Clear();
+            target.SurfaceDamageRects.Clear();
         }
 
         if ((fields & SurfaceStateFields.BufferDamage) != 0)
@@ -55,27 +59,35 @@ public static class SurfaceCommit
             if (targetIsCurrent)
             {
                 target.BufferDamage.Copy(pending.BufferDamage);
+                target.BufferDamageRects = pending.BufferDamageRects;
             }
             else
             {
                 target.BufferDamage.UnionWith(pending.BufferDamage);
+                target.BufferDamageRects.Add(in pending.BufferDamageRects);
             }
 
             pending.BufferDamage.Clear();
+            pending.BufferDamageRects.Clear();
         }
         else if (targetIsCurrent)
         {
             target.BufferDamage.Clear();
+            target.BufferDamageRects.Clear();
         }
 
-        if ((fields & SurfaceStateFields.OpaqueRegion) != 0)
+        if ((fields & SurfaceStateFields.OpaqueRegion) != 0 && (pending.HasOpaque || target.HasOpaque))
         {
             target.Opaque.Copy(pending.Opaque);
         }
 
         if ((fields & SurfaceStateFields.InputRegion) != 0)
         {
-            target.Input.Copy(pending.Input);
+            if (pending.HasInput || target.HasInput)
+            {
+                target.Input.Copy(pending.Input);
+            }
+
             target.InputIsInfinite = pending.InputIsInfinite;
         }
 

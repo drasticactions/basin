@@ -34,11 +34,6 @@ internal sealed class CompositorTestHost : IDisposable
     private readonly Dictionary<string, int> _fdAllowance;
     private uint _frameTimestamp;
 
-    /// <summary>
-    /// Whether this host has a libwayland client to drive a compositor with.
-    /// The managed transport replaces the server half only, so a test that needs
-    /// a client needs this.
-    /// </summary>
     public static bool HasWaylandClient { get; } =
         System.Runtime.InteropServices.NativeLibrary.TryLoad("wayland-client", out _) ||
         System.Runtime.InteropServices.NativeLibrary.TryLoad("libwayland-client.so.0", out _);
@@ -48,10 +43,6 @@ internal sealed class CompositorTestHost : IDisposable
             !HasWaylandClient,
             "this host has no libwayland client, and the suite drives the compositor with one");
 
-    /// <summary>
-    /// Whether this host has a libwayland server to create a display with. The
-    /// managed transport replaces that half, so only a libwayland run needs it.
-    /// </summary>
     public static bool HasWaylandServer { get; } =
         System.Runtime.InteropServices.NativeLibrary.TryLoad("wayland-server", out _) ||
         System.Runtime.InteropServices.NativeLibrary.TryLoad("libwayland-server.so.0", out _);
@@ -261,9 +252,6 @@ internal sealed class CompositorTestHost : IDisposable
 
     private static bool DriverClosesFdsLazily => NvidiaRenderNode;
 
-    /// <summary>
-    /// Whether this renderer's goldens were recorded on hardware that samples the same way this box does.
-    /// </summary>
     public static bool GoldensComparable(string renderer) =>
         !(NvidiaRenderNode && renderer == "skia-graphite");
 
@@ -519,11 +507,6 @@ internal static class FdSnapshot
     [DllImport("libproc", SetLastError = true)]
     private static extern unsafe int proc_pidinfo(int pid, int flavor, ulong arg, void* buffer, int size);
 
-    /// <summary>
-    /// The same census where there is no procfs. Darwin reports an fd's kind
-    /// rather than its target, so a leak is named by what leaked and not by
-    /// which one.
-    /// </summary>
     private static unsafe Dictionary<string, int> TakeFromLibproc()
     {
         var snapshot = new Dictionary<string, int>();

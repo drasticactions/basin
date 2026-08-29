@@ -6,6 +6,8 @@ public sealed class ClientBufferRegistry
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly Dictionary<nint, IBuffer> _byResource = [];
+    private readonly List<nint> _dead = [];
+    private Action? _forget;
 
     public int Count => _byResource.Count;
 
@@ -13,7 +15,34 @@ public sealed class ClientBufferRegistry
     {
         _thread.Assert();
         _byResource[bufferResourceHandle] = buffer;
-        buffer.Destroyed += () => _byResource.Remove(bufferResourceHandle);
+        Watch(buffer);
+    }
+
+    private void Watch(IBuffer buffer)
+    {
+        _forget ??= ForgetDestroyed;
+        buffer.Destroyed += _forget;
+    }
+
+    private void ForgetDestroyed()
+    {
+        foreach (var pair in _byResource)
+        {
+            if (pair.Value.IsDestroyed)
+            {
+                _dead.Add(pair.Key);
+            }
+        }
+
+        foreach (var handle in _dead)
+        {
+            if (_byResource.Remove(handle, out var buffer) && _forget is { } forget)
+            {
+                buffer.Destroyed -= forget;
+            }
+        }
+
+        _dead.Clear();
     }
 
     public IBuffer? GetOrImport(nint bufferResourceHandle)
@@ -36,7 +65,7 @@ public sealed class ClientBufferRegistry
         }
 
         _byResource[bufferResourceHandle] = imported;
-        imported.Destroyed += () => _byResource.Remove(bufferResourceHandle);
+        Watch(imported);
         return imported;
     }
 }

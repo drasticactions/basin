@@ -388,9 +388,6 @@ public sealed class ManagedShmTests
         var serverBuffer = host.SurfaceScenes[0].Surface.Current.Buffer!;
         Assert.Equal(0xFF111111u, ServerPixel(serverBuffer, 8, 60));
 
-        // The EOF-containing page stays readable (zero-filled), so the pool
-        // must shrink by whole pages for the copy to fault; the kernel copy
-        // stops at the fault, so rows past it keep the previous frame.
         pool.Truncate(4096);
         surface.Attach(pool.Proxy, 0, 0);
         surface.Damage(0, 0, 64, 64);

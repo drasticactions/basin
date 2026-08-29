@@ -280,9 +280,6 @@ public sealed class HeadlessSessionTests
             poke: "where");
         Assert.NotNull(placed);
 
-        // press inside the client and release over the titlebar: the press routes to
-        // the seat and the release would otherwise be absorbed by the frame's surface,
-        // leaving the pointer in an implicit grab that never ends.
         await session.SendAsync("move 600 400");
         await session.SendAsync("button 272 1");
         await session.SendAsync("move 600 114");
@@ -295,7 +292,6 @@ public sealed class HeadlessSessionTests
         Assert.NotNull(grab);
         Assert.Contains("buttons=False", grab!, StringComparison.Ordinal);
 
-        // and a titlebar drag still works afterwards
         var before = await Geometry(session);
         await session.SendAsync("move 600 114");
         await session.SendAsync("button 272 1");
@@ -331,9 +327,6 @@ public sealed class HeadlessSessionTests
             poke: "where");
         Assert.NotNull(mapped);
 
-        // weston-flower carries no decoration: it answers a press by sending
-        // xdg_toplevel.move, so the compositor grabs while the client still holds
-        // the button. The release has to reach the client or it cannot ask twice.
         var first = await DragAndRead(session, 620, 350, 700, 430);
         var second = await DragAndRead(session, 700, 430, 780, 510);
         var third = await DragAndRead(session, 780, 510, 600, 400);

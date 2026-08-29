@@ -16,6 +16,7 @@ public sealed class FifoManager : IDisposable, IFrameSink
     private readonly IEventSource _guard;
     private readonly IFrameClock? _clock;
     private readonly HashSet<Surface> _surfaces = [];
+    private readonly Dictionary<Surface, WpFifoV1Resource> _owners = [];
     private readonly List<IOutput> _hooked = [];
     private readonly List<Surface> _sweep = [];
     private bool _consumerLatches;
@@ -217,11 +218,14 @@ public sealed class FifoManager : IDisposable, IFrameSink
                 return;
             }
 
-            if (!_surfaces.Add(surface))
+            if (_owners.ContainsKey(surface))
             {
                 manager.PostError((uint)WpFifoManagerV1.Error.AlreadyExists, "surface already has a fifo object");
                 return;
             }
+
+            _owners[surface] = resource;
+            _surfaces.Add(surface);
 
             resource.SetBarrier += (_, _) =>
             {
@@ -239,8 +243,18 @@ public sealed class FifoManager : IDisposable, IFrameSink
                 }
             };
 
-            resource.Destroyed += (_, _) => _surfaces.Remove(surface);
-            surface.Destroyed += () => _surfaces.Remove(surface);
+            resource.Destroyed += (_, _) =>
+            {
+                if (_owners.TryGetValue(surface, out var owner) && ReferenceEquals(owner, resource))
+                {
+                    _owners.Remove(surface);
+                }
+            };
+            surface.Destroyed += () =>
+            {
+                _owners.Remove(surface);
+                _surfaces.Remove(surface);
+            };
         };
     }
 

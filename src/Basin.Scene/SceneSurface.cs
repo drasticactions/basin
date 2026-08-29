@@ -96,11 +96,16 @@ public sealed class SceneSurface
         _content.DestinationHeight = state.Height;
 
         _content.IsOpaque = state.Buffer is not null &&
-            state.Opaque.Contains(new Pixman.PixmanBox32(0, 0, state.Width, state.Height)) == Pixman.PixmanRegionOverlap.In;
+            (state.Buffer.Format.IsOpaque() ||
+             (state.HasOpaque &&
+              state.Opaque.Contains(new Pixman.PixmanBox32(0, 0, state.Width, state.Height)) == Pixman.PixmanRegionOverlap.In));
+        _content.SetOpaqueRegion(!_content.IsOpaque && state.Buffer is not null && state.HasOpaque ? state.Opaque : null);
 
         _damageScratch.Copy(state.SurfaceDamage);
         _damageScratch.UnionWith(state.BufferDamage);
-        _content.NotifyContentChanged(_damageScratch);
+        var damageRects = state.SurfaceDamageRects;
+        damageRects.Add(in state.BufferDamageRects);
+        _content.NotifyContentChanged(_damageScratch, in damageRects);
         ReconcileChildren(Surface.SubsurfacesBelow, _below);
         ReconcileChildren(Surface.SubsurfacesAbove, _above);
         if (state.FrameCallbacks.Count > 0 || state.FrameResources.Count > 0)

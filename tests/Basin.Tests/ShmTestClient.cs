@@ -114,9 +114,10 @@ internal sealed class ShmTestClient : IDisposable
         pumpToClient();
     }
 
-    public ClientShmBuffer CreateBuffer(int width, int height, Action<nint, int> fill)
+    public ClientShmBuffer CreateBuffer(
+        int width, int height, Action<nint, int> fill, WlShm.Format format = WlShm.Format.Xrgb8888)
     {
-        var buffer = new ClientShmBuffer(Shm, width, height);
+        var buffer = new ClientShmBuffer(Shm, width, height, format);
         fill(buffer.Data, buffer.Stride);
         _buffers.Add(buffer);
         return buffer;
@@ -177,7 +178,7 @@ internal sealed unsafe class ClientShmBuffer : IDisposable
     [DllImport("libc")]
     private static extern int close(int fd);
 
-    public ClientShmBuffer(WlShm shm, int width, int height)
+    public ClientShmBuffer(WlShm shm, int width, int height, WlShm.Format format = WlShm.Format.Xrgb8888)
     {
         Width = width;
         Height = height;
@@ -197,7 +198,7 @@ internal sealed unsafe class ClientShmBuffer : IDisposable
         }
 
         var pool = shm.CreatePool(_fd, _size);
-        Proxy = pool.CreateBuffer(0, width, height, Stride, WlShm.Format.Xrgb8888);
+        Proxy = pool.CreateBuffer(0, width, height, Stride, format);
         pool.Dispose();
     }
 

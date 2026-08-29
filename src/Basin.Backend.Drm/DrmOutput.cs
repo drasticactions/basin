@@ -6,7 +6,7 @@ using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
-public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingOutput
+public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingOutput, Basin.Capabilities.IOutputColorPipeline
 {
     private readonly DrmBackend _backend;
     private readonly uint _connectorId;
@@ -141,6 +141,8 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     public uint GammaLutSize { get; }
 
     public uint DegammaLutSize { get; }
+
+    public bool SupportsCtm => _crtcProps.Has("CTM");
 
     public EdidInfo Edid { get; }
 

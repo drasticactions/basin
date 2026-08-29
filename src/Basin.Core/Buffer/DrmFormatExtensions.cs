@@ -7,6 +7,12 @@ public static class DrmFormatExtensions
         DrmFormat.Argb2101010 or DrmFormat.Abgr2101010 or
         DrmFormat.Abgr16161616f;
 
+    public static bool IsOpaque(this DrmFormat format) => format is
+        DrmFormat.Xrgb8888 or DrmFormat.Xbgr8888 or
+        DrmFormat.Xrgb2101010 or DrmFormat.Xbgr2101010 or
+        DrmFormat.Xbgr16161616f or DrmFormat.Rgb565 or
+        DrmFormat.Nv12 or DrmFormat.P010;
+
     public static DrmFormat OpaqueSubstitute(this DrmFormat format) => format switch
     {
         DrmFormat.Argb8888 => DrmFormat.Xrgb8888,

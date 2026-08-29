@@ -129,8 +129,9 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
         };
         pointer.Motion += (time, x, y) =>
         {
+            var outputs = _layout.Outputs;
             var output = _layout.OutputAt(_x, _y) ??
-                (_layout.Outputs.Count > 0 ? _layout.Outputs[0].Output : null);
+                (outputs.Length > 0 ? outputs[0].Output : null);
             if (output is null)
             {
                 return;

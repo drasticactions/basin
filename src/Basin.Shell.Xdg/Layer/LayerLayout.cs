@@ -35,8 +35,9 @@ public static class LayerLayout
         var placements = new List<Placement>(specs.Length);
         var usable = outputBox with { X = 0, Y = 0 };
 
-        foreach (var exclusive in new[] { true, false })
+        for (var pass = 0; pass < 2; pass++)
         {
+            var exclusive = pass == 0;
             for (var layer = (int)LayerKind.Overlay; layer >= (int)LayerKind.Background; layer--)
             {
                 for (var i = 0; i < specs.Length; i++)

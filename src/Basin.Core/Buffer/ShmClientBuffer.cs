@@ -9,6 +9,8 @@ public sealed class ShmClientBuffer : BufferBase
 
     private readonly nint _resourceHandle;
     private readonly DrmFormat _format;
+
+    public override DrmFormat Format => _format;
     private WlForeignDestroyListener? _destroyListener;
     private WlShmBufferRef _shm;
     private bool _resourceAlive;

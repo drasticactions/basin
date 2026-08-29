@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Capabilities;
 using Basin.Desktop;
 using Basin.Protocol;
+using Basin.Scene;
 using Wayland;
 using Xunit;
 
@@ -122,6 +123,136 @@ public sealed class DispatchAllocationTests
         }
 
         Budgets.Check("server", "commit-swapping-buffers", allocated);
+    }
+
+    [Fact]
+    public void A_popup_map_and_unmap_round_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var client = host.Client;
+        var parent = MappedToplevel.Map(host, client);
+        var placer = new PopupPlacer(host.Layout);
+        var parentTree = new SceneTree(host.Scene.Root);
+        host.Shell.NewPopup += popup => placer.Attach(popup, parentTree);
+        var buffer = client.CreateBuffer(30, 30, Fill.Solid(30, 30, 0xFF884422));
+
+        for (var i = 0; i < 20; i++)
+        {
+            PopupRound(host, client, parent, buffer, out _);
+        }
+
+        var allocated = 0L;
+        for (var round = 0; round < Rounds; round++)
+        {
+            PopupRound(host, client, parent, buffer, out var measured);
+            allocated += measured;
+        }
+
+        Budgets.Check("server", "popup-cycle", allocated);
+    }
+
+    [Fact]
+    public void Setting_a_colour_representation_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var manager = new ColorRepresentationManager(host.Display, host.Compositor);
+        var window = MappedToplevel.Map(host, host.Client);
+        var proxy = Bind<Basin.Desktop.Protocol.WpColorRepresentationManagerV1>(
+            host, "wp_color_representation_manager_v1", ColorRepresentationManager.Version);
+        var representation = proxy.GetSurface(window.Surface);
+        host.PumpToClient();
+
+        RepresentationRounds(host, representation, Rounds);
+        host.Loop.Dispatch(0);
+
+        RepresentationRounds(host, representation, Rounds);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        host.Loop.Dispatch(0);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Budgets.Check("server", "color-representation-set", allocated);
+    }
+
+    [Fact]
+    public void A_frame_with_a_client_committing_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var sceneOutput = new SceneOutput(host.Scene, host.Output);
+        using var swapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        var options = new SceneCommitOptions { AllowDirectScanout = false };
+
+        var window = MappedToplevel.Map(host, host.Client);
+        var front = host.Client.CreateBuffer(60, 50, Fill.Gradient(60, 50));
+        var back = host.Client.CreateBuffer(60, 50, Fill.Gradient(60, 50));
+
+        for (var round = 0; round < Rounds; round++)
+        {
+            ClientFrame(host, window, round % 2 == 0 ? front : back, round);
+            ServerFrame(host, sceneOutput, swapchain, state, options, round);
+        }
+
+        var allocated = 0L;
+        for (var round = 0; round < Rounds; round++)
+        {
+            ClientFrame(host, window, round % 2 == 0 ? front : back, round);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            ServerFrame(host, sceneOutput, swapchain, state, options, round);
+            allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+
+        Budgets.Check("server", "frame-with-a-client", allocated);
+    }
+
+    [Fact]
+    public void A_layer_surface_repainting_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var layerShell = new Basin.Shell.Xdg.LayerShell(host.Display, host.Compositor);
+        var layers = new Basin.Scene.SceneLayers(host.Scene.Root);
+        var driver = new LayerShellSceneDriver(layerShell, host.Layout, layers);
+        var client = host.Client;
+
+        var shellProxy = Bind<Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1>(host, "zwlr_layer_shell_v1", 4);
+        var surface = client.Compositor.CreateSurface();
+        var layerProxy = shellProxy.GetLayerSurface(
+            surface, client.Outputs[0], Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, "panel");
+        layerProxy.SetSize(200, 30);
+        var acked = 0u;
+        layerProxy.Configure += (_, e) =>
+        {
+            acked = e.Serial;
+            layerProxy.AckConfigure(e.Serial);
+        };
+        surface.Commit();
+        host.PumpUntil(() => acked != 0);
+
+        SceneSurface? panel = null;
+        driver.SceneCreated += (_, scene) => panel = scene;
+        var buffer = client.CreateBuffer(200, 30, Fill.Solid(200, 30, 0xFF285577));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 200, 30);
+        surface.Commit();
+        host.PumpUntil(() => panel is not null);
+
+        LayerRepaints(host, surface, buffer, Rounds);
+        host.Loop.Dispatch(0);
+
+        LayerRepaints(host, surface, buffer, Rounds);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        host.Loop.Dispatch(0);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Budgets.Check("server", "layer-surface-repaint", allocated);
     }
 
     [Fact]
@@ -527,6 +658,102 @@ public sealed class DispatchAllocationTests
         Assert.True(fd >= 0);
         Assert.Equal(0, ftruncate(fd, size));
         return fd;
+    }
+
+    private static void PopupRound(
+        CompositorTestHost host,
+        ShmTestClient client,
+        MappedToplevel parent,
+        ClientShmBuffer buffer,
+        out long allocated)
+    {
+        var positioner = client.WmBase!.CreatePositioner();
+        positioner.SetSize(30, 30);
+        positioner.SetAnchorRect(5, 5, 1, 1);
+        var surface = client.Compositor.CreateSurface();
+        var xdgSurface = client.WmBase.GetXdgSurface(surface);
+        var popup = xdgSurface.GetPopup(parent.XdgSurface, positioner);
+        xdgSurface.Configure += (_, e) => xdgSurface.AckConfigure(e.Serial);
+        surface.Commit();
+        client.Display.Flush();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        host.Loop.Dispatch(0);
+        allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        host.PumpToClient();
+
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 30, 30);
+        surface.Commit();
+        popup.Destroy();
+        xdgSurface.Destroy();
+        surface.Dispose();
+        positioner.Destroy();
+        client.Display.Flush();
+
+        before = GC.GetAllocatedBytesForCurrentThread();
+        host.Loop.Dispatch(0);
+        allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+    }
+
+    private static void RepresentationRounds(
+        CompositorTestHost host,
+        Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1 representation,
+        int rounds)
+    {
+        for (var i = 0; i < rounds; i++)
+        {
+            representation.SetAlphaMode(i % 2 == 0
+                ? Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1.AlphaMode.Straight
+                : Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1.AlphaMode.PremultipliedElectrical);
+            representation.SetCoefficientsAndRange(
+                Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1.Coefficients.Bt709,
+                i % 2 == 0
+                    ? Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1.Range.Limited
+                    : Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1.Range.Full);
+            representation.SetChromaLocation(
+                Basin.Desktop.Protocol.WpColorRepresentationSurfaceV1.ChromaLocation.Type0);
+        }
+
+        host.Client.Display.Flush();
+    }
+
+    private static void ClientFrame(
+        CompositorTestHost host, MappedToplevel window, ClientShmBuffer buffer, int round)
+    {
+        using var callback = window.Surface.Frame();
+        window.Surface.Attach(buffer.Proxy, 0, 0);
+        window.Surface.Damage(0, round % 4, 60, 20);
+        window.Surface.Commit();
+        host.Client.Display.Flush();
+    }
+
+    private static void ServerFrame(
+        CompositorTestHost host,
+        SceneOutput sceneOutput,
+        Swapchain swapchain,
+        OutputState state,
+        in SceneCommitOptions options,
+        int round)
+    {
+        host.Loop.Dispatch(0);
+        _ = sceneOutput.Commit(host.Renderer, swapchain, state, options);
+        host.Output.StepFrame();
+        host.Scene.SendFrameDone((uint)(round * 16));
+    }
+
+    private static void LayerRepaints(
+        CompositorTestHost host, WlSurface surface, ClientShmBuffer buffer, int rounds)
+    {
+        for (var i = 0; i < rounds; i++)
+        {
+            surface.Attach(buffer.Proxy, 0, 0);
+            surface.Damage(0, i % 4, 200, 10);
+            surface.Commit();
+        }
+
+        host.Client.Display.Flush();
     }
 
     private static void AxisRound(CompositorTestHost host, int i)

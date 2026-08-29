@@ -269,7 +269,6 @@ public sealed class HostOriginatedInputTests
     {
         using var peer = new LoopbackChannel();
 
-        // Remote id 7 is the peer's, opened the way a real one arrives.
         Span<byte> open = stackalloc byte[4];
         System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(open, 7);
         peer.Channel.Engine.Apply(Basin.Transport.Waypipe.WaypipeMessageType.OpenIRPipe, open);

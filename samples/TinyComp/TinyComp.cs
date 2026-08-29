@@ -144,6 +144,8 @@ internal sealed partial class TinyComp :
     private readonly bool _fullRepaint;
     private readonly bool _offload;
     private readonly bool _hdr;
+    private readonly Basin.Capabilities.OutputColorProfileSource _colorSource;
+    private readonly string? _iccProfile;
     private readonly bool _damageTint;
     private readonly double[] _scales;
     private Basin.Desktop.FractionalScaleManager _fractionalScale = null!;
@@ -169,9 +171,10 @@ internal sealed partial class TinyComp :
     private readonly string? _channelEndpoint;
     private Basin.Transport.Waypipe.WaypipeChannel? _channel;
 
-    public TinyComp(int outputCount, string rendererName = "vulkan", bool drm = false, bool fullRepaint = false, bool damageTint = false, double[]? scales = null, bool offload = false, double? nightLight = null, bool hdr = false, FrameStyle frameStyle = FrameStyle.Beos, bool noTransactions = false, int socketFd = -1, BasinLogger log = default, bool wobbly = false, string? openAnimation = null, string? post = null, string? closeAnimation = null, bool switcher = false, int cornerRadius = 0, long frameLimit = 0, bool managedTransport = false, string? channelEndpoint = null)
+    public TinyComp(int outputCount, string rendererName = "vulkan", bool drm = false, bool fullRepaint = false, bool damageTint = false, double[]? scales = null, bool offload = true, double? nightLight = null, bool hdr = false, Basin.Capabilities.OutputColorProfileSource colorSource = Basin.Capabilities.OutputColorProfileSource.Edid, FrameStyle frameStyle = FrameStyle.Beos, bool noTransactions = false, int socketFd = -1, BasinLogger log = default, bool wobbly = false, string? openAnimation = null, string? post = null, string? closeAnimation = null, bool switcher = false, int cornerRadius = 0, long frameLimit = 0, bool managedTransport = false, string? channelEndpoint = null, string? iccProfile = null)
     {
         _log = log;
+        _iccProfile = iccProfile;
         _frames = frameLimit;
         _effects = new EffectsPolicy(wobbly, openAnimation, closeAnimation, switcher);
         _postKind = post;
@@ -181,6 +184,7 @@ internal sealed partial class TinyComp :
         _offload = offload;
         _nightLightKelvin = nightLight;
         _hdr = hdr;
+        _colorSource = colorSource;
         _damageTint = damageTint;
         _scales = scales ?? [];
         _host = Basin.Host.BasinHost.Create(
@@ -492,7 +496,15 @@ internal sealed partial class TinyComp :
         {
             if (FindWindow(toplevel) is { } window)
             {
+                SetMinimized(window, false);
                 FocusWindow(window);
+            }
+        };
+        _xdgToplevels.MinimizeRequested += (toplevel, minimized) =>
+        {
+            if (FindWindow(toplevel) is { } window)
+            {
+                SetMinimized(window, minimized);
             }
         };
         _xdgToplevels.NoBorderRequested += (toplevel, noBorder) =>
@@ -548,9 +560,7 @@ internal sealed partial class TinyComp :
 
         _lutDriver = new Basin.Desktop.SurfaceLutDriver(
             _scene, _color,
-            surface => _luts.LutFor(
-                _color.DescriptionOf(surface),
-                _views.Count > 0 ? _views[0].ColorDescription : Basin.Capabilities.ImageDescription.Srgb));
+            surface => _luts.LutFor(_color.DescriptionOf(surface), BlendDescription()));
         _lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
         _color.SurfaceDescriptionChanged += (_, _) => UpdateEdrDemand();
 
@@ -1230,6 +1240,11 @@ internal sealed partial class TinyComp :
     private readonly Basin.Color.ColorLutCache _luts;
     private Basin.Desktop.SurfaceLutDriver _lutDriver = null!;
 
+    private Basin.Capabilities.ImageDescription BlendDescription() =>
+        _views.Count == 0 || _views[0].KmsColorRouted
+            ? Basin.Capabilities.ImageDescription.Srgb
+            : _views[0].ColorDescription;
+
     private void RefreshSurfaceLuts()
     {
         _lutDriver.Refresh();
@@ -1271,16 +1286,34 @@ internal sealed partial class TinyComp :
         _nightLightKelvin = kelvin;
         foreach (var view in _views)
         {
-            if (_gamma.RampSize(view.Output) is var size && size > 0)
+            if (_gamma.RampSize(view.Output) > 0)
             {
-                _gamma.Baseline = kelvin is { } k ? NightLightRamps((int)size, k) : null;
+                RefreshGammaBaseline(view);
                 _gamma.ApplyBaseline(view.Output);
             }
         }
     }
 
-    private static OutputGammaRamps NightLightRamps(int size, double kelvin)
+    private void RefreshGammaBaseline(OutputView view)
     {
+        if (_gamma.RampSize(view.Output) is var size && size > 0)
+        {
+            _gamma.Baseline = _nightLightKelvin is { } k
+                ? NightLightRamps(view, (int)size, k)
+                : view.KmsColorRouted && _colorConfiguration is { } configuration
+                    ? configuration.RoutedEncodeRamps(view.Output)
+                    : null;
+        }
+    }
+
+    private OutputGammaRamps NightLightRamps(OutputView view, int size, double kelvin)
+    {
+        if (view.KmsColorRouted && _colorConfiguration is { } configuration &&
+            configuration.RoutedEncodeRamps(view.Output, Basin.Color.NightLight.Multipliers(kelvin)) is { } routed)
+        {
+            return routed;
+        }
+
         var ramps = new OutputGammaRamps(new ushort[size], new ushort[size], new ushort[size]);
         Basin.Color.NightLight.FillGammaRamps(kelvin, ramps.Red, ramps.Green, ramps.Blue);
         return ramps;
@@ -1455,10 +1488,19 @@ internal sealed partial class TinyComp :
             (colorConfiguration.Supported(output) &
              Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange) != 0)
         {
-            colorConfiguration.Seed(output, new Basin.Color.OutputColorState { HighDynamicRange = true });
+            colorConfiguration.Seed(
+                output,
+                new Basin.Color.OutputColorState { HighDynamicRange = true, Source = _colorSource });
+        }
+        else if (_colorSource != Basin.Capabilities.OutputColorProfileSource.Edid &&
+            _colorConfiguration is { } sdrConfiguration)
+        {
+            sdrConfiguration.Seed(
+                output, new Basin.Color.OutputColorState { Source = _colorSource, IccProfilePath = _iccProfile });
         }
 
         view.ColorDescription = DescriptionOf(output);
+        view.KmsColorRouted = _colorConfiguration is { } routing && routing.RouteKmsPipeline(output);
         DeclareColor();
         _color.SetOutputDescription(view.Global, view.ColorDescription);
         RefreshSurfaceLuts();
@@ -1475,10 +1517,10 @@ internal sealed partial class TinyComp :
         }
 
         output.Commit(_frameState);
+        RefreshGammaBaseline(view);
         if (_nightLightKelvin is not null && output.GammaLutSize > 0)
         {
-            using var gammaState = new OutputState();
-            _ = output.Commit(gammaState.SetGammaLut(NightLightRamps((int)output.GammaLutSize, _nightLightKelvin.Value)));
+            _gamma.ApplyBaseline(view.Output);
         }
 
         if (_fullRepaint)
@@ -2108,7 +2150,7 @@ internal sealed partial class TinyComp :
         workspace.Tiled.Clear();
         foreach (var window in _windows)
         {
-            if (window.Workspace == workspace && workspace.Tiled.Count < 2)
+            if (window.Workspace == workspace && !window.Minimized && workspace.Tiled.Count < 2)
             {
                 workspace.Tiled.Add(window);
             }
@@ -2248,7 +2290,7 @@ internal sealed partial class TinyComp :
         {
             if (window.Tree is not null)
             {
-                window.Tree.Enabled = true;
+                window.Tree.Enabled = !window.Minimized;
             }
         }
 
@@ -2372,6 +2414,8 @@ internal sealed partial class TinyComp :
     internal void OnWindowMapped(Window window)
     {
         _windows.Add(window);
+        window.Minimized = false;
+        _xdgToplevels.SetMinimized(window.Toplevel, false);
 
         var placed = RestorePosition(window);
         if (!placed &&
@@ -2461,6 +2505,42 @@ internal sealed partial class TinyComp :
             _seat.Keyboard.NotifyClearFocus();
             _textInput.NotifyFocus(null);
         }
+    }
+
+    internal void SetMinimized(Window window, bool minimized)
+    {
+        if (window.Minimized == minimized)
+        {
+            return;
+        }
+
+        window.Minimized = minimized;
+        if (window.Tree is { } tree)
+        {
+            tree.Enabled = !minimized;
+        }
+
+        _xdgToplevels.SetMinimized(window.Toplevel, minimized);
+        if (minimized)
+        {
+            if (_focused == window)
+            {
+                if (window.Workspace is { } workspace && ViewOf(workspace)?.Active == workspace)
+                {
+                    FocusWorkspaceWindow(workspace);
+                }
+                else
+                {
+                    FocusWindow(null);
+                }
+            }
+        }
+        else
+        {
+            FocusWindow(window);
+        }
+
+        _workspaceModel.RaiseMembersChanged();
     }
 
     internal void BeginMove(IGrabTarget window, uint? serial = null)
@@ -3229,6 +3309,11 @@ internal sealed partial class TinyComp :
     {
         foreach (var window in _windows)
         {
+            if (window.Minimized)
+            {
+                continue;
+            }
+
             if (ResizeRing.EdgesAt(window.FrameBox, x, y, margin, corner) is var e && e != ResizeEdges.None)
             {
                 (edges, xdgWindow, xWindow) = (e, window, null);
@@ -3629,7 +3714,7 @@ internal sealed partial class TinyComp :
         var members = new List<Window>();
         foreach (var window in _windows)
         {
-            if (window.Workspace == workspace)
+            if (window.Workspace == workspace && !window.Minimized)
             {
                 members.Add(window);
             }
@@ -3662,7 +3747,7 @@ internal sealed partial class TinyComp :
             _switcherWindows.Clear();
             foreach (var window in _windows)
             {
-                if (window.Workspace == workspace && window.Tree is { IsDestroyed: false })
+                if (window.Workspace == workspace && !window.Minimized && window.Tree is { IsDestroyed: false })
                 {
                     _switcherWindows.Add(window);
                 }
@@ -3820,6 +3905,8 @@ internal sealed partial class TinyComp :
         }
 
         view.ColorDescription = description;
+        view.KmsColorRouted = colorConfiguration.RouteKmsPipeline(view.Output);
+        RefreshGammaBaseline(view);
         _color.SetOutputDescription(view.Global, description);
         RefreshSurfaceLuts();
         view.Scheduler?.ScheduleRepaint();
@@ -3960,6 +4047,8 @@ internal sealed partial class TinyComp :
         public bool IsSecondary { get; set; }
 
         public Basin.Capabilities.ImageDescription ColorDescription { get; set; } = Basin.Capabilities.ImageDescription.Srgb;
+
+        public bool KmsColorRouted { get; set; }
 
         public Box UsableArea { get; set; }
 
@@ -4327,6 +4416,7 @@ internal sealed partial class TinyComp :
             toplevel.Xdg.Committed += ReportGeometry;
             toplevel.TitleChanged += RefreshFrame;
             toplevel.AppIdChanged += RefreshFrame;
+            toplevel.MinimizeRequested += () => comp.SetMinimized(this, true);
             toplevel.MoveRequested += serial => comp.BeginMove(this, serial);
             toplevel.ResizeRequested += (serial, edges) => comp.BeginResize(this, edges, serial);
             toplevel.MaximizeRequested += maximized =>
@@ -4365,6 +4455,8 @@ internal sealed partial class TinyComp :
         public XdgToplevelWindow Toplevel { get; }
 
         public Workspace? Workspace { get; set; }
+
+        public bool Minimized { get; set; }
 
         public SceneTree? Tree { get; private set; }
 
@@ -4696,6 +4788,9 @@ internal sealed partial class TinyComp :
                     break;
                 case FrameActionKind.ToggleMaximize:
                     ToggleMaximize();
+                    break;
+                case FrameActionKind.Minimize:
+                    _comp.SetMinimized(this, true);
                     break;
                 case FrameActionKind.Move:
                     _comp.BeginMove(this);

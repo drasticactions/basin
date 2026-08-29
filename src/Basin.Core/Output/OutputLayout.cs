@@ -1,22 +1,31 @@
+using System.Runtime.InteropServices;
+
 namespace Basin;
 
 public sealed class OutputLayout
 {
     private readonly List<Entry> _entries = [];
+    private readonly List<(IOutput Output, Point Position)> _projection = [];
+    private bool _projectionStale = true;
 
     public event Action? Changed;
 
-    public IReadOnlyList<(IOutput Output, Point Position)> Outputs
+    public ReadOnlySpan<(IOutput Output, Point Position)> Outputs
     {
         get
         {
-            var result = new List<(IOutput, Point)>(_entries.Count);
-            foreach (var entry in _entries)
+            if (_projectionStale)
             {
-                result.Add((entry.Output, entry.Position));
+                _projection.Clear();
+                foreach (var entry in _entries)
+                {
+                    _projection.Add((entry.Output, entry.Position));
+                }
+
+                _projectionStale = false;
             }
 
-            return result;
+            return CollectionsMarshal.AsSpan(_projection);
         }
     }
 
@@ -41,6 +50,7 @@ public sealed class OutputLayout
         TryRemove(output);
         var entry = new Entry(output, new Point(x, y));
         _entries.Add(entry);
+        _projectionStale = true;
         output.Destroyed += entry.OnDestroyed = () => Remove(output);
         output.Committed += entry.OnCommitted = fields => OnOutputCommitted(entry, fields);
         entry.LastBox = entry.Box;
@@ -60,6 +70,7 @@ public sealed class OutputLayout
                 }
 
                 entry.Position = new Point(x, y);
+                _projectionStale = true;
                 OutputGlobal.For(output)?.NotifyPosition(x, y);
                 Changed?.Invoke();
                 return;
@@ -92,6 +103,7 @@ public sealed class OutputLayout
                 }
 
                 _entries.RemoveAt(i);
+                _projectionStale = true;
                 return true;
             }
         }

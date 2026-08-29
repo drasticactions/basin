@@ -18,6 +18,8 @@ public readonly record struct TextureRenderOptions
 
     public PixmanRegion32? Clip { get; init; } = null;
 
+    public bool Opaque { get; init; } = false;
+
     public IColorLut? Lut { get; init; } = null;
 
     public IPixelShader? Shader { get; init; } = null;

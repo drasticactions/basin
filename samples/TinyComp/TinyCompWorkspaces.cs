@@ -665,7 +665,8 @@ internal sealed partial class TinyComp
     {
         switch (workspace.LastFocused)
         {
-            case Window window when _windows.Contains(window) && window.Workspace == workspace:
+            case Window window when _windows.Contains(window) && window.Workspace == workspace &&
+                !window.Minimized:
                 FocusWindow(window);
                 return;
 
@@ -676,7 +677,7 @@ internal sealed partial class TinyComp
 
         for (var i = _windows.Count - 1; i >= 0; i--)
         {
-            if (_windows[i].Workspace == workspace)
+            if (_windows[i].Workspace == workspace && !_windows[i].Minimized)
             {
                 FocusWindow(_windows[i]);
                 return;

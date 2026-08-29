@@ -106,7 +106,7 @@ internal sealed class PixmanRenderPass : IRenderPass
                 ? PixmanImage.CreateSolidFill(new PixmanColor(0, 0, 0, (ushort)(options.Alpha * ushort.MaxValue)))
                 : null;
             _image!.Composite(
-                PixmanOp.Over,
+                options.Opaque && options.Alpha >= 1f ? PixmanOp.Src : PixmanOp.Over,
                 source,
                 mask,
                 scaled ? 0 : (int)sourceX,

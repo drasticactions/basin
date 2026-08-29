@@ -115,6 +115,94 @@ public sealed class ColorOutputConfigurationTests
     }
 
     [Fact]
+    public void Routing_the_kms_pipeline_commits_all_three_stages()
+    {
+        var (configuration, layout) = Compose();
+        var output = new TestHdrOutput();
+        layout.Add(output, 0, 0);
+
+        Assert.True(configuration.RouteKmsPipeline(output));
+        Assert.True(configuration.IsKmsRouted(output));
+        Assert.True(output.DegammaFieldSeen);
+        Assert.True(output.GammaFieldSeen);
+        Assert.True(output.CtmFieldSeen);
+        Assert.Equal(256, output.CommittedDegamma!.Value.Red.Length);
+        Assert.Equal(256, output.CommittedGamma!.Value.Red.Length);
+        Assert.NotNull(output.CommittedCtm);
+        Assert.NotEqual(1.0, output.CommittedCtm![0]);
+
+        output.Destroy();
+        Assert.False(configuration.IsKmsRouted(output));
+    }
+
+    [Fact]
+    public void Dimming_scales_the_routed_gamut_matrix()
+    {
+        var (configuration, layout) = Compose();
+        var output = new TestHdrOutput();
+        layout.Add(output, 0, 0);
+
+        Assert.True(configuration.RouteKmsPipeline(output));
+        var routed = (double[])output.CommittedCtm!.Clone();
+
+        configuration.Apply(
+        [
+            new OutputConfigurationEntry { Output = output, Enabled = true, Dimming = 5000 },
+        ]);
+        for (var i = 0; i < 9; i++)
+        {
+            Assert.Equal(routed[i] * 0.5, output.CommittedCtm![i], 6);
+        }
+
+        configuration.Apply(
+        [
+            new OutputConfigurationEntry { Output = output, Enabled = true, Dimming = 10000 },
+        ]);
+        for (var i = 0; i < 9; i++)
+        {
+            Assert.Equal(routed[i], output.CommittedCtm![i], 6);
+        }
+
+        output.Destroy();
+    }
+
+    [Fact]
+    public void Hdr_unroutes_the_kms_pipeline()
+    {
+        var (configuration, layout) = Compose();
+        var output = new TestHdrOutput();
+        layout.Add(output, 0, 0);
+
+        Assert.True(configuration.RouteKmsPipeline(output));
+        configuration.Apply(
+        [
+            new OutputConfigurationEntry { Output = output, Enabled = true, HighDynamicRange = true },
+        ]);
+        Assert.False(configuration.RouteKmsPipeline(output));
+        Assert.False(configuration.IsKmsRouted(output));
+        Assert.Null(output.CommittedGamma);
+        Assert.Null(output.CommittedDegamma);
+        Assert.Null(output.CommittedCtm);
+
+        output.Destroy();
+    }
+
+    [Fact]
+    public void An_srgb_profile_is_identity_and_does_not_route()
+    {
+        var (configuration, layout) = Compose();
+        var output = new TestHdrOutput();
+        layout.Add(output, 0, 0);
+        configuration.Seed(output, new OutputColorState { Source = OutputColorProfileSource.Srgb });
+
+        Assert.False(configuration.RouteKmsPipeline(output));
+        Assert.False(configuration.IsKmsRouted(output));
+        Assert.False(output.GammaFieldSeen);
+
+        output.Destroy();
+    }
+
+    [Fact]
     public void A_missing_icc_profile_fails_with_a_reason_naming_the_file()
     {
         var (configuration, layout) = Compose();
@@ -172,6 +260,61 @@ public sealed class ColorOutputConfigurationTests
             Assert.True(applied);
             var description = configuration.DescriptionOf(output);
             Assert.NotNull(description.IccData);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        output.Destroy();
+    }
+
+    [Fact]
+    public void An_icc_matrix_shaper_routes_the_kms_pipeline_per_channel()
+    {
+        Assert.SkipUnless(Lcms2Support.IsAvailable, "liblcms2 ≥ 2.19 not present");
+        var (configuration, layout) = Compose();
+        var output = new TestHdrOutput();
+        layout.Add(output, 0, 0);
+
+        byte[] icc;
+        var white = new Lcms2.Native.cmsCIExyY { x = 0.3127, y = 0.3290, Y = 1 };
+        var primaries = new Lcms2.Native.cmsCIExyYTRIPLE
+        {
+            Red = new Lcms2.Native.cmsCIExyY { x = 0.68, y = 0.32, Y = 1 },
+            Green = new Lcms2.Native.cmsCIExyY { x = 0.265, y = 0.69, Y = 1 },
+            Blue = new Lcms2.Native.cmsCIExyY { x = 0.15, y = 0.06, Y = 1 },
+        };
+        using (var red = Lcms2.ToneCurve.BuildGamma(2.4))
+        using (var green = Lcms2.ToneCurve.BuildGamma(2.2))
+        using (var blue = Lcms2.ToneCurve.BuildGamma(2.0))
+        using (var profile = Lcms2.IccProfile.CreateRgb(white, primaries, [red, green, blue]))
+        {
+            icc = profile.SaveToArray();
+        }
+
+        var path = Path.Combine(Path.GetTempPath(), $"basin-icc-shaper-{Environment.ProcessId}.icc");
+        File.WriteAllBytes(path, icc);
+        try
+        {
+            Assert.True(configuration.Apply(
+            [
+                new OutputConfigurationEntry
+                {
+                    Output = output,
+                    Enabled = true,
+                    IccProfilePath = path,
+                    ColorProfileSource = OutputColorProfileSource.Icc,
+                },
+            ]));
+
+            Assert.True(configuration.RouteKmsPipeline(output));
+            Assert.True(configuration.IsKmsRouted(output));
+            Assert.NotNull(output.CommittedDegamma);
+            Assert.NotNull(output.CommittedCtm);
+            var gamma = output.CommittedGamma!.Value;
+            Assert.True(gamma.Red[128] > gamma.Green[128]);
+            Assert.True(gamma.Green[128] > gamma.Blue[128]);
         }
         finally
         {

@@ -18,9 +18,20 @@ public sealed class SurfaceState : IDisposable
 
     public PixmanRegion32 BufferDamage { get; } = new();
 
-    public PixmanRegion32 Opaque { get; } = new();
+    public DamageRects SurfaceDamageRects;
 
-    public PixmanRegion32 Input { get; } = new();
+    public DamageRects BufferDamageRects;
+
+    private PixmanRegion32? _opaque;
+    private PixmanRegion32? _input;
+
+    public PixmanRegion32 Opaque => _opaque ??= new();
+
+    public PixmanRegion32 Input => _input ??= new();
+
+    public bool HasOpaque => _opaque is not null;
+
+    public bool HasInput => _input is not null;
 
     public bool InputIsInfinite = true;
 
@@ -178,7 +189,7 @@ public sealed class SurfaceState : IDisposable
 
         SurfaceDamage.Dispose();
         BufferDamage.Dispose();
-        Opaque.Dispose();
-        Input.Dispose();
+        _opaque?.Dispose();
+        _input?.Dispose();
     }
 }

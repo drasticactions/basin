@@ -9,6 +9,8 @@ namespace TinyComp;
 
 internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
 {
+    public bool OpaqueChrome => true;
+
     private const int Border = 4;
     private const int TitleHeight = 26;
     private const int CornerZone = 16;

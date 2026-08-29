@@ -9,6 +9,7 @@ public sealed class LayerShellSceneDriver
     private readonly Func<LayerSurface, SceneTree> _treeFor;
     private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _surfaces = [];
     private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _scratch = [];
+    private readonly Dictionary<LayerSurface, ArrangeInputs> _arranged = [];
     private readonly PopupPlacer _popups;
     private bool _trackingPopups;
 
@@ -103,8 +104,49 @@ public sealed class LayerShellSceneDriver
         return null;
     }
 
+    private readonly record struct ArrangeInputs(
+        LayerKind Layer,
+        LayerAnchor Anchor,
+        int ExclusiveZone,
+        LayerAnchor ExclusiveEdge,
+        (int Top, int Right, int Bottom, int Left) Margin,
+        int DesiredWidth,
+        int DesiredHeight,
+        OutputGlobal? Output,
+        bool Mapped,
+        bool Visible);
+
+    private static ArrangeInputs InputsOf(LayerSurface layer, SceneSurface? scene) =>
+        new(layer.Layer,
+            layer.Anchor,
+            layer.ExclusiveZone,
+            layer.ExclusiveEdge,
+            layer.Margin,
+            layer.DesiredWidth,
+            layer.DesiredHeight,
+            layer.Output,
+            layer.IsMapped,
+            scene is not { IsDestroyed: false } visible || visible.Tree.Enabled);
+
+    private void RearrangeIfMoved(LayerSurface layer)
+    {
+        var inputs = InputsOf(layer, SceneOf(layer));
+        if (_arranged.TryGetValue(layer, out var last) && last == inputs)
+        {
+            return;
+        }
+
+        Rearrange();
+    }
+
     public void Rearrange()
     {
+        _arranged.Clear();
+        foreach (var entry in _surfaces)
+        {
+            _arranged[entry.Layer] = InputsOf(entry.Layer, entry.Scene);
+        }
+
         var first = true;
         foreach (var (output, _) in _layout.Outputs)
         {
@@ -152,7 +194,7 @@ public sealed class LayerShellSceneDriver
             Rearrange();
             SceneCreated?.Invoke(layer, scene);
         };
-        layer.Committed += Rearrange;
+        layer.Committed += () => RearrangeIfMoved(layer);
         void Remove()
         {
             var index = _surfaces.FindIndex(entry => entry.Layer == layer);
@@ -167,6 +209,7 @@ public sealed class LayerShellSceneDriver
             }
 
             _surfaces.RemoveAt(index);
+            _arranged.Remove(layer);
             Removed?.Invoke(layer);
             Rearrange();
         }

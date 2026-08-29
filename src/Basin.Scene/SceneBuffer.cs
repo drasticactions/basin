@@ -56,6 +56,33 @@ public sealed class SceneBuffer : SceneNode
 
     public bool IsOpaque { get; set; }
 
+    private PixmanRegion32? _opaqueRegion;
+
+    internal PixmanRegion32? OpaqueRegion => _opaqueRegion is { IsEmpty: false } region ? region : null;
+
+    public void SetOpaqueRegion(PixmanRegion32? region)
+    {
+        if (region is null || region.IsEmpty)
+        {
+            if (_opaqueRegion is { IsEmpty: false })
+            {
+                _opaqueRegion.Clear();
+                DamageSubtree();
+            }
+
+            return;
+        }
+
+        _opaqueRegion ??= new PixmanRegion32();
+        if (_opaqueRegion.Equals(region))
+        {
+            return;
+        }
+
+        _opaqueRegion.Copy(region);
+        DamageSubtree();
+    }
+
     private IColorLut? _lut;
 
     public IColorLut? Lut
@@ -142,7 +169,7 @@ public sealed class SceneBuffer : SceneNode
         }
 
         return surface.Current.InputIsInfinite ||
-               surface.Current.Input.Contains((int)x, (int)y);
+               (surface.Current.HasInput && surface.Current.Input.Contains((int)x, (int)y));
     }
 
     public void SetBuffer(IBuffer? buffer)
@@ -189,6 +216,12 @@ public sealed class SceneBuffer : SceneNode
 
     public void NotifyContentChanged(PixmanRegion32 damage)
     {
+        var none = default(DamageRects);
+        NotifyContentChanged(damage, in none);
+    }
+
+    public void NotifyContentChanged(PixmanRegion32 damage, in DamageRects rects)
+    {
         _conversion?.Refresh();
         if (damage.IsEmpty)
         {
@@ -209,28 +242,28 @@ public sealed class SceneBuffer : SceneNode
             {
                 _adoptDamageIsFull = true;
             }
+            else if (rects.Count > 0)
+            {
+                _adoptDamage.Add(in rects);
+            }
             else
             {
                 var box = damage.Extents;
-                if (_adoptDamage.IsEmpty)
-                {
-                    _adoptDamage = new Box(box.X1, box.Y1, box.X2 - box.X1, box.Y2 - box.Y1);
-                }
-                else
-                {
-                    var x0 = Math.Min(_adoptDamage.X, box.X1);
-                    var y0 = Math.Min(_adoptDamage.Y, box.Y1);
-                    var x1 = Math.Max(_adoptDamage.X + _adoptDamage.Width, box.X2);
-                    var y1 = Math.Max(_adoptDamage.Y + _adoptDamage.Height, box.Y2);
-                    _adoptDamage = new Box(x0, y0, x1 - x0, y1 - y0);
-                }
+                _adoptDamage.Add(box.X1, box.Y1, box.X2 - box.X1, box.Y2 - box.Y1);
             }
         }
         else if (scaled)
         {
             (CurrentTexture as IRefreshableTexture)?.MarkDirty();
         }
-        else
+        else if (rects.Count > 0 && CurrentTexture is IRefreshableTexture refreshable)
+        {
+            for (var i = 0; i < rects.Count; i++)
+            {
+                refreshable.MarkDirty(rects[i]);
+            }
+        }
+        else if (rects.Count == 0)
         {
             var extents = damage.Extents;
             (CurrentTexture as IRefreshableTexture)?.MarkDirty(
@@ -250,7 +283,7 @@ public sealed class SceneBuffer : SceneNode
     private bool _bufferSwapped;
 
     private IBuffer? _adoptFrom;
-    private Box _adoptDamage;
+    private DamageRects _adoptDamage;
     private bool _adoptDamageIsFull;
 
     protected override (int Width, int Height) ContentSize
@@ -300,9 +333,7 @@ public sealed class SceneBuffer : SceneNode
         }
 
         if (_adoptFrom is { } previous &&
-            scene.TryAdoptTexture(renderer, previous, buffer, _adoptDamageIsFull || _adoptDamage.IsEmpty
-                ? new Box(0, 0, buffer.Width, buffer.Height)
-                : _adoptDamage))
+            scene.TryAdoptTexture(renderer, previous, buffer, in _adoptDamage, _adoptDamageIsFull))
         {
             _adoptFrom = null;
             _adoptDamage = default;
@@ -418,6 +449,8 @@ public sealed class SceneBuffer : SceneNode
         _lock.Dispose();
         _backdropRegion?.Dispose();
         _backdropRegion = null;
+        _opaqueRegion?.Dispose();
+        _opaqueRegion = null;
     }
 
     private void ReleaseTexture()

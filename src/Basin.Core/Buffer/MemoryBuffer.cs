@@ -22,7 +22,7 @@ public sealed class MemoryBuffer : BufferBase
 
     public int Stride { get; }
 
-    public DrmFormat Format => _format;
+    public override DrmFormat Format => _format;
 
     protected override bool TryMap(BufferDataAccess access, out BufferDataView view)
     {

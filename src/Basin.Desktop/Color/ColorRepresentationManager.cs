@@ -11,7 +11,7 @@ public sealed class ColorRepresentationManager : IDisposable
     private const uint ErrorSurfaceExists = 1;
     private const uint ErrorInert = 4;
 
-    public sealed record Representation(
+    public readonly record struct Representation(
         WpColorRepresentationSurfaceV1.AlphaMode AlphaMode,
         WpColorRepresentationSurfaceV1.Coefficients Coefficients,
         WpColorRepresentationSurfaceV1.Range Range,
@@ -135,22 +135,47 @@ public sealed class ColorRepresentationManager : IDisposable
             var inert = false;
             surface.Destroyed += () => inert = true;
 
-            void Update(Func<Representation, Representation> change)
+            Representation? Basis()
             {
                 if (inert)
                 {
                     resource.PostError(ErrorInert, "the surface this object was created for is gone");
+                    return null;
+                }
+
+                return state.HasPending ? state.Pending : state.HasLatched ? state.Latched : state.Current;
+            }
+
+            resource.SetAlphaMode += (_, ae) =>
+            {
+                if (Basis() is not { } basis)
+                {
                     return;
                 }
 
-                var basis = state.HasPending ? state.Pending : state.HasLatched ? state.Latched : state.Current;
-                state.Pending = change(basis);
+                state.Pending = basis with { AlphaMode = ae.AlphaMode };
                 state.HasPending = true;
-            }
+            };
+            resource.SetCoefficientsAndRange += (_, ce) =>
+            {
+                if (Basis() is not { } basis)
+                {
+                    return;
+                }
 
-            resource.SetAlphaMode += (_, ae) => Update(r => r with { AlphaMode = ae.AlphaMode });
-            resource.SetCoefficientsAndRange += (_, ce) => Update(r => r with { Coefficients = ce.Coefficients, Range = ce.Range });
-            resource.SetChromaLocation += (_, le) => Update(r => r with { ChromaLocation = le.ChromaLocation });
+                state.Pending = basis with { Coefficients = ce.Coefficients, Range = ce.Range };
+                state.HasPending = true;
+            };
+            resource.SetChromaLocation += (_, le) =>
+            {
+                if (Basis() is not { } basis)
+                {
+                    return;
+                }
+
+                state.Pending = basis with { ChromaLocation = le.ChromaLocation };
+                state.HasPending = true;
+            };
             resource.Destroyed += (_, _) =>
             {
                 _claimed.Remove(surface);

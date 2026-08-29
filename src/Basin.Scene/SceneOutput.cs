@@ -1063,6 +1063,23 @@ public sealed class SceneOutput : IDisposable
                 _opaque.UnionWith(_scratch);
                 anyBackground.SubtractWith(_scratch);
             }
+            else if (!clip.IsEmpty && !entry.Transformed && !entry.Mirrored && entry.Alpha >= 1f &&
+                _projection.Scale == 1.0 && !_projection.IsTransformed &&
+                entry.Node is SceneBuffer { TextureShader: null } partialNode &&
+                !(partialNode.HasActiveBackdrop && _runsBackdropEffects) &&
+                partialNode.OpaqueRegion is { } partial)
+            {
+                _scratch.Copy(partial);
+                _scratch.Translate(physical.X - bounds.X, physical.Y - bounds.Y);
+                _scratch.IntersectRect(_scratch, physical.X, physical.Y, (uint)physical.Width, (uint)physical.Height);
+                if (onPlane is not null)
+                {
+                    _scratch.SubtractWith(_planeScratch);
+                }
+
+                _opaque.UnionWith(_scratch);
+                anyBackground.SubtractWith(_scratch);
+            }
         }
 
         var pass = renderer.BeginBufferPass(target, new RenderPassOptions { WaitFenceFd = waitFence });
@@ -1260,7 +1277,7 @@ public sealed class SceneOutput : IDisposable
             state.SetLayers(_layers);
         }
 
-        if (!Output.TestCommit(state) || !Output.Commit(state))
+        if ((!_scanningOut && !Output.TestCommit(state)) || !Output.Commit(state))
         {
             _scanoutStreak = 0;
             if (_scanningOut)

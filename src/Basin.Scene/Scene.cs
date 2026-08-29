@@ -18,41 +18,46 @@ public sealed partial class Scene
             _scene = scene;
             Renderer = renderer;
             Texture = texture;
-            Drop = () =>
-            {
-                if (Watched is { } watched)
-                {
-                    _scene.DropTexture(watched, this);
-                }
-            };
         }
+
+        public Action DropOnRelease => _dropOnRelease ??= () =>
+        {
+            if (Watched is { } watched)
+            {
+                _scene.DropTexture(watched, this);
+            }
+        };
+
+        private Action? _dropOnRelease;
 
         public IRenderer Renderer { get; }
 
         public ITexture Texture { get; }
-
-        public Action Drop { get; }
 
         public IBuffer? Watched { get; set; }
 
         public bool DropsOnRelease { get; set; }
     }
 
-    private static void WatchBufferEnd(IBuffer buffer, TextureCacheEntry entry)
+    private readonly List<IBuffer> _deadTextures = [];
+    private Action? _dropDestroyed;
+
+    private void WatchBufferEnd(IBuffer buffer, TextureCacheEntry entry)
     {
         entry.Watched = buffer;
         entry.DropsOnRelease = buffer.IsDestroyed;
         if (entry.DropsOnRelease)
         {
-            buffer.Released += entry.Drop;
+            buffer.Released += entry.DropOnRelease;
         }
         else
         {
-            buffer.Destroyed += entry.Drop;
+            _dropDestroyed ??= DropDestroyedTextures;
+            buffer.Destroyed += _dropDestroyed;
         }
     }
 
-    private static void UnwatchBufferEnd(IBuffer buffer, TextureCacheEntry entry)
+    private void UnwatchBufferEnd(IBuffer buffer, TextureCacheEntry entry)
     {
         if (entry.Watched is null)
         {
@@ -61,14 +66,35 @@ public sealed partial class Scene
 
         if (entry.DropsOnRelease)
         {
-            buffer.Released -= entry.Drop;
+            buffer.Released -= entry.DropOnRelease;
         }
-        else
+        else if (_dropDestroyed is { } handler)
         {
-            buffer.Destroyed -= entry.Drop;
+            buffer.Destroyed -= handler;
         }
 
         entry.Watched = null;
+    }
+
+    private void DropDestroyedTextures()
+    {
+        foreach (var pair in _textures)
+        {
+            if (!pair.Value.DropsOnRelease && pair.Key.IsDestroyed)
+            {
+                _deadTextures.Add(pair.Key);
+            }
+        }
+
+        foreach (var buffer in _deadTextures)
+        {
+            if (_textures.TryGetValue(buffer, out var entry))
+            {
+                DropTexture(buffer, entry);
+            }
+        }
+
+        _deadTextures.Clear();
     }
 
     internal ITexture? TextureFor(IRenderer renderer, IBuffer buffer)
@@ -95,7 +121,7 @@ public sealed partial class Scene
         return texture;
     }
 
-    internal bool TryAdoptTexture(IRenderer renderer, IBuffer from, IBuffer to, in Box damage)
+    internal bool TryAdoptTexture(IRenderer renderer, IBuffer from, IBuffer to, in DamageRects damage, bool full)
     {
         if (ReferenceEquals(from, to) ||
             _textures.TryGetValue(to, out _) ||
@@ -107,9 +133,18 @@ public sealed partial class Scene
             return false;
         }
 
-        if (!refreshable.TryAdopt(to, damage))
+        var whole = full || damage.Count == 0;
+        if (!refreshable.TryAdopt(to, whole ? new Box(0, 0, to.Width, to.Height) : damage[0]))
         {
             return false;
+        }
+
+        if (!whole)
+        {
+            for (var i = 1; i < damage.Count; i++)
+            {
+                refreshable.MarkDirty(damage[i]);
+            }
         }
 
         UnwatchBufferEnd(from, entry);
@@ -619,6 +654,7 @@ public sealed partial class Scene
                             Clip = clip,
                             Lut = buffer.Lut,
                             Shader = buffer.TextureShader,
+                            Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
                         });
                     }
                     else
@@ -632,6 +668,7 @@ public sealed partial class Scene
                             Clip = clip,
                             Lut = buffer.Lut,
                             Shader = buffer.TextureShader,
+                            Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
                         });
                     }
                 }

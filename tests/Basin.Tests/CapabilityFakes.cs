@@ -853,8 +853,22 @@ internal sealed class TestPreferenceOutput : OutputBase
     }
 }
 
-internal sealed class TestHdrOutput : OutputBase
+internal sealed class TestHdrOutput : OutputBase, IOutputColorPipeline
 {
+    public uint DegammaLutSize => 256;
+
+    public uint GammaLutSize => 256;
+
+    public bool SupportsCtm => true;
+
+    public OutputGammaRamps? CommittedGamma { get; private set; }
+
+    public bool GammaFieldSeen { get; private set; }
+
+    public OutputGammaRamps? CommittedDegamma { get; private set; }
+
+    public bool DegammaFieldSeen { get; private set; }
+
     public TestHdrOutput(string name = "HDR-1")
         : base(name)
     {
@@ -901,6 +915,18 @@ internal sealed class TestHdrOutput : OutputBase
         {
             CommittedCtm = state.Ctm;
             CtmFieldSeen = true;
+        }
+
+        if ((state.Fields & OutputStateFields.GammaLut) != 0)
+        {
+            CommittedGamma = state.GammaLut;
+            GammaFieldSeen = true;
+        }
+
+        if ((state.Fields & OutputStateFields.DegammaLut) != 0)
+        {
+            CommittedDegamma = state.DegammaLut;
+            DegammaFieldSeen = true;
         }
 
         return true;

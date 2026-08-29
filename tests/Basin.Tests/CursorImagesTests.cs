@@ -57,7 +57,7 @@ public sealed class CursorImagesTests
     }
 
     [Fact]
-    public void A_cursor_too_large_for_the_buffer_is_marked_rather_than_quietly_clipped()
+    public void A_cursor_too_large_for_the_buffer_is_scaled_onto_the_plane()
     {
         using var allocator = new ShmAllocator();
         using var cursors = new CursorImages(allocator, 24, 24, logicalSize: 24);
@@ -66,9 +66,29 @@ public sealed class CursorImagesTests
         var fits = cursors.Named("left_ptr", new CursorKey(1, null));
         Assert.SkipWhen(fits is null, "theme has no left_ptr or its aliases");
 
+        var theme = XcursorTheme.Load(null, cursors.SizeForScale(4));
+        Assert.SkipWhen(theme is null, "no xcursor theme installed");
+        var cursor = theme!.Get("left_ptr");
+        foreach (var alias in CursorAliases.Of("left_ptr"))
+        {
+            cursor ??= theme.Get(alias);
+        }
+
+        Assert.SkipWhen(cursor is null, "theme has no left_ptr or its aliases");
+        var frame = cursor!.Frame(0);
+        Assert.SkipWhen(frame.Width <= 24 && frame.Height <= 24, "theme carries no frame larger than the buffer");
+
         var oversized = cursors.Named("left_ptr", new CursorKey(4, null));
         Assert.NotNull(oversized);
-        Assert.True(oversized!.Value.Clipped);
+        Assert.False(oversized!.Value.Clipped);
+        Assert.Equal(24, oversized.Value.Buffer.Width);
+        Assert.Equal(24, oversized.Value.Buffer.Height);
+
+        var factor = Math.Min(24.0 / frame.Width, 24.0 / frame.Height);
+        Assert.Equal(Math.Max(1, (int)Math.Round(frame.Width * factor)), oversized.Value.Width);
+        Assert.Equal(Math.Max(1, (int)Math.Round(frame.Height * factor)), oversized.Value.Height);
+        Assert.Equal((int)Math.Round(frame.HotspotX * factor), oversized.Value.HotspotX);
+        Assert.Equal((int)Math.Round(frame.HotspotY * factor), oversized.Value.HotspotY);
     }
 
     [Fact]

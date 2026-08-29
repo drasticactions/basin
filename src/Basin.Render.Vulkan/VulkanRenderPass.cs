@@ -312,7 +312,8 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             set,
             options.Lut is VulkanColorLut vulkanLut ? vulkanLut.Set : default,
             constants,
-            options.Clip);
+            options.Clip,
+            options.Opaque && options.Alpha >= 1f);
     }
 
     public void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)
@@ -609,17 +610,20 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         return linear * alpha;
     }
 
-    private void Record(int kind, DescriptorSet set, DescriptorSet lutSet, in Push constants, PixmanRegion32? clip)
+    private void Record(int kind, DescriptorSet set, DescriptorSet lutSet, in Push constants, PixmanRegion32? clip, bool opaque = false)
     {
         var vk = _renderer.Dev.Api;
-        if (kind != _boundKind)
+        var bindKey = opaque ? kind + 8 : kind;
+        if (bindKey != _boundKind)
         {
             var group = _entry!.TwoPassTarget ? _renderer.TwoPassPipelines : _renderer.OnePassPipelines;
             vk.CmdBindPipeline(
                 _render,
                 PipelineBindPoint.Graphics,
-                kind switch { 0 => group.Solid, 1 => group.TextureIdentity, 2 => group.TextureSrgb, _ => group.TextureLut });
-            _boundKind = kind;
+                opaque
+                    ? kind switch { 1 => group.TextureIdentityOpaque, 2 => group.TextureSrgbOpaque, _ => group.TextureLutOpaque }
+                    : kind switch { 0 => group.Solid, 1 => group.TextureIdentity, 2 => group.TextureSrgb, _ => group.TextureLut });
+            _boundKind = bindKey;
         }
 
         var layout = kind == 3 ? _renderer.LutLayout : _renderer.Layout;

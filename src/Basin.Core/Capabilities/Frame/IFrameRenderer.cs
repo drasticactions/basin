@@ -8,6 +8,8 @@ public interface IFrameRenderer
 
     FramePart PartAt(double x, double y, in FrameState state, double scale);
 
+    bool OpaqueChrome => false;
+
     string? CursorFor(FramePart part) => null;
 
     Box PartBounds(FramePart part) => default;

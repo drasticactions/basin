@@ -234,6 +234,7 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
             }
 
             strip.SetBuffer(buffer);
+            strip.IsOpaque = _renderer.OpaqueChrome;
             strip.SourceBox = OutputScaling.ToPhysical(box, _pendingScale);
             strip.DestinationWidth = box.Width;
             strip.DestinationHeight = box.Height;

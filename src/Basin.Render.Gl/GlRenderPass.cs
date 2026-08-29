@@ -238,7 +238,17 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         _gl.Uniform1(program.Alpha, options.Alpha);
         _gl.Uniform1(program.ForceOpaque, forceOpaque ? 1f : 0f);
         SetTransform(program.Transform, options.Transform);
+        var opaque = options.Opaque && options.Alpha >= 1f;
+        if (opaque)
+        {
+            _gl.Disable(EnableCap.Blend);
+        }
+
         DrawClipped(options.Clip);
+        if (opaque)
+        {
+            _gl.Enable(EnableCap.Blend);
+        }
     }
 
     public void AddShader(IPixelShader shader, in ShaderRenderOptions options)

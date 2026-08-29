@@ -13,6 +13,8 @@ public sealed class RemoteImageBuffer : BufferBase
 
     public IRemoteImage Image => _image;
 
+    public override DrmFormat Format => _image.Format;
+
     protected override bool TryMap(BufferDataAccess access, out BufferDataView view)
     {
         if (_image.IsReleased)

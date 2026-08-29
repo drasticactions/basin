@@ -14,6 +14,8 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
     private readonly IOutputConfiguration _inner;
     private readonly Dictionary<IOutput, OutputColorState> _states = [];
     private readonly Dictionary<IOutput, Action> _cleanup = [];
+    private readonly Dictionary<IOutput, double[]> _routedCtm = [];
+    private readonly Dictionary<IOutput, OutputGammaRamps> _routedGamma = [];
     private string? _failure;
 
     public ColorOutputConfiguration(IOutputConfiguration inner)
@@ -269,6 +271,143 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
         return sdr;
     }
 
+    public bool IsKmsRouted(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _routedCtm.ContainsKey(output);
+    }
+
+    public bool RouteKmsPipeline(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        var state = StateOf(output);
+        var description = DescriptionOf(output);
+        if (output is not IOutputColorPipeline pipeline ||
+            pipeline.GammaLutSize == 0 || pipeline.DegammaLutSize == 0 || !pipeline.SupportsCtm ||
+            state.HighDynamicRange)
+        {
+            UnrouteKmsPipeline(output);
+            return false;
+        }
+
+        double[] ctm;
+        OutputGammaRamps gamma;
+        if (description.IccData is { } icc)
+        {
+            if (!KmsColorPipeline.TryExtractMatrixShaper(icc, (int)pipeline.GammaLutSize, out ctm, out gamma))
+            {
+                UnrouteKmsPipeline(output);
+                return false;
+            }
+        }
+        else
+        {
+            if (ColorLutBaker.IsIdentity(ImageDescription.Srgb, description) ||
+                !KmsColorPipeline.CanExpress(ImageDescription.Srgb, description))
+            {
+                UnrouteKmsPipeline(output);
+                return false;
+            }
+
+            ctm = KmsColorPipeline.GamutCtm(ImageDescription.Srgb, description);
+            var scale = KmsColorPipeline.HeadroomScale(ImageDescription.Srgb, description);
+            if (scale < 1.0)
+            {
+                for (var i = 0; i < 9; i++)
+                {
+                    ctm[i] *= scale;
+                }
+            }
+
+            gamma = KmsColorPipeline.EncodeRamps(description, (int)pipeline.GammaLutSize);
+        }
+
+        _routedCtm[output] = ctm;
+        _routedGamma[output] = gamma;
+        Record(output, state);
+        using var commit = new OutputState();
+        commit.SetDegammaLut(KmsColorPipeline.DecodeRamps(ImageDescription.Srgb, (int)pipeline.DegammaLutSize));
+        commit.SetCtm(CtmFor(output, SoftwareFactor(output, state)));
+        commit.SetGammaLut(gamma);
+        if (output.Commit(commit))
+        {
+            return true;
+        }
+
+        _routedCtm.Remove(output);
+        _routedGamma.Remove(output);
+        return false;
+    }
+
+    public OutputGammaRamps? RoutedEncodeRamps(IOutput output, (double R, double G, double B)? multipliers = null)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (!_routedGamma.TryGetValue(output, out var ramps))
+        {
+            return null;
+        }
+
+        if (multipliers is not { } m)
+        {
+            return ramps;
+        }
+
+        var size = ramps.Red.Length;
+        var scaled = new OutputGammaRamps(new ushort[size], new ushort[size], new ushort[size]);
+        for (var i = 0; i < size; i++)
+        {
+            scaled.Red[i] = (ushort)Math.Clamp(Math.Round(ramps.Red[i] * m.R), 0, ushort.MaxValue);
+            scaled.Green[i] = (ushort)Math.Clamp(Math.Round(ramps.Green[i] * m.G), 0, ushort.MaxValue);
+            scaled.Blue[i] = (ushort)Math.Clamp(Math.Round(ramps.Blue[i] * m.B), 0, ushort.MaxValue);
+        }
+
+        return scaled;
+    }
+
+    private void UnrouteKmsPipeline(IOutput output)
+    {
+        if (!_routedCtm.Remove(output))
+        {
+            return;
+        }
+
+        _routedGamma.Remove(output);
+
+        using var commit = new OutputState();
+        commit.SetDegammaLut(null);
+        commit.SetCtm(CtmFor(output, SoftwareFactor(output, StateOf(output))));
+        commit.SetGammaLut(null);
+        _ = output.Commit(commit);
+    }
+
+    private double SoftwareFactor(IOutput output, OutputColorState state)
+    {
+        var hardware = Brightness is { } control && control.Supports(output) && control.Max(output) > 0 &&
+            (state.DdcCiAllowed || !control.UsesDdcCi(output));
+        return (hardware ? 1.0 : state.Brightness / 10000.0) * (state.Dimming / 10000.0);
+    }
+
+    private double[]? CtmFor(IOutput output, double factor)
+    {
+        if (!_routedCtm.TryGetValue(output, out var matrix))
+        {
+            return factor >= 1.0 ? null : [factor, 0, 0, 0, factor, 0, 0, 0, factor];
+        }
+
+        if (factor >= 1.0)
+        {
+            return matrix;
+        }
+
+        var scaled = new double[9];
+        for (var i = 0; i < 9; i++)
+        {
+            scaled[i] = matrix[i] * factor;
+        }
+
+        return scaled;
+    }
+
     private void ApplyColor(in OutputConfigurationEntry entry)
     {
         var output = entry.Output;
@@ -376,12 +515,12 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
 
         ReevaluateEdr(output);
 
-        var factor = (hardware ? 1.0 : next.Brightness / 10000.0) * (next.Dimming / 10000.0);
-        var previousFactor = (hardware ? 1.0 : previous.Brightness / 10000.0) * (previous.Dimming / 10000.0);
+        var factor = SoftwareFactor(output, next);
+        var previousFactor = SoftwareFactor(output, previous);
         if (Math.Abs(factor - previousFactor) > double.Epsilon)
         {
             using var state = new OutputState();
-            state.SetCtm(factor >= 1.0 ? null : [factor, 0, 0, 0, factor, 0, 0, 0, factor]);
+            state.SetCtm(CtmFor(output, factor));
             _ = output.Commit(state);
         }
     }
@@ -394,6 +533,8 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
             void OnDestroyed()
             {
                 _states.Remove(output);
+                _routedCtm.Remove(output);
+                _routedGamma.Remove(output);
                 _cleanup.Remove(output);
             }
 

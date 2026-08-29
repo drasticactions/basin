@@ -7,7 +7,9 @@ namespace Basin.Render.Vulkan;
 
 public sealed unsafe class VulkanRenderer : IRenderer
 {
-    internal readonly struct PipelineGroup(Pipeline solid, Pipeline textureIdentity, Pipeline textureSrgb, Pipeline textureLut)
+    internal readonly struct PipelineGroup(
+        Pipeline solid, Pipeline textureIdentity, Pipeline textureSrgb, Pipeline textureLut,
+        Pipeline textureIdentityOpaque, Pipeline textureSrgbOpaque, Pipeline textureLutOpaque)
     {
         public readonly Pipeline Solid = solid;
 
@@ -16,6 +18,12 @@ public sealed unsafe class VulkanRenderer : IRenderer
         public readonly Pipeline TextureSrgb = textureSrgb;
 
         public readonly Pipeline TextureLut = textureLut;
+
+        public readonly Pipeline TextureIdentityOpaque = textureIdentityOpaque;
+
+        public readonly Pipeline TextureSrgbOpaque = textureSrgbOpaque;
+
+        public readonly Pipeline TextureLutOpaque = textureLutOpaque;
     }
 
     internal readonly struct MeshGroup(
@@ -180,7 +188,10 @@ public sealed unsafe class VulkanRenderer : IRenderer
         CreatePipeline(vertex, solid, Layout, renderPass, subpass: 0, blend: true, textureTransform: null),
         CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: true, textureTransform: 0),
         CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: true, textureTransform: 1),
-        CreatePipeline(vertex, textureLut, LutLayout, renderPass, subpass: 0, blend: true, textureTransform: null));
+        CreatePipeline(vertex, textureLut, LutLayout, renderPass, subpass: 0, blend: true, textureTransform: null),
+        CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: false, textureTransform: 0),
+        CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: false, textureTransform: 1),
+        CreatePipeline(vertex, textureLut, LutLayout, renderPass, subpass: 0, blend: false, textureTransform: null));
 
     private MeshGroup BuildMeshGroup(ShaderModule vertex, ShaderModule fragment, RenderPass renderPass) => new(
         CreatePipeline(vertex, fragment, Layout, renderPass, subpass: 0, blend: true, textureTransform: 0, meshInput: true),
@@ -379,6 +390,9 @@ public sealed unsafe class VulkanRenderer : IRenderer
         vk.DestroyPipeline(Dev.Device, group.TextureIdentity, null);
         vk.DestroyPipeline(Dev.Device, group.TextureSrgb, null);
         vk.DestroyPipeline(Dev.Device, group.TextureLut, null);
+        vk.DestroyPipeline(Dev.Device, group.TextureIdentityOpaque, null);
+        vk.DestroyPipeline(Dev.Device, group.TextureSrgbOpaque, null);
+        vk.DestroyPipeline(Dev.Device, group.TextureLutOpaque, null);
     }
 
     public IColorLut? ImportLut(ColorLut3D lut)

@@ -64,11 +64,11 @@ public sealed class OutputScheduler : IDisposable
         }
 
         var elapsed = Environment.TickCount64 - _lastFireTick;
-        var interval = (long)IntervalMs();
+        var interval = IntervalMs();
         if (elapsed < interval)
         {
             _timerArmed = true;
-            _timer.UpdateTimer((int)Math.Max(1, interval - elapsed));
+            _timer.UpdateTimer((int)Math.Max(1, (long)Math.Ceiling(interval - elapsed)));
             return;
         }
 
@@ -197,9 +197,9 @@ public sealed class OutputScheduler : IDisposable
         if (_repaintQueued && !_commitInFlight && !_disposed && !_timerArmed && !_idleQueued && !TryArmDeadline())
         {
             var elapsed = Environment.TickCount64 - _lastFireTick;
-            var interval = (long)IntervalMs();
+            var interval = IntervalMs();
             _timerArmed = true;
-            _timer.UpdateTimer((int)Math.Max(1, interval - elapsed));
+            _timer.UpdateTimer((int)Math.Max(1, (long)Math.Ceiling(interval - elapsed)));
         }
     }
 

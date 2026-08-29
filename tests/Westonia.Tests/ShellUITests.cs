@@ -89,8 +89,6 @@ public sealed class ShellUITests
         var model = new FrameModel { Title = "basin" };
         var outerWidth = 400 + (2 * (FrameModel.Margin + FrameModel.BorderWidth));
 
-        // the title strip is the shadow margin plus the titlebar, and nothing else:
-        // the interior is not part of any frame surface.
         var strip = Layout(
             new FrameTitleView { DataContext = model },
             outerWidth,
@@ -129,8 +127,6 @@ public sealed class ShellUITests
     [AvaloniaFact]
     public void The_frame_edges_are_strips_rather_than_a_window_sized_surface()
     {
-        // A frame drawn as one surface the size of the window costs a full-window
-        // repaint on every resize step. Four strips cover the same ring.
         var left = Layout(new FrameEdgeView { DataContext = new FrameEdgeModel(FrameEdge.Left) }, 38, 400);
         var bottom = Layout(new FrameEdgeView { DataContext = new FrameEdgeModel(FrameEdge.Bottom) }, 400, 38);
 
