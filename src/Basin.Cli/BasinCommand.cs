@@ -11,6 +11,7 @@ namespace Basin.Cli;
 public sealed class BasinCommand
 {
     private readonly List<Func<ParseResult, string>> _report = [];
+    private readonly List<Action<ParseResult>> _prepare = [];
     private readonly HelpOption _help = new("--help", "-h");
     private readonly Option<string> _logLevel;
     private readonly Option<bool> _allocReport;
@@ -35,13 +36,42 @@ public sealed class BasinCommand
 
     public RootCommand Command { get; }
 
-    public Option<T> Add<T>(Option<T> option)
+    public Option<T> Add<T>(Option<T> option, bool report = true)
     {
         ArgumentNullException.ThrowIfNull(option);
         Command.Options.Add(option);
-        var key = option.Name.TrimStart('-');
-        _report.Add(result => $"{key}={Format(result.GetValue(option))}");
+        if (report)
+        {
+            var key = option.Name.TrimStart('-');
+            _report.Add(result => $"{key}={Format(result.GetValue(option))}");
+        }
+
         return option;
+    }
+
+    public static string Report(string key, object? value) => $"{key}={Format(value)}";
+
+    public void AddReport(Func<ParseResult, string> entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        _report.Add(entry);
+    }
+
+    public void Prepare(Action<ParseResult> step)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+        _prepare.Add(step);
+    }
+
+    public static T Effective<T>(ParseResult result, Option<T> option, T fromConfig) =>
+        Effective(result, option, fromConfig, configured: true);
+
+    public static T Effective<T>(ParseResult result, Option<T> option, T fromConfig, bool configured)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return configured && result.GetResult(option) is null or { Implicit: true }
+            ? fromConfig
+            : result.GetValue(option)!;
     }
 
     public void ReportFrames(long frames) => _frames = frames;
@@ -54,6 +84,11 @@ public sealed class BasinCommand
 
         Command.SetAction(result =>
         {
+            foreach (var step in _prepare)
+            {
+                step(result);
+            }
+
             WriteOptions(result);
             wanted = result.GetValue(_allocReport);
             return body(result);

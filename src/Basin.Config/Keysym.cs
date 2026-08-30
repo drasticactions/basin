@@ -1,6 +1,6 @@
 using Xkb;
 
-namespace Basin.WindowManager;
+namespace Basin.Config;
 
 public static class Keysym
 {

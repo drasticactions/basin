@@ -7,11 +7,11 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Tomlyn" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
   </ItemGroup>
 
 </Project>

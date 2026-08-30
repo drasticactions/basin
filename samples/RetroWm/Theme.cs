@@ -1,3 +1,4 @@
+using Basin.Config;
 using SkiaSharp;
 using Tomlyn.Model;
 
@@ -159,38 +160,5 @@ internal static class Theme
         : null;
 
     private static uint? Color(TomlTable table, string key) =>
-        table.TryGetValue(key, out var value) ? ParseColor(value) : null;
-
-    private static uint? ParseColor(object value)
-    {
-        if (value is long raw)
-        {
-            return (uint)raw;
-        }
-
-        if (value is not string text || !text.StartsWith('#'))
-        {
-            return null;
-        }
-
-        var hex = text[1..];
-        try
-        {
-            return hex.Length switch
-            {
-                3 => (uint)(
-                    (Convert.ToUInt32(hex[..1], 16) * 0x11 << 24)
-                    | (Convert.ToUInt32(hex[1..2], 16) * 0x11 << 16)
-                    | (Convert.ToUInt32(hex[2..3], 16) * 0x11 << 8)
-                    | 0xFF),
-                6 => (Convert.ToUInt32(hex, 16) << 8) | 0xFF,
-                8 => Convert.ToUInt32(hex, 16),
-                _ => null,
-            };
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
-    }
+        table.TryGetValue(key, out var value) ? TomlColor.Rgba(value) : null;
 }

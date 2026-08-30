@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
     <PackageReference Include="xkbcommon-dotnet" />
     <PackageReference Include="WaylandSharpest" />
     <AdditionalFiles Include="$(RiverProtocolDir)river-window-management-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />

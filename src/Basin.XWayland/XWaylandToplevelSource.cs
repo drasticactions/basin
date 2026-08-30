@@ -154,6 +154,9 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             case ToplevelRequestKind.Close:
                 window.Close();
                 return true;
+            case ToplevelRequestKind.Minimize or ToplevelRequestKind.Unminimize:
+                window.RaiseMinimizeRequested(request.Kind == ToplevelRequestKind.Minimize);
+                return true;
             case ToplevelRequestKind.SetNoBorder or ToplevelRequestKind.UnsetNoBorder
                 when NoBorderRequested is { } noBorder:
                 noBorder.Invoke(window, request.Kind == ToplevelRequestKind.SetNoBorder);
@@ -189,6 +192,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
         window.TitleChanged += () => _observers.Changed(id);
         window.GeometryChanged += () => _observers.Changed(id);
         window.PropertiesChanged += () => _observers.Changed(id);
+        window.MinimizeRequested += _ => _observers.Changed(id);
         window.Destroyed += () =>
         {
             _windows.Remove(id);
@@ -207,7 +211,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
         var rect = new Box(window.X, window.Y, window.Width, window.Height);
         var (frame, client) = _geometry.TryGetValue(id, out var pair) ? pair : (rect, rect);
         var state = _flags.GetValueOrDefault(id);
-        if (!window.IsMappedInX)
+        if (window.Minimized || !window.IsMappedInX)
         {
             state |= ToplevelState.Minimized;
         }

@@ -71,6 +71,8 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public event Action? Destroyed;
 
+    public event Action<bool>? MinimizeRequested;
+
     public XWaylandReadiness Readiness { get; set; } = XWaylandReadiness.OnMatchingCommit;
 
     public void Configure(int x, int y, int width, int height) => _wm.ConfigureWindow(this, x, y, width, height);
@@ -168,6 +170,10 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public void SetFullscreen(bool fullscreen) => _wm.SetWindowFullscreen(this, fullscreen);
 
+    public void SetMinimized(bool minimized) => _wm.SetWindowMinimized(this, minimized);
+
+    public bool Minimized { get; internal set; }
+
     internal bool MaximizedState { get; set; }
 
     internal bool FullscreenState { get; set; }
@@ -196,6 +202,8 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public void Close() => _wm.CloseWindow(this);
 
     public void Raise() => _wm.RaiseWindow(this);
+
+    internal void RaiseMinimizeRequested(bool minimized) => MinimizeRequested?.Invoke(minimized);
 
     internal void RaiseMapped() => Mapped?.Invoke();
 

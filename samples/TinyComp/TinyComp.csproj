@@ -7,9 +7,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
     <PublishAot>true</PublishAot>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
@@ -41,6 +46,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="../../assets/fonts/NotoSansCJK-Regular.ttc" LogicalName="NotoSansCJK-Regular.ttc" />
+    <EmbeddedResource Include="tinycomp.toml" LogicalName="tinycomp.toml" />
     <EmbeddedResource Include="shaders/corners.frag.spv" LogicalName="corners.frag.spv" />
     <EmbeddedResource Include="shaders/corners_outer.frag.spv" LogicalName="corners_outer.frag.spv" />
   </ItemGroup>

@@ -1,3 +1,4 @@
+using Basin.Config;
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
 using CursorShape = Basin.WindowManager.Protocol.WpCursorShapeDeviceV1.Shape;
@@ -413,7 +414,7 @@ internal sealed class Manager
 
             foreach (var hotkey in _config.Hotkeys)
             {
-                var command = hotkey.Command;
+                var command = hotkey.Command!;
                 var binding = _wm.Bindings.Bind(seat, hotkey.Keysym, hotkey.ModifierMask, () => Spawn(command));
                 if (_mode == BindingMode.Default)
                 {

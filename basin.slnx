@@ -18,6 +18,7 @@
     <Project Path="src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
     <Project Path="src/Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
     <Project Path="src/Basin.Cli/Basin.Cli.csproj" />
+    <Project Path="src/Basin.Config/Basin.Config.csproj" />
     <Project Path="src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
     <Project Path="src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
     <Project Path="src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />

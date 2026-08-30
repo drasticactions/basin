@@ -1,4 +1,4 @@
-namespace Basin.WindowManager;
+namespace Basin.Config;
 
 [Flags]
 public enum Modifiers

@@ -19,6 +19,8 @@
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../samples/Dam/Dam.csproj" />
     <ProjectReference Include="../../samples/EightWm/EightWm.csproj" />
+    <ProjectReference Include="../../samples/TinyComp/TinyComp.csproj" />
+    <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />

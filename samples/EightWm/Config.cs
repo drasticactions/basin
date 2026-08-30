@@ -1,7 +1,4 @@
-using Basin.Cli;
-using System.Globalization;
-using Tomlyn;
-using Tomlyn.Model;
+using Basin.Config;
 
 using Basin.Diagnostics;
 
@@ -49,85 +46,70 @@ internal sealed class Config
             return config;
         }
 
-        if (table.TryGetValue("shell", out var shell) && shell is TomlTable shellTable)
+        var reader = new TomlReader(table, log);
+
+        if (reader.Section("shell") is { } shell)
         {
-            config.HotCorners = Flag(shellTable, "hot_corners", config.HotCorners);
-            config.Animations = Flag(shellTable, "animations", config.Animations);
-            config.EdgeBand = Number(shellTable, "edge_band", (int)config.EdgeBand);
-            config.MinWidth = Number(shellTable, "min_width", config.MinWidth);
-            config.MaxCells = Math.Clamp(Number(shellTable, "max_cells", config.MaxCells), 1, 8);
-            config.StartOutput = Math.Max(0, Number(shellTable, "start_output", config.StartOutput));
+            config.HotCorners = shell.Flag("hot_corners", config.HotCorners);
+            config.Animations = shell.Flag("animations", config.Animations);
+            config.EdgeBand = shell.Number("edge_band", (int)config.EdgeBand);
+            config.MinWidth = shell.Number("min_width", config.MinWidth);
+            config.MaxCells = Math.Clamp(shell.Number("max_cells", config.MaxCells), 1, 8);
+            config.StartOutput = Math.Max(0, shell.Number("start_output", config.StartOutput));
         }
 
-        if (table.TryGetValue("rule", out var rules) && rules is TomlTableArray ruleArray)
+        var rules = new List<Rule>();
+        foreach (var row in reader.Sections("rule"))
         {
-            foreach (var row in ruleArray)
+            if (row.Text("app_id") is { Length: > 0 } appId)
             {
-                if (Text(row, "app_id") is { Length: > 0 } appId)
-                {
-                    config.Rules.Add(new Rule(appId, Number(row, "min_width", 0)));
-                }
+                rules.Add(new Rule { AppIds = [appId], MinWidth = row.Number("min_width", 0) });
             }
         }
 
-        if (table.TryGetValue("ui", out var ui) && ui is TomlTable uiTable &&
-            uiTable.TryGetValue("font", out var font) && font is string fontName)
+        config.Rules.AddRange(WindowRule.MostSpecificFirst(rules));
+
+        if (reader.Section("ui") is { } ui && ui.Text("font") is { } fontName)
         {
             config.Font = fontName;
         }
 
-        if (table.TryGetValue("start", out var start) && start is TomlTable startTable)
+        if (reader.Section("start") is { } start)
         {
-            if (startTable.TryGetValue("background", out var background) && background is string color)
-            {
-                config.Background = ParseColor(color, config.Background);
-            }
+            config.Background = TomlColor.Argb(start.Text("background"), config.Background);
+            config.ScanDesktopFiles = start.Flag("scan_desktop_files", config.ScanDesktopFiles);
+            config.AppsView = start.Flag("apps_view", config.AppsView);
+        }
 
-            if (startTable.TryGetValue("scan_desktop_files", out var scan) && scan is bool scanning)
+        foreach (var group in reader.Sections("group"))
+        {
+            if (group.Text("name") is { } groupName)
             {
-                config.ScanDesktopFiles = scanning;
-            }
-
-            if (startTable.TryGetValue("apps_view", out var apps) && apps is bool appsView)
-            {
-                config.AppsView = appsView;
+                config.GroupOrder.Add(groupName);
             }
         }
 
-        if (table.TryGetValue("group", out var groups) && groups is TomlTableArray groupArray)
+        foreach (var row in reader.Sections("tile"))
         {
-            foreach (var group in groupArray)
+            if (ReadTile(row, log) is { } tile)
             {
-                if (group.TryGetValue("name", out var name) && name is string groupName)
-                {
-                    config.GroupOrder.Add(groupName);
-                }
+                config.Tiles.Add(tile);
             }
         }
 
-        if (table.TryGetValue("tile", out var tiles) && tiles is TomlTableArray tileArray)
-        {
-            foreach (var row in tileArray)
-            {
-                if (ReadTile(row, log) is { } tile)
-                {
-                    config.Tiles.Add(tile);
-                }
-            }
-        }
-
+        reader.ReportUnknown();
         return config;
     }
 
     public static string DefaultPath() => TomlConfig.DefaultPath("eight-wm");
 
-    private static Tile? ReadTile(TomlTable row, BasinLogger log)
+    private static Tile? ReadTile(TomlReader row, BasinLogger log)
     {
-        var name = Text(row, "name");
-        var exec = Text(row, "exec");
-        var icon = Text(row, "icon");
+        var name = row.Text("name");
+        var exec = row.Text("exec");
+        var icon = row.Text("icon");
 
-        if (Text(row, "desktop") is { Length: > 0 } desktop)
+        if (row.Text("desktop") is { Length: > 0 } desktop)
         {
             if (DesktopEntries.Find(desktop) is not { } entry)
             {
@@ -151,42 +133,18 @@ internal sealed class Config
             Name = name,
             Exec = exec,
             Icon = icon,
-            Size = Text(row, "size") switch
+            Size = row.Text("size") switch
             {
                 "small" => TileSize.Small,
                 "wide" => TileSize.Wide,
                 "large" => TileSize.Large,
                 _ => TileSize.Square,
             },
-            Color = ParseColor(Text(row, "color"), 0xff2d89ef),
-            Group = Text(row, "group") ?? "Main",
-            PeekCommand = Text(row, "peek_cmd"),
-            BadgeCommand = Text(row, "badge_cmd"),
-            PeekIntervalSeconds = Number(row, "peek_interval", 60),
+            Color = TomlColor.Argb(row.Text("color"), 0xff2d89ef),
+            Group = row.Text("group") ?? "Main",
+            PeekCommand = row.Text("peek_cmd"),
+            BadgeCommand = row.Text("badge_cmd"),
+            PeekIntervalSeconds = row.Number("peek_interval", 60),
         };
-    }
-
-    private static bool Flag(TomlTable table, string key, bool fallback) =>
-        TomlConfig.Flag(table, key, fallback);
-
-    private static string? Text(TomlTable table, string key) => TomlConfig.Text(table, key);
-
-    private static int Number(TomlTable table, string key, int fallback) =>
-        TomlConfig.Number(table, key, fallback);
-
-    public static uint ParseColor(string? text, uint fallback)
-    {
-        if (text is not { Length: > 0 })
-        {
-            return fallback;
-        }
-
-        var digits = text.TrimStart('#');
-        if (!uint.TryParse(digits, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
-        {
-            return fallback;
-        }
-
-        return digits.Length <= 6 ? 0xff000000u | value : value;
     }
 }

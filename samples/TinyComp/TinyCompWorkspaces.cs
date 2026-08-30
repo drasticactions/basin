@@ -296,6 +296,21 @@ internal sealed partial class TinyComp
 
     private Workspace? CurrentWorkspace() => ViewAtCursor()?.Active;
 
+    internal Workspace? WorkspaceForRule(Rule? rule)
+    {
+        if (rule?.Workspace is not { } wanted || wanted < 1 || ViewAtCursor() is not { } view)
+        {
+            return null;
+        }
+
+        while (view.Workspaces.Count < wanted)
+        {
+            _ = CreateWorkspace(view, null, afterActive: false);
+        }
+
+        return view.Workspaces[wanted - 1];
+    }
+
     private void InitWorkspaces(OutputView view)
     {
         view.GroupId = ++_workspaceIds;
@@ -670,7 +685,8 @@ internal sealed partial class TinyComp
                 FocusWindow(window);
                 return;
 
-            case XWindow xwindow when _xwindows.Contains(xwindow) && xwindow.Workspace == workspace:
+            case XWindow xwindow when _xwindows.Contains(xwindow) && xwindow.Workspace == workspace &&
+                !xwindow.Minimized:
                 FocusXWindow(xwindow);
                 return;
         }
@@ -686,7 +702,7 @@ internal sealed partial class TinyComp
 
         for (var i = _xwindows.Count - 1; i >= 0; i--)
         {
-            if (_xwindows[i].Workspace == workspace)
+            if (_xwindows[i].Workspace == workspace && !_xwindows[i].Minimized)
             {
                 FocusXWindow(_xwindows[i]);
                 return;
@@ -917,6 +933,7 @@ internal sealed partial class TinyComp
 
         workspace.Urgent = true;
         _workspaceModel.RaiseChanged();
+        RingBell();
         BasinReport.Line($"URGENT {workspace.Name}");
     }
 

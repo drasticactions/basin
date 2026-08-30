@@ -51,10 +51,11 @@ internal sealed partial class TinyComp :
     private PointerRefresh? _pointerRefresh;
     private SceneLayers _layers = null!;
     private readonly EffectsPolicy _effects;
-    private readonly string? _postKind;
-    private MagnifierStage? _magnify;
-    private InvertStage? _invert;
-    private IPixelShader? _invertShader;
+    private PostEffects _post = null!;
+    private FeedbackEffects? _feedback;
+    private IPixelShader? _dimShader;
+    private bool _dimShaderTried;
+    private Basin.Effects.DropShadowTexture? _shadowTexture;
     private LayerShell _layerShell = null!;
     private Basin.Desktop.SessionLockManager _sessionLock = null!;
     private Basin.Desktop.SessionLockSceneDriver _lockDriver = null!;
@@ -63,10 +64,12 @@ internal sealed partial class TinyComp :
     private readonly Basin.Desktop.KdeServerDecorationManager _kdeDecorations;
     private readonly Dictionary<Surface, bool> _ssdPreference = [];
     private Basin.Capabilities.IUIHost? _uiHost;
-    private readonly FrameStyle _frameStyle;
+    private FrameStyle _frameStyle;
     private FrameTheme? _frameTheme;
 
-    internal IFrameRenderer? CreateFrameRenderer() => _frameStyle switch
+    internal IFrameRenderer? CreateFrameRenderer() => CreateFrameRenderer(_frameStyle);
+
+    internal IFrameRenderer? CreateFrameRenderer(FrameStyle style) => style switch
     {
         FrameStyle.Beos => new BeosFrameRenderer(_frameTheme ??= new FrameTheme()),
         FrameStyle.Flat => new SkiaFrameRenderer(_frameTheme ??= new FrameTheme()),
@@ -122,7 +125,6 @@ internal sealed partial class TinyComp :
     private readonly List<Basin.Render.Vulkan.VulkanDeviceBlitter> _blitters = [];
 
     private IBackdropEffect? _blurEffect;
-    private IPixelShader? _cornerShader;
     private IPixelShader? _fireShader;
     private int _cornerRadius;
     private Basin.Desktop.BackgroundEffectManager _backgroundEffects = null!;
@@ -142,12 +144,12 @@ internal sealed partial class TinyComp :
     private readonly Basin.Host.CompositorRunLoop _runLoop;
     private readonly long _frames;
     private readonly bool _fullRepaint;
-    private readonly bool _offload;
+    private bool _offload;
     private readonly bool _hdr;
     private readonly Basin.Capabilities.OutputColorProfileSource _colorSource;
     private readonly string? _iccProfile;
-    private readonly bool _damageTint;
-    private readonly double[] _scales;
+    private bool _damageTint;
+    private double[] _scales;
     private Basin.Desktop.FractionalScaleManager _fractionalScale = null!;
     private Surface? _scanoutFeedbackSurface;
     private LinuxDmabufGlobal? _dmabufGlobal;
@@ -170,23 +172,92 @@ internal sealed partial class TinyComp :
 
     private readonly string? _channelEndpoint;
     private Basin.Transport.Waypipe.WaypipeChannel? _channel;
+    private Config _config;
+    private readonly string? _configPath;
+    private string _rendererName = "vulkan";
+    private bool _cornerShaderTried;
+    private bool _fireShaderTried;
 
-    public TinyComp(int outputCount, string rendererName = "vulkan", bool drm = false, bool fullRepaint = false, bool damageTint = false, double[]? scales = null, bool offload = true, double? nightLight = null, bool hdr = false, Basin.Capabilities.OutputColorProfileSource colorSource = Basin.Capabilities.OutputColorProfileSource.Edid, FrameStyle frameStyle = FrameStyle.Beos, bool noTransactions = false, int socketFd = -1, BasinLogger log = default, bool wobbly = false, string? openAnimation = null, string? post = null, string? closeAnimation = null, bool switcher = false, int cornerRadius = 0, long frameLimit = 0, bool managedTransport = false, string? channelEndpoint = null, string? iccProfile = null)
+    private readonly Dictionary<int, IPixelShader> _cornerShaders = [];
+
+    private IPixelShader? CornerShaderFor(int radius)
     {
+        if (radius <= 0)
+        {
+            return null;
+        }
+
+        if (_cornerShaders.TryGetValue(radius, out var cached))
+        {
+            return cached;
+        }
+
+        if (_cornerShaderTried && _cornerShaders.Count == 0)
+        {
+            return null;
+        }
+
+        _cornerShaderTried = true;
+        var shader = _renderer.CompilePixelShader(CornerShader.Source, CornerShader.Uniforms);
+        if (shader is null)
+        {
+            _log.Warn($"{_rendererName} compiles no pixel shader dialect; corner_radius is ignored");
+            return null;
+        }
+
+        var cornerScale = _scales.Length > 0 ? _scales[0] : 1.0;
+        shader.SetUniforms([(float)(radius * cornerScale)]);
+        _cornerShaders[radius] = shader;
+        return shader;
+    }
+
+    private void ApplyEffectShaders()
+    {
+        var fire = _effects.CloseKind == "fire-gpu"
+            || _config.Rules.Any(static rule => rule.Close == "fire-gpu");
+        _effects.FireShaderHandle = fire ? FireShaderHandle() : null;
+    }
+
+    private void ApplyCornerRadius(int radius) =>
+        _cornerRadius = radius > 0 && CornerShaderFor(radius) is not null ? radius : 0;
+
+    private IPixelShader? FireShaderHandle()
+    {
+        if (_fireShaderTried)
+        {
+            return _fireShader;
+        }
+
+        _fireShaderTried = true;
+        _fireShader = _renderer.CompilePixelShader(Basin.Effects.FireShader.Source, Basin.Effects.FireShader.Uniforms);
+        if (_fireShader is null)
+        {
+            _log.Warn($"{_rendererName} compiles no pixel shader dialect; fire-gpu falls back to the particle mesh");
+        }
+
+        return _fireShader;
+    }
+
+    public TinyComp(Config config, bool drm = false, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        _config = config;
+        _configPath = configPath;
+        var outputCount = config.Outputs;
+        var rendererName = config.Renderer;
         _log = log;
-        _iccProfile = iccProfile;
-        _frames = frameLimit;
-        _effects = new EffectsPolicy(wobbly, openAnimation, closeAnimation, switcher);
-        _postKind = post;
-        _useTransactions = !noTransactions;
-        _frameStyle = frameStyle;
-        _fullRepaint = fullRepaint;
-        _offload = offload;
-        _nightLightKelvin = nightLight;
-        _hdr = hdr;
-        _colorSource = colorSource;
-        _damageTint = damageTint;
-        _scales = scales ?? [];
+        _iccProfile = config.IccProfile;
+        _frames = config.Frames;
+        _effects = new EffectsPolicy();
+        _useTransactions = config.Transactions;
+        _frameStyle = config.FrameStyle;
+        _fullRepaint = config.FullRepaint;
+        _offload = config.Offload;
+        _nightLightKelvin = config.NightLight;
+        _hdr = config.Hdr;
+        _colorSource = config.ColorSource;
+        _damageTint = config.DamageTint;
+        _scales = config.Scales;
         _host = Basin.Host.BasinHost.Create(
             Basin.Host.HostOptions.ForBackend(drm ? "drm" : "nested") with
             {
@@ -215,11 +286,11 @@ internal sealed partial class TinyComp :
         {
             if (client.TryGetCredentials(out var credentials))
             {
-                _log.Info($"client connected: pid={credentials.Pid} uid={credentials.Uid}");
+                _log.Debug($"client connected: pid={credentials.Pid} uid={credentials.Uid}");
             }
             else
             {
-                _log.Info($"client connected: no local process behind it");
+                _log.Debug($"client connected: no local process behind it");
             }
         };
         _layers = new SceneLayers(_scene.Root);
@@ -405,31 +476,11 @@ internal sealed partial class TinyComp :
             _services.Use<Basin.Capabilities.IBackgroundEffects>(glBlur);
         }
 
-        if (closeAnimation == "fire-gpu")
-        {
-            _fireShader = _renderer.CompilePixelShader(Basin.Effects.FireShader.Source, Basin.Effects.FireShader.Uniforms);
-            if (_fireShader is null)
-            {
-                _log.Warn($"{rendererName} compiles no pixel shader dialect; fire-gpu falls back to the particle mesh");
-            }
-
-            _effects.FireShaderHandle = _fireShader;
-        }
-
-        if (cornerRadius > 0)
-        {
-            _cornerShader = _renderer.CompilePixelShader(CornerShader.Source, CornerShader.Uniforms);
-            if (_cornerShader is null)
-            {
-                _log.Warn($"{rendererName} compiles no pixel shader dialect; --corner-radius is ignored");
-            }
-            else
-            {
-                _cornerRadius = cornerRadius;
-                var cornerScale = _scales.Length > 0 ? _scales[0] : 1.0;
-                _cornerShader.SetUniforms([(float)(cornerRadius * cornerScale)]);
-            }
-        }
+        _rendererName = rendererName;
+        _post = new PostEffects(_renderer, rendererName, _log);
+        _post.Configure(config);
+        ApplyEffectShaders();
+        ApplyCornerRadius(config.CornerRadius);
 
         var xwayland = new Basin.XWayland.XWaylandModule();
         _xwaylandModule = xwayland;
@@ -736,6 +787,7 @@ internal sealed partial class TinyComp :
             Touch = _touchDriver?.Router,
         };
         _dragIcon.Created += _ => RefreshSurfaceLuts();
+        ApplyEffectSettings(config);
     }
 
     public long Rendered => _views.Count > 0 ? _views[0].Rendered : 0;
@@ -764,9 +816,299 @@ internal sealed partial class TinyComp :
             _log.Info($"channel attached; replaying it as one client");
         }
 
+        var hangup = _loop.AddSignal(Signal.Hangup, _ => Reload());
         _runLoop.Frames = _frames;
         _runLoop.Run();
+        hangup.Remove();
         return 0;
+    }
+
+    private void Reload()
+    {
+        var loaded = Config.Load(_configPath, _log, out var fatal);
+        if (fatal is not null)
+        {
+            _log.Warn($"reload failed, keeping the running config: {fatal}");
+            BasinReport.Line("RELOAD failed");
+            return;
+        }
+
+        var restart = new List<string>();
+
+        void Restarts(string key, bool changed)
+        {
+            if (changed && loaded.FromFile.Contains(key) && !_config.FromFlags.Contains(key))
+            {
+                restart.Add(key);
+            }
+        }
+
+        Restarts("renderer", loaded.Renderer != _config.Renderer);
+        Restarts("outputs", loaded.Outputs != _config.Outputs);
+        Restarts("frames", loaded.Frames != _config.Frames);
+        Restarts("full_repaint", loaded.FullRepaint != _fullRepaint);
+        Restarts("color.source", loaded.ColorSource != _colorSource);
+        Restarts("color.icc", loaded.IccProfile != _iccProfile);
+        Restarts("color.hdr", loaded.Hdr != _hdr);
+
+        loaded.Renderer = _config.Renderer;
+        loaded.Outputs = _config.Outputs;
+        loaded.Frames = _config.Frames;
+        loaded.FullRepaint = _fullRepaint;
+        loaded.ColorSource = _colorSource;
+        loaded.IccProfile = _iccProfile;
+        loaded.Hdr = _hdr;
+        foreach (var key in _config.FromFlags)
+        {
+            loaded.FromFlags.Add(key);
+        }
+
+        if (loaded.FromFlags.Contains("offload"))
+        {
+            loaded.Offload = _offload;
+        }
+
+        if (loaded.FromFlags.Contains("damage_tint"))
+        {
+            loaded.DamageTint = _damageTint;
+        }
+
+        if (loaded.FromFlags.Contains("scale"))
+        {
+            loaded.Scales = _scales;
+        }
+
+        _config = loaded;
+
+        _useTransactions = loaded.Transactions;
+        _offload = loaded.Offload;
+        _damageTint = loaded.DamageTint;
+        ApplyEffectShaders();
+
+        _scales = loaded.Scales;
+        for (var i = 0; i < _views.Count; i++)
+        {
+            var view = _views[i];
+            var scale = FollowedScaleFor(i, view.Output);
+            if (scale != view.Output.Scale)
+            {
+                SetOutputScale(view, scale);
+            }
+        }
+
+        ApplyNightLight(loaded.NightLight);
+        ApplyFrameStyle(loaded.FrameStyle);
+        ApplyCornerRadius(loaded.CornerRadius);
+        ApplyPostStages(loaded);
+        ApplyEffectSettings(loaded);
+
+        foreach (var view in _views)
+        {
+            if (view.SceneOutput is not null && view.LastPresentedBuffer is { } presented)
+            {
+                _ = _post.BeginCrossfade(presented, EffectTick());
+            }
+
+            view.Scheduler?.ScheduleRepaint();
+        }
+
+        BasinReport.Line(
+            $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
+            + " rules-apply-to-windows-mapped-after-this"
+            + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}"));
+    }
+
+    private void ApplyFrameStyle(FrameStyle style)
+    {
+        if (style == _frameStyle)
+        {
+            return;
+        }
+
+        _frameStyle = style;
+        foreach (var window in _windows)
+        {
+            if (window.Rule?.FrameStyle is null)
+            {
+                window.RebuildFrame();
+            }
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            if (xwindow.Rule?.FrameStyle is null)
+            {
+                xwindow.RebuildFrame();
+            }
+        }
+    }
+
+    private void AddPostStage(OutputView view)
+    {
+        if (view.SceneOutput is { } output)
+        {
+            _post.Apply(output);
+        }
+    }
+
+    private void ApplyPostStages(Config config)
+    {
+        foreach (var view in _views)
+        {
+            if (view.SceneOutput is { } output)
+            {
+                _post.Remove(output);
+            }
+        }
+
+        _post.Configure(config);
+
+        foreach (var view in _views)
+        {
+            if (view.SceneOutput is { } output)
+            {
+                _post.Apply(output);
+            }
+        }
+    }
+
+    private void ApplyEffectSettings(Config config)
+    {
+        _effects.WobblyEnabled = config.Wobbly;
+        _effects.OpenKind = config.OpenAnimation;
+        _effects.CloseKind = config.CloseAnimation;
+        _effects.MinimizeKind = config.MinimizeAnimation;
+        _effects.SwitcherEnabled = config.Switcher;
+        _effects.HighlightEnabled = config.Highlight;
+        _effects.SlideBackEnabled = config.SlideBack;
+        _effects.StretchEnabled = config.Stretch;
+        _effects.NotificationsEnabled = config.Notifications;
+
+        if (!config.Highlight)
+        {
+            _effects.ClearHighlights();
+        }
+
+        ApplyDim(config.DimInactive);
+        ApplyDropShadows(config.DropShadow);
+
+        if (config.MouseClick || config.MouseMark || config.TrackMouse || config.TouchPoints
+            || config.SystemBell || config.ShakeCursor
+            || config.StartupFeedback != Basin.Effects.StartupFeedbackKind.None)
+        {
+            _feedback ??= new FeedbackEffects(_layers.Feedback)
+            {
+                MagnificationChanged = magnification => _cursor.Magnification = magnification,
+            };
+            _feedback.Configure(config);
+        }
+        else if (_feedback is { } feedback)
+        {
+            feedback.Dispose();
+            _feedback = null;
+            _cursor.Magnification = 1.0;
+        }
+    }
+
+    private void ApplyDim(bool wanted)
+    {
+        if (!wanted)
+        {
+            _effects.Dim = null;
+            foreach (var window in _windows)
+            {
+                window.SetDimmed(false);
+            }
+
+            foreach (var xwindow in _xwindows)
+            {
+                xwindow.SetDimmed(false);
+            }
+
+            return;
+        }
+
+        if (_effects.Dim is not null)
+        {
+            return;
+        }
+
+        if (_dimShader is null && !_dimShaderTried)
+        {
+            _dimShaderTried = true;
+            _dimShader = _renderer.CompilePixelShader(
+                Basin.Effects.DimShader.Source, Basin.Effects.DimShader.Uniforms);
+            if (_dimShader is null)
+            {
+                _log.Warn($"{_rendererName} compiles no pixel shader dialect; dim_inactive is ignored");
+            }
+        }
+
+        if (_dimShader is null)
+        {
+            return;
+        }
+
+        _effects.Dim = new Basin.Effects.DimInactiveEffect(_dimShader);
+        _effects.DimChanged = dim => _dimShader?.SetUniforms([(float)dim]);
+        _dimShader.SetUniforms([(float)_effects.Dim.Dim]);
+        RefreshDim();
+    }
+
+    private void ApplyDropShadows(bool wanted)
+    {
+        if (!wanted)
+        {
+            _shadowTexture?.Dispose();
+            _shadowTexture = null;
+            foreach (var window in _windows)
+            {
+                window.SetShadow(null);
+            }
+
+            foreach (var xwindow in _xwindows)
+            {
+                xwindow.SetShadow(null);
+            }
+
+            return;
+        }
+
+        _shadowTexture ??= Basin.Effects.DropShadowTexture.Build(new Basin.Effects.DropShadowOptions(), 1.0);
+        foreach (var window in _windows)
+        {
+            window.SetShadow(_shadowTexture);
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            xwindow.SetShadow(_shadowTexture);
+        }
+    }
+
+    internal void RefreshDim()
+    {
+        if (_effects.Dim is null)
+        {
+            return;
+        }
+
+        var anyInactive = false;
+        foreach (var window in _windows)
+        {
+            var inactive = window != _focused;
+            window.SetDimmed(inactive);
+            anyInactive |= inactive;
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            var inactive = xwindow != _focusedX;
+            xwindow.SetDimmed(inactive);
+            anyInactive |= inactive;
+        }
+
+        _effects.FadeDim(anyInactive);
     }
 
     public void Dispose()
@@ -828,10 +1170,20 @@ internal sealed partial class TinyComp :
             backend.Dispose();
         }
 
+        _feedback?.Dispose();
+        _feedback = null;
+        _effects.Dispose();
+        _post.Dispose();
+        _shadowTexture?.Dispose();
+        _dimShader?.Dispose();
         (_blurEffect as IDisposable)?.Dispose();
-        _cornerShader?.Dispose();
+        foreach (var shader in _cornerShaders.Values)
+        {
+            shader.Dispose();
+        }
+
+        _cornerShaders.Clear();
         _fireShader?.Dispose();
-        _invertShader?.Dispose();
         _allocator?.Dispose();
         _frameState.Dispose();
         _seam?.Dispose();
@@ -878,6 +1230,9 @@ internal sealed partial class TinyComp :
     private double ScaleFor(int index) =>
         _scales.Length == 0 ? 1 : _scales[Math.Min(index, _scales.Length - 1)];
 
+    private double FollowedScaleFor(int index, OutputBase output) =>
+        _scales.Length == 0 && output is WaylandOutput hosted ? hosted.HostScale : ScaleFor(index);
+
     private void AddOutput()
     {
         var output = _backend!.CreateOutput();
@@ -892,16 +1247,13 @@ internal sealed partial class TinyComp :
             output.Commit(state.SetScale(scale));
         }
 
-        if (_scales.Length == 0)
+        output.HostScaleChanged += () =>
         {
-            output.HostScaleChanged += () =>
+            if (_scales.Length == 0 && output.HostScale != output.Scale)
             {
-                if (output.HostScale != output.Scale)
-                {
-                    SetOutputScale(view, output.HostScale);
-                }
-            };
-        }
+                SetOutputScale(view, output.HostScale);
+            }
+        };
 
         _layout.Add(output, 0, 0);
         Relayout();
@@ -951,32 +1303,25 @@ internal sealed partial class TinyComp :
         }
 
         view.SceneOutput = new SceneOutput(_scene, view.Output);
-        if (_effects.Any)
+        view.SceneOutput.BeforeRepaint += tick =>
         {
-            view.SceneOutput.BeforeRepaint += tick =>
+            var running = _effects.Step(tick);
+            if (_feedback is { } feedback)
             {
-                if (_effects.Step(tick))
-                {
-                    foreach (var animated in _views)
-                    {
-                        animated.Scheduler?.ScheduleRepaint();
-                    }
-                }
-            };
-        }
+                running |= feedback.Step(tick);
+            }
 
-        if (_postKind == "invert")
-        {
-            _invertShader ??= _renderer.CompilePixelShader(InvertShader.Source, InvertShader.Uniforms);
-            _invert ??= new InvertStage(_invertShader);
-            view.SceneOutput.AddPostStage(_invert);
-        }
-        else if (_postKind == "magnify")
-        {
-            _magnify ??= new MagnifierStage();
-            _magnify.TargetZoom = 2.0;
-            view.SceneOutput.AddPostStage(_magnify);
-        }
+            running |= _post.Step(tick, view.Width, view.Height);
+            if (running)
+            {
+                foreach (var animated in _views)
+                {
+                    animated.Scheduler?.ScheduleRepaint();
+                }
+            }
+        };
+
+        AddPostStage(view);
 
         _dmabufCapture.Track(view.Output, view.SceneOutput);
 
@@ -1087,16 +1432,6 @@ internal sealed partial class TinyComp :
                 view.Scheduler!.PredictedVblankNanos,
                 (long)(Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency))),
         };
-        if (_magnify is { } magnify)
-        {
-            magnify.CenterX = _cursorX;
-            magnify.CenterY = _cursorY;
-            if (magnify.Step(new FrameTick(options.TargetPresentNanos, 0)))
-            {
-                view.Scheduler?.ScheduleRepaint();
-            }
-        }
-
         _frameState.Clear();
         var autoVrr = false;
         if (_scanoutFeedbackSurface is { } scanoutSurface)
@@ -1707,6 +2042,7 @@ internal sealed partial class TinyComp :
 
     bool Basin.Seat.ITouchChrome.TryPress(int id, uint timeMs, double x, double y)
     {
+        _feedback?.OnTouchDown(id, x, y, EffectTick());
         var topFrame = _scene.NodeAt(x, y) is { Node: { } topNode } ? FindFrame(topNode) : null;
         if (topFrame is null && _scene.SurfaceAt(x, y) is not null)
         {
@@ -1764,12 +2100,12 @@ internal sealed partial class TinyComp :
         return false;
     }
 
-    void Basin.Seat.ITouchChrome.Motion(int id, uint timeMs, double x, double y)
-    {
-    }
+    void Basin.Seat.ITouchChrome.Motion(int id, uint timeMs, double x, double y) =>
+        _feedback?.OnTouchMotion(id, x, y, EffectTick());
 
     void Basin.Seat.ITouchChrome.Release(int id, uint timeMs, double x, double y)
     {
+        _feedback?.OnTouchUp(id, EffectTick());
         if (_touchFramePress is { } held)
         {
             _touchFramePress = null;
@@ -1903,6 +2239,14 @@ internal sealed partial class TinyComp :
 
     private void OnOutputChanged(OutputView view)
     {
+        if (_transforms.TryGetValue(view, out var was) && was != view.Output.Transform)
+        {
+            _ = _post.BeginRotation(view.LastPresentedBuffer, was, view.Output.Transform, EffectTick());
+            view.Scheduler?.ScheduleRepaint();
+        }
+
+        _transforms[view] = view.Output.Transform;
+
         var mode = view.Output.CurrentMode;
         var resized = view.Width != mode.Width || view.Height != mode.Height;
         if (!resized)
@@ -1964,8 +2308,12 @@ internal sealed partial class TinyComp :
         var xwindow = new XWindow(this, window, scene, framable: managed);
         if (managed)
         {
-            xwindow.Workspace = _pendingXWorkspace;
+            xwindow.Workspace = WorkspaceForRule(xwindow.Rule) ?? _pendingXWorkspace;
             _pendingXWorkspace = null;
+            if (xwindow.Workspace is { } assigned && assigned.Tree != xwindow.Tree.Parent)
+            {
+                xwindow.Tree.Reparent(assigned.Tree);
+            }
         }
 
         _xwindows.Add(xwindow);
@@ -1973,8 +2321,36 @@ internal sealed partial class TinyComp :
         if (managed)
         {
             window.DecorationsChanged += xwindow.UpdateDecorations;
+            window.MinimizeRequested += minimized => SetMinimized(xwindow, minimized);
+            PlaceXByRule(xwindow);
+            _feedback?.OnMapped();
             FocusXWindow(xwindow);
+            _effects.OnMapped(xwindow.Tree, xwindow.Rule?.OpenFor(_effects.OpenKind));
         }
+    }
+
+    private void PlaceXByRule(XWindow xwindow)
+    {
+        if (xwindow.Rule is not { } rule)
+        {
+            return;
+        }
+
+        var width = rule.Width ?? 0;
+        var height = rule.Height ?? 0;
+        if (rule.X is null && rule.Y is null && width <= 0 && height <= 0)
+        {
+            return;
+        }
+
+        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var origin = _layout.BoxOf(view.Output);
+        xwindow.ResizeTo(
+            origin.X + (rule.X ?? xwindow.X),
+            origin.Y + (rule.Y ?? xwindow.Y),
+            width > 0 ? width : xwindow.XWin.Width,
+            height > 0 ? height : xwindow.XWin.Height,
+            ResizeEdges.None);
     }
 
     private void OnXRemoved(Basin.XWayland.XWaylandWindow window, SceneSurface scene)
@@ -1995,6 +2371,17 @@ internal sealed partial class TinyComp :
             return;
         }
 
+        if (xwindow.Framable)
+        {
+            _effects.OnClosing(
+                xwindow,
+                xwindow.Tree,
+                _layers.Top,
+                xwindow.DetachCornerRig(),
+                xwindow.Rule?.CloseFor(_effects.CloseKind));
+        }
+
+        _effects.Forget(xwindow.Tree);
         xwindow.Destroy();
         if (_focusedX == xwindow)
         {
@@ -2035,6 +2422,7 @@ internal sealed partial class TinyComp :
 
         xwindow.XWin.Activate();
         xwindow.XWin.Raise();
+        SlideBackOthers(xwindow, xwindow.Workspace);
         xwindow.Tree.RaiseToTop();
         _stack.RaiseChanged();
         if (xwindow.XWin.Surface is { } surface)
@@ -2042,6 +2430,8 @@ internal sealed partial class TinyComp :
             _seat.Keyboard.NotifyEnter(surface);
             _textInput.NotifyFocus(surface);
         }
+
+        RefreshDim();
     }
 
     private void ActivateXWindow(Basin.XWayland.XWaylandWindow window)
@@ -2056,6 +2446,7 @@ internal sealed partial class TinyComp :
                 }
                 else
                 {
+                    SetMinimized(xwindow, false);
                     FocusXWindow(xwindow);
                 }
 
@@ -2133,7 +2524,7 @@ internal sealed partial class TinyComp :
         _scene.SendFrameDone((uint)Environment.TickCount);
     }
 
-    private readonly bool _useTransactions;
+    private bool _useTransactions;
     private Transaction? _splitTransaction;
     private readonly List<SceneSnapshot> _splitSnapshots = [];
 
@@ -2411,13 +2802,42 @@ internal sealed partial class TinyComp :
         window.MoveTo(origin.X + usable.X + 40 + (slot * 30), origin.Y + usable.Y + 40 + (slot * 30));
     }
 
+    private bool PlaceByRule(Window window)
+    {
+        if (window.Rule is not { } rule)
+        {
+            return false;
+        }
+
+        var width = rule.Width ?? 0;
+        var height = rule.Height ?? 0;
+        if (rule.X is null && rule.Y is null && width <= 0 && height <= 0)
+        {
+            return false;
+        }
+
+        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var origin = _layout.BoxOf(view.Output);
+        if (width > 0 && height > 0)
+        {
+            window.ResizeTo(
+                origin.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0), width, height, ResizeEdges.None);
+        }
+        else
+        {
+            window.MoveTo(origin.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0));
+        }
+
+        return true;
+    }
+
     internal void OnWindowMapped(Window window)
     {
         _windows.Add(window);
         window.Minimized = false;
         _xdgToplevels.SetMinimized(window.Toplevel, false);
 
-        var placed = RestorePosition(window);
+        var placed = RestorePosition(window) || PlaceByRule(window);
         if (!placed &&
             !window.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen) &&
             !window.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized))
@@ -2427,12 +2847,12 @@ internal sealed partial class TinyComp :
 
         if (window.Workspace is { } mapped && ViewOf(mapped)?.Active != mapped)
         {
-            BasinReport.Line($"MAPPED {window.Toplevel.AppId} hidden");
+            BasinReport.Line($"MAPPED {window.Toplevel.AppId} hidden rule={(window.Rule is null ? "none" : "yes")}");
         }
         else
         {
             FocusWindow(window);
-            BasinReport.Line($"MAPPED {window.Toplevel.AppId}");
+            BasinReport.Line($"MAPPED {window.Toplevel.AppId} rule={(window.Rule is null ? "none" : "yes")}");
         }
 
         _workspaceModel.RaiseMembersChanged();
@@ -2495,6 +2915,7 @@ internal sealed partial class TinyComp :
 
             window.Toplevel.SetActivated(true);
             window.SetDecorationFocus(true);
+            SlideBackOthers(window, window.Workspace);
             window.Tree?.RaiseToTop();
             _stack.RaiseChanged();
             _seat.Keyboard.NotifyEnter(window.Toplevel.Surface);
@@ -2505,7 +2926,75 @@ internal sealed partial class TinyComp :
             _seat.Keyboard.NotifyClearFocus();
             _textInput.NotifyFocus(null);
         }
+
+        RefreshDim();
     }
+
+    internal void RingBell()
+    {
+        if (_feedback is null || _views.Count == 0)
+        {
+            return;
+        }
+
+        var box = _focused?.Tree is { IsDestroyed: false }
+            ? new Box(_focused.X, _focused.Y, Math.Max(_focused.GeometrySize.Width, 1), Math.Max(_focused.GeometrySize.Height, 1))
+            : _layout.BoxOf(_views[0].Output);
+        if (_feedback.Bell(box, EffectTick()))
+        {
+            ScheduleEffectRepaint();
+        }
+    }
+
+    private FrameTick EffectTick() => new(
+        (long)(Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency)), 16_666_667);
+
+    private void ScheduleEffectRepaint()
+    {
+        foreach (var view in _views)
+        {
+            view.Scheduler?.ScheduleRepaint();
+        }
+    }
+
+    private void HideMinimized(Window window)
+    {
+        if (window.Minimized && window.Tree is { IsDestroyed: false } tree)
+        {
+            tree.Enabled = false;
+        }
+    }
+
+    private void SlideBackOthers(IGrabTarget raised, Workspace? workspace)
+    {
+        if (!_effects.SlideBackEnabled)
+        {
+            return;
+        }
+
+        foreach (var window in _windows)
+        {
+            if (!ReferenceEquals(window, raised) && window.Workspace == workspace && !window.Minimized)
+            {
+                _effects.OnRaised(window.Tree, -SlideBackTravel, 0);
+            }
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            if (!ReferenceEquals(xwindow, raised) && xwindow.Workspace == workspace
+                && xwindow.Framable && !xwindow.Minimized)
+            {
+                _effects.OnRaised(xwindow.Tree, -SlideBackTravel, 0);
+            }
+        }
+    }
+
+    private const int SlideBackTravel = 40;
+
+    private const int NotificationTravel = 400;
+
+    private readonly Dictionary<OutputView, OutputTransform> _transforms = [];
 
     internal void SetMinimized(Window window, bool minimized)
     {
@@ -2517,7 +3006,19 @@ internal sealed partial class TinyComp :
         window.Minimized = minimized;
         if (window.Tree is { } tree)
         {
-            tree.Enabled = !minimized;
+            var (geometryWidth, geometryHeight) = window.GeometrySize;
+            var box = new Box(window.X, window.Y, Math.Max(geometryWidth, 1), Math.Max(geometryHeight, 1));
+            if (!minimized)
+            {
+                tree.Enabled = true;
+                _ = _effects.OnMinimize(tree, box, default, restoring: true, _cursorX, _cursorY);
+            }
+            else if (!_effects.OnMinimize(
+                tree, box, default, restoring: false, _cursorX, _cursorY,
+                () => HideMinimized(window)))
+            {
+                tree.Enabled = false;
+            }
         }
 
         _xdgToplevels.SetMinimized(window.Toplevel, minimized);
@@ -2543,6 +3044,59 @@ internal sealed partial class TinyComp :
         _workspaceModel.RaiseMembersChanged();
     }
 
+    internal void SetMinimized(XWindow xwindow, bool minimized)
+    {
+        if (xwindow.Minimized == minimized || !xwindow.Framable)
+        {
+            return;
+        }
+
+        xwindow.Minimized = minimized;
+        xwindow.XWin.SetMinimized(minimized);
+
+        var box = new Box(xwindow.X, xwindow.Y, Math.Max(xwindow.XWin.Width, 1), Math.Max(xwindow.XWin.Height, 1));
+        if (!minimized)
+        {
+            xwindow.Tree.Enabled = true;
+            _ = _effects.OnMinimize(xwindow.Tree, box, default, restoring: true, _cursorX, _cursorY);
+        }
+        else if (!_effects.OnMinimize(
+            xwindow.Tree, box, default, restoring: false, _cursorX, _cursorY,
+            () => HideMinimized(xwindow)))
+        {
+            xwindow.Tree.Enabled = false;
+        }
+
+        if (minimized)
+        {
+            if (_focusedX == xwindow)
+            {
+                _focusedX = null;
+                xwindow.SetDecorationFocus(false);
+                if (xwindow.Workspace is { } workspace && ViewOf(workspace)?.Active == workspace)
+                {
+                    FocusWorkspaceWindow(workspace);
+                }
+            }
+        }
+        else
+        {
+            FocusXWindow(xwindow);
+        }
+
+        _workspaceModel.RaiseMembersChanged();
+        DropSwitcherCard(xwindow);
+        BasinReport.Line($"XMINIMIZED {xwindow.XWin.Class} {(minimized ? "on" : "off")}");
+    }
+
+    private void HideMinimized(XWindow xwindow)
+    {
+        if (xwindow.Minimized && !xwindow.Tree.IsDestroyed)
+        {
+            xwindow.Tree.Enabled = false;
+        }
+    }
+
     internal void BeginMove(IGrabTarget window, uint? serial = null)
     {
         if (TraceEnabled)
@@ -2555,7 +3109,16 @@ internal sealed partial class TinyComp :
         var (x, y) = _grabOrigin.For(serial);
         _grabX = x - window.X;
         _grabY = y - window.Y;
-        _effects.OnMoveGrab(window.EffectTree, _grabX, _grabY);
+        _effects.OnMoveGrab(
+            window.EffectTree,
+            _grabX,
+            _grabY,
+            window switch
+            {
+                Window { Rule: { } windowRule } => windowRule.WobblyFor(_effects.WobblyEnabled),
+                XWindow { Rule: { } xRule } => xRule.WobblyFor(_effects.WobblyEnabled),
+                _ => null,
+            });
     }
 
     internal void BeginResize(IGrabTarget window, ResizeEdges edges, uint? serial = null)
@@ -2566,6 +3129,8 @@ internal sealed partial class TinyComp :
         (_grabX, _grabY) = _grabOrigin.For(serial);
         var (width, height) = window.GeometrySize;
         _grabStart = new Box(window.X, window.Y, width, height);
+        var frame = new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1));
+        _effects.OnResizeStart(window.EffectTree, frame, frame, frame, 0, 0);
         window.SetResizing(true);
     }
 
@@ -2668,11 +3233,12 @@ internal sealed partial class TinyComp :
         }
     }
 
-    private void ApplyCorners(SceneSurface scene)
+    private void ApplyCorners(SceneSurface scene, int radius)
     {
-        if (_cornerShader is not null)
+        var shader = CornerShaderFor(radius);
+        if (shader is not null || scene.Content.TextureShader is not null)
         {
-            scene.Content.TextureShader = _cornerShader;
+            scene.Content.TextureShader = shader;
         }
     }
 
@@ -2739,9 +3305,14 @@ internal sealed partial class TinyComp :
         _layerDriver.PopupSceneCreated += (_, _, _) => RefreshSurfaceLuts();
         _layerDriver.PopupBounds = _ =>
             _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? _views[0].Output);
-        _layerDriver.SceneCreated += (layer, _) =>
+        _layerDriver.SceneCreated += (layer, scene) =>
         {
             RefreshSurfaceLuts();
+            if (layer.Namespace.Contains("notification", StringComparison.OrdinalIgnoreCase) && scene is not null)
+            {
+                _effects.OnNotificationMapped(scene.Tree, NotificationTravel, 0);
+            }
+
             if (layer.KeyboardInteractivity != Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.KeyboardInteractivity.None)
             {
                 _seat.Keyboard.NotifyEnter(layer.Surface);
@@ -2876,6 +3447,8 @@ internal sealed partial class TinyComp :
         _cursorX = x;
         _cursorY = y;
         _cursor.MoveTo(x, y);
+        _post.SetCursor(x, y, (long)time * 1_000_000);
+        _feedback?.OnMotion(x, y, (long)time * 1_000_000, EffectTick());
         if (TraceEnabled)
         {
             Trace($"motion {x:F1},{y:F1} mode={_mode}");
@@ -3143,6 +3716,21 @@ internal sealed partial class TinyComp :
         if (TraceEnabled)
         {
             Trace($"button {button} pressed={pressed} mode={_mode}");
+        }
+
+        _feedback?.OnButton(_cursorX, _cursorY, button, pressed, EffectTick());
+        if (_feedback is { MarksEnabled: true } marking && button == InputCodes.BtnMiddle && IsAltDown())
+        {
+            if (pressed)
+            {
+                marking.BeginMark(_cursorX, _cursorY);
+            }
+            else
+            {
+                marking.EndMark();
+            }
+
+            return;
         }
 
         if (_mode != DragMode.None)
@@ -3461,14 +4049,14 @@ internal sealed partial class TinyComp :
         }
 
         if (pressed && !_sessionLock.IsLocked && !_shortcutsInhibit.IsActive(_seat.Keyboard.Focus)
-            && IsAltDown() && HandleKeybind(key))
+            && HandleKeybind(key))
         {
             return;
         }
 
         if (_effects.SwitcherActive && !_sessionLock.IsLocked)
         {
-            if (!pressed && key is InputCodes.KeyLeftAlt or InputCodes.KeyRightAlt)
+            if (!pressed && ReleasesSwitcher(key))
             {
                 EndSwitcher(focus: true);
             }
@@ -3528,6 +4116,11 @@ internal sealed partial class TinyComp :
                 foreach (var window in _windows)
                 {
                     BasinReport.Line($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")}");
+                }
+
+                foreach (var xwindow in _xwindows)
+                {
+                    BasinReport.Line($"XWIN {xwindow.XWin.Class} {xwindow.X} {xwindow.Y} {xwindow.XWin.Width}x{xwindow.XWin.Height} rule={(xwindow.Rule is null ? "none" : "yes")} corners={xwindow.CornerRadius} framed={(xwindow.Frame is null ? "no" : "yes")} minimized={xwindow.Minimized}");
                 }
 
                 break;
@@ -3612,6 +4205,38 @@ internal sealed partial class TinyComp :
                 BasinReport.Line($"GC {now - _gcMark} bytes since last mark");
                 _gcMark = now;
                 break;
+            case ["reload"]:
+                Reload();
+                break;
+            case ["bell"]:
+                RingBell();
+                break;
+            case ["xminimize", var index, var state]:
+                SetMinimized(_xwindows[int.Parse(index)], state == "1");
+                break;
+            case ["mark", "undo"]:
+                _feedback?.UndoMark();
+                ScheduleEffectRepaint();
+                break;
+            case ["mark", "clear"]:
+                _feedback?.ClearMarks();
+                ScheduleEffectRepaint();
+                break;
+            case ["zoom", "in"]:
+                _post.Zoom?.ZoomIn();
+                _post.Magnifier?.ZoomIn();
+                ScheduleEffectRepaint();
+                break;
+            case ["zoom", "out"]:
+                _post.Zoom?.ZoomOut();
+                _post.Magnifier?.ZoomOut();
+                ScheduleEffectRepaint();
+                break;
+            case ["zoom", "reset"]:
+                _post.Zoom?.Reset();
+                _post.Magnifier?.Reset();
+                ScheduleEffectRepaint();
+                break;
             case ["quit"]:
                 _runLoop.Stop();
                 break;
@@ -3651,57 +4276,209 @@ internal sealed partial class TinyComp :
 
     private bool IsShiftDown() => _seat.Keyboard.State?.IsModActive("Shift") == true;
 
+    private Basin.Config.Modifiers _switcherModifiers;
+
+    private Basin.Config.Modifiers HeldModifiers()
+    {
+        var state = _seat.Keyboard.State;
+        if (state is null)
+        {
+            return Basin.Config.Modifiers.None;
+        }
+
+        var held = Basin.Config.Modifiers.None;
+        if (state.IsModActive("Shift"))
+        {
+            held |= Basin.Config.Modifiers.Shift;
+        }
+
+        if (state.IsModActive("Control"))
+        {
+            held |= Basin.Config.Modifiers.Ctrl;
+        }
+
+        if (state.IsModActive("Mod1"))
+        {
+            held |= Basin.Config.Modifiers.Mod1;
+        }
+
+        if (state.IsModActive("Mod3"))
+        {
+            held |= Basin.Config.Modifiers.Mod3;
+        }
+
+        if (state.IsModActive("Mod4"))
+        {
+            held |= Basin.Config.Modifiers.Mod4;
+        }
+
+        if (state.IsModActive("Mod5"))
+        {
+            held |= Basin.Config.Modifiers.Mod5;
+        }
+
+        return held;
+    }
+
+    private bool ReleasesSwitcher(uint key)
+    {
+        if (_switcherModifiers == Basin.Config.Modifiers.None)
+        {
+            return false;
+        }
+
+        var released = ModifierOf(_seat.Keyboard.RawKeysymFor(key).Value);
+        return released != Basin.Config.Modifiers.None && (_switcherModifiers & released) != 0;
+    }
+
+    private static Basin.Config.Modifiers ModifierOf(uint keysym) => keysym switch
+    {
+        AltLeft or AltRight or MetaLeft or MetaRight => Basin.Config.Modifiers.Mod1,
+        SuperLeft or SuperRight => Basin.Config.Modifiers.Mod4,
+        ControlLeft or ControlRight => Basin.Config.Modifiers.Ctrl,
+        ShiftLeft or ShiftRight => Basin.Config.Modifiers.Shift,
+        _ => Basin.Config.Modifiers.None,
+    };
+
+    private const uint ShiftLeft = 0xffe1;
+    private const uint ShiftRight = 0xffe2;
+    private const uint ControlLeft = 0xffe3;
+    private const uint ControlRight = 0xffe4;
+    private const uint MetaLeft = 0xffe7;
+    private const uint MetaRight = 0xffe8;
+    private const uint AltLeft = 0xffe9;
+    private const uint AltRight = 0xffea;
+    private const uint SuperLeft = 0xffeb;
+    private const uint SuperRight = 0xffec;
+
     private bool HandleKeybind(uint key)
     {
-        switch (key)
+        var symbol = _seat.Keyboard.RawKeysymFor(key).Value;
+        if (symbol == Basin.Config.Keysym.NoSymbol)
         {
-            case InputCodes.KeyEsc:
+            return false;
+        }
+
+        var held = HeldModifiers();
+        foreach (var binding in _config.Bindings)
+        {
+            if (binding.Keysym != symbol || binding.ModifierMask != held)
+            {
+                continue;
+            }
+
+            if (binding.Command is { Length: > 0 } command)
+            {
+                Spawn(command);
+                return true;
+            }
+
+            if (binding.Action is { } action && RunAction(action, binding.ModifierMask))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void Spawn(string[] command)
+    {
+        try
+        {
+            Basin.Diagnostics.BasinDiagnostics.StartClient(string.Join(' ', command), _socket)?.Dispose();
+            _feedback?.OnSpawn(EffectTick());
+        }
+        catch (Exception e)
+        {
+            _log.Error($"spawn failed: {e.Message}");
+        }
+    }
+
+    private bool RunAction(KeyAction action, Basin.Config.Modifiers modifiers)
+    {
+        switch (action)
+        {
+            case KeyAction.Quit:
                 _runLoop.Stop();
                 return true;
 
-            case InputCodes.KeyEnter:
-                try
+            case KeyAction.Cycle when _effects.SwitcherEnabled:
+            case KeyAction.Switcher:
+                if (_effects.SwitcherActive
+                    || (CurrentWorkspace() is { } cards && WorkspaceWindowCount(cards) > 1))
                 {
-                    Basin.Diagnostics.BasinDiagnostics.StartClient("foot", _socket)?.Dispose();
+                    _switcherModifiers = modifiers;
+                    AdvanceSwitcher();
+                    return true;
                 }
-                catch (Exception e)
+
+                return false;
+
+            case KeyAction.Cycle:
+            case KeyAction.CycleFocus:
+                if (CurrentWorkspace() is { } cycle && WorkspaceWindowCount(cycle) > 1)
                 {
-                    _log.Error($"spawn failed: {e.Message}");
+                    CycleWorkspaceFocus(cycle);
+                    return true;
                 }
 
-                return true;
+                return false;
 
-            case InputCodes.KeyTab when _effects.SwitcherEnabled &&
-                (_effects.SwitcherActive || (CurrentWorkspace() is { } cards && WorkspaceWindowCount(cards) > 1)):
-                AdvanceSwitcher();
-                return true;
-
-            case InputCodes.KeyTab when CurrentWorkspace() is { } cycle && WorkspaceWindowCount(cycle) > 1:
-                CycleWorkspaceFocus(cycle);
-                return true;
-
-            case InputCodes.KeyS:
+            case KeyAction.CycleScale:
                 CycleScale();
                 return true;
 
-            case InputCodes.KeyRight when IsShiftDown():
+            case KeyAction.CarryNext:
                 CarryFocusedWindow(1);
                 return true;
 
-            case InputCodes.KeyLeft when IsShiftDown():
+            case KeyAction.CarryPrev:
                 CarryFocusedWindow(-1);
                 return true;
 
-            case InputCodes.KeyRight:
+            case KeyAction.WorkspaceNext:
                 SwitchWorkspace(1);
                 return true;
 
-            case InputCodes.KeyLeft:
+            case KeyAction.WorkspacePrev:
                 SwitchWorkspace(-1);
                 return true;
 
-            case InputCodes.KeyN when ViewAtCursor() is { } view:
+            case KeyAction.WorkspaceNew when ViewAtCursor() is { } view:
                 ActivateWorkspace(view, CreateWorkspace(view, null, afterActive: true));
+                return true;
+
+            case KeyAction.ZoomIn:
+                _post.Zoom?.ZoomIn();
+                _post.Magnifier?.ZoomIn();
+                ScheduleEffectRepaint();
+                return true;
+
+            case KeyAction.ZoomOut:
+                _post.Zoom?.ZoomOut();
+                _post.Magnifier?.ZoomOut();
+                ScheduleEffectRepaint();
+                return true;
+
+            case KeyAction.ZoomReset:
+                _post.Zoom?.Reset();
+                _post.Magnifier?.Reset();
+                ScheduleEffectRepaint();
+                return true;
+
+            case KeyAction.MarkUndo:
+                _feedback?.UndoMark();
+                ScheduleEffectRepaint();
+                return true;
+
+            case KeyAction.MarkClear:
+                _feedback?.ClearMarks();
+                ScheduleEffectRepaint();
+                return true;
+
+            case KeyAction.Bell:
+                RingBell();
                 return true;
 
             default:
@@ -3755,7 +4532,8 @@ internal sealed partial class TinyComp :
 
             foreach (var xwindow in _xwindows)
             {
-                if (xwindow.Workspace == workspace && xwindow.Framable && !xwindow.Tree.IsDestroyed)
+                if (xwindow.Workspace == workspace && xwindow.Framable && !xwindow.Minimized
+                    && !xwindow.Tree.IsDestroyed)
                 {
                     _switcherWindows.Add(xwindow);
                 }
@@ -3798,6 +4576,21 @@ internal sealed partial class TinyComp :
 
         _effects.SwitcherSelect(next);
         RestackSwitcher();
+        HighlightSwitcherCards();
+    }
+
+    private void HighlightSwitcherCards()
+    {
+        if (!_effects.HighlightEnabled)
+        {
+            return;
+        }
+
+        var selected = _effects.SwitcherSelected;
+        for (var i = 0; i < _switcherWindows.Count; i++)
+        {
+            _effects.SetHighlight(_switcherWindows[i].EffectTree, i == selected);
+        }
     }
 
     private void RestackSwitcher()
@@ -3824,6 +4617,7 @@ internal sealed partial class TinyComp :
         }
 
         var selected = _effects.SwitcherSelected;
+        _effects.ClearHighlights();
         _effects.SwitcherEnd();
         _switcherDim?.Destroy();
         _switcherDim = null;
@@ -4094,16 +4888,69 @@ internal sealed partial class TinyComp :
             _comp = comp;
             XWin = xwin;
             Framable = framable;
+            Rule = framable ? comp._config.RuleFor(xwin.Class, xwin.Title) : null;
+            CornerRadius = Rule?.CornerRadius ?? comp._cornerRadius;
             Tree = scene.Tree.Parent!;
             Tree.SetPosition(xwin.X, xwin.Y);
             SceneSurface = scene;
+            scene.Tree.SetPosition(0, 0);
             comp.RefreshSurfaceLuts();
-            comp.ApplyCorners(SceneSurface);
+            comp.ApplyCorners(SceneSurface, CornerRadius);
+            SetShadow(framable ? comp._shadowTexture : null);
             xwin.TitleChanged += Layout;
             xwin.IconChanged += RefreshIcon;
             UpdateDecorations();
             RefreshIcon();
         }
+
+        public Rule? Rule { get; }
+
+        public int CornerRadius { get; }
+
+        public void SetDimmed(bool dimmed)
+        {
+            if (_dimmed == dimmed || SceneSurface.IsDestroyed)
+            {
+                return;
+            }
+
+            _dimmed = dimmed;
+            if (dimmed)
+            {
+                SceneSurface.Content.TextureShader = _comp._dimShader;
+            }
+            else
+            {
+                _comp.ApplyCorners(SceneSurface, CornerRadius);
+            }
+        }
+
+        public void SetShadow(Basin.Effects.DropShadowTexture? texture)
+        {
+            if (texture is null || !Framable)
+            {
+                _shadow?.Dispose();
+                _shadow = null;
+                return;
+            }
+
+            _shadow ??= new Basin.Effects.DropShadowEffect(Tree);
+            _shadow.Texture = texture;
+            LayoutShadow();
+        }
+
+        internal void LayoutShadow() =>
+            _shadow?.SetGeometry(new Box(0, 0, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1)));
+
+        internal FrameCornerRig? DetachCornerRig()
+        {
+            var rig = _cornerRig;
+            _cornerRig = null;
+            return rig;
+        }
+
+        private bool _dimmed;
+        private Basin.Effects.DropShadowEffect? _shadow;
 
         public Frame? Frame => _frame;
 
@@ -4169,6 +5016,13 @@ internal sealed partial class TinyComp :
 
         public void ResizeTo(int x, int y, int width, int height, ResizeEdges edges)
         {
+            _comp._effects.OnResized(
+                Tree,
+                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
+                new Box(0, 0, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1)),
+                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
+                0,
+                0);
             XWin.Configure(x, y, width, height);
             Layout();
         }
@@ -4180,6 +5034,8 @@ internal sealed partial class TinyComp :
         public void Layout()
         {
             Tree.SetPosition(XWin.X, XWin.Y);
+            SceneSurface.Tree.SetPosition(0, 0);
+            LayoutShadow();
             ReportGeometry();
             _comp._workspaceModel.RaiseMembersChanged();
             if (_frame is not null && XWin.Width > 0 && XWin.Height > 0)
@@ -4203,7 +5059,7 @@ internal sealed partial class TinyComp :
             if (noBorder)
             {
                 DisposeFrame();
-                _comp.ApplyCorners(SceneSurface);
+                _comp.ApplyCorners(SceneSurface, CornerRadius);
                 ReportDecoration();
                 ReportGeometry();
             }
@@ -4228,18 +5084,30 @@ internal sealed partial class TinyComp :
             _frame = null;
         }
 
+        public void RebuildFrame()
+        {
+            if (_frame is null)
+            {
+                return;
+            }
+
+            DisposeFrame();
+            UpdateDecorations();
+        }
+
         public void UpdateDecorations()
         {
             ReportDecoration();
             if (!WantsFrame)
             {
                 DisposeFrame();
-                _comp.ApplyCorners(SceneSurface);
+                _comp.ApplyCorners(SceneSurface, CornerRadius);
                 ReportGeometry();
                 return;
             }
 
-            if (_frame is not null || _comp.CreateFrameRenderer() is not { } renderer)
+            if (_frame is not null
+                || _comp.CreateFrameRenderer(Rule?.FrameStyle ?? _comp._frameStyle) is not { } renderer)
             {
                 return;
             }
@@ -4253,9 +5121,9 @@ internal sealed partial class TinyComp :
             _frame.Faulted += e => _comp.Log.Error($"frame fault {XWin.Class}: {e.Message}");
             SceneSurface.Tree.RaiseToTop();
             Layout();
-            if (_comp._cornerRadius > 0)
+            if (CornerRadius > 0)
             {
-                _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, _comp._cornerRadius);
+                _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, CornerRadius);
             }
         }
 
@@ -4290,8 +5158,10 @@ internal sealed partial class TinyComp :
             Icon = new FrameIcon(null, _iconBuffer),
             Active = _active,
             Maximized = _maximized,
-            Capabilities = FrameCapabilities.Maximize,
+            Capabilities = FrameCapabilities.Maximize | FrameCapabilities.Minimize,
         };
+
+        public bool Minimized { get; set; }
 
         private void OnFrameAction(FrameAction action)
         {
@@ -4299,6 +5169,9 @@ internal sealed partial class TinyComp :
             {
                 case FrameActionKind.Close:
                     XWin.Close();
+                    break;
+                case FrameActionKind.Minimize:
+                    _comp.SetMinimized(this, true);
                     break;
                 case FrameActionKind.ToggleMaximize:
                     ToggleMaximize();
@@ -4386,33 +5259,46 @@ internal sealed partial class TinyComp :
             Toplevel = toplevel;
             toplevel.Xdg.Mapped += () =>
             {
-                Workspace = comp.CurrentWorkspace();
+                Rule = comp._config.RuleFor(toplevel.AppId, toplevel.Title);
+                CornerRadius = Rule?.CornerRadius ?? comp._cornerRadius;
+                Workspace = comp.WorkspaceForRule(Rule) ?? comp.CurrentWorkspace();
                 Tree = new SceneTree(Workspace?.Tree ?? comp._layers.Windows);
                 Tree.SetPosition(X, Y);
                 SceneSurface = new SceneSurface(Tree, toplevel.Surface);
                 comp.RefreshSurfaceLuts();
                 comp.ApplyBlur(SceneSurface);
-                comp.ApplyCorners(SceneSurface);
+                comp.ApplyCorners(SceneSurface, CornerRadius);
                 comp.OnWindowMapped(this);
                 comp._effects.CancelClosing(toplevel.Surface);
                 SetDecorated(comp.IsServerDecorated(toplevel));
                 ReportGeometry();
-                comp._effects.OnMapped(Tree);
+                SetShadow(comp._shadowTexture);
+                comp._feedback?.OnMapped();
+                comp._effects.OnMapped(Tree, Rule?.OpenFor(comp._effects.OpenKind));
             };
             toplevel.Xdg.Unmapped += () =>
             {
-                comp._effects.OnClosing(toplevel.Surface, Tree, comp._layers.Top, _cornerRig);
+                comp._effects.OnClosing(
+                    toplevel.Surface, Tree, comp._layers.Top, _cornerRig, Rule?.CloseFor(comp._effects.CloseKind));
                 _cornerRig = null;
+                _shadow?.Dispose();
+                _shadow = null;
                 SceneSurface?.Destroy();
                 SceneSurface = null;
                 _frame?.Dispose();
                 _frame = null;
+                if (Tree is { } gone)
+                {
+                    comp._effects.Forget(gone);
+                }
+
                 Tree?.Destroy();
                 Tree = null;
                 comp.OnWindowGone(this);
             };
             toplevel.Xdg.Committed += ApplyResizeAnchor;
             toplevel.Xdg.Committed += LayoutDecorations;
+            toplevel.Xdg.Committed += LayoutShadow;
             toplevel.Xdg.Committed += ReportGeometry;
             toplevel.TitleChanged += RefreshFrame;
             toplevel.AppIdChanged += RefreshFrame;
@@ -4453,6 +5339,10 @@ internal sealed partial class TinyComp :
         }
 
         public XdgToplevelWindow Toplevel { get; }
+
+        public Rule? Rule { get; private set; }
+
+        public int CornerRadius { get; private set; }
 
         public Workspace? Workspace { get; set; }
 
@@ -4497,6 +5387,14 @@ internal sealed partial class TinyComp :
 
         public void ResizeTo(int x, int y, int width, int height, ResizeEdges edges)
         {
+            var (wasWidth, wasHeight) = GeometrySize;
+            _comp._effects.OnResized(
+                Tree,
+                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
+                new Box(0, 0, Math.Max(wasWidth, 1), Math.Max(wasHeight, 1)),
+                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
+                0,
+                0);
             _resizeAnchor = ResizeAnchor.For(edges, x, y, width, height);
             if (_resizeAnchor is null)
             {
@@ -4650,14 +5548,15 @@ internal sealed partial class TinyComp :
                 _frame = null;
                 if (SceneSurface is not null)
                 {
-                    _comp.ApplyCorners(SceneSurface);
+                    _comp.ApplyCorners(SceneSurface, CornerRadius);
                 }
 
                 ReportGeometry();
                 return;
             }
 
-            if (Tree is null || _frame is not null || _comp.CreateFrameRenderer() is not { } renderer)
+            if (Tree is null || _frame is not null
+                || _comp.CreateFrameRenderer(Rule?.FrameStyle ?? _comp._frameStyle) is not { } renderer)
             {
                 return;
             }
@@ -4672,10 +5571,24 @@ internal sealed partial class TinyComp :
             SceneSurface?.Tree.RaiseToTop();
             LayoutDecorations();
             ReportGeometry();
-            if (_comp._cornerRadius > 0 && SceneSurface is not null)
+            if (CornerRadius > 0 && SceneSurface is not null)
             {
-                _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, _comp._cornerRadius);
+                _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, CornerRadius);
             }
+        }
+
+        public void RebuildFrame()
+        {
+            if (_frame is null)
+            {
+                return;
+            }
+
+            _cornerRig?.Dispose();
+            _cornerRig = null;
+            _frame.Dispose();
+            _frame = null;
+            SetDecorated(true);
         }
 
         public void SetDecorationFocus(bool active)
@@ -4683,6 +5596,58 @@ internal sealed partial class TinyComp :
             _active = active;
             RefreshFrame();
         }
+
+        public void SetDimmed(bool dimmed)
+        {
+            if (_dimmed == dimmed || SceneSurface is null)
+            {
+                return;
+            }
+
+            _dimmed = dimmed;
+            if (dimmed)
+            {
+                SceneSurface.Content.TextureShader = _comp._dimShader;
+            }
+            else
+            {
+                _comp.ApplyCorners(SceneSurface, CornerRadius);
+            }
+        }
+
+        public void SetShadow(Basin.Effects.DropShadowTexture? texture)
+        {
+            if (texture is null)
+            {
+                _shadow?.Dispose();
+                _shadow = null;
+                return;
+            }
+
+            if (Tree is null)
+            {
+                return;
+            }
+
+            _shadow ??= new Basin.Effects.DropShadowEffect(Tree);
+            _shadow.Texture = texture;
+            var (width, height) = GeometrySize;
+            _shadow.SetGeometry(new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)));
+        }
+
+        internal void LayoutShadow()
+        {
+            if (_shadow is null)
+            {
+                return;
+            }
+
+            var (width, height) = GeometrySize;
+            _shadow.SetGeometry(new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)));
+        }
+
+        private bool _dimmed;
+        private Basin.Effects.DropShadowEffect? _shadow;
 
         public void SetIconName(string? name)
         {
@@ -4776,7 +5741,7 @@ internal sealed partial class TinyComp :
             Maximized = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized),
             Fullscreen = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen),
             Resizing = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Resizing),
-            Capabilities = FrameCapabilities.Maximize,
+            Capabilities = FrameCapabilities.Maximize | FrameCapabilities.Minimize,
         };
 
         private void OnFrameAction(FrameAction action)

@@ -1,7 +1,5 @@
-using Basin.Cli;
-using System.Text.RegularExpressions;
+using Basin.Config;
 using Basin.WindowManager;
-using Tomlyn;
 using Tomlyn.Model;
 
 using Basin.Diagnostics;
@@ -39,7 +37,9 @@ internal sealed class Config
             return config;
         }
 
-        if (table.TryGetValue("main_modifier", out var modifier) && modifier is string modifierName)
+        var reader = new TomlReader(table, log);
+
+        if (reader.Text("main_modifier") is { } modifierName)
         {
             config.MainModifier = modifierName.ToLowerInvariant() switch
             {
@@ -48,31 +48,28 @@ internal sealed class Config
             };
         }
 
-        config.TerminalCommand = Command(table, "terminal_cmd") ?? config.TerminalCommand;
-        config.LauncherCommand = Command(table, "launcher_cmd") ?? config.LauncherCommand;
-        config.LockCommand = Command(table, "lock_cmd") ?? config.LockCommand;
+        config.TerminalCommand = reader.Words("terminal_cmd") ?? config.TerminalCommand;
+        config.LauncherCommand = reader.Words("launcher_cmd") ?? config.LauncherCommand;
+        config.LockCommand = reader.Words("lock_cmd") ?? config.LockCommand;
+        config.DesktopWallpaper = reader.Flag("desktop_wallpaper", config.DesktopWallpaper);
 
-        if (table.TryGetValue("desktop_wallpaper", out var wallpaper) && wallpaper is bool drawWallpaper)
-        {
-            config.DesktopWallpaper = drawWallpaper;
-        }
-
-        if (table.TryGetValue("ui", out var ui) && ui is TomlTable uiTable)
+        if (reader.Free("ui") is { } uiTable)
         {
             Theme.Apply(uiTable);
         }
 
-        if (table.TryGetValue("rules", out var rules) && rules is TomlTableArray ruleTables)
+        if (reader.FreeArray("rules") is { } ruleTables)
         {
-            config.Rules = [.. ruleTables.Select(table => ParseRule(table, log)).OfType<Rule>()];
+            config.Rules = WindowRule.MostSpecificFirst(
+                ruleTables.Select(rule => ParseRule(rule, log)).OfType<Rule>());
         }
 
-        if (table.TryGetValue("hotkeys", out var hotkeys) && hotkeys is TomlTable hotkeyTable)
+        if (reader.Free("hotkeys") is { } hotkeyTable)
         {
             var parsed = new List<Hotkey>();
             foreach (var (chord, value) in hotkeyTable)
             {
-                if (ParseHotkey(chord, value, log) is { } hotkey)
+                if (HotkeyParser.Parse(chord, value, log) is { Unbinds: false } hotkey)
                 {
                     parsed.Add(hotkey);
                 }
@@ -81,55 +78,15 @@ internal sealed class Config
             config.Hotkeys = parsed;
         }
 
+        reader.ReportUnknown();
         return config;
-    }
-
-    private static string[]? Command(TomlTable table, string key)
-    {
-        if (!table.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-
-        var parts = value switch
-        {
-            string text => text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            TomlArray array => [.. array.OfType<string>().Select(static part => part.Trim()).Where(static part => part.Length > 0)],
-            _ => Array.Empty<string>(),
-        };
-        return parts.Length > 0 ? parts : null;
     }
 
     private static Rule? ParseRule(TomlTable table, BasinLogger log)
     {
-        static string[]? Strings(TomlTable table, string key) =>
-            !table.TryGetValue(key, out var value) ? null : value switch
-            {
-                string text => [text],
-                TomlArray array => [.. array.OfType<string>()],
-                _ => null,
-            };
-
-        Regex? Pattern(TomlTable table, string key)
-        {
-            if (table.TryGetValue(key, out var value) && value is string pattern)
-            {
-                try
-                {
-                    return new Regex(pattern);
-                }
-                catch (ArgumentException error)
-                {
-                    log.Warn($"rule pattern '{pattern}' is invalid: {error.Message}");
-                }
-            }
-
-            return null;
-        }
-
         bool? requireCsdOnly = null;
         bool? requireNoParent = null;
-        foreach (var prop in Strings(table, "match_props") ?? [])
+        foreach (var prop in WindowRule.Strings(table, "match_props") ?? [])
         {
             switch (prop)
             {
@@ -144,11 +101,11 @@ internal sealed class Config
 
         return new Rule
         {
-            AppIds = Strings(table, "match_app_id"),
-            AppIdPrefixes = Strings(table, "match_app_id_prefix"),
-            Titles = Strings(table, "title"),
-            AppIdRegex = Pattern(table, "app_id_regex"),
-            TitleRegex = Pattern(table, "title_regex"),
+            AppIds = WindowRule.Strings(table, "match_app_id"),
+            AppIdPrefixes = WindowRule.Strings(table, "match_app_id_prefix"),
+            Titles = WindowRule.Strings(table, "title"),
+            AppIdRegex = WindowRule.Pattern(table, "app_id_regex", log),
+            TitleRegex = WindowRule.Pattern(table, "title_regex", log),
             RequireCsdOnly = requireCsdOnly,
             RequireNoParent = requireNoParent,
             ForceSsd = table.TryGetValue("force_ssd", out var force) && force is true,
@@ -156,64 +113,5 @@ internal sealed class Config
                 ? (int)pixels
                 : null,
         };
-    }
-
-    private static Hotkey? ParseHotkey(string chord, object value, BasinLogger log)
-    {
-        var command = value switch
-        {
-            string text => text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            TomlArray array => [.. array.OfType<string>().Select(static part => part.Trim()).Where(static part => part.Length > 0)],
-            _ => Array.Empty<string>(),
-        };
-        if (command.Length == 0)
-        {
-            log.Warn($"hotkey '{chord}' has no command, skipping");
-            return null;
-        }
-
-        var tokens = chord.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (tokens.Length == 0)
-        {
-            return null;
-        }
-
-        var modifiers = Modifiers.None;
-        for (var i = 0; i < tokens.Length - 1; i++)
-        {
-            switch (tokens[i].ToLowerInvariant())
-            {
-                case "shift":
-                    modifiers |= Modifiers.Shift;
-                    break;
-                case "ctrl" or "control":
-                    modifiers |= Modifiers.Ctrl;
-                    break;
-                case "alt" or "mod1":
-                    modifiers |= Modifiers.Alt;
-                    break;
-                case "super" or "logo" or "win" or "mod4":
-                    modifiers |= Modifiers.Super;
-                    break;
-                case "mod3":
-                    modifiers |= Modifiers.Mod3;
-                    break;
-                case "mod5":
-                    modifiers |= Modifiers.Mod5;
-                    break;
-                default:
-                    log.Warn($"unknown modifier '{(tokens[i])}' in hotkey '{chord}', skipping");
-                    return null;
-            }
-        }
-
-        var keysym = Keysym.FromName(tokens[^1]);
-        if (keysym == Keysym.NoSymbol)
-        {
-            log.Warn($"unknown keysym '{(tokens[^1])}' in hotkey '{chord}', skipping");
-            return null;
-        }
-
-        return new Hotkey(keysym, modifiers, command);
     }
 }

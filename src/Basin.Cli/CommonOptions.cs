@@ -364,6 +364,16 @@ public static class CommonOptions
         return false;
     }
 
+    public static Option<string?> Config(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        return new Option<string?>("--config")
+        {
+            Description = $"read this TOML file instead of ~/.config/{name}/{name}.toml, or false to read none",
+            HelpName = "PATH",
+        };
+    }
+
     public static Option<string?> Client() => new("--client")
     {
         Description = "spawn this client once the socket is up",

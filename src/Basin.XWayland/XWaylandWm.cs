@@ -62,13 +62,14 @@ public sealed unsafe class XWaylandWm : IDisposable
         var check = _wmWindow;
         SetProperty32(_root, Atom("_NET_SUPPORTING_WM_CHECK"), 33 , &check, 1);
         SetProperty32(_wmWindow, Atom("_NET_SUPPORTING_WM_CHECK"), 33, &check, 1);
-        var supported = stackalloc uint[8]
+        var supported = stackalloc uint[11]
         {
             Atom("_NET_WM_NAME"), Atom("_NET_WM_STATE"), Atom("_NET_WM_STATE_MODAL"),
             Atom("_NET_WM_STATE_FULLSCREEN"), Atom("_NET_ACTIVE_WINDOW"),
             Atom("_NET_WM_WINDOW_TYPE"), Atom("_NET_SUPPORTING_WM_CHECK"), Atom("_NET_CLIENT_LIST"),
+            Atom("_NET_WM_STATE_HIDDEN"), Atom("_NET_WM_ALLOWED_ACTIONS"), Atom("_NET_WM_ACTION_MINIMIZE"),
         };
-        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 8);
+        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 11);
         _ = Libxcb.xcb_flush(_conn);
 
         if (seat is not null)
@@ -104,7 +105,8 @@ public sealed unsafe class XWaylandWm : IDisposable
             "_NET_ACTIVE_WINDOW", "_NET_WM_STATE", "_NET_WM_STATE_MODAL", "_NET_WM_STATE_FULLSCREEN",
             "_NET_WM_WINDOW_TYPE", "_NET_WM_PING", "WL_SURFACE_SERIAL", "_MOTIF_WM_HINTS", "_NET_WM_ICON",
             "CLIPBOARD", "PRIMARY", "TARGETS", "TEXT", "_BASIN_SELECTION",
-            "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ",
+            "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ", "_NET_WM_STATE_HIDDEN",
+            "_NET_WM_ALLOWED_ACTIONS", "_NET_WM_ACTION_MINIMIZE",
             "_NET_WM_WINDOW_TYPE_COMBO", "_NET_WM_WINDOW_TYPE_DND", "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU",
             "_NET_WM_WINDOW_TYPE_MENU", "_NET_WM_WINDOW_TYPE_NOTIFICATION", "_NET_WM_WINDOW_TYPE_POPUP_MENU",
             "_NET_WM_WINDOW_TYPE_SPLASH", "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_WINDOW_TYPE_TOOLTIP",
@@ -250,8 +252,10 @@ public sealed unsafe class XWaylandWm : IDisposable
                 if (_windows.TryGetValue(e->window, out var window))
                 {
                     RefreshProperties(window);
-                    var state = stackalloc uint[2] { 1 , 0 };
+                    var state = stackalloc uint[2] { NormalState, 0 };
                     SetProperty32(e->window, Atom("WM_STATE"), Atom("WM_STATE"), state, 2);
+                    var actions = stackalloc uint[1] { Atom("_NET_WM_ACTION_MINIMIZE") };
+                    SetProperty32(e->window, Atom("_NET_WM_ALLOWED_ACTIONS"), 4 , actions, 1);
                 }
 
                 _ = Libxcb.xcb_map_window(_conn, e->window);
@@ -372,6 +376,26 @@ public sealed unsafe class XWaylandWm : IDisposable
                         ActivationRequested?.Invoke(window);
                     }
                 }
+                else if (e->type == Atom("WM_CHANGE_STATE"))
+                {
+                    if (data[0] == IconicState && _windows.TryGetValue(e->window, out var window))
+                    {
+                        window.RaiseMinimizeRequested(true);
+                    }
+                }
+                else if (e->type == Atom("_NET_WM_STATE"))
+                {
+                    if (_windows.TryGetValue(e->window, out var window) &&
+                        (data[1] == Atom("_NET_WM_STATE_HIDDEN") || data[2] == Atom("_NET_WM_STATE_HIDDEN")))
+                    {
+                        window.RaiseMinimizeRequested(data[0] switch
+                        {
+                            NetWmStateRemove => false,
+                            NetWmStateAdd => true,
+                            _ => !window.Minimized,
+                        });
+                    }
+                }
 
                 break;
             }
@@ -485,9 +509,32 @@ public sealed unsafe class XWaylandWm : IDisposable
         WriteWindowState(window);
     }
 
+    internal void SetWindowMinimized(XWaylandWindow window, bool minimized)
+    {
+        if (window.Minimized == minimized)
+        {
+            return;
+        }
+
+        window.Minimized = minimized;
+        WriteWindowState(window);
+        var state = stackalloc uint[2] { minimized ? IconicState : NormalState, 0 };
+        SetProperty32(window.WindowId, Atom("WM_STATE"), Atom("WM_STATE"), state, 2);
+        _ = Libxcb.xcb_flush(_conn);
+        window.RaisePropertiesChanged();
+    }
+
+    private const uint NetWmStateRemove = 0;
+
+    private const uint NetWmStateAdd = 1;
+
+    private const uint NormalState = 1;
+
+    private const uint IconicState = 3;
+
     private void WriteWindowState(XWaylandWindow window)
     {
-        var atoms = stackalloc uint[4];
+        var atoms = stackalloc uint[5];
         uint count = 0;
         if (window.Modal)
         {
@@ -503,6 +550,11 @@ public sealed unsafe class XWaylandWm : IDisposable
         if (window.FullscreenState)
         {
             atoms[count++] = Atom("_NET_WM_STATE_FULLSCREEN");
+        }
+
+        if (window.Minimized)
+        {
+            atoms[count++] = Atom("_NET_WM_STATE_HIDDEN");
         }
 
         SetProperty32(window.WindowId, Atom("_NET_WM_STATE"), 4 , atoms, count);

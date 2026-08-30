@@ -1,3 +1,4 @@
+using Basin.Config;
 using Basin.WindowManager;
 using Xunit;
 

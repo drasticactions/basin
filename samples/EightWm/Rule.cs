@@ -1,7 +1,8 @@
-using System.Globalization;
-using Tomlyn;
-using Tomlyn.Model;
+using Basin.Config;
 
 namespace EightWm;
 
-internal sealed record Rule(string AppId, int MinWidth);
+internal sealed class Rule : WindowRule
+{
+    public int MinWidth { get; init; }
+}

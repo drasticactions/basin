@@ -220,6 +220,18 @@ public sealed class SeatKeyboard : IDisposable
 
     public XkbKeysym KeysymFor(uint key) => State?.GetKeyOneSym(key + 8) ?? default;
 
+    public XkbKeysym RawKeysymFor(uint key)
+    {
+        if (Keymap is not { } keymap || State is not { } state)
+        {
+            return default;
+        }
+
+        var layout = state.SerializeLayout(XkbStateComponent.LayoutEffective);
+        var syms = keymap.GetKeySymsByLevel(key + 8, layout, 0);
+        return syms.Length > 0 ? syms[0] : default;
+    }
+
     public bool TryKeycodeForKeysym(uint keysym, out uint keycode, out uint modifiers)
     {
         keycode = 0;

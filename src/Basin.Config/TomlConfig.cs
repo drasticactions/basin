@@ -2,7 +2,7 @@ using Basin.Diagnostics;
 using Tomlyn;
 using Tomlyn.Model;
 
-namespace Basin.Cli;
+namespace Basin.Config;
 
 public static class TomlConfig
 {
@@ -21,6 +21,17 @@ public static class TomlConfig
 
     public static TomlTable? Read(string path, BasinLogger log)
     {
+        var table = Read(path, out var failure);
+        if (failure is not null && File.Exists(path))
+        {
+            log.Warn($"{path} did not parse, keeping defaults: {failure}");
+        }
+
+        return table;
+    }
+
+    public static TomlTable? Read(string path, out string? failure)
+    {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
         string text;
@@ -28,6 +39,7 @@ public static class TomlConfig
         {
             if (!File.Exists(path))
             {
+                failure = "no such file";
                 return null;
             }
 
@@ -35,17 +47,18 @@ public static class TomlConfig
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            log.Warn($"cannot read {path}: {error.Message}");
+            failure = error.Message;
             return null;
         }
 
         try
         {
+            failure = null;
             return Toml.ToModel(text);
         }
         catch (TomlException error)
         {
-            log.Warn($"{path} did not parse, keeping defaults: {error.Message}");
+            failure = error.Message;
             return null;
         }
     }

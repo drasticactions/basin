@@ -1,7 +1,4 @@
-using System.Text.RegularExpressions;
-using Basin.WindowManager;
-using Tomlyn;
-using Tomlyn.Model;
+using Basin.Config;
 
 namespace RetroWm;
 

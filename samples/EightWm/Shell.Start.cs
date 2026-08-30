@@ -83,9 +83,10 @@ internal sealed partial class Shell
         app.MinWidth = 0;
         foreach (var rule in _config.Rules)
         {
-            if (rule.AppId == app.AppId && rule.MinWidth > 0)
+            if (rule.MatchesText(app.AppId, null) && rule.MinWidth > 0)
             {
                 app.MinWidth = rule.MinWidth;
+                return;
             }
         }
     }

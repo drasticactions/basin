@@ -208,7 +208,7 @@ public class RiverShellTests
                 return;
             }
 
-            binding = fixture.Client.Bindings.Bind(seat, "q", Wm.Modifiers.Super);
+            binding = fixture.Client.Bindings.Bind(seat, "q", Basin.Config.Modifiers.Super);
             binding.Pressed += () => presses++;
             binding.Released += () => releases++;
             binding.Enable();
@@ -241,7 +241,7 @@ public class RiverShellTests
         Wm.KeyBinding? binding = null;
         var presses = 0;
         fixture.OnManage = _ =>
-            binding ??= fixture.Client.Bindings.Bind(seat, "q", Wm.Modifiers.Super, () => presses++);
+            binding ??= fixture.Client.Bindings.Bind(seat, "q", Basin.Config.Modifiers.Super, () => presses++);
         fixture.RequestManageAndSettle();
         fixture.OnManage = null;
 
@@ -1098,7 +1098,7 @@ public class RiverShellTests
             }
 
             armed = true;
-            var binding = fixture.Client.Bindings.Bind(seat, "q", Wm.Modifiers.Super);
+            var binding = fixture.Client.Bindings.Bind(seat, "q", Basin.Config.Modifiers.Super);
             binding.StopRepeat += () => stops++;
             binding.Enable();
         };
@@ -1136,11 +1136,11 @@ public class RiverShellTests
 
             armed = true;
 
-            var tap = fixture.Client.Bindings.Bind(seat, "Super_L", Wm.Modifiers.None);
+            var tap = fixture.Client.Bindings.Bind(seat, "Super_L", Basin.Config.Modifiers.None);
             tap.Pressed += () => taps++;
             tap.Enable();
 
-            var chord = fixture.Client.Bindings.Bind(seat, "q", Wm.Modifiers.Super);
+            var chord = fixture.Client.Bindings.Bind(seat, "q", Basin.Config.Modifiers.Super);
             chord.Pressed += () => chords++;
             chord.Enable();
         };
@@ -1179,7 +1179,7 @@ public class RiverShellTests
             }
 
             armed = true;
-            var binding = fixture.Client.Bindings.Bind(seat, "q", Wm.Modifiers.Super);
+            var binding = fixture.Client.Bindings.Bind(seat, "q", Basin.Config.Modifiers.Super);
             binding.Pressed += () => presses++;
             binding.Released += () => releases++;
             binding.Enable();

@@ -1,0 +1,72 @@
+[compositor]
+renderer      = "vulkan"     # --renderer
+outputs       = 1            # --outputs
+scale         = []           # --scale, one entry per output; empty asks the outputs
+
+[frame]
+style         = "flat"       # beos | flat | none
+corner_radius = 0            # logical pixels
+
+[color]
+source      = "edid"         # edid | srgb | icc
+icc         = ""             # profile path when source = "icc"
+hdr         = false          # drive the outputs in HDR where they support it
+night_light = 0              # kelvin; 0 is off
+
+[effects]
+# Window animations.
+wobbly   = false             # wobble windows on interactive move
+open     = "none"            # none | fade | zoom | glide | sheet
+close    = "none"            # none | fade | zoom | fire | fire-gpu | glide | sheet | fall-apart
+minimize = "none"            # none | magic-lamp | squash
+switcher = false             # flip through windows as 3d cards
+stretch  = false             # stretch the last frame while a window resizes
+slide_back = false           # push the other windows back when one is raised
+notifications = false        # slide a layer-shell notification in on a spring
+
+# Window appearance.
+dim_inactive = false         # dim every window but the focused one
+drop_shadow  = false         # a soft shadow under every window
+highlight    = false         # ghost the unselected cards while the switcher is up
+
+# Screen-wide post stages, in the order they are listed. A single name or an
+# array: post = ["show-paint", "color-blindness"]
+post = "none"                # none | invert | magnify | zoom | color-blindness | show-paint
+color_blindness = "protanopia"   # protanopia | deuteranopia | tritanopia | monochrome
+color_blindness_intensity = 1.0  # 0 is off, 1 is the full simulation
+zoom_tracking = "proportional"   # proportional | centered | push | disabled | centered-strict
+blend_changes = false        # crossfade the screen when a reload changes it
+screen_transform = false     # crossfade a rotation instead of cutting to it
+
+# Input and session feedback.
+shake_cursor = false         # grow the cursor when it is shaken
+mouse_click  = false         # draw a ring where each button lands
+mouse_mark   = false         # draw on the screen with Alt and the middle button
+track_mouse  = false         # turning rings around the cursor while a button is held
+touch_points = false         # draw a ring for every touch contact
+system_bell  = false         # flash the focused window when a client asks for attention
+startup_feedback = "none"    # none | bouncing | blinking | passive
+
+# The chord is Mod+Mod+Key, where the key is an xkb keysym name.
+[bindings]
+"Alt+Escape"      = "quit"
+"Alt+Tab"         = "cycle"
+"Alt+s"           = "cycle-scale"
+"Alt+Left"        = "workspace-prev"
+"Alt+Right"       = "workspace-next"
+"Alt+Shift+Left"  = "carry-prev"
+"Alt+Shift+Right" = "carry-next"
+"Alt+n"           = "workspace-new"
+"Alt+Return"    = { exec = "foot" }
+
+# Per Window/App rules
+# [[rule]]
+# app_id      = "mpv"        # exact match
+# title_regex = ""           # optional
+# frame       = "none"
+# effects     = false        # or per effect: wobbly = false, open = "none"
+# workspace   = 2
+# x = 0
+# y = 0
+# width  = 1280
+# height = 720

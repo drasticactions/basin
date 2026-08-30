@@ -163,7 +163,8 @@ internal sealed class BeosFrameRenderer(FrameTheme theme) : IFrameRenderer
     private const int MenuPadding = 3;
 
     private static int MenuItemCount(in FrameState state) =>
-        1 + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0);
+        1 + (state.Capabilities.HasFlag(FrameCapabilities.Minimize) ? 1 : 0)
+          + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0);
 
     public UISurfaceSize MeasureMenu(in FrameState state, double scale) =>
         new(MenuWidth, MenuItemCount(state) * MenuItemHeight + 2 * MenuPadding, scale);
@@ -221,11 +222,22 @@ internal sealed class BeosFrameRenderer(FrameTheme theme) : IFrameRenderer
     public FrameAction? MenuItemAction(int item, in FrameState state) => LabelOf(item, state) switch
     {
         "Close" => new FrameAction(FrameActionKind.Close),
+        "Minimize" => new FrameAction(FrameActionKind.Minimize),
         _ => new FrameAction(FrameActionKind.ToggleMaximize),
     };
 
     private static string LabelOf(int item, in FrameState state)
     {
+        if (state.Capabilities.HasFlag(FrameCapabilities.Minimize))
+        {
+            if (item == 0)
+            {
+                return "Minimize";
+            }
+
+            item--;
+        }
+
         var hasZoom = state.Capabilities.HasFlag(FrameCapabilities.Maximize);
         return item == 0 && hasZoom ? (state.Maximized ? "Restore" : "Zoom") : "Close";
     }

@@ -37,6 +37,7 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
     private int _outerHeight;
     private Box _close;
     private Box _maximize;
+    private Box _minimize;
     private Box _icon;
 
     public FrameInsets Measure(in FrameState state, double scale) =>
@@ -51,11 +52,17 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
         var barTop = Border;
         var buttonY = barTop + (TitleHeight - 20) / 2;
         var x = _outerWidth - Border - 4 - ButtonWidth;
-        var buttonsFit = clientBox.Width > 4 * (ButtonWidth + ButtonGap);
+        var hasMaximize = state.Capabilities.HasFlag(FrameCapabilities.Maximize);
+        var hasMinimize = state.Capabilities.HasFlag(FrameCapabilities.Minimize);
+        var slots = 1 + (hasMaximize ? 1 : 0) + (hasMinimize ? 1 : 0);
+        var buttonsFit = clientBox.Width > (slots + 2) * (ButtonWidth + ButtonGap);
         _close = buttonsFit ? new Box(x, buttonY, ButtonWidth, 20) : default;
-        var showMaximize = buttonsFit && state.Capabilities.HasFlag(FrameCapabilities.Maximize);
+        var showMaximize = buttonsFit && hasMaximize;
         x -= showMaximize ? ButtonWidth + ButtonGap : 0;
         _maximize = showMaximize ? new Box(x, buttonY, ButtonWidth, 20) : default;
+        var showMinimize = buttonsFit && hasMinimize;
+        x -= showMinimize ? ButtonWidth + ButtonGap : 0;
+        _minimize = showMinimize ? new Box(x, buttonY, ButtonWidth, 20) : default;
         var iconSide = 18;
         _icon = new Box(Border + 6, barTop + (TitleHeight - iconSide) / 2, iconSide, iconSide);
 
@@ -129,6 +136,11 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
                 return FramePart.Maximize;
             }
 
+            if (Hits(_minimize, x, y))
+            {
+                return FramePart.Minimize;
+            }
+
             if (Hits(_icon, x, y))
             {
                 return FramePart.Icon;
@@ -144,6 +156,7 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
     {
         FramePart.Close => _close,
         FramePart.Maximize => _maximize,
+        FramePart.Minimize => _minimize,
         _ => default,
     };
 
@@ -152,7 +165,8 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
     private const int MenuPadding = 4;
 
     private static int MenuItemCount(in FrameState state) =>
-        1 + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0);
+        1 + (state.Capabilities.HasFlag(FrameCapabilities.Minimize) ? 1 : 0)
+          + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0);
 
     public UISurfaceSize MeasureMenu(in FrameState state, double scale) =>
         new(MenuWidth, MenuItemCount(state) * MenuItemHeight + 2 * MenuPadding, scale);
@@ -210,11 +224,22 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
     public FrameAction? MenuItemAction(int item, in FrameState state) => LabelOf(item, state) switch
     {
         "Close" => new FrameAction(FrameActionKind.Close),
+        "Minimize" => new FrameAction(FrameActionKind.Minimize),
         _ => new FrameAction(FrameActionKind.ToggleMaximize),
     };
 
     private static string LabelOf(int item, in FrameState state)
     {
+        if (state.Capabilities.HasFlag(FrameCapabilities.Minimize))
+        {
+            if (item == 0)
+            {
+                return "Minimize";
+            }
+
+            item--;
+        }
+
         var hasMaximize = state.Capabilities.HasFlag(FrameCapabilities.Maximize);
         return item == 0 && hasMaximize ? (state.Maximized ? "Restore" : "Maximize") : "Close";
     }
@@ -287,6 +312,16 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
             }
 
             titleRight = _maximize.X - 8;
+        }
+
+        if (!_minimize.IsEmpty)
+        {
+            DrawButtonBack(canvas, _minimize, interaction, FramePart.Minimize, ButtonHot, ButtonPressed);
+            stroke.Color = interaction.Hot == FramePart.Minimize ? TextActive : text;
+            stroke.StrokeWidth = 1.2f;
+            var c = Center(_minimize);
+            canvas.DrawLine(c.X - 4.5f, c.Y + 3.5f, c.X + 4.5f, c.Y + 3.5f, stroke);
+            titleRight = _minimize.X - 8;
         }
 
         var title = string.IsNullOrEmpty(state.Title) ? state.AppId : state.Title;

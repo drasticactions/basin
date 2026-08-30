@@ -1,3 +1,4 @@
+using Basin.Config;
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
 using Wayland;
