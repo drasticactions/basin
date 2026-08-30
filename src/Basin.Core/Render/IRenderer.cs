@@ -25,4 +25,6 @@ public interface IRenderer : IDisposable
     IPixelShader? CompilePixelShader(in PixelShaderSource source, ReadOnlySpan<PixelShaderUniform> uniforms) => null;
 
     bool SupportsBackdropEffects => false;
+
+    bool SupportsFrameFilters => false;
 }

@@ -29,12 +29,15 @@ internal sealed unsafe class VulkanDmabufTexture : ITexture, IVulkanRetired
 
     internal Image Image => _imported.Image;
 
+    internal readonly Format VkFormat;
+
     private VulkanDmabufTexture(VulkanRenderer renderer, ImportedDmabuf imported, in DmabufAttributes attributes)
     {
         _renderer = renderer;
         _imported = imported;
         Attributes = attributes;
         _ = renderer.Dev.FormatTable.TryGet(attributes.Format, out var props);
+        VkFormat = props.Entry.Vk;
 
         if (props.Entry.IsYcbcr)
         {

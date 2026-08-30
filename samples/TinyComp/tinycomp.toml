@@ -9,6 +9,7 @@ scale         = []           # --scale, one entry per output; empty asks the out
 # scale     = 1.5
 # transform = "normal"        # normal | 90 | 180 | 270 | flipped | flipped-90 | flipped-180 | flipped-270
 # mode      = "3840x2560@60"  # WIDTHxHEIGHT or WIDTHxHEIGHT@HZ
+# aspect    = "4:3"           # letterbox the desktop to W:H (or a number) at the native mode
 
 [frame]
 style         = "flat"       # beos | flat | none
@@ -44,6 +45,24 @@ color_blindness_intensity = 1.0  # 0 is off, 1 is the full simulation
 zoom_tracking = "proportional"   # proportional | centered | push | disabled | centered-strict
 blend_changes = false        # crossfade the screen when a reload changes it
 screen_transform = false     # crossfade a rotation instead of cutting to it
+
+# A libraslang/RetroArch slang preset. This is used on all outputs.
+# Needs the vulkan or gl renderer and the librashader library. "none" is off.
+shader = "none"              # a .slangp path, or none
+shader_continuous = true    # repaint every vblank for an animated preset
+
+# Preset parameters by name. librashader reports the names and the ranges,
+# Posting a name without a preset shows a warning.
+# [effects.shader_params]
+# CRTgamma = 2.4
+
+# You can also change presets together.
+# [[effects.shader]]
+# path = "~/shaders/ntsc/ntsc-adaptive.slangp"
+# [[effects.shader]]
+# path = "~/shaders/crt/crt-geom.slangp"
+#   [effects.shader.params]
+#   CRTgamma = 2.4
 
 # Input and session feedback.
 shake_cursor = false         # grow the cursor when it is shaken

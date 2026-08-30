@@ -31,6 +31,8 @@ public abstract class OutputBase : IOutput
 
     public double Scale { get; private set; } = 1;
 
+    public double AspectRatio { get; private set; }
+
     public OutputTransform Transform { get; private set; }
 
     public bool AdaptiveSync { get; private set; }
@@ -123,6 +125,11 @@ public abstract class OutputBase : IOutput
         if ((state.Fields & OutputStateFields.Scale) != 0)
         {
             Scale = state.Scale;
+        }
+
+        if ((state.Fields & OutputStateFields.AspectRatio) != 0)
+        {
+            AspectRatio = state.AspectRatio;
         }
 
         if ((state.Fields & OutputStateFields.Transform) != 0)

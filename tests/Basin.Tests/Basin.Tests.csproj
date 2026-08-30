@@ -28,6 +28,9 @@
     <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Rashader/Basin.Rashader.csproj" />
+    <ProjectReference Include="../../src/Basin.Rashader.Gl/Basin.Rashader.Gl.csproj" />
+    <ProjectReference Include="../../src/Basin.Rashader.Vulkan/Basin.Rashader.Vulkan.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />

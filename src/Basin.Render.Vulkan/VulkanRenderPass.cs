@@ -603,6 +603,152 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         Record(1, _renderer.EffectSetFor(result.View), default, constants, clip);
     }
 
+    public bool AddFrameFilter(IFrameFilter filter, ITexture source, in FrameFilterOptions options)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        if (filter is not IVulkanFilter vulkanFilter)
+        {
+            throw new ArgumentException("filter does not belong to this renderer");
+        }
+
+        var entry = _entry!;
+        if (entry.TwoPassTarget || !vulkanFilter.IsSupported)
+        {
+            return false;
+        }
+
+        Image sourceImage;
+        Format sourceFormat;
+        switch (source)
+        {
+            case VulkanDmabufTexture dmabuf:
+                if (dmabuf.Ycbcr is not null)
+                {
+                    return false;
+                }
+
+                if (!dmabuf.OwnedThisPass)
+                {
+                    dmabuf.OwnedThisPass = true;
+                    _foreign.Add(dmabuf);
+                }
+
+                sourceImage = dmabuf.Image;
+                sourceFormat = dmabuf.VkFormat;
+                break;
+            case VulkanShmTexture shm:
+                if (!shm.PrepareUpload(_renderer.Dev.Staging))
+                {
+                    return false;
+                }
+
+                if (shm.NeedsGpuCopy)
+                {
+                    shm.RecordGpuCopy(EnsureStage());
+                }
+
+                sourceImage = shm.Image;
+                sourceFormat = shm.VkFormat;
+                break;
+            default:
+                throw new ArgumentException("texture does not belong to this renderer");
+        }
+
+        var vk = _renderer.Dev.Api;
+        vk.CmdEndRenderPass(_render);
+
+        var into = stackalloc ImageMemoryBarrier[2];
+        into[0] = new ImageMemoryBarrier
+        {
+            SType = StructureType.ImageMemoryBarrier,
+            SrcAccessMask = AccessFlags.MemoryWriteBit,
+            DstAccessMask = AccessFlags.ShaderReadBit,
+            OldLayout = ImageLayout.General,
+            NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = sourceImage,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        into[1] = new ImageMemoryBarrier
+        {
+            SType = StructureType.ImageMemoryBarrier,
+            SrcAccessMask = AccessFlags.ColorAttachmentWriteBit,
+            DstAccessMask = AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit,
+            OldLayout = ImageLayout.General,
+            NewLayout = ImageLayout.ColorAttachmentOptimal,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = entry.Image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        vk.CmdPipelineBarrier(
+            _render,
+            PipelineStageFlags.AllCommandsBit,
+            PipelineStageFlags.FragmentShaderBit | PipelineStageFlags.ColorAttachmentOutputBit,
+            0, 0, null, 0, null, 2, into);
+
+        var context = new VulkanFilterContext
+        {
+            Device = _renderer.Dev,
+            Commands = _render,
+            Source = sourceImage,
+            SourceFormat = sourceFormat,
+            SourceExtent = new Extent2D((uint)source.Width, (uint)source.Height),
+            Target = entry.Image,
+            TargetFormat = Format.B8G8R8A8Unorm,
+            TargetExtent = new Extent2D((uint)_target.Width, (uint)_target.Height),
+            Viewport = new Box(0, 0, _target.Width, _target.Height),
+            Options = options,
+        };
+        var recorded = vulkanFilter.Record(in context);
+
+        var back = stackalloc ImageMemoryBarrier[2];
+        back[0] = new ImageMemoryBarrier
+        {
+            SType = StructureType.ImageMemoryBarrier,
+            SrcAccessMask = AccessFlags.ShaderReadBit,
+            DstAccessMask = AccessFlags.MemoryReadBit | AccessFlags.MemoryWriteBit,
+            OldLayout = ImageLayout.ShaderReadOnlyOptimal,
+            NewLayout = ImageLayout.General,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = sourceImage,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        back[1] = new ImageMemoryBarrier
+        {
+            SType = StructureType.ImageMemoryBarrier,
+            SrcAccessMask = AccessFlags.ColorAttachmentWriteBit,
+            DstAccessMask = AccessFlags.MemoryReadBit | AccessFlags.MemoryWriteBit,
+            OldLayout = ImageLayout.ColorAttachmentOptimal,
+            NewLayout = ImageLayout.General,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = entry.Image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        vk.CmdPipelineBarrier(
+            _render,
+            PipelineStageFlags.FragmentShaderBit | PipelineStageFlags.ColorAttachmentOutputBit,
+            PipelineStageFlags.AllCommandsBit,
+            0, 0, null, 0, null, 2, back);
+
+        var passBegin = new RenderPassBeginInfo
+        {
+            SType = StructureType.RenderPassBeginInfo,
+            RenderPass = _renderer.OnePass,
+            Framebuffer = entry.Framebuffer,
+            RenderArea = _area,
+        };
+        vk.CmdBeginRenderPass(_render, in passBegin, SubpassContents.Inline);
+        var viewport = new Viewport(0, 0, _target.Width, _target.Height, 0, 1);
+        vk.CmdSetViewport(_render, 0, 1, in viewport);
+        _boundKind = -1;
+
+        return recorded;
+    }
+
     private static float LinearizePremultiplied(float premultiplied, float alpha)
     {
         var straight = alpha > 0 ? Math.Clamp(premultiplied / alpha, 0f, 1f) : 0f;

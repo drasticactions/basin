@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Rashader.Vulkan</PackageId>
+    <RootNamespace>Basin.Rashader.Vulkan</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>librashader output filter on the Basin Vulkan renderer.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Rashader/Basin.Rashader.csproj" />
+    <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

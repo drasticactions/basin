@@ -52,6 +52,7 @@ internal sealed partial class TinyComp :
     private SceneLayers _layers = null!;
     private readonly EffectsPolicy _effects;
     private PostEffects _post = null!;
+    private ScreenShader _shader = null!;
     private FeedbackEffects? _feedback;
     private IPixelShader? _dimShader;
     private bool _dimShaderTried;
@@ -473,6 +474,8 @@ internal sealed partial class TinyComp :
         _rendererName = rendererName;
         _post = new PostEffects(_renderer, rendererName, _log);
         _post.Configure(config);
+        _shader = new ScreenShader(_renderer, rendererName, _allocator, _log);
+        _shader.Configure(config);
         ApplyEffectShaders();
         ApplyCornerRadius(config.CornerRadius);
 
@@ -864,6 +867,7 @@ internal sealed partial class TinyComp :
         _feedback = null;
         _effects.Dispose();
         _post.Dispose();
+        _shader.Dispose();
         _shadowTexture?.Dispose();
         _dimShader?.Dispose();
         (_blurEffect as IDisposable)?.Dispose();

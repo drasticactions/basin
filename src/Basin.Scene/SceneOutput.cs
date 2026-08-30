@@ -273,6 +273,7 @@ public sealed class SceneOutput : IDisposable
         }
 
         DropPostBuffers();
+        DropFilterScratch();
         Ring.Dispose();
     }
 
@@ -325,6 +326,73 @@ public sealed class SceneOutput : IDisposable
         Ring.AddWhole();
         DamagePending?.Invoke();
         return true;
+    }
+
+    private IFrameFilter? _frameFilter;
+    private IAllocator? _filterAllocator;
+    private IBuffer? _filterScratch;
+    private ITexture? _filterTexture;
+    private IRenderer? _filterTextureRenderer;
+    private ulong _filterFrameCount;
+    private long _filterLastPresentNanos;
+
+    public IFrameFilter? FrameFilter => _frameFilter;
+
+    public void SetFrameFilter(IFrameFilter? filter, IAllocator? allocator = null)
+    {
+        _frameFilter = filter;
+        _filterAllocator = filter is null ? null : allocator;
+        DropFilterScratch();
+        if (_disposed)
+        {
+            return;
+        }
+
+        Ring.AddWhole();
+        DamagePending?.Invoke();
+    }
+
+    private void DropFilterScratch()
+    {
+        _filterTexture?.Dispose();
+        _filterTexture = null;
+        _filterTextureRenderer = null;
+        (_filterScratch as BufferBase)?.Destroy();
+        _filterScratch = null;
+    }
+
+    private IBuffer? EnsureFilterScratch(IRenderer renderer, OutputMode mode)
+    {
+        if (_filterScratch is { } existing && existing.Width == mode.Width && existing.Height == mode.Height)
+        {
+            return existing;
+        }
+
+        DropFilterScratch();
+        if (_filterAllocator is { } allocator)
+        {
+            var usable = allocator.Formats.Intersect(renderer.DmabufTextureFormats);
+            if (usable.Contains(DrmFormat.Xrgb8888))
+            {
+                ulong[] modifiers = [.. usable.ModifiersOf(DrmFormat.Xrgb8888)];
+                _filterScratch = allocator.Allocate(mode.Width, mode.Height, DrmFormat.Xrgb8888, modifiers, BufferUse.Render);
+            }
+        }
+
+        _filterScratch ??= new MemoryBuffer(mode.Width, mode.Height, DrmFormat.Xrgb8888);
+        return _filterScratch;
+    }
+
+    private ITexture? FilterTexture(IRenderer renderer, IBuffer scratch)
+    {
+        if (!ReferenceEquals(_filterTextureRenderer, renderer))
+        {
+            _filterTexture?.Dispose();
+            _filterTexture = null;
+            _filterTextureRenderer = renderer;
+        }
+
+        return _filterTexture ??= renderer.ImportTexture(scratch);
     }
 
     private void EnsurePostBuffers(OutputMode mode)
@@ -445,7 +513,15 @@ public sealed class SceneOutput : IDisposable
             Ring.AddWhole();
         }
 
-        if (_postStages.Count == 0 && !_projection.IsTransformed && _replicationSource is null &&
+        var filter = _frameFilter is { IsSupported: true } installed && renderer.SupportsFrameFilters
+            ? installed
+            : null;
+        if (filter is not null && (filter.NeedsContinuousRepaint || (!Ring.IsEmpty && filter.NeedsFullFrame)))
+        {
+            Ring.AddWhole();
+        }
+
+        if (_postStages.Count == 0 && filter is null && !_projection.IsTransformed && _replicationSource is null &&
             options.AllowDirectScanout && _softwareCursor.Buffer is null && TryDirectScanout(state))
         {
             return true;
@@ -462,7 +538,7 @@ public sealed class SceneOutput : IDisposable
         _layers.Clear();
         var sendLayers = false;
         if (options.AllowPlaneOffload && !_projection.IsTransformed && _replicationSource is null &&
-            _softwareCursor.Buffer is null && _postStages.Count == 0)
+            _softwareCursor.Buffer is null && _postStages.Count == 0 && filter is null)
         {
             SelectOverlayCandidates(mode, options.MaxOffloadLayers);
         }
@@ -531,7 +607,11 @@ public sealed class SceneOutput : IDisposable
         }
 
         Ring.GetBufferDamage(age, _damage);
-        if (_postStages.Count > 0)
+        if (filter is not null)
+        {
+            RenderFiltered(renderer, filter, target, options, mode, tick);
+        }
+        else if (_postStages.Count > 0)
         {
             RenderWithPost(renderer, target, options, mode, tick);
         }
@@ -581,6 +661,11 @@ public sealed class SceneOutput : IDisposable
 
         (_offloadedPrev, _offloadedNow) = (_offloadedNow, _offloadedPrev);
         (_offloadedPrevBoxes, _offloadedNowBoxes) = (_offloadedNowBoxes, _offloadedPrevBoxes);
+        if (filter is { NeedsContinuousRepaint: true })
+        {
+            _damagedDuringCommit = true;
+        }
+
         return true;
     }
 
@@ -958,7 +1043,8 @@ public sealed class SceneOutput : IDisposable
     private static extern int CloseFd(int fd);
 
     private void RenderWithPost(
-        IRenderer renderer, IBuffer target, in SceneCommitOptions options, OutputMode mode, in FrameTick tick)
+        IRenderer renderer, IBuffer target, in SceneCommitOptions options, OutputMode mode, in FrameTick tick,
+        bool drawCursor = true)
     {
         EnsurePostBuffers(mode);
         Render(renderer, _postA!, options, drawCursor: false);
@@ -971,14 +1057,14 @@ public sealed class SceneOutput : IDisposable
             var texture = PostTexture(renderer, source);
             if (texture is null)
             {
-                Render(renderer, target, options);
+                Render(renderer, target, options, drawCursor);
                 return;
             }
 
             (texture as IRefreshableTexture)?.MarkDirty();
             var pass = renderer.BeginBufferPass(stageTarget, new RenderPassOptions());
             _postStages[i].Render(pass, texture, new PostContext(mode.Width, mode.Height, tick, _postDamage));
-            if (last)
+            if (last && drawCursor)
             {
                 DrawSoftwareCursor(renderer, pass);
             }
@@ -990,6 +1076,72 @@ public sealed class SceneOutput : IDisposable
             }
         }
     }
+
+    private void RenderFiltered(
+        IRenderer renderer, IFrameFilter filter, IBuffer target, in SceneCommitOptions options,
+        OutputMode mode, in FrameTick tick)
+    {
+        var scratch = EnsureFilterScratch(renderer, mode);
+        var texture = scratch is null ? null : FilterTexture(renderer, scratch);
+        if (scratch is null || texture is null)
+        {
+            if (_postStages.Count > 0)
+            {
+                RenderWithPost(renderer, target, options, mode, tick);
+            }
+            else
+            {
+                Render(renderer, target, options);
+            }
+
+            return;
+        }
+
+        if (_postStages.Count > 0)
+        {
+            RenderWithPost(renderer, scratch, options, mode, tick, drawCursor: false);
+        }
+        else
+        {
+            Render(renderer, scratch, options, drawCursor: false);
+        }
+
+        (texture as IRefreshableTexture)?.MarkDirty();
+        _filterFrameCount++;
+        var delta = _filterLastPresentNanos > 0 && tick.TargetPresentNanos > _filterLastPresentNanos
+            ? (uint)Math.Min((tick.TargetPresentNanos - _filterLastPresentNanos) / 1_000_000, 1000)
+            : 0u;
+        _filterLastPresentNanos = tick.TargetPresentNanos;
+        var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
+        var recorded = pass.AddFrameFilter(filter, texture, new FrameFilterOptions
+        {
+            FrameCount = _filterFrameCount,
+            FramesPerSecond = tick.RefreshIntervalNanos > 0
+                ? (float)(1_000_000_000.0 / tick.RefreshIntervalNanos)
+                : 0f,
+            FrametimeDeltaMillis = delta,
+            Rotation = RotationOf(Output.Transform),
+        });
+        if (!recorded)
+        {
+            pass.AddTexture(texture, new TextureRenderOptions
+            {
+                DstBox = new Box(0, 0, mode.Width, mode.Height),
+                Opaque = true,
+            });
+        }
+
+        DrawSoftwareCursor(renderer, pass);
+        pass.Submit();
+    }
+
+    private static uint RotationOf(OutputTransform transform) => transform switch
+    {
+        OutputTransform.Rotate90 or OutputTransform.Flipped90 => 1,
+        OutputTransform.Rotate180 or OutputTransform.Flipped180 => 2,
+        OutputTransform.Rotate270 or OutputTransform.Flipped270 => 3,
+        _ => 0,
+    };
 
     private void DrawSoftwareCursor(IRenderer renderer, IRenderPass pass)
     {
@@ -1229,7 +1381,9 @@ public sealed class SceneOutput : IDisposable
             DamagePending?.Invoke();
         }
 
-        if (Output.Scale != _scale || (_replicationSource is null && Output.Transform != _projection.Transform))
+        if (Output.Scale != _scale ||
+            (fields & OutputStateFields.AspectRatio) != 0 ||
+            (_replicationSource is null && Output.Transform != _projection.Transform))
         {
             _scale = Output.Scale;
             _projection = ComputeProjection();

@@ -27,6 +27,9 @@
     <Project Path="src/Basin.Desktop/Basin.Desktop.csproj" />
     <Project Path="src/Basin.Host/Basin.Host.csproj" />
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <Project Path="src/Basin.Rashader/Basin.Rashader.csproj" />
+    <Project Path="src/Basin.Rashader.Gl/Basin.Rashader.Gl.csproj" />
+    <Project Path="src/Basin.Rashader.Vulkan/Basin.Rashader.Vulkan.csproj" />
     <Project Path="src/Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
     <Project Path="src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
     <Project Path="src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />

@@ -28,6 +28,13 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (loaded.Shaders.Count > 0 && !Basin.Rashader.RashaderLibrary.IsAvailable(out var shaderWhy))
+        {
+            _log.Error($"reload failed, keeping the running config: [effects] shader: {shaderWhy}");
+            BasinReport.Line("RELOAD failed");
+            return;
+        }
+
         var restart = new List<string>();
 
         void Restarts(string key, bool changed)
@@ -92,12 +99,19 @@ internal sealed partial class TinyComp
             {
                 SetOutputScale(view, wanted);
             }
+
+            var aspect = _config.OutputSettingFor(view.Output.Name)?.Aspect ?? 0;
+            if (aspect != view.Output.AspectRatio)
+            {
+                SetOutputAspect(view, aspect);
+            }
         }
 
         ApplyNightLight(loaded.NightLight);
         ApplyFrameStyle(loaded.FrameStyle);
         ApplyCornerRadius(loaded.CornerRadius);
         ApplyPostStages(loaded);
+        ApplyScreenShader(loaded);
         ApplyEffectSettings(loaded);
 
         foreach (var view in Views)
@@ -151,6 +165,7 @@ internal sealed partial class TinyComp
         if (view.Scene is { } output)
         {
             _post.Apply(output);
+            _shader.Apply(output);
         }
     }
 
@@ -171,6 +186,18 @@ internal sealed partial class TinyComp
             if (view.Scene is { } output)
             {
                 _post.Apply(output);
+            }
+        }
+    }
+
+    private void ApplyScreenShader(Config config)
+    {
+        _shader.Configure(config);
+        foreach (var view in Views)
+        {
+            if (view.Scene is { } output)
+            {
+                _shader.Apply(output);
             }
         }
     }

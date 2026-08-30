@@ -18,5 +18,7 @@ public interface IRenderPass
     {
     }
 
+    bool AddFrameFilter(IFrameFilter filter, ITexture source, in FrameFilterOptions options) => false;
+
     bool Submit();
 }

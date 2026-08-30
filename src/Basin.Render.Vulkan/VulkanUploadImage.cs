@@ -70,6 +70,7 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         _bytesPerPixel = format.BytesPerPixel();
         HasAlpha = format.HasAlpha();
         var vkFormat = props.Entry.Vk;
+        VkFormat = vkFormat;
 
         var mutableSrgb = props.ShmHasMutableSrgb && props.Entry.HasSrgb;
         var viewFormats = stackalloc Format[2] { props.Entry.Vk, props.Entry.VkSrgb };
@@ -137,6 +138,8 @@ public sealed unsafe class VulkanUploadImage : IDisposable
     }
 
     public Image Image { get; }
+
+    public Format VkFormat { get; }
 
     public ImageView View { get; }
 

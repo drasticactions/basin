@@ -98,6 +98,12 @@ internal sealed class Config
 
     public IReadOnlyList<string> Post { get; set; } = [];
 
+    public IReadOnlyList<ShaderSetting> Shaders { get; set; } = [];
+
+    public bool ShaderContinuous { get; set; }
+
+    private static readonly Dictionary<string, double> EmptyShaderParams = [];
+
     public HashSet<string> FromFlags { get; } = new(StringComparer.Ordinal);
 
     public HashSet<string> FromFile { get; } = new(StringComparer.Ordinal);
@@ -340,6 +346,8 @@ internal sealed class Config
                 _ => ZoomTracking.Proportional,
             };
             Post = PostStages(effects, log);
+            Shaders = ShaderPresets(effects, log);
+            ShaderContinuous = effects.Flag("shader_continuous", ShaderContinuous);
         }
 
         if (reader.Free("output") is { } outputs)
@@ -447,6 +455,7 @@ internal sealed class Config
     private static OutputSetting ParseOutputSetting(string name, TomlTable table, BasinLogger log)
     {
         double? scale = null;
+        double? aspect = null;
         OutputTransform? transform = null;
         (int Width, int Height, int? Refresh)? mode = null;
         foreach (var (key, value) in table)
@@ -458,6 +467,15 @@ internal sealed class Config
                     break;
                 case "scale" when value is long integer:
                     scale = integer;
+                    break;
+                case "aspect" when value is double fractional:
+                    aspect = fractional;
+                    break;
+                case "aspect" when value is long integer:
+                    aspect = integer;
+                    break;
+                case "aspect" when value is string text:
+                    aspect = ParseAspect(text, name, log);
                     break;
                 case "transform" when value is string text:
                     transform = ParseTransform(text, name, log);
@@ -471,7 +489,21 @@ internal sealed class Config
             }
         }
 
-        return new OutputSetting { Scale = scale, Transform = transform, Mode = mode };
+        return new OutputSetting { Scale = scale, Aspect = aspect, Transform = transform, Mode = mode };
+    }
+
+    private static double? ParseAspect(string text, string name, BasinLogger log)
+    {
+        var parts = text.Split(':');
+        if (parts.Length == 2 &&
+            double.TryParse(parts[0], out var width) && double.TryParse(parts[1], out var height) &&
+            width > 0 && height > 0)
+        {
+            return width / height;
+        }
+
+        log.Warn($"[output.\"{name}\"] aspect \"{text}\" is not W:H or a number, ignored");
+        return null;
     }
 
     private static OutputTransform? ParseTransform(string text, string name, BasinLogger log)
@@ -548,5 +580,54 @@ internal sealed class Config
         }
 
         return chosen;
+    }
+
+    private static IReadOnlyList<ShaderSetting> ShaderPresets(TomlReader effects, BasinLogger log)
+    {
+        _ = effects.Table.TryGetValue("shader", out var raw);
+        if (raw is TomlTableArray)
+        {
+            var entries = new List<ShaderSetting>();
+            foreach (var row in effects.Sections("shader"))
+            {
+                var path = row.Text("path");
+                var parameters = ShaderParameters(row, "params");
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    log.Warn($"effects.shader: an entry names no path, ignored");
+                    continue;
+                }
+
+                entries.Add(new ShaderSetting(path, parameters));
+            }
+
+            if (ShaderParameters(effects, "shader_params").Count > 0)
+            {
+                log.Warn($"effects.shader_params is ignored with [[effects.shader]]; put params on each entry");
+            }
+
+            return entries;
+        }
+
+        var text = effects.Text("shader");
+        var single = string.IsNullOrWhiteSpace(text) || text is "none" or "false" ? null : text;
+        var singleParameters = ShaderParameters(effects, "shader_params");
+        return single is null ? [] : [new ShaderSetting(single, singleParameters)];
+    }
+
+    private static IReadOnlyDictionary<string, double> ShaderParameters(TomlReader reader, string key)
+    {
+        if (reader.Section(key) is not { } table)
+        {
+            return EmptyShaderParams;
+        }
+
+        var values = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var name in table.Table.Keys.ToArray())
+        {
+            values[name] = table.Number(name, 0.0);
+        }
+
+        return values;
     }
 }

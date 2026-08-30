@@ -225,6 +225,8 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     public bool SupportsBackdropEffects => true;
 
+    public bool SupportsFrameFilters => true;
+
     private readonly Dictionary<ulong, DescriptorAllocation> _effectSets = [];
 
     internal DescriptorSet EffectSetFor(ImageView view)

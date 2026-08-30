@@ -19,6 +19,10 @@ internal sealed class VulkanShmTexture : ITexture, IRefreshableTexture, IVulkanR
 
     internal bool NeedsShaderDecode => _upload.NeedsShaderDecode;
 
+    internal Image Image => _upload.Image;
+
+    internal Format VkFormat => _upload.VkFormat;
+
     internal VulkanShmTexture(VulkanRenderer renderer, IBuffer buffer)
     {
         _renderer = renderer;

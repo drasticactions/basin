@@ -5,7 +5,7 @@ namespace Basin.Render.Vulkan;
 
 internal sealed unsafe class VulkanCommandPool : IDisposable
 {
-    private const int Slots = 8;
+    internal const int Slots = 8;
 
     private struct Slot
     {

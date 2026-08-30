@@ -57,6 +57,8 @@ public sealed unsafe class GlRenderer : IRenderer
 
     public bool SupportsBackdropEffects => true;
 
+    public bool SupportsFrameFilters => true;
+
     public bool WaitsOnGpu => _device.WaitsOnGpu;
 
     public RenderFencePrecision FencePrecision => RenderFencePrecision.Context;

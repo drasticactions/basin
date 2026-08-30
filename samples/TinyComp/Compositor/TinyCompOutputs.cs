@@ -109,6 +109,12 @@ internal sealed partial class TinyComp
     {
         view.Tag = new OutputPolicy();
         _presenceTracker.AddOutput(view.Output, view.Global);
+        if (_config.OutputSettingFor(view.Output.Name)?.Aspect is { } aspect && aspect > 0 &&
+            view.Output.AspectRatio != aspect)
+        {
+            SetOutputAspect(view, aspect);
+        }
+
         InitWorkspaces(view);
         if (view.Scene is { } sceneOutput)
         {
@@ -214,6 +220,11 @@ internal sealed partial class TinyComp
             if (setting.Transform is { } transform)
             {
                 state.SetTransform(transform);
+            }
+
+            if (setting.Aspect is { } aspect)
+            {
+                state.SetAspectRatio(aspect);
             }
         }
 
@@ -525,6 +536,19 @@ internal sealed partial class TinyComp
         }
 
         BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
+        RefreshOutputLayout();
+    }
+
+    private void SetOutputAspect(OutputView view, double aspect)
+    {
+        _driver.SetAspectRatio(view, aspect);
+        if (view.Output.AspectRatio != aspect)
+        {
+            return;
+        }
+
+        var (width, height) = view.Output.LogicalSize();
+        BasinReport.Line($"ASPECT {view.Output.Name} {aspect} logical={width}x{height}");
         RefreshOutputLayout();
     }
 

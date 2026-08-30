@@ -27,9 +27,24 @@ public static class OutputScaling
 
     public static (int Width, int Height) LogicalSize(this IOutput output)
     {
+        var box = output.ContentBox();
+        return ((int)Math.Round(box.Width / output.Scale), (int)Math.Round(box.Height / output.Scale));
+    }
+
+    public static Box ContentBox(this IOutput output)
+    {
         var mode = output.CurrentMode;
-        var width = (int)Math.Round(mode.Width / output.Scale);
-        var height = (int)Math.Round(mode.Height / output.Scale);
-        return output.Transform.SwapsAxes() ? (height, width) : (width, height);
+        var (width, height) = output.Transform.SwapsAxes()
+            ? (mode.Height, mode.Width)
+            : (mode.Width, mode.Height);
+        var aspect = output.AspectRatio;
+        if (aspect <= 0 || width <= 0 || height <= 0)
+        {
+            return new Box(0, 0, width, height);
+        }
+
+        var fitWidth = Math.Min(width, (int)Math.Round(height * aspect));
+        var fitHeight = Math.Min(height, (int)Math.Round(width / aspect));
+        return new Box((width - fitWidth) / 2, (height - fitHeight) / 2, fitWidth, fitHeight);
     }
 }

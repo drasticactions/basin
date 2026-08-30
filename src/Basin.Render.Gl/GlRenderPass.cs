@@ -98,6 +98,63 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         DrawClipped(clip);
     }
 
+    public bool AddFrameFilter(IFrameFilter filter, ITexture source, in FrameFilterOptions options)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        if (filter is not IGlFilter glFilter)
+        {
+            throw new ArgumentException("filter does not belong to this renderer");
+        }
+
+        if (!glFilter.IsSupported)
+        {
+            return false;
+        }
+
+        uint sourceId;
+        switch (source)
+        {
+            case GlDmabufTexture dmabuf:
+                sourceId = dmabuf.TextureId;
+                if (!dmabuf.SampledThisPass)
+                {
+                    dmabuf.SampledThisPass = true;
+                    _sampled.Add(dmabuf);
+                }
+
+                break;
+            case GlShmTexture shm:
+                if (!shm.Acquire(out sourceId))
+                {
+                    return false;
+                }
+
+                break;
+            default:
+                throw new ArgumentException("texture does not belong to this renderer");
+        }
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, sourceId);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, 0);
+
+        var context = new GlFilterContext
+        {
+            Device = _renderer.Device,
+            Source = sourceId,
+            SourceWidth = source.Width,
+            SourceHeight = source.Height,
+            Target = _entry!.TargetTexture,
+            TargetWidth = _target.Width,
+            TargetHeight = _target.Height,
+            Viewport = new Box(0, 0, _target.Width, _target.Height),
+            Options = options,
+        };
+        var recorded = glFilter.Record(in context);
+        BindPassState();
+        return recorded;
+    }
+
     private uint _backdropCopyTexture;
     private uint _backdropCopyFbo;
     private int _backdropCopyWidth;

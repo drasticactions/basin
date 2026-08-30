@@ -53,9 +53,10 @@ public readonly record struct OutputProjection
         ArgumentNullException.ThrowIfNull(output);
         var mode = output.CurrentMode;
         var transform = output.Transform;
+        var content = output.ContentBox();
         return transform.SwapsAxes()
-            ? new OutputProjection(output.Scale, transform, mode.Height, mode.Width)
-            : new OutputProjection(output.Scale, transform, mode.Width, mode.Height);
+            ? new OutputProjection(output.Scale, transform, mode.Height, mode.Width, -content.X, -content.Y)
+            : new OutputProjection(output.Scale, transform, mode.Width, mode.Height, -content.X, -content.Y);
     }
 
     public OutputProjection CroppedTo(int originX, int originY) =>

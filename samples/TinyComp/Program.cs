@@ -44,6 +44,12 @@ internal static class Program
         {
             cli.ConfigureLogging(result);
             settings = Config.Load(result.GetValue(configPath), BasinLog.For("TinyComp"), out fatal);
+            if (fatal is null && settings.Shaders.Count > 0 &&
+                !Basin.Rashader.RashaderLibrary.IsAvailable(out var shaderWhy))
+            {
+                fatal = $"[effects] shader: {shaderWhy}";
+            }
+
             if (fatal is not null)
             {
                 return;

@@ -173,6 +173,8 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
 
     public int DrmFd => _nodeFd;
 
+    public int FramesInFlight => VulkanCommandPool.Slots;
+
     public string DevicePath { get; }
 
     internal readonly VulkanFormatTable FormatTable;

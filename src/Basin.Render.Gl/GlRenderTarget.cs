@@ -17,6 +17,8 @@ public sealed unsafe class GlRenderTarget
 
     public uint ColorTexture => IsCpuReadback ? 0u : _textureOrRenderbuffer;
 
+    public uint TargetTexture => _textureOrRenderbuffer;
+
     public DmabufAttributes Attributes { get; private set; }
 
     private uint _textureOrRenderbuffer;

@@ -27,4 +27,5 @@ public enum OutputStateFields
     CustomModes = 1 << 18,
     Sharpness = 1 << 19,
     AbmLevel = 1 << 20,
+    AspectRatio = 1 << 21,
 }

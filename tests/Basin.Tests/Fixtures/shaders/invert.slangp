@@ -1,0 +1,9 @@
+shaders = 2
+
+shader0 = passthrough.slang
+scale_type0 = source
+scale0 = 1.0
+filter_linear0 = false
+
+shader1 = invert.slang
+filter_linear1 = false
