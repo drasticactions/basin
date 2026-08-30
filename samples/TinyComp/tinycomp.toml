@@ -3,6 +3,13 @@ renderer      = "vulkan"     # --renderer
 outputs       = 1            # --outputs
 scale         = []           # --scale, one entry per output; empty asks the outputs
 
+# Per-output settings, by connector name. A key that is absent stays automatic,
+# and the [compositor] scale array above beats a matching section here.
+# [output."DP-1"]
+# scale     = 1.5
+# transform = "normal"        # normal | 90 | 180 | 270 | flipped | flipped-90 | flipped-180 | flipped-270
+# mode      = "3840x2560@60"  # WIDTHxHEIGHT or WIDTHxHEIGHT@HZ
+
 [frame]
 style         = "flat"       # beos | flat | none
 corner_radius = 0            # logical pixels

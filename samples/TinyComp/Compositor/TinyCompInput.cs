@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -26,13 +27,13 @@ internal sealed partial class TinyComp
 
     private void AimTool(Basin.Desktop.TabletManager.TabletTool tool, Basin.Capabilities.TabletToolAxes axes)
     {
-        if (_views.Count == 0)
+        if (Views.Count == 0)
         {
             return;
         }
 
         _idle.NotifyActivity();
-        Basin.Desktop.TabletAiming.AimAt(tool, _scene, _layout, _cursor.CursorOutput ?? _views[0].Output, axes);
+        Basin.Desktop.TabletAiming.AimAt(tool, _scene, _layout, _cursor.CursorOutput ?? Views[0].Output, axes);
     }
 
     private void WireLibinput(Basin.Backend.Libinput.LibinputBackend input)

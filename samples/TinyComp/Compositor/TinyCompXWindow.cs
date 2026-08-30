@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -346,8 +347,8 @@ internal sealed partial class TinyComp
                 return;
             }
 
-            var view = _comp._views.FirstOrDefault(v => _comp._layout.OutputAt(_comp._cursorX, _comp._cursorY) == v.Output)
-                ?? _comp._views[0];
+            var view = _comp.Views.FirstOrDefault(v => _comp._layout.OutputAt(_comp._cursorX, _comp._cursorY) == v.Output)
+                ?? _comp.Views[0];
             _restore = _restore.Saving(new Box(XWin.X, XWin.Y, XWin.Width, XWin.Height));
             _maximized = true;
             ApplyMaximizeGeometry(view);
@@ -368,13 +369,13 @@ internal sealed partial class TinyComp
 
         public void ReapplyPinnedGeometry()
         {
-            if (!_maximized || _comp._views.Count == 0)
+            if (!_maximized || _comp.Views.Count == 0)
             {
                 return;
             }
 
-            var view = _comp._views.FirstOrDefault(v => _comp._layout.OutputAt(X + 1, Y + 1) == v.Output)
-                ?? _comp._views[0];
+            var view = _comp.Views.FirstOrDefault(v => _comp._layout.OutputAt(X + 1, Y + 1) == v.Output)
+                ?? _comp.Views[0];
             ApplyMaximizeGeometry(view);
         }
 

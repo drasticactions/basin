@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -90,7 +91,7 @@ internal sealed partial class TinyComp
     private void RestoreWorkspace(Window window, Box geometry, string name)
     {
         var output = _layout.OutputAt(geometry.X + (geometry.Width / 2.0), geometry.Y + (geometry.Height / 2.0));
-        var view = _views.FirstOrDefault(v => v.Output == output) ?? ViewAtCursor();
+        var view = Views.FirstOrDefault(v => v.Output == output) ?? ViewAtCursor();
         if (view is null)
         {
             return;
@@ -107,7 +108,7 @@ internal sealed partial class TinyComp
 
     internal void PlaceCascade(IGrabTarget window)
     {
-        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
         var usable = view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea;
         var slot = _windows.Count % 8;
@@ -128,7 +129,7 @@ internal sealed partial class TinyComp
             return false;
         }
 
-        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
         if (width > 0 && height > 0)
         {
@@ -244,14 +245,14 @@ internal sealed partial class TinyComp
 
     internal void RingBell()
     {
-        if (_feedback is null || _views.Count == 0)
+        if (_feedback is null || Views.Count == 0)
         {
             return;
         }
 
         var box = _focused?.Tree is { IsDestroyed: false }
             ? new Box(_focused.X, _focused.Y, Math.Max(_focused.GeometrySize.Width, 1), Math.Max(_focused.GeometrySize.Height, 1))
-            : _layout.BoxOf(_views[0].Output);
+            : _layout.BoxOf(Views[0].Output);
         if (_feedback.Bell(box, EffectTick()))
         {
             ScheduleEffectRepaint();
@@ -263,7 +264,7 @@ internal sealed partial class TinyComp
 
     private void ScheduleEffectRepaint()
     {
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
             view.Scheduler?.ScheduleRepaint();
         }
@@ -306,7 +307,6 @@ internal sealed partial class TinyComp
 
     private const int NotificationTravel = 400;
 
-    private readonly Dictionary<OutputView, OutputTransform> _transforms = [];
 
     internal void SetMinimized(Window window, bool minimized)
     {
@@ -454,7 +454,7 @@ internal sealed partial class TinyComp
                 popup,
                 _layers.Top,
                 origin: () => PopupContentOrigin(popup),
-                constrainBox: () => _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? _views[0].Output));
+                constrainBox: () => _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? Views[0].Output));
         }
 
         popup.Xdg.Mapped += () =>
@@ -462,7 +462,7 @@ internal sealed partial class TinyComp
             RefreshSurfaceLuts();
             var origin = ParentOrigin(popup);
             var output = _layout.OutputAt(origin.X + popup.Geometry.X, origin.Y + popup.Geometry.Y)
-                ?? _views[0].Output;
+                ?? Views[0].Output;
             _fractionalScale.AnnounceScale(popup.Surface, output.Scale);
         };
     }
@@ -609,14 +609,14 @@ internal sealed partial class TinyComp
     {
         _layerDriver = new Basin.Desktop.LayerShellSceneDriver(_layerShell, _layout, _layers)
         {
-            DefaultOutput = _ => _views.Count > 0
-                ? (_views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0]).Global
+            DefaultOutput = _ => Views.Count > 0
+                ? (Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0]).Global
                 : null,
         };
         _layerDriver.TrackPopups(_shell);
         _layerDriver.PopupSceneCreated += (_, _, _) => RefreshSurfaceLuts();
         _layerDriver.PopupBounds = _ =>
-            _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? _views[0].Output);
+            _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? Views[0].Output);
         _layerDriver.SceneCreated += (layer, scene) =>
         {
             RefreshSurfaceLuts();
@@ -639,7 +639,7 @@ internal sealed partial class TinyComp
         };
         _layerDriver.UsableAreaChanged += (output, usable) =>
         {
-            foreach (var view in _views)
+            foreach (var view in Views)
             {
                 if (view.Output != output)
                 {

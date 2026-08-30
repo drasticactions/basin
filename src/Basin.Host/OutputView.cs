@@ -21,7 +21,7 @@ public sealed class OutputView
 
     public Swapchain? Swapchain { get; internal set; }
 
-    public IAllocator? Allocator { get; internal set; }
+    public IAllocator? Allocator { get; set; }
 
     public ulong[] SwapModifiers { get; internal set; } = [DrmFormatSet.ModifierLinear];
 
@@ -32,6 +32,12 @@ public sealed class OutputView
     public int Height { get; internal set; }
 
     public double Scale { get; internal set; } = 1;
+
+    public OutputTransform Transform { get; internal set; }
+
+    public OutputView? ReplicaSource { get; set; }
+
+    public bool IsSecondary { get; internal set; }
 
     public Box Box { get; internal set; }
 

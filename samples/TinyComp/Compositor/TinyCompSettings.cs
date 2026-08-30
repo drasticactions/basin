@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -77,16 +78,19 @@ internal sealed partial class TinyComp
         _useTransactions = loaded.Transactions;
         _offload = loaded.Offload;
         _damageTint = loaded.DamageTint;
+        _driver.AllowPlaneOffload = _offload;
+        _driver.DebugDamageTint = _damageTint;
         ApplyEffectShaders();
 
         _scales = loaded.Scales;
-        for (var i = 0; i < _views.Count; i++)
+        _driver.Scales = loaded.Scales;
+        for (var i = 0; i < Views.Count; i++)
         {
-            var view = _views[i];
-            var scale = FollowedScaleFor(i, view.Output);
-            if (scale != view.Output.Scale)
+            var view = Views[i];
+            var scale = ReloadScaleFor(i, view.Output);
+            if (scale is { } wanted && wanted != view.Output.Scale)
             {
-                SetOutputScale(view, scale);
+                SetOutputScale(view, wanted);
             }
         }
 
@@ -96,9 +100,9 @@ internal sealed partial class TinyComp
         ApplyPostStages(loaded);
         ApplyEffectSettings(loaded);
 
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
-            if (view.SceneOutput is not null && view.LastPresentedBuffer is { } presented)
+            if (view.Scene is not null && view.LastPresentedBuffer is { } presented)
             {
                 _ = _post.BeginCrossfade(presented, EffectTick());
             }
@@ -111,6 +115,11 @@ internal sealed partial class TinyComp
             + " rules-apply-to-windows-mapped-after-this"
             + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}"));
     }
+
+    private double? ReloadScaleFor(int index, IOutput output) =>
+        _scales.Length > 0 ? _scales[Math.Min(index, _scales.Length - 1)]
+        : _config.OutputSettingFor(output.Name)?.Scale
+            ?? (output is Basin.Backend.Wayland.WaylandOutput hosted ? hosted.HostScale : null);
 
     private void ApplyFrameStyle(FrameStyle style)
     {
@@ -139,7 +148,7 @@ internal sealed partial class TinyComp
 
     private void AddPostStage(OutputView view)
     {
-        if (view.SceneOutput is { } output)
+        if (view.Scene is { } output)
         {
             _post.Apply(output);
         }
@@ -147,9 +156,9 @@ internal sealed partial class TinyComp
 
     private void ApplyPostStages(Config config)
     {
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
-            if (view.SceneOutput is { } output)
+            if (view.Scene is { } output)
             {
                 _post.Remove(output);
             }
@@ -157,9 +166,9 @@ internal sealed partial class TinyComp
 
         _post.Configure(config);
 
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
-            if (view.SceneOutput is { } output)
+            if (view.Scene is { } output)
             {
                 _post.Apply(output);
             }

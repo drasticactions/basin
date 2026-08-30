@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -21,9 +22,9 @@ internal sealed partial class TinyComp
     private Basin.Desktop.SurfaceLutDriver _lutDriver = null!;
 
     private Basin.Capabilities.ImageDescription BlendDescription() =>
-        _views.Count == 0 || _views[0].KmsColorRouted
+        Views.Count == 0 || Views[0].KmsColorRouted
             ? Basin.Capabilities.ImageDescription.Srgb
-            : _views[0].ColorDescription;
+            : Views[0].ColorDescription;
 
     private void RefreshSurfaceLuts()
     {
@@ -53,7 +54,7 @@ internal sealed partial class TinyComp
             }
         }
 
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
             colorConfiguration.SetEdrDemand(view.Output, demand);
         }
@@ -64,7 +65,7 @@ internal sealed partial class TinyComp
     private void ApplyNightLight(double? kelvin)
     {
         _nightLightKelvin = kelvin;
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
             if (_gamma.RampSize(view.Output) > 0)
             {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -92,18 +93,18 @@ internal sealed partial class TinyComp
             case ["shot", var path]:
                 _shotPath = path;
                 _shotView = 0;
-                RenderOutput(_views[0]);
+                _driver.RepaintNow(Views[0]);
                 break;
             case ["shot", var path, var index]:
                 _shotPath = path;
                 _shotView = int.Parse(index);
-                RenderOutput(_views[_shotView]);
+                _driver.RepaintNow(Views[_shotView]);
                 break;
             case ["scale", var viewIndex, var factor]:
-                SetOutputScale(_views[int.Parse(viewIndex)], double.Parse(factor));
+                SetOutputScale(Views[int.Parse(viewIndex)], double.Parse(factor));
                 break;
             case ["shotraw", var path]:
-                DumpPresented(_views[0], path);
+                DumpPresented(Views[0], path);
                 break;
             case ["where"]:
                 foreach (var window in _windows)
@@ -166,9 +167,9 @@ internal sealed partial class TinyComp
             case ["stats"]:
                 BasinReport.Line($"STATS transactions={_useTransactions} timedout={Transaction.TimedOutCount}");
                 BasinReport.Line($"STATS cursor theme={(_cursor.Images?.HasTheme == true ? _cursor.Images.Size.ToString() : "none")} " + $"showing={_cursor.Showing} " + $"on={(_cursor.CursorOutput?.Name ?? "none")}");
-                foreach (var view in _views)
+                foreach (var view in Views)
                 {
-                    var so = view.SceneOutput;
+                    var so = view.Scene;
                     BasinReport.Line(so is null
                         ? $"STATS {view.Output.Name} full-repaint scale={view.Output.Scale}"
                         : $"STATS {view.Output.Name} scanout={so.ScanoutCommits} composed={so.ComposedCommits} skipped={so.SkippedCommits} direct={so.IsDirectScanout} offload={so.OffloadedLayers}/{so.OffloadCommits} swcursor={_cursor.IsSoftwareOn(view.Output)} scale={view.Output.Scale}");
@@ -252,7 +253,7 @@ internal sealed partial class TinyComp
 
     private void MaybeScreenshot(OutputView view)
     {
-        if (_shotPath is null || view != _views[_shotView])
+        if (_shotPath is null || view != Views[_shotView])
         {
             return;
         }
@@ -538,7 +539,7 @@ internal sealed partial class TinyComp
                 return;
             }
 
-            var output = _layout.OutputAt(_cursorX, _cursorY) ?? _views[0].Output;
+            var output = _layout.OutputAt(_cursorX, _cursorY) ?? Views[0].Output;
             var box = _layout.BoxOf(output);
             var focused = _focused is not null ? _switcherWindows.IndexOf(_focused)
                 : _focusedX is not null ? _switcherWindows.IndexOf(_focusedX)

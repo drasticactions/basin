@@ -1,4 +1,5 @@
 using Basin;
+using Basin.Host;
 using Basin.Capabilities;
 using Basin.Scene;
 using Basin.Seat;
@@ -72,17 +73,17 @@ internal sealed partial class TinyComp
 
         public int EnumerateGroups(Span<WorkspaceGroupInfo> groups)
         {
-            if (_comp._views.Count > groups.Length)
+            if (_comp.Views.Count > groups.Length)
             {
                 return -1;
             }
 
-            for (var i = 0; i < _comp._views.Count; i++)
+            for (var i = 0; i < _comp.Views.Count; i++)
             {
-                groups[i] = new WorkspaceGroupInfo(_comp._views[i].GroupId, ClientsCanCreateWorkspaces: true);
+                groups[i] = new WorkspaceGroupInfo(_comp.Views[i].GroupId, ClientsCanCreateWorkspaces: true);
             }
 
-            return _comp._views.Count;
+            return _comp.Views.Count;
         }
 
         public int EnumerateWorkspaces(ulong groupId, Span<WorkspaceInfo> workspaces)
@@ -220,13 +221,13 @@ internal sealed partial class TinyComp
         }
     }
 
-    private OutputView? ViewOfGroup(ulong groupId) => _views.FirstOrDefault(v => v.GroupId == groupId);
+    private OutputView? ViewOfGroup(ulong groupId) => Views.FirstOrDefault(v => v.GroupId == groupId);
 
-    private OutputView? ViewOf(Workspace workspace) => _views.FirstOrDefault(v => v.Workspaces.Contains(workspace));
+    private OutputView? ViewOf(Workspace workspace) => Views.FirstOrDefault(v => v.Workspaces.Contains(workspace));
 
     private (OutputView View, Workspace Workspace)? FindWorkspace(ulong id)
     {
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
             if (view.Workspaces.ById(id) is { } workspace)
             {
@@ -290,7 +291,7 @@ internal sealed partial class TinyComp
     }
 
     private OutputView? ViewAt(double x, double y) =>
-        _views.Count == 0 ? null : _views.FirstOrDefault(v => _layout.OutputAt(x, y) == v.Output) ?? _views[0];
+        Views.Count == 0 ? null : Views.FirstOrDefault(v => _layout.OutputAt(x, y) == v.Output) ?? Views[0];
 
     private OutputView? ViewAtCursor() => ViewAt(_cursorX, _cursorY);
 
@@ -453,7 +454,7 @@ internal sealed partial class TinyComp
         view.Active = target;
         if (current is not null && !sliding)
         {
-            if (_effects.SlideEnabled && view.SceneOutput is not null && !current.Tree.IsDestroyed)
+            if (_effects.SlideEnabled && view.Scene is not null && !current.Tree.IsDestroyed)
             {
                 FinishPendingSlide(except: target);
                 if (direction == 0)
@@ -551,7 +552,7 @@ internal sealed partial class TinyComp
         var target = direction > 0 ? index - 1 : index + 1;
         _swipeTo = target >= 0 && target < view.Workspaces.Count ? view.Workspaces[target] : null;
 
-        if (!_effects.SlideEnabled || view.SceneOutput is null || from.Tree.IsDestroyed)
+        if (!_effects.SlideEnabled || view.Scene is null || from.Tree.IsDestroyed)
         {
             return;
         }
@@ -776,7 +777,7 @@ internal sealed partial class TinyComp
 
         var (width, height) = window.GeometrySize;
         var under = _layout.OutputAt(window.X + (width / 2), window.Y + (height / 2));
-        var view = _views.FirstOrDefault(v => v.Output == under);
+        var view = Views.FirstOrDefault(v => v.Output == under);
         if (view is null || view.Active is not { } target || ViewOf(workspace) == view)
         {
             return;
@@ -890,7 +891,7 @@ internal sealed partial class TinyComp
 
     private void DropWorkspacesOf(OutputView view)
     {
-        var fallback = _views.FirstOrDefault(v => v != view);
+        var fallback = Views.FirstOrDefault(v => v != view);
         foreach (var workspace in view.Workspaces.ToArray())
         {
             foreach (var window in _windows)
@@ -939,9 +940,9 @@ internal sealed partial class TinyComp
 
     private void PrintWorkspaces()
     {
-        for (var i = 0; i < _views.Count; i++)
+        for (var i = 0; i < Views.Count; i++)
         {
-            var view = _views[i];
+            var view = Views[i];
             var cells = view.Workspaces.Select(ws =>
                 $"[{ws.Name}{(view.Active == ws ? "*" : "")}{(ws.Urgent ? "!" : "")}:{WorkspaceWindowCount(ws)}]");
             BasinReport.Line($"WS output={i} {string.Join(" ", cells)}");

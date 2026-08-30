@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -45,8 +46,7 @@ internal sealed partial class TinyComp :
     private readonly XdgShell _shell;
     private readonly IRenderer _renderer;
     private readonly IAllocator? _allocator;
-    private readonly DrmFormat _swapFormat = DrmFormat.Xrgb8888;
-    private ulong[] _swapModifiers = [];
+    private readonly Basin.Host.OutputDriver _driver;
     private readonly Scene _scene = new();
     private PointerRefresh? _pointerRefresh;
     private SceneLayers _layers = null!;
@@ -116,10 +116,9 @@ internal sealed partial class TinyComp :
     private Basin.Desktop.LayerShellSceneDriver _layerDriver = null!;
     private readonly Basin.Desktop.PopupPlacer _popupPlacer;
     private readonly OutputLayout _layout = new();
-    private readonly OutputState _frameState = new();
-    private readonly List<OutputView> _views = [];
     private readonly List<HostChrome> _hostChrome = [];
     private bool _probed;
+    private bool _outputsCreated;
     private readonly List<Basin.Backend.Drm.DrmBackend> _secondaryBackends = [];
     private readonly List<IAllocator> _secondaryAllocators = [];
     private readonly List<Basin.Render.Vulkan.VulkanDeviceBlitter> _blitters = [];
@@ -349,7 +348,7 @@ internal sealed partial class TinyComp :
             var stack = CreateStack(ref rendererName, _drm.RenderNodePath);
             _renderer = stack.Renderer;
 
-            _allocator = stack.DeviceAllocator ?? new Basin.Backend.Drm.DumbAllocator(_drm);
+            _allocator = stack.DeviceAllocator;
         }
         else
         {
@@ -358,27 +357,21 @@ internal sealed partial class TinyComp :
             var stack = CreateStack(ref rendererName, Basin.Renderers.RendererCatalog.FindRenderNode());
             _renderer = stack.Renderer;
 
-            if (stack.DeviceAllocator is { } gbm)
-            {
-                _swapModifiers = SwapchainFormats.CommonModifiers(gbm, _backend.ParentDmabufFormats, _swapFormat);
-                if (_swapModifiers.Length > 0)
-                {
-                    _allocator = gbm;
-                    _log.Info($"{rendererName} zero-copy: {_swapModifiers.Length} modifiers for {_swapFormat}");
-                }
-                else
-                {
-                    gbm.Dispose();
-                    _allocator = new ShmAllocator();
-                    _log.Info($"{rendererName} rendering with shm-copy presentation (no common dmabuf format with parent)");
-                }
-            }
-            else
-            {
-                _allocator = new ShmAllocator();
-                _log.Info($"{rendererName} rendering with shm-copy presentation");
-            }
+            _allocator = stack.DeviceAllocator;
         }
+
+        _driver = new Basin.Host.OutputDriver(_host, _scene, _layout, _renderer, _allocator)
+        {
+            Background = Background,
+            Requested = outputCount,
+            Scales = config.Scales,
+            ContinuousRepaint = _frames > 0,
+            FullRepaint = _fullRepaint,
+            DebugDamageTint = _damageTint,
+            AllowPlaneOffload = _offload,
+            NestedName = _ => null,
+        };
+        WireOutputDriver();
 
         _popupPlacer = new Basin.Desktop.PopupPlacer(_layout);
         _luts = new Basin.Color.ColorLutCache(_renderer);
@@ -390,6 +383,7 @@ internal sealed partial class TinyComp :
         _dmabufCapture = capturePack.DmabufCapture;
         _captureIndex = capturePack.Index;
         _stack = capturePack.Stack;
+        _driver.Capture = capturePack;
         _gamma = servicePack.Drm.Gamma;
         _cursorTheme = servicePack.CursorTheme;
         _orientationSensor = new Basin.Desktop.OrientationSensor(_loop);
@@ -399,7 +393,7 @@ internal sealed partial class TinyComp :
         _colorConfiguration = _colorPack.Configuration;
         _colorConfiguration.EdrChanged += output =>
         {
-            if (_views.FirstOrDefault(v => v.Output == output) is { } edrView)
+            if (Views.FirstOrDefault(v => v.Output == output) is { } edrView)
             {
                 RefreshOutputColor(edrView);
                 edrView.Scheduler?.ScheduleRepaint();
@@ -569,7 +563,6 @@ internal sealed partial class TinyComp :
         _decorations = _services.Require<XdgDecorationManager>();
         _decorations.ModeChanged += (toplevel, mode) =>
             RecordDecorationPreference(toplevel.Surface, mode == DecorationMode.ServerSide);
-        _presentation = _services.Require<PresentationTimeGlobal>();
         _sessionLock = _services.Require<Basin.Desktop.SessionLockManager>();
         WireSessionLock();
         _screencopy = _services.Require<Basin.Desktop.ScreencopyManager>();
@@ -619,6 +612,7 @@ internal sealed partial class TinyComp :
         _contentType = _services.Require<Basin.Desktop.ContentTypeManager>();
         _fifo = _services.Require<Basin.Desktop.FifoManager>();
         _frameClock = _services.Require<Basin.Capabilities.IFrameClock>();
+        _driver.Frames = _frameClock;
         _xwaylandShell = _services.Require<Basin.XWayland.XwaylandShellGlobal>();
         _xwayland = _services.Require<Basin.XWayland.XWaylandServer>();
         xwayland.WindowManagerReady += wm =>
@@ -680,30 +674,20 @@ internal sealed partial class TinyComp :
         if (drm)
         {
             _pointer = new LayoutPointer(_layout);
-            foreach (var output in _drm!.Outputs)
-            {
-                AddDrmOutput(output);
-            }
-
-            _drm.OutputAdded += output =>
-            {
-                BasinReport.Line($"OUTPUT + {output.Name}");
-                AddDrmOutput(output);
-                Relayout();
-            };
-            _drm.OutputRemoved += RemoveDrmOutput;
+            _driver.CreateInitialOutputs();
 
             if (forcedCard is null)
             {
                 foreach (var device in drmDevices)
                 {
-                    if (device.HasConnectors && device.CardPath != _drm.DevicePath)
+                    if (device.HasConnectors && device.CardPath != _drm!.DevicePath)
                     {
                         AdoptSecondaryCard(device);
                     }
                 }
             }
 
+            _outputsCreated = true;
             SetupTouch();
             WireLibinput(_input!);
             _touchBinder!.PointerFrozen = () => ActiveLock() is not null;
@@ -733,10 +717,8 @@ internal sealed partial class TinyComp :
                     MoveCursor(layoutX, layoutY, time == 0 ? (uint)Environment.TickCount : time);
                 },
             };
-            for (var i = 0; i < outputCount; i++)
-            {
-                AddOutput();
-            }
+            _driver.CreateInitialOutputs();
+            _outputsCreated = true;
 
             _cursor.UseParentCursor();
             LoadCursorTheme();
@@ -753,7 +735,7 @@ internal sealed partial class TinyComp :
         {
             if (surface.Current.FrameCallbacks.Count > 0)
             {
-                foreach (var view in _views)
+                foreach (var view in Views)
                 {
                     view.Scheduler?.ScheduleRepaint();
                 }
@@ -768,7 +750,7 @@ internal sealed partial class TinyComp :
 
         _shell.NewToplevel += toplevel =>
         {
-            var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views.FirstOrDefault();
+            var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views.FirstOrDefault();
             if (view is not null)
             {
                 var outputBox = _layout.BoxOf(view.Output);
@@ -790,7 +772,9 @@ internal sealed partial class TinyComp :
         ApplyEffectSettings(config);
     }
 
-    public long Rendered => _views.Count > 0 ? _views[0].Rendered : 0;
+    public long Rendered => _driver.PrimaryRendered;
+
+    private IReadOnlyList<Basin.Host.OutputView> Views => _driver.Views;
 
     public int Run()
     {
@@ -849,13 +833,7 @@ internal sealed partial class TinyComp :
         _hostChrome.Clear();
         _uiHost?.Dispose();
 
-        foreach (var view in _views)
-        {
-            view.Scheduler?.Dispose();
-            view.SceneOutput?.Dispose();
-            view.Swapchain?.Dispose();
-            view.Target?.Destroy();
-        }
+        _driver.Dispose();
 
         _cursor.Dispose();
 
@@ -897,7 +875,6 @@ internal sealed partial class TinyComp :
         _cornerShaders.Clear();
         _fireShader?.Dispose();
         _allocator?.Dispose();
-        _frameState.Dispose();
         _seam?.Dispose();
         _seam = null;
         _seamTextInput?.Dispose();

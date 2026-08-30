@@ -659,7 +659,7 @@ internal static class Program
                 BasinReport.Line($"OUTPUT{(outputsCreated ? " + $" : string.Empty)} {added.Name} " + $"{added.PreferredMode.Width}x{added.PreferredMode.Height}");
             }
 
-            if (scales.Length > 0 && view.Output.Scale != 1)
+            if (view.Output.Scale != 1)
             {
                 BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
             }

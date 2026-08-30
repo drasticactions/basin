@@ -4,6 +4,7 @@ using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
 using Basin.Backend.Wayland;
+using Basin.Host;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 using Basin.Capabilities;
@@ -42,216 +43,225 @@ internal sealed partial class TinyComp
     {
         if (_color is { } color)
         {
-            Basin.Desktop.SurfaceLutDriver.Declare(color, _views.Select(v => DescriptionOf(v.Output)));
+            Basin.Desktop.SurfaceLutDriver.Declare(color, Views.Select(v => DescriptionOf(v.Output)));
         }
     }
 
     private void ReportFallback(Basin.Renderers.RendererFallback fallback) =>
         _log.Warn($"{(fallback.Describe())}");
 
-    private double ScaleFor(int index) =>
-        _scales.Length == 0 ? 1 : _scales[Math.Min(index, _scales.Length - 1)];
-
-    private double FollowedScaleFor(int index, OutputBase output) =>
-        _scales.Length == 0 && output is WaylandOutput hosted ? hosted.HostScale : ScaleFor(index);
-
-    private void AddOutput()
+    private void WireOutputDriver()
     {
-        var output = _backend!.CreateOutput();
-        var view = new OutputView(output, new OutputGlobal(_display, output));
-        _views.Add(view);
+        _driver.Arrange = ArrangeOutputs;
+        _driver.ConfiguredScale = output => _config.OutputSettingFor(output.Name)?.Scale;
+        _driver.Added += OnViewAdded;
+        _driver.Removed += OnViewRemoved;
+        _driver.Emptied += () => _runLoop.Stop();
+        _driver.Painted += OnPainted;
+        _driver.ModeChanged += OnModeChanged;
+        _driver.TransformChanged += OnTransformChanged;
+        _driver.StampFrame += OnStampFrame;
+        _driver.StampModeset += OnStampModeset;
+        _driver.ScanoutChanged += OnScanoutChanged;
+        _driver.ScaleRefused += (view, scale) => _log.Warn($"scale {scale} refused by {view.Output.Name}");
+        _driver.ModesetRefused += card => _log.Error($"modeset refused by {card.Name}");
+        _driver.HostScaleFollowed += view =>
+        {
+            BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
+            RefreshOutputLayout();
+        };
+    }
+
+    private static bool AutoLayoutOf(OutputView view) =>
+        view.Tag is not OutputPolicy policy || policy.AutoLayout;
+
+    private void ArrangeOutputs(IReadOnlyList<OutputView> views)
+    {
+        var edge = 0;
+        var row = 0;
+        foreach (var view in views)
+        {
+            if (AutoLayoutOf(view) || !_layout.Contains(view.Output))
+            {
+                continue;
+            }
+
+            var pinned = _layout.BoxOf(view.Output);
+            if (pinned.Right > edge)
+            {
+                (edge, row) = (pinned.Right, pinned.Y);
+            }
+        }
+
+        foreach (var view in views)
+        {
+            if (!AutoLayoutOf(view) || !_layout.Contains(view.Output))
+            {
+                continue;
+            }
+
+            _layout.Move(view.Output, edge, row);
+            edge += view.Output.LogicalSize().Width;
+        }
+    }
+
+    private void OnViewAdded(OutputView view)
+    {
+        view.Tag = new OutputPolicy();
         _presenceTracker.AddOutput(view.Output, view.Global);
         InitWorkspaces(view);
-        var scale = ScaleFor(_views.Count - 1);
-        if (scale != 1)
+        if (view.Scene is { } sceneOutput)
         {
-            using var state = new OutputState();
-            output.Commit(state.SetScale(scale));
+            sceneOutput.BeforeRepaint += tick => StepEffects(view, tick);
+            AddPostStage(view);
+            sceneOutput.ScanoutCandidateChanged += surface => OnScanoutCandidate(view, surface);
+            sceneOutput.OffloadCandidatesChanged += candidates => OnOffloadCandidates(view, candidates);
+            if (TraceEnabled)
+            {
+                sceneOutput.DamagePending += () => Trace("damage");
+            }
         }
 
-        output.HostScaleChanged += () =>
-        {
-            if (_scales.Length == 0 && output.HostScale != output.Scale)
-            {
-                SetOutputScale(view, output.HostScale);
-            }
-        };
-
-        _layout.Add(output, 0, 0);
-        Relayout();
-        output.CloseRequested += () => _runLoop.Stop();
-        output.Committed += _ => OnOutputChanged(view);
-        output.Committed += _ => { if (!_probed && output.CurrentMode.Width > 0) { _probed = true; BasinReport.Line($"PROBE decorated={output.Decorated} hostFrame={(output.HostFrame is null ? "none" : "yes")} insets={(output.HostFrame is null ? "-" : output.HostFrame.Insets.ToString())} mode={output.CurrentMode.Width}x{output.CurrentMode.Height}"); } };
-        WireRepaint(view);
-        _cursor.AddOutput(view.Output, view.SceneOutput);
-
-        output.HostFrameAvailable += frame =>
-        {
-            if (CreateFrameRenderer() is not { } renderer)
-            {
-                return;
-            }
-
-            var chrome = new HostChrome(this, frame, renderer, $"basin — {output.Name}", () => _runLoop.Stop());
-            _hostChrome.Add(chrome);
-            output.Committed += chrome.OnOutputChanged;
-        };
-    }
-
-    private void WireRepaint(OutputView view)
-    {
-        if (_fullRepaint)
-        {
-            view.Output.Frame += () => RenderOutput(view);
-            return;
-        }
-
-        view.Scheduler = new OutputScheduler(_loop, view.Output);
-        view.Scheduler.Repaint += () => Repaint(view);
-        if (view.IsSecondary)
-        {
-            _scene.Damaged += (_, box) =>
-            {
-                var outputBox = view.ReplicaSource is { } replicaSource
-                    ? _layout.BoxOf(replicaSource.Output)
-                    : _layout.BoxOf(view.Output);
-                if (!outputBox.IsEmpty && box.X < outputBox.X + outputBox.Width && box.X + box.Width > outputBox.X &&
-                    box.Y < outputBox.Y + outputBox.Height && box.Y + box.Height > outputBox.Y)
-                {
-                    view.Scheduler.ScheduleRepaint();
-                }
-            };
-            return;
-        }
-
-        view.SceneOutput = new SceneOutput(_scene, view.Output);
-        view.SceneOutput.BeforeRepaint += tick =>
-        {
-            var running = _effects.Step(tick);
-            if (_feedback is { } feedback)
-            {
-                running |= feedback.Step(tick);
-            }
-
-            running |= _post.Step(tick, view.Width, view.Height);
-            if (running)
-            {
-                foreach (var animated in _views)
-                {
-                    animated.Scheduler?.ScheduleRepaint();
-                }
-            }
-        };
-
-        AddPostStage(view);
-
-        _dmabufCapture.Track(view.Output, view.SceneOutput);
-
-        view.SceneOutput.DamagePending += view.Scheduler.ScheduleRepaint;
-        view.SceneOutput.ScanoutCandidateChanged += surface => OnScanoutCandidate(view, surface);
-        view.SceneOutput.OffloadCandidatesChanged += candidates => OnOffloadCandidates(view, candidates);
-        if (view.Output is IPresentingOutput presenting)
-        {
-            presenting.PresentedOnScreen += (timeNs, refreshNs, sequence) =>
-            {
-                view.PresentDiscarded = false;
-                view.LastPresent = (timeNs, refreshNs, sequence);
-                view.Scheduler!.NotifyPresented((long)timeNs);
-            };
-            presenting.PresentationDiscarded += () =>
-            {
-                view.LastPresent = null;
-                view.PresentDiscarded = true;
-            };
-        }
-
-        view.Output.Frame += () =>
-        {
-            if (!view.FrameDonesPending)
-            {
-                return;
-            }
-
-            view.FrameDonesPending = false;
-            if (view.PresentDiscarded)
-            {
-                view.PresentDiscarded = false;
-                _presentation.DiscardAll();
-                _frameClock.EndFrame(view.Output, 0);
-            }
-            else if (view.LastPresent is { } present)
-            {
-                view.LastPresent = null;
-                _presentation.PresentAll(view.Output, present.TimeNs, present.RefreshNs, present.Sequence,
-                    PresentedFlags.Vsync | PresentedFlags.HwClock | PresentedFlags.HwCompletion);
-                _frameClock.EndFrame(view.Output, (long)present.TimeNs);
-            }
-            else
-            {
-                _presentation.PresentAllNow(view.Output);
-                _frameClock.EndFrame(view.Output, MonotonicClock.Nanos);
-            }
-        };
         if (TraceEnabled)
         {
-            view.SceneOutput.DamagePending += () => Trace("damage");
             view.Output.Frame += () => Trace($"frame {view.Output.Name}");
         }
-    }
 
-    private PresentationTimeGlobal _presentation = null!;
+        _cursor.AddOutput(view.Output, view.Scene);
 
-    private void Repaint(OutputView view)
-    {
-        _frameClock.BeginFrame(view.Output, view.Scheduler!.PredictedVblankNanos);
-        if (view.IsSecondary)
+        if (view.Output is WaylandOutput hosted)
         {
-            SecondaryRepaint(view);
-            return;
-        }
-
-        if (view.Swapchain is null || view.SceneOutput is null)
-        {
-            return;
-        }
-
-        if (_frames > 0)
-        {
-            view.SceneOutput.Ring.AddWhole();
-        }
-
-        var box = new Box(0, 0, view.Width, view.Height);
-        if (view.ReplicaSource is { } replicaSource && _layout.Contains(replicaSource.Output))
-        {
-            view.SceneOutput.ReplicationSource = _layout.BoxOf(replicaSource.Output);
-        }
-        else
-        {
-            view.SceneOutput.ReplicationSource = null;
-            if (_layout.Contains(view.Output))
+            hosted.Committed += _ =>
             {
-                box = _layout.BoxOf(view.Output);
-                view.SceneOutput.Position = new Point(box.X, box.Y);
+                if (!_probed && hosted.CurrentMode.Width > 0)
+                {
+                    _probed = true;
+                    BasinReport.Line($"PROBE decorated={hosted.Decorated} hostFrame={(hosted.HostFrame is null ? "none" : "yes")} insets={(hosted.HostFrame is null ? "-" : hosted.HostFrame.Insets.ToString())} mode={hosted.CurrentMode.Width}x{hosted.CurrentMode.Height}");
+                }
+            };
+            hosted.HostFrameAvailable += frame =>
+            {
+                if (CreateFrameRenderer() is not { } renderer)
+                {
+                    return;
+                }
+
+                var chrome = new HostChrome(this, frame, renderer, $"basin — {hosted.Name}", () => _runLoop.Stop());
+                _hostChrome.Add(chrome);
+                hosted.Committed += chrome.OnOutputChanged;
+            };
+        }
+
+        if (view.Output is Basin.Backend.Drm.DrmOutput drmOutput)
+        {
+            if (_outputsCreated)
+            {
+                BasinReport.Line($"OUTPUT + {drmOutput.Name}");
+            }
+
+            BasinReport.Line($"OUTPUT {drmOutput.Name} {drmOutput.Description} {drmOutput.PreferredMode.Width}x{drmOutput.PreferredMode.Height} scanout-modifiers={view.SwapModifiers.Length}{(view.IsSecondary ? " secondary" : "")}");
+
+            view.ColorDescription = DescriptionOf(view.Output);
+            view.KmsColorRouted = _colorConfiguration is { } routing && routing.RouteKmsPipeline(view.Output);
+            DeclareColor();
+            _color.SetOutputDescription(view.Global, view.ColorDescription);
+            RefreshSurfaceLuts();
+            if (_hdr && drmOutput.Edid.SupportsPq)
+            {
+                BasinReport.Line($"HDR {drmOutput.Name} PQ peak={drmOutput.Edid.MaxLuminance:F0}cd/m2 bt2020={drmOutput.Edid.SupportsBt2020}");
+            }
+
+            RefreshGammaBaseline(view);
+            if (_nightLightKelvin is not null && drmOutput.GammaLutSize > 0)
+            {
+                _gamma.ApplyBaseline(view.Output);
             }
         }
 
-        var renderStart = TraceEnabled ? Stopwatch.GetTimestamp() : 0;
-        var options = new SceneCommitOptions
+        if (view.Output.Scale != 1)
         {
-            Background = Background,
-            DebugDamageTint = _damageTint,
-            AllowPlaneOffload = _offload,
-            TargetPresentNanos = Math.Max(
-                view.Scheduler!.PredictedVblankNanos,
-                (long)(Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency))),
-        };
-        _frameState.Clear();
+            BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
+        }
+    }
+
+    private void OnViewRemoved(OutputView view)
+    {
+        if (view.Output is Basin.Backend.Drm.DrmOutput)
+        {
+            BasinReport.Line($"OUTPUT - {view.Output.Name}");
+        }
+
+        if (view == _swipeView)
+        {
+            AbortWorkspaceSwipe();
+        }
+
+        _presenceTracker.RemoveOutput(view.Output);
+        _cursor.RemoveOutput(view.Output);
+        DropWorkspacesOf(view);
+    }
+
+    private void OnStampModeset(Basin.Backend.Drm.DrmOutput output, OutputState state)
+    {
+        if (_config.OutputSettingFor(output.Name) is { } setting)
+        {
+            if (setting.Mode is { } wanted &&
+                FindMode(output, wanted.Width, wanted.Height, wanted.Refresh) is { } mode)
+            {
+                state.SetMode(mode);
+            }
+
+            if (setting.Transform is { } transform)
+            {
+                state.SetTransform(transform);
+            }
+        }
+
+        var driveHdr = _hdr && output.Edid.SupportsPq;
+        if (driveHdr && _colorConfiguration is { } colorConfiguration &&
+            (colorConfiguration.Supported(output) &
+             Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange) != 0)
+        {
+            colorConfiguration.Seed(
+                output,
+                new Basin.Color.OutputColorState { HighDynamicRange = true, Source = _colorSource });
+        }
+        else if (_colorSource != Basin.Capabilities.OutputColorProfileSource.Edid &&
+            _colorConfiguration is { } sdrConfiguration)
+        {
+            sdrConfiguration.Seed(
+                output, new Basin.Color.OutputColorState { Source = _colorSource, IccProfilePath = _iccProfile });
+        }
+
+        if (driveHdr)
+        {
+            state.SetHdr(Basin.Color.OutputDescriptions.HdrMetadataFor(
+                DescriptionOf(output), output.Edid.Chromaticities));
+        }
+    }
+
+    private static OutputMode? FindMode(Basin.Backend.Drm.DrmOutput output, int width, int height, int? refresh)
+    {
+        foreach (var mode in output.Modes)
+        {
+            if (mode.Width == width && mode.Height == height &&
+                (refresh is not { } wanted || (int)Math.Round(mode.RefreshMilliHz / 1000.0) == wanted))
+            {
+                return mode;
+            }
+        }
+
+        return null;
+    }
+
+    private void OnStampFrame(OutputView view, OutputState state)
+    {
         var autoVrr = false;
         if (_scanoutFeedbackSurface is { } scanoutSurface)
         {
             if (_tearing.PrefersTearing(scanoutSurface))
             {
-                _frameState.SetTearing(true);
+                state.SetTearing(true);
             }
 
             var contentType = _contentType.TypeOf(scanoutSurface);
@@ -259,54 +269,66 @@ internal sealed partial class TinyComp
                     or Basin.Desktop.ContentTypeManager.ContentType.Video &&
                 VrrPolicyOf(view.Output) == Basin.Capabilities.OutputVrrPolicy.Automatic)
             {
-                _frameState.SetAdaptiveSync(true);
+                state.SetAdaptiveSync(true);
                 autoVrr = true;
             }
         }
 
         if (!autoVrr && view.AutoVrrActive)
         {
-            _frameState.SetAdaptiveSync(false);
+            state.SetAdaptiveSync(false);
         }
 
         view.AutoVrrActive = autoVrr;
+    }
 
-        var committed = view.SceneOutput.Commit(_renderer, view.Swapchain, _frameState, options);
-        var refused = !committed && view.SceneOutput.NeedsRepaint;
-        if (committed)
+    private void StepEffects(OutputView view, FrameTick tick)
+    {
+        var running = _effects.Step(tick);
+        if (_feedback is { } feedback)
         {
-            view.Scheduler!.NotifyCommitted();
-            view.LastPresentedBuffer = _frameState.Buffer;
-            view.Rendered++;
-        }
-        else if (refused)
-        {
-            view.Scheduler!.ScheduleRepaint();
+            running |= feedback.Step(tick);
         }
 
-        if (TraceEnabled)
+        running |= _post.Step(tick, view.Width, view.Height);
+        if (running)
         {
-            var renderMs = (Stopwatch.GetTimestamp() - renderStart) * 1000.0 / Stopwatch.Frequency;
-            Trace($"repaint committed={committed} refused={refused} renderMs={renderMs:F2}");
+            foreach (var animated in Views)
+            {
+                animated.Scheduler?.ScheduleRepaint();
+            }
         }
+    }
 
-        MaybeScreenshotDamage(view, box);
-        if (refused)
-        {
-            return;
-        }
-
-        _capture.NotifyDamaged(view.Output, new Box(0, 0, view.Width, view.Height));
+    private void OnPainted(OutputView view)
+    {
         UpdateSurfacePresence();
-        if (committed)
-        {
-            view.FrameDonesPending = true;
-        }
+        MaybeScreenshotDamage(view);
+    }
 
-        _scene.SendFrameDone((uint)Environment.TickCount);
-        if (_frames > 0)
+    private void OnModeChanged(OutputView view) => ReapplyPinnedGeometry();
+
+    private void OnTransformChanged(OutputView view, OutputTransform was)
+    {
+        _ = _post.BeginRotation(view.LastPresentedBuffer, was, view.Output.Transform, EffectTick());
+        view.Scheduler?.ScheduleRepaint();
+    }
+
+    private void OnScanoutChanged(OutputView view, ScanoutChoice choice)
+    {
+        if (choice == ScanoutChoice.DeviceBuffers && view.Output is WaylandOutput)
         {
-            view.Scheduler!.ScheduleRepaint();
+            _log.Info($"{_rendererName} zero-copy: {view.SwapModifiers.Length} modifiers for {DrmFormat.Xrgb8888}");
+        }
+        else if (choice == ScanoutChoice.DumbLinear && _renderer.Device is not null)
+        {
+            _log.Warn(
+                $"{view.Output.Name}: the renderer shares no scanout format with this plane; " +
+                $"presenting through CPU-mapped buffers, which reads the whole framebuffer back every frame");
+        }
+        else if (choice == ScanoutChoice.RefusedByPlane)
+        {
+            _log.Warn($"{view.Output.Name}: device buffers refused by the plane; falling back to dumb linear");
         }
     }
 
@@ -404,86 +426,19 @@ internal sealed partial class TinyComp
         }
     }
 
-    private bool RenderForCapture(IOutput output, IBuffer target)
+    private void MaybeScreenshotDamage(OutputView view)
     {
-        var box = _layout.BoxOf(output);
-        _scene.Root.SetPosition(-box.X, -box.Y);
-        var ok = _scene.Render(_renderer, target, SceneOptions(output));
-        _scene.Root.SetPosition(0, 0);
-        return ok;
-    }
-
-    private Box ToplevelBox(Basin.Shell.Xdg.XdgToplevelWindow toplevel)
-    {
-        var window = _windows.FirstOrDefault(w => w.Toplevel == toplevel);
-        var surface = toplevel.Surface.Current;
-        return window is null
-            ? default
-            : new Box(window.X, window.Y, surface.Width, surface.Height);
-    }
-
-    private double ScaleOfBox(Box box)
-    {
-        var scale = 1.0;
-        foreach (var view in _views)
-        {
-            var outputBox = _layout.BoxOf(view.Output);
-            if (box.X < outputBox.Right && box.Right > outputBox.X &&
-                box.Y < outputBox.Bottom && box.Bottom > outputBox.Y)
-            {
-                scale = Math.Max(scale, view.Output.Scale);
-            }
-        }
-
-        return scale;
-    }
-
-    private bool RenderToplevelCapture(Basin.Shell.Xdg.XdgToplevelWindow toplevel, IBuffer target)
-    {
-        var box = ToplevelBox(toplevel);
-        if (box.Width <= 0 || box.Height <= 0)
-        {
-            return false;
-        }
-
-        _scene.Root.SetPosition(-box.X, -box.Y);
-        var ok = _scene.Render(_renderer, target, SceneOptions(ScaleOfBox(box)));
-        _scene.Root.SetPosition(0, 0);
-        return ok;
-    }
-
-    private void MaybeScreenshotDamage(OutputView view, Box box)
-    {
-        if (_shotPath is null || view != _views[_shotView])
+        if (_shotPath is null || view != Views[_shotView])
         {
             return;
         }
 
+        var box = view.Scene?.ReplicationSource is null
+            ? view.Box
+            : new Box(0, 0, view.Width, view.Height);
         _scene.Root.SetPosition(-box.X, -box.Y);
         MaybeScreenshot(view);
         _scene.Root.SetPosition(0, 0);
-    }
-
-    private void RemoveDrmOutput(Basin.Backend.Drm.DrmOutput output)
-    {
-        BasinReport.Line($"OUTPUT - {output.Name}");
-        var view = _views.FirstOrDefault(v => v.Output == output);
-        if (view is not null)
-        {
-            if (view == _swipeView)
-            {
-                AbortWorkspaceSwipe();
-            }
-
-            _views.Remove(view);
-            _presenceTracker.RemoveOutput(view.Output);
-            DropWorkspacesOf(view);
-            _dmabufCapture.Forget(view.Output);
-            view.Swapchain?.Dispose();
-            view.Global.Dispose();
-        }
-
-        Relayout();
     }
 
     private void AdoptSecondaryCard(DrmDeviceInfo device)
@@ -498,16 +453,21 @@ internal sealed partial class TinyComp
             BasinReport.Line($"CARD + {device.CardPath} ({device.Driver})");
             foreach (var output in backend.Outputs)
             {
-                AddDrmOutput(output, allocator, secondary: true);
+                AddSecondaryOutput(output, allocator);
             }
 
             backend.OutputAdded += output =>
             {
                 BasinReport.Line($"OUTPUT + {output.Name}");
-                AddDrmOutput(output, allocator, secondary: true);
-                Relayout();
+                AddSecondaryOutput(output, allocator);
             };
-            backend.OutputRemoved += RemoveDrmOutput;
+            backend.OutputRemoved += output =>
+            {
+                if (_driver.ViewOf(output) is { } view)
+                {
+                    _driver.RemoveView(view);
+                }
+            };
         }
         catch (Exception e) when (e is InvalidOperationException or IOException)
         {
@@ -515,130 +475,18 @@ internal sealed partial class TinyComp
         }
     }
 
-    private void AddDrmOutput(Basin.Backend.Drm.DrmOutput output, IAllocator? allocator = null, bool secondary = false)
+    private void AddSecondaryOutput(Basin.Backend.Drm.DrmOutput output, IAllocator allocator)
     {
-        var view = new OutputView(output, new OutputGlobal(_display, output))
+        if (!_driver.EnableWithStamp(output))
         {
-            IsSecondary = secondary,
-            Allocator = allocator ?? _allocator,
-        };
-        _views.Add(view);
-        _presenceTracker.AddOutput(view.Output, view.Global);
-        InitWorkspaces(view);
-        _layout.Add(output, 0, 0);
-        Relayout();
-        output.Committed += _ => OnOutputChanged(view);
-        WireRepaint(view);
-        _cursor.AddOutput(view.Output, view.SceneOutput);
-
-        view.SwapModifiers = view.Allocator!.Formats.Intersect(output.ScanoutFormats).ModifiersOf(_swapFormat).ToArray();
-        if (view.Allocator is not Basin.Backend.Drm.DumbAllocator &&
-            !view.Allocator!.CanScanOut(output, view.SwapModifiers, DrmFormat.Xrgb8888))
-        {
-            _log.Warn(
-                $"{output.Name}: the renderer shares no scanout format with this plane; " +
-                $"presenting through CPU-mapped buffers, which reads the whole framebuffer back every frame");
-            view.Allocator = new Basin.Backend.Drm.DumbAllocator(_drm!);
-            view.SwapModifiers = [];
-        }
-
-        if (!secondary)
-        {
-            _swapModifiers = view.SwapModifiers;
-        }
-
-        BasinReport.Line($"OUTPUT {output.Name} {output.Description} {output.PreferredMode.Width}x{output.PreferredMode.Height} scanout-modifiers={view.SwapModifiers.Length}{(secondary ? " secondary" : "")}");
-
-        var driveHdr = _hdr && output.Edid.SupportsPq;
-        if (driveHdr && _colorConfiguration is { } colorConfiguration &&
-            (colorConfiguration.Supported(output) &
-             Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange) != 0)
-        {
-            colorConfiguration.Seed(
-                output,
-                new Basin.Color.OutputColorState { HighDynamicRange = true, Source = _colorSource });
-        }
-        else if (_colorSource != Basin.Capabilities.OutputColorProfileSource.Edid &&
-            _colorConfiguration is { } sdrConfiguration)
-        {
-            sdrConfiguration.Seed(
-                output, new Basin.Color.OutputColorState { Source = _colorSource, IccProfilePath = _iccProfile });
-        }
-
-        view.ColorDescription = DescriptionOf(output);
-        view.KmsColorRouted = _colorConfiguration is { } routing && routing.RouteKmsPipeline(output);
-        DeclareColor();
-        _color.SetOutputDescription(view.Global, view.ColorDescription);
-        RefreshSurfaceLuts();
-        if (driveHdr)
-        {
-            BasinReport.Line($"HDR {output.Name} PQ peak={output.Edid.MaxLuminance:F0}cd/m2 bt2020={output.Edid.SupportsBt2020}");
-        }
-
-        _frameState.Clear();
-        _frameState.SetEnabled(true).SetMode(output.PreferredMode).SetScale(ScaleFor(_views.Count - 1));
-        if (driveHdr)
-        {
-            _frameState.SetHdr(Basin.Color.OutputDescriptions.HdrMetadataFor(view.ColorDescription, output.Edid.Chromaticities));
-        }
-
-        output.Commit(_frameState);
-        RefreshGammaBaseline(view);
-        if (_nightLightKelvin is not null && output.GammaLutSize > 0)
-        {
-            _gamma.ApplyBaseline(view.Output);
-        }
-
-        if (_fullRepaint)
-        {
-            RenderOutput(view);
-        }
-        else
-        {
-            view.Scheduler!.ScheduleRepaint();
-        }
-    }
-
-    private static readonly RenderColor Background = new(0.09f, 0.1f, 0.12f, 1f);
-
-    private void OnOutputChanged(OutputView view)
-    {
-        if (_transforms.TryGetValue(view, out var was) && was != view.Output.Transform)
-        {
-            _ = _post.BeginRotation(view.LastPresentedBuffer, was, view.Output.Transform, EffectTick());
-            view.Scheduler?.ScheduleRepaint();
-        }
-
-        _transforms[view] = view.Output.Transform;
-
-        var mode = view.Output.CurrentMode;
-        var resized = view.Width != mode.Width || view.Height != mode.Height;
-        if (!resized)
-        {
+            _log.Error($"modeset refused by {output.Name}");
             return;
         }
 
-        (view.Width, view.Height) = (mode.Width, mode.Height);
-        if ((view.Allocator ?? _allocator) is { } allocator)
-        {
-            if (view.Swapchain is null)
-            {
-                view.Swapchain = new Swapchain(allocator, mode.Width, mode.Height, _swapFormat, view.SwapModifiers ?? _swapModifiers);
-            }
-            else
-            {
-                view.Swapchain.Resize(mode.Width, mode.Height);
-            }
-        }
-        else
-        {
-            view.Target?.Destroy();
-            view.Target = new MemoryBuffer(mode.Width, mode.Height, DrmFormat.Xrgb8888);
-        }
-
-        Relayout();
-        ReapplyPinnedGeometry();
+        _ = _driver.AddView(output, allocator, secondary: true);
     }
+
+    private static readonly RenderColor Background = new(0.09f, 0.1f, 0.12f, 1f);
 
     private void ReapplyPinnedGeometry()
     {
@@ -653,87 +501,12 @@ internal sealed partial class TinyComp
         }
     }
 
-    private void SecondaryRepaint(OutputView view)
-    {
-        if (view.Swapchain is null || view.Swapchain.Acquire(out _) is not { } buffer)
-        {
-            return;
-        }
-
-        var replicating = view.ReplicaSource is not null;
-        if (view.ReplicaSource is { } replicaSource)
-        {
-            if (!ReplicaBlit(replicaSource, buffer))
-            {
-                return;
-            }
-        }
-        else
-        {
-            var box = _layout.BoxOf(view.Output);
-            _scene.Root.SetPosition(-box.X, -box.Y);
-            var rendered = _scene.Render(_renderer, buffer, SceneOptions(view.Output));
-            _scene.Root.SetPosition(0, 0);
-            if (!rendered)
-            {
-                return;
-            }
-        }
-
-        _frameState.Clear();
-        _frameState.SetBuffer(buffer);
-        if (view.Output.Commit(_frameState))
-        {
-            view.Scheduler!.NotifyCommitted();
-            view.LastPresentedBuffer = buffer;
-        }
-
-        _capture.NotifyDamaged(view.Output, new Box(0, 0, view.Width, view.Height));
-        if (!replicating)
-        {
-            _scene.SendFrameDone((uint)Environment.TickCount);
-        }
-    }
-
-    private bool ReplicaBlit(OutputView source, IBuffer target)
-    {
-        if ((source.LastPresentedBuffer ?? source.SceneOutput?.LastTarget) is not { } sourceBuffer)
-        {
-            return false;
-        }
-
-        if (_renderer.ImportTexture(sourceBuffer) is not { } texture)
-        {
-            return false;
-        }
-
-        try
-        {
-            var scale = Math.Min(
-                (double)target.Width / sourceBuffer.Width, (double)target.Height / sourceBuffer.Height);
-            var width = (int)Math.Round(sourceBuffer.Width * scale);
-            var height = (int)Math.Round(sourceBuffer.Height * scale);
-            var pass = _renderer.BeginBufferPass(target, new RenderPassOptions());
-            pass.AddRect(new RenderColor(0f, 0f, 0f, 1f), new Box(0, 0, target.Width, target.Height));
-            pass.AddTexture(texture, new TextureRenderOptions
-            {
-                DstBox = new Box((target.Width - width) / 2, (target.Height - height) / 2, width, height),
-            });
-            pass.Submit();
-            return true;
-        }
-        finally
-        {
-            texture.Dispose();
-        }
-    }
-
     private static readonly double[] ScaleSteps = [1, 1.25, 1.5, 2];
 
     private void CycleScale()
     {
-        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output)
-            ?? _views.FirstOrDefault();
+        var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output)
+            ?? Views.FirstOrDefault();
         if (view is null)
         {
             return;
@@ -745,15 +518,13 @@ internal sealed partial class TinyComp
 
     private void SetOutputScale(OutputView view, double scale)
     {
-        using var state = new OutputState();
-        if (!view.Output.Commit(state.SetScale(scale)))
+        _driver.SetScale(view, scale);
+        if (view.Output.Scale != scale)
         {
-            _log.Warn($"scale {scale} refused by {view.Output.Name}");
             return;
         }
 
         BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
-        Relayout();
         RefreshOutputLayout();
     }
 
@@ -789,7 +560,7 @@ internal sealed partial class TinyComp
     {
         foreach (var entry in entries)
         {
-            if (TouchesColor(entry) && _views.FirstOrDefault(v => v.Output == entry.Output) is { } colorView)
+            if (TouchesColor(entry) && Views.FirstOrDefault(v => v.Output == entry.Output) is { } colorView)
             {
                 RefreshOutputColor(colorView);
             }
@@ -798,13 +569,13 @@ internal sealed partial class TinyComp
         foreach (var entry in entries)
         {
             if (entry.ReplicationSourceUuid is not { } uuid ||
-                _views.FirstOrDefault(v => v.Output == entry.Output) is not { } replicaView)
+                Views.FirstOrDefault(v => v.Output == entry.Output) is not { } replicaView)
             {
                 continue;
             }
 
             replicaView.ReplicaSource = uuid.Length > 0
-                ? _views.FirstOrDefault(v =>
+                ? Views.FirstOrDefault(v =>
                     v != replicaView && Basin.Desktop.OutputUuid.For(v.Output) == uuid)
                 : null;
             replicaView.Scheduler?.ScheduleRepaint();
@@ -812,14 +583,14 @@ internal sealed partial class TinyComp
 
         foreach (var entry in entries)
         {
-            if (_views.FirstOrDefault(v => v.Output == entry.Output) is { } view &&
+            if (Views.FirstOrDefault(v => v.Output == entry.Output) is { } view &&
                 entry is { Enabled: true, Position: not null })
             {
                 view.AutoLayout = false;
             }
         }
 
-        Relayout();
+        _driver.Relayout();
         RefreshOutputLayout();
         foreach (var entry in entries)
         {
@@ -848,7 +619,7 @@ internal sealed partial class TinyComp
             pointer.Reposition();
         }
 
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
             if (!_layout.Contains(view.Output))
             {
@@ -857,7 +628,7 @@ internal sealed partial class TinyComp
 
             if (_fullRepaint)
             {
-                view.Output.RequestFrame();
+                _driver.RepaintNow(view);
             }
             else
             {
@@ -871,61 +642,4 @@ internal sealed partial class TinyComp
         state.VrrPolicy is { } policy
             ? policy
             : Basin.Capabilities.OutputVrrPolicy.Automatic;
-
-    private sealed class OutputView(OutputBase output, OutputGlobal global)
-    {
-        public OutputBase Output { get; } = output;
-
-        public OutputGlobal Global { get; } = global;
-
-        public MemoryBuffer? Target { get; set; }
-
-        public Swapchain? Swapchain { get; set; }
-
-        public SceneOutput? SceneOutput { get; set; }
-
-        public OutputScheduler? Scheduler { get; set; }
-
-        public bool AutoLayout { get; set; } = true;
-
-        public bool FrameDonesPending { get; set; }
-
-        public bool AutoVrrActive { get; set; }
-
-        public OutputView? ReplicaSource { get; set; }
-
-        public long Rendered { get; set; }
-
-        public (ulong TimeNs, uint RefreshNs, ulong Sequence)? LastPresent { get; set; }
-
-        public bool PresentDiscarded { get; set; }
-
-        public IBuffer? LastPresentedBuffer { get; set; }
-
-        public int Width { get; set; }
-
-        public int Height { get; set; }
-
-        public IAllocator? Allocator { get; set; }
-
-        public ulong[]? SwapModifiers { get; set; }
-
-        public bool IsSecondary { get; set; }
-
-        public Basin.Capabilities.ImageDescription ColorDescription { get; set; } = Basin.Capabilities.ImageDescription.Srgb;
-
-        public bool KmsColorRouted { get; set; }
-
-        public Box UsableArea { get; set; }
-
-        public ulong GroupId { get; set; }
-
-        public Basin.Capabilities.WorkspaceSet<Workspace> Workspaces { get; } = new();
-
-        public Workspace? Active
-        {
-            get => Workspaces.Active;
-            set => Workspaces.Active = value;
-        }
-    }
 }

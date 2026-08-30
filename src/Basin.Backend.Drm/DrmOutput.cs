@@ -82,6 +82,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         var preferredIndex = Math.Max(0, _nativeModes.FindIndex(m => m.IsPreferred));
         PreferredMode = _modes.Count > 0 ? _modes[preferredIndex] : default;
         PhysicalSize = ((int)connector.WidthMm, (int)connector.HeightMm);
+        Class = connector.Type is DrmConnectorType.Edp or DrmConnectorType.Lvds or DrmConnectorType.Dsi
+            ? OutputClass.Handheld
+            : OutputClass.Desktop;
         ScanoutFormats = ReadInFormats(backend.Device, _planeProps);
         OverlayScanoutFormats = backend.OverlayFormatsFor(crtcIndex);
 
@@ -127,6 +130,8 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     public IReadOnlyList<OutputMode> Modes => _modes;
 
     public OutputMode PreferredMode { get; }
+
+    public override OutputClass Class { get; }
 
     public DrmFormatSet ScanoutFormats { get; }
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -92,7 +93,7 @@ internal sealed partial class TinyComp
                 toplevel.SetFullscreen(fullscreen);
                 if (fullscreen)
                 {
-                    var output = comp._layout.OutputAt(comp._cursorX, comp._cursorY) ?? comp._views[0].Output;
+                    var output = comp._layout.OutputAt(comp._cursorX, comp._cursorY) ?? comp.Views[0].Output;
                     var box = comp._layout.BoxOf(output);
                     _restore = (X, Y);
                     MoveTo(box.X, box.Y);
@@ -259,8 +260,8 @@ internal sealed partial class TinyComp
             }
 
             var comp = _comp;
-            var view = comp._views.FirstOrDefault(v => comp._layout.OutputAt(comp._cursorX, comp._cursorY) == v.Output)
-                ?? comp._views[0];
+            var view = comp.Views.FirstOrDefault(v => comp._layout.OutputAt(comp._cursorX, comp._cursorY) == v.Output)
+                ?? comp.Views[0];
             var geometry = Toplevel.Xdg.EffectiveGeometry;
             _maximizeRestore = _maximizeRestore.Saving(new Box(X, Y, geometry.Width, geometry.Height));
             ApplyMaximizeGeometry(view);
@@ -279,13 +280,13 @@ internal sealed partial class TinyComp
         public void ReapplyPinnedGeometry()
         {
             var comp = _comp;
-            if (comp._views.Count == 0)
+            if (comp.Views.Count == 0)
             {
                 return;
             }
 
-            var view = comp._views.FirstOrDefault(v => comp._layout.OutputAt(X + 1, Y + 1) == v.Output)
-                ?? comp._views[0];
+            var view = comp.Views.FirstOrDefault(v => comp._layout.OutputAt(X + 1, Y + 1) == v.Output)
+                ?? comp.Views[0];
             if (Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen))
             {
                 var box = comp._layout.BoxOf(view.Output);

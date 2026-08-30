@@ -17,6 +17,8 @@ public interface IOutput
 
     (int Width, int Height) PhysicalSize { get; }
 
+    OutputClass Class => OutputClass.Desktop;
+
     OutputMode CurrentMode { get; }
 
     bool Enabled { get; }

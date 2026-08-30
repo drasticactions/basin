@@ -1,3 +1,4 @@
+using Basin;
 using Basin.Capabilities;
 using Basin.Config;
 using Basin.Effects;
@@ -104,6 +105,12 @@ internal sealed class Config
     public IReadOnlyList<Binding> Bindings { get; private set; } = [];
 
     public IReadOnlyList<Rule> Rules { get; private set; } = [];
+
+    public IReadOnlyDictionary<string, OutputSetting> OutputSettings { get; private set; } =
+        new Dictionary<string, OutputSetting>(StringComparer.Ordinal);
+
+    public OutputSetting? OutputSettingFor(string name) =>
+        OutputSettings.TryGetValue(name, out var setting) ? setting : null;
 
     public static KeyAction? ActionFromName(string name) => name switch
     {
@@ -335,6 +342,24 @@ internal sealed class Config
             Post = PostStages(effects, log);
         }
 
+        if (reader.Free("output") is { } outputs)
+        {
+            var parsed = new Dictionary<string, OutputSetting>(StringComparer.Ordinal);
+            foreach (var (name, value) in outputs)
+            {
+                if (value is TomlTable table)
+                {
+                    parsed[name] = ParseOutputSetting(name, table, log);
+                }
+                else
+                {
+                    log.Warn($"[output.\"{name}\"] is not a table, ignored");
+                }
+            }
+
+            OutputSettings = parsed;
+        }
+
         if (reader.Free("bindings") is { } bindings)
         {
             Bindings = MergeBindings(bindings, log);
@@ -417,6 +442,76 @@ internal sealed class Config
             Width = Number("width"),
             Height = Number("height"),
         };
+    }
+
+    private static OutputSetting ParseOutputSetting(string name, TomlTable table, BasinLogger log)
+    {
+        double? scale = null;
+        OutputTransform? transform = null;
+        (int Width, int Height, int? Refresh)? mode = null;
+        foreach (var (key, value) in table)
+        {
+            switch (key)
+            {
+                case "scale" when value is double fractional:
+                    scale = fractional;
+                    break;
+                case "scale" when value is long integer:
+                    scale = integer;
+                    break;
+                case "transform" when value is string text:
+                    transform = ParseTransform(text, name, log);
+                    break;
+                case "mode" when value is string text:
+                    mode = ParseMode(text, name, log);
+                    break;
+                default:
+                    log.Warn($"[output.\"{name}\"] {key}: unknown key or wrong type, ignored");
+                    break;
+            }
+        }
+
+        return new OutputSetting { Scale = scale, Transform = transform, Mode = mode };
+    }
+
+    private static OutputTransform? ParseTransform(string text, string name, BasinLogger log)
+    {
+        switch (text)
+        {
+            case "normal": return OutputTransform.Normal;
+            case "90": return OutputTransform.Rotate90;
+            case "180": return OutputTransform.Rotate180;
+            case "270": return OutputTransform.Rotate270;
+            case "flipped": return OutputTransform.Flipped;
+            case "flipped-90": return OutputTransform.Flipped90;
+            case "flipped-180": return OutputTransform.Flipped180;
+            case "flipped-270": return OutputTransform.Flipped270;
+            default:
+                log.Warn($"[output.\"{name}\"] transform \"{text}\" is not normal|90|180|270|flipped|flipped-90|flipped-180|flipped-270, ignored");
+                return null;
+        }
+    }
+
+    private static (int Width, int Height, int? Refresh)? ParseMode(string text, string name, BasinLogger log)
+    {
+        var at = text.Split('@');
+        var size = at[0].Split('x');
+        if (at.Length <= 2 && size.Length == 2 &&
+            int.TryParse(size[0], out var width) && int.TryParse(size[1], out var height))
+        {
+            if (at.Length == 1)
+            {
+                return (width, height, null);
+            }
+
+            if (int.TryParse(at[1], out var refresh))
+            {
+                return (width, height, refresh);
+            }
+        }
+
+        log.Warn($"[output.\"{name}\"] mode \"{text}\" is not WIDTHxHEIGHT or WIDTHxHEIGHT@HZ, ignored");
+        return null;
     }
 
     private static string? Animation(string? name) => name is null or "none" ? null : name;

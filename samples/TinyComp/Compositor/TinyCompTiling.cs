@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -17,74 +18,11 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
-    private void Relayout()
-    {
-        var edge = 0;
-        var row = 0;
-        foreach (var view in _views)
-        {
-            if (view.AutoLayout || !_layout.Contains(view.Output))
-            {
-                continue;
-            }
-
-            var pinned = _layout.BoxOf(view.Output);
-            if (pinned.Right > edge)
-            {
-                (edge, row) = (pinned.Right, pinned.Y);
-            }
-        }
-
-        foreach (var view in _views)
-        {
-            if (!view.AutoLayout || !_layout.Contains(view.Output))
-            {
-                continue;
-            }
-
-            _layout.Move(view.Output, edge, row);
-            edge += view.Output.LogicalSize().Width;
-        }
-    }
-
-    private SceneRenderOptions SceneOptions(double scale) => new()
-    {
-        Background = Background,
-        Scale = scale,
-    };
-
     private SceneRenderOptions SceneOptions(IOutput output) => new()
     {
         Background = Background,
         Projection = OutputProjection.For(output),
     };
-
-    private void RenderOutput(OutputView view)
-    {
-        _frameClock.BeginFrameAtNextRefresh(view.Output);
-        var target = view.Swapchain?.Acquire(out _) ?? (IBuffer?)view.Target;
-        if (target is null)
-        {
-            return;
-        }
-
-        var box = _layout.BoxOf(view.Output);
-        _scene.Root.SetPosition(-box.X, -box.Y);
-        if (!_scene.Render(_renderer, target, SceneOptions(view.Output)))
-        {
-            BasinReport.Line($"SHOT render failed");
-        }
-
-        MaybeScreenshot(view);
-        _scene.Root.SetPosition(0, 0);
-        _frameState.Clear();
-        view.Output.Commit(_frameState.SetBuffer(target));
-
-        view.Swapchain?.Presented(target);
-        view.LastPresentedBuffer = target;
-
-        _scene.SendFrameDone((uint)Environment.TickCount);
-    }
 
     private bool _useTransactions;
     private Transaction? _splitTransaction;
@@ -116,7 +54,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
         var usable = view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea;
         workspace.TileArea = new Box(origin.X + usable.X, origin.Y + usable.Y, usable.Width, usable.Height);

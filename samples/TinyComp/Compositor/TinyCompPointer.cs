@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -28,7 +29,7 @@ internal sealed partial class TinyComp
         };
         pointer.Motion += (time, x, y) =>
         {
-            var output = _layout.OutputAt(_cursorX, _cursorY) ?? _views[0].Output;
+            var output = _layout.OutputAt(_cursorX, _cursorY) ?? Views[0].Output;
             var (layoutX, layoutY) = _layout.ToLayout(output, x, y);
             MoveCursor(layoutX, layoutY, time);
         };
@@ -554,7 +555,7 @@ internal sealed partial class TinyComp
     private void PrepareMenu((Frame Frame, IGrabTarget Owner) hit)
     {
         hit.Frame.MenuOrigin = new Point(hit.Owner.X, hit.Owner.Y);
-        var output = _layout.OutputAt(_cursorX, _cursorY) ?? _views.FirstOrDefault()?.Output;
+        var output = _layout.OutputAt(_cursorX, _cursorY) ?? Views.FirstOrDefault()?.Output;
         hit.Frame.MenuConstraint = output is null ? default : _layout.BoxOf(output);
     }
 
@@ -576,14 +577,14 @@ internal sealed partial class TinyComp
 
     internal double ScaleAt(double x, double y)
     {
-        var view = _views.FirstOrDefault(v => _layout.OutputAt(x, y) == v.Output) ?? _views.FirstOrDefault();
+        var view = Views.FirstOrDefault(v => _layout.OutputAt(x, y) == v.Output) ?? Views.FirstOrDefault();
         return view?.Output.Scale ?? 1.0;
     }
 
     internal double ScaleForBox(in Box box)
     {
         var best = 0.0;
-        foreach (var view in _views)
+        foreach (var view in Views)
         {
             if (!_layout.BoxOf(view.Output).Intersect(box).IsEmpty)
             {

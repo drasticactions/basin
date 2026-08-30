@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Basin;
+using Basin.Host;
 using Basin.Backend.Libinput;
 using Basin.Cli;
 using Basin.Effects;
@@ -71,7 +72,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        var view = _views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? _views[0];
+        var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
         xwindow.ResizeTo(
             origin.X + (rule.X ?? xwindow.X),

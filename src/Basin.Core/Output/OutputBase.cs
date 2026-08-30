@@ -181,6 +181,8 @@ public abstract class OutputBase : IOutput
 
     protected virtual bool SupportsAbmLevel => false;
 
+    public virtual OutputClass Class => OutputClass.Desktop;
+
     public virtual OutputConfigurationFeatures Features => OutputConfigurationFeatures.None;
 
     public virtual OutputColorimetry? Colorimetry => null;

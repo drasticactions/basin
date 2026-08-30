@@ -374,7 +374,7 @@ public sealed class TinyCompConfigTests : IDisposable
             Assert.Equal(TinyComp.Config.Template(), File.ReadAllText(seeded));
             Assert.Contains(_lines, line => line.Contains("wrote the default", StringComparison.Ordinal));
             Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
-            Assert.Equal(8, config.Bindings.Count);
+            Assert.Equal(9, config.Bindings.Count);
 
             var written = File.GetLastWriteTimeUtc(seeded);
             _lines.Clear();
@@ -386,6 +386,54 @@ public sealed class TinyCompConfigTests : IDisposable
         {
             Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", previous);
         }
+    }
+
+    [Fact]
+    public void An_output_section_pins_scale_transform_and_mode_by_connector_name()
+    {
+        var path = Write("""
+            [output."DP-1"]
+            scale     = 1.5
+            transform = "270"
+            mode      = "3840x2560@60"
+
+            [output."HDMI-A-1"]
+            scale = 2
+            """);
+
+        var config = TinyComp.Config.Load(path, BasinLog.For("t"), out var fatal);
+
+        Assert.Null(fatal);
+        Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
+        var setting = config.OutputSettingFor("DP-1");
+        Assert.NotNull(setting);
+        Assert.Equal(1.5, setting.Scale);
+        Assert.Equal(OutputTransform.Rotate270, setting.Transform);
+        Assert.Equal((3840, 2560, (int?)60), setting.Mode);
+        Assert.Equal(2, config.OutputSettingFor("HDMI-A-1")!.Scale);
+        Assert.Null(config.OutputSettingFor("DP-2"));
+    }
+
+    [Fact]
+    public void An_output_section_warns_on_a_bad_value_and_keeps_the_rest()
+    {
+        var path = Write("""
+            [output."DP-1"]
+            scale     = 1.25
+            transform = "diagonal"
+            mode      = "wide"
+            """);
+
+        var config = TinyComp.Config.Load(path, BasinLog.For("t"), out var fatal);
+
+        Assert.Null(fatal);
+        Assert.Contains(_lines, line => line.Contains("transform", StringComparison.Ordinal));
+        Assert.Contains(_lines, line => line.Contains("mode", StringComparison.Ordinal));
+        var setting = config.OutputSettingFor("DP-1");
+        Assert.NotNull(setting);
+        Assert.Equal(1.25, setting.Scale);
+        Assert.Null(setting.Transform);
+        Assert.Null(setting.Mode);
     }
 
     [Fact]
@@ -430,7 +478,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Null(fatal);
         Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
         Assert.DoesNotContain(_lines, line => line.Contains("unknown stage", StringComparison.Ordinal));
-        Assert.Equal(8, config.Bindings.Count);
+        Assert.Equal(9, config.Bindings.Count);
         Assert.Empty(config.Rules);
         Assert.Empty(config.Post);
     }
