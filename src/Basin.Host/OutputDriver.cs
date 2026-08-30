@@ -276,21 +276,6 @@ public sealed class OutputDriver : IDisposable
         view.Scheduler?.ScheduleRepaint();
     }
 
-    public void SetAspectRatio(OutputView view, double aspectRatio)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-
-        using var state = new OutputState();
-        if (!view.Output.Commit(state.SetAspectRatio(aspectRatio)))
-        {
-            return;
-        }
-
-        Relayout();
-        ModeChanged?.Invoke(view);
-        view.Scheduler?.ScheduleRepaint();
-    }
-
     private void FollowHostScale(OutputView view, WaylandOutput hosted)
     {
         if (Math.Abs(hosted.HostScale - hosted.Scale) < 0.0001)

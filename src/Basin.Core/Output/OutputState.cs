@@ -13,8 +13,6 @@ public sealed class OutputState : IDisposable
 
     public double Scale { get; private set; } = 1;
 
-    public double AspectRatio { get; private set; }
-
     public OutputTransform Transform { get; private set; }
 
     public IBuffer? Buffer { get; private set; }
@@ -69,14 +67,6 @@ public sealed class OutputState : IDisposable
     {
         Scale = OutputScaling.Snap(scale);
         Fields |= OutputStateFields.Scale;
-        return this;
-    }
-
-    public OutputState SetAspectRatio(double aspectRatio)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(aspectRatio);
-        AspectRatio = aspectRatio;
-        Fields |= OutputStateFields.AspectRatio;
         return this;
     }
 

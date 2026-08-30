@@ -25,8 +25,6 @@ public interface IOutput
 
     double Scale { get; }
 
-    double AspectRatio => 0;
-
     OutputTransform Transform { get; }
 
     bool AdaptiveSync { get; }

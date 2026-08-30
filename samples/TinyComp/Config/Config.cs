@@ -455,7 +455,6 @@ internal sealed class Config
     private static OutputSetting ParseOutputSetting(string name, TomlTable table, BasinLogger log)
     {
         double? scale = null;
-        double? aspect = null;
         OutputTransform? transform = null;
         (int Width, int Height, int? Refresh)? mode = null;
         foreach (var (key, value) in table)
@@ -467,15 +466,6 @@ internal sealed class Config
                     break;
                 case "scale" when value is long integer:
                     scale = integer;
-                    break;
-                case "aspect" when value is double fractional:
-                    aspect = fractional;
-                    break;
-                case "aspect" when value is long integer:
-                    aspect = integer;
-                    break;
-                case "aspect" when value is string text:
-                    aspect = ParseAspect(text, name, log);
                     break;
                 case "transform" when value is string text:
                     transform = ParseTransform(text, name, log);
@@ -489,21 +479,7 @@ internal sealed class Config
             }
         }
 
-        return new OutputSetting { Scale = scale, Aspect = aspect, Transform = transform, Mode = mode };
-    }
-
-    private static double? ParseAspect(string text, string name, BasinLogger log)
-    {
-        var parts = text.Split(':');
-        if (parts.Length == 2 &&
-            double.TryParse(parts[0], out var width) && double.TryParse(parts[1], out var height) &&
-            width > 0 && height > 0)
-        {
-            return width / height;
-        }
-
-        log.Warn($"[output.\"{name}\"] aspect \"{text}\" is not W:H or a number, ignored");
-        return null;
+        return new OutputSetting { Scale = scale, Transform = transform, Mode = mode };
     }
 
     private static OutputTransform? ParseTransform(string text, string name, BasinLogger log)

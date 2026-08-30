@@ -1381,9 +1381,7 @@ public sealed class SceneOutput : IDisposable
             DamagePending?.Invoke();
         }
 
-        if (Output.Scale != _scale ||
-            (fields & OutputStateFields.AspectRatio) != 0 ||
-            (_replicationSource is null && Output.Transform != _projection.Transform))
+        if (Output.Scale != _scale || (_replicationSource is null && Output.Transform != _projection.Transform))
         {
             _scale = Output.Scale;
             _projection = ComputeProjection();

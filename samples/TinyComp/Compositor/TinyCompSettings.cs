@@ -99,12 +99,6 @@ internal sealed partial class TinyComp
             {
                 SetOutputScale(view, wanted);
             }
-
-            var aspect = _config.OutputSettingFor(view.Output.Name)?.Aspect ?? 0;
-            if (aspect != view.Output.AspectRatio)
-            {
-                SetOutputAspect(view, aspect);
-            }
         }
 
         ApplyNightLight(loaded.NightLight);

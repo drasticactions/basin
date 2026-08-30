@@ -516,8 +516,7 @@ public sealed class CursorController : IDisposable
         }
         else
         {
-            var content = output.ContentBox();
-            (output as IHardwareCursor)?.MoveCursor(content.X + x, content.Y + y);
+            (output as IHardwareCursor)?.MoveCursor(x, y);
             if (output is IHardwareCursor { CursorAwaitingFrame: true })
             {
                 scene?.RequestPlaneCommit();
