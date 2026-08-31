@@ -63,6 +63,9 @@ public sealed class OutputScaleTests
     [Fact]
     public void The_driver_keeps_a_headless_output_at_1()
     {
+        Assert.SkipWhen(
+            !CompositorTestHost.HasWaylandServer,
+            "this host has no libwayland server, and the driver hosts a real display");
         using var host = Basin.Host.BasinHost.Create(Basin.Host.HostOptions.ForBackend("headless"));
         var scene = new Basin.Scene.Scene();
         var layout = new OutputLayout();
@@ -79,6 +82,9 @@ public sealed class OutputScaleTests
     [Fact]
     public void A_configured_scale_beats_the_default_and_the_scales_array_beats_both()
     {
+        Assert.SkipWhen(
+            !CompositorTestHost.HasWaylandServer,
+            "this host has no libwayland server, and the driver hosts a real display");
         using var host = Basin.Host.BasinHost.Create(Basin.Host.HostOptions.ForBackend("headless"));
         var scene = new Basin.Scene.Scene();
         var layout = new OutputLayout();
