@@ -11,6 +11,7 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
     private readonly IBuffer _buffer;
     private SKImage? _image;
     private nint _imageData;
+    private bool _dirty;
 
     internal SkiaTexture(IBuffer buffer)
     {
@@ -24,9 +25,7 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
 
     public int Height { get; }
 
-    public void MarkDirty()
-    {
-    }
+    public void MarkDirty() => _dirty = true;
 
     public bool Acquire(out SKImage image)
     {
@@ -36,8 +35,9 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
             return false;
         }
 
-        if (_image is null || _imageData != view.Data)
+        if (_dirty || _image is null || _imageData != view.Data)
         {
+            _dirty = false;
             Rebuild(view);
         }
 
