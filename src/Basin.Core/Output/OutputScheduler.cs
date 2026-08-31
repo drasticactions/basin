@@ -185,12 +185,14 @@ public sealed class OutputScheduler : IDisposable
         _lastFireTick = Environment.TickCount64;
         _lastFireNanos = MonotonicClock.Nanos;
         _firing = true;
+        AllocationScope.Pause();
         try
         {
             Repaint?.Invoke();
         }
         finally
         {
+            AllocationScope.Resume();
             _firing = false;
         }
 
@@ -242,10 +244,27 @@ public sealed class OutputScheduler : IDisposable
         }
     }
 
+    private int _scopedFires;
+
     private void OnTimer()
     {
         Log.Debug($"scheduler: timer fired (queued={_repaintQueued})");
         _timerArmed = false;
-        Fire();
+        if (_scopedFires < 10)
+        {
+            _scopedFires++;
+            Fire();
+            return;
+        }
+
+        AllocationScope.Begin(region: "SchedulerTimer", forgiving: true);
+        try
+        {
+            Fire();
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
     }
 }

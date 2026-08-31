@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Pixman;
 
 namespace Basin.Scene;
@@ -472,7 +473,22 @@ public sealed class SceneOutput : IDisposable
         try
         {
             BeforeRepaint?.Invoke(tick);
-            return CommitLocked(renderer, swapchain, suppliedTarget, suppliedAge, state, options, mode, tick);
+            var warm = _commitsEntered >= CommitScopeWarmup;
+            if (!warm)
+            {
+                _commitsEntered++;
+                return CommitLocked(renderer, swapchain, suppliedTarget, suppliedAge, state, options, mode, tick);
+            }
+
+            AllocationScope.Begin(region: "Commit", forgiving: true);
+            try
+            {
+                return CommitLocked(renderer, swapchain, suppliedTarget, suppliedAge, state, options, mode, tick);
+            }
+            finally
+            {
+                AllocationScope.End();
+            }
         }
         finally
         {
@@ -487,6 +503,9 @@ public sealed class SceneOutput : IDisposable
 
     private bool _inCommit;
     private bool _damagedDuringCommit;
+    private int _commitsEntered;
+
+    private const int CommitScopeWarmup = 30;
 
     private bool CommitLocked(
         IRenderer renderer, Swapchain? swapchain, IBuffer? suppliedTarget, int suppliedAge,
@@ -499,8 +518,16 @@ public sealed class SceneOutput : IDisposable
         _runsBackdropEffects = renderer.SupportsBackdropEffects;
         Ring.Resize(mode.Width, mode.Height);
         _renderList.Clear();
-        _scene.CollectRenderList(_renderList, -_position.X, -_position.Y);
-        _scene.PrepareCaptures(renderer, _renderList, _projection.Scale);
+        AllocationScope.Pause();
+        try
+        {
+            _scene.CollectRenderList(_renderList, -_position.X, -_position.Y);
+            _scene.PrepareCaptures(renderer, _renderList, _projection.Scale);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
 
         if (!Ring.IsEmpty && _runsBackdropEffects && AnyActiveBackdrop())
         {
@@ -808,10 +835,13 @@ public sealed class SceneOutput : IDisposable
 
     private void OfferLayers(OutputState state)
     {
+        AllocationScope.Pause();
         while (_layerPool.Count < _candidateNodes.Count)
         {
             _layerPool.Add(new OutputLayer());
         }
+
+        AllocationScope.Resume();
 
         for (var i = _candidateNodes.Count - 1; i >= 0; i--)
         {
@@ -932,9 +962,17 @@ public sealed class SceneOutput : IDisposable
             return;
         }
 
-        _announcedCandidates.Clear();
-        _announcedCandidates.AddRange(_candidateNodes);
-        OffloadCandidatesChanged?.Invoke(_announcedCandidates);
+        AllocationScope.Pause();
+        try
+        {
+            _announcedCandidates.Clear();
+            _announcedCandidates.AddRange(_candidateNodes);
+            OffloadCandidatesChanged?.Invoke(_announcedCandidates);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
     }
 
     private static int IndexOfNode(List<SceneBuffer> list, SceneBuffer node)
@@ -1063,7 +1101,16 @@ public sealed class SceneOutput : IDisposable
 
             (texture as IRefreshableTexture)?.MarkDirty();
             var pass = renderer.BeginBufferPass(stageTarget, new RenderPassOptions());
-            _postStages[i].Render(pass, texture, new PostContext(mode.Width, mode.Height, tick, _postDamage));
+            AllocationScope.Pause();
+            try
+            {
+                _postStages[i].Render(pass, texture, new PostContext(mode.Width, mode.Height, tick, _postDamage));
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
+
             if (last && drawCursor)
             {
                 DrawSoftwareCursor(renderer, pass);
@@ -1113,6 +1160,7 @@ public sealed class SceneOutput : IDisposable
             : 0u;
         _filterLastPresentNanos = tick.TargetPresentNanos;
         var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
+        AllocationScope.Pause();
         var recorded = pass.AddFrameFilter(filter, texture, new FrameFilterOptions
         {
             FrameCount = _filterFrameCount,
@@ -1122,6 +1170,7 @@ public sealed class SceneOutput : IDisposable
             FrametimeDeltaMillis = delta,
             Rotation = RotationOf(Output.Transform),
         });
+        AllocationScope.Resume();
         if (!recorded)
         {
             pass.AddTexture(texture, new TextureRenderOptions
@@ -1364,10 +1413,18 @@ public sealed class SceneOutput : IDisposable
 
     private void EnsurePool(int count)
     {
+        if (_regionPool.Count >= count)
+        {
+            return;
+        }
+
+        AllocationScope.Pause();
         while (_regionPool.Count < count)
         {
             _regionPool.Add(new PixmanRegion32());
         }
+
+        AllocationScope.Resume();
     }
 
     private PixmanRegion32 PoolRegion(int index) => _regionPool[index];
@@ -1397,7 +1454,15 @@ public sealed class SceneOutput : IDisposable
         {
             if (_scanoutStreak != 0 || _scanningOut)
             {
-                ScanoutCandidateChanged?.Invoke(null);
+                AllocationScope.Pause();
+                try
+                {
+                    ScanoutCandidateChanged?.Invoke(null);
+                }
+                finally
+                {
+                    AllocationScope.Resume();
+                }
             }
 
             _scanoutStreak = 0;
@@ -1407,7 +1472,15 @@ public sealed class SceneOutput : IDisposable
         var buffer = candidate.Buffer!;
         if (_scanoutStreak == 0)
         {
-            ScanoutCandidateChanged?.Invoke(candidate.InputSurface);
+            AllocationScope.Pause();
+            try
+            {
+                ScanoutCandidateChanged?.Invoke(candidate.InputSurface);
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
         }
 
         _scanoutStreak++;

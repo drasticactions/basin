@@ -1,3 +1,5 @@
+using Basin.Diagnostics;
+
 namespace Basin;
 
 public sealed class Swapchain : IDisposable
@@ -30,14 +32,17 @@ public sealed class Swapchain : IDisposable
             var slot = _slots[i];
             if (slot is null)
             {
+                AllocationScope.Pause();
                 var buffer = _allocator.Allocate(Width, Height, Format, _modifiers, BufferUse.Render | BufferUse.Scanout);
-                if (buffer is null)
+                var made = buffer is null ? null : new Slot(buffer);
+                AllocationScope.Resume();
+                if (made is null)
                 {
                     age = 0;
                     return null;
                 }
 
-                _slots[i] = new Slot(buffer);
+                _slots[i] = made;
                 age = 0;
                 return buffer;
             }

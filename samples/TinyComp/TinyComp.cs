@@ -238,9 +238,10 @@ internal sealed partial class TinyComp :
         return _fireShader;
     }
 
-    public TinyComp(Config config, bool drm = false, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null)
+    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null)
     {
         ArgumentNullException.ThrowIfNull(config);
+        var drm = backend == BackendKind.Drm;
         _config = config;
         _configPath = configPath;
         var outputCount = config.Outputs;
@@ -259,7 +260,7 @@ internal sealed partial class TinyComp :
         _damageTint = config.DamageTint;
         _scales = config.Scales;
         _host = Basin.Host.BasinHost.Create(
-            Basin.Host.HostOptions.ForBackend(drm ? "drm" : "nested") with
+            Basin.Host.HostOptions.ForBackend(drm ? "drm" : backend == BackendKind.Headless ? "headless" : "nested") with
             {
                 Transport = managedTransport || channelEndpoint is not null
                     ? Basin.Host.HostTransport.Managed
@@ -353,7 +354,7 @@ internal sealed partial class TinyComp :
         }
         else
         {
-            _backend = _host.Parent!;
+            _backend = _host.Parent;
 
             var stack = CreateStack(ref rendererName, Basin.Renderers.RendererCatalog.FindRenderNode());
             _renderer = stack.Renderer;
@@ -699,9 +700,17 @@ internal sealed partial class TinyComp :
             _input!.Start();
             LoadCursorTheme();
         }
+        else if (_backend is null)
+        {
+            _pointer = new LayoutPointer(_layout);
+            _driver.CreateInitialOutputs();
+            _outputsCreated = true;
+            SetupTouch();
+            LoadCursorTheme();
+        }
         else
         {
-            _backend!.RenderDevice = _renderer.Device;
+            _backend.RenderDevice = _renderer.Device;
 
             _backend.ParentGone += () => _runLoop.Stop();
             _backend.PointerAdded += WirePointer;

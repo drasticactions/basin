@@ -307,7 +307,6 @@ internal sealed partial class TinyComp
 
     private const int NotificationTravel = 400;
 
-
     internal void SetMinimized(Window window, bool minimized)
     {
         if (window.Minimized == minimized)

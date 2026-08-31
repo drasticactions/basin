@@ -1,6 +1,7 @@
 using Basin.Backend.Drm;
 using Basin.Backend.Wayland;
 using Basin.Capabilities;
+using Basin.Diagnostics;
 using Basin.Scene;
 using Wayland.Server;
 
@@ -578,19 +579,27 @@ public sealed class OutputDriver : IDisposable
         var rotated = view.Transform != view.Output.Transform;
         if (resized || rotated)
         {
-            (view.Width, view.Height) = (mode.Width, mode.Height);
-            view.Scale = view.Output.Scale;
-            var was = view.Transform;
-            view.Transform = view.Output.Transform;
-            Relayout();
-            if (resized)
+            AllocationScope.Pause();
+            try
             {
-                ModeChanged?.Invoke(view);
-            }
+                (view.Width, view.Height) = (mode.Width, mode.Height);
+                view.Scale = view.Output.Scale;
+                var was = view.Transform;
+                view.Transform = view.Output.Transform;
+                Relayout();
+                if (resized)
+                {
+                    ModeChanged?.Invoke(view);
+                }
 
-            if (rotated)
+                if (rotated)
+                {
+                    TransformChanged?.Invoke(view, was);
+                }
+            }
+            finally
             {
-                TransformChanged?.Invoke(view, was);
+                AllocationScope.Resume();
             }
         }
 
@@ -601,14 +610,18 @@ public sealed class OutputDriver : IDisposable
     {
         if (view.Swapchain is null)
         {
+            AllocationScope.Pause();
             view.Swapchain = new Swapchain(
                 view.Allocator!, mode.Width, mode.Height, DrmFormat.Xrgb8888, view.SwapModifiers);
+            AllocationScope.Resume();
         }
         else if (mode.Width != view.Swapchain.Width || mode.Height != view.Swapchain.Height)
         {
             view.Swapchain.Resize(mode.Width, mode.Height);
         }
     }
+
+    private int _scopedRepaints;
 
     private void Repaint(OutputView view)
     {
@@ -617,7 +630,37 @@ public sealed class OutputDriver : IDisposable
             return;
         }
 
-        Frames?.BeginFrame(view.Output, view.Scheduler?.PredictedVblankNanos ?? 0);
+        if (_scopedRepaints < 30)
+        {
+            _scopedRepaints++;
+            RepaintCore(view);
+            return;
+        }
+
+        AllocationScope.Begin(region: "Repaint", forgiving: true);
+        try
+        {
+            RepaintCore(view);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    private void RepaintCore(OutputView view)
+    {
+
+        AllocationScope.Pause();
+        try
+        {
+            Frames?.BeginFrame(view.Output, view.Scheduler?.PredictedVblankNanos ?? 0);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+
         if (!SyncViewGeometry(view, out var mode))
         {
             return;
@@ -629,7 +672,15 @@ public sealed class OutputDriver : IDisposable
             return;
         }
 
-        BeforeRepaint?.Invoke(view);
+        AllocationScope.Pause();
+        try
+        {
+            BeforeRepaint?.Invoke(view);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
 
         EnsureSwapchain(view, mode);
 
@@ -649,7 +700,16 @@ public sealed class OutputDriver : IDisposable
         }
 
         _frameState.Clear();
-        StampFrame?.Invoke(view, _frameState);
+        AllocationScope.Pause();
+        try
+        {
+            StampFrame?.Invoke(view, _frameState);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+
         var committed = view.Scene.Commit(
             _renderer, view.Swapchain!, _frameState, new SceneCommitOptions
             {
@@ -669,23 +729,39 @@ public sealed class OutputDriver : IDisposable
         {
             if (view.Rendered == 0 && _host.Drm is { } drm && view.Allocator is not DumbAllocator)
             {
-                ScanoutChanged?.Invoke(view, ScanoutChoice.RefusedByPlane);
-                view.Swapchain!.Dispose();
-                view.Swapchain = null;
-                var dumb = new DumbAllocator(drm);
-                _ownedAllocators.Add(dumb);
-                view.Allocator = dumb;
-                view.SwapModifiers = [DrmFormatSet.ModifierLinear];
+                AllocationScope.Pause();
+                try
+                {
+                    ScanoutChanged?.Invoke(view, ScanoutChoice.RefusedByPlane);
+                    view.Swapchain!.Dispose();
+                    view.Swapchain = null;
+                    var dumb = new DumbAllocator(drm);
+                    _ownedAllocators.Add(dumb);
+                    view.Allocator = dumb;
+                    view.SwapModifiers = [DrmFormatSet.ModifierLinear];
+                }
+                finally
+                {
+                    AllocationScope.Resume();
+                }
             }
 
             view.Scheduler!.ScheduleRepaint();
             return;
         }
 
-        Painted?.Invoke(view);
-        if (committed)
+        AllocationScope.Pause();
+        try
         {
-            Capture?.Capture.NotifyDamaged(view.Output, new Box(0, 0, mode.Width, mode.Height));
+            Painted?.Invoke(view);
+            if (committed)
+            {
+                Capture?.Capture.NotifyDamaged(view.Output, new Box(0, 0, mode.Width, mode.Height));
+            }
+        }
+        finally
+        {
+            AllocationScope.Resume();
         }
 
         _scene.SendFrameDone((uint)Environment.TickCount);

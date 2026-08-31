@@ -284,7 +284,28 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
         }
     }
 
+    private int _scopedSubmits;
+
     public bool Submit()
+    {
+        if (_scopedSubmits < 30)
+        {
+            _scopedSubmits++;
+            return SubmitCore();
+        }
+
+        AllocationScope.Begin(region: "ImpellerSubmit", forgiving: true);
+        try
+        {
+            return SubmitCore();
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    private bool SubmitCore()
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
         var target = _target;

@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Basin.Render.Gl;
 using Pixman;
 using SkiaSharp;
@@ -63,7 +64,28 @@ internal sealed unsafe class SkiaGlRenderPass : IRenderPass
         SkiaDraw.Shader(_entry!.Canvas, _paint, shader, options);
     }
 
+    private int _scopedSubmits;
+
     public bool Submit()
+    {
+        if (_scopedSubmits < 30)
+        {
+            _scopedSubmits++;
+            return SubmitCore();
+        }
+
+        AllocationScope.Begin(region: "SkiaGlSubmit", forgiving: true);
+        try
+        {
+            return SubmitCore();
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    private bool SubmitCore()
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
         var target = _target;

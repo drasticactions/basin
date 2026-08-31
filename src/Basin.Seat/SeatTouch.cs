@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Wayland;
 
 namespace Basin.Seat;
@@ -44,14 +45,88 @@ public sealed class SeatTouch
         return false;
     }
 
-    public uint NotifyDown(Surface surface, uint timeMs, int id, double x, double y) =>
-        Grab.Down(surface, timeMs, id, x, y);
+    private int _scopedNotifies;
 
-    public void NotifyUp(uint timeMs, int id) => Grab.Up(timeMs, id);
+    private const int NotifyScopeWarmup = 10;
 
-    public void NotifyMotion(uint timeMs, int id, double x, double y) => Grab.Motion(timeMs, id, x, y);
+    public uint NotifyDown(Surface surface, uint timeMs, int id, double x, double y)
+    {
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            return Grab.Down(surface, timeMs, id, x, y);
+        }
 
-    public void NotifyFrame() => Grab.Frame();
+        AllocationScope.Begin(region: "TouchNotify", forgiving: true);
+        try
+        {
+            return _defaultGrab.Down(surface, timeMs, id, x, y);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    public void NotifyUp(uint timeMs, int id)
+    {
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            Grab.Up(timeMs, id);
+            return;
+        }
+
+        AllocationScope.Begin(region: "TouchNotify", forgiving: true);
+        try
+        {
+            _defaultGrab.Up(timeMs, id);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    public void NotifyMotion(uint timeMs, int id, double x, double y)
+    {
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            Grab.Motion(timeMs, id, x, y);
+            return;
+        }
+
+        AllocationScope.Begin(region: "TouchNotify", forgiving: true);
+        try
+        {
+            _defaultGrab.Motion(timeMs, id, x, y);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    public void NotifyFrame()
+    {
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            Grab.Frame();
+            return;
+        }
+
+        AllocationScope.Begin(region: "TouchNotify", forgiving: true);
+        try
+        {
+            _defaultGrab.Frame();
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
 
     public void NotifyCancel() => Grab.Cancel();
 

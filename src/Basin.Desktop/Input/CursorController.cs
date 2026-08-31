@@ -458,7 +458,16 @@ public sealed class CursorController : IDisposable
         }
 
         var at = _layout.OutputAt(_x, _y);
-        var index = at is null ? -1 : _outputs.FindIndex(entry => ReferenceEquals(entry.Output, at));
+        var index = -1;
+        for (var i = 0; at is not null && i < _outputs.Count; i++)
+        {
+            if (ReferenceEquals(_outputs[i].Output, at))
+            {
+                index = i;
+                break;
+            }
+        }
+
         if (_cursorOn is { } previous && !ReferenceEquals(previous, at))
         {
             (previous as IHardwareCursor)?.SetCursor(null, 0, 0);

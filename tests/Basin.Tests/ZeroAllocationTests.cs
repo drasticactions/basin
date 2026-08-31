@@ -34,6 +34,159 @@ public sealed class ZeroAllocationTests
     }
 
     [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void SceneOutput_frame_loop_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var node = new Scene.SceneRect(host.Scene.Root, 30, 30, new RenderColor(0.2f, 0.5f, 0.8f, 1f));
+
+        for (var i = 0; i < 20; i++)
+        {
+            node.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        }
+
+        NothingAllocated(1000, i =>
+        {
+            node.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        });
+        node.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void SceneOutput_direct_scanout_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var client = DirectScanoutTests.FakeClientBuffer(160, 120);
+        using var clientGuard = new DeferDestroy(client);
+        var node = new Scene.SceneBuffer(host.Scene.Root) { IsOpaque = true };
+        node.SetBuffer(client);
+        var options = new Scene.SceneCommitOptions { AllowDirectScanout = true };
+
+        for (var i = 0; i < 20; i++)
+        {
+            host.CommitFrame(options);
+        }
+
+        Assert.SkipWhen(
+            host.SceneOutput.ScanoutCommits == 0,
+            $"the {renderer} row never entered direct scanout");
+
+        NothingAllocated(1000, _ => host.CommitFrame(options));
+        Assert.True(host.SceneOutput.ScanoutCommits >= 1000);
+        node.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void SceneOutput_plane_offload_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var output = new PlaneOutput();
+        using (var lit = new OutputState())
+        {
+            Assert.True(output.Commit(lit.SetEnabled(true).SetMode(new OutputMode(160, 120, 60_000))));
+        }
+
+        using var sceneOutput = new Scene.SceneOutput(host.Scene, output) { OffloadEntryThreshold = 1 };
+        using var swapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        var options = new Scene.SceneCommitOptions { AllowPlaneOffload = true };
+
+        var background = new Scene.SceneRect(host.Scene.Root, 160, 120, new RenderColor(0.1f, 0.2f, 0.3f, 1f));
+        var client = DirectScanoutTests.FakeClientBuffer(40, 40);
+        using var clientGuard = new DeferDestroy(client);
+        var node = new Scene.SceneBuffer(host.Scene.Root);
+        node.SetBuffer(client);
+        node.SetPosition(10, 10);
+        output.Accept = (_, _) => true;
+
+        void Frame(int i)
+        {
+            background.SetPosition(i % 2, 0);
+            host.Loop.Dispatch(0);
+            _ = sceneOutput.Commit(host.Renderer, swapchain, state, options);
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Frame(i);
+        }
+
+        Assert.SkipWhen(
+            sceneOutput.OffloadCommits == 0,
+            $"the {renderer} row never offloaded a plane");
+
+        var before = sceneOutput.OffloadCommits;
+        NothingAllocated(1000, Frame);
+        Assert.True(sceneOutput.OffloadCommits - before >= 1000);
+        node.Destroy();
+        background.Destroy();
+        output.Destroy();
+    }
+
+    private sealed class PlaneOutput() : OutputBase("plane-test")
+    {
+        public Func<OutputLayer, int, bool>? Accept { get; set; }
+
+        protected override bool SupportsLayers => true;
+
+        protected override bool TestCommitCore(OutputState state) => Judge(state);
+
+        protected override bool CommitCore(OutputState state) => Judge(state);
+
+        private bool Judge(OutputState state)
+        {
+            if ((state.Fields & OutputStateFields.Layers) == 0 || state.Layers is null)
+            {
+                return true;
+            }
+
+            for (var i = 0; i < state.Layers.Count; i++)
+            {
+                state.Layers[i].Accepted = Accept?.Invoke(state.Layers[i], i) ?? false;
+            }
+
+            return true;
+        }
+    }
+
+    [Theory]
     [InlineData("gl")]
     [InlineData("vulkan")]
     public void Animated_shader_uniforms_allocate_nothing_over_1000_frames(string renderer)
@@ -416,9 +569,6 @@ public sealed class ZeroAllocationTests
     public void A_client_swapping_buffers_costs_nothing_to_render(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
-        Assert.SkipWhen(
-            renderer is "vulkan" or "skia",
-            $"the {renderer} shm upload path still allocates once a swap");
         using var host = new CompositorTestHost(renderer: renderer);
 
         var surface = host.Client.Compositor.CreateSurface();
@@ -521,10 +671,64 @@ public sealed class ZeroAllocationTests
     private static void Report(string message) =>
         TestContext.Current.TestOutputHelper?.WriteLine(message);
 
+    [Fact]
+    public void A_log_line_allocates_nothing_over_1000_lines()
+    {
+        var previousLevel = Basin.Diagnostics.BasinLog.Level;
+        var previousSink = Basin.Diagnostics.BasinLog.Sink;
+        var sink = new CountingLogSink();
+        Basin.Diagnostics.BasinLog.Level = Basin.Diagnostics.BasinLogLevel.Debug;
+        Basin.Diagnostics.BasinLog.Sink = sink;
+        try
+        {
+            var log = Basin.Diagnostics.BasinLog.For("zero");
+            var payload = new char[600];
+            payload.AsSpan().Fill('x');
+
+            for (var i = 0; i < 20; i++)
+            {
+                log.Debug($"an enabled line with {i} and {i * 2} and {i * 3} holes");
+                log.Trace($"a line below the threshold with {i} and {i * 2} and {i * 3} holes");
+                log.Debug($"a line that outgrows the scratch: {payload.AsSpan()} with {i} holes");
+            }
+
+            NothingAllocated(1000, i => log.Debug($"an enabled line with {i} and {i * 2} and {i * 3} holes"));
+            NothingAllocated(1000, i => log.Trace($"a line below the threshold with {i} and {i * 2} and {i * 3} holes"));
+            NothingAllocated(1000, i => log.Debug($"a line that outgrows the scratch: {payload.AsSpan()} with {i} holes"));
+
+            Assert.True(sink.Writes >= 2040);
+            Assert.True(sink.LongestLine > 600);
+        }
+        finally
+        {
+            Basin.Diagnostics.BasinLog.Level = previousLevel;
+            Basin.Diagnostics.BasinLog.Sink = previousSink;
+        }
+    }
+
+    private sealed class CountingLogSink : Basin.Diagnostics.IBasinLogSink
+    {
+        public long Writes { get; private set; }
+
+        public int LongestLine { get; private set; }
+
+        public void Write(
+            Basin.Diagnostics.BasinLogLevel level, string category, ReadOnlySpan<char> message)
+        {
+            Writes++;
+            LongestLine = Math.Max(LongestLine, message.Length);
+        }
+    }
+
     private static void Frame(CompositorTestHost host)
     {
         host.Output.StepFrame();
         host.RenderFrame();
         host.Loop.Dispatch(0);
+    }
+
+    private sealed class DeferDestroy(BufferBase buffer) : IDisposable
+    {
+        public void Dispose() => buffer.Destroy();
     }
 }

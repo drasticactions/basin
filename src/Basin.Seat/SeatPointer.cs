@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Wayland;
 
 namespace Basin.Seat;
@@ -52,7 +53,29 @@ public sealed class SeatPointer
 
     public void NotifyClearFocus() => Grab.Enter(null, 0, 0);
 
-    public void NotifyMotion(uint timeMs, double x, double y) => Grab.Motion(timeMs, x, y);
+    private int _scopedNotifies;
+
+    private const int NotifyScopeWarmup = 10;
+
+    public void NotifyMotion(uint timeMs, double x, double y)
+    {
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            Grab.Motion(timeMs, x, y);
+            return;
+        }
+
+        AllocationScope.Begin(region: "PointerNotify", forgiving: true);
+        try
+        {
+            _defaultGrab.Motion(timeMs, x, y);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
 
     public void NotifyWarp(uint timeMs, double x, double y) => SendWarp(timeMs, x, y);
 
@@ -81,7 +104,25 @@ public sealed class SeatPointer
 
     public uint NotifyButton(uint timeMs, uint button, WlPointer.ButtonState state)
     {
-        var serial = Grab.Button(timeMs, button, state);
+        uint serial;
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            serial = Grab.Button(timeMs, button, state);
+        }
+        else
+        {
+            AllocationScope.Begin(region: "PointerNotify", forgiving: true);
+            try
+            {
+                serial = _defaultGrab.Button(timeMs, button, state);
+            }
+            finally
+            {
+                AllocationScope.End();
+            }
+        }
+
         Buttoned?.Invoke(button, state == WlPointer.ButtonState.Pressed);
         if (state == WlPointer.ButtonState.Pressed)
         {
@@ -98,7 +139,25 @@ public sealed class SeatPointer
         return serial;
     }
 
-    public void NotifyAxis(uint timeMs, in PointerAxis axis) => Grab.Axis(timeMs, axis);
+    public void NotifyAxis(uint timeMs, in PointerAxis axis)
+    {
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            Grab.Axis(timeMs, axis);
+            return;
+        }
+
+        AllocationScope.Begin(region: "PointerNotify", forgiving: true);
+        try
+        {
+            _defaultGrab.Axis(timeMs, axis);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
 
     public void ClearImplicitGrab() => _pressedButtons = 0;
 
@@ -176,7 +235,16 @@ public sealed class SeatPointer
         var dy = y - Y;
         X = x;
         Y = y;
-        Moved?.Invoke(timeMs, dx, dy);
+        AllocationScope.Pause();
+        try
+        {
+            Moved?.Invoke(timeMs, dx, dy);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+
         if (_seat.ClientOf(Focus) is { } client)
         {
             foreach (var pointer in client.Pointers)

@@ -33,6 +33,8 @@ internal sealed class CompositorTestHost : IDisposable
     private readonly Dictionary<string, int> _fdBaseline;
     private readonly Dictionary<string, int> _fdAllowance;
     private uint _frameTimestamp;
+    private SceneOutput? _sceneOutput;
+    private Swapchain? _swapchain;
 
     public static bool HasWaylandClient { get; } =
         System.Runtime.InteropServices.NativeLibrary.TryLoad("wayland-client", out _) ||
@@ -346,6 +348,21 @@ internal sealed class CompositorTestHost : IDisposable
         }
     }
 
+    public SceneOutput SceneOutput => _sceneOutput ??= new SceneOutput(Scene, Output);
+
+    public void CommitFrame(in SceneCommitOptions options = default)
+    {
+        var mode = Output.CurrentMode;
+        _swapchain ??= new Swapchain(
+            new ShmAllocator(), mode.Width, mode.Height, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+
+        Loop.Dispatch(0);
+        _ = SceneOutput.Commit(Renderer, _swapchain, FrameState, options);
+        Output.StepFrame();
+        _frameTimestamp += 16;
+        Scene.SendFrameDone(_frameTimestamp);
+    }
+
     public void RenderFrame()
     {
         Scene.Render(Renderer, Target, RenderColor.Black, Output.Scale);
@@ -393,6 +410,8 @@ internal sealed class CompositorTestHost : IDisposable
         Loop.Dispatch(0);
         Loop.Dispatch(0);
 
+        _sceneOutput?.Dispose();
+        _swapchain?.Dispose();
         Scene.Root.Destroy();
         Renderer.Dispose();
         Target.Destroy();

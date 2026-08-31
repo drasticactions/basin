@@ -397,6 +397,761 @@ public sealed class DispatchAllocationTests
         Budgets.Check("server", "river-repaint-round", allocated);
     }
 
+    [Fact]
+    public void Presentation_feedback_on_every_frame_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var pump = new PresentationFeedbackPump(host.Presentation, host.Layout);
+        using var sceneOutput = new SceneOutput(host.Scene, host.Output);
+        using var swapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        var options = new SceneCommitOptions { AllowDirectScanout = false };
+
+        var window = MappedToplevel.Map(host, host.Client);
+        var front = host.Client.CreateBuffer(60, 50, Fill.Gradient(60, 50));
+        var back = host.Client.CreateBuffer(60, 50, Fill.Gradient(60, 50));
+
+        long FeedbackRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var round = 0; round < rounds; round++)
+            {
+                var feedback = host.Client.Presentation!.Feedback(window.Surface);
+                ClientFrame(host, window, round % 2 == 0 ? front : back, round);
+
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                host.Loop.Dispatch(0);
+                _ = sceneOutput.Commit(host.Renderer, swapchain, state, options);
+                host.Output.StepFrame();
+                pump.EndFrame(host.Output, (round + 1) * 16_000_000L);
+                host.Scene.SendFrameDone((uint)(round * 16));
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+
+                host.PumpToClient();
+                feedback.Dispose();
+            }
+
+            return allocated;
+        }
+
+        _ = FeedbackRounds(Rounds);
+        Budgets.Check("server", "presentation-feedback", FeedbackRounds(Rounds));
+    }
+
+    [Fact]
+    public void A_fifo_and_commit_timing_round_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var manager = new FifoManager(host.Display, host.Compositor, host.Layout, host.Loop);
+        using var timing = new CommitTimingManager(host.Display, host.Compositor, host.Loop);
+
+        var client = host.Client;
+        var surface = client.Compositor.CreateSurface();
+        var buffer = client.CreateBuffer(40, 40, Fill.Solid(40, 40, 0xFF336699));
+        var fifoProxy = Bind<Basin.Desktop.Protocol.WpFifoManagerV1>(host, "wp_fifo_manager_v1", 1);
+        var timingProxy = Bind<Basin.Desktop.Protocol.WpCommitTimingManagerV1>(host, "wp_commit_timing_manager_v1", 1);
+        var fifo = fifoProxy.GetFifo(surface);
+        var timer = timingProxy.GetTimer(surface);
+
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+
+        long TimedRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var round = 0; round < rounds; round++)
+            {
+                var target = MonotonicClock.Nanos - 1_000_000;
+                var seconds = (ulong)(target / 1_000_000_000);
+                fifo.WaitBarrier();
+                fifo.SetBarrier();
+                timer.SetTimestamp((uint)(seconds >> 32), (uint)seconds, (uint)(target % 1_000_000_000));
+                surface.Attach(buffer.Proxy, 0, 0);
+                surface.Damage(0, 0, 40, 40);
+                surface.Commit();
+                client.Display.Flush();
+
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                host.Loop.Dispatch(0);
+                manager.Latch(MonotonicClock.Nanos);
+                host.Output.StepFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = TimedRounds(Rounds);
+        Budgets.Check("server", "fifo-and-commit-timing", TimedRounds(Rounds));
+    }
+
+    [DllImport("libc", SetLastError = true, EntryPoint = "open")]
+    private static extern int OpenFd(string path, int flags);
+
+    [Fact]
+    public void An_explicit_sync_commit_stays_within_budget()
+    {
+        Budgets.Require();
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "explicit sync is DRM syncobjs, which are a Linux object");
+        Assert.SkipUnless(File.Exists(CompositorTestHost.RenderNodePath), "no render node");
+        var drmFd = OpenFd(CompositorTestHost.RenderNodePath, 2);
+        Assert.SkipWhen(drmFd < 0, "no render node available");
+
+        try
+        {
+            var probe = DrmSyncobjTimeline.TryCreate(drmFd);
+            Assert.SkipWhen(probe is null, $"{CompositorTestHost.RenderNodePath} has no syncobj support");
+            probe!.Release();
+
+            using var host = new CompositorTestHost();
+            using var manager = new Basin.Desktop.LinuxDrmSyncobjManager(
+                host.Display, host.Compositor, new Basin.Backend.Drm.DrmSyncDevice(drmFd));
+            var window = MappedToplevel.Map(host, host.Client);
+            var proxy = Bind<Basin.Desktop.Protocol.WpLinuxDrmSyncobjManagerV1>(
+                host, "wp_linux_drm_syncobj_manager_v1", 1);
+
+            var acquire = DrmSyncobjTimeline.Create(drmFd);
+            var release = DrmSyncobjTimeline.Create(drmFd);
+            var acquireFd = acquire.ExportFd();
+            var releaseFd = release.ExportFd();
+            var acquireProxy = proxy.ImportTimeline(acquireFd);
+            var releaseProxy = proxy.ImportTimeline(releaseFd);
+            CloseFd(acquireFd);
+            CloseFd(releaseFd);
+            var syncSurface = proxy.GetSurface(window.Surface);
+            host.PumpToServer();
+
+            var front = host.Client.CreateBuffer(60, 50, Fill.Gradient(60, 50));
+            var back = host.Client.CreateBuffer(60, 50, Fill.Gradient(60, 50));
+
+            long SyncRounds(int rounds, ulong pointBase)
+            {
+                var allocated = 0L;
+                for (var round = 0; round < rounds; round++)
+                {
+                    var point = pointBase + (ulong)round + 1;
+                    acquire.Signal(point);
+                    syncSurface.SetAcquirePoint(acquireProxy, (uint)(point >> 32), (uint)point);
+                    syncSurface.SetReleasePoint(releaseProxy, (uint)(point >> 32), (uint)point);
+                    window.Surface.Attach((round % 2 == 0 ? front : back).Proxy, 0, 0);
+                    window.Surface.Damage(0, 0, 60, 50);
+                    window.Surface.Commit();
+                    host.Client.Display.Flush();
+
+                    var before = GC.GetAllocatedBytesForCurrentThread();
+                    host.Loop.Dispatch(0);
+                    allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                }
+
+                return allocated;
+            }
+
+            _ = SyncRounds(Rounds, 0);
+            var measured = SyncRounds(Rounds, (ulong)Rounds);
+
+            acquire.Release();
+            release.Release();
+            syncSurface.Dispose();
+            acquireProxy.Dispose();
+            releaseProxy.Dispose();
+            host.PumpToServer();
+
+            Budgets.Check("server", "explicit-sync-commit", measured);
+        }
+        finally
+        {
+            CloseFd(drmFd);
+        }
+    }
+
+    [Fact]
+    public void A_screencopy_stream_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer };
+        using var manager = new ScreencopyManager(host.Display, host.Layout, host.Buffers, capture);
+        _ = new Basin.Scene.SceneRect(host.Scene.Root, 40, 30, new RenderColor(1, 0, 0, 1));
+
+        var proxy = Bind<Basin.Desktop.Protocol.ZwlrScreencopyManagerV1>(host, "zwlr_screencopy_manager_v1", 3);
+        var target = host.Client.CreateBuffer(160, 120, Fill.Solid(160, 120, 0x00000000));
+
+        long StreamRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var round = 0; round < rounds; round++)
+            {
+                var frame = proxy.CaptureOutput(0, host.Client.Outputs[0]);
+                var announced = false;
+                var done = false;
+                frame.Buffer += (_, _) => announced = true;
+                frame.Ready += (_, _) => done = true;
+                frame.Failed += (_, _) => done = true;
+                host.Client.Display.Flush();
+
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                host.Loop.Dispatch(0);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+
+                host.PumpUntil(() => announced);
+                frame.Copy(target.Proxy);
+                host.Client.Display.Flush();
+
+                before = GC.GetAllocatedBytesForCurrentThread();
+                host.Loop.Dispatch(0);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+
+                host.PumpUntil(() => done);
+                frame.Dispose();
+                host.Client.Display.Flush();
+
+                before = GC.GetAllocatedBytesForCurrentThread();
+                host.Loop.Dispatch(0);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = StreamRounds(Rounds);
+        Budgets.Check("server", "screencopy-stream", StreamRounds(Rounds));
+    }
+
+    [Fact]
+    public void A_cursor_motion_round_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var sceneOutput = new SceneOutput(host.Scene, host.Output);
+        using var swapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        var options = new SceneCommitOptions { AllowDirectScanout = false };
+
+        using var cursor = new CursorController(host.Layout);
+        cursor.AddOutput(host.Output, sceneOutput);
+        cursor.Load(new ShmAllocator(), 64, 64);
+        Assert.SkipWhen(cursor.Images?.HasTheme != true, "no xcursor theme installed");
+        cursor.ShowNamed("left_ptr");
+
+        var window = MappedToplevel.Map(host, host.Client);
+        host.Seat.Pointer.NotifyEnter(window.ServerSurface, 10, 10);
+        host.PumpToClient();
+
+        long MotionRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                host.Seat.Pointer.NotifyMotion((uint)i, 10 + (i % 20), 10 + (i % 20));
+                host.Seat.Pointer.NotifyFrame();
+                cursor.MoveTo(10 + (i % 20), 10 + (i % 20));
+                _ = sceneOutput.Commit(host.Renderer, swapchain, state, options);
+                host.Output.StepFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                host.PumpToClient();
+            }
+
+            return allocated;
+        }
+
+        _ = MotionRounds(Rounds);
+        Budgets.Check("server", "cursor-motion", MotionRounds(Rounds));
+    }
+
+    [Fact]
+    public void Relative_pointer_delivery_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var manager = new RelativePointerManager(host.Display, host.Seat);
+        var window = MappedToplevel.Map(host, host.Client);
+        host.Seat.Pointer.NotifyEnter(window.ServerSurface, 10, 10);
+
+        var proxy = Bind<Basin.Desktop.Protocol.ZwpRelativePointerManagerV1>(
+            host, "zwp_relative_pointer_manager_v1", 1);
+        var relative = proxy.GetRelativePointer(host.Client.Seat!.GetPointer());
+        host.PumpToClient();
+
+        long RelativeRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                manager.NotifyMotion((ulong)i * 1000, 2.5, -1.5, 3.0, -2.0);
+                host.Seat.Pointer.NotifyMotion((uint)i, 10 + (i % 20), 10 + (i % 20));
+                host.Seat.Pointer.NotifyFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                host.PumpToClient();
+            }
+
+            return allocated;
+        }
+
+        _ = RelativeRounds(Rounds);
+        var measured = RelativeRounds(Rounds);
+        host.PumpToClient();
+        relative.Dispose();
+
+        Budgets.Check("server", "relative-pointer", measured);
+    }
+
+    [Fact]
+    public void Touch_delivery_over_the_wire_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        var touchProxy = host.Client.Seat!.GetTouch();
+        host.PumpToClient();
+
+        long TouchRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                host.Seat.Touch.NotifyDown(window.ServerSurface, (uint)i, 0, 10, 10);
+                host.Seat.Touch.NotifyFrame();
+                host.Seat.Touch.NotifyMotion((uint)i + 1, 0, 12, 12);
+                host.Seat.Touch.NotifyFrame();
+                host.Seat.Touch.NotifyMotion((uint)i + 2, 0, 14, 14);
+                host.Seat.Touch.NotifyFrame();
+                host.Seat.Touch.NotifyUp((uint)i + 3, 0);
+                host.Seat.Touch.NotifyFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                host.PumpToClient();
+            }
+
+            return allocated;
+        }
+
+        _ = TouchRounds(Rounds);
+        var measured = TouchRounds(Rounds);
+        host.PumpToClient();
+        touchProxy.Dispose();
+
+        Budgets.Check("server", "touch-delivery", measured);
+    }
+
+    [Fact]
+    public void A_pointer_gesture_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var manager = new PointerGesturesManager(host.Display, host.Seat);
+        var window = MappedToplevel.Map(host, host.Client);
+        host.Seat.Pointer.NotifyEnter(window.ServerSurface, 5, 5);
+
+        var proxy = Bind<Basin.Desktop.Protocol.ZwpPointerGesturesV1>(host, "zwp_pointer_gestures_v1", 3);
+        var swipe = proxy.GetSwipeGesture(host.Client.Seat!.GetPointer());
+        host.PumpToServer();
+
+        long GestureRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var time = (uint)(i * 16);
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                manager.NotifySwipeBegin(time, 3);
+                for (var update = 0; update < 10; update++)
+                {
+                    manager.NotifySwipeUpdate(time + (uint)update, 4.5, -2.25);
+                }
+
+                manager.NotifySwipeEnd(time + 11);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                host.PumpToClient();
+            }
+
+            return allocated;
+        }
+
+        _ = GestureRounds(Rounds);
+        var measured = GestureRounds(Rounds);
+        host.PumpToClient();
+        swipe.Dispose();
+
+        Budgets.Check("server", "pointer-gesture", measured);
+    }
+
+    [Fact]
+    public void A_nested_frame_stays_within_budget()
+    {
+        Budgets.Require();
+        CompositorTestHost.SkipWithoutWaylandClient();
+
+        using var host = new NestedBackendTestHost(NestedParentOptions.Undecorating);
+        var output = host.CreateOutput();
+        var front = new MemoryBuffer(output.CurrentMode.Width, output.CurrentMode.Height, DrmFormat.Xrgb8888);
+        var back = new MemoryBuffer(output.CurrentMode.Width, output.CurrentMode.Height, DrmFormat.Xrgb8888);
+        using var state = new OutputState();
+        using var damage = new Pixman.PixmanRegion32();
+
+        long NestedRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var round = 0; round < rounds; round++)
+            {
+                state.Clear();
+                damage.Reset(new Pixman.PixmanBox32(0, round % 4, 100, (round % 4) + 40));
+                state.SetBuffer(round % 2 == 0 ? front : back).SetDamage(damage);
+
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                _ = output.Commit(state);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+
+                host.Pump(1);
+            }
+
+            return allocated;
+        }
+
+        _ = NestedRounds(Rounds);
+        var measured = NestedRounds(Rounds);
+
+        front.Destroy();
+        back.Destroy();
+        Budgets.Check("server", "nested-frame", measured);
+    }
+
+    [Fact]
+    public void An_effect_animation_frame_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var window = new SceneTree(host.Scene.Root);
+        window.SetPosition(40, 30);
+        _ = new SceneRect(window, 60, 40, new RenderColor(0.8f, 0.4f, 0.2f, 1f));
+        var stack = new TransformStack(window);
+        var effect = new Basin.Effects.WobblyEffect();
+        effect.Attach(stack);
+
+        long EffectRounds(int rounds, int phase)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                if (!effect.IsWobbling)
+                {
+                    effect.Grab(30, 20);
+                    effect.NotifyMoved(20 + (i % 10), 0);
+                    effect.Release();
+                }
+
+                var tick = new FrameTick((phase + i) * 16_000_000L, 16_666_667);
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                _ = effect.Step(tick);
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = EffectRounds(Rounds, 0);
+        Budgets.Check("server", "effect-animation-frame", EffectRounds(Rounds, Rounds));
+    }
+
+    [Fact]
+    public void A_transaction_configure_round_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+
+        long TransactionRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                using (var transaction = new Transaction(host.Loop))
+                {
+                    var first = transaction.Join();
+                    var second = transaction.Join();
+                    transaction.Seal();
+                    first.Ready();
+                    second.Ready();
+                    host.Loop.Dispatch(0);
+                }
+
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = TransactionRounds(Rounds);
+        Budgets.Check("server", "transaction-configure-round", TransactionRounds(Rounds));
+    }
+
+    private sealed class TintStage : IPostStage
+    {
+        public void Render(IRenderPass pass, ITexture frame, in PostContext context)
+        {
+            pass.AddTexture(frame, new TextureRenderOptions { DstBox = new Box(0, 0, context.Width, context.Height) });
+            pass.AddRect(new RenderColor(0.2f, 0f, 0f, 0.2f), new Box(0, 0, 16, 16));
+        }
+    }
+
+    [Fact]
+    public void A_post_stage_frame_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        host.SceneOutput.AddPostStage(new TintStage());
+        var node = new SceneRect(host.Scene.Root, 30, 30, new RenderColor(0.2f, 0.5f, 0.8f, 1f));
+
+        long PostRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                node.SetPosition(i % 2, 0);
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = PostRounds(Rounds);
+        var measured = PostRounds(Rounds);
+        node.Destroy();
+        Budgets.Check("server", "post-stage-frame", measured);
+    }
+
+    [Fact]
+    public void An_xwayland_event_round_stays_within_budget()
+    {
+        Budgets.Require();
+        Assert.SkipUnless(File.Exists("/usr/bin/Xwayland"), "no Xwayland binary");
+        Assert.SkipUnless(File.Exists("/usr/bin/xdotool"), "no xdotool to drive the X side");
+
+        _ = Xdotool(":none", "version");
+
+        using var host = new CompositorTestHost();
+        using var shell = new Basin.XWayland.XwaylandShellGlobal(host.Display, host.Compositor);
+        using var server = new Basin.XWayland.XWaylandServer(host.Display, host.Loop);
+        Basin.XWayland.XWaylandWm? wm = null;
+        server.Ready += fd => wm = new Basin.XWayland.XWaylandWm(fd, host.Loop, shell, host.Seat);
+
+        using var eyes = new System.Diagnostics.Process();
+        eyes.StartInfo = new System.Diagnostics.ProcessStartInfo("/usr/bin/xeyes")
+        {
+            Environment = { ["DISPLAY"] = server.DisplayName },
+            RedirectStandardError = true,
+        };
+        eyes.Start();
+
+        var deadline = Environment.TickCount64 + 15_000;
+        while (wm is null && Environment.TickCount64 < deadline)
+        {
+            host.Loop.Dispatch(50);
+        }
+
+        try
+        {
+            Assert.SkipWhen(wm is null, "Xwayland did not come up");
+
+            string? windowId = null;
+            while (windowId is null && Environment.TickCount64 < deadline)
+            {
+                host.Loop.Dispatch(20);
+                windowId = Xdotool(server.DisplayName, "search --name xeyes")?.Trim().Split('\n')[0];
+                if (windowId is { Length: 0 })
+                {
+                    windowId = null;
+                }
+            }
+
+            Assert.SkipWhen(windowId is null, "the X client never mapped");
+
+            long XRounds(int rounds)
+            {
+                var allocated = 0L;
+                for (var i = 0; i < rounds; i++)
+                {
+                    _ = Xdotool(server.DisplayName, $"windowmove {windowId} {10 + (i % 40)} {10 + (i % 40)}");
+                    var before = GC.GetAllocatedBytesForCurrentThread();
+                    for (var k = 0; k < 5; k++)
+                    {
+                        host.Loop.Dispatch(1);
+                    }
+
+                    allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                }
+
+                return allocated;
+            }
+
+            _ = XRounds(Rounds);
+            Budgets.Check("server", "xwayland-event-round", XRounds(Rounds));
+        }
+        finally
+        {
+            try
+            {
+                eyes.Kill();
+                eyes.WaitForExit(2000);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            eyes.StandardError.Dispose();
+
+            var drained = Environment.TickCount64 + 2000;
+            while (server.IsRunning && Environment.TickCount64 < drained)
+            {
+                host.Loop.Dispatch(20);
+            }
+
+            wm?.Dispose();
+        }
+    }
+
+    private static string? Xdotool(string display, string arguments)
+    {
+        using var tool = new System.Diagnostics.Process();
+        tool.StartInfo = new System.Diagnostics.ProcessStartInfo("/usr/bin/xdotool")
+        {
+            Arguments = arguments,
+            Environment = { ["DISPLAY"] = display },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        tool.Start();
+        var output = tool.StandardOutput.ReadToEnd();
+        _ = tool.StandardError.ReadToEnd();
+        tool.WaitForExit(5000);
+        var succeeded = tool.ExitCode == 0;
+        tool.StandardOutput.Dispose();
+        tool.StandardError.Dispose();
+        return succeeded ? output : null;
+    }
+
+    [Fact]
+    public void A_window_manager_input_round_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var fixture = new RiverFixture();
+        _ = fixture.MapToplevel();
+        var seat = Assert.Single(fixture.Seats);
+
+        Basin.WindowManager.KeyBinding? binding = null;
+        var presses = 0;
+        fixture.OnManage = _ =>
+        {
+            if (binding is null)
+            {
+                binding = fixture.Client.Bindings.Bind(seat, "q", Basin.Config.Modifiers.Super);
+                binding.Pressed += () => presses++;
+                binding.Enable();
+            }
+        };
+        fixture.RequestManageAndSettle();
+        fixture.OnManage = null;
+        Assert.NotNull(binding);
+        _ = fixture.PressKey(125);
+
+        long InputRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                fixture.Host.Seat.Pointer.NotifyMotion((uint)i, 10 + (i % 20), 10 + (i % 20));
+                fixture.PressKey(16);
+                fixture.ReleaseKey(16);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = InputRounds(Rounds);
+        var measured = InputRounds(Rounds);
+        Assert.True(presses >= 2 * Rounds);
+        fixture.ReleaseKey(125);
+
+        Budgets.Check("client", "wm-input-round", measured);
+    }
+
+    [Fact]
+    public void A_window_manager_chrome_repaint_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var fixture = new RiverFixture();
+        _ = fixture.MapToplevel();
+        var window = Assert.Single(fixture.Windows);
+
+        var surface = fixture.Client.Compositor!.CreateSurface();
+        Basin.WindowManager.WmDecoration? decoration = null;
+        fixture.OnManage = _ => decoration ??= window.CreateDecorationAbove(surface);
+        fixture.RequestManageAndSettle();
+        fixture.OnManage = null;
+        Assert.NotNull(decoration);
+
+        var front = fixture.CreateManagerBuffer(120, 24, 0xFF303030);
+        var back = fixture.CreateManagerBuffer(120, 24, 0xFF303030);
+
+        long ChromeRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var buffer = i % 2 == 0 ? front : back;
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                unsafe
+                {
+                    var pixels = (uint*)buffer.Data;
+                    for (var x = 0; x < 120; x++)
+                    {
+                        pixels[x] = 0xFF000000u | (uint)(i * 8);
+                    }
+                }
+
+                surface.Attach(buffer.Proxy, 0, 0);
+                surface.Damage(0, 0, 120, 24);
+                surface.Commit();
+                fixture.Settle(2);
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = ChromeRounds(Rounds);
+        var measured = ChromeRounds(Rounds);
+
+        decoration!.Dispose();
+        surface.Destroy();
+        fixture.Settle();
+
+        Budgets.Check("client", "wm-chrome-repaint", measured);
+    }
+
     private static void Commits(CompositorTestHost host, WlSurface surface, ClientShmBuffer buffer, int count)
     {
         for (var i = 0; i < count; i++)

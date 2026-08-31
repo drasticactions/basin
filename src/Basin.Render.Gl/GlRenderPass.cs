@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Pixman;
 using Silk.NET.OpenGLES;
 
@@ -446,7 +447,28 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
     }
 
+    private int _scopedSubmits;
+
     public bool Submit()
+    {
+        if (_scopedSubmits < 30)
+        {
+            _scopedSubmits++;
+            return SubmitCore();
+        }
+
+        AllocationScope.Begin(region: "GlSubmit", forgiving: true);
+        try
+        {
+            return SubmitCore();
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
+    }
+
+    private bool SubmitCore()
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
         var target = _target;

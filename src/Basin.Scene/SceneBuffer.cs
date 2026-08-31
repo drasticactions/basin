@@ -314,7 +314,9 @@ public sealed class SceneBuffer : SceneNode
         {
             if (_texture is null && !_importFailed)
             {
+                Basin.Diagnostics.AllocationScope.Pause();
                 _texture = renderer.ImportTexture(buffer);
+                Basin.Diagnostics.AllocationScope.Resume();
                 _ownsTexture = _texture is not null;
                 ReportIfUnimportable(buffer);
             }

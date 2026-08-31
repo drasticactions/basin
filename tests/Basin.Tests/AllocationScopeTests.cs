@@ -96,6 +96,117 @@ public sealed class AllocationScopeTests : IDisposable
     }
 
     [Fact]
+    public void A_paused_region_charges_nothing_to_the_open_scopes()
+    {
+        LeakTracking.Require();
+
+        AllocationScope.Begin();
+        AllocationScope.Pause();
+        GC.KeepAlive(new byte[8192]);
+        AllocationScope.Resume();
+        AllocationScope.End();
+    }
+
+    [Fact]
+    public void A_nested_pause_resumes_only_at_the_outermost_resume()
+    {
+        LeakTracking.Require();
+
+        AllocationScope.Begin();
+        AllocationScope.Pause();
+        AllocationScope.Pause();
+        GC.KeepAlive(new byte[4096]);
+        AllocationScope.Resume();
+        GC.KeepAlive(new byte[4096]);
+        AllocationScope.Resume();
+        AllocationScope.End();
+    }
+
+    [Fact]
+    public void An_allocation_after_a_resume_still_throws()
+    {
+        LeakTracking.Require();
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            AllocationScope.Begin();
+            AllocationScope.Pause();
+            AllocationScope.Resume();
+            GC.KeepAlive(new byte[4096]);
+            AllocationScope.End();
+        });
+    }
+
+    [Fact]
+    public void A_scope_begun_inside_a_pause_still_measures_itself()
+    {
+        LeakTracking.Require();
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            AllocationScope.Pause();
+            try
+            {
+                AllocationScope.Begin(region: "inside-a-pause");
+                GC.KeepAlive(new byte[4096]);
+                AllocationScope.End();
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
+        });
+    }
+
+    [Fact]
+    public void A_pause_inside_a_scope_begun_during_an_outer_pause_still_exempts()
+    {
+        LeakTracking.Require();
+
+        AllocationScope.Pause();
+        try
+        {
+            AllocationScope.Begin(region: "born-inside-a-pause");
+            AllocationScope.Pause();
+            GC.KeepAlive(new byte[8192]);
+            AllocationScope.Resume();
+            AllocationScope.End();
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
+
+    [Fact]
+    public void A_forgiving_region_forgives_a_one_off_and_throws_on_a_recurrence()
+    {
+        LeakTracking.Require();
+
+        for (var i = 0; i < 8; i++)
+        {
+            AllocationScope.Begin(region: "forgiving", forgiving: true);
+            GC.KeepAlive(new byte[4096]);
+            AllocationScope.End();
+        }
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            AllocationScope.Begin(region: "forgiving", forgiving: true);
+            GC.KeepAlive(new byte[4096]);
+            AllocationScope.End();
+        });
+    }
+
+    [Fact]
+    public void A_resume_that_never_paused_cannot_run()
+    {
+        LeakTracking.Require();
+
+        Assert.Throws<InvalidOperationException>(() => AllocationScope.Resume());
+    }
+
+    [Fact]
     public void A_scope_that_never_began_cannot_end()
     {
         LeakTracking.Require();

@@ -1,5 +1,6 @@
-using Wayland;
 using Basin.Capabilities;
+using Basin.Diagnostics;
+using Wayland;
 using Xkb;
 
 namespace Basin.Seat;
@@ -128,7 +129,23 @@ public sealed class SeatKeyboard : IDisposable
             _modifiers = device.Modifiers;
             UpdateLeds();
             Grab.Modifiers();
+            AllocationScope.Pause();
+            try
+            {
+                AllocationScope.Pause();
+        try
+        {
             ModifiersChanged?.Invoke();
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
             return;
         }
 
@@ -195,11 +212,32 @@ public sealed class SeatKeyboard : IDisposable
     public void NotifyKey(uint timeMs, uint key, bool pressed) =>
         NotifyKey(timeMs, key, pressed ? WlKeyboard.KeyState.Pressed : WlKeyboard.KeyState.Released);
 
+    private int _scopedNotifies;
+
+    private const int NotifyScopeWarmup = 10;
+
     public void NotifyKey(uint timeMs, uint key, WlKeyboard.KeyState state)
     {
-        TrackKey(key, state);
-        Grab.Key(timeMs, key, state);
-        UpdateKeyState(key, state);
+        if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
+        {
+            _scopedNotifies += HasGrab ? 0 : 1;
+            TrackKey(key, state);
+            Grab.Key(timeMs, key, state);
+            UpdateKeyState(key, state);
+            return;
+        }
+
+        AllocationScope.Begin(region: "KeyboardNotify", forgiving: true);
+        try
+        {
+            TrackKey(key, state);
+            _defaultGrab.Key(timeMs, key, state);
+            UpdateKeyState(key, state);
+        }
+        finally
+        {
+            AllocationScope.End();
+        }
     }
 
     public void NotifyKeyConsumed(uint key, bool pressed) =>
@@ -435,7 +473,23 @@ public sealed class SeatKeyboard : IDisposable
             if (_modifiers != previousModifiers)
             {
                 Grab.Modifiers();
-                ModifiersChanged?.Invoke();
+                AllocationScope.Pause();
+            try
+            {
+                AllocationScope.Pause();
+        try
+        {
+            ModifiersChanged?.Invoke();
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
             }
         }
 
@@ -459,7 +513,23 @@ public sealed class SeatKeyboard : IDisposable
         if (changed)
         {
             Grab.Modifiers();
+            AllocationScope.Pause();
+            try
+            {
+                AllocationScope.Pause();
+        try
+        {
             ModifiersChanged?.Invoke();
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
         }
     }
 
@@ -498,7 +568,15 @@ public sealed class SeatKeyboard : IDisposable
         if (leds != Leds)
         {
             Leds = leds;
-            LedsChanged?.Invoke();
+            AllocationScope.Pause();
+            try
+            {
+                LedsChanged?.Invoke();
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
         }
     }
 

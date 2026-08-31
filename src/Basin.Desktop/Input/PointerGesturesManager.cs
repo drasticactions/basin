@@ -3,7 +3,6 @@ using Basin.Desktop.Protocol;
 using Basin.Seat;
 using Wayland;
 using Wayland.Server;
-using Xkb;
 
 namespace Basin.Desktop;
 
@@ -27,43 +26,135 @@ public sealed class PointerGesturesManager : IDisposable
 
     public void Dispose() => _global.Dispose();
 
-    public void NotifySwipeBegin(uint timeMs, uint fingers) => ForFocused(_swipes, (r, surface) =>
-        r.SendBegin(_display.NextSerial(), timeMs, surface, fingers));
-
-    public void NotifySwipeUpdate(uint timeMs, double dx, double dy) => ForFocused(_swipes, (r, _) =>
-        r.SendUpdate(timeMs, WlFixed.FromDouble(dx), WlFixed.FromDouble(dy)));
-
-    public void NotifySwipeEnd(uint timeMs, bool canceled = false) => ForFocused(_swipes, (r, _) =>
-        r.SendEnd(_display.NextSerial(), timeMs, canceled ? 1 : 0));
-
-    public void NotifyPinchBegin(uint timeMs, uint fingers) => ForFocused(_pinches, (r, surface) =>
-        r.SendBegin(_display.NextSerial(), timeMs, surface, fingers));
-
-    public void NotifyPinchUpdate(uint timeMs, double dx, double dy, double scale, double rotation) => ForFocused(_pinches, (r, _) =>
-        r.SendUpdate(timeMs, WlFixed.FromDouble(dx), WlFixed.FromDouble(dy), WlFixed.FromDouble(scale), WlFixed.FromDouble(rotation)));
-
-    public void NotifyPinchEnd(uint timeMs, bool canceled = false) => ForFocused(_pinches, (r, _) =>
-        r.SendEnd(_display.NextSerial(), timeMs, canceled ? 1 : 0));
-
-    public void NotifyHoldBegin(uint timeMs, uint fingers) => ForFocused(_holds, (r, surface) =>
-        r.SendBegin(_display.NextSerial(), timeMs, surface, fingers));
-
-    public void NotifyHoldEnd(uint timeMs, bool canceled = false) => ForFocused(_holds, (r, _) =>
-        r.SendEnd(_display.NextSerial(), timeMs, canceled ? 1 : 0));
-
-    private void ForFocused<T>(List<T> resources, Action<T, WlSurfaceResource> send)
-        where T : WlResource
+    public void NotifySwipeBegin(uint timeMs, uint fingers)
     {
         if (_seat.Pointer.Focus is not { } surface)
         {
             return;
         }
 
-        foreach (var resource in resources)
+        foreach (var resource in _swipes)
         {
             if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
             {
-                send(resource, surface.Resource);
+                resource.SendBegin(_display.NextSerial(), timeMs, surface.Resource, fingers);
+            }
+        }
+    }
+
+    public void NotifySwipeUpdate(uint timeMs, double dx, double dy)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _swipes)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendUpdate(timeMs, WlFixed.FromDouble(dx), WlFixed.FromDouble(dy));
+            }
+        }
+    }
+
+    public void NotifySwipeEnd(uint timeMs, bool canceled = false)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _swipes)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendEnd(_display.NextSerial(), timeMs, canceled ? 1 : 0);
+            }
+        }
+    }
+
+    public void NotifyPinchBegin(uint timeMs, uint fingers)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _pinches)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendBegin(_display.NextSerial(), timeMs, surface.Resource, fingers);
+            }
+        }
+    }
+
+    public void NotifyPinchUpdate(uint timeMs, double dx, double dy, double scale, double rotation)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _pinches)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendUpdate(
+                    timeMs,
+                    WlFixed.FromDouble(dx),
+                    WlFixed.FromDouble(dy),
+                    WlFixed.FromDouble(scale),
+                    WlFixed.FromDouble(rotation));
+            }
+        }
+    }
+
+    public void NotifyPinchEnd(uint timeMs, bool canceled = false)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _pinches)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendEnd(_display.NextSerial(), timeMs, canceled ? 1 : 0);
+            }
+        }
+    }
+
+    public void NotifyHoldBegin(uint timeMs, uint fingers)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _holds)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendBegin(_display.NextSerial(), timeMs, surface.Resource, fingers);
+            }
+        }
+    }
+
+    public void NotifyHoldEnd(uint timeMs, bool canceled = false)
+    {
+        if (_seat.Pointer.Focus is not { } surface)
+        {
+            return;
+        }
+
+        foreach (var resource in _holds)
+        {
+            if (!resource.IsDestroyed && resource.Client == surface.Resource.Client)
+            {
+                resource.SendEnd(_display.NextSerial(), timeMs, canceled ? 1 : 0);
             }
         }
     }

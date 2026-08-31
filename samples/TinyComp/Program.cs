@@ -15,7 +15,7 @@ internal static class Program
         var configPath = cli.Add(CommonOptions.Config("tinycomp"));
         var renderer = cli.Add(CommonOptions.Renderer(
             Basin.Renderers.RendererCatalog.Names, "vulkan"), report: false);
-        var backend = cli.Add(CommonOptions.Backend([BackendKind.Nested, BackendKind.Drm], acceptsSocketFd: true), report: false);
+        var backend = cli.Add(CommonOptions.Backend([BackendKind.Nested, BackendKind.Drm, BackendKind.Headless], acceptsSocketFd: true), report: false);
         var outputs = cli.Add(CommonOptions.Outputs(), report: false);
         var scales = cli.Add(CommonOptions.Scales(), report: false);
         var fullRepaint = cli.Add(new Option<bool>("--full-repaint")
@@ -37,7 +37,6 @@ internal static class Program
         var channel = cli.Add(CommonOptions.WaypipeListen());
 
         var settings = new Config();
-        var drm = false;
         string? fatal = null;
 
         cli.Prepare(result =>
@@ -73,7 +72,6 @@ internal static class Program
             settings.Offload = Layered(offload, "offload", settings.Offload);
             settings.FullRepaint = Layered(fullRepaint, "full_repaint", settings.FullRepaint);
             settings.DamageTint = Layered(damageTint, "damage_tint", settings.DamageTint);
-            drm = result.GetValue(backend).Kind == BackendKind.Drm;
 
             Given(renderer, "renderer");
             Given(outputs, "outputs");
@@ -118,7 +116,7 @@ internal static class Program
 
             using var comp = new TinyComp(
                 settings,
-                drm,
+                result.GetValue(backend).Kind,
                 result.GetValue(backend).SocketFd,
                 log,
                 result.GetValue(transport).Kind == TransportKind.Managed,

@@ -109,16 +109,24 @@ public sealed partial class Scene
             DropTexture(buffer, entry);
         }
 
-        var texture = renderer.ImportTexture(buffer);
-        if (texture is null)
+        AllocationScope.Pause();
+        try
         {
-            return null;
-        }
+            var texture = renderer.ImportTexture(buffer);
+            if (texture is null)
+            {
+                return null;
+            }
 
-        var created = new TextureCacheEntry(this, renderer, texture);
-        _textures[buffer] = created;
-        WatchBufferEnd(buffer, created);
-        return texture;
+            var created = new TextureCacheEntry(this, renderer, texture);
+            _textures[buffer] = created;
+            WatchBufferEnd(buffer, created);
+            return texture;
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
     }
 
     internal bool TryAdoptTexture(IRenderer renderer, IBuffer from, IBuffer to, in DamageRects damage, bool full)
