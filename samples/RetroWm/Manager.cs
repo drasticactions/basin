@@ -1218,7 +1218,7 @@ internal sealed class Manager
             _pointerInput.SetShape(seatName, CursorShape.Default);
             if (_menu!.UpdateHover((int)x, (int)y))
             {
-                _wm.RequestManage();
+                RenderMenu();
             }
 
             return;
@@ -1240,7 +1240,7 @@ internal sealed class Manager
             _pointerOnMenu = false;
             if (menu.ClearHover())
             {
-                _wm.RequestManage();
+                RenderMenu();
             }
         }
 
@@ -1263,7 +1263,7 @@ internal sealed class Manager
         {
             if (menu.UpdateHover((int)x, (int)y))
             {
-                _wm.RequestManage();
+                RenderMenu();
             }
 
             return;
@@ -1292,6 +1292,7 @@ internal sealed class Manager
 
         if (_pointerDock is { } dock && isPressed)
         {
+            var restoring = false;
             if (dock.IconAt((int)_pointerX, (int)_pointerY) is { } icon)
             {
                 var now = Environment.TickCount64;
@@ -1303,6 +1304,7 @@ internal sealed class Manager
                 {
                     _pendingRestore = icon;
                     _actions.Enqueue(WmAction.RestoreIcon);
+                    restoring = true;
                 }
             }
             else
@@ -1310,7 +1312,14 @@ internal sealed class Manager
                 dock.Selected = null;
             }
 
-            _wm.RequestManage();
+            if (restoring)
+            {
+                _wm.RequestManage();
+            }
+            else
+            {
+                RenderDocks();
+            }
         }
     }
 

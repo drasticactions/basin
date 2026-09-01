@@ -19,7 +19,7 @@ internal sealed class MenuSurface : IDisposable
     private const uint BorderColor = 0x000000FF;
 
     private readonly ManagerSurface _surface;
-    private string? _lastKey;
+    private (int Scale, int? Hovered)? _lastKey;
 
     internal MenuSurface(
         WlCompositor compositor,
@@ -149,7 +149,7 @@ internal sealed class MenuSurface : IDisposable
             return false;
         }
 
-        var key = $"{scale}|{Hovered}";
+        var key = (scale, Hovered);
         if (key == _lastKey)
         {
             return false;

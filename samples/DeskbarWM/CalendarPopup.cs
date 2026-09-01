@@ -13,7 +13,7 @@ internal sealed class CalendarPopup : IDisposable
     private const int Border = 1;
 
     private readonly ManagerSurface _surface;
-    private string? _lastKey;
+    private (DateTime Month, DateTime Today, int Scale)? _lastKey;
 
     internal CalendarPopup(
         WlCompositor compositor,
@@ -73,7 +73,7 @@ internal sealed class CalendarPopup : IDisposable
             return false;
         }
 
-        var key = $"{Month:yyyy-MM}|{DateTime.Now:yyyy-MM-dd}|{scale}";
+        var key = (Month, DateTime.Today, scale);
         if (key == _lastKey)
         {
             return false;

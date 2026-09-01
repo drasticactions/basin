@@ -26,6 +26,7 @@ public static class AllocationScope
     private static int _regions;
     private static int _depth;
     private static int _paused;
+    private static bool _thrown;
 
     public static bool Enabled { get; set; } = true;
 
@@ -36,6 +37,11 @@ public static class AllocationScope
         {
             throw new InvalidOperationException(
                 $"Allocation scopes nested more than {MaxDepth} deep, entering '{region}'.");
+        }
+
+        if (_depth == 0)
+        {
+            _thrown = false;
         }
 
         var index = IndexOf(region);
@@ -64,6 +70,11 @@ public static class AllocationScope
         var allocated = GC.GetAllocatedBytesForCurrentThread() - started;
         if (allocated > allowance)
         {
+            if (_thrown)
+            {
+                return;
+            }
+
             var index = IndexOf(Open[_depth]);
             if (Forgiving[_depth] && Forgiven[index] < ForgivenessBudget)
             {
@@ -71,6 +82,7 @@ public static class AllocationScope
                 return;
             }
 
+            _thrown = true;
             throw new InvalidOperationException(
                 $"'{Open[_depth]}' allocated {allocated} bytes on a path allowed {allowance} (entry {Entered[index]}).");
         }
@@ -113,6 +125,7 @@ public static class AllocationScope
     {
         _depth = 0;
         _paused = 0;
+        _thrown = false;
         for (var i = 0; i < _regions; i++)
         {
             Entered[i] = 0;

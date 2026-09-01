@@ -638,6 +638,32 @@ internal sealed class Manager
         }
     }
 
+    private void RepaintTitlebar(ManagedWindow mw)
+    {
+        if (_compositor is null || mw.Titlebar is not { Mapped: true } titlebar
+            || mw.Hidden || mw.Chrome == WindowChrome.ClientSide || mw.Width <= 0 || mw.Height <= 0)
+        {
+            return;
+        }
+
+        var style = mw.FrameStyle;
+        var scale = titlebar.ScaleFor(mw.Output?.WlOutputName ?? 0);
+        titlebar.EnsureBuffer(mw.Width, Math.Max(mw.Height - mw.SwallowTop, 1), scale, style);
+        var rendered = titlebar.Render(
+            mw.Window.Title,
+            ReferenceEquals(mw, _focusStack.Focused),
+            mw.Maximized,
+            showMinimize: !mw.IsDialog,
+            showMaximize: !mw.IsDialog && !mw.IsFixedSize,
+            style,
+            mw.TitlebarHovered,
+            mw.TitlebarLeftDown);
+        if (rendered)
+        {
+            titlebar.Commit();
+        }
+    }
+
     private void OnInteraction(ManagedWindow mw)
     {
         if (_menu is not null)
@@ -845,7 +871,7 @@ internal sealed class Manager
         if (mw.TitlebarHovered != hovered)
         {
             mw.TitlebarHovered = hovered;
-            _wm.RequestManage();
+            RepaintTitlebar(mw);
         }
     }
 
@@ -1022,7 +1048,7 @@ internal sealed class Manager
             _pointerInput.SetShape(seatName, CursorShape.Default);
             if (menu.UpdateHover((int)x, (int)y))
             {
-                _wm.RequestManage();
+                RenderMenuAndShield();
             }
 
             return;
@@ -1048,7 +1074,7 @@ internal sealed class Manager
             _pointerTitlebar = null;
             if (changed)
             {
-                _wm.RequestManage();
+                RepaintTitlebar(mw);
             }
         }
     }
@@ -1074,7 +1100,7 @@ internal sealed class Manager
 
         if (_pointerOnMenu && _menu is { } menu && menu.UpdateHover((int)x, (int)y))
         {
-            _wm.RequestManage();
+            RenderMenuAndShield();
         }
     }
 
@@ -1107,7 +1133,7 @@ internal sealed class Manager
         {
             mw.TitlebarLeftDown = true;
             mw.TitlebarPressed = mw.TitlebarHovered;
-            _wm.RequestManage();
+            RepaintTitlebar(mw);
             return;
         }
 

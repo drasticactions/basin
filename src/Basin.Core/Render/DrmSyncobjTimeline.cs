@@ -132,6 +132,20 @@ public sealed unsafe class DrmSyncobjTimeline
         return new DrmSyncobjWaiter(loop, eventFd, ready);
     }
 
+    /// <summary>Arms an existing waiter for a further point on this timeline, so a commit-per-frame path creates no new waiter.</summary>
+    public bool Rearm(DrmSyncobjWaiter waiter, ulong point)
+    {
+        ArgumentNullException.ThrowIfNull(waiter);
+        try
+        {
+            return Libdrm.drmSyncobjEventfd(_drmFd, _handle, point, waiter.EventFd, 0) == 0;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public int ExportSyncFileAt(ulong point)
     {
         uint binary;
@@ -210,12 +224,13 @@ public sealed unsafe class DrmSyncobjTimeline
             _source = loop.AddFd(eventFd, FdReadiness.Readable, OnReadable);
         }
 
+        internal int EventFd => _eventFd;
+
         private void OnReadable(int fd, FdReadiness readiness)
         {
             ulong value;
             _ = ReadFd(fd, &value, sizeof(ulong));
 
-            Cancel();
             _ready();
         }
 

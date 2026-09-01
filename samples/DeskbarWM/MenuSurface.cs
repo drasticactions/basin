@@ -15,7 +15,7 @@ internal sealed class MenuSurface : IDisposable
     private const int ArrowWidth = 12;
 
     private readonly ManagerSurface _surface;
-    private string? _lastKey;
+    private (int Scale, int Hovered)? _lastKey;
 
     internal MenuSurface(
         WlCompositor compositor,
@@ -133,7 +133,7 @@ internal sealed class MenuSurface : IDisposable
             return false;
         }
 
-        var key = $"{scale}|{Hovered}";
+        var key = (scale, Hovered);
         if (key == _lastKey)
         {
             return false;

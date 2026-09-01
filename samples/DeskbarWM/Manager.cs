@@ -162,7 +162,7 @@ internal sealed class Manager
         _clockTimer?.UpdateTimer(ClockIntervalMs());
         if (HasClockApplet())
         {
-            _wm.RequestManage();
+            RenderDeskbars();
         }
     }
 
@@ -1124,7 +1124,7 @@ internal sealed class Manager
         {
             if (motionMenu.UpdateHover((int)x, (int)y))
             {
-                _wm.RequestManage();
+                RenderMenus();
             }
 
             return;
@@ -1139,7 +1139,7 @@ internal sealed class Manager
             if (candidate != drag.Candidate)
             {
                 _barDrag = (drag.Bar, candidate);
-                _wm.RequestManage();
+                RenderPlacementOutline();
             }
 
             return;
@@ -1149,7 +1149,7 @@ internal sealed class Manager
         {
             if (bar.UpdateHover((int)x, (int)y))
             {
-                _wm.RequestManage();
+                RenderDeskbars();
             }
 
             return;

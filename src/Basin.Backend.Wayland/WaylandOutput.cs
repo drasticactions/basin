@@ -20,6 +20,8 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
     private EventHandler<WlCallback.DoneEventArgs>? _onFrameDone;
     private EventHandler<WpPresentationFeedback.PresentedEventArgs>? _onPresented;
     private EventHandler<WpPresentationFeedback.DiscardedEventArgs>? _onDiscarded;
+    private WlCallback? _frameCallback;
+    private readonly List<WpPresentationFeedback> _spentFeedbacks = [];
     private nint _mapping;
     private int _mappingSize;
     private int _mappingFd = -1;
@@ -577,13 +579,36 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         }
 
         ApplyWindowGeometry();
-        var callback = _surface.Frame();
-        callback.Done += _onFrameDone ??= (_, _) => OnFrameDone();
+        var callback = _surface.Frame(_frameCallback);
+        if (!ReferenceEquals(callback, _frameCallback))
+        {
+            callback.Done += _onFrameDone ??= (_, _) => OnFrameDone();
+            _frameCallback = callback;
+        }
+
         if (_backend.ParentPresentation is { } presentation && _backend.ParentPresentationClockMatches)
         {
-            var feedback = presentation.Feedback(_surface);
-            feedback.Presented += _onPresented ??= (_, e) => OnPresented(e);
-            feedback.Discarded += _onDiscarded ??= (_, _) => PresentationDiscarded?.Invoke();
+            WpPresentationFeedback? recycle = null;
+            if (_spentFeedbacks.Count > 0)
+            {
+                recycle = _spentFeedbacks[^1];
+                _spentFeedbacks.RemoveAt(_spentFeedbacks.Count - 1);
+            }
+
+            var feedback = presentation.Feedback(_surface, recycle);
+            if (!ReferenceEquals(feedback, recycle))
+            {
+                feedback.Presented += _onPresented ??= (s, e) =>
+                {
+                    OnPresented(e);
+                    RecycleFeedback(s);
+                };
+                feedback.Discarded += _onDiscarded ??= (s, _) =>
+                {
+                    PresentationDiscarded?.Invoke();
+                    RecycleFeedback(s);
+                };
+            }
         }
 
         _surface.Attach(proxy, 0, 0);
@@ -620,13 +645,22 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         }
 
         var release = ++imported.ReleasePoint;
-        imported.ReleaseWaiter?.Dispose();
-        imported.ReleaseWaiter = imported.ReleaseTimeline!.TryWait(
-            _backend.Loop, release, () => OnReleasePoint(buffer, imported));
-        if (imported.ReleaseWaiter is null)
+        if (imported.ReleaseWaiter is { } waiter)
         {
-            WarnSyncobjOnce("syncobj timeline points cannot be waited on (kernel or libdrm too old)");
-            return false;
+            if (!imported.ReleaseTimeline!.Rearm(waiter, release))
+            {
+                WarnSyncobjOnce("a syncobj timeline waiter would not rearm");
+                return false;
+            }
+        }
+        else
+        {
+            imported.ReleaseWaiter = CreateReleaseWaiter(buffer, imported, release);
+            if (imported.ReleaseWaiter is null)
+            {
+                WarnSyncobjOnce("syncobj timeline points cannot be waited on (kernel or libdrm too old)");
+                return false;
+            }
         }
 
         if (_syncobjSurface is null)
@@ -683,10 +717,16 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    private DrmSyncobjTimeline.DrmSyncobjWaiter? CreateReleaseWaiter(IBuffer buffer, ImportedBuffer imported, ulong release) =>
+        imported.ReleaseTimeline!.TryWait(_backend.Loop, release, () => OnReleasePoint(buffer, imported));
+
     private static void OnReleasePoint(IBuffer buffer, ImportedBuffer imported)
     {
-        imported.ReleaseWaiter?.Dispose();
-        imported.ReleaseWaiter = null;
+        if (imported.ReleaseTimeline is not { } timeline || !timeline.IsSignaled(imported.ReleasePoint))
+        {
+            return;
+        }
+
         if (imported.Presented)
         {
             imported.Presented = false;
@@ -723,6 +763,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
             return cached;
         }
 
+        return ImportDmabuf(buffer);
+    }
+
+    private ImportedBuffer? ImportDmabuf(IBuffer buffer)
+    {
         if (_backend.ParentDmabuf is not { } dmabuf ||
             !buffer.TryGetDmabuf(out var attributes) ||
             !_backend.ParentDmabufFormats.Contains(attributes.Format, attributes.Modifier))
@@ -810,6 +855,14 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _acquireTimeline = null;
         _frameFallback.Remove();
         DestroySlots();
+        _frameCallback?.Dispose();
+        _frameCallback = null;
+        foreach (var feedback in _spentFeedbacks)
+        {
+            feedback.Dispose();
+        }
+
+        _spentFeedbacks.Clear();
         _hostFrame?.Dispose();
         _hostFrame = null;
         _fractionalScale?.Dispose();
@@ -819,6 +872,14 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _xdgSurface.Dispose();
         _surface.Dispose();
         _backend.Flush();
+    }
+
+    private void RecycleFeedback(object? sender)
+    {
+        if (sender is WpPresentationFeedback feedback)
+        {
+            _spentFeedbacks.Add(feedback);
+        }
     }
 
     private void OnPresented(WpPresentationFeedback.PresentedEventArgs e)
