@@ -1,18 +1,17 @@
-using Basin.WindowManager;
-using RetroWm.Protocol;
+using Basin.WindowManager.Skia.Protocol;
 using SkiaSharp;
 using Wayland;
 
-namespace RetroWm;
+namespace Basin.WindowManager.Skia;
 
-internal sealed class ManagerSurface : IDisposable
+public sealed class ManagerSurface : IDisposable
 {
     private readonly WlCompositor _compositor;
     private readonly ShmSlots _slots;
     private readonly ZwlrLayerSurfaceV1 _layerSurface;
     private bool _disposed;
 
-    internal ManagerSurface(
+    public ManagerSurface(
         WlCompositor compositor,
         WlShm shm,
         ZwlrLayerShellV1 layerShell,
@@ -55,6 +54,11 @@ internal sealed class ManagerSurface : IDisposable
 
     public void SetExclusiveZone(int zone) => _layerSurface.SetExclusiveZone(zone);
 
+    public void SetLayer(ZwlrLayerShellV1.Layer layer) => _layerSurface.SetLayer(layer);
+
+    public void SetKeyboardInteractivity(ZwlrLayerSurfaceV1.KeyboardInteractivity interactivity) =>
+        _layerSurface.SetKeyboardInteractivity(interactivity);
+
     public void SetSize(int width, int height) => _layerSurface.SetSize((uint)width, (uint)height);
 
     public void SetMargin(int top, int left) => _layerSurface.SetMargin(top, 0, 0, left);
@@ -78,6 +82,8 @@ internal sealed class ManagerSurface : IDisposable
         return pixels;
     }
 
+    public Span<byte> Bytes => _slots.CurrentBytes();
+
     public SKSurface? CreateCanvas(nint pixels) => SKSurface.Create(
         new SKImageInfo(Width * Scale, Height * Scale, SKColorType.Bgra8888, SKAlphaType.Premul),
         pixels,
@@ -89,6 +95,22 @@ internal sealed class ManagerSurface : IDisposable
         if (!area.IsEmpty)
         {
             region.Add(area.X, area.Y, area.Width, area.Height);
+        }
+
+        Surface.SetInputRegion(region);
+        region.Destroy();
+    }
+
+    public void SetInputRegion(IReadOnlyList<Rect> areas)
+    {
+        var region = _compositor.CreateRegion();
+        for (var i = 0; i < areas.Count; i++)
+        {
+            var area = areas[i];
+            if (!area.IsEmpty)
+            {
+                region.Add(area.X, area.Y, area.Width, area.Height);
+            }
         }
 
         Surface.SetInputRegion(region);

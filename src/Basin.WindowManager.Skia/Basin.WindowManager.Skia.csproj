@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.WindowManager.Skia</PackageId>
+    <RootNamespace>Basin.WindowManager.Skia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>Skia painting mechanism for window managers built on Basin.WindowManager: the layer-shell manager surface, typeface loading and icon rasterization.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.WindowManager/Basin.WindowManager.csproj" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Svg.Skia" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="Basin.WindowManager.Skia.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-layer-shell-unstable-v1.xml" WaylandNamespace="Basin.WindowManager.Skia.Protocol" />
+  </ItemGroup>
+
+</Project>

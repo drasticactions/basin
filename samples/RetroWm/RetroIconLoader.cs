@@ -14,7 +14,11 @@ internal sealed class RetroIconLoader
 
     private const int DitherSpread = 64;
 
-    private readonly IconLoader _loader = new();
+    private readonly Basin.WindowManager.Skia.IconRaster _loader = new(new Basin.Cli.IconSearch
+    {
+        OverrideDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "retro-wm", "icons"),
+    }.Find);
     private readonly Dictionary<string, SKImage?> _cache = [];
 
     public SKImage? Load(string appId, int scale)

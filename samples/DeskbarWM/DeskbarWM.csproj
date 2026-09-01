@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DeskbarWm</RootNamespace>
+    <AssemblyName>deskbar-wm</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.WindowManager/Basin.WindowManager.csproj" />
+    <ProjectReference Include="../../src/Basin.WindowManager.Skia/Basin.WindowManager.Skia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
+    <PackageReference Include="Tomlyn" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/fonts/NotoSansCJK-Regular.ttc" LogicalName="NotoSansCJK-Regular.ttc" />
+    <EmbeddedResource Include="deskbar-wm.toml" LogicalName="deskbar-wm.toml" />
+  </ItemGroup>
+
+</Project>

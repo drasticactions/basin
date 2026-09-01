@@ -1,0 +1,70 @@
+# deskbar-wm reads this file from ~/.config/deskbar-wm/deskbar-wm.toml and
+# rereads it on SIGHUP. Every key below shows its default.
+
+[deskbar]
+orientation = "vertical"  # "vertical" | "horizontal"
+side = "right"            # "left" | "right"
+end = "top"               # "top" | "bottom"
+state = "expando"         # "mini" | "expando" | "full"; there is no horizontal full
+width = 0                 # 0 derives the width from the icon size
+icon-size = 32            # 16 to 96
+show-labels = true
+expand-windows = false    # Haiku's superExpando; vertical bars only
+expand-new-teams = false
+sort-teams = false
+always-on-top = false
+auto-raise = false
+auto-hide = false
+
+[deskbar.tray]
+applets = ["workspaces", "clock"]
+
+[deskbar.clock]
+show-seconds = false
+show-day-of-week = false
+show-time-zone = false
+
+[deskbar.menu]
+recent-documents = 10
+recent-folders = 10
+recent-applications = 10
+
+[icons]
+haiku-directory = ""      # a directory of .hvif files; themed icons otherwise
+
+[look]
+flavor = "haiku"          # "haiku" | "r5"
+tab-color = "#ffcb00"
+font-size = 12
+
+[focus]
+mode = "click"            # "click" | "follow-mouse" | "follow-mouse-warping"
+raise-on-focus = true
+
+[stack-and-tile]
+enabled = true
+snap-distance = 10
+
+[workspaces]
+rows = 2
+columns = 2
+
+[desktop]
+wallpaper = ""
+color = "#336698"
+scale = "fill"            # "fill" | "fit" | "center" | "tile"
+
+# [bindings] maps Mod+Mod+Key chords to an action or a command to spawn.
+# Actions: close, zoom, minimize, terminal, previous-workspace, workspace N.
+# Anything else is spawned as a command line.
+#
+# [bindings]
+# "Ctrl+Alt+q" = "close"
+# "Ctrl+Alt+Return" = "foot"
+# "Alt+F1" = "workspace 1"
+
+# [[rule]] assigns matched windows a workspace at creation.
+#
+# [[rule]]
+# app-id = "mpv"
+# workspace = 2

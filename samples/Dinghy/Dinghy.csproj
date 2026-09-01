@@ -15,20 +15,14 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.WindowManager/Basin.WindowManager.csproj" />
+    <ProjectReference Include="../../src/Basin.WindowManager.Skia/Basin.WindowManager.Skia.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
-    <PackageReference Include="Svg.Skia" />
     <PackageReference Include="Tomlyn" />
     <PackageReference Include="SkiaSharp.HarfBuzz" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="WaylandSharpest" />
-    <AdditionalFiles Include="$(WaylandProtocolsDir)stable/xdg-shell/xdg-shell.xml" WaylandNamespace="Dinghy.Protocol" />
-    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-layer-shell-unstable-v1.xml" WaylandNamespace="Dinghy.Protocol" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 using Basin.WindowManager;
-using Dinghy.Protocol;
+using Basin.WindowManager.Skia;
+using Basin.WindowManager.Skia.Protocol;
 using SkiaSharp;
 using Wayland;
 

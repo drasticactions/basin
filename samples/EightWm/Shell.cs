@@ -373,6 +373,7 @@ internal sealed partial class Shell : IDisposable
 
     public void Dispose()
     {
+        _luts?.Dispose();
         ReleaseChrome();
         _seat.Dispose();
         _outputs.Dispose();

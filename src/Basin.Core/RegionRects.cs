@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using Pixman;
+using Pixman.Native;
 
 namespace Basin;
 
@@ -6,10 +8,10 @@ public static class RegionRects
 {
     public static Walker Of(PixmanRegion32 region) => new(region);
 
-    public struct Walker
+    public unsafe struct Walker
     {
         private readonly PixmanBox32 _single;
-        private readonly PixmanBox32[]? _many;
+        private readonly PixmanBox32* _many;
         private readonly int _count;
         private int _index;
 
@@ -31,8 +33,12 @@ public static class RegionRects
             else
             {
                 _single = default;
-                _many = region.Rectangles();
-                _count = _many.Length;
+                fixed (pixman_region32* raw = &RegionOf(region))
+                {
+                    int fetched;
+                    _many = (PixmanBox32*)Libpixman.pixman_region32_rectangles(raw, &fetched);
+                    _count = fetched;
+                }
             }
 
             _index = -1;
@@ -43,5 +49,8 @@ public static class RegionRects
         public bool MoveNext() => ++_index < _count;
 
         public readonly Walker GetEnumerator() => this;
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "Region")]
+        private static extern ref pixman_region32 RegionOf(PixmanRegion32 region);
     }
 }

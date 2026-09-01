@@ -1,5 +1,6 @@
 using Basin.WindowManager;
-using RetroWm.Protocol;
+using Basin.WindowManager.Skia;
+using Basin.WindowManager.Skia.Protocol;
 using SkiaSharp;
 using Wayland;
 
@@ -73,7 +74,7 @@ internal sealed class BackgroundSurface : IDisposable
 
         surface.Canvas.Clear(Theme.Color(color));
         surface.Canvas.Flush();
-        _surface.SetInputRegion(default);
+        _surface.SetInputRegion(default(Rect));
 
         _drawnScale = scale;
         _drawnSize = size;

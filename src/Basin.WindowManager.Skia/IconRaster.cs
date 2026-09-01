@@ -1,17 +1,23 @@
-using Basin.Cli;
 using SkiaSharp;
 using Svg.Skia;
 
-namespace RetroWm;
+namespace Basin.WindowManager.Skia;
 
-internal sealed class IconLoader
+public sealed class IconRaster
 {
-    private readonly Dictionary<(string AppId, int SizePx), SKImage?> _cache = [];
+    private readonly Func<string, string?> _resolve;
+    private readonly Dictionary<(string Key, int SizePx), SKImage?> _cache = [];
 
-    public SKImage? Load(string appId, int sizePx)
+    public IconRaster(Func<string, string?> resolve)
     {
-        var key = (appId, sizePx);
-        if (_cache.TryGetValue(key, out var cached))
+        ArgumentNullException.ThrowIfNull(resolve);
+        _resolve = resolve;
+    }
+
+    public SKImage? Load(string key, int sizePx)
+    {
+        var cacheKey = (key, sizePx);
+        if (_cache.TryGetValue(cacheKey, out var cached))
         {
             return cached;
         }
@@ -19,28 +25,17 @@ internal sealed class IconLoader
         SKImage? image = null;
         try
         {
-            image = LoadUncached(appId, sizePx);
+            image = _resolve(key) is { } path ? Rasterize(path, sizePx) : null;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
         }
 
-        _cache[key] = image;
+        _cache[cacheKey] = image;
         return image;
     }
 
-    private static SKImage? LoadUncached(string appId, int sizePx)
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var search = new IconSearch
-        {
-            OverrideDirectory = Path.Combine(home, ".config", "retro-wm", "icons"),
-        };
-
-        return search.Find(appId) is { } path ? Rasterize(path, sizePx) : null;
-    }
-
-    private static SKImage? Rasterize(string path, int sizePx)
+    public static SKImage? Rasterize(string path, int sizePx)
     {
         var info = new SKImageInfo(sizePx, sizePx, SKColorType.Bgra8888, SKAlphaType.Premul);
         if (path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))

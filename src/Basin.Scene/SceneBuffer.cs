@@ -334,45 +334,53 @@ public sealed class SceneBuffer : SceneNode
             return _texture;
         }
 
-        if (_adoptFrom is { } previous &&
-            scene.TryAdoptTexture(renderer, previous, buffer, in _adoptDamage, _adoptDamageIsFull))
+        Basin.Diagnostics.AllocationScope.Pause();
+        try
         {
+            if (_adoptFrom is { } previous &&
+                scene.TryAdoptTexture(renderer, previous, buffer, in _adoptDamage, _adoptDamageIsFull))
+            {
+                _adoptFrom = null;
+                _adoptDamage = default;
+                _adoptDamageIsFull = false;
+            }
+
             _adoptFrom = null;
-            _adoptDamage = default;
-            _adoptDamageIsFull = false;
-        }
-
-        _adoptFrom = null;
-        var texture = scene.TextureFor(renderer, buffer);
-        if (texture is not null)
-        {
-            _texture = texture;
-            _ownsTexture = false;
-            ForgetTextureWhenBufferDies(buffer);
-            return texture;
-        }
-
-        if (scene.CrossDeviceImport is { } convert && convert(buffer) is { } conversion)
-        {
-            _conversion = conversion;
-            texture = scene.TextureFor(renderer, conversion.Buffer);
+            var texture = scene.TextureFor(renderer, buffer);
             if (texture is not null)
             {
                 _texture = texture;
                 _ownsTexture = false;
-                ForgetTextureWhenBufferDies(conversion.Buffer);
-                if (buffer.TryGetDmabuf(out var foreign))
-                {
-                    Log.Info(
-                        $"cross-device conversion: {buffer.Width}x{buffer.Height} modifier 0x{foreign.Modifier:X} now renders via a linear copy");
-                }
-
+                ForgetTextureWhenBufferDies(buffer);
                 return texture;
             }
-        }
 
-        ReportIfUnimportable(buffer);
-        return null;
+            if (scene.CrossDeviceImport is { } convert && convert(buffer) is { } conversion)
+            {
+                _conversion = conversion;
+                texture = scene.TextureFor(renderer, conversion.Buffer);
+                if (texture is not null)
+                {
+                    _texture = texture;
+                    _ownsTexture = false;
+                    ForgetTextureWhenBufferDies(conversion.Buffer);
+                    if (buffer.TryGetDmabuf(out var foreign))
+                    {
+                        Log.Info(
+                            $"cross-device conversion: {buffer.Width}x{buffer.Height} modifier 0x{foreign.Modifier:X} now renders via a linear copy");
+                    }
+
+                    return texture;
+                }
+            }
+
+            ReportIfUnimportable(buffer);
+            return null;
+        }
+        finally
+        {
+            Basin.Diagnostics.AllocationScope.Resume();
+        }
     }
 
     private readonly List<IBuffer> _watched = [];

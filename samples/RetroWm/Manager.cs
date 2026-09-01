@@ -1,6 +1,8 @@
 using Basin.Config;
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
+using Basin.WindowManager.Skia;
+using Protocol = Basin.WindowManager.Skia.Protocol;
 using Wayland;
 using CursorShape = Basin.WindowManager.Protocol.WpCursorShapeDeviceV1.Shape;
 

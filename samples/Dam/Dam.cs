@@ -240,6 +240,7 @@ internal sealed partial class Dam : IDisposable
 
     public void Dispose()
     {
+        _luts?.Dispose();
         _client?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();

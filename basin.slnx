@@ -5,6 +5,7 @@
     <Project Path="samples/BasinSwap/BasinSwap.csproj" />
     <Project Path="samples/BlurClient/BlurClient.csproj" />
     <Project Path="samples/Dam/Dam.csproj" />
+    <Project Path="samples/DeskbarWM/DeskbarWM.csproj" />
     <Project Path="samples/Dinghy/Dinghy.csproj" />
     <Project Path="samples/EightWm/EightWm.csproj" />
     <Project Path="samples/Inlet/Inlet.csproj" />
@@ -50,6 +51,7 @@
     <Project Path="src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
     <Project Path="src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <Project Path="src/Basin.WindowManager/Basin.WindowManager.csproj" />
+    <Project Path="src/Basin.WindowManager.Skia/Basin.WindowManager.Skia.csproj" />
     <Project Path="src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
     <Project Path="src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
     <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />

@@ -2,8 +2,10 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
-public sealed class ColorLutCache
+public sealed class ColorLutCache : IDisposable
 {
+    private bool _disposed;
+
     private readonly IRenderer _renderer;
     private readonly Dictionary<(ImageDescription Source, ImageDescription Output), IColorLut?> _luts;
 
@@ -42,6 +44,22 @@ public sealed class ColorLutCache
 
         _luts[key] = imported;
         return imported;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        foreach (var lut in _luts.Values)
+        {
+            lut?.Dispose();
+        }
+
+        _luts.Clear();
     }
 
     private sealed class PairComparer : IEqualityComparer<(ImageDescription Source, ImageDescription Output)>

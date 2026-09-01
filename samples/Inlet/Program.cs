@@ -843,6 +843,7 @@ internal static class Program
         totalRendered = driver.PrimaryRendered;
 
         startup?.Stop(log);
+        luts.Dispose();
         driver.Dispose();
         scene.Root.Destroy();
 

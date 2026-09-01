@@ -530,6 +530,7 @@ internal sealed partial class Westonia : IDisposable
 
     public void Dispose()
     {
+        _luts?.Dispose();
         foreach (var process in _spawned)
         {
             BasinDiagnostics.StopClient(process);

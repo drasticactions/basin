@@ -1,6 +1,8 @@
 using Basin.Config;
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
+using Basin.WindowManager.Skia;
+using Protocol = Basin.WindowManager.Skia.Protocol;
 using CursorShape = Basin.WindowManager.Protocol.WpCursorShapeDeviceV1.Shape;
 using Wayland;
 
@@ -45,7 +47,11 @@ internal sealed class Manager
 
     private readonly Dictionary<WmOutput, DesktopSurface> _desktops = [];
     private readonly Dictionary<WmOutput, WallpaperSurface> _wallpapers = [];
-    private readonly IconLoader _icons = new();
+    private readonly IconRaster _icons = new(new Basin.Cli.IconSearch
+    {
+        OverrideDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "dinghy", "icons"),
+    }.Find);
     private BindingMode _mode = BindingMode.Default;
     private MenuSurface? _menu;
     private MenuMode? _menuMode;

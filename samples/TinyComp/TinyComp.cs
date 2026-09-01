@@ -845,6 +845,7 @@ internal sealed partial class TinyComp :
         _hostChrome.Clear();
         _uiHost?.Dispose();
 
+        _luts.Dispose();
         _driver.Dispose();
 
         _cursor.Dispose();

@@ -1,20 +1,13 @@
 using SkiaSharp;
-using Tomlyn.Model;
 
 namespace Dinghy;
 
 internal static class Fonts
 {
-    public static SKTypeface Sans { get; } = SKTypeface.FromFamilyName("sans-serif") ?? SKTypeface.Default;
+    private static readonly Basin.WindowManager.Skia.Fonts Instance = new(fallbackFamily: "sans-serif");
 
-    public static string Ellipsize(SKFont font, string text, float maxWidth)
-    {
-        if (font.MeasureText(text) <= maxWidth)
-        {
-            return text;
-        }
+    public static SKTypeface Sans => Instance.Sans;
 
-        var fit = (int)font.BreakText(text, Math.Max(maxWidth - font.MeasureText("…"), 0));
-        return fit <= 0 ? "…" : text[..fit] + "…";
-    }
+    public static string Ellipsize(SKFont font, string text, float maxWidth) =>
+        Basin.WindowManager.Skia.Fonts.Ellipsize(font, text, maxWidth);
 }

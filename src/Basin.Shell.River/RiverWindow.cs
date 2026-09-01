@@ -228,6 +228,7 @@ internal sealed class RiverWindow
             focused,
             _requested.ServerSideDecorations);
         var changed = !_appliedValid || !_applied.Equals(applied);
+        var newSize = !_appliedValid || _applied.Size != applied.Size;
         _applied = applied;
         _appliedValid = true;
 
@@ -244,15 +245,22 @@ internal sealed class RiverWindow
                 toplevel,
                 _requested.ServerSideDecorations ? DecorationMode.ServerSide : DecorationMode.ClientSide);
 
-            if (target.Width > 0 || target.Height > 0)
+            if (newSize && (target.Width > 0 || target.Height > 0))
             {
                 toplevel.SetSize(target.Width, target.Height);
             }
 
             if (changed)
             {
-                CaptureSnapshot();
-                toplevel.SendConfigure(transaction);
+                if (applied.Resizing)
+                {
+                    toplevel.SendConfigure();
+                }
+                else
+                {
+                    CaptureSnapshot();
+                    toplevel.SendConfigure(transaction);
+                }
 
                 Scene.SendFrameDone(0);
             }
@@ -393,7 +401,7 @@ internal sealed class RiverWindow
 
     private void CaptureSnapshot()
     {
-        if (!IsDisplayable || _snapshot is not null || Tree.Parent is null)
+        if (!IsDisplayable || !Tree.Enabled || _snapshot is not null || Tree.Parent is null)
         {
             return;
         }
