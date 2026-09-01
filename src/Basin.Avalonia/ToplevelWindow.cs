@@ -13,6 +13,7 @@ public sealed class ToplevelWindow : Window
     private readonly ToplevelWindows _manager;
     private readonly int _id;
     private readonly BasinToplevelView _view;
+    private readonly global::Avalonia.Controls.Panel _content;
     private bool _applyingClientState;
     private bool _closing;
 
@@ -27,12 +28,12 @@ public sealed class ToplevelWindow : Window
         _manager = manager;
         _id = id;
         _view = new BasinToplevelView(manager.Host, _ => manager.CreateView(id));
-        var background = new global::Avalonia.Controls.Panel
+        _content = new global::Avalonia.Controls.Panel
         {
             Background = global::Avalonia.Media.Brushes.Transparent,
         };
-        background.Children.Add(_view);
-        Content = background;
+        _content.Children.Add(_view);
+        Content = _content;
         _clientTitle = info.Title.Length > 0 ? info.Title : info.AppId.Length > 0 ? info.AppId : "Wayland";
         Title = _clientTitle;
         Width = info.Width;
@@ -157,7 +158,7 @@ public sealed class ToplevelWindow : Window
     {
         if (!_edgeCursor)
         {
-            Cursor = cursor;
+            _content.Cursor = cursor;
         }
     }
 
