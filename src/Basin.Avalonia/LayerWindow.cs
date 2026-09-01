@@ -12,6 +12,7 @@ public sealed class LayerWindow : Window
     private bool _takesKeyboard;
     private HostStackingBand _band;
     private bool _closing;
+    private bool _scaleSettled;
 
     internal LayerWindow(ToplevelWindows manager, int id, bool takesKeyboard, HostStackingBand band)
     {
@@ -123,9 +124,15 @@ public sealed class LayerWindow : Window
         Opened += (_, _) =>
         {
             HostStacking.Apply(this, _band, _takesKeyboard);
+            ObserveScreenScale();
             _manager.HostScaleChanged(_id, RenderScaling, RenderScaling != 1.0);
         };
-        ScalingChanged += (_, _) => _manager.HostScaleChanged(_id, RenderScaling, authoritative: true);
+        ScalingChanged += (_, _) =>
+        {
+            _scaleSettled = true;
+            ObserveScreenScale();
+            _manager.HostScaleChanged(_id, RenderScaling, authoritative: true);
+        };
         Closing += (_, e) =>
         {
             if (!_closing)
@@ -171,6 +178,21 @@ public sealed class LayerWindow : Window
         Width = width;
         Height = height;
         Position = position;
+    }
+
+    private void ObserveScreenScale()
+    {
+        if (RenderScaling <= 0 || (!_scaleSettled && RenderScaling == 1.0))
+        {
+            return;
+        }
+
+        var screens = Screens;
+        var screen = screens.ScreenFromTopLevel(this) ?? screens.ScreenFromWindow(this);
+        if (HostScreens.KeyFor(screens, screen) is { } key)
+        {
+            _manager.HostScreenScaleObserved(key, RenderScaling);
+        }
     }
 
     internal async Task CloseFromCompositorAsync()

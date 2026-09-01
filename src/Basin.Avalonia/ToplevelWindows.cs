@@ -52,6 +52,8 @@ public sealed class ToplevelWindows : IDisposable
         public LayerSurface? Layer;
         public int LayerX;
         public int LayerY;
+        public int HostX;
+        public int HostY;
         public HostStackingBand Band;
         public double Scale;
         public string? ScreenKey;
@@ -912,8 +914,14 @@ public sealed class ToplevelWindows : IDisposable
                 return;
             }
 
+            var changed = entry.Scale != value;
             entry.Scale = value;
             AnnounceScaleTree(entry.Surface, value);
+            if (changed && entry.Layer is { } layerSurface && entry.Width > 0)
+            {
+                layerSurface.Configure(entry.Width, entry.Height);
+            }
+
             ApplyScreenOutput(entry);
         });
     }
@@ -1313,11 +1321,16 @@ public sealed class ToplevelWindows : IDisposable
                 entry.Height = height;
                 entry.WindowWidth = width;
                 entry.WindowHeight = height;
-                _host.Screens.EnterScreen(layer.Surface, screen.Key);
+                _host.Screens.RefreshPresence(layer.Surface, screen.Key);
+                AnnounceScaleTree(
+                    layer.Surface,
+                    entry.Scale > 0 ? entry.Scale : _host.Screens.ScalingOf(screen.Key));
                 layer.Configure(width, height);
                 var position = new global::Avalonia.PixelPoint(
                     screen.X + (int)Math.Round(placement.Box.X * scale),
                     screen.Y + (int)Math.Round(placement.Box.Y * scale));
+                entry.HostX = position.X;
+                entry.HostY = position.Y;
                 var id = entry.Id;
                 RunOnUi(() =>
                 {
@@ -1358,6 +1371,9 @@ public sealed class ToplevelWindows : IDisposable
             $"keyboard={layer.KeyboardInteractivity} anchor={layer.Anchor} zone={layer.ExclusiveZone} " +
             $"{entry.Width}x{entry.Height} inputInfinite={layer.Surface.Current.InputIsInfinite} " +
             $"inputRects={layer.Surface.Current.Input.RectangleCount} {DescribeRegion(layer.Surface.Current.Input)}");
+        var placedPosition = new global::Avalonia.PixelPoint(entry.HostX, entry.HostY);
+        var placedWidth = entry.WindowWidth;
+        var placedHeight = entry.WindowHeight;
         RunOnUi(() =>
         {
             LayerWindow window;
@@ -1376,6 +1392,10 @@ public sealed class ToplevelWindows : IDisposable
             {
                 window = new LayerWindow(this, id, takesKeyboard, band);
                 _layerWindows[id] = window;
+                if (placedWidth > 0 && placedHeight > 0)
+                {
+                    window.PlaceAt(placedPosition, placedWidth, placedHeight);
+                }
             }
 
             if (!window.IsVisible)

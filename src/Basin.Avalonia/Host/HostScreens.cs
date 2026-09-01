@@ -218,6 +218,7 @@ public sealed class HostScreens : IDisposable
         get
         {
             Row? first = null;
+            Row? noted = null;
             foreach (var row in _rows.Values)
             {
                 first ??= row;
@@ -225,9 +226,14 @@ public sealed class HostScreens : IDisposable
                 {
                     return row.Effective;
                 }
+
+                if (row.Noted is not null)
+                {
+                    noted ??= row;
+                }
             }
 
-            return first?.Effective ?? 1.0;
+            return (noted ?? first)?.Effective ?? 1.0;
         }
     }
 
@@ -239,6 +245,7 @@ public sealed class HostScreens : IDisposable
         get
         {
             string? first = null;
+            string? noted = null;
             foreach (var (key, row) in _rows)
             {
                 first ??= key;
@@ -246,9 +253,14 @@ public sealed class HostScreens : IDisposable
                 {
                     return key;
                 }
+
+                if (row.Noted is not null)
+                {
+                    noted ??= key;
+                }
             }
 
-            return first;
+            return noted ?? first;
         }
     }
 
