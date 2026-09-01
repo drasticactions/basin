@@ -255,7 +255,8 @@ public sealed class PlaneOffloadTests
 
             for (var i = 0; i < state.Layers.Count; i++)
             {
-                state.Layers[i].Accepted = Accept?.Invoke(state.Layers[i], i) ?? false;
+                state.Layers[i].Accepted = state.Layers[i].Buffer is not null &&
+                    (Accept?.Invoke(state.Layers[i], i) ?? false);
             }
         }
     }
@@ -326,7 +327,7 @@ public sealed class PlaneOffloadTests
         output.Accept = (_, _) => false;
         Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
         Assert.Equal(0, sceneOutput.OffloadedLayers);
-        Assert.Empty(output.LastCommittedLayers!);
+        Assert.DoesNotContain(output.LastCommittedLayers!, static l => l.Accepted);
         Assert.False(sceneOutput.NeedsRepaint);
 
         node.Destroy();
@@ -384,7 +385,8 @@ public sealed class PlaneOffloadTests
         output.Accept = (_, index) => index == 0;
         Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
         Assert.Equal(0, sceneOutput.OffloadedLayers);
-        Assert.Empty(output.LastCommittedLayers!);
+        Assert.DoesNotContain(output.LastCommittedLayers!, static l => l.Accepted);
+        Assert.Null(output.LastCommittedLayers![0].Buffer);
 
         top.Destroy();
         bottom.Destroy();
@@ -415,7 +417,7 @@ public sealed class PlaneOffloadTests
         output.Accept = (_, _) => false;
         Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
         Assert.Equal(0, sceneOutput.OffloadedLayers);
-        Assert.Empty(output.LastCommittedLayers!);
+        Assert.DoesNotContain(output.LastCommittedLayers!, static l => l.Accepted);
 
         node.Destroy();
         client.Destroy();

@@ -28,10 +28,8 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     private readonly DrmAtomicBuilder _testBuilder = new();
     private readonly List<LiftoffLayer> _liftoffLayers = [];
-    private readonly List<LiftoffLayer> _liftoffProbeLayers = [];
     private readonly List<uint> _layerFbIds = [];
     private LiftoffOutput? _liftoffOutput;
-    private LiftoffOutput? _liftoffProbeOutput;
     private bool _liftoffActive;
 
     private List<BufferLock> _layerScanout = [];
@@ -103,17 +101,15 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         Description = $"{edid.Make} {edid.Model} ({connector.Name})";
         _cursorRetry = backend.Loop.AddTimer(OnCursorRetry);
         _queuedFlush = backend.Loop.AddTimer(OnQueuedFlush);
-        if (backend.Liftoff is { } liftoff && backend.LiftoffProbe is { } probe)
+        if (backend.Liftoff is { } liftoff)
         {
             try
             {
                 _liftoffOutput = liftoff.CreateOutput(crtcId);
-                _liftoffProbeOutput = probe.CreateOutput(crtcId);
             }
             catch (LiftoffException e)
             {
                 _liftoffOutput = null;
-                _liftoffProbeOutput = null;
                 Log.Warn($"{Name}: liftoff output unavailable ({e.Message}); overlay offload disabled");
             }
         }
@@ -303,7 +299,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if (layers is not null && CanOffloadLayers(state))
         {
-            _ = ApplyLayers(layers, _testBuilder, _liftoffProbeOutput!, _liftoffProbeLayers, out _);
+            _ = ApplyLayers(layers, _testBuilder, _liftoffOutput!, _liftoffLayers, out _);
             ReleaseStagedFences();
         }
 
@@ -1519,14 +1515,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             target.SetProperty("SRC_W", LiftoffLayer.ToFixed16(src.Width));
             target.SetProperty("SRC_H", LiftoffLayer.ToFixed16(src.Height));
             target.SetZPos(i + 1);
-            if (layer.InFenceFd >= 0)
-            {
-                target.SetProperty("IN_FENCE_FD", unchecked((ulong)(long)StageFence(layer.InFenceFd)));
-            }
-            else
-            {
-                target.UnsetProperty("IN_FENCE_FD");
-            }
+            target.SetProperty(
+                "IN_FENCE_FD",
+                unchecked((ulong)(long)(layer.InFenceFd >= 0 ? StageFence(layer.InFenceFd) : -1)));
 
             target.SetAlpha(layer.Alpha >= 1f ? (ushort)0xFFFF : (ushort)Math.Clamp(layer.Alpha * 0xFFFF, 0, 0xFFFF));
         }
@@ -1554,7 +1545,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
-        Log.Debug($"{Name}: liftoff {(ReferenceEquals(output, _liftoffProbeOutput) ? "probe" : "commit")} placed {acceptedCount}/{layers.Count} layers");
+        Log.Debug($"{Name}: liftoff {(ReferenceEquals(builder, _testBuilder) ? "probe" : "commit")} placed {acceptedCount}/{layers.Count} layers");
         return true;
     }
 
@@ -1615,9 +1606,6 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _liftoffOutput?.Dispose();
         _liftoffOutput = null;
         _liftoffLayers.Clear();
-        _liftoffProbeOutput?.Dispose();
-        _liftoffProbeOutput = null;
-        _liftoffProbeLayers.Clear();
         ReleaseLayerLocks();
         _testBuilder.Dispose();
         _cursorRetry?.Remove();

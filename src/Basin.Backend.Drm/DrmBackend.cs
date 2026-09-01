@@ -77,8 +77,6 @@ public sealed class DrmBackend : IDisposable
 
     internal LiftoffDevice? Liftoff { get; private set; }
 
-    internal LiftoffDevice? LiftoffProbe { get; private set; }
-
     private readonly List<(uint PossibleCrtcs, DrmFormatSet Formats)> _overlayPlanes = [];
 
     internal DrmFormatSet OverlayFormatsFor(int crtcIndex)
@@ -165,8 +163,6 @@ public sealed class DrmBackend : IDisposable
         _drmSource?.Remove();
         Liftoff?.Dispose();
         Liftoff = null;
-        LiftoffProbe?.Dispose();
-        LiftoffProbe = null;
         if (Device is not null)
         {
             RestoreCrtcState();
@@ -332,7 +328,6 @@ public sealed class DrmBackend : IDisposable
         try
         {
             Liftoff = LiftoffDevice.Create(Device.Fd);
-            LiftoffProbe = LiftoffDevice.Create(Device.Fd);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
@@ -374,7 +369,6 @@ public sealed class DrmBackend : IDisposable
             try
             {
                 Liftoff.CreatePlane(planeId);
-                LiftoffProbe!.CreatePlane(planeId);
                 overlays++;
                 _overlayPlanes.Add((Device.GetPlane(planeId).PossibleCrtcs, DrmOutput.ReadInFormats(Device, props)));
             }
@@ -388,8 +382,6 @@ public sealed class DrmBackend : IDisposable
         {
             Liftoff.Dispose();
             Liftoff = null;
-            LiftoffProbe?.Dispose();
-            LiftoffProbe = null;
             Log.Info($"{DevicePath}: no overlay planes; plane offload disabled");
             return;
         }

@@ -28,6 +28,7 @@ public sealed class SceneOutput : IDisposable
     private readonly PixmanRegion32 _compositedAbove = new();
     private List<SceneBuffer> _offloadedNow = [];
     private List<Box> _offloadedNowBoxes = [];
+    private readonly List<OutputLayer> _offloadedNowLayers = [];
     private List<SceneBuffer> _offloadedPrev = [];
     private List<Box> _offloadedPrevBoxes = [];
 
@@ -562,6 +563,7 @@ public sealed class SceneOutput : IDisposable
 
         _offloadedNow.Clear();
         _offloadedNowBoxes.Clear();
+        _offloadedNowLayers.Clear();
         _layers.Clear();
         var sendLayers = false;
         if (options.AllowPlaneOffload && !_projection.IsTransformed && _replicationSource is null &&
@@ -878,17 +880,19 @@ public sealed class SceneOutput : IDisposable
             {
                 _offloadedNow.Add(_candidateNodes[i]);
                 _offloadedNowBoxes.Add(box);
+                _offloadedNowLayers.Add(layer);
             }
             else
             {
                 Decline(_candidateNodes[i], layer.Accepted ? PlaneDeclineReason.Demoted : PlaneDeclineReason.BackendRefused);
                 _scratch.Reset(new PixmanBox32(box.X, box.Y, box.Right, box.Bottom));
                 _compositedAbove.UnionWith(_scratch);
-                layer.Buffer = null;
+                if (layer.Accepted)
+                {
+                    layer.Buffer = null;
+                }
             }
         }
-
-        _layers.RemoveAll(static l => l.Buffer is null);
     }
 
     private void DamageOffloadTransitions()
@@ -920,7 +924,7 @@ public sealed class SceneOutput : IDisposable
         var demoted = false;
         for (var i = _offloadedNow.Count - 1; i >= 0; i--)
         {
-            if (_layers[_layers.Count - 1 - i].Accepted)
+            if (_offloadedNowLayers[i].Accepted)
             {
                 continue;
             }
@@ -928,6 +932,7 @@ public sealed class SceneOutput : IDisposable
             Ring.Add(_offloadedNowBoxes[i]);
             _offloadedNow.RemoveAt(i);
             _offloadedNowBoxes.RemoveAt(i);
+            _offloadedNowLayers.RemoveAt(i);
             demoted = true;
         }
 
