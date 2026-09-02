@@ -21,6 +21,32 @@ internal static class AvaloniaKeyMap
         _ => 0,
     };
 
+    private static readonly (KeyModifiers Flag, uint Code)[] ModifierKeys =
+    [
+        (KeyModifiers.Shift, 42),
+        (KeyModifiers.Shift, 54),
+        (KeyModifiers.Control, 29),
+        (KeyModifiers.Control, 97),
+        (KeyModifiers.Alt, 56),
+        (KeyModifiers.Alt, 100),
+        (KeyModifiers.Meta, 125),
+        (KeyModifiers.Meta, 126),
+    ];
+
+    public static List<uint>? StaleModifiers(KeyModifiers held, IReadOnlySet<uint> pressed)
+    {
+        List<uint>? stale = null;
+        foreach (var (flag, code) in ModifierKeys)
+        {
+            if ((held & flag) == 0 && pressed.Contains(code))
+            {
+                (stale ??= []).Add(code);
+            }
+        }
+
+        return stale;
+    }
+
     public static uint EvdevFor(PhysicalKey key) => key switch
     {
         PhysicalKey.Escape => 1,

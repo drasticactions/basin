@@ -62,6 +62,7 @@ public sealed class LayerWindow : Window
             global::Avalonia.Input.InputElement.KeyDownEvent,
             (object? _, global::Avalonia.Input.KeyEventArgs e) =>
             {
+                ReleaseStaleModifiers(e.KeyModifiers);
                 if (e.Key == global::Avalonia.Input.Key.ImeProcessed)
                 {
                     return;
@@ -85,6 +86,8 @@ public sealed class LayerWindow : Window
                     Send(InputKind.Key, code: code, pressed: false);
                     e.Handled = true;
                 }
+
+                ReleaseStaleModifiers(e.KeyModifiers);
             },
             global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
         PointerEntered += (_, e) => SendPointer(InputKind.PointerEnter, e);
@@ -99,6 +102,7 @@ public sealed class LayerWindow : Window
                 return;
             }
 
+            ReleaseStaleModifiers(e.KeyModifiers);
             SendPointer(InputKind.PointerMotion, e);
             var button = AvaloniaKeyMap.ButtonFor(e.GetCurrentPoint(_view).Properties.PointerUpdateKind);
             if (button != 0)
@@ -205,6 +209,20 @@ public sealed class LayerWindow : Window
         _closing = true;
         await _view.ShutdownAsync();
         Close();
+    }
+
+    private void ReleaseStaleModifiers(global::Avalonia.Input.KeyModifiers held)
+    {
+        if (AvaloniaKeyMap.StaleModifiers(held, _pressedKeys) is not { } stale)
+        {
+            return;
+        }
+
+        foreach (var code in stale)
+        {
+            _pressedKeys.Remove(code);
+            Send(InputKind.Key, code: code, pressed: false);
+        }
     }
 
     private void ReleasePressedKeys()

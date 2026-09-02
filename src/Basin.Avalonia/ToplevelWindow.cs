@@ -508,6 +508,7 @@ public sealed class ToplevelWindow : Window
 
         EndGesture();
         _view.Focus();
+        ReleaseStaleModifiers(e.KeyModifiers);
         _gesturePointer = e.Pointer;
         if (IsActive && e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Alt))
         {
@@ -574,8 +575,23 @@ public sealed class ToplevelWindow : Window
         }
     }
 
+    private void ReleaseStaleModifiers(global::Avalonia.Input.KeyModifiers held)
+    {
+        if (AvaloniaKeyMap.StaleModifiers(held, _pressedKeys) is not { } stale)
+        {
+            return;
+        }
+
+        foreach (var code in stale)
+        {
+            _pressedKeys.Remove(code);
+            Send(InputKind.Key, code: code, pressed: false);
+        }
+    }
+
     private void OnHostKeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e)
     {
+        ReleaseStaleModifiers(e.KeyModifiers);
         if (e.Key == global::Avalonia.Input.Key.ImeProcessed)
         {
             return;
@@ -651,6 +667,8 @@ public sealed class ToplevelWindow : Window
             Send(InputKind.Key, code: code, pressed: false);
             e.Handled = true;
         }
+
+        ReleaseStaleModifiers(e.KeyModifiers);
     }
 
     private string _clientTitle = "Wayland";
