@@ -108,7 +108,7 @@ public sealed class SceneScreenCapture : IScreenCapture
                 return true;
 
             case CaptureSourceKind.Toplevel:
-                if (!TryToplevelBox(source.ToplevelId, out var box, out var scale))
+                if (!TryToplevelBox(source, out var box, out var scale))
                 {
                     return false;
                 }
@@ -139,7 +139,7 @@ public sealed class SceneScreenCapture : IScreenCapture
         return source.Kind switch
         {
             CaptureSourceKind.Output => CaptureOutput(source.OutputTarget!, region, target, source.OverlayCursor),
-            CaptureSourceKind.Toplevel => CaptureToplevel(source.ToplevelId, region, target),
+            CaptureSourceKind.Toplevel => CaptureToplevel(source, region, target),
             CaptureSourceKind.Cursor => CaptureCursor(target),
             CaptureSourceKind.Region => CaptureRegion(source, region, target),
             _ => false,
@@ -282,21 +282,40 @@ public sealed class SceneScreenCapture : IScreenCapture
         return pass.Submit();
     }
 
-    private bool CaptureToplevel(ulong toplevelId, in Box region, IBuffer target)
+    private bool CaptureToplevel(in CaptureSource source, in Box region, IBuffer target)
     {
-        if (!TryToplevelBox(toplevelId, out var box, out var scale))
+        if (!TryToplevelBox(source, out var box, out var scale))
         {
             return false;
         }
 
         if (Renderer is { } renderer && Index is { } index &&
-            index.TryGet(toplevelId, out var trees) && trees.Content is { } content)
+            index.TryGet(source.ToplevelId, out var trees) && trees.Content is { } content)
         {
-            return _scene.RenderSubtrees(
-                renderer, [content, trees.Popups], target, region.X, region.Y, scale, Background);
+            var client = source.ClientOnly ? trees.Client ?? content : content;
+            Box? popupClip = source.ClientOnly ? box : null;
+            var (originX, originY) = source.ClientOnly ? (box.X, box.Y) : client.ScenePosition;
+            var rendered = _scene.RenderSubtrees(
+                renderer, client, trees.Popups, popupClip, target, originX + region.X, originY + region.Y, scale,
+                Background);
+            return rendered && (!source.OverlayCursor || DrawCursorOverRegion(box, region, scale, target));
         }
 
         return RenderAt(box.X + region.X, box.Y + region.Y, scale, target);
+    }
+
+    private static bool TryClientBox(SceneNode client, out Box box)
+    {
+        var bounds = client.SubtreeBounds();
+        if (bounds.IsEmpty)
+        {
+            box = default;
+            return false;
+        }
+
+        var (x, y) = client.ScenePosition;
+        box = new Box(x + bounds.X, y + bounds.Y, bounds.Width, bounds.Height);
+        return true;
     }
 
     private bool CaptureCursor(IBuffer target)
@@ -436,17 +455,28 @@ public sealed class SceneScreenCapture : IScreenCapture
         });
     }
 
-    private bool TryToplevelBox(ulong toplevelId, out Box box, out double scale)
+    private bool TryToplevelBox(in CaptureSource source, out Box box, out double scale)
     {
         box = default;
         scale = 1;
-        if (Toplevels is not { } model || !model.TryGet(toplevelId, out var info) || info.Geometry.IsEmpty ||
+        if (Toplevels is not { } model || !model.TryGet(source.ToplevelId, out var info) ||
             (info.State & ToplevelState.ExcludedFromCapture) != 0)
         {
             return false;
         }
 
-        box = info.Geometry;
+        if (source.ClientOnly && Index is { } index && index.TryGet(source.ToplevelId, out var trees) &&
+            trees.Client is { } client && TryClientBox(client, out box))
+        {
+        }
+        else if (info.Geometry.IsEmpty)
+        {
+            return false;
+        }
+        else
+        {
+            box = info.Geometry;
+        }
 
         foreach (var (output, _) in _layout.Outputs)
         {

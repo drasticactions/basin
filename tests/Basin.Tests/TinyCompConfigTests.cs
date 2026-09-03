@@ -81,6 +81,36 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_hypr_section_reads_its_flags_and_shortcut_rows()
+    {
+        var config = TinyComp.Config.Load(
+            Write("""
+                [hypr]
+                enable = true
+                input_capture = false
+                ctm = false
+
+                [hypr.shortcuts]
+                "org.example.app:toggle" = "Super+Shift+p"
+                "no-colon" = "Super+q"
+                "org.example.app:bad" = "Nope+q"
+                """),
+            BasinLog.For("t"),
+            out var fatal);
+
+        Assert.Null(fatal);
+        Assert.True(config.HyprEnabled);
+        Assert.False(config.HyprInputCapture);
+        Assert.False(config.HyprCtm);
+        Assert.Contains("hypr.ctm", config.FromFile);
+        var row = Assert.Single(config.HyprShortcuts);
+        Assert.Equal(("org.example.app", "toggle"), row.Key);
+        Assert.Equal(Modifiers.Super | Modifiers.Shift, row.Value.Modifiers);
+        Assert.Equal(Keysym.FromName("p"), row.Value.Keysym);
+        Assert.Contains(_lines, line => line.Contains("no-colon", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_named_path_that_does_not_parse_is_fatal()
     {
         _ = TinyComp.Config.Load(Write("[compositor\n"), BasinLog.For("t"), out var fatal);

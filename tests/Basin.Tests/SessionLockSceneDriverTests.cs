@@ -83,6 +83,55 @@ public sealed class SessionLockSceneDriverTests
         Assert.Equal(["locked", "unlocked"], events);
     }
 
+    [Fact]
+    public void Locked_is_sent_after_every_output_presents_a_frame()
+    {
+        using var host = new CompositorTestHost();
+        var manager = new SessionLockManager(host.Display, host.Compositor, host.Layout);
+        var layers = new SceneLayers(host.Scene.Root);
+        _ = new SessionLockSceneDriver(manager, host.Seat, layers.Lock, host.Layout, layers.SetLocked);
+        var state = new SessionLockState();
+        state.Attach(manager);
+        var observed = new List<string>();
+        state.AddObserver(new LockRecorder(observed));
+
+        var locker = host.ConnectClient();
+        var lockProxy = BindLock(host, locker).Lock();
+        var gotLocked = false;
+        lockProxy.Locked += (_, _) => gotLocked = true;
+        host.PumpToServer();
+        host.PumpToClient();
+
+        Assert.True(manager.IsLocked);
+        Assert.False(manager.IsPresentedLocked);
+        Assert.False(layers.Windows.Enabled);
+        Assert.False(gotLocked);
+        Assert.False(state.IsLocked);
+        Assert.Empty(observed);
+
+        host.RenderFrame();
+        host.PumpToClient();
+        Assert.False(gotLocked);
+
+        host.Output.StepFrame();
+        host.PumpUntil(() => gotLocked);
+        Assert.True(manager.IsPresentedLocked);
+        Assert.True(state.IsLocked);
+        Assert.Equal(["locked"], observed);
+
+        lockProxy.UnlockAndDestroy();
+        host.PumpUntil(() => !manager.IsLocked);
+        Assert.False(state.IsLocked);
+        Assert.Equal(["locked", "unlocked"], observed);
+    }
+
+    private sealed class LockRecorder(List<string> events) : Basin.Capabilities.ILockStateObserver
+    {
+        public void SessionLocked() => events.Add("locked");
+
+        public void SessionUnlocked() => events.Add("unlocked");
+    }
+
     private static Basin.Desktop.Protocol.ExtSessionLockManagerV1 BindLock(CompositorTestHost host, ShmTestClient client)
     {
         Basin.Desktop.Protocol.ExtSessionLockManagerV1? manager = null;

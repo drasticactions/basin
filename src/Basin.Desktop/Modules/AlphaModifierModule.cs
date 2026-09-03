@@ -9,6 +9,14 @@ public sealed class AlphaModifierModule : DesktopModule<AlphaModifierManager>
 
     public override int Version => AlphaModifierManager.Version;
 
+    public override IReadOnlyList<Type> Capabilities => [typeof(ISurfaceAppearance)];
+
+    public override void SeedDefaults(BasinServices services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.UseDefault<ISurfaceAppearance>(new DefaultSurfaceAppearance());
+    }
+
     protected override AlphaModifierManager Create(BasinServices services) =>
-        new(services.Display, services.Require<CompositorGlobal>());
+        new(services.Display, services.Require<CompositorGlobal>(), services.Require<ISurfaceAppearance>());
 }

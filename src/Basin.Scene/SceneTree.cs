@@ -14,6 +14,22 @@ public class SceneTree : SceneNode
 
     public bool ExcludeFromScanout { get; set; }
 
+    private float _alpha = 1f;
+
+    public float Alpha
+    {
+        get => _alpha;
+        set
+        {
+            if (_alpha != value)
+            {
+                DamageSubtree();
+                _alpha = value;
+                DamageSubtree();
+            }
+        }
+    }
+
     internal Scene? Owner { get; set; }
 
     internal List<SceneMirror>? Mirrors { get; set; }

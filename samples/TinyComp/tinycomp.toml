@@ -72,6 +72,19 @@ touch_points = false         # draw a ring for every touch contact
 system_bell  = false         # flash the focused window when a client asks for attention
 startup_feedback = "none"    # none | bouncing | blinking | passive
 
+# The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
+# toplevel mapping and export, CTM control, global shortcuts and input capture.
+# Each flag needs a restart to change.
+[hypr]
+enable        = true         # advertise the pack at all
+input_capture = true         # hyprland_input_capture_v1, which needs libeis
+ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage elsewhere
+
+# A global shortcut a client registers fires on the chord bound here. Rows are
+# "app_id:id" = "Mod+Mod+Key"; a registration with no row never fires.
+# [hypr.shortcuts]
+# "org.example.app:toggle" = "Super+Shift+P"
+
 # The chord is Mod+Mod+Key, where the key is an xkb keysym name.
 [bindings]
 "Alt+Escape"      = "quit"

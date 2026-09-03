@@ -74,7 +74,9 @@ public sealed class AlphaModifierTests
     public void Multiplier_applies_and_resets_on_destroy()
     {
         using var host = new CompositorTestHost();
-        using var manager = new AlphaModifierManager(host.Display, host.Compositor);
+        var appearance = new Basin.Capabilities.Defaults.DefaultSurfaceAppearance();
+        host.Scene.Appearance = appearance;
+        using var manager = new AlphaModifierManager(host.Display, host.Compositor, appearance);
         var window = MappedToplevel.Map(host, host.Client);
 
         Basin.Desktop.Protocol.WpAlphaModifierV1? proxy = null;
@@ -94,12 +96,24 @@ public sealed class AlphaModifierTests
 
         var modifier = proxy!.GetSurface(window.Surface);
         modifier.SetMultiplier(uint.MaxValue / 2);
+        host.PumpToServer();
+        Assert.Empty(changes);
+        Assert.Equal(1.0, manager.AlphaOf(window.ServerSurface));
+
+        window.Surface.Commit();
         host.PumpUntil(() => changes.Count == 1);
         Assert.Equal(0.5, manager.AlphaOf(window.ServerSurface), 2);
+        var scene = host.SurfaceScenes.Single(s => ReferenceEquals(s.Surface, window.ServerSurface));
+        Assert.Equal(0.5f, scene.Tree.Alpha, 2);
 
         modifier.Dispose();
+        host.PumpToServer();
+        Assert.Equal(0.5, manager.AlphaOf(window.ServerSurface), 2);
+
+        window.Surface.Commit();
         host.PumpUntil(() => changes.Count == 2);
         Assert.Equal(1.0, manager.AlphaOf(window.ServerSurface));
+        Assert.Equal(1f, scene.Tree.Alpha);
 
         host.PumpToServer();
     }

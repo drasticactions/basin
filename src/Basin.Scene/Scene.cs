@@ -356,17 +356,29 @@ public sealed partial class Scene
     }
 
     internal bool RenderSubtrees(
-        IRenderer renderer, ReadOnlySpan<SceneNode?> roots, IBuffer target, int originX, int originY, double scale,
-        RenderColor background)
+        IRenderer renderer, SceneNode? content, SceneNode? popups, Box? popupClip, IBuffer target,
+        int originX, int originY, double scale, RenderColor background)
     {
         var list = RentList();
         try
         {
-            foreach (var root in roots)
+            if (content is SceneTree contentTree)
             {
-                if (root is SceneTree tree)
+                var (contentX, contentY) = contentTree.ScenePosition;
+                CollectTree(
+                    contentTree, contentX - originX, contentY - originY, Unclipped, RenderTransform.Identity,
+                    transformed: false, contentTree.Alpha, list, mirrorDepth: 0);
+            }
+
+            if (popups is SceneTree popupTree)
+            {
+                var clip = popupClip is { } box ? box.Translated(-originX, -originY) : Unclipped;
+                if (!clip.IsEmpty)
                 {
-                    CollectTree(tree, -originX, -originY, Unclipped, list);
+                    var (popupX, popupY) = popupTree.ScenePosition;
+                    CollectTree(
+                        popupTree, popupX - originX, popupY - originY, clip, RenderTransform.Identity,
+                        transformed: false, popupTree.Alpha, list, mirrorDepth: 0);
                 }
             }
 
@@ -1117,12 +1129,28 @@ public sealed partial class Scene
                 }
 
                 case SceneTree subtree:
-                    CollectTree(subtree, childX, childY, childClip, frame, transformed, alpha, list, mirrorDepth);
+                    CollectTree(subtree, childX, childY, childClip, frame, transformed, alpha * subtree.Alpha, list, mirrorDepth);
                     break;
 
                 default:
+                    var entryClip = childClip;
+                    if (child is SceneBuffer { VisibleBox: { } visible })
+                    {
+                        var own = visible.Translated(childX, childY);
+                        if (transformed && !frame.TryMapBounds(own, out own))
+                        {
+                            break;
+                        }
+
+                        entryClip = entryClip.Equals(Unclipped) ? own : entryClip.Intersect(own);
+                        if (entryClip.IsEmpty)
+                        {
+                            break;
+                        }
+                    }
+
                     list.Add(new RenderEntry(
-                        child, childX, childY, childClip.Equals(Unclipped) ? null : childClip,
+                        child, childX, childY, entryClip.Equals(Unclipped) ? null : entryClip,
                         transformed ? frame : RenderTransform.Identity, transformed, alpha, mirrorDepth > 0));
                     break;
             }

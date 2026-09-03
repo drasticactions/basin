@@ -33,6 +33,10 @@ public static class PrivilegedProtocols
         "wp_security_context_manager_v1",
 
         "zwlr_layer_shell_v1",
+
+        "hyprland_ctm_control_manager_v1",
+        "hyprland_toplevel_export_manager_v1",
+        "hyprland_input_capture_manager_v1",
     ];
 
     public static bool Contains(string interfaceName) => Names.Contains(interfaceName);

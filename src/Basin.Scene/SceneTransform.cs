@@ -5,7 +5,6 @@ public sealed class SceneTransform : SceneTree
     private RenderTransform _matrix = RenderTransform.Identity;
     private RenderTransform _inverse = RenderTransform.Identity;
     private bool _invertible = true;
-    private float _alpha = 1f;
 
     public SceneTransform(SceneTree parent)
         : base(parent)
@@ -26,20 +25,6 @@ public sealed class SceneTransform : SceneTree
             _matrix = value;
             _invertible = value.TryInvert(out _inverse);
             DamageSubtree();
-        }
-    }
-
-    public float Alpha
-    {
-        get => _alpha;
-        set
-        {
-            if (_alpha != value)
-            {
-                DamageSubtree();
-                _alpha = value;
-                DamageSubtree();
-            }
         }
     }
 
@@ -67,7 +52,7 @@ public sealed class SceneTransform : SceneTree
         }
     }
 
-    public bool IsInertNow => _matrix.IsIdentity && _alpha >= 1f && _deformer is null;
+    public bool IsInertNow => _matrix.IsIdentity && Alpha >= 1f && _deformer is null;
 
     private MemoryBuffer? _capture;
     private bool _captureValid;

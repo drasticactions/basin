@@ -56,6 +56,24 @@ public sealed class SceneBuffer : SceneNode
 
     public bool IsOpaque { get; set; }
 
+    private Box? _visibleBox;
+
+    public Box? VisibleBox
+    {
+        get => _visibleBox;
+        set
+        {
+            if (Nullable.Equals(_visibleBox, value))
+            {
+                return;
+            }
+
+            DamageSubtree();
+            _visibleBox = value;
+            DamageSubtree();
+        }
+    }
+
     private PixmanRegion32? _opaqueRegion;
 
     internal PixmanRegion32? OpaqueRegion => _opaqueRegion is { IsEmpty: false } region ? region : null;

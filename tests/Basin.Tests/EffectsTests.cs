@@ -1489,6 +1489,22 @@ public sealed class ColorBlindnessStageTests
         Assert.True(Math.Abs(r - g) <= 3 && Math.Abs(g - b) <= 3, $"channels {r},{g},{b} should be equal");
     }
 
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Monochrome_keeps_mid_grey_at_mid_grey(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        using var shader = host.Renderer.CompilePixelShader(
+            ColorBlindnessShader.Source, ColorBlindnessShader.Uniforms);
+        Assert.SkipWhen(shader is null, $"{renderer} compiles no dialect of the correction shader");
+
+        var stage = new ColorBlindnessStage(shader) { Mode = ColorBlindnessMode.Monochrome };
+        var (r, g, b) = Through(host, stage, new RenderColor(0.5f, 0.5f, 0.5f, 1f));
+        Assert.True(Math.Abs(r - 128) <= 4 && Math.Abs(g - 128) <= 4 && Math.Abs(b - 128) <= 4,
+            $"mid grey came out as {r},{g},{b}; an encode applied twice brightens it to about 188");
+    }
+
     [Fact]
     public void Without_a_shader_the_stage_passes_the_frame_through()
     {
@@ -2252,5 +2268,54 @@ public sealed class KwinEffectGoldenTests
         squash.Step(stack, Tick(millis));
         host.RenderFrame();
         Golden.AssertMatches(host, golden);
+    }
+}
+
+public sealed class InvertStageTests
+{
+    private sealed class BufferGuard(BufferBase buffer) : IDisposable
+    {
+        public void Dispose() => buffer.Destroy();
+    }
+
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+
+    private static (byte R, byte G, byte B) Through(CompositorTestHost host, InvertStage stage, RenderColor input)
+    {
+        var source = new MemoryBuffer(32, 32, DrmFormat.Xrgb8888);
+        using var sourceGuard = new BufferGuard(source);
+        var fill = host.Renderer.BeginBufferPass(source, new RenderPassOptions());
+        fill.AddRect(input, new Box(0, 0, 32, 32));
+        Assert.True(fill.Submit());
+
+        using var texture = host.Renderer.ImportTexture(source);
+        Assert.NotNull(texture);
+        var target = new MemoryBuffer(32, 32, DrmFormat.Xrgb8888);
+        using var targetGuard = new BufferGuard(target);
+        var pass = host.Renderer.BeginBufferPass(target, new RenderPassOptions());
+        stage.Render(pass, texture!, new PostContext(32, 32, default));
+        Assert.True(pass.Submit());
+
+        var rgba = Basin.Diagnostics.BufferCapture.ReadRgba(target);
+        var index = ((16 * 32) + 16) * 4;
+        return (rgba[index], rgba[index + 1], rgba[index + 2]);
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Inversion_maps_black_to_white_and_mid_grey_to_itself(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        using var shader = host.Renderer.CompilePixelShader(InvertShader.Source, InvertShader.Uniforms);
+        Assert.SkipWhen(shader is null, $"{renderer} compiles no dialect of the invert shader");
+
+        var stage = new InvertStage(shader);
+        var (r, g, b) = Through(host, stage, new RenderColor(0f, 0f, 0f, 1f));
+        Assert.True(r >= 250 && g >= 250 && b >= 250, $"black inverted to {r},{g},{b}");
+
+        var (gr, gg, gb) = Through(host, stage, new RenderColor(0.5f, 0.5f, 0.5f, 1f));
+        Assert.True(Math.Abs(gr - 128) <= 4 && Math.Abs(gg - 128) <= 4 && Math.Abs(gb - 128) <= 4,
+            $"mid grey inverted to {gr},{gg},{gb}; an encode applied twice brightens it to about 188");
     }
 }

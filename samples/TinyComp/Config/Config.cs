@@ -110,6 +110,15 @@ internal sealed class Config
 
     public IReadOnlyList<Binding> Bindings { get; private set; } = [];
 
+    public bool HyprEnabled { get; set; } = true;
+
+    public bool HyprInputCapture { get; set; } = true;
+
+    public bool HyprCtm { get; set; } = true;
+
+    public IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> HyprShortcuts { get; private set; } =
+        new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
+
     public IReadOnlyList<Rule> Rules { get; private set; } = [];
 
     public IReadOnlyDictionary<string, OutputSetting> OutputSettings { get; private set; } =
@@ -350,6 +359,25 @@ internal sealed class Config
             ShaderContinuous = effects.Flag("shader_continuous", ShaderContinuous);
         }
 
+        if (reader.Section("hypr") is { } hypr)
+        {
+            foreach (var key in new[] { "enable", "input_capture", "ctm" })
+            {
+                if (hypr.Table.ContainsKey(key))
+                {
+                    FromFile.Add("hypr." + key);
+                }
+            }
+
+            HyprEnabled = hypr.Flag("enable", HyprEnabled);
+            HyprInputCapture = hypr.Flag("input_capture", HyprInputCapture);
+            HyprCtm = hypr.Flag("ctm", HyprCtm);
+            if (hypr.Free("shortcuts") is { } shortcuts)
+            {
+                HyprShortcuts = ParseHyprShortcuts(shortcuts, log);
+            }
+        }
+
         if (reader.Free("output") is { } outputs)
         {
             var parsed = new Dictionary<string, OutputSetting>(StringComparer.Ordinal);
@@ -379,6 +407,31 @@ internal sealed class Config
         }
 
         reader.ReportUnknown();
+    }
+
+    private static IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> ParseHyprShortcuts(
+        TomlTable table, BasinLogger log)
+    {
+        var rows = new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
+        foreach (var (name, value) in table)
+        {
+            var colon = name.IndexOf(':', StringComparison.Ordinal);
+            if (colon <= 0 || colon == name.Length - 1)
+            {
+                log.Warn($"[hypr.shortcuts] \"{name}\" is not app_id:id, ignored");
+                continue;
+            }
+
+            if (value is not string chord || !HotkeyParser.TryParseChord(chord, log, out var keysym, out var modifiers))
+            {
+                log.Warn($"[hypr.shortcuts] \"{name}\" names no chord, ignored");
+                continue;
+            }
+
+            rows[(name[..colon], name[(colon + 1)..])] = (keysym, modifiers);
+        }
+
+        return rows;
     }
 
     private IReadOnlyList<Binding> MergeBindings(TomlTable table, BasinLogger log)

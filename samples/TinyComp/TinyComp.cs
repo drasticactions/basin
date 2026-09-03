@@ -6,6 +6,7 @@ using Basin.Cli;
 using Basin.Effects;
 using Basin.Backend.Wayland;
 using Basin.Scene;
+using Basin.Hypr;
 using Basin.Shell.Xdg;
 using Basin.Capabilities;
 using Basin.UI.Skia;
@@ -244,6 +245,8 @@ internal sealed partial class TinyComp :
         var drm = backend == BackendKind.Drm;
         _config = config;
         _configPath = configPath;
+        _hyprShortcuts = new HyprShortcuts(log);
+        _hyprShortcuts.Configure(config);
         var outputCount = config.Outputs;
         var rendererName = config.Renderer;
         _log = log;
@@ -483,6 +486,13 @@ internal sealed partial class TinyComp :
         var xwayland = new Basin.XWayland.XWaylandModule();
         _xwaylandModule = xwayland;
         var desktopPack = Basin.Desktop.DesktopPack.For("tinycomp");
+        var hyprPack = HyprPackFor(config);
+        if (hyprPack is not null)
+        {
+            _hyprCtm = new HyprCtm(this);
+            _services.Use<Basin.Capabilities.ICtmControl>(_hyprCtm);
+            _services.Use<Basin.Capabilities.IGlobalShortcuts>(_hyprShortcuts);
+        }
 
         LinuxDmabufModule? dmabufModule = null;
         if (_renderer.Device is { } dmabufDevice)
@@ -496,6 +506,11 @@ internal sealed partial class TinyComp :
         _services
             .Install(desktopPack)
             .Install(xwayland);
+        if (hyprPack is not null)
+        {
+            _services.Install(hyprPack);
+        }
+
         if (dmabufModule is not null)
         {
             _services.Install(dmabufModule);
@@ -503,6 +518,8 @@ internal sealed partial class TinyComp :
 
         _services.Freeze();
         _dmabufGlobal = dmabufModule?.Global;
+        _hyprShortcutManager = _services.Find<HyprlandGlobalShortcutsManager>();
+        WireInputCapture();
 
         _sessionStore = _services.Require<Basin.Capabilities.ISessionStore>();
         if (_colorConfiguration is { } wiredColor)
@@ -526,7 +543,9 @@ internal sealed partial class TinyComp :
         _toplevels = _services.Require<Basin.Capabilities.IToplevelModel>();
         capturePack.Attach(_toplevels, surface =>
         {
-            SceneNode? content = FindWindow(surface)?.Tree;
+            var window = FindWindow(surface);
+            SceneNode? content = window?.Tree;
+            SceneNode? client = window?.SceneSurface?.Tree;
             if (content is null)
             {
                 foreach (var xwindow in _xwindows)
@@ -534,12 +553,13 @@ internal sealed partial class TinyComp :
                     if (xwindow.XWin.Surface == surface)
                     {
                         content = xwindow.Tree;
+                        client = xwindow.SceneSurface.Tree;
                         break;
                     }
                 }
             }
 
-            return content is null ? null : new ToplevelCaptureTrees(content, null);
+            return content is null ? null : new ToplevelCaptureTrees(content, null, client);
         });
         _xdgToplevels.ActivateRequested += toplevel =>
         {

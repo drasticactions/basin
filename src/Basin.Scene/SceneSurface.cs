@@ -17,8 +17,12 @@ public sealed class SceneSurface
 
         surface.Committed += Reconcile;
         surface.Destroyed += Destroy;
+        _owner = Tree.RootOwner();
+        _owner?.Register(this);
         Reconcile();
     }
+
+    private readonly Scene? _owner;
 
     private readonly Pixman.PixmanRegion32 _damageScratch = new();
 
@@ -71,8 +75,47 @@ public sealed class SceneSurface
 
         _childScenes.Clear();
         _damageScratch.Dispose();
+        _owner?.Unregister(this);
         Tree.Destroy();
         Destroyed?.Invoke();
+    }
+
+    internal void ApplyAppearance()
+    {
+        if (IsDestroyed)
+        {
+            return;
+        }
+
+        var appearance = (_owner ?? Tree.RootOwner())?.Appearance;
+        if (appearance is null)
+        {
+            Tree.Alpha = 1f;
+            _content.VisibleBox = null;
+            return;
+        }
+
+        Tree.Alpha = (float)appearance.OpacityOf(Surface);
+        _content.VisibleBox = appearance.TryVisibleRegion(Surface, out var region) ? VisibleBoxFor(region) : null;
+    }
+
+    private Box? VisibleBoxFor(Pixman.PixmanRegion32 region)
+    {
+        var state = Surface.Current;
+        if (state.Buffer is not { } buffer || state.Width <= 0 || state.Height <= 0 ||
+            state.Transform != OutputTransform.Normal || state.ViewportSourceWidth >= 0)
+        {
+            return null;
+        }
+
+        var extents = region.Extents;
+        var scaleX = state.Width / (double)buffer.Width;
+        var scaleY = state.Height / (double)buffer.Height;
+        var x1 = Math.Max(0, (int)Math.Floor(extents.X1 * scaleX));
+        var y1 = Math.Max(0, (int)Math.Floor(extents.Y1 * scaleY));
+        var x2 = Math.Min(state.Width, (int)Math.Ceiling(extents.X2 * scaleX));
+        var y2 = Math.Min(state.Height, (int)Math.Ceiling(extents.Y2 * scaleY));
+        return new Box(x1, y1, Math.Max(0, x2 - x1), Math.Max(0, y2 - y1));
     }
 
     private void Reconcile()
@@ -106,6 +149,7 @@ public sealed class SceneSurface
         var damageRects = state.SurfaceDamageRects;
         damageRects.Add(in state.BufferDamageRects);
         _content.NotifyContentChanged(_damageScratch, in damageRects);
+        ApplyAppearance();
         ReconcileChildren(Surface.SubsurfacesBelow, _below);
         ReconcileChildren(Surface.SubsurfacesAbove, _above);
         if (state.FrameCallbacks.Count > 0 || state.FrameResources.Count > 0)

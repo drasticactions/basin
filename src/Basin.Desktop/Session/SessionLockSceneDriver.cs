@@ -27,7 +27,8 @@ public sealed class SessionLockSceneDriver
         _layout = layout;
         _setLocked = setLocked;
 
-        manager.Locked += OnLocked;
+        manager.LockRequested += OnLockRequested;
+        manager.Locked += () => Locked?.Invoke();
         manager.Unlocked += OnUnlocked;
         manager.Abandoned += () => Abandoned?.Invoke();
         manager.NewLockSurface += OnNewLockSurface;
@@ -43,7 +44,11 @@ public sealed class SessionLockSceneDriver
 
     public event Action<LockSurface, SceneSurface>? LockSurfaceAdded;
 
-    public void LockNow() => OnLocked();
+    public void LockNow()
+    {
+        OnLockRequested();
+        Locked?.Invoke();
+    }
 
     public void UnlockNow() => OnUnlocked();
 
@@ -57,13 +62,12 @@ public sealed class SessionLockSceneDriver
         }
     }
 
-    private void OnLocked()
+    private void OnLockRequested()
     {
         _setLocked(true);
         _seat.Keyboard.NotifyClearFocus();
         TextInput?.NotifyFocus(null);
         _seat.Pointer.NotifyClearFocus();
-        Locked?.Invoke();
     }
 
     private void OnUnlocked()

@@ -20,6 +20,7 @@
   <ItemGroup>
     <PackageVersion Include="drm-dotnet" Version="2.4.134" />
     <PackageVersion Include="lcms2-dotnet" Version="2.19.1" />
+    <PackageVersion Include="libei-dotnet" Version="1.6.0" />
     <PackageVersion Include="libinput-dotnet" Version="1.30.4" />
     <PackageVersion Include="liftoff-dotnet" Version="0.5.0" />
     <PackageVersion Include="mesa-dotnet" Version="26.1.5" />

@@ -18,6 +18,8 @@ public abstract class DesktopModule<T> : IProtocolModule
     {
     }
 
+    public virtual bool ShouldInstall(BasinServices services) => true;
+
     public T? Manager { get; private set; }
 
     public IDisposable Install(BasinServices services)

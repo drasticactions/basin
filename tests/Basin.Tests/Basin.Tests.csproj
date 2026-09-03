@@ -45,6 +45,8 @@
     <ProjectReference Include="../../src/Basin.Color/Basin.Color.csproj" />
     <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
+    <ProjectReference Include="../../src/Basin.Hypr/Basin.Hypr.csproj" />
+    <ProjectReference Include="../../src/Basin.Hypr.InputCapture/Basin.Hypr.InputCapture.csproj" />
     <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
     <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.River/Basin.Shell.River.csproj" />

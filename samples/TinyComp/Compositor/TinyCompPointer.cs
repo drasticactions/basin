@@ -86,6 +86,12 @@ internal sealed partial class TinyComp
         var rawDx = x - _lastRawX;
         var rawDy = y - _lastRawY;
         (_lastRawX, _lastRawY) = (x, y);
+        if (CaptureMotion(time, x, y, rawDx, rawDy))
+        {
+            (_lastRawX, _lastRawY) = (_cursorX, _cursorY);
+            return;
+        }
+
         if (ActiveLock() is not null)
         {
             _relativePointer.NotifyMotion((ulong)time * 1000, rawDx, rawDy, rawDx, rawDy);

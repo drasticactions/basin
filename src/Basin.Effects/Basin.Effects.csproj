@@ -18,6 +18,7 @@
     <EmbeddedResource Include="shaders/fire.frag.spv" LogicalName="fire.frag.spv" />
     <EmbeddedResource Include="shaders/invert.frag.spv" LogicalName="invert.frag.spv" />
     <EmbeddedResource Include="shaders/colorblind.frag.spv" LogicalName="colorblind.frag.spv" />
+    <EmbeddedResource Include="shaders/ctm.frag.spv" LogicalName="ctm.frag.spv" />
     <EmbeddedResource Include="shaders/zoom.frag.spv" LogicalName="zoom.frag.spv" />
     <EmbeddedResource Include="shaders/dim.frag.spv" LogicalName="dim.frag.spv" />
     <EmbeddedResource Include="shaders/blur.vert.spv" LogicalName="blur.vert.spv" />

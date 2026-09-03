@@ -34,6 +34,32 @@ public ref struct LogHandler<T>
 
     public void AppendFormatted<TValue>(TValue value, string? format) => _inner.AppendFormatted(value, format);
 
+    public void AppendFormatted(double value) => LogFormat.Append(ref _inner, value, null);
+
+    public void AppendFormatted(double value, string? format) => LogFormat.Append(ref _inner, value, format);
+
+    public void AppendFormatted(float value) => LogFormat.Append(ref _inner, value, null);
+
+    public void AppendFormatted(float value, string? format) => LogFormat.Append(ref _inner, value, format);
+
+    public void AppendFormatted(int value) => LogFormat.Append(ref _inner, (long)value, null);
+
+    public void AppendFormatted(int value, string? format) => LogFormat.Append(ref _inner, (long)value, format);
+
+    public void AppendFormatted(long value) => LogFormat.Append(ref _inner, value, null);
+
+    public void AppendFormatted(long value, string? format) => LogFormat.Append(ref _inner, value, format);
+
+    public void AppendFormatted(uint value) => LogFormat.Append(ref _inner, (ulong)value, null);
+
+    public void AppendFormatted(uint value, string? format) => LogFormat.Append(ref _inner, (ulong)value, format);
+
+    public void AppendFormatted(ulong value) => LogFormat.Append(ref _inner, value, null);
+
+    public void AppendFormatted(ulong value, string? format) => LogFormat.Append(ref _inner, value, format);
+
+    public void AppendFormatted(bool value) => LogFormat.Append(ref _inner, value);
+
     public void AppendFormatted(ReadOnlySpan<char> value) => _inner.AppendFormatted(value);
 
     public void Clear()

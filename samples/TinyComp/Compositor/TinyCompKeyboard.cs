@@ -42,6 +42,11 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (!fromInputMethod && HandleHyprShortcut(key, pressed))
+        {
+            return;
+        }
+
         if (pressed && !_sessionLock.IsLocked && !_shortcutsInhibit.IsActive(_seat.Keyboard.Focus)
             && HandleKeybind(key))
         {

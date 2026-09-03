@@ -14,6 +14,7 @@
     <RiverProtocolDir>$(RepoRoot)external/river/protocol/</RiverProtocolDir>
     <PlasmaProtocolsDir>$(RepoRoot)external/plasma-wayland-protocols/src/protocols/</PlasmaProtocolsDir>
     <WestonProtocolDir>$(RepoRoot)external/weston/protocol/</WestonProtocolDir>
+    <HyprlandProtocolDir>$(RepoRoot)external/hyprland-protocols/protocols/</HyprlandProtocolDir>
     <BasinProtocolDir>$(RepoRoot)protocol/</BasinProtocolDir>
     <IsAotCompatible>true</IsAotCompatible>
     <SignAssembly>true</SignAssembly>

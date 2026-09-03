@@ -5,7 +5,7 @@ namespace Basin.Capabilities;
 public readonly record struct CaptureSource
 {
     private CaptureSource(CaptureSourceKind kind, IOutput? output, ulong toplevelId, bool overlayCursor,
-        Box layoutBox = default, double scale = 0)
+        Box layoutBox = default, double scale = 0, bool clientOnly = false)
     {
         Kind = kind;
         OutputTarget = output;
@@ -13,6 +13,7 @@ public readonly record struct CaptureSource
         OverlayCursor = overlayCursor;
         LayoutBox = layoutBox;
         Scale = scale;
+        ClientOnly = clientOnly;
     }
 
     public CaptureSourceKind Kind { get; }
@@ -27,14 +28,16 @@ public readonly record struct CaptureSource
 
     public double Scale { get; }
 
+    public bool ClientOnly { get; }
+
     public static CaptureSource Output(IOutput output, bool overlayCursor = false)
     {
         ArgumentNullException.ThrowIfNull(output);
         return new CaptureSource(CaptureSourceKind.Output, output, 0, overlayCursor);
     }
 
-    public static CaptureSource Toplevel(ulong toplevelId) =>
-        new(CaptureSourceKind.Toplevel, null, toplevelId, false);
+    public static CaptureSource Toplevel(ulong toplevelId, bool clientOnly = false, bool overlayCursor = false) =>
+        new(CaptureSourceKind.Toplevel, null, toplevelId, overlayCursor, clientOnly: clientOnly);
 
     public static CaptureSource Cursor(IOutput output)
     {

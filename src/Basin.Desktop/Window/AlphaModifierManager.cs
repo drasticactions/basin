@@ -11,23 +11,30 @@ public sealed class AlphaModifierManager : IDisposable
     public const int Version = 1;
 
     private const uint ErrorAlreadyConstructed = 0;
+    private const uint ErrorNoSurface = 0;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
-    private readonly Dictionary<Surface, double> _alphas = [];
+    private readonly ISurfaceAppearance _appearance;
     private readonly HashSet<Surface> _claimed = [];
 
-    public AlphaModifierManager(WlServerDisplay display, CompositorGlobal compositor)
+    public AlphaModifierManager(WlServerDisplay display, CompositorGlobal compositor, ISurfaceAppearance appearance)
     {
+        ArgumentNullException.ThrowIfNull(display);
+        ArgumentNullException.ThrowIfNull(compositor);
+        ArgumentNullException.ThrowIfNull(appearance);
         _compositor = compositor;
+        _appearance = appearance;
         _global = display.CreateGlobal(WpAlphaModifierV1.Interface, Version, OnBind);
     }
 
     public event Action<Surface, double>? AlphaChanged;
 
+    public ISurfaceAppearance Appearance => _appearance;
+
     public void Dispose() => _global.Dispose();
 
-    public double AlphaOf(Surface surface) => _alphas.GetValueOrDefault(surface, 1.0);
+    public double AlphaOf(Surface surface) => _appearance.OpacityOf(surface);
 
     private void OnBind(WlClient client, uint version, uint id)
     {
@@ -47,25 +54,50 @@ public sealed class AlphaModifierManager : IDisposable
                 return;
             }
 
+            var alive = true;
+            Action committed = () =>
+            {
+                if (surface.Current.TakeExtension<PendingAlpha>() is { } pending)
+                {
+                    _appearance.SetOpacity(surface, pending.Alpha);
+                    AlphaChanged?.Invoke(surface, pending.Alpha);
+                }
+            };
+            surface.Committed += committed;
+
             resource.SetMultiplier += (_, me) =>
             {
-                var alpha = me.Factor / (double)uint.MaxValue;
-                _alphas[surface] = alpha;
-                AlphaChanged?.Invoke(surface, alpha);
+                if (!alive)
+                {
+                    resource.PostError(ErrorNoSurface, "the wl_surface has been destroyed");
+                    return;
+                }
+
+                surface.Pending.SetExtension(new PendingAlpha(me.Factor / (double)uint.MaxValue));
             };
             resource.Destroyed += (_, _) =>
             {
                 _claimed.Remove(surface);
-                if (_alphas.Remove(surface))
+                if (alive)
                 {
-                    AlphaChanged?.Invoke(surface, 1.0);
+                    surface.Pending.SetExtension(new PendingAlpha(1.0));
                 }
             };
             surface.Destroyed += () =>
             {
+                alive = false;
                 _claimed.Remove(surface);
-                _alphas.Remove(surface);
+                surface.Committed -= committed;
             };
         };
+    }
+
+    private sealed class PendingAlpha(double alpha) : IDisposable
+    {
+        public double Alpha { get; } = alpha;
+
+        public void Dispose()
+        {
+        }
     }
 }

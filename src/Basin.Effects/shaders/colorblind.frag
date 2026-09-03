@@ -19,15 +19,12 @@ layout(location = 0) out vec4 color;
 vec3 srgb_to_linear(vec3 c) {
     return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
 }
-vec3 linear_to_srgb(vec3 c) {
-    return mix(c * 12.92, (1.055 * pow(c, vec3(1.0 / 2.4))) - 0.055, step(0.0031308, c));
-}
 void main() {
     vec4 c = texture(u_texture, pc.src.xy + v_uv * pc.src.zw);
     c.a = mix(c.a, 1.0, pc.forceOpaque);
     vec3 straight = c.a > 0.001 ? c.rgb / c.a : c.rgb;
     straight = clamp(straight, 0.0, 1.0);
-    vec3 linear = TEXTURE_TRANSFORM == 1 ? straight : srgb_to_linear(straight);
+    vec3 linear = TEXTURE_TRANSFORM == 1 ? srgb_to_linear(straight) : straight;
     if (mode >= 2.5) {
         float luma = dot(linear, vec3(0.2126, 0.7152, 0.0722));
         linear = mix(linear, vec3(luma), clamp(intensity, 0.0, 1.0));
@@ -52,6 +49,5 @@ void main() {
         vec3 correction = vec3(0.0, (diff.r * 0.7) + diff.g, (diff.r * 0.7) + diff.b);
         linear = linear + correction;
     }
-    vec3 encoded = TEXTURE_TRANSFORM == 1 ? clamp(linear, 0.0, 1.0) : linear_to_srgb(clamp(linear, 0.0, 1.0));
-    color = vec4(encoded * c.a, c.a) * u_alpha;
+    color = vec4(clamp(linear, 0.0, 1.0) * c.a, c.a) * u_alpha;
 }

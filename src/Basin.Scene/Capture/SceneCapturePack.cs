@@ -1,16 +1,22 @@
 using Basin.Capabilities;
+using Basin.Capabilities.Defaults;
 
 namespace Basin.Scene;
 
 public sealed class SceneCapturePack : ICapabilityPack
 {
-    public SceneCapturePack(Scene scene, OutputLayout layout)
+    public SceneCapturePack(Scene scene, OutputLayout layout, ISurfaceAppearance? appearance = null)
     {
+        ArgumentNullException.ThrowIfNull(scene);
         Index = new ToplevelSceneIndex();
         Stack = new SceneToplevelStack(scene, Index);
         Capture = new SceneScreenCapture(scene, layout) { Index = Index };
         DmabufCapture = new SceneDmabufCapture();
+        Appearance = appearance ?? new DefaultSurfaceAppearance();
+        scene.Appearance = Appearance;
     }
+
+    public ISurfaceAppearance Appearance { get; }
 
     public ToplevelSceneIndex Index { get; }
 
@@ -35,6 +41,10 @@ public sealed class SceneCapturePack : ICapabilityPack
     public void Register(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        services.Use<IScreenCapture>(Capture).Use<IDmabufCapture>(DmabufCapture).UseDefault<IToplevelStack>(Stack);
+        services
+            .Use<IScreenCapture>(Capture)
+            .Use<IDmabufCapture>(DmabufCapture)
+            .Use(Appearance)
+            .UseDefault<IToplevelStack>(Stack);
     }
 }

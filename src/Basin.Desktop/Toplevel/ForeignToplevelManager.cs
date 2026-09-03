@@ -8,6 +8,8 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
 {
     public const int Version = 3;
 
+    private static readonly Dictionary<nint, ulong> HandleToplevels = [];
+
     private readonly WlGlobal _global;
     private readonly IToplevelModel? _model;
     private readonly List<ZwlrForeignToplevelManagerV1Resource> _managers = [];
@@ -38,6 +40,9 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
     public void OnToplevelChanged(ulong toplevelId) => OnChanged(toplevelId);
 
     public void OnToplevelRemoved(ulong toplevelId) => OnRemoved(toplevelId);
+
+    public static ulong ToplevelOf(nint handleResource) =>
+        HandleToplevels.GetValueOrDefault(handleResource);
 
     public void Dispose()
     {
@@ -180,7 +185,13 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
         var handle = new ZwlrForeignToplevelHandleV1Resource(manager.Client, manager.Version, 0);
         manager.SendToplevel(handle);
         tracked.Handles[manager] = handle;
-        handle.Destroyed += (_, _) => tracked.Handles.Remove(manager);
+        var raw = handle.RawHandle;
+        HandleToplevels[raw] = id;
+        handle.Destroyed += (_, _) =>
+        {
+            tracked.Handles.Remove(manager);
+            HandleToplevels.Remove(raw);
+        };
 
         if (model.TryGet(id, out var info))
         {

@@ -52,6 +52,9 @@ internal sealed partial class TinyComp
         Restarts("color.source", loaded.ColorSource != _colorSource);
         Restarts("color.icc", loaded.IccProfile != _iccProfile);
         Restarts("color.hdr", loaded.Hdr != _hdr);
+        Restarts("hypr.enable", loaded.HyprEnabled != _config.HyprEnabled);
+        Restarts("hypr.input_capture", loaded.HyprInputCapture != _config.HyprInputCapture);
+        Restarts("hypr.ctm", loaded.HyprCtm != _config.HyprCtm);
 
         loaded.Renderer = _config.Renderer;
         loaded.Outputs = _config.Outputs;
@@ -60,6 +63,9 @@ internal sealed partial class TinyComp
         loaded.ColorSource = _colorSource;
         loaded.IccProfile = _iccProfile;
         loaded.Hdr = _hdr;
+        loaded.HyprEnabled = _config.HyprEnabled;
+        loaded.HyprInputCapture = _config.HyprInputCapture;
+        loaded.HyprCtm = _config.HyprCtm;
         foreach (var key in _config.FromFlags)
         {
             loaded.FromFlags.Add(key);
@@ -107,6 +113,7 @@ internal sealed partial class TinyComp
         ApplyPostStages(loaded);
         ApplyScreenShader(loaded);
         ApplyEffectSettings(loaded);
+        _hyprShortcuts.Configure(loaded);
 
         foreach (var view in Views)
         {

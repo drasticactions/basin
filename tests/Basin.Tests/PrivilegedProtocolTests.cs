@@ -36,6 +36,11 @@ public sealed class PrivilegedProtocolTests
         using var securityContext = new SecurityContextManager(host.Display, host.Loop);
         using var layerShell = new Basin.Shell.Xdg.LayerShell(host.Display, host.Compositor);
         using var xwaylandGrab = new Basin.XWayland.XWaylandKeyboardGrabManager(host.Display, host.Compositor, host.Seat);
+        using var ctm = new Basin.Hypr.HyprlandCtmControlManager(host.Display, host.Layout, new NoCtm());
+        using var toplevelExport = new Basin.Hypr.HyprlandToplevelExportManager(
+            host.Display, host.Layout, host.Buffers, capture: null, toplevels: null);
+        using var inputCapture = new Basin.Hypr.InputCapture.HyprlandInputCaptureManager(
+            host.Display, host.Loop, host.Layout, host.Seat);
 
         var advertised = new HashSet<string>();
         var registry = host.Client.Display.GetRegistry();
@@ -46,6 +51,15 @@ public sealed class PrivilegedProtocolTests
         Assert.True(
             missing.Count == 0,
             $"privileged names that no global advertises (a typo denies nothing): {string.Join(", ", missing)}");
+    }
+
+    private sealed class NoCtm : ICtmControl
+    {
+        public bool SupportsCtm(IOutput output) => false;
+
+        public bool SetCtm(IOutput output, ReadOnlySpan<double> rowMajor3x3) => false;
+
+        public bool ResetCtm(IOutput output) => false;
     }
 
     [Fact]

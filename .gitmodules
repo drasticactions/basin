@@ -19,3 +19,6 @@
 [submodule "external/weston"]
 	path = external/weston
 	url = https://gitlab.freedesktop.org/wayland/weston.git
+[submodule "external/hyprland-protocols"]
+	path = external/hyprland-protocols
+	url = https://github.com/hyprwm/hyprland-protocols.git

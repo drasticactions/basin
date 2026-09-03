@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Hypr</PackageId>
+    <RootNamespace>Basin.Hypr</RootNamespace>
+    <Description>hyprland-protocols for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <InternalsVisibleTo Include="Basin.Hypr.InputCapture" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-ctm-control-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-focus-grab-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-global-shortcuts-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-lock-notify-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-surface-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-toplevel-export-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-toplevel-mapping-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+  </ItemGroup>
+
+</Project>

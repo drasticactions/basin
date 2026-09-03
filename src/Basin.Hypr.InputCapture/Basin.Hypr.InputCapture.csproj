@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Hypr.InputCapture</PackageId>
+    <RootNamespace>Basin.Hypr.InputCapture</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>hyprland-input-capture-v1 and its EIS bridge for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Hypr/Basin.Hypr.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="libei-dotnet" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-input-capture-v1.xml" WaylandNamespace="Basin.Hypr.InputCapture.Protocol" />
+  </ItemGroup>
+
+</Project>
