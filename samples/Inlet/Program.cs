@@ -213,7 +213,7 @@ internal static class Program
             libinput = new Basin.Backend.Libinput.LibinputBackend(loop, host.Session!);
         }
 
-        var colorPack = new Basin.Color.ColorCapabilityPack(layout);
+        var colorPack = new Basin.Color.ColorCapabilityPack(layout, renderer);
         var servicePack = new Basin.Desktop.DesktopServicePack(scene, layout, renderer, drmBackend);
         var capturePack = servicePack.Capture;
         driver.Capture = capturePack;
@@ -304,18 +304,9 @@ internal static class Program
         }
 
         var color = services.Require<Basin.Desktop.ColorManager>();
-        ImageDescription OutputDescription(IOutput output) => colorPack.Configuration.DescriptionOf(output);
-        void DeclareColor() => Basin.Desktop.SurfaceLutDriver.Declare(
-            color, driver.Views.Select(v => OutputDescription(v.Output)));
-        DeclareColor();
-
-        var luts = new Basin.Color.ColorLutCache(renderer);
-        var lutDriver = new Basin.Desktop.SurfaceLutDriver(
-            scene,
-            color,
-            surface => luts.LutFor(
-                color.DescriptionOf(surface),
-                driver.Views.Count > 0 ? OutputDescription(driver.Views[0].Output) : ImageDescription.Srgb));
+        var outputColor = new Basin.Desktop.OutputColorDriver(color, colorPack.Configuration);
+        var luts = colorPack.Luts;
+        var lutDriver = new Basin.Desktop.SurfaceLutDriver(scene, color, luts);
         lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
         lutDriver.WatchToplevels(shell);
 
@@ -651,8 +642,7 @@ internal static class Program
         {
             cursor.AddOutput(view.Output, view.Scene!);
             presenceTracker.AddOutput(view.Output, view.Global);
-            color.SetOutputDescription(view.Global, OutputDescription(view.Output));
-            DeclareColor();
+            outputColor.Add(view.Global, view.Output, view.Scene);
             management.AddOutput(view.Global);
             if (view.Output is Basin.Backend.Drm.DrmOutput added)
             {
@@ -680,6 +670,7 @@ internal static class Program
 
             cursor.RemoveOutput(view.Output);
             presenceTracker.RemoveOutput(view.Output);
+            outputColor.Remove(view.Global);
         };
         driver.LayoutChanged += () =>
         {

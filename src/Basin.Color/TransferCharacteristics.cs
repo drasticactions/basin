@@ -4,23 +4,18 @@ namespace Basin.Color;
 
 public readonly struct TransferCharacteristics
 {
-    private enum Kind
-    {
-        Compound24,
-        Gamma,
-        Linear,
-        Pq,
-        Hlg,
-    }
-
-    private readonly Kind _kind;
+    private readonly TransferKind _kind;
     private readonly double _gamma;
+
+    public TransferKind Kind => _kind;
+
+    public double Gamma => _gamma;
 
     public double ReferenceLuminance { get; }
 
     public double MaxLuminance { get; }
 
-    private TransferCharacteristics(Kind kind, double gamma, double reference, double max)
+    private TransferCharacteristics(TransferKind kind, double gamma, double reference, double max)
     {
         _kind = kind;
         _gamma = gamma;
@@ -37,7 +32,7 @@ public readonly struct TransferCharacteristics
         {
             var exponent = Math.Clamp(power / 10000.0, 1.0, 10.0);
             reference = reference > 0 ? reference : SdrReferenceLuminance;
-            return new TransferCharacteristics(Kind.Gamma, exponent, reference, max > 0 ? max : reference);
+            return new TransferCharacteristics(TransferKind.Gamma, exponent, reference, max > 0 ? max : reference);
         }
 
         switch (description.TransferNamed)
@@ -54,24 +49,24 @@ public readonly struct TransferCharacteristics
                     max = cll;
                 }
 
-                return new TransferCharacteristics(Kind.Pq, 0, reference, max > 0 ? max : 10000);
+                return new TransferCharacteristics(TransferKind.Pq, 0, reference, max > 0 ? max : 10000);
 
             case ColorTransferFunction.Hlg:
                 reference = reference > 0 ? reference : PqReferenceLuminance;
-                return new TransferCharacteristics(Kind.Hlg, 0, reference, max > 0 ? max : 1000);
+                return new TransferCharacteristics(TransferKind.Hlg, 0, reference, max > 0 ? max : 1000);
 
             case ColorTransferFunction.ExtLinear:
                 reference = reference > 0 ? reference : SdrReferenceLuminance;
-                return new TransferCharacteristics(Kind.Linear, 1, reference, max > 0 ? max : reference);
+                return new TransferCharacteristics(TransferKind.Linear, 1, reference, max > 0 ? max : reference);
 
             case ColorTransferFunction.Gamma22:
                 reference = reference > 0 ? reference : SdrReferenceLuminance;
-                return new TransferCharacteristics(Kind.Gamma, 2.2, reference, max > 0 ? max : reference);
+                return new TransferCharacteristics(TransferKind.Gamma, 2.2, reference, max > 0 ? max : reference);
 
             case ColorTransferFunction.CompoundPower24:
             default:
                 reference = reference > 0 ? reference : SdrReferenceLuminance;
-                return new TransferCharacteristics(Kind.Compound24, 0, reference, max > 0 ? max : reference);
+                return new TransferCharacteristics(TransferKind.Compound24, 0, reference, max > 0 ? max : reference);
         }
     }
 
@@ -84,11 +79,11 @@ public readonly struct TransferCharacteristics
         signal = Math.Clamp(signal, 0, 1);
         return _kind switch
         {
-            Kind.Compound24 => Compound24Eotf(signal) * MaxLuminance,
-            Kind.Gamma => Math.Pow(signal, _gamma) * MaxLuminance,
-            Kind.Linear => signal * MaxLuminance,
-            Kind.Pq => PqEotf(signal),
-            Kind.Hlg => Math.Pow(HlgInverseOetf(signal), 1.2) * MaxLuminance,
+            TransferKind.Compound24 => Compound24Eotf(signal) * MaxLuminance,
+            TransferKind.Gamma => Math.Pow(signal, _gamma) * MaxLuminance,
+            TransferKind.Linear => signal * MaxLuminance,
+            TransferKind.Pq => PqEotf(signal),
+            TransferKind.Hlg => Math.Pow(HlgInverseOetf(signal), 1.2) * MaxLuminance,
             _ => signal * MaxLuminance,
         };
     }
@@ -98,11 +93,11 @@ public readonly struct TransferCharacteristics
         luminance = Math.Max(0, luminance);
         return _kind switch
         {
-            Kind.Compound24 => Compound24InverseEotf(Math.Min(1, luminance / MaxLuminance)),
-            Kind.Gamma => Math.Pow(Math.Min(1, luminance / MaxLuminance), 1.0 / _gamma),
-            Kind.Linear => Math.Min(1, luminance / MaxLuminance),
-            Kind.Pq => PqInverseEotf(luminance),
-            Kind.Hlg => HlgOetf(Math.Pow(Math.Min(1, luminance / MaxLuminance), 1 / 1.2)),
+            TransferKind.Compound24 => Compound24InverseEotf(Math.Min(1, luminance / MaxLuminance)),
+            TransferKind.Gamma => Math.Pow(Math.Min(1, luminance / MaxLuminance), 1.0 / _gamma),
+            TransferKind.Linear => Math.Min(1, luminance / MaxLuminance),
+            TransferKind.Pq => PqInverseEotf(luminance),
+            TransferKind.Hlg => HlgOetf(Math.Pow(Math.Min(1, luminance / MaxLuminance), 1 / 1.2)),
             _ => Math.Min(1, luminance / MaxLuminance),
         };
     }

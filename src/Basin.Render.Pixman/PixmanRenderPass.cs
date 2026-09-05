@@ -68,7 +68,7 @@ internal sealed class PixmanRenderPass : IRenderPass
             if (options.Lut is PixmanColorLut lut)
             {
                 var bounds = src.RoundedOut();
-                TransformIntoScratch(image, lut.Lut, bounds);
+                TransformIntoScratch(image, lut.Lut, bounds, scaled && options.Transform.IsIdentity);
                 source = _scratchImage!;
                 sourceX = src.X - bounds.X;
                 sourceY = src.Y - bounds.Y;
@@ -103,9 +103,7 @@ internal sealed class PixmanRenderPass : IRenderPass
             }
 
             ApplyClip(options.Clip);
-            using var mask = options.Alpha < 1f
-                ? PixmanImage.CreateSolidFill(new PixmanColor(0, 0, 0, (ushort)(options.Alpha * ushort.MaxValue)))
-                : null;
+            var mask = options.Alpha < 1f ? AlphaMask(options.Alpha) : null;
             _image!.Composite(
                 options.Opaque && options.Alpha >= 1f ? PixmanOp.Src : PixmanOp.Over,
                 source,
@@ -132,37 +130,100 @@ internal sealed class PixmanRenderPass : IRenderPass
         }
     }
 
+    private byte[]? _alphaMaskBits;
+    private System.Runtime.InteropServices.GCHandle _alphaMaskPin;
+    private PixmanImage? _alphaMask;
+
+    private PixmanImage AlphaMask(float alpha)
+    {
+        if (_alphaMask is null)
+        {
+            _alphaMaskBits = new byte[4];
+            _alphaMaskPin = System.Runtime.InteropServices.GCHandle.Alloc(
+                _alphaMaskBits, System.Runtime.InteropServices.GCHandleType.Pinned);
+            _alphaMask = PixmanImage.CreateBits(PixmanFormat.A8, 1, 1, _alphaMaskPin.AddrOfPinnedObject(), 4);
+            _alphaMask.SetRepeat(PixmanRepeat.Normal);
+        }
+
+        _alphaMaskBits![0] = (byte)((ushort)(alpha * ushort.MaxValue) >> 8);
+        return _alphaMask;
+    }
+
+    private void DropAlphaMask()
+    {
+        _alphaMask?.Dispose();
+        _alphaMask = null;
+        if (_alphaMaskPin.IsAllocated)
+        {
+            _alphaMaskPin.Free();
+        }
+
+        _alphaMaskBits = null;
+    }
+
     private byte[]? _scratch;
     private System.Runtime.InteropServices.GCHandle _scratchPin;
     private PixmanImage? _scratchImage;
     private int _scratchWidth;
     private int _scratchHeight;
 
-    private unsafe void TransformIntoScratch(PixmanImage source, ColorLut3D lut, Box src)
+    private unsafe void TransformIntoScratch(PixmanImage source, ColorLut3D lut, Box src, bool padEdge)
     {
         EnsureScratch(src.Width, src.Height);
         _scratchImage!.Composite(PixmanOp.Src, source, null, src.X, src.Y, 0, 0, 0, 0, src.Width, src.Height);
 
         var pixels = (uint*)_scratchPin.AddrOfPinnedObject();
-        var count = src.Width * src.Height;
-        for (var i = 0; i < count; i++)
+        for (var y = 0; y < src.Height; y++)
         {
-            var value = pixels[i];
-            var alpha = value >> 24;
-            if (alpha == 0)
+            var row = pixels + (y * _scratchWidth);
+            for (var x = 0; x < src.Width; x++)
             {
-                continue;
-            }
+                var value = row[x];
+                var alpha = value >> 24;
+                if (alpha == 0)
+                {
+                    continue;
+                }
 
-            var fa = alpha / 255f;
-            var (r, g, b) = lut.Sample(
-                ((value >> 16) & 0xFF) / 255f / fa,
-                ((value >> 8) & 0xFF) / 255f / fa,
-                (value & 0xFF) / 255f / fa);
-            pixels[i] = (alpha << 24)
-                | ((uint)(Math.Clamp(r, 0f, 1f) * fa * 255f + 0.5f) << 16)
-                | ((uint)(Math.Clamp(g, 0f, 1f) * fa * 255f + 0.5f) << 8)
-                | (uint)(Math.Clamp(b, 0f, 1f) * fa * 255f + 0.5f);
+                var fa = alpha / 255f;
+                var (r, g, b) = lut.Sample(
+                    ((value >> 16) & 0xFF) / 255f / fa,
+                    ((value >> 8) & 0xFF) / 255f / fa,
+                    (value & 0xFF) / 255f / fa);
+                row[x] = (alpha << 24)
+                    | ((uint)(Math.Clamp(r, 0f, 1f) * fa * 255f + 0.5f) << 16)
+                    | ((uint)(Math.Clamp(g, 0f, 1f) * fa * 255f + 0.5f) << 8)
+                    | (uint)(Math.Clamp(b, 0f, 1f) * fa * 255f + 0.5f);
+            }
+        }
+
+        EdgeScratch(src.Width, src.Height, padEdge);
+    }
+
+    private unsafe void EdgeScratch(int width, int height, bool pad)
+    {
+        var pixels = (uint*)_scratchPin.AddrOfPinnedObject();
+        var stride = _scratchWidth;
+        if (width < stride)
+        {
+            for (var y = 0; y < height; y++)
+            {
+                pixels[(y * stride) + width] = pad ? pixels[(y * stride) + width - 1] : 0;
+            }
+        }
+
+        if (height < _scratchHeight)
+        {
+            var count = Math.Min(width + 1, stride);
+            var edge = pixels + (height * stride);
+            if (pad)
+            {
+                Buffer.MemoryCopy(pixels + ((height - 1) * stride), edge, count * 4, count * 4);
+            }
+            else
+            {
+                new Span<uint>(edge, count).Clear();
+            }
         }
     }
 
@@ -224,6 +285,7 @@ internal sealed class PixmanRenderPass : IRenderPass
     {
         EnsureScratch(src.Width, src.Height);
         _scratchImage!.Composite(PixmanOp.Src, source, null, src.X, src.Y, 0, 0, 0, 0, src.Width, src.Height);
+        EdgeScratch(src.Width, src.Height, pad: false);
     }
 
     private void CompositeTransformed(
@@ -274,9 +336,7 @@ internal sealed class PixmanRenderPass : IRenderPass
         source.SetFilter(PixmanFilter.Bilinear);
         source.SetRepeat(PixmanRepeat.None);
         ApplyClip(options.Clip);
-        using var mask = options.Alpha < 1f
-            ? PixmanImage.CreateSolidFill(new PixmanColor(0, 0, 0, (ushort)(options.Alpha * ushort.MaxValue)))
-            : null;
+        var mask = options.Alpha < 1f ? AlphaMask(options.Alpha) : null;
         _image!.Composite(
             PixmanOp.Over,
             source,
@@ -296,22 +356,21 @@ internal sealed class PixmanRenderPass : IRenderPass
 
     private void EnsureScratch(int width, int height)
     {
-        if (_scratch is null || _scratch.Length < width * height * 4)
+        if (_scratchImage is not null && width <= _scratchWidth && height <= _scratchHeight)
         {
-            DropScratch();
-            _scratch = new byte[width * height * 4];
-            _scratchPin = System.Runtime.InteropServices.GCHandle.Alloc(
-                _scratch, System.Runtime.InteropServices.GCHandleType.Pinned);
+            return;
         }
 
-        if (_scratchImage is null || _scratchWidth != width || _scratchHeight != height)
-        {
-            _scratchImage?.Dispose();
-            _scratchImage = PixmanImage.CreateBits(
-                PixmanFormat.A8R8G8B8, width, height, _scratchPin.AddrOfPinnedObject(), width * 4);
-            _scratchWidth = width;
-            _scratchHeight = height;
-        }
+        var scratchWidth = Math.Max(width, _scratchWidth);
+        var scratchHeight = Math.Max(height, _scratchHeight);
+        DropScratch();
+        _scratch = new byte[scratchWidth * scratchHeight * 4];
+        _scratchPin = System.Runtime.InteropServices.GCHandle.Alloc(
+            _scratch, System.Runtime.InteropServices.GCHandleType.Pinned);
+        _scratchImage = PixmanImage.CreateBits(
+            PixmanFormat.A8R8G8B8, scratchWidth, scratchHeight, _scratchPin.AddrOfPinnedObject(), scratchWidth * 4);
+        _scratchWidth = scratchWidth;
+        _scratchHeight = scratchHeight;
     }
 
     private void DropScratch()
@@ -363,6 +422,7 @@ internal sealed class PixmanRenderPass : IRenderPass
     {
         _fullClip.Dispose();
         DropScratch();
+        DropAlphaMask();
     }
 
     private void ApplyClip(PixmanRegion32? clip)

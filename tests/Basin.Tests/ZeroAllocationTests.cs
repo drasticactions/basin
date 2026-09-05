@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Xunit;
 
 namespace Basin.Tests;
@@ -158,6 +159,63 @@ public sealed class ZeroAllocationTests
         node.Destroy();
         background.Destroy();
         output.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void Two_outputs_at_different_descriptions_allocate_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var second = host.Backend.CreateOutput(new OutputMode(160, 120, 60_000), manualFrameClock: true);
+        using var resolver = new SceneColorTableTests.PairResolver(host.Renderer);
+        host.Scene.ColorTransforms = resolver;
+        host.SceneOutput.ColorDescription = new ImageDescription
+        {
+            PrimariesNamed = ColorPrimaries.DisplayP3,
+            TransferNamed = ColorTransferFunction.Gamma22,
+        };
+        using var secondScene = new Scene.SceneOutput(host.Scene, second)
+        {
+            ColorDescription = new ImageDescription
+            {
+                PrimariesNamed = ColorPrimaries.Bt2020,
+                TransferNamed = ColorTransferFunction.St2084Pq,
+            },
+        };
+        using var secondSwapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var secondState = new OutputState();
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var node = new Scene.SceneRect(host.Scene.Root, 30, 30, new RenderColor(0.2f, 0.5f, 0.8f, 1f));
+
+        void Frame(int i)
+        {
+            node.SetPosition(i % 2, 0);
+            host.CommitFrame();
+            _ = secondScene.Commit(host.Renderer, secondSwapchain, secondState);
+            second.StepFrame();
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Frame(i);
+        }
+
+        NothingAllocated(1000, Frame);
+        node.Destroy();
     }
 
     private sealed class PlaneOutput() : OutputBase("plane-test")

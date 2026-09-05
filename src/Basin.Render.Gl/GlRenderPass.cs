@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Pixman;
 using Silk.NET.OpenGLES;
@@ -19,7 +20,9 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         _gl = gl;
     }
 
-    internal void Begin(IBuffer target, GlRenderTarget entry, int signalFenceFd = -1)
+    private ImageDescription? _outputColor;
+
+    internal void Begin(IBuffer target, GlRenderTarget entry, int signalFenceFd = -1, ImageDescription? outputColor = null)
     {
         if (_target is not null)
         {
@@ -29,6 +32,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         _target = target;
         _entry = entry;
         _signalFenceFd = signalFenceFd;
+        _outputColor = outputColor;
         BindPassState();
     }
 
@@ -198,11 +202,26 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             return;
         }
 
+        var r = color.R;
+        var g = color.G;
+        var b = color.B;
+        if (_outputColor is not null && color.A > 0 && _renderer.TransformFor(null, _outputColor) is { } transform)
+        {
+            Span<double> rgb = stackalloc double[3];
+            rgb[0] = Math.Clamp(r / color.A, 0, 1);
+            rgb[1] = Math.Clamp(g / color.A, 0, 1);
+            rgb[2] = Math.Clamp(b / color.A, 0, 1);
+            transform.Parameters.Apply(rgb);
+            r = (float)rgb[0] * color.A;
+            g = (float)rgb[1] * color.A;
+            b = (float)rgb[2] * color.A;
+        }
+
         var program = _renderer.SolidProgram;
         _gl.UseProgram(program.Program);
         _gl.Uniform4(program.Dst, (float)box.X, box.Y, box.Width, box.Height);
         _gl.Uniform2(program.Target, (float)_target.Width, _target.Height);
-        _gl.Uniform4(program.Color, color.R, color.G, color.B, color.A);
+        _gl.Uniform4(program.Color, r, g, b, color.A);
         SetTransform(program.Transform, RenderTransform.Identity);
         DrawClipped(clip);
     }
@@ -271,6 +290,17 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             _gl.ActiveTexture(TextureUnit.Texture1);
             _gl.BindTexture(TextureTarget.Texture3D, lut.TextureId);
             _gl.Uniform1(program.Lut, 1);
+        }
+        else if (custom is null && _renderer.TransformFor(options.ColorDescription, _outputColor) is { } colorTransform)
+        {
+            program = _renderer.TextureColorProgram;
+            _gl.UseProgram(program.Program);
+            _gl.Uniform3(program.M0, colorTransform.M0.X, colorTransform.M0.Y, colorTransform.M0.Z);
+            _gl.Uniform3(program.M1, colorTransform.M1.X, colorTransform.M1.Y, colorTransform.M1.Z);
+            _gl.Uniform3(program.M2, colorTransform.M2.X, colorTransform.M2.Y, colorTransform.M2.Z);
+            _gl.Uniform4(program.Source, colorTransform.Source.X, colorTransform.Source.Y, colorTransform.Source.Z, colorTransform.Source.W);
+            _gl.Uniform4(program.Output, colorTransform.Output.X, colorTransform.Output.Y, colorTransform.Output.Z, colorTransform.Output.W);
+            _gl.Uniform4(program.Tone, colorTransform.Tone.X, colorTransform.Tone.Y, colorTransform.Tone.Z, colorTransform.Tone.W);
         }
 
         _gl.UseProgram(program.Program);

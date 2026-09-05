@@ -98,7 +98,7 @@ public sealed class OutputPreferencesTests
                 Overscan = 10,
                 RgbRange = OutputRgbRange.Full,
                 MaxBitsPerColor = 10,
-                VrrPolicy = OutputVrrPolicy.Always,
+                AdaptiveSync = true,
             },
         ]);
 
@@ -112,7 +112,6 @@ public sealed class OutputPreferencesTests
         Assert.Equal(10u, state.Overscan);
         Assert.Equal(OutputRgbRange.Full, state.RgbRange);
         Assert.Equal(10u, state.MaxBitsPerColor);
-        Assert.Equal(OutputVrrPolicy.Always, state.VrrPolicy);
 
         applied = configuration.Apply(
         [
@@ -120,14 +119,13 @@ public sealed class OutputPreferencesTests
             {
                 Output = output,
                 Enabled = true,
-                VrrPolicy = OutputVrrPolicy.Never,
+                AdaptiveSync = false,
             },
         ]);
 
         Assert.True(applied);
         Assert.False(output.AdaptiveSync);
         Assert.True(configuration.TryRead(output, out state));
-        Assert.Equal(OutputVrrPolicy.Never, state.VrrPolicy);
         Assert.Equal(10u, state.Overscan);
 
         output.Destroy();

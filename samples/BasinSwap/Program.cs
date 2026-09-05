@@ -52,12 +52,14 @@ internal static class Program
         var capture = new TintedCapture(scene, layout, renderer);
         var clipboard = new HistoryClipboard();
         var bell = new CountingBell();
+        using var luts = new Basin.Color.ColorLutCache(renderer);
 
         using var services = host.CreateServices()
             .Use(layout)
             .Use<IScreenCapture>(capture)
             .Use<ISelectionStore>(clipboard)
             .Use<IBell>(bell)
+            .Use<IColorTransformResolver>(luts)
             .Use<IActivationTokens>(new Basin.Capabilities.Defaults.DefaultActivationTokens())
             .Install(DesktopPack.Default)
             .Freeze();

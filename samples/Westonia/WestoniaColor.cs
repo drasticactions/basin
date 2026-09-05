@@ -11,7 +11,7 @@ namespace Westonia;
 internal sealed partial class Westonia
 {
     private ColorManager? _color;
-    private ColorLutCache? _luts;
+    private OutputColorDriver? _outputColor;
     private SurfaceLutDriver? _lutDriver;
 
     private void WireColor()
@@ -23,11 +23,8 @@ internal sealed partial class Westonia
             return;
         }
 
-        DeclareColor();
-
-        _luts = new ColorLutCache(_renderer);
-        _lutDriver = new SurfaceLutDriver(
-            _scene, _color, surface => _luts.LutFor(_color.DescriptionOf(surface), PrimaryDescription()));
+        _outputColor = new OutputColorDriver(_color, _colorPack.Configuration);
+        _lutDriver = new SurfaceLutDriver(_scene, _color, _colorPack.Luts);
         _lutDriver.CountChanged += attached =>
         {
             BasinReport.Line($"COLOR luts={attached}");
@@ -36,24 +33,9 @@ internal sealed partial class Westonia
         _lutDriver.WatchToplevels(Shell);
     }
 
-    private ImageDescription DescriptionOf(IOutput output) => _colorPack.Configuration.DescriptionOf(output);
+    private void DescribeOutput(OutputView view) => _outputColor?.Add(view.Global, view.Output, view.Scene);
 
-    private ImageDescription PrimaryDescription() =>
-        _outputs.Views.Count > 0 ? DescriptionOf(_outputs.Views[0].Output) : ImageDescription.Srgb;
-
-    private void DeclareColor()
-    {
-        if (_color is { } color)
-        {
-            SurfaceLutDriver.Declare(color, _outputs.Views.Select(v => DescriptionOf(v.Output)));
-        }
-    }
-
-    private void DescribeOutput(OutputView view)
-    {
-        _color?.SetOutputDescription(view.Global, DescriptionOf(view.Output));
-        DeclareColor();
-    }
+    private void ForgetOutput(OutputView view) => _outputColor?.Remove(view.Global);
 
     internal void RefreshSurfaceLuts() => _lutDriver?.Refresh();
 }

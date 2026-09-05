@@ -32,7 +32,9 @@ internal static class SkiaDraw
         }
     }
 
-    public static void Texture(SKCanvas canvas, SKPaint paint, ISkiaTexture texture, in TextureRenderOptions options)
+    public static void Texture(
+        SKCanvas canvas, SKPaint paint, ISkiaTexture texture, in TextureRenderOptions options,
+        SkiaColorTransform? transform = null)
     {
         if (options.DstBox.IsEmpty)
         {
@@ -58,7 +60,7 @@ internal static class SkiaDraw
 
             if (options.Shader is not null)
             {
-                DrawWithShader(canvas, paint, image, src, options);
+                DrawWithShader(canvas, paint, image, src, options, transform);
                 return;
             }
 
@@ -71,6 +73,10 @@ internal static class SkiaDraw
             if (options.Lut is SkiaColorLut lut)
             {
                 paint.ColorFilter = lut.Filter;
+            }
+            else if (transform is not null)
+            {
+                paint.ColorFilter = transform.Filter;
             }
 
             var matrix = ToMatrix(options.Transform);
@@ -106,7 +112,7 @@ internal static class SkiaDraw
         }
         finally
         {
-            if (options.Lut is SkiaColorLut)
+            if (options.Lut is SkiaColorLut || transform is not null)
             {
                 paint.ColorFilter = null;
             }
@@ -146,7 +152,7 @@ internal static class SkiaDraw
         }
     }
 
-    private static void DrawWithShader(SKCanvas canvas, SKPaint paint, SKImage image, in FBox src, in TextureRenderOptions options)
+    private static void DrawWithShader(SKCanvas canvas, SKPaint paint, SKImage image, in FBox src, in TextureRenderOptions options, SkiaColorTransform? transform)
     {
         if (options.Shader is not SkiaPixelShader skiaShader)
         {
@@ -162,6 +168,12 @@ internal static class SkiaDraw
         if (options.Lut is SkiaColorLut lut)
         {
             var filtered = SkiaCensus.Track(child.WithColorFilter(lut.Filter));
+            SkiaCensus.Release(child);
+            child = filtered;
+        }
+        else if (transform is not null)
+        {
+            var filtered = SkiaCensus.Track(child.WithColorFilter(transform.Filter));
             SkiaCensus.Release(child);
             child = filtered;
         }

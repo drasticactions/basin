@@ -142,6 +142,7 @@ public sealed class ServiceRegistryTests
     public void The_whole_pack_installs_onto_a_bare_display()
     {
         using var host = new CompositorTestHost();
+        using var luts = new Basin.Color.ColorLutCache(host.Renderer);
 
         using var services = new BasinServices(host.Display, host.Loop)
             .Use(new OutputLayout())
@@ -151,6 +152,7 @@ public sealed class ServiceRegistryTests
             .Use<IFrameClock>(new Basin.Capabilities.Defaults.FrameClock())
             .Use<IActivationTokens>(new DefaultActivationTokens())
             .Use<IBell>(SilentBell.Instance)
+            .Use<IColorTransformResolver>(luts)
             .Install(DesktopPack.Desktop)
             .Freeze();
 

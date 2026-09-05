@@ -9,6 +9,42 @@ namespace Basin.Tests;
 public sealed class DegradationTests
 {
     [Fact]
+    public void A_colour_manager_that_cannot_convert_refuses_to_freeze()
+    {
+        using var host = new CompositorTestHost();
+        using var services = new BasinServices(host.Display, host.Loop)
+            .Use(host.Layout)
+            .Use(host.Compositor)
+            .Install(new ColorManagementModule());
+
+        var error = Assert.Throws<InvalidOperationException>(() => services.Freeze());
+        Assert.Contains("wp_color_manager_v1", error.Message);
+        Assert.Contains(nameof(IColorTransformResolver), error.Message);
+        Assert.Contains("Without(\"wp_color_manager_v1\")", error.Message);
+    }
+
+    [Fact]
+    public void A_compositor_that_does_no_colour_management_says_so_by_subtraction()
+    {
+        using var host = new CompositorTestHost();
+        using var services = new BasinServices(host.Display, host.Loop)
+            .Use(host.Layout)
+            .Use(host.Compositor)
+            .Install(new ColorManagementModule())
+            .Without("wp_color_manager_v1")
+            .Freeze();
+
+        Assert.Null(services.Find<ColorManager>());
+        var globals = new List<string>();
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) => globals.Add(e.Interface);
+        host.PumpToClient();
+        Assert.Contains("wl_compositor", globals);
+        Assert.DoesNotContain("wp_color_manager_v1", globals);
+        AssertClientAlive(host);
+    }
+
+    [Fact]
     public void Screencopy_without_a_capture_backend_fails_the_frame()
     {
         using var host = new CompositorTestHost();

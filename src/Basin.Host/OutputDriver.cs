@@ -794,6 +794,8 @@ public sealed class OutputDriver : IDisposable
             {
                 Background = Background,
                 Projection = OutputProjection.For(view.Output),
+                Luts = view.Scene,
+                ColorDescription = view.Scene?.ColorDescription,
             });
             _scene.Root.SetPosition(0, 0);
             if (!rendered)
@@ -877,6 +879,8 @@ public sealed class OutputDriver : IDisposable
         {
             Background = Background,
             Projection = OutputProjection.For(view.Output),
+            Luts = view.Scene,
+            ColorDescription = view.Scene?.ColorDescription,
         });
         _scene.Root.SetPosition(0, 0);
         if (!rendered)

@@ -255,7 +255,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
         }
         else
         {
-            sdr = ImageDescription.Srgb;
+            sdr = ImageDescription.SdrDefault;
         }
 
         var headroom = EdrHeadroomOf(output);
@@ -302,15 +302,15 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
         }
         else
         {
-            if (ColorLutBaker.IsIdentity(ImageDescription.Srgb, description) ||
-                !KmsColorPipeline.CanExpress(ImageDescription.Srgb, description))
+            if (ColorLutBaker.IsIdentity(ImageDescription.SdrDefault, description) ||
+                !KmsColorPipeline.CanExpress(ImageDescription.SdrDefault, description))
             {
                 UnrouteKmsPipeline(output);
                 return false;
             }
 
-            ctm = KmsColorPipeline.GamutCtm(ImageDescription.Srgb, description);
-            var scale = KmsColorPipeline.HeadroomScale(ImageDescription.Srgb, description);
+            ctm = KmsColorPipeline.GamutCtm(ImageDescription.SdrDefault, description);
+            var scale = KmsColorPipeline.HeadroomScale(ImageDescription.SdrDefault, description);
             if (scale < 1.0)
             {
                 for (var i = 0; i < 9; i++)
@@ -326,7 +326,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
         _routedGamma[output] = gamma;
         Record(output, state);
         using var commit = new OutputState();
-        commit.SetDegammaLut(KmsColorPipeline.DecodeRamps(ImageDescription.Srgb, (int)pipeline.DegammaLutSize));
+        commit.SetDegammaLut(KmsColorPipeline.DecodeRamps(ImageDescription.SdrDefault, (int)pipeline.DegammaLutSize));
         commit.SetCtm(CtmFor(output, SoftwareFactor(output, state)));
         commit.SetGammaLut(gamma);
         if (output.Commit(commit))

@@ -6,17 +6,22 @@ namespace Basin.Desktop;
 public sealed class SurfaceLutDriver
 {
     private readonly Scene.Scene _scene;
-    private readonly Func<Surface, IColorLut?> _resolve;
+    private readonly ColorManager _color;
+    private readonly Func<Surface, ImageDescription?> _describe;
     private int _lastCount = -1;
 
-    public SurfaceLutDriver(Scene.Scene scene, ColorManager color, Func<Surface, IColorLut?> resolve)
+    public SurfaceLutDriver(Scene.Scene scene, ColorManager color, IColorTransformResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(color);
-        ArgumentNullException.ThrowIfNull(resolve);
+        ArgumentNullException.ThrowIfNull(resolver);
         _scene = scene;
-        _resolve = resolve;
+        _color = color;
+        _describe = Describe;
+        scene.ColorTransforms = resolver;
         color.SurfaceDescriptionChanged += (_, _) => Refresh();
+        color.OutputDescriptionChanged += (_, _) => Refresh();
+        color.OutputDescriptionRemoved += _ => Refresh();
     }
 
     public event Action<int>? CountChanged;
@@ -25,7 +30,10 @@ public sealed class SurfaceLutDriver
     {
         ArgumentNullException.ThrowIfNull(color);
         color.SupportedTransferFunctions =
-            [ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear];
+        [
+            ColorTransferFunction.CompoundPower24, ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22,
+            ColorTransferFunction.ExtLinear,
+        ];
         color.SupportedPrimaries = [ColorPrimaries.Srgb];
     }
 
@@ -36,7 +44,8 @@ public sealed class SurfaceLutDriver
 
         var transfers = new List<ColorTransferFunction>
         {
-            ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear,
+            ColorTransferFunction.CompoundPower24, ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22,
+            ColorTransferFunction.ExtLinear,
         };
         var primaries = new List<ColorPrimaries> { ColorPrimaries.Srgb };
 
@@ -65,11 +74,18 @@ public sealed class SurfaceLutDriver
 
     public void Refresh()
     {
-        var attached = _scene.AttachLuts(_resolve);
+        _scene.DescribeSurfaces(_describe);
+        var attached = _scene.LutCount;
         if (attached != _lastCount)
         {
             _lastCount = attached;
             CountChanged?.Invoke(attached);
         }
+    }
+
+    private ImageDescription? Describe(Surface surface)
+    {
+        var description = _color.DescriptionOf(surface);
+        return ReferenceEquals(description, ImageDescription.SdrDefault) ? null : description;
     }
 }

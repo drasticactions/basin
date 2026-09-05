@@ -87,7 +87,7 @@ public sealed class SceneSnapshot : IDisposable
                         DestinationWidth = buffer.DestinationWidth,
                         DestinationHeight = buffer.DestinationHeight,
                         IsOpaque = buffer.IsOpaque,
-                        Lut = buffer.Lut,
+                        ColorDescription = buffer.ColorDescription,
                         TextureShader = buffer.TextureShader,
                     };
                     copy.SetPosition(buffer.X, buffer.Y);

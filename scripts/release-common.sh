@@ -45,8 +45,34 @@ resolve_program() {
     return 1
 }
 
+portable_rid() {
+    local system=$1 machine=$2 libc=$3 os= architecture=
+
+    case "$system" in
+        Linux) os=linux; [ "$libc" = musl ] && os=linux-musl ;;
+        Darwin) os=osx ;;
+        CYGWIN*|MINGW*|MSYS*|Windows*) os=win ;;
+        *) return 1 ;;
+    esac
+
+    case "$machine" in
+        x86_64|amd64) architecture=x64 ;;
+        aarch64|arm64) architecture=arm64 ;;
+        armv7l|armv6l|arm) architecture=arm ;;
+        i686|i386) architecture=x86 ;;
+        *) return 1 ;;
+    esac
+
+    printf '%s-%s' "$os" "$architecture"
+}
+
+host_libc() {
+    ls /lib/ld-musl-* >/dev/null 2>&1 && echo musl || echo gnu
+}
+
 host_rid() {
-    dotnet --info | sed -n 's/^ *RID: *//p' | head -1
+    portable_rid "$(uname -s)" "$(uname -m)" "$(host_libc)" 2>/dev/null ||
+        dotnet --info | sed -n 's/^ *RID: *//p' | head -1
 }
 
 warn_cross_rid() {

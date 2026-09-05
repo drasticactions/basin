@@ -82,7 +82,7 @@ internal sealed partial class Dam : IDisposable
         _host = Basin.Host.BasinHost.Create(
             Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()));
 
-        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
         var capturePack = servicePack.Capture;
         var cursorTheme = servicePack.CursorTheme;
@@ -240,7 +240,7 @@ internal sealed partial class Dam : IDisposable
 
     public void Dispose()
     {
-        _luts?.Dispose();
+        _colorPack?.Luts.Dispose();
         _client?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();

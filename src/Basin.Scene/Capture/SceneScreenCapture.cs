@@ -187,7 +187,7 @@ public sealed class SceneScreenCapture : IScreenCapture
         var hidden = HideExcluded();
         try
         {
-            if (!RenderAt(box.X, box.Y, projection, target))
+            if (!RenderAt(box.X, box.Y, projection, target, output))
             {
                 return false;
             }
@@ -297,7 +297,7 @@ public sealed class SceneScreenCapture : IScreenCapture
             var (originX, originY) = source.ClientOnly ? (box.X, box.Y) : client.ScenePosition;
             var rendered = _scene.RenderSubtrees(
                 renderer, client, trees.Popups, popupClip, target, originX + region.X, originY + region.Y, scale,
-                Background);
+                Background, TableFor(null));
             return rendered && (!source.OverlayCursor || DrawCursorOverRegion(box, region, scale, target));
         }
 
@@ -436,10 +436,10 @@ public sealed class SceneScreenCapture : IScreenCapture
         return pass.Submit();
     }
 
-    private bool RenderAt(int originX, int originY, double scale, IBuffer target) =>
-        RenderAt(originX, originY, new OutputProjection(scale), target);
+    private bool RenderAt(int originX, int originY, double scale, IBuffer target, IOutput? output = null) =>
+        RenderAt(originX, originY, new OutputProjection(scale), target, output);
 
-    private bool RenderAt(int originX, int originY, in OutputProjection projection, IBuffer target)
+    private bool RenderAt(int originX, int originY, in OutputProjection projection, IBuffer target, IOutput? output = null)
     {
         if (Renderer is not { } renderer)
         {
@@ -452,7 +452,23 @@ public sealed class SceneScreenCapture : IScreenCapture
             Projection = projection,
             OriginX = originX,
             OriginY = originY,
+            Luts = TableFor(output),
+            ColorDescription = TableFor(output)?.ColorDescription,
         });
+    }
+
+    private SceneOutput? TableFor(IOutput? output)
+    {
+        var outputs = _scene.Outputs;
+        for (var i = 0; i < outputs.Count; i++)
+        {
+            if (output is null || outputs[i].Output == output)
+            {
+                return outputs[i];
+            }
+        }
+
+        return null;
     }
 
     private bool TryToplevelBox(in CaptureSource source, out Box box, out double scale)

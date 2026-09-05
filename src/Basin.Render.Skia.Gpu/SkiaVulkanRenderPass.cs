@@ -1,3 +1,5 @@
+using Basin.Render.Skia;
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Render.Vulkan;
 using Pixman;
@@ -20,7 +22,9 @@ internal sealed unsafe class SkiaVulkanRenderPass : IRenderPass
         _paint = paint;
     }
 
-    internal void Begin(IBuffer target, SkiaVulkanTarget entry, int signalFenceFd)
+    private ImageDescription? _outputColor;
+
+    internal void Begin(IBuffer target, SkiaVulkanTarget entry, int signalFenceFd, ImageDescription? outputColor)
     {
         if (_target is not null)
         {
@@ -28,6 +32,7 @@ internal sealed unsafe class SkiaVulkanRenderPass : IRenderPass
         }
 
         _target = target;
+        _outputColor = outputColor;
         _entry = entry;
         _signalFenceFd = signalFenceFd;
     }
@@ -35,13 +40,15 @@ internal sealed unsafe class SkiaVulkanRenderPass : IRenderPass
     public void AddRect(in RenderColor color, in Box box, PixmanRegion32? clip = null)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
-        SkiaDraw.Rect(_entry!.Canvas, _paint, color, box, clip);
+        SkiaDraw.Rect(_entry!.Canvas, _paint, _renderer.ColorTransforms.ConvertRect(color, _outputColor), box, clip);
     }
 
     public void AddTexture(ITexture texture, in TextureRenderOptions options)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
-        SkiaDraw.Texture(_entry!.Canvas, _paint, (ISkiaTexture)texture, options);
+        SkiaDraw.Texture(
+            _entry!.Canvas, _paint, (ISkiaTexture)texture, options,
+            options.Lut is null && options.Shader is null ? _renderer.ColorTransforms.TransformFor(options.ColorDescription, _outputColor) : null);
     }
 
     public void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)

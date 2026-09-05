@@ -1,3 +1,5 @@
+using Basin.Color;
+using Basin.Capabilities;
 using Xunit;
 
 namespace Basin.Tests;
@@ -73,7 +75,7 @@ public sealed class RendererLutTests
         CompositorTestHost.SkipUnlessRunnable(renderer);
         using var host = new CompositorTestHost(renderer: renderer);
 
-        Assert.Equal(ColorTransformCapability.Lut3D, host.Renderer.ColorTransform);
+        Assert.NotEqual(ColorTransformCapability.None, host.Renderer.ColorTransform);
         var target = SolidBuffer(32, 32, 0xFF000000);
         var opaque = SolidBuffer(8, 8, 0xFF808080);
         var translucent = SolidBuffer(8, 8, 0x80404040);
@@ -128,8 +130,9 @@ public sealed class RendererLutTests
         var content = SolidBuffer(160, 120, 0xFF808080);
         var node = new Basin.Scene.SceneBuffer(host.Scene.Root) { IsOpaque = true };
         node.SetBuffer(content);
-        var lut = host.Renderer.ImportLut(InvertingLut());
-        node.Lut = lut;
+        using var table = new FixedTable(host.Renderer.ImportLut(InvertingLut()));
+        sceneOutput.Resolver = table;
+        Assert.Same(table.Lut, sceneOutput.LutFor(node));
 
         Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
         Assert.False(sceneOutput.IsDirectScanout);
@@ -138,22 +141,143 @@ public sealed class RendererLutTests
         AssertNear(127, g, "green");
         AssertNear(127, b, "blue");
 
-        node.Lut = null;
+        sceneOutput.Resolver = null;
+        Assert.Null(sceneOutput.LutFor(node));
         Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
         (_, r, _, _) = PixelAt(state.Buffer!, 80, 60);
         AssertNear(128, r, "red after clearing the LUT");
 
         node.Destroy();
         content.Destroy();
-        lut!.Dispose();
     }
 
-    [Fact]
-    public void Impeller_declares_none_and_the_import_agrees()
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void The_oracle_and_the_output_agree_through_the_table(string renderer)
     {
-        Assert.SkipWhen(!File.Exists(CompositorTestHost.RenderNodePath), "no render node");
-        using var host = new CompositorTestHost(renderer: "impeller");
-        Assert.Equal(ColorTransformCapability.None, host.Renderer.ColorTransform);
-        Assert.Null(host.Renderer.ImportLut(InvertingLut()));
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        using var sceneOutput = new Basin.Scene.SceneOutput(host.Scene, host.Output);
+        using var swapchain = new Swapchain(new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+
+        var content = SolidBuffer(60, 40, 0xFF4080C0);
+        var node = new Basin.Scene.SceneBuffer(host.Scene.Root) { IsOpaque = true };
+        node.SetBuffer(content);
+        node.SetPosition(20, 30);
+        using var table = new FixedTable(host.Renderer.ImportLut(InvertingLut()));
+        sceneOutput.Resolver = table;
+
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        var oracle = new MemoryBuffer(160, 120, DrmFormat.Xrgb8888);
+        Assert.True(host.Scene.Render(host.Renderer, oracle, new Basin.Scene.SceneRenderOptions
+        {
+            Background = RenderColor.Black,
+            Luts = sceneOutput,
+        }));
+
+        var (_, r, g, b) = PixelAt(oracle, 40, 40);
+        AssertNear(0xFF - 0x40, r, "oracle red");
+        AssertNear(0xFF - 0x80, g, "oracle green");
+        AssertNear(0xFF - 0xC0, b, "oracle blue");
+        var (_, r2, g2, b2) = PixelAt(state.Buffer!, 40, 40);
+        AssertNear(r, r2, "red");
+        AssertNear(g, g2, "green");
+        AssertNear(b, b2, "blue");
+
+        node.Destroy();
+        content.Destroy();
+        oracle.Destroy();
+    }
+
+    private static readonly ImageDescription PqSource = new()
+    {
+        PrimariesNamed = ColorPrimaries.Bt2020,
+        TransferNamed = ColorTransferFunction.St2084Pq,
+        Luminances = (0, 1000, 203),
+    };
+
+    private static readonly ImageDescription P3Output = new()
+    {
+        PrimariesNamed = ColorPrimaries.DisplayP3,
+        TransferNamed = ColorTransferFunction.Gamma22,
+    };
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void A_decomposed_row_matches_the_baked_transform(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        Assert.SkipWhen(
+            host.Renderer.ColorTransform != ColorTransformCapability.Decomposed,
+            $"the {renderer} row keeps the table");
+
+        var target = SolidBuffer(48, 16, 0xFF000000);
+        var content = SolidBuffer(8, 8, 0xFF80664D);
+        var texture = host.Renderer.ImportTexture(content);
+        Assert.NotNull(texture);
+
+        var pass = host.Renderer.BeginBufferPass(target, new RenderPassOptions { ColorDescription = ImageDescription.SdrDefault });
+        pass.AddTexture(texture, new TextureRenderOptions { DstBox = new Box(0, 0, 8, 8) });
+        pass.AddTexture(texture, new TextureRenderOptions { DstBox = new Box(16, 0, 8, 8), ColorDescription = PqSource });
+        pass.AddRect(new RenderColor(0x80 / 255f, 0x66 / 255f, 0x4D / 255f, 1f), new Box(32, 0, 8, 8));
+        Assert.True(pass.Submit());
+
+        var (_, r0, g0, b0) = PixelAt(target, 4, 4);
+        AssertNear(0x80, r0, "untagged red");
+        AssertNear(0x66, g0, "untagged green");
+        AssertNear(0x4D, b0, "untagged blue");
+
+        Span<double> expected = stackalloc double[3];
+        expected[0] = 0x80 / 255.0;
+        expected[1] = 0x66 / 255.0;
+        expected[2] = 0x4D / 255.0;
+        ColorTransformParameters.From(PqSource, ImageDescription.SdrDefault).Apply(expected);
+        var (_, r1, g1, b1) = PixelAt(target, 20, 4);
+        AssertNear((byte)Math.Round(expected[0] * 255), r1, "pq red");
+        AssertNear((byte)Math.Round(expected[1] * 255), g1, "pq green");
+        AssertNear((byte)Math.Round(expected[2] * 255), b1, "pq blue");
+        Assert.True(r1 != 0x80 || g1 != 0x66, "the PQ source was converted");
+
+        var (_, r2, g2, b2) = PixelAt(target, 36, 4);
+        AssertNear(0x80, r2, "rect red on the default output");
+        AssertNear(0x66, g2, "rect green on the default output");
+        AssertNear(0x4D, b2, "rect blue on the default output");
+
+        var wide = SolidBuffer(48, 16, 0xFF000000);
+        pass = host.Renderer.BeginBufferPass(wide, new RenderPassOptions { ColorDescription = P3Output });
+        pass.AddTexture(texture, new TextureRenderOptions { DstBox = new Box(0, 0, 8, 8) });
+        pass.AddRect(new RenderColor(0x80 / 255f, 0x66 / 255f, 0x4D / 255f, 1f), new Box(16, 0, 8, 8));
+        Assert.True(pass.Submit());
+
+        expected[0] = 0x80 / 255.0;
+        expected[1] = 0x66 / 255.0;
+        expected[2] = 0x4D / 255.0;
+        ColorTransformParameters.From(ImageDescription.SdrDefault, P3Output).Apply(expected);
+        var (_, r3, g3, b3) = PixelAt(wide, 4, 4);
+        AssertNear((byte)Math.Round(expected[0] * 255), r3, "sdr on p3 red");
+        AssertNear((byte)Math.Round(expected[1] * 255), g3, "sdr on p3 green");
+        AssertNear((byte)Math.Round(expected[2] * 255), b3, "sdr on p3 blue");
+        var (_, r4, g4, b4) = PixelAt(wide, 20, 4);
+        AssertNear(r3, r4, "rect matches the surface painted the same colour");
+        AssertNear(g3, g4, "rect green matches");
+        AssertNear(b3, b4, "rect blue matches");
+
+        texture.Dispose();
+        target.Destroy();
+        wide.Destroy();
+        content.Destroy();
+    }
+
+    internal sealed class FixedTable(IColorLut? lut) : IColorTransformResolver, IDisposable
+    {
+        public IColorLut? Lut { get; } = lut;
+
+        public ColorTransformCapability Capability => ColorTransformCapability.Lut3D;
+
+        public IColorLut? Resolve(ImageDescription source, ImageDescription output) => Lut;
+
+        public void Dispose() => Lut?.Dispose();
     }
 }

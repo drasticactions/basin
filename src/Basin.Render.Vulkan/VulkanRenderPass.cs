@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using System.Runtime.InteropServices;
 using Basin.Diagnostics;
 using Pixman;
@@ -59,7 +60,9 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         }
     }
 
-    internal void Begin(IBuffer target, RenderTarget entry, int waitFenceFd, int signalFenceFd)
+    private ImageDescription? _outputColor;
+
+    internal void Begin(IBuffer target, RenderTarget entry, int waitFenceFd, int signalFenceFd, ImageDescription? outputColor)
     {
         if (_target is not null)
         {
@@ -67,6 +70,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         }
 
         _target = target;
+        _outputColor = outputColor;
         _entry = entry;
         _waitFenceFd = waitFenceFd;
         _signalFenceFd = signalFenceFd;
@@ -105,6 +109,21 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             return;
         }
 
+        var r = color.R;
+        var g = color.G;
+        var b = color.B;
+        if (_outputColor is not null && color.A > 0 && _renderer.TransformFor(null, _outputColor) is { } transform)
+        {
+            Span<double> rgb = stackalloc double[3];
+            rgb[0] = Math.Clamp(r / color.A, 0, 1);
+            rgb[1] = Math.Clamp(g / color.A, 0, 1);
+            rgb[2] = Math.Clamp(b / color.A, 0, 1);
+            transform.Parameters.Apply(rgb);
+            r = (float)rgb[0] * color.A;
+            g = (float)rgb[1] * color.A;
+            b = (float)rgb[2] * color.A;
+        }
+
         var constants = new Push
         {
             DstX = box.X,
@@ -113,9 +132,9 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             DstH = box.Height,
             TargetW = _target.Width,
             TargetH = _target.Height,
-            R = LinearizePremultiplied(color.R, color.A),
-            G = LinearizePremultiplied(color.G, color.A),
-            B = LinearizePremultiplied(color.B, color.A),
+            R = LinearizePremultiplied(r, color.A),
+            G = LinearizePremultiplied(g, color.A),
+            B = LinearizePremultiplied(b, color.A),
             A = color.A,
         };
         WriteTransform(ref constants, RenderTransform.Identity);
@@ -236,6 +255,10 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         }
 
         var hasLutOption = options.Lut is VulkanColorLut;
+        var colorTransform = hasLutOption || options.Shader is not null
+            ? null
+            : _renderer.TransformFor(options.ColorDescription, _outputColor);
+        var decomposed = colorTransform is not null;
         DescriptorSet set;
         bool forceOpaque;
         int kind;
@@ -259,8 +282,8 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                     return;
                 }
 
-                set = hasLutOption ? dmabuf.Set : dmabuf.LinearSet;
-                kind = hasLutOption ? 3 : dmabuf.NeedsShaderDecode ? 2 : 1;
+                set = hasLutOption || decomposed ? dmabuf.Set : dmabuf.LinearSet;
+                kind = hasLutOption ? 3 : decomposed ? 4 : dmabuf.NeedsShaderDecode ? 2 : 1;
                 forceOpaque = !dmabuf.HasAlpha;
                 break;
             case VulkanShmTexture shm:
@@ -274,8 +297,8 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                     shm.RecordGpuCopy(EnsureStage());
                 }
 
-                set = hasLutOption ? shm.Set : shm.LinearSet;
-                kind = hasLutOption ? 3 : shm.NeedsShaderDecode ? 2 : 1;
+                set = hasLutOption || decomposed ? shm.Set : shm.LinearSet;
+                kind = hasLutOption ? 3 : decomposed ? 4 : shm.NeedsShaderDecode ? 2 : 1;
                 forceOpaque = !shm.HasAlpha;
                 break;
             default:
@@ -310,7 +333,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         Record(
             kind,
             set,
-            options.Lut is VulkanColorLut vulkanLut ? vulkanLut.Set : default,
+            options.Lut is VulkanColorLut vulkanLut ? vulkanLut.Set : colorTransform?.Set ?? default,
             constants,
             options.Clip,
             options.Opaque && options.Alpha >= 1f);
@@ -767,16 +790,16 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 _render,
                 PipelineBindPoint.Graphics,
                 opaque
-                    ? kind switch { 1 => group.TextureIdentityOpaque, 2 => group.TextureSrgbOpaque, _ => group.TextureLutOpaque }
-                    : kind switch { 0 => group.Solid, 1 => group.TextureIdentity, 2 => group.TextureSrgb, _ => group.TextureLut });
+                    ? kind switch { 1 => group.TextureIdentityOpaque, 2 => group.TextureSrgbOpaque, 4 => group.TextureColorOpaque, _ => group.TextureLutOpaque }
+                    : kind switch { 0 => group.Solid, 1 => group.TextureIdentity, 2 => group.TextureSrgb, 4 => group.TextureColor, _ => group.TextureLut });
             _boundKind = bindKey;
         }
 
-        var layout = kind == 3 ? _renderer.LutLayout : _renderer.Layout;
+        var layout = kind switch { 3 => _renderer.LutLayout, 4 => _renderer.ColorLayout, _ => _renderer.Layout };
         if (kind != 0)
         {
             vk.CmdBindDescriptorSets(_render, PipelineBindPoint.Graphics, layout, 0, 1, &set, 0, null);
-            if (kind == 3)
+            if (kind is 3 or 4)
             {
                 vk.CmdBindDescriptorSets(_render, PipelineBindPoint.Graphics, layout, 1, 1, &lutSet, 0, null);
             }

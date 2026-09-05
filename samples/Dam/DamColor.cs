@@ -11,7 +11,7 @@ namespace Dam;
 internal sealed partial class Dam
 {
     private ColorManager? _color;
-    private ColorLutCache? _luts;
+    private OutputColorDriver? _outputColor;
     private SurfaceLutDriver? _lutDriver;
 
     private void WireColor()
@@ -22,39 +22,20 @@ internal sealed partial class Dam
         }
 
         _color = color;
-        _luts = new ColorLutCache(_renderer);
-        DeclareColor();
-        _lutDriver = new SurfaceLutDriver(
-            _scene, color, surface => _luts.LutFor(color.DescriptionOf(surface), PrimaryDescription()));
+        _outputColor = new OutputColorDriver(color, _colorPack.Configuration);
+        _lutDriver = new SurfaceLutDriver(_scene, color, _colorPack.Luts);
         _lutDriver.CountChanged += attached =>
         {
             BasinReport.Line($"COLOR luts={attached}");
         };
         _lutDriver.WatchToplevels(_services.Require<Basin.Shell.Xdg.XdgShell>());
         _outputs.Added += DescribeOutput;
+        _outputs.Removed += view => _outputColor.Remove(view.Global);
         foreach (var view in _outputs.Views)
         {
             DescribeOutput(view);
         }
     }
 
-    private ImageDescription DescriptionOf(IOutput output) => _colorPack.Configuration.DescriptionOf(output);
-
-    private ImageDescription PrimaryDescription() =>
-        _outputs.Views.Count > 0 ? DescriptionOf(_outputs.Views[0].Output) : ImageDescription.Srgb;
-
-    private void DeclareColor()
-    {
-        if (_color is { } color)
-        {
-            SurfaceLutDriver.Declare(color, _outputs.Views.Select(v => DescriptionOf(v.Output)));
-        }
-    }
-
-    private void DescribeOutput(OutputView view)
-    {
-        _color?.SetOutputDescription(view.Global, DescriptionOf(view.Output));
-        DeclareColor();
-        _lutDriver?.Refresh();
-    }
+    private void DescribeOutput(OutputView view) => _outputColor?.Add(view.Global, view.Output, view.Scene);
 }

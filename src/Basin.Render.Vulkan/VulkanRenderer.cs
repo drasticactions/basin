@@ -1,3 +1,5 @@
+using Basin.Capabilities;
+using Basin.Color;
 using Basin.Diagnostics;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
@@ -9,8 +11,13 @@ public sealed unsafe class VulkanRenderer : IRenderer
 {
     internal readonly struct PipelineGroup(
         Pipeline solid, Pipeline textureIdentity, Pipeline textureSrgb, Pipeline textureLut,
-        Pipeline textureIdentityOpaque, Pipeline textureSrgbOpaque, Pipeline textureLutOpaque)
+        Pipeline textureIdentityOpaque, Pipeline textureSrgbOpaque, Pipeline textureLutOpaque,
+        Pipeline textureColor, Pipeline textureColorOpaque)
     {
+        public readonly Pipeline TextureColor = textureColor;
+
+        public readonly Pipeline TextureColorOpaque = textureColorOpaque;
+
         public readonly Pipeline Solid = solid;
 
         public readonly Pipeline TextureIdentity = textureIdentity;
@@ -60,6 +67,11 @@ public sealed unsafe class VulkanRenderer : IRenderer
     internal readonly Pipeline OutputPipeline;
     internal readonly PipelineLayout Layout;
     internal readonly PipelineLayout LutLayout;
+    internal readonly PipelineLayout ColorLayout;
+    internal readonly DescriptorSetLayout ColorSetLayout;
+    internal readonly VulkanDescriptorPools ColorDescriptors;
+    private readonly Dictionary<(ImageDescription Source, ImageDescription Output), VulkanColorTransform?> _colorTransforms =
+        new(ImageDescriptionPairComparer.Instance);
     internal readonly PipelineLayout OutputPipeLayout;
     internal readonly DescriptorSetLayout SetLayout;
     internal readonly DescriptorSetLayout LutSetLayout;
@@ -148,6 +160,32 @@ public sealed unsafe class VulkanRenderer : IRenderer
         };
         VulkanDevice.Check(vk.CreatePipelineLayout(device, in lutLayoutInfo, null, out LutLayout), "vkCreatePipelineLayout(lut)");
 
+        var colorBinding = new DescriptorSetLayoutBinding
+        {
+            Binding = 0,
+            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorCount = 1,
+            StageFlags = ShaderStageFlags.FragmentBit,
+        };
+        var colorSetLayoutInfo = new DescriptorSetLayoutCreateInfo
+        {
+            SType = StructureType.DescriptorSetLayoutCreateInfo,
+            BindingCount = 1,
+            PBindings = &colorBinding,
+        };
+        VulkanDevice.Check(vk.CreateDescriptorSetLayout(device, in colorSetLayoutInfo, null, out ColorSetLayout), "vkCreateDescriptorSetLayout(color)");
+        ColorDescriptors = new VulkanDescriptorPools(Dev, DescriptorType.UniformBuffer);
+        var colorSetLayouts = stackalloc DescriptorSetLayout[2] { SetLayout, ColorSetLayout };
+        var colorLayoutInfo = new PipelineLayoutCreateInfo
+        {
+            SType = StructureType.PipelineLayoutCreateInfo,
+            SetLayoutCount = 2,
+            PSetLayouts = colorSetLayouts,
+            PushConstantRangeCount = 1,
+            PPushConstantRanges = &pushRange,
+        };
+        VulkanDevice.Check(vk.CreatePipelineLayout(device, in colorLayoutInfo, null, out ColorLayout), "vkCreatePipelineLayout(color)");
+
         var inputSetLayout = InputSetLayout;
         var outputLayoutInfo = new PipelineLayoutCreateInfo
         {
@@ -165,9 +203,10 @@ public sealed unsafe class VulkanRenderer : IRenderer
         var solidFragment = CreateShaderModule("solid.frag.spv");
         var textureFragment = CreateShaderModule("texture.frag.spv");
         var textureLutFragment = CreateShaderModule("texture_lut.frag.spv");
+        var textureColorFragment = CreateShaderModule("texture_color.frag.spv");
         var outputFragment = CreateShaderModule("output.frag.spv");
-        OnePassPipelines = BuildGroup(vertex, solidFragment, textureFragment, textureLutFragment, OnePass);
-        TwoPassPipelines = BuildGroup(vertex, solidFragment, textureFragment, textureLutFragment, TwoPass);
+        OnePassPipelines = BuildGroup(vertex, solidFragment, textureFragment, textureLutFragment, textureColorFragment, OnePass);
+        TwoPassPipelines = BuildGroup(vertex, solidFragment, textureFragment, textureLutFragment, textureColorFragment, TwoPass);
         var meshVertex = CreateShaderModule("mesh.vert.spv");
         var meshFragment = CreateShaderModule("mesh.frag.spv");
         OnePassMesh = BuildMeshGroup(meshVertex, meshFragment, OnePass);
@@ -178,20 +217,25 @@ public sealed unsafe class VulkanRenderer : IRenderer
         vk.DestroyShaderModule(device, textureFragment, null);
         vk.DestroyShaderModule(device, textureLutFragment, null);
         vk.DestroyShaderModule(device, outputFragment, null);
+        vk.DestroyShaderModule(device, textureColorFragment, null);
         vk.DestroyShaderModule(device, meshVertex, null);
         vk.DestroyShaderModule(device, meshFragment, null);
 
         _pass = new VulkanRenderPass(this);
     }
 
-    private PipelineGroup BuildGroup(ShaderModule vertex, ShaderModule solid, ShaderModule texture, ShaderModule textureLut, RenderPass renderPass) => new(
+    private PipelineGroup BuildGroup(
+        ShaderModule vertex, ShaderModule solid, ShaderModule texture, ShaderModule textureLut, ShaderModule textureColor,
+        RenderPass renderPass) => new(
         CreatePipeline(vertex, solid, Layout, renderPass, subpass: 0, blend: true, textureTransform: null),
         CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: true, textureTransform: 0),
         CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: true, textureTransform: 1),
         CreatePipeline(vertex, textureLut, LutLayout, renderPass, subpass: 0, blend: true, textureTransform: null),
         CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: false, textureTransform: 0),
         CreatePipeline(vertex, texture, Layout, renderPass, subpass: 0, blend: false, textureTransform: 1),
-        CreatePipeline(vertex, textureLut, LutLayout, renderPass, subpass: 0, blend: false, textureTransform: null));
+        CreatePipeline(vertex, textureLut, LutLayout, renderPass, subpass: 0, blend: false, textureTransform: null),
+        CreatePipeline(vertex, textureColor, ColorLayout, renderPass, subpass: 0, blend: true, textureTransform: null),
+        CreatePipeline(vertex, textureColor, ColorLayout, renderPass, subpass: 0, blend: false, textureTransform: null));
 
     private MeshGroup BuildMeshGroup(ShaderModule vertex, ShaderModule fragment, RenderPass renderPass) => new(
         CreatePipeline(vertex, fragment, Layout, renderPass, subpass: 0, blend: true, textureTransform: 0, meshInput: true),
@@ -221,7 +265,37 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => Dev.SampleableFormats;
 
-    public ColorTransformCapability ColorTransform => ColorTransformCapability.Lut3D;
+    public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
+
+    internal VulkanColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)
+    {
+        source ??= ImageDescription.SdrDefault;
+        output ??= ImageDescription.SdrDefault;
+        if (ReferenceEquals(source, output))
+        {
+            return null;
+        }
+
+        var key = (source, output);
+        if (_colorTransforms.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        AllocationScope.Pause();
+        try
+        {
+            var transform = source.IccData is null && !ColorLutBaker.IsIdentity(source, output)
+                ? new VulkanColorTransform(this, ColorTransformParameters.From(source, output))
+                : null;
+            _colorTransforms[key] = transform;
+            return transform;
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
 
     public bool SupportsBackdropEffects => true;
 
@@ -292,7 +366,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
             entry = ImportTarget(target);
         }
 
-        _pass.Begin(target, entry.Target, options.WaitFenceFd, options.SignalFenceFd);
+        _pass.Begin(target, entry.Target, options.WaitFenceFd, options.SignalFenceFd, options.ColorDescription);
         return _pass;
     }
 
@@ -335,6 +409,12 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
         Dev.Ring.ReleaseAllRetired();
         _pass.DestroyResources();
+        foreach (var transform in _colorTransforms.Values)
+        {
+            transform?.Dispose();
+        }
+
+        _colorTransforms.Clear();
         foreach (var bundle in _ycbcrSamplers.Values)
         {
             vk.DestroyPipeline(device, bundle.OnePassPipeline, null);
@@ -355,6 +435,9 @@ public sealed unsafe class VulkanRenderer : IRenderer
         vk.DestroyRenderPass(device, TwoPass, null);
         vk.DestroyPipelineLayout(device, Layout, null);
         vk.DestroyPipelineLayout(device, LutLayout, null);
+        vk.DestroyPipelineLayout(device, ColorLayout, null);
+        ColorDescriptors.Dispose();
+        vk.DestroyDescriptorSetLayout(device, ColorSetLayout, null);
         vk.DestroyPipelineLayout(device, OutputPipeLayout, null);
         if (_shaderInfrastructure)
         {
@@ -395,6 +478,8 @@ public sealed unsafe class VulkanRenderer : IRenderer
         vk.DestroyPipeline(Dev.Device, group.TextureIdentityOpaque, null);
         vk.DestroyPipeline(Dev.Device, group.TextureSrgbOpaque, null);
         vk.DestroyPipeline(Dev.Device, group.TextureLutOpaque, null);
+        vk.DestroyPipeline(Dev.Device, group.TextureColor, null);
+        vk.DestroyPipeline(Dev.Device, group.TextureColorOpaque, null);
     }
 
     public IColorLut? ImportLut(ColorLut3D lut)

@@ -82,7 +82,7 @@ internal sealed partial class Shell : IDisposable
             });
 
         _popups = new Basin.Desktop.PopupPlacer(_layout);
-        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
         _capture = servicePack.Capture;
         var cursorTheme = servicePack.CursorTheme;
@@ -373,7 +373,7 @@ internal sealed partial class Shell : IDisposable
 
     public void Dispose()
     {
-        _luts?.Dispose();
+        _colorPack?.Luts.Dispose();
         ReleaseChrome();
         _seat.Dispose();
         _outputs.Dispose();

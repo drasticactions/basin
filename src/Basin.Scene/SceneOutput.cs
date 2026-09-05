@@ -1,11 +1,17 @@
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Pixman;
 
 namespace Basin.Scene;
 
-public sealed class SceneOutput : IDisposable
+public sealed class SceneOutput : IDisposable, IColorLutTable
 {
     private readonly Scene _scene;
+    private readonly Dictionary<ImageDescription, IColorLut?> _luts = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ImageDescription> _descriptionScratch = [];
+    private IColorLut? _defaultLut;
+    private ImageDescription? _colorDescription;
+    private IColorTransformResolver? _resolver;
     private readonly List<Scene.RenderEntry> _renderList = [];
     private readonly List<PixmanRegion32> _regionPool = [];
     private readonly PixmanRegion32 _damage = new();
@@ -41,11 +47,99 @@ public sealed class SceneOutput : IDisposable
         Ring = new DamageRing(output.CurrentMode.Width, output.CurrentMode.Height);
         scene.Damaged += OnSceneDamaged;
         scene.FrameRequested += OnFrameRequested;
+        scene.ColorDescriptionChanged += OnColorDescriptionChanged;
         output.Committed += OnOutputCommitted;
         output.Destroyed += Dispose;
+        scene.Attach(this);
+        RebuildLuts();
     }
 
     public IOutput Output { get; }
+
+    public ImageDescription? ColorDescription
+    {
+        get => _colorDescription;
+        set
+        {
+            if (ReferenceEquals(_colorDescription, value) ||
+                (_colorDescription is not null && value is not null &&
+                 ImageDescription.ContentComparer.Equals(_colorDescription, value)))
+            {
+                _colorDescription = value;
+                return;
+            }
+
+            _colorDescription = value;
+            RebuildLuts();
+        }
+    }
+
+    public IColorTransformResolver? Resolver
+    {
+        get => _resolver ?? _scene.ColorTransforms;
+        set
+        {
+            if (ReferenceEquals(_resolver, value))
+            {
+                return;
+            }
+
+            _resolver = value;
+            RebuildLuts();
+        }
+    }
+
+    public int LutCount
+    {
+        get
+        {
+            var count = _defaultLut is null ? 0 : 1;
+            foreach (var lut in _luts.Values)
+            {
+                count += lut is null ? 0 : 1;
+            }
+
+            return count;
+        }
+    }
+
+    public IColorLut? LutFor(SceneBuffer node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return node.ColorDescription is { } description
+            ? _luts.GetValueOrDefault(description)
+            : _defaultLut;
+    }
+
+    public void RebuildLuts()
+    {
+        var resolver = Resolver;
+        var output = _colorDescription ?? ImageDescription.SdrDefault;
+        var before = LutCount;
+        _luts.Clear();
+        _defaultLut = resolver?.Resolve(ImageDescription.SdrDefault, output);
+        _descriptionScratch.Clear();
+        _scene.CollectColorDescriptions(_descriptionScratch);
+        foreach (var description in _descriptionScratch)
+        {
+            _luts[description] = resolver?.Resolve(description, output);
+        }
+
+        _descriptionScratch.Clear();
+        if (before != 0 || LutCount != 0)
+        {
+            Ring.AddWhole();
+            DamagePending?.Invoke();
+        }
+    }
+
+    private void OnColorDescriptionChanged(SceneBuffer node)
+    {
+        if (node.ColorDescription is { } description && !_luts.ContainsKey(description))
+        {
+            _luts[description] = Resolver?.Resolve(description, _colorDescription ?? ImageDescription.SdrDefault);
+        }
+    }
 
     public DamageRing Ring { get; }
 
@@ -254,8 +348,12 @@ public sealed class SceneOutput : IDisposable
         }
 
         _disposed = true;
+        _scene.Detach(this);
         _scene.Damaged -= OnSceneDamaged;
         _scene.FrameRequested -= OnFrameRequested;
+        _scene.ColorDescriptionChanged -= OnColorDescriptionChanged;
+        _luts.Clear();
+        _defaultLut = null;
         Output.Committed -= OnOutputCommitted;
         Output.Destroyed -= Dispose;
         _softwareCursorTexture?.Dispose();
@@ -756,7 +854,7 @@ public sealed class SceneOutput : IDisposable
             return PlaneDeclineReason.NotABuffer;
         }
 
-        if (node.Lut is not null)
+        if (LutFor(node) is not null)
         {
             return PlaneDeclineReason.ColorTransform;
         }
@@ -1288,7 +1386,8 @@ public sealed class SceneOutput : IDisposable
             }
         }
 
-        var pass = renderer.BeginBufferPass(target, new RenderPassOptions { WaitFenceFd = waitFence });
+        var pass = renderer.BeginBufferPass(
+            target, new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = _colorDescription });
         if (ownsFence)
         {
             _ = CloseFd(waitFence);
@@ -1305,7 +1404,7 @@ public sealed class SceneOutput : IDisposable
             var clip = PoolRegion(i + 1);
             if (!clip.IsEmpty)
             {
-                Scene.DrawEntry(renderer, pass, _renderList[i], clip, _projection);
+                Scene.DrawEntry(renderer, pass, _renderList[i], clip, _projection, this);
             }
         }
 
@@ -1563,7 +1662,8 @@ public sealed class SceneOutput : IDisposable
             }
 
             if (!entry.Transformed && !entry.Mirrored && entry.Alpha >= 1f &&
-                entry.Node is SceneBuffer { Lut: null, TextureShader: null } buffer &&
+                entry.Node is SceneBuffer { TextureShader: null } buffer &&
+                LutFor(buffer) is null &&
                 !(buffer.HasActiveBackdrop && _runsBackdropEffects) &&
                 CoversWholeNode(entry, physical) &&
                 buffer.IsOpaque &&

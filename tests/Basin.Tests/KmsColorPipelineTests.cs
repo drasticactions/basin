@@ -12,7 +12,7 @@ public sealed class KmsColorPipelineTests
     [Fact]
     public void The_srgb_to_srgb_matrix_is_identity()
     {
-        var matrix = KmsColorPipeline.GamutCtm(ImageDescription.Srgb, ImageDescription.Srgb);
+        var matrix = KmsColorPipeline.GamutCtm(ImageDescription.SdrDefault, ImageDescription.SdrDefault);
         for (var i = 0; i < 9; i++)
         {
             Assert.Equal(i % 4 == 0 ? 1.0 : 0.0, matrix[i], 6);
@@ -22,7 +22,7 @@ public sealed class KmsColorPipelineTests
     [Fact]
     public void The_gamut_matrix_maps_white_to_white()
     {
-        var matrix = KmsColorPipeline.GamutCtm(ImageDescription.Srgb, WidePanel);
+        var matrix = KmsColorPipeline.GamutCtm(ImageDescription.SdrDefault, WidePanel);
         var white = Colorimetry.Apply(matrix, [1.0, 1.0, 1.0]);
         Assert.Equal(1.0, white[0], 3);
         Assert.Equal(1.0, white[1], 3);
@@ -33,7 +33,7 @@ public sealed class KmsColorPipelineTests
     [Fact]
     public void Decode_ramps_are_monotonic_and_span_the_range()
     {
-        var ramps = KmsColorPipeline.DecodeRamps(ImageDescription.Srgb, 256);
+        var ramps = KmsColorPipeline.DecodeRamps(ImageDescription.SdrDefault, 256);
         Assert.Equal(256, ramps.Red.Length);
         Assert.Equal(0, ramps.Red[0]);
         Assert.Equal(ushort.MaxValue, ramps.Red[255]);
@@ -48,8 +48,8 @@ public sealed class KmsColorPipelineTests
     [Fact]
     public void Encode_ramps_invert_the_decode_ramps()
     {
-        var decode = KmsColorPipeline.DecodeRamps(ImageDescription.Srgb, 4096);
-        var encode = KmsColorPipeline.EncodeRamps(ImageDescription.Srgb, 4096);
+        var decode = KmsColorPipeline.DecodeRamps(ImageDescription.SdrDefault, 4096);
+        var encode = KmsColorPipeline.EncodeRamps(ImageDescription.SdrDefault, 4096);
         for (var i = 255; i < 4096; i += 64)
         {
             var linear = decode.Red[i] / (double)ushort.MaxValue;
@@ -62,8 +62,8 @@ public sealed class KmsColorPipelineTests
     public void Night_light_multipliers_scale_the_encode_ramps()
     {
         var multipliers = NightLight.Multipliers(3500);
-        var plain = KmsColorPipeline.EncodeRamps(ImageDescription.Srgb, 256);
-        var warm = KmsColorPipeline.EncodeRamps(ImageDescription.Srgb, 256, multipliers);
+        var plain = KmsColorPipeline.EncodeRamps(ImageDescription.SdrDefault, 256);
+        var warm = KmsColorPipeline.EncodeRamps(ImageDescription.SdrDefault, 256, multipliers);
         Assert.InRange(Math.Abs(warm.Red[200] - plain.Red[200]), 0, 700);
         Assert.True(warm.Blue[200] < plain.Blue[200]);
     }
@@ -84,6 +84,19 @@ public sealed class KmsColorPipelineTests
         var linear = Colorimetry.Apply(
             ctm, [EvalRamp(decode.Red, r), EvalRamp(decode.Green, g), EvalRamp(decode.Blue, b)]);
         return (EvalRamp(encode.Red, linear[0]), EvalRamp(encode.Green, linear[1]), EvalRamp(encode.Blue, linear[2]));
+    }
+
+    private static Lcms2.IccProfile Gamma22SrgbProfile()
+    {
+        var white = new Lcms2.Native.cmsCIExyY { x = 0.3127, y = 0.3290, Y = 1 };
+        var primaries = new Lcms2.Native.cmsCIExyYTRIPLE
+        {
+            Red = new Lcms2.Native.cmsCIExyY { x = 0.64, y = 0.33, Y = 1 },
+            Green = new Lcms2.Native.cmsCIExyY { x = 0.30, y = 0.60, Y = 1 },
+            Blue = new Lcms2.Native.cmsCIExyY { x = 0.15, y = 0.06, Y = 1 },
+        };
+        using var gamma = Lcms2.ToneCurve.BuildGamma(2.2);
+        return Lcms2.IccProfile.CreateRgb(white, primaries, [gamma, gamma, gamma]);
     }
 
     private static byte[] MatrixShaperProfile(double redGamma, double greenGamma, double blueGamma)
@@ -108,12 +121,12 @@ public sealed class KmsColorPipelineTests
         Assert.SkipUnless(Lcms2Support.IsAvailable, "liblcms2 ≥ 2.19 not present");
         var icc = MatrixShaperProfile(2.4, 2.2, 2.0);
         Assert.True(KmsColorPipeline.TryExtractMatrixShaper(icc, 4096, out var ctm, out var encode));
-        var decode = KmsColorPipeline.DecodeRamps(ImageDescription.Srgb, 4096);
+        var decode = KmsColorPipeline.DecodeRamps(ImageDescription.SdrDefault, 4096);
 
-        using var srgb = Lcms2.IccProfile.CreateSrgb();
+        using var source = Gamma22SrgbProfile();
         using var device = Lcms2.IccProfile.FromMemory(icc);
         using var reference = Lcms2.ColorTransform.Create(
-            srgb, Lcms2.PixelFormat.RgbFloat, device, Lcms2.PixelFormat.RgbFloat,
+            source, Lcms2.PixelFormat.RgbFloat, device, Lcms2.PixelFormat.RgbFloat,
             Lcms2.RenderingIntent.RelativeColorimetric);
 
         const int steps = 8;
@@ -179,40 +192,41 @@ public sealed class KmsColorPipelineTests
     [Fact]
     public void Hdr_and_icc_descriptions_cannot_be_expressed()
     {
-        Assert.True(KmsColorPipeline.CanExpress(ImageDescription.Srgb, WidePanel));
-        Assert.False(KmsColorPipeline.CanExpress(ImageDescription.Srgb, OutputDescriptions.Hdr10(600, 0.05)));
+        Assert.True(KmsColorPipeline.CanExpress(ImageDescription.SdrDefault, WidePanel));
+        Assert.False(KmsColorPipeline.CanExpress(ImageDescription.SdrDefault, OutputDescriptions.Hdr10(600, 0.05)));
         Assert.False(KmsColorPipeline.CanExpress(
-            ImageDescription.Srgb, ImageDescription.Srgb with { IccData = [1, 2, 3] }));
+            ImageDescription.SdrDefault, ImageDescription.SdrDefault with { IccData = [1, 2, 3] }));
     }
 
     [Fact]
     public void Edr_headroom_is_expressible_and_a_dimmer_panel_is_not()
     {
         Assert.True(KmsColorPipeline.CanExpress(
-            ImageDescription.Srgb, WidePanel with { Luminances = (0, 160, 80) }));
+            ImageDescription.SdrDefault, WidePanel with { Luminances = (0, 160, 80) }));
         Assert.False(KmsColorPipeline.CanExpress(
-            ImageDescription.Srgb, WidePanel with { Luminances = (0, 40, 80) }));
+            ImageDescription.SdrDefault, WidePanel with { Luminances = (0, 40, 80) }));
         Assert.Equal(0.5, KmsColorPipeline.HeadroomScale(
-            ImageDescription.Srgb, WidePanel with { Luminances = (0, 160, 80) }), 6);
-        Assert.Equal(1.0, KmsColorPipeline.HeadroomScale(ImageDescription.Srgb, WidePanel), 6);
+            ImageDescription.SdrDefault, WidePanel with { Luminances = (0, 160, 80) }), 6);
+        Assert.Equal(1.0, KmsColorPipeline.HeadroomScale(ImageDescription.SdrDefault, WidePanel), 6);
     }
 
     [Fact]
     public void Edr_headroom_decomposes_to_the_bake()
     {
         var description = WidePanel with { Luminances = (0, 160, 80) };
-        var decode = KmsColorPipeline.DecodeRamps(ImageDescription.Srgb, 4096);
+        var decode = KmsColorPipeline.DecodeRamps(ImageDescription.SdrDefault, 4096);
         var encode = KmsColorPipeline.EncodeRamps(description, 4096);
-        var ctm = KmsColorPipeline.GamutCtm(ImageDescription.Srgb, description);
-        var scale = KmsColorPipeline.HeadroomScale(ImageDescription.Srgb, description);
+        var ctm = KmsColorPipeline.GamutCtm(ImageDescription.SdrDefault, description);
+        var scale = KmsColorPipeline.HeadroomScale(ImageDescription.SdrDefault, description);
         for (var i = 0; i < 9; i++)
         {
             ctm[i] *= scale;
         }
 
         const int size = 9;
-        var lut = ColorLutBaker.Bake(ImageDescription.Srgb, description, size);
+        var lut = ColorLutBaker.Bake(ImageDescription.SdrDefault, description, size);
         var worst = 0.0;
+        var worstBright = 0.0;
         var index = 0;
         for (var b = 0; b < size; b++)
         {
@@ -222,14 +236,21 @@ public sealed class KmsColorPipelineTests
                 {
                     var (pr, pg, pb) = EvalPipeline(
                         decode, ctm, encode, r / (size - 1.0), g / (size - 1.0), b / (size - 1.0));
-                    worst = Math.Max(worst, Math.Abs(pr - lut.Data[index]));
-                    worst = Math.Max(worst, Math.Abs(pg - lut.Data[index + 1]));
-                    worst = Math.Max(worst, Math.Abs(pb - lut.Data[index + 2]));
+                    var error = Math.Max(
+                        Math.Abs(pr - lut.Data[index]),
+                        Math.Max(Math.Abs(pg - lut.Data[index + 1]), Math.Abs(pb - lut.Data[index + 2])));
+                    worst = Math.Max(worst, error);
+                    if (r >= 2 && g >= 2 && b >= 2)
+                    {
+                        worstBright = Math.Max(worstBright, error);
+                    }
+
                     index += 3;
                 }
             }
         }
 
-        Assert.True(worst < 1.0 / 256, $"max channel error {worst} is over 1/256");
+        Assert.True(worst < 1.0 / 128, $"max channel error {worst} is over 1/128");
+        Assert.True(worstBright < 1.0 / 256, $"max channel error away from black {worstBright} is over 1/256");
     }
 }

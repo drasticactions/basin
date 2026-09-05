@@ -25,6 +25,10 @@ public readonly record struct SceneRenderOptions
         init => _projection = value;
     }
 
+    public IColorLutTable? Luts { get; init; }
+
+    public Capabilities.ImageDescription? ColorDescription { get; init; }
+
     public int OriginX { get; init; }
 
     public int OriginY { get; init; }

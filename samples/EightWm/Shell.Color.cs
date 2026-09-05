@@ -10,9 +10,8 @@ namespace EightWm;
 internal sealed partial class Shell
 {
     private ColorManager? _color;
-    private ColorLutCache? _luts;
-    private Func<Surface, IColorLut?>? _resolveLut;
-    private int _lutCount = -1;
+    private OutputColorDriver? _outputColor;
+    private SurfaceLutDriver? _lutDriver;
 
     private void AttachColor()
     {
@@ -22,14 +21,15 @@ internal sealed partial class Shell
         }
 
         _color = color;
-        _luts = new ColorLutCache(_renderer);
-        DeclareColor();
-        color.SurfaceDescriptionChanged += (_, _) => RefreshLuts();
+        _outputColor = new OutputColorDriver(color, _colorPack.Configuration);
+        _lutDriver = new SurfaceLutDriver(_scene, color, _colorPack.Luts);
+        _lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
         color.OutputDescriptionChanged += (global, description) =>
             _seat.DescribeCursor(global.Output, description);
 
         Shells.NewToplevel += window => window.Xdg.Mapped += RefreshLuts;
         _outputs.Added += driver => DescribeOutput(ViewOf(driver));
+        _outputs.Removed += view => _outputColor.Remove(view.Global);
         _outputs.LayoutChanged += RefreshLuts;
         foreach (var view in Views)
         {
@@ -37,41 +37,7 @@ internal sealed partial class Shell
         }
     }
 
-    private ImageDescription DescriptionOf(IOutput output) => _colorPack.Configuration.DescriptionOf(output);
+    private void DescribeOutput(ShellView view) => _outputColor?.Add(view.Global, view.Output, view.SceneOutput);
 
-    private ImageDescription PrimaryDescription() =>
-        Views.Count > 0 ? DescriptionOf(Views[0].Output) : ImageDescription.Srgb;
-
-    private void DeclareColor()
-    {
-        if (_color is { } color)
-        {
-            SurfaceLutDriver.Declare(color, Views.Select(v => DescriptionOf(v.Output)));
-        }
-    }
-
-    private void DescribeOutput(ShellView view)
-    {
-        _color?.SetOutputDescription(view.Global, DescriptionOf(view.Output));
-        DeclareColor();
-        RefreshLuts();
-    }
-
-    private void RefreshLuts()
-    {
-        if (_color is not { } color || _luts is not { } luts)
-        {
-            return;
-        }
-
-        _resolveLut ??= surface => luts.LutFor(color.DescriptionOf(surface), PrimaryDescription());
-        var attached = _scene.AttachLuts(_resolveLut);
-        if (attached == _lutCount)
-        {
-            return;
-        }
-
-        _lutCount = attached;
-        BasinReport.Line($"COLOR luts={attached}");
-    }
+    private void RefreshLuts() => _lutDriver?.Refresh();
 }

@@ -18,17 +18,16 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
-    private readonly Basin.Color.ColorLutCache _luts;
-    private Basin.Desktop.SurfaceLutDriver _lutDriver = null!;
+    private Basin.Desktop.OutputColorDriver? _outputColor;
+    private Basin.Desktop.SurfaceLutDriver? _lutDriver;
 
-    private Basin.Capabilities.ImageDescription BlendDescription() =>
-        Views.Count == 0 || Views[0].KmsColorRouted
-            ? Basin.Capabilities.ImageDescription.Srgb
-            : Views[0].ColorDescription;
+    private void SyncBlendSpace(OutputView view) =>
+        _outputColor?.SetBlendSpace(
+            view.Global, view.KmsColorRouted ? Basin.Capabilities.ImageDescription.SdrDefault : null);
 
     private void RefreshSurfaceLuts()
     {
-        _lutDriver.Refresh();
+        _lutDriver?.Refresh();
         UpdateEdrDemand();
     }
 

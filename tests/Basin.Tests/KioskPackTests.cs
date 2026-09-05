@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Desktop;
 using Basin.Diagnostics;
 using Wayland.Server;
@@ -81,13 +82,15 @@ public sealed class KioskPackTests
     }
 
     [Fact]
-    public void KioskPack_installs_and_freezes_with_a_layout_alone()
+    public void KioskPack_installs_and_freezes_with_a_layout_and_a_resolver()
     {
         CompositorTestHost.SkipWithoutWaylandClient();
         BasinCounters.Reset();
         using var display = WlServerDisplay.Create();
         var loop = new WaylandEventLoop(display);
-        using (var services = new BasinServices(display, loop).Use(new OutputLayout()))
+        using (var services = new BasinServices(display, loop)
+            .Use(new OutputLayout())
+            .Use<IColorTransformResolver>(new NoColorTransforms()))
         {
             services.Install(KioskPack.Default);
             services.Freeze();
@@ -96,5 +99,12 @@ public sealed class KioskPackTests
 
         Assert.SkipWhen(!BasinCounters.Enabled, "lifetime tracking is compiled out in this configuration");
         Assert.Equal(0, BasinCounters.LiveObjects);
+    }
+
+    private sealed class NoColorTransforms : IColorTransformResolver
+    {
+        public ColorTransformCapability Capability => ColorTransformCapability.None;
+
+        public IColorLut? Resolve(ImageDescription source, ImageDescription output) => null;
     }
 }

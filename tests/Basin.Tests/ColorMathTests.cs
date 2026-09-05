@@ -8,7 +8,7 @@ namespace Basin.Tests;
 
 public sealed class ColorMathTests
 {
-    private static readonly ImageDescription SrgbDescription = ImageDescription.Srgb;
+    private static readonly ImageDescription SrgbDescription = ImageDescription.SdrDefault;
 
     private static readonly ImageDescription PqDescription = new()
     {
@@ -141,6 +141,22 @@ public sealed class ColorMathTests
     }
 
     [Fact]
+    public void A_gamma22_surface_on_a_default_output_needs_no_lut()
+    {
+        var gamma22 = new ImageDescription
+        {
+            PrimariesNamed = ColorPrimaries.Srgb,
+            TransferNamed = ColorTransferFunction.Gamma22,
+        };
+        var compound = gamma22 with { TransferNamed = ColorTransferFunction.CompoundPower24 };
+
+        Assert.Equal(ColorTransferFunction.Gamma22, ImageDescription.SdrDefault.TransferNamed);
+        Assert.True(ColorLutBaker.IsIdentity(gamma22, ImageDescription.SdrDefault));
+        Assert.False(ColorLutBaker.IsIdentity(compound, ImageDescription.SdrDefault));
+        Assert.True(ColorLutBaker.IsIdentity(gamma22, OutputDescriptions.Sdr(null)));
+    }
+
+    [Fact]
     public void Srgb_to_srgb_lut_is_identity()
     {
         Assert.True(ColorLutBaker.IsIdentity(SrgbDescription, SrgbDescription));
@@ -201,7 +217,8 @@ public sealed class ColorMathTests
             icc = srgb.SaveToArray();
         }
 
-        var lut = ColorLutBaker.BakeFromIcc(icc, SrgbDescription, 9);
+        var compound = SrgbDescription with { TransferNamed = ColorTransferFunction.CompoundPower24 };
+        var lut = ColorLutBaker.BakeFromIcc(icc, compound, 9);
         Assert.NotNull(lut);
         var n = lut.Size;
         for (var i = 0; i < n; i++)
@@ -221,8 +238,8 @@ public sealed class ColorMathTests
         var sdr = OutputDescriptions.Sdr(chroma);
         Assert.NotNull(sdr.PrimariesCustom);
         Assert.Equal(680000, sdr.PrimariesCustom!.Value.Rx);
-        Assert.Equal(ColorTransferFunction.Srgb, sdr.TransferNamed);
-        Assert.Same(ImageDescription.Srgb, OutputDescriptions.Sdr(null));
+        Assert.Equal(ColorTransferFunction.Gamma22, sdr.TransferNamed);
+        Assert.Same(ImageDescription.SdrDefault, OutputDescriptions.Sdr(null));
 
         var hdr = OutputDescriptions.Hdr10(496.7, 0.0001);
         Assert.Equal(ColorPrimaries.Bt2020, hdr.PrimariesNamed);

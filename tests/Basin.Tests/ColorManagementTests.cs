@@ -24,6 +24,36 @@ public sealed class ColorManagementTests
         return color!;
     }
 
+    private static ColorManager HdrManager(CompositorTestHost host)
+    {
+        var manager = new ColorManager(host.Display, host.Compositor) { Resolver = new LutResolver() };
+        manager.SetOutputDescription(host.OutputGlobal, Basin.Color.OutputDescriptions.Hdr10(1000, 0));
+        return manager;
+    }
+
+    private sealed class LutResolver(ColorTransformCapability capability = ColorTransformCapability.Lut3D)
+        : IColorTransformResolver
+    {
+        public ColorTransformCapability Capability => capability;
+
+        public IColorLut? Resolve(ImageDescription source, ImageDescription output) => null;
+    }
+
+    private static (List<uint> Tfs, List<uint> Primaries) Advertised(CompositorTestHost host, uint version)
+    {
+        var proxy = Bind(host, version);
+        var tfs = new List<uint>();
+        var primaries = new List<uint>();
+        var done = false;
+        proxy.SupportedTfNamed += (_, e) => tfs.Add((uint)e.Tf);
+        proxy.SupportedPrimariesNamed += (_, e) => primaries.Add((uint)e.Primaries);
+        proxy.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+        proxy.Dispose();
+        host.PumpToServer();
+        return (tfs, primaries);
+    }
+
     private static WpImageDescriptionV1 HdrDescription(WpColorManagerV1 proxy)
     {
         var creator = proxy.CreateParametricCreator();
@@ -37,7 +67,7 @@ public sealed class ColorManagementTests
     public void A_client_at_two_gets_ready2_and_its_low_half_is_what_version_one_was_told()
     {
         using var host = new CompositorTestHost();
-        using var manager = new ColorManager(host.Display, host.Compositor);
+        using var manager = HdrManager(host);
 
         var second = Bind(host, 2);
         var atTwo = HdrDescription(second);
@@ -87,7 +117,7 @@ public sealed class ColorManagementTests
     public void Version_two_advertises_the_compound_curve_and_the_unadapted_intent()
     {
         using var host = new CompositorTestHost();
-        using var manager = new ColorManager(host.Display, host.Compositor);
+        using var manager = new ColorManager(host.Display, host.Compositor) { Resolver = new LutResolver() };
 
         var proxy = Bind(host, 2);
         var tfs = new List<uint>();
@@ -100,7 +130,8 @@ public sealed class ColorManagementTests
 
         Assert.Contains((uint)ColorTransferFunction.CompoundPower24, tfs);
         Assert.Contains((uint)ColorRenderIntent.AbsoluteNoAdaptation, intents);
-        Assert.Contains((uint)ColorTransferFunction.Srgb, tfs);
+        Assert.DoesNotContain((uint)ColorTransferFunction.Srgb, tfs);
+        Assert.DoesNotContain((uint)ColorTransferFunction.ExtSrgb, tfs);
 
         proxy.Dispose();
         host.PumpToServer();
@@ -123,6 +154,31 @@ public sealed class ColorManagementTests
 
         Assert.DoesNotContain((uint)ColorTransferFunction.CompoundPower24, tfs);
         Assert.DoesNotContain((uint)ColorRenderIntent.AbsoluteNoAdaptation, intents);
+
+        proxy.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
+    public void Version_one_is_still_told_about_the_deprecated_curve()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new ColorManager(host.Display, host.Compositor)
+        {
+            SupportedTransferFunctions =
+                [ColorTransferFunction.Srgb, ColorTransferFunction.ExtSrgb, ColorTransferFunction.Gamma22],
+        };
+
+        var proxy = Bind(host, 1);
+        var tfs = new List<uint>();
+        var done = false;
+        proxy.SupportedTfNamed += (_, e) => tfs.Add((uint)e.Tf);
+        proxy.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+
+        Assert.Equal(
+            [(uint)ColorTransferFunction.Srgb, (uint)ColorTransferFunction.ExtSrgb, (uint)ColorTransferFunction.Gamma22],
+            tfs);
 
         proxy.Dispose();
         host.PumpToServer();
@@ -175,7 +231,7 @@ public sealed class ColorManagementTests
     public void Parametric_description_flows_to_the_surface()
     {
         using var host = new CompositorTestHost();
-        using var manager = new ColorManager(host.Display, host.Compositor);
+        using var manager = HdrManager(host);
         var window = MappedToplevel.Map(host, host.Client);
         var proxy = Bind(host);
 
@@ -232,7 +288,7 @@ public sealed class ColorManagementTests
         colorSurface.SetImageDescription(description, WpColorManagerV1.RenderIntent.Perceptual);
         host.PumpToServer();
         Assert.Empty(changes);
-        Assert.Same(ImageDescription.Srgb, manager.DescriptionOf(window.ServerSurface));
+        Assert.Same(ImageDescription.SdrDefault, manager.DescriptionOf(window.ServerSurface));
 
         window.Surface.Commit();
         host.PumpUntil(() => changes.Count == 1);
@@ -245,7 +301,7 @@ public sealed class ColorManagementTests
         window.Surface.Commit();
         host.PumpUntil(() => changes.Count == 2);
         Assert.Null(changes[1]);
-        Assert.Same(ImageDescription.Srgb, manager.DescriptionOf(window.ServerSurface));
+        Assert.Same(ImageDescription.SdrDefault, manager.DescriptionOf(window.ServerSurface));
 
         var feedback = proxy.GetSurfaceFeedback(window.Surface);
         var preferredChanges = 0;
@@ -270,7 +326,7 @@ public sealed class ColorManagementTests
     public void Replacing_the_surface_object_between_commits_never_drops_the_description()
     {
         using var host = new CompositorTestHost();
-        using var manager = new ColorManager(host.Display, host.Compositor);
+        using var manager = HdrManager(host);
         var window = MappedToplevel.Map(host, host.Client);
         var proxy = Bind(host);
 
@@ -305,7 +361,7 @@ public sealed class ColorManagementTests
         window.Surface.Commit();
         host.PumpUntil(() => changes.Count == 2);
         Assert.Null(changes[1]);
-        Assert.Same(ImageDescription.Srgb, manager.DescriptionOf(window.ServerSurface));
+        Assert.Same(ImageDescription.SdrDefault, manager.DescriptionOf(window.ServerSurface));
     }
 
     [Fact]
@@ -318,6 +374,72 @@ public sealed class ColorManagementTests
         var creator = proxy.CreateParametricCreator();
         creator.SetPrimariesNamed((WpColorManagerV1.Primaries)ColorPrimaries.Srgb);
         _ = creator.Create();
+        Assert.ThrowsAny<WaylandException>(() =>
+        {
+            for (var i = 0; i < 10; i++)
+            {
+                host.PumpToServer();
+                host.PumpToClient();
+            }
+        });
+    }
+
+    [Fact]
+    public void The_advertised_set_is_the_floor_and_follows_the_outputs()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new ColorManager(host.Display, host.Compositor) { Resolver = new LutResolver() };
+
+        var (tfs, primaries) = Advertised(host, 2);
+        Assert.Equal(
+            [(uint)ColorTransferFunction.CompoundPower24, (uint)ColorTransferFunction.Gamma22, (uint)ColorTransferFunction.ExtLinear],
+            tfs);
+        Assert.Equal([(uint)ColorPrimaries.Srgb], primaries);
+
+        manager.SetOutputDescription(host.OutputGlobal, Basin.Color.OutputDescriptions.Hdr10(1000, 0));
+        (tfs, primaries) = Advertised(host, 2);
+        Assert.Contains((uint)ColorTransferFunction.St2084Pq, tfs);
+        Assert.Contains((uint)ColorPrimaries.Bt2020, primaries);
+        Assert.DoesNotContain((uint)ColorTransferFunction.Hlg, tfs);
+
+        manager.RemoveOutputDescription(host.OutputGlobal);
+        (tfs, primaries) = Advertised(host, 2);
+        Assert.DoesNotContain((uint)ColorTransferFunction.St2084Pq, tfs);
+        Assert.DoesNotContain((uint)ColorPrimaries.Bt2020, primaries);
+
+        (tfs, _) = Advertised(host, 1);
+        Assert.Equal([(uint)ColorTransferFunction.Srgb, (uint)ColorTransferFunction.Gamma22, (uint)ColorTransferFunction.ExtLinear], tfs);
+    }
+
+    [Fact]
+    public void A_manager_that_cannot_convert_offers_only_what_its_outputs_present()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new ColorManager(host.Display, host.Compositor)
+        {
+            Resolver = new LutResolver(ColorTransformCapability.None),
+        };
+
+        var (tfs, primaries) = Advertised(host, 2);
+        Assert.Equal([(uint)ColorTransferFunction.Gamma22], tfs);
+        Assert.Equal([(uint)ColorPrimaries.Srgb], primaries);
+
+        manager.SetOutputDescription(host.OutputGlobal, Basin.Color.OutputDescriptions.Hdr10(1000, 0));
+        (tfs, primaries) = Advertised(host, 2);
+        Assert.Equal([(uint)ColorTransferFunction.Gamma22, (uint)ColorTransferFunction.St2084Pq], tfs);
+        Assert.Equal([(uint)ColorPrimaries.Srgb, (uint)ColorPrimaries.Bt2020], primaries);
+    }
+
+    [Fact]
+    public void A_deprecated_transfer_function_is_an_error_at_version_two()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new ColorManager(host.Display, host.Compositor) { Resolver = new LutResolver() };
+        var proxy = Bind(host, 2);
+
+        var creator = proxy.CreateParametricCreator();
+        creator.SetPrimariesNamed((WpColorManagerV1.Primaries)ColorPrimaries.Srgb);
+        creator.SetTfNamed((WpColorManagerV1.TransferFunction)ColorTransferFunction.Srgb);
         Assert.ThrowsAny<WaylandException>(() =>
         {
             for (var i = 0; i < 10; i++)
@@ -347,7 +469,7 @@ public sealed class ColorManagementTests
         proxy.Done += (_, _) => done = true;
         host.PumpUntil(() => done);
 
-        Assert.Equal([(uint)ColorTransferFunction.Srgb, (uint)ColorTransferFunction.Gamma22], tfs);
+        Assert.Equal([(uint)ColorTransferFunction.Gamma22], tfs);
         Assert.Equal([(uint)ColorPrimaries.Srgb], primaries);
         Assert.DoesNotContain((uint)ColorTransferFunction.St2084Pq, tfs);
 
@@ -364,7 +486,7 @@ public sealed class ColorManagementTests
             SupportedTransferFunctions = [ColorTransferFunction.Srgb],
             SupportedPrimaries = [ColorPrimaries.Srgb],
         };
-        var proxy = Bind(host);
+        var proxy = Bind(host, 1);
 
         var creator = proxy.CreateParametricCreator();
         creator.SetPrimariesNamed((WpColorManagerV1.Primaries)ColorPrimaries.Srgb);

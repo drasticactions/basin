@@ -339,7 +339,8 @@ public sealed partial class Scene
 
         var waitFence = GatherAcquireFences(_renderList, out var ownsFence);
 
-        var pass = renderer.BeginBufferPass(target, new RenderPassOptions { WaitFenceFd = waitFence });
+        var pass = renderer.BeginBufferPass(
+            target, new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = options.ColorDescription });
         if (ownsFence)
         {
             RenderFences.CloseFence(waitFence);
@@ -349,7 +350,7 @@ public sealed partial class Scene
 
         for (var i = 0; i < _renderList.Count; i++)
         {
-            DrawEntry(renderer, pass, _renderList[i], clip: null, projection);
+            DrawEntry(renderer, pass, _renderList[i], clip: null, projection, options.Luts);
         }
 
         return pass.Submit();
@@ -357,7 +358,7 @@ public sealed partial class Scene
 
     internal bool RenderSubtrees(
         IRenderer renderer, SceneNode? content, SceneNode? popups, Box? popupClip, IBuffer target,
-        int originX, int originY, double scale, RenderColor background)
+        int originX, int originY, double scale, RenderColor background, IColorLutTable? luts)
     {
         var list = RentList();
         try
@@ -394,7 +395,7 @@ public sealed partial class Scene
             var projection = new OutputProjection(scale);
             for (var i = 0; i < list.Count; i++)
             {
-                DrawEntry(renderer, pass, list[i], clip: null, projection);
+                DrawEntry(renderer, pass, list[i], clip: null, projection, luts);
             }
 
             return pass.Submit();
@@ -482,7 +483,7 @@ public sealed partial class Scene
             var projection = new OutputProjection(scale);
             for (var i = 0; i < list.Count; i++)
             {
-                DrawEntry(renderer, pass, list[i], clip: null, projection, 0, 0, backdrops: false);
+                DrawEntry(renderer, pass, list[i], clip: null, projection, 0, 0, backdrops: false, luts: null);
             }
 
             return pass.Submit();
@@ -579,16 +580,19 @@ public sealed partial class Scene
         return fence;
     }
 
-    internal static void DrawEntry(IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection) =>
-        DrawEntry(renderer, pass, entry, clip, projection, 0, 0);
+    internal static void DrawEntry(
+        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection,
+        IColorLutTable? luts) =>
+        DrawEntry(renderer, pass, entry, clip, projection, 0, 0, luts);
 
     internal static void DrawEntry(
-        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY) =>
-        DrawEntry(renderer, pass, entry, clip, projection, offsetX, offsetY, backdrops: true);
+        IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY,
+        IColorLutTable? luts) =>
+        DrawEntry(renderer, pass, entry, clip, projection, offsetX, offsetY, backdrops: true, luts);
 
     private static void DrawEntry(
         IRenderer renderer, IRenderPass pass, in RenderEntry entry, PixmanRegion32? clip, in OutputProjection projection, int offsetX, int offsetY,
-        bool backdrops)
+        bool backdrops, IColorLutTable? luts)
     {
         var scale = projection.Scale;
         if (entry.Clip is { } clipBox)
@@ -624,7 +628,7 @@ public sealed partial class Scene
                 break;
 
             case SceneTransform { Deformer: not null } deformed:
-                DrawDeformed(renderer, pass, deformed, entry, clip, projection, offsetX, offsetY, backdrops);
+                DrawDeformed(renderer, pass, deformed, entry, clip, projection, offsetX, offsetY, backdrops, luts);
                 break;
 
             case SceneRect rect:
@@ -672,7 +676,8 @@ public sealed partial class Scene
                             Transform = matrix,
                             Alpha = entry.Alpha,
                             Clip = clip,
-                            Lut = buffer.Lut,
+                            Lut = luts?.LutFor(buffer),
+                            ColorDescription = buffer.ColorDescription,
                             Shader = buffer.TextureShader,
                             Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
                         });
@@ -686,7 +691,8 @@ public sealed partial class Scene
                             Transform = projection.MapsPixels ? projection.Matrix : RenderTransform.Identity,
                             Alpha = entry.Alpha,
                             Clip = clip,
-                            Lut = buffer.Lut,
+                            Lut = luts?.LutFor(buffer),
+                            ColorDescription = buffer.ColorDescription,
                             Shader = buffer.TextureShader,
                             Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
                         });
@@ -758,7 +764,7 @@ public sealed partial class Scene
 
     private static void DrawDeformed(
         IRenderer renderer, IRenderPass pass, SceneTransform node, in RenderEntry entry, PixmanRegion32? clip,
-        in OutputProjection projection, int offsetX, int offsetY, bool backdrops)
+        in OutputProjection projection, int offsetX, int offsetY, bool backdrops, IColorLutTable? luts)
     {
         if (node.Deformer is not { } deformer)
         {

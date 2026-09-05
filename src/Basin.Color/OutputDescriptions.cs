@@ -9,7 +9,7 @@ public static class OutputDescriptions
     {
         if (chromaticities is not { } c)
         {
-            return ImageDescription.Srgb;
+            return ImageDescription.SdrDefault;
         }
 
         return new ImageDescription
@@ -19,7 +19,7 @@ public static class OutputDescriptions
                 (int)(c.Gx * 1e6), (int)(c.Gy * 1e6),
                 (int)(c.Bx * 1e6), (int)(c.By * 1e6),
                 (int)(c.Wx * 1e6), (int)(c.Wy * 1e6)),
-            TransferNamed = ColorTransferFunction.Srgb,
+            TransferNamed = ColorTransferFunction.Gamma22,
         };
     }
 

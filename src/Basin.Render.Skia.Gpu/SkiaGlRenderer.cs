@@ -1,3 +1,4 @@
+using Basin.Render.Skia;
 using System.Runtime.InteropServices;
 using Basin.Diagnostics;
 using Basin.Render.Gl;
@@ -62,7 +63,9 @@ public sealed class SkiaGlRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
-    public ColorTransformCapability ColorTransform => ColorTransformCapability.Lut3D;
+    public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
+
+    internal SkiaColorTransforms ColorTransforms { get; } = new();
 
     public bool WaitsOnGpu => _device.WaitsOnGpu;
 
@@ -126,7 +129,7 @@ public sealed class SkiaGlRenderer : IRenderer
         DirtyGlStateForDebug();
 
         _context.ResetContext(uint.MaxValue);
-        _pass.Begin(target, entry, options.SignalFenceFd);
+        _pass.Begin(target, entry, options.SignalFenceFd, options.ColorDescription);
         return _pass;
     }
 
@@ -165,6 +168,7 @@ public sealed class SkiaGlRenderer : IRenderer
     {
         _thread.Assert();
         DropTargets();
+        ColorTransforms.Dispose();
         RenderFences.CloseFence(_completionFence);
         _completionFence = -1;
         SkiaCensus.Release(_paint);

@@ -14,6 +14,11 @@ internal sealed class PixmanTexture : ITexture
         Width = buffer.Width;
         Height = buffer.Height;
         buffer.Destroyed += DropImage;
+        if (buffer.BeginDataAccess(BufferDataAccess.Read, out var view))
+        {
+            EnsureImage(in view);
+            buffer.EndDataAccess();
+        }
     }
 
     public int Width { get; }
@@ -45,15 +50,7 @@ internal sealed class PixmanTexture : ITexture
             return false;
         }
 
-        if (_image is null || _imageData != view.Data)
-        {
-            _image?.Dispose();
-            _image = PixmanImage.CreateBits(
-                PixmanRenderer.ToPixmanFormat(view.Format), Width, Height, view.Data, view.Stride);
-            _imageData = view.Data;
-        }
-
-        image = _image;
+        image = EnsureImage(in view);
         return true;
     }
 
@@ -63,6 +60,19 @@ internal sealed class PixmanTexture : ITexture
     {
         _buffer.Destroyed -= DropImage;
         DropImage();
+    }
+
+    private PixmanImage EnsureImage(in BufferDataView view)
+    {
+        if (_image is null || _imageData != view.Data)
+        {
+            _image?.Dispose();
+            _image = PixmanImage.CreateBits(
+                PixmanRenderer.ToPixmanFormat(view.Format), Width, Height, view.Data, view.Stride);
+            _imageData = view.Data;
+        }
+
+        return _image;
     }
 
     private void DropImage()

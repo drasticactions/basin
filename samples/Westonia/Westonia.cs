@@ -102,7 +102,7 @@ internal sealed partial class Westonia : IDisposable
                 SocketFd = options.SocketFd,
             });
 
-        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
         var capturePack = servicePack.Capture;
         var cursorTheme = servicePack.CursorTheme;
@@ -167,6 +167,7 @@ internal sealed partial class Westonia : IDisposable
         _outputs.Removed += OnOutputRemoved;
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
         _outputs.Added += DescribeOutput;
+        _outputs.Removed += ForgetOutput;
         _outputs.Removed += view => _cursor.RemoveOutput(view.Output);
         _outputs.LayoutChanged += PlaceShell;
         _outputs.BeforeRepaint += view =>
@@ -530,7 +531,7 @@ internal sealed partial class Westonia : IDisposable
 
     public void Dispose()
     {
-        _luts?.Dispose();
+        _colorPack?.Luts.Dispose();
         foreach (var process in _spawned)
         {
             BasinDiagnostics.StopClient(process);

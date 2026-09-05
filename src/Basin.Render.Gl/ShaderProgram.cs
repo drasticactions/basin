@@ -16,6 +16,12 @@ internal sealed class ShaderProgram
     public readonly int Transform;
     public readonly int HasTexture;
     public readonly int Size;
+    public readonly int M0;
+    public readonly int M1;
+    public readonly int M2;
+    public readonly int Source;
+    public readonly int Output;
+    public readonly int Tone;
 
     public ShaderProgram(GL gl, string vertexSource, string fragmentSource)
     {
@@ -52,6 +58,12 @@ internal sealed class ShaderProgram
         Transform = gl.GetUniformLocation(Program, "u_transform");
         HasTexture = gl.GetUniformLocation(Program, "u_hasTexture");
         Size = gl.GetUniformLocation(Program, "u_size");
+        M0 = gl.GetUniformLocation(Program, "u_m0");
+        M1 = gl.GetUniformLocation(Program, "u_m1");
+        M2 = gl.GetUniformLocation(Program, "u_m2");
+        Source = gl.GetUniformLocation(Program, "u_source");
+        Output = gl.GetUniformLocation(Program, "u_output");
+        Tone = gl.GetUniformLocation(Program, "u_tone");
     }
 
     public void Dispose(GL gl) => gl.DeleteProgram(Program);

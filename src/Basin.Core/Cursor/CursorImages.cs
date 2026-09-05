@@ -175,7 +175,7 @@ public sealed class CursorImages : IDisposable
             Size = size,
             Theme = XcursorTheme.Load(ThemeName, size) ?? _current?.Theme,
             Lut = key.Output is { } output && ColorProfiles is { } profiles
-                ? profiles.BuildLut(ImageDescription.Srgb, output)
+                ? profiles.BuildLut(ImageDescription.SdrDefault, output)
                 : null,
         };
 

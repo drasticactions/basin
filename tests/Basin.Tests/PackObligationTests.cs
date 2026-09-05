@@ -168,10 +168,12 @@ public sealed class PackObligationTests
     public void The_whole_desktop_pack_has_every_obligation_a_host_registry_meets()
     {
         using var host = new CompositorTestHost();
+        using var luts = new Basin.Color.ColorLutCache(host.Renderer);
         using var services = Registry(host)
             .Use<IFrameClock>(new FrameClock())
             .Use<IActivationTokens>(new DefaultActivationTokens())
             .Use<IBell>(SilentBell.Instance)
+            .Use<IColorTransformResolver>(luts)
             .Install(DesktopPack.Desktop)
             .Freeze();
 

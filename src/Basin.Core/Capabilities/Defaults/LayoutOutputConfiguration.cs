@@ -231,11 +231,6 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
             current = current with { MaxBitsPerColor = maxBpc };
         }
 
-        if (entry.VrrPolicy is { } vrrPolicy)
-        {
-            current = current with { VrrPolicy = vrrPolicy };
-        }
-
         if (entry.CustomModes is { } customModes)
         {
             current = current with { CustomModes = customModes };
@@ -348,11 +343,6 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         if (entry.AdaptiveSync is { } adaptiveSync)
         {
             state.SetAdaptiveSync(adaptiveSync);
-        }
-
-        if (entry.VrrPolicy is { } vrrPolicy)
-        {
-            state.SetAdaptiveSync(vrrPolicy == OutputVrrPolicy.Always);
         }
 
         if (entry.Overscan is { } overscan)

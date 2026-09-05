@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Color/Basin.Color.csproj" />
     <ProjectReference Include="../Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
     <PackageReference Include="Silk.NET.Vulkan" />
     <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" />
@@ -17,6 +18,7 @@
     <EmbeddedResource Include="shaders/solid.frag.spv" LogicalName="solid.frag.spv" />
     <EmbeddedResource Include="shaders/texture.frag.spv" LogicalName="texture.frag.spv" />
     <EmbeddedResource Include="shaders/texture_lut.frag.spv" LogicalName="texture_lut.frag.spv" />
+    <EmbeddedResource Include="shaders/texture_color.frag.spv" LogicalName="texture_color.frag.spv" />
     <EmbeddedResource Include="shaders/output.frag.spv" LogicalName="output.frag.spv" />
     <EmbeddedResource Include="shaders/mesh.vert.spv" LogicalName="mesh.vert.spv" />
     <EmbeddedResource Include="shaders/mesh.frag.spv" LogicalName="mesh.frag.spv" />

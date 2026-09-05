@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Pixman;
 using static Basin.Scene.SceneLog;
@@ -101,18 +102,21 @@ public sealed class SceneBuffer : SceneNode
         DamageSubtree();
     }
 
-    private IColorLut? _lut;
+    private ImageDescription? _colorDescription;
 
-    public IColorLut? Lut
+    public ImageDescription? ColorDescription
     {
-        get => _lut;
+        get => _colorDescription;
         set
         {
-            if (!ReferenceEquals(_lut, value))
+            if (ReferenceEquals(_colorDescription, value))
             {
-                _lut = value;
-                DamageSubtree();
+                return;
             }
+
+            _colorDescription = value;
+            RootOwner()?.NotifyColorDescription(this);
+            DamageSubtree();
         }
     }
 

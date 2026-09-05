@@ -22,5 +22,7 @@ public readonly record struct TextureRenderOptions
 
     public IColorLut? Lut { get; init; } = null;
 
+    public Capabilities.ImageDescription? ColorDescription { get; init; } = null;
+
     public IPixelShader? Shader { get; init; } = null;
 }

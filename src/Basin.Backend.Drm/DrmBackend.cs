@@ -344,7 +344,7 @@ public sealed class DrmBackend : IDisposable
             return;
         }
 
-        LiftoffLog.Priority = LiftoffLogPriority.Debug;
+        LiftoffLog.Priority = Log.IsEnabled(BasinLogLevel.Debug) ? LiftoffLogPriority.Debug : LiftoffLogPriority.Error;
         LiftoffLog.SetHandler(static (priority, message) =>
         {
             if (priority == LiftoffLogPriority.Error)

@@ -20,17 +20,7 @@ public static class ColorLutBaker
         int size = DefaultSize,
         ColorRenderIntent intent = ColorRenderIntent.Perceptual)
     {
-        var sourceTc = TransferCharacteristics.From(source);
-        var outputTc = TransferCharacteristics.From(output);
-        var matrix = Colorimetry.GamutMatrix(
-            Chromaticities.From(source),
-            Chromaticities.From(output),
-            adaptWhite: intent != ColorRenderIntent.AbsoluteNoAdaptation);
-
-        var anchor = outputTc.ReferenceLuminance / sourceTc.ReferenceLuminance;
-        var peak = sourceTc.MaxLuminance * anchor;
-        var mapTones = peak > outputTc.MaxLuminance * 1.001;
-
+        var parameters = ColorTransformParameters.From(source, output, intent);
         var data = new float[size * size * size * 3];
         var index = 0;
         Span<double> rgb = stackalloc double[3];
@@ -40,18 +30,13 @@ public static class ColorLutBaker
             {
                 for (var r = 0; r < size; r++)
                 {
-                    rgb[0] = sourceTc.Decode(r / (double)(size - 1)) * anchor;
-                    rgb[1] = sourceTc.Decode(g / (double)(size - 1)) * anchor;
-                    rgb[2] = sourceTc.Decode(b / (double)(size - 1)) * anchor;
-                    Convert(rgb, matrix);
-                    if (mapTones)
-                    {
-                        ToneMap(rgb, peak, outputTc.MaxLuminance);
-                    }
-
-                    data[index++] = (float)outputTc.Encode(rgb[0]);
-                    data[index++] = (float)outputTc.Encode(rgb[1]);
-                    data[index++] = (float)outputTc.Encode(rgb[2]);
+                    rgb[0] = r / (double)(size - 1);
+                    rgb[1] = g / (double)(size - 1);
+                    rgb[2] = b / (double)(size - 1);
+                    parameters.Apply(rgb);
+                    data[index++] = (float)rgb[0];
+                    data[index++] = (float)rgb[1];
+                    data[index++] = (float)rgb[2];
                 }
             }
         }
@@ -131,49 +116,5 @@ public static class ColorLutBaker
         };
         using var gamma = ToneCurve.BuildGamma(1.0);
         return IccProfile.CreateRgb(white, primaries, [gamma, gamma, gamma]);
-    }
-
-    private static void Convert(Span<double> rgb, double[] matrix)
-    {
-        var r = matrix[0] * rgb[0] + matrix[1] * rgb[1] + matrix[2] * rgb[2];
-        var g = matrix[3] * rgb[0] + matrix[4] * rgb[1] + matrix[5] * rgb[2];
-        var b = matrix[6] * rgb[0] + matrix[7] * rgb[1] + matrix[8] * rgb[2];
-        rgb[0] = Math.Max(0, r);
-        rgb[1] = Math.Max(0, g);
-        rgb[2] = Math.Max(0, b);
-    }
-
-    private static void ToneMap(Span<double> rgb, double sourcePeak, double outputPeak)
-    {
-        var max = Math.Max(rgb[0], Math.Max(rgb[1], rgb[2]));
-        if (max <= 0)
-        {
-            return;
-        }
-
-        var scale = Bt2390(max, sourcePeak, outputPeak) / max;
-        rgb[0] *= scale;
-        rgb[1] *= scale;
-        rgb[2] *= scale;
-    }
-
-    private static double Bt2390(double nits, double sourcePeak, double outputPeak)
-    {
-        var sourceMax = TransferCharacteristics.PqInverseEotf(sourcePeak);
-        var targetMax = TransferCharacteristics.PqInverseEotf(outputPeak) / sourceMax;
-        var e1 = Math.Min(1, TransferCharacteristics.PqInverseEotf(nits) / sourceMax);
-        var knee = Math.Max(0, 1.5 * targetMax - 0.5);
-        if (e1 <= knee)
-        {
-            return nits;
-        }
-
-        var t = (e1 - knee) / (1 - knee);
-        var t2 = t * t;
-        var t3 = t2 * t;
-        var e2 = (2 * t3 - 3 * t2 + 1) * knee
-            + (t3 - 2 * t2 + t) * (1 - knee)
-            + (-2 * t3 + 3 * t2) * targetMax;
-        return TransferCharacteristics.PqEotf(e2 * sourceMax);
     }
 }

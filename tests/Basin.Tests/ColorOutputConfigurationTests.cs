@@ -506,7 +506,7 @@ public sealed class ColorOutputConfigurationTests
     [Fact]
     public void An_extended_range_sdr_description_encodes_reference_below_full()
     {
-        var extended = ImageDescription.Srgb with { Luminances = (0, 160, 80) };
+        var extended = ImageDescription.SdrDefault with { Luminances = (0, 160, 80) };
         var characteristics = TransferCharacteristics.From(extended);
         Assert.Equal(80, characteristics.ReferenceLuminance);
         Assert.Equal(160, characteristics.MaxLuminance);
@@ -514,7 +514,7 @@ public sealed class ColorOutputConfigurationTests
         Assert.InRange(signal, 0.6, 0.9);
         Assert.Equal(1.0, characteristics.Encode(160), 3);
 
-        var plain = TransferCharacteristics.From(ImageDescription.Srgb);
+        var plain = TransferCharacteristics.From(ImageDescription.SdrDefault);
         Assert.Equal(1.0, plain.Encode(plain.ReferenceLuminance), 3);
     }
 

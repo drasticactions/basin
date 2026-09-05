@@ -415,13 +415,13 @@ public sealed class CursorImagesTests
 
         public bool TryParseIcc(ReadOnlySpan<byte> profile, out ImageDescription description)
         {
-            description = ImageDescription.Srgb;
+            description = ImageDescription.SdrDefault;
             return false;
         }
 
         public bool TryBuildParametric(ImageDescription parameters, out ImageDescription description)
         {
-            description = ImageDescription.Srgb;
+            description = ImageDescription.SdrDefault;
             return false;
         }
 
@@ -432,7 +432,7 @@ public sealed class CursorImagesTests
 
         public bool TryDescribeOutput(IOutput output, out ImageDescription description)
         {
-            description = ImageDescription.Srgb;
+            description = ImageDescription.SdrDefault;
             return false;
         }
     }

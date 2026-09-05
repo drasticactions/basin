@@ -37,12 +37,6 @@ internal static class OutputViewPolicy
             set => view.Policy.AutoLayout = value;
         }
 
-        public bool AutoVrrActive
-        {
-            get => view.Policy.AutoVrrActive;
-            set => view.Policy.AutoVrrActive = value;
-        }
-
         public bool KmsColorRouted
         {
             get => view.Policy.KmsColorRouted;

@@ -21,7 +21,7 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
 
     public bool TryParseIcc(ReadOnlySpan<byte> profile, out ImageDescription description)
     {
-        description = ImageDescription.Srgb;
+        description = ImageDescription.SdrDefault;
         if (!Lcms2Support.IsAvailable)
         {
             return false;
@@ -92,7 +92,7 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
             return true;
         }
 
-        description = ImageDescription.Srgb;
+        description = ImageDescription.SdrDefault;
         return false;
     }
 }

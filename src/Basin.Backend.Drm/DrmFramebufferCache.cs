@@ -30,10 +30,18 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
     {
         if (!_entries.TryGetValue(buffer, out var entry))
         {
-            entry = Import(buffer) ?? new Entry();
-            _entries[buffer] = entry;
-            _drop ??= DropDestroyed;
-            buffer.Destroyed += _drop;
+            Basin.Diagnostics.AllocationScope.Pause();
+            try
+            {
+                entry = Import(buffer) ?? new Entry();
+                _entries[buffer] = entry;
+                _drop ??= DropDestroyed;
+                buffer.Destroyed += _drop;
+            }
+            finally
+            {
+                Basin.Diagnostics.AllocationScope.Resume();
+            }
         }
 
         if (!opaque || entry.PlaneHandles.Length == 0 || !buffer.TryGetDmabuf(out var attributes))

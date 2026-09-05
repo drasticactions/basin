@@ -37,15 +37,7 @@ internal sealed partial class TinyComp
     private Basin.Capabilities.ImageDescription DescriptionOf(IOutput output) =>
         _colorConfiguration is { } configuration
             ? configuration.DescriptionOf(output)
-            : Basin.Capabilities.ImageDescription.Srgb;
-
-    private void DeclareColor()
-    {
-        if (_color is { } color)
-        {
-            Basin.Desktop.SurfaceLutDriver.Declare(color, Views.Select(v => DescriptionOf(v.Output)));
-        }
-    }
+            : Basin.Capabilities.ImageDescription.SdrDefault;
 
     private void ReportFallback(Basin.Renderers.RendererFallback fallback) =>
         _log.Warn($"{(fallback.Describe())}");
@@ -163,8 +155,8 @@ internal sealed partial class TinyComp
 
             view.ColorDescription = DescriptionOf(view.Output);
             view.KmsColorRouted = _colorConfiguration is { } routing && routing.RouteKmsPipeline(view.Output);
-            DeclareColor();
-            _color.SetOutputDescription(view.Global, view.ColorDescription);
+            _outputColor?.Add(view.Global, view.Output, view.Scene);
+            SyncBlendSpace(view);
             RefreshSurfaceLuts();
             if (_hdr && drmOutput.Edid.SupportsPq)
             {
@@ -178,6 +170,7 @@ internal sealed partial class TinyComp
             }
         }
 
+        _outputColor?.Add(view.Global, view.Output, view.Scene);
         if (view.Output.Scale != 1)
         {
             BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
@@ -197,6 +190,7 @@ internal sealed partial class TinyComp
         }
 
         _presenceTracker.RemoveOutput(view.Output);
+        _outputColor?.Remove(view.Global);
         _cursor.RemoveOutput(view.Output);
         DropWorkspacesOf(view);
     }
@@ -256,30 +250,10 @@ internal sealed partial class TinyComp
 
     private void OnStampFrame(OutputView view, OutputState state)
     {
-        var autoVrr = false;
-        if (_scanoutFeedbackSurface is { } scanoutSurface)
+        if (_scanoutFeedbackSurface is { } scanoutSurface && _tearing.PrefersTearing(scanoutSurface))
         {
-            if (_tearing.PrefersTearing(scanoutSurface))
-            {
-                state.SetTearing(true);
-            }
-
-            var contentType = _contentType.TypeOf(scanoutSurface);
-            if (contentType is Basin.Desktop.ContentTypeManager.ContentType.Game
-                    or Basin.Desktop.ContentTypeManager.ContentType.Video &&
-                VrrPolicyOf(view.Output) == Basin.Capabilities.OutputVrrPolicy.Automatic)
-            {
-                state.SetAdaptiveSync(true);
-                autoVrr = true;
-            }
+            state.SetTearing(true);
         }
-
-        if (!autoVrr && view.AutoVrrActive)
-        {
-            state.SetAdaptiveSync(false);
-        }
-
-        view.AutoVrrActive = autoVrr;
     }
 
     private void StepEffects(OutputView view, FrameTick tick)
@@ -544,7 +518,8 @@ internal sealed partial class TinyComp
         view.ColorDescription = description;
         view.KmsColorRouted = colorConfiguration.RouteKmsPipeline(view.Output);
         RefreshGammaBaseline(view);
-        _color.SetOutputDescription(view.Global, description);
+        _outputColor?.Refresh();
+        SyncBlendSpace(view);
         RefreshSurfaceLuts();
         view.Scheduler?.ScheduleRepaint();
     }
@@ -636,10 +611,4 @@ internal sealed partial class TinyComp
             }
         }
     }
-
-    private Basin.Capabilities.OutputVrrPolicy VrrPolicyOf(IOutput output) =>
-        _outputConfiguration is { } configuration && configuration.TryRead(output, out var state) &&
-        state.VrrPolicy is { } policy
-            ? policy
-            : Basin.Capabilities.OutputVrrPolicy.Automatic;
 }

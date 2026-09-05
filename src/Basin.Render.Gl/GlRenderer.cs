@@ -1,3 +1,5 @@
+using Basin.Capabilities;
+using Basin.Color;
 using Silk.NET.OpenGLES;
 
 namespace Basin.Render.Gl;
@@ -10,6 +12,9 @@ public sealed unsafe class GlRenderer : IRenderer
 
     internal readonly ShaderProgram TextureProgram;
     internal readonly ShaderProgram TextureLutProgram;
+    internal readonly ShaderProgram TextureColorProgram;
+    private readonly Dictionary<(ImageDescription Source, ImageDescription Output), GlColorTransform?> _colorTransforms =
+        new(ImageDescriptionPairComparer.Instance);
     internal readonly ShaderProgram SolidProgram;
     internal readonly ShaderProgram MeshProgram;
     internal readonly uint MeshVbo;
@@ -20,6 +25,7 @@ public sealed unsafe class GlRenderer : IRenderer
         _device = new GlDevice(devicePath);
         TextureProgram = new ShaderProgram(_device.Gl, GlShaders.Vertex, GlShaders.TextureFragment);
         TextureLutProgram = new ShaderProgram(_device.Gl, GlShaders.Vertex, GlShaders.TextureLutFragment);
+        TextureColorProgram = new ShaderProgram(_device.Gl, GlShaders.Vertex, GlShaders.TextureColorFragment);
         SolidProgram = new ShaderProgram(_device.Gl, GlShaders.Vertex, GlShaders.SolidFragment);
         MeshProgram = new ShaderProgram(_device.Gl, GlShaders.MeshVertex, GlShaders.MeshFragment);
         MeshVbo = _device.Gl.GenBuffer();
@@ -53,7 +59,37 @@ public sealed unsafe class GlRenderer : IRenderer
 
     internal GL Gl => _device.Gl;
 
-    public ColorTransformCapability ColorTransform => ColorTransformCapability.Lut3D;
+    public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
+
+    internal GlColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)
+    {
+        source ??= ImageDescription.SdrDefault;
+        output ??= ImageDescription.SdrDefault;
+        if (ReferenceEquals(source, output))
+        {
+            return null;
+        }
+
+        var key = (source, output);
+        if (_colorTransforms.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        Basin.Diagnostics.AllocationScope.Pause();
+        try
+        {
+            var transform = source.IccData is null && !ColorLutBaker.IsIdentity(source, output)
+                ? new GlColorTransform(ColorTransformParameters.From(source, output))
+                : null;
+            _colorTransforms[key] = transform;
+            return transform;
+        }
+        finally
+        {
+            Basin.Diagnostics.AllocationScope.Resume();
+        }
+    }
 
     public bool SupportsBackdropEffects => true;
 
@@ -143,7 +179,7 @@ public sealed unsafe class GlRenderer : IRenderer
 
         _device.FenceWait.Wait(options.WaitFenceFd);
 
-        _pass.Begin(target, entry, options.SignalFenceFd);
+        _pass.Begin(target, entry, options.SignalFenceFd, options.ColorDescription);
         return _pass;
     }
 
@@ -174,6 +210,8 @@ public sealed unsafe class GlRenderer : IRenderer
         _pass.DisposeResources();
         TextureProgram.Dispose(_device.Gl);
         TextureLutProgram.Dispose(_device.Gl);
+        TextureColorProgram.Dispose(_device.Gl);
+        _colorTransforms.Clear();
         SolidProgram.Dispose(_device.Gl);
         MeshProgram.Dispose(_device.Gl);
         _device.Gl.DeleteBuffer(MeshVbo);

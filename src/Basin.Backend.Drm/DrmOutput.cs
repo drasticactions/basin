@@ -397,13 +397,19 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             _needsModeset = true;
         }
 
+        if ((state.Fields & OutputStateFields.AdaptiveSync) != 0 && state.AdaptiveSync != _adaptiveSync)
+        {
+            _adaptiveSync = state.AdaptiveSync;
+            _adaptiveSyncDirty = true;
+        }
+
         if (!Enabled)
         {
             return true;
         }
 
         var colorDirty = _gammaDirty || _ctmDirty || _degammaDirty || _hdrDirty;
-        if (buffer is null && !modeChanged && !_needsModeset && !_cursorDirty && !colorDirty && !_enhancementDirty)
+        if (buffer is null && !modeChanged && !_needsModeset && !_cursorDirty && !colorDirty && !_enhancementDirty && !_adaptiveSyncDirty)
         {
             return true;
         }
@@ -518,9 +524,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             AddCursorProperties(builder);
         }
 
-        if ((state.Fields & OutputStateFields.AdaptiveSync) != 0 && _crtcProps.Has("VRR_ENABLED"))
+        if ((_adaptiveSyncDirty || modeset) && _crtcProps.Has("VRR_ENABLED"))
         {
-            builder.Add(_crtcProps, "crtc", "VRR_ENABLED", state.AdaptiveSync ? 1u : 0u);
+            builder.Add(_crtcProps, "crtc", "VRR_ENABLED", _adaptiveSync ? 1u : 0u);
         }
 
         if (colorDirty)
@@ -595,6 +601,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         _cursorDirty = false;
         _cursorAwaitingFrame = false;
+        _adaptiveSyncDirty = false;
         _needsModeset = false;
         _hardwareLit = true;
         _flipPending = true;
@@ -925,6 +932,8 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     private uint _pendingSharpness;
     private uint _pendingAbmLevel;
     private bool _enhancementDirty;
+    private bool _adaptiveSync;
+    private bool _adaptiveSyncDirty;
 
     private static readonly string[] AbmLevelNames = ["off", "min", "bias min", "bias max", "max"];
 
@@ -1315,6 +1324,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if (buffer is null)
         {
+            if (!_cursorVisible)
+            {
+                return true;
+            }
+
             _cursorBuffer.Dispose();
             _cursorBuffer = default;
             _cursorVisible = false;
@@ -1327,6 +1341,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         if (buffer.Width > maxWidth || buffer.Height > maxHeight)
         {
             return false;
+        }
+
+        if (_cursorVisible && ReferenceEquals(_cursorBuffer.Buffer, buffer) && hotspotX == _hotspotX && hotspotY == _hotspotY)
+        {
+            return true;
         }
 
         if (_backend.Framebuffers.GetOrAdd(buffer) == 0)
@@ -1346,6 +1365,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     public void MoveCursor(int x, int y)
     {
+        if (x == _cursorX && y == _cursorY)
+        {
+            return;
+        }
+
         _cursorX = x;
         _cursorY = y;
         if (_cursorVisible)
@@ -1363,11 +1387,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         var refreshMs = RefreshMs();
+        var rideWindow = Math.Max(2 * refreshMs, CursorRideWindowMs);
         var sinceFrame = Environment.TickCount64 - _lastFrameCommitTick;
-        if (sinceFrame < 2 * refreshMs)
+        if (sinceFrame < rideWindow)
         {
             Log.Debug($"{Name}: cursor rides with the next frame commit");
-            _cursorRetry?.UpdateTimer((int)(2 * refreshMs - sinceFrame));
+            _cursorRetry?.UpdateTimer((int)(rideWindow - sinceFrame));
             return;
         }
 
@@ -1398,11 +1423,15 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    private const long CursorRideWindowMs = 34;
+
     private IEventSource? _cursorRetry;
 
     private bool _cursorAwaitingFrame;
 
     public bool CursorAwaitingFrame => _cursorAwaitingFrame && _cursorDirty;
+
+    internal bool CursorDirty => _cursorDirty;
 
     private void OnCursorRetry()
     {

@@ -7,4 +7,6 @@ public enum ColorTransformCapability
     None,
 
     Lut3D,
+
+    Decomposed,
 }

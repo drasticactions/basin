@@ -8,9 +8,7 @@ internal sealed class OutputPolicy
 {
     public bool AutoLayout { get; set; } = true;
 
-    public bool AutoVrrActive { get; set; }
-
-    public ImageDescription ColorDescription { get; set; } = ImageDescription.Srgb;
+    public ImageDescription ColorDescription { get; set; } = ImageDescription.SdrDefault;
 
     public bool KmsColorRouted { get; set; }
 

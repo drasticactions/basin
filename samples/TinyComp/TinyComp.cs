@@ -379,7 +379,6 @@ internal sealed partial class TinyComp :
         WireOutputDriver();
 
         _popupPlacer = new Basin.Desktop.PopupPlacer(_layout);
-        _luts = new Basin.Color.ColorLutCache(_renderer);
         _effects.SlideEnabled = rendererName != "pixman";
 
         var servicePack = new Basin.Desktop.DesktopServicePack(_scene, _layout, _renderer, _drm);
@@ -392,7 +391,7 @@ internal sealed partial class TinyComp :
         _gamma = servicePack.Drm.Gamma;
         _cursorTheme = servicePack.CursorTheme;
         _orientationSensor = new Basin.Desktop.OrientationSensor(_loop);
-        _colorPack = new Basin.Color.ColorCapabilityPack(_layout);
+        _colorPack = new Basin.Color.ColorCapabilityPack(_layout, _renderer);
         _layoutConfiguration = _colorPack.Layout;
         _layoutConfiguration.Orientation = _orientationSensor;
         _colorConfiguration = _colorPack.Configuration;
@@ -624,12 +623,15 @@ internal sealed partial class TinyComp :
             (toplevel, name) => FindWindow(toplevel)?.SetIconName(name);
         _color = _services.Require<Basin.Desktop.ColorManager>();
         _compositor.SurfaceCreated += surface => surface.Destroyed += UpdateEdrDemand;
-        DeclareColor();
-
-        _lutDriver = new Basin.Desktop.SurfaceLutDriver(
-            _scene, _color,
-            surface => _luts.LutFor(_color.DescriptionOf(surface), BlendDescription()));
+        _outputColor = new Basin.Desktop.OutputColorDriver(_color, _colorPack.Configuration);
+        _lutDriver = new Basin.Desktop.SurfaceLutDriver(_scene, _color, _colorPack.Luts);
         _lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
+        foreach (var view in Views)
+        {
+            _outputColor.Add(view.Global, view.Output, view.Scene);
+            SyncBlendSpace(view);
+        }
+
         _color.SurfaceDescriptionChanged += (_, _) => UpdateEdrDemand();
 
         _tearing = _services.Require<Basin.Desktop.TearingControlManager>();
@@ -865,7 +867,7 @@ internal sealed partial class TinyComp :
         _hostChrome.Clear();
         _uiHost?.Dispose();
 
-        _luts.Dispose();
+        _colorPack.Luts.Dispose();
         _driver.Dispose();
 
         _cursor.Dispose();

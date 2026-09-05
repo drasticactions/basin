@@ -1,3 +1,4 @@
+using Basin.Render.Skia;
 using Basin.Diagnostics;
 using Basin.Render.Vulkan;
 using SkiaSharp;
@@ -89,7 +90,9 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableRgbFormats;
 
-    public ColorTransformCapability ColorTransform => ColorTransformCapability.Lut3D;
+    public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
+
+    internal SkiaColorTransforms ColorTransforms { get; } = new();
 
     public bool WaitsOnGpu => _device.WaitsOnGpu;
 
@@ -134,7 +137,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
             entry = ImportTarget(target);
         }
 
-        _pass.Begin(target, entry, options.SignalFenceFd);
+        _pass.Begin(target, entry, options.SignalFenceFd, options.ColorDescription);
         return _pass;
     }
 
@@ -156,6 +159,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     {
         _thread.Assert();
         DropTargets();
+        ColorTransforms.Dispose();
         SkiaCensus.Release(_paint);
         SkiaCensus.Release(_recorder);
         _context.FreeGpuResources();

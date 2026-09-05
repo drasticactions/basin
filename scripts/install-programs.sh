@@ -96,27 +96,6 @@ run_login() {
     run_ssh "sh -lc $(quote "$1")"
 }
 
-portable_rid() {
-    local system=$1 machine=$2 libc=$3 os= architecture=
-
-    case "$system" in
-        Linux) os=linux; [ "$libc" = musl ] && os=linux-musl ;;
-        Darwin) os=osx ;;
-        CYGWIN*|MINGW*|MSYS*|Windows*) os=win ;;
-        *) return 1 ;;
-    esac
-
-    case "$machine" in
-        x86_64|amd64) architecture=x64 ;;
-        aarch64|arm64) architecture=arm64 ;;
-        armv7l|armv6l|arm) architecture=arm ;;
-        i686|i386) architecture=x86 ;;
-        *) return 1 ;;
-    esac
-
-    printf '%s-%s' "$os" "$architecture"
-}
-
 remote_expand() {
     local path=$1
     case "$path" in

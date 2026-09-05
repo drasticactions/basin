@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Basin.Capabilities;
 using Basin.Desktop.Protocol;
 using Wayland;
@@ -17,16 +18,23 @@ public sealed class ColorManager : IDisposable
     private const uint CreatorErrorInvalidPrimariesNamed = 4;
     private const uint SurfaceErrorInert = 2;
 
-    private static readonly ColorTransferFunction[] AllTransferFunctions =
+    private static readonly ColorTransferFunction[] ConvertibleTransferFunctions =
     [
-        ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22, ColorTransferFunction.ExtLinear,
-        ColorTransferFunction.St2084Pq, ColorTransferFunction.Hlg, ColorTransferFunction.CompoundPower24,
+        ColorTransferFunction.CompoundPower24, ColorTransferFunction.Srgb, ColorTransferFunction.Gamma22,
+        ColorTransferFunction.ExtLinear,
     ];
 
-    private static readonly ColorPrimaries[] AllPrimaries =
+    private static readonly ColorTransferFunction[] DeprecatedTransferFunctions =
     [
-        ColorPrimaries.Srgb, ColorPrimaries.Bt2020, ColorPrimaries.DciP3, ColorPrimaries.DisplayP3,
+        ColorTransferFunction.Srgb, ColorTransferFunction.ExtSrgb,
     ];
+
+    private static readonly ColorPrimaries[] DeprecatedPrimaries = [];
+
+    private IReadOnlyList<ColorTransferFunction>? _declaredTransferFunctions;
+    private IReadOnlyList<ColorPrimaries>? _declaredPrimaries;
+    private IReadOnlyList<ColorTransferFunction>? _derivedTransferFunctions;
+    private IReadOnlyList<ColorPrimaries>? _derivedPrimaries;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
@@ -46,16 +54,65 @@ public sealed class ColorManager : IDisposable
 
     public IColorProfileService? Profiles { get; init; }
 
-    public IReadOnlyList<ColorTransferFunction> SupportedTransferFunctions { get; set; } = AllTransferFunctions;
+    public IColorTransformResolver? Resolver { get; init; }
 
-    public IReadOnlyList<ColorPrimaries> SupportedPrimaries { get; set; } = AllPrimaries;
+    public IReadOnlyList<ColorTransferFunction> SupportedTransferFunctions
+    {
+        get => _declaredTransferFunctions ?? (_derivedTransferFunctions ??= DeriveTransferFunctions());
+        set => _declaredTransferFunctions = value;
+    }
+
+    public IReadOnlyList<ColorPrimaries> SupportedPrimaries
+    {
+        get => _declaredPrimaries ?? (_derivedPrimaries ??= DerivePrimaries());
+        set => _declaredPrimaries = value;
+    }
+
+    public bool CanConvert => Resolver is { Capability: not ColorTransformCapability.None };
+
+    private IReadOnlyList<ColorTransferFunction> DeriveTransferFunctions()
+    {
+        var transfers = new List<ColorTransferFunction>();
+        if (CanConvert)
+        {
+            transfers.AddRange(ConvertibleTransferFunctions);
+        }
+        else
+        {
+            transfers.Add(ColorTransferFunction.Gamma22);
+        }
+
+        foreach (var description in _outputs.Values)
+        {
+            if (description.TransferNamed is { } transfer && !transfers.Contains(transfer))
+            {
+                transfers.Add(transfer);
+            }
+        }
+
+        return transfers;
+    }
+
+    private IReadOnlyList<ColorPrimaries> DerivePrimaries()
+    {
+        var primaries = new List<ColorPrimaries> { ColorPrimaries.Srgb };
+        foreach (var description in _outputs.Values)
+        {
+            if (description.PrimariesNamed is { } named && !primaries.Contains(named))
+            {
+                primaries.Add(named);
+            }
+        }
+
+        return primaries;
+    }
 
     public void Dispose() => _global.Dispose();
 
     public ImageDescription DescriptionOf(Surface surface) =>
         _surfaces.TryGetValue(surface, out var entry) && entry.Current is { } description
             ? description
-            : ImageDescription.Srgb;
+            : ImageDescription.SdrDefault;
 
     private sealed class SurfaceColor
     {
@@ -122,11 +179,34 @@ public sealed class ColorManager : IDisposable
 
     public event Action<OutputGlobal, ImageDescription>? OutputDescriptionChanged;
 
+    public event Action<OutputGlobal>? OutputDescriptionRemoved;
+
+    public IEnumerable<ImageDescription> OutputDescriptions => _outputs.Values;
+
+    public bool TryGetOutputDescription(OutputGlobal output, [NotNullWhen(true)] out ImageDescription? description) =>
+        _outputs.TryGetValue(output, out description);
+
+    public void RemoveOutputDescription(OutputGlobal output)
+    {
+        if (_outputs.Remove(output))
+        {
+            _derivedTransferFunctions = null;
+            _derivedPrimaries = null;
+            OutputDescriptionRemoved?.Invoke(output);
+        }
+    }
+
     public void SetOutputDescription(OutputGlobal output, ImageDescription description)
     {
         var changed = !_outputs.TryGetValue(output, out var previous) ||
             !ImageDescription.ContentComparer.Equals(previous, description);
         _outputs[output] = description;
+        if (changed)
+        {
+            _derivedTransferFunctions = null;
+            _derivedPrimaries = null;
+        }
+
         foreach (var (resource, resourceOutput) in _outputResources)
         {
             if (resourceOutput == output && !resource.IsDestroyed)
@@ -185,7 +265,7 @@ public sealed class ColorManager : IDisposable
             }
         }
 
-        return _outputs.Count > 0 ? _outputs.Values.First() : ImageDescription.Srgb;
+        return _outputs.Count > 0 ? _outputs.Values.First() : ImageDescription.SdrDefault;
     }
 
     private void OnBind(WlClient client, uint version, uint id)
@@ -214,11 +294,21 @@ public sealed class ColorManager : IDisposable
                 continue;
             }
 
+            if (IsDeprecatedAt(tf, manager.Version))
+            {
+                continue;
+            }
+
             manager.SendSupportedTfNamed((WpColorManagerV1.TransferFunction)tf);
         }
 
         foreach (var primaries in SupportedPrimaries)
         {
+            if (IsDeprecatedAt(primaries, manager.Version))
+            {
+                continue;
+            }
+
             manager.SendSupportedPrimariesNamed((WpColorManagerV1.Primaries)primaries);
         }
 
@@ -269,7 +359,7 @@ public sealed class ColorManager : IDisposable
             resource.Destroyed += (_, _) => _outputResources.Remove(entry);
             resource.GetImageDescription += (_, ge) =>
             {
-                var description = _outputs.GetValueOrDefault(output, ImageDescription.Srgb);
+                var description = _outputs.GetValueOrDefault(output, ImageDescription.SdrDefault);
                 DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, ge.ImageDescription), description);
             };
         };
@@ -355,6 +445,12 @@ public sealed class ColorManager : IDisposable
                 DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, ge.ImageDescription), PreferredFor(surface));
         };
     }
+
+    public static bool IsDeprecatedAt(ColorTransferFunction transfer, uint version) =>
+        version >= 2 && Array.IndexOf(DeprecatedTransferFunctions, transfer) >= 0;
+
+    public static bool IsDeprecatedAt(ColorPrimaries primaries, uint version) =>
+        version >= 2 && Array.IndexOf(DeprecatedPrimaries, primaries) >= 0;
 
     public static WpImageDescriptionReferenceV1Resource CreateReference(
         WlClient client,
@@ -471,7 +567,7 @@ public sealed class ColorManager : IDisposable
                 return true;
             }
 
-            description = ImageDescription.Srgb;
+            description = ImageDescription.SdrDefault;
             allowInformation = false;
             return false;
         }
@@ -621,7 +717,8 @@ public sealed class ColorManager : IDisposable
             _resource = resource;
             resource.SetPrimariesNamed += (_, e) =>
             {
-                if (!manager.SupportedPrimaries.Contains((ColorPrimaries)e.Primaries))
+                if (!manager.SupportedPrimaries.Contains((ColorPrimaries)e.Primaries) ||
+                    IsDeprecatedAt((ColorPrimaries)e.Primaries, resource.Version))
                 {
                     resource.PostError(CreatorErrorInvalidPrimariesNamed, "primaries are not offered");
                     return;
@@ -632,7 +729,8 @@ public sealed class ColorManager : IDisposable
             resource.SetPrimaries += (_, e) => Set(ref _primariesCustom, (e.RX, e.RY, e.GX, e.GY, e.BX, e.BY, e.WX, e.WY));
             resource.SetTfNamed += (_, e) =>
             {
-                if (!manager.SupportedTransferFunctions.Contains((ColorTransferFunction)e.Tf))
+                if (!manager.SupportedTransferFunctions.Contains((ColorTransferFunction)e.Tf) ||
+                    IsDeprecatedAt((ColorTransferFunction)e.Tf, resource.Version))
                 {
                     resource.PostError(CreatorErrorInvalidTf, "transfer function is not offered");
                     return;

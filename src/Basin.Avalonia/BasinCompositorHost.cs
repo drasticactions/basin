@@ -43,7 +43,7 @@ public sealed class BasinCompositorHost : IDisposable
             services = services.Use<Capabilities.ITextInputMethod>(textInput);
         }
 
-        services = services.Install(DesktopPack.For(options.AppName));
+        services = services.Install(DesktopPack.For(options.AppName)).Without("wp_color_manager_v1");
         if (options.ExtraModules is { } extras)
         {
             foreach (var module in extras)

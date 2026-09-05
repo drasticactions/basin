@@ -2,7 +2,7 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
-public sealed class ColorLutCache : IDisposable
+public sealed class ColorLutCache : IColorTransformResolver, IDisposable
 {
     private bool _disposed;
 
@@ -16,9 +16,13 @@ public sealed class ColorLutCache : IDisposable
         _luts = new(PairComparer.Instance);
     }
 
-    public IColorLut? LutFor(ImageDescription source, ImageDescription output)
+    public ColorTransformCapability Capability => _renderer.ColorTransform;
+
+    public IColorLut? Resolve(ImageDescription source, ImageDescription output)
     {
-        if (_renderer.ColorTransform == ColorTransformCapability.None)
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(output);
+        if (_renderer.ColorTransform != ColorTransformCapability.Lut3D)
         {
             return null;
         }

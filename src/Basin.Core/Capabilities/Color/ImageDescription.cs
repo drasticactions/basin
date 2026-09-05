@@ -28,10 +28,10 @@ public sealed record ImageDescription
 
     public byte[]? IccData { get; init; }
 
-    public static ImageDescription Srgb { get; } = new()
+    public static ImageDescription SdrDefault { get; } = new()
     {
         PrimariesNamed = ColorPrimaries.Srgb,
-        TransferNamed = ColorTransferFunction.Srgb,
+        TransferNamed = ColorTransferFunction.Gamma22,
     };
 
     public static IEqualityComparer<ImageDescription> ContentComparer { get; } = new ContentEquality();
