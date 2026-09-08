@@ -76,6 +76,7 @@ internal sealed class Manager
 
     private WmSeat? _currentSeat;
     private WmOutput? _currentOutput;
+    private bool _layerDefaultSet;
     private DragState? _drag;
     private SKFont? _font;
     private readonly Dictionary<WmSeat, bool> _shiftHeld = [];
@@ -287,6 +288,14 @@ internal sealed class Manager
         if (_currentOutput is null or { IsRemoved: true })
         {
             _currentOutput = _outputs.Count > 0 ? _outputs[0] : null;
+            _layerDefaultSet = false;
+        }
+
+        if (!_layerDefaultSet && _wm.LayerShell is not null
+            && _currentOutput is { IsRemoved: false } defaultOutput)
+        {
+            defaultOutput.SetDefaultForLayerSurfaces();
+            _layerDefaultSet = true;
         }
 
         _session.ObserveSeats(context);
