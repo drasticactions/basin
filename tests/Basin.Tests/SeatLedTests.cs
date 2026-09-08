@@ -9,12 +9,15 @@ public sealed class SeatLedTests
     private const uint NumKey = 69;
     private const uint ScrollKey = 70;
 
+    private static readonly Basin.Capabilities.KeymapNames UsQwerty =
+        new(Model: "pc105", Layout: "us", Options: "");
+
     [Fact]
     public void Caps_lock_sets_the_led_and_a_second_toggle_clears_it()
     {
         using var host = new CompositorTestHost();
         var keyboard = host.Seat.Keyboard;
-        keyboard.SetKeymap();
+        keyboard.SetKeymap(UsQwerty);
         var changes = 0;
         keyboard.LedsChanged += () => changes++;
 
@@ -36,7 +39,7 @@ public sealed class SeatLedTests
     {
         using var host = new CompositorTestHost();
         var keyboard = host.Seat.Keyboard;
-        keyboard.SetKeymap();
+        keyboard.SetKeymap(UsQwerty);
 
         keyboard.NotifyKey(10, NumKey, WlKeyboard.KeyState.Pressed);
         keyboard.NotifyKey(20, NumKey, WlKeyboard.KeyState.Released);
@@ -64,7 +67,7 @@ public sealed class SeatLedTests
     {
         using var host = new CompositorTestHost();
         var keyboard = host.Seat.Keyboard;
-        keyboard.SetKeymap();
+        keyboard.SetKeymap(UsQwerty);
 
         keyboard.NotifyKey(10, CapsKey, WlKeyboard.KeyState.Pressed);
         keyboard.NotifyKey(20, CapsKey, WlKeyboard.KeyState.Released);

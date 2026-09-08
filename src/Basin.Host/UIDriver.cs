@@ -69,6 +69,7 @@ public sealed class UIDriver : IDisposable
             if (popup.Surface is { } surface)
             {
                 popup.SetPosition((int)Math.Round(surface.PositionX), (int)Math.Round(surface.PositionY));
+                popup.InputEnabled = surface.AcceptsInput;
             }
         }
     }
@@ -124,6 +125,7 @@ public sealed class UIDriver : IDisposable
 
         var node = new UISurfaceNode(layer, popup, Index) { PreciseDamage = PreciseDamage };
         node.SetPosition((int)Math.Round(popup.PositionX), (int)Math.Round(popup.PositionY));
+        node.InputEnabled = popup.AcceptsInput;
         node.Publish();
         _popups.Add(node);
         PopupAdded?.Invoke(popup);

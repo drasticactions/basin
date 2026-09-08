@@ -81,6 +81,8 @@ internal sealed class BasinPopupImpl : BasinTopLevelImpl, IPopupImpl, IManagedPo
     {
     }
 
+    public void SetHitTestVisible(bool isHitTestVisible) => Surface?.SetHitTestVisible(isHitTestVisible);
+
     public void SetWindowManagerAddShadowHint(bool enabled)
     {
     }

@@ -110,11 +110,13 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public void RemoveObserver(IUISurfaceObserver observer) => _observers.Remove(observer);
 
+    public bool AcceptsInput { get; private set; } = true;
+
     public bool AcceptsInputAt(double x, double y)
     {
         _thread.Assert();
         var size = _impl.Size;
-        return !_disposed && x >= 0 && y >= 0 && x < size.Width && y < size.Height;
+        return !_disposed && AcceptsInput && x >= 0 && y >= 0 && x < size.Width && y < size.Height;
     }
 
     public string? CursorAt(double x, double y) => _impl.CursorName;
@@ -305,6 +307,8 @@ public sealed class AvaloniaUISurface : IUISurface
 
         _observers.Destroyed(this);
     }
+
+    internal void SetHitTestVisible(bool value) => AcceptsInput = value;
 
     internal void SetPositionFromToolkit(double x, double y)
     {

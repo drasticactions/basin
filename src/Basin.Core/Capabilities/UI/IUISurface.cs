@@ -22,6 +22,8 @@ public interface IUISurface : IDisposable
 
     void RemoveObserver(IUISurfaceObserver observer);
 
+    bool AcceptsInput => true;
+
     bool AcceptsInputAt(double x, double y);
 
     string? CursorAt(double x, double y);

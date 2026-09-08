@@ -52,6 +52,29 @@ public sealed class UIDriverTests : IDisposable
     }
 
     [Fact]
+    public void A_popup_that_declines_input_leaves_its_node_out_of_the_hit_test()
+    {
+        using var host = new PopupUIHost();
+        using var driver = new UIDriver(host, _loop) { PopupLayer = _scene.Root };
+        driver.Start();
+
+        var popup = host.OpenPopup(0, 0);
+        Assert.True(driver.Popups[0].InputEnabled);
+        Assert.NotNull(_scene.NodeAt(1, 1));
+
+        popup.AcceptsInput = false;
+        driver.Pump();
+        Assert.False(driver.Popups[0].InputEnabled);
+        Assert.Null(_scene.NodeAt(1, 1));
+        Assert.False(popup.AcceptsInputAt(1, 1));
+
+        popup.AcceptsInput = true;
+        driver.Pump();
+        Assert.True(driver.Popups[0].InputEnabled);
+        Assert.NotNull(_scene.NodeAt(1, 1));
+    }
+
+    [Fact]
     public void A_wakeup_request_moves_the_timer_to_what_the_host_is_due()
     {
         using var host = new PopupUIHost { Due = 5 };
@@ -116,6 +139,8 @@ public sealed class UIDriverTests : IDisposable
                 Height = 20,
                 Scale = 1.0,
             })!;
+            surface.BeginPixels();
+            surface.EndPixels();
             _popups.Add(surface);
             var placed = new PlacedUISurface(surface, x, y);
             PopupAppeared?.Invoke(placed);
@@ -151,6 +176,8 @@ public sealed class UIDriverTests : IDisposable
 
         public double PositionY { get; private set; }
 
+        public bool AcceptsInput { get; set; } = true;
+
         public UISurfaceSize Size => _inner.Size;
 
         public void SetPosition(double x, double y)
@@ -172,7 +199,7 @@ public sealed class UIDriverTests : IDisposable
         {
         }
 
-        public bool AcceptsInputAt(double x, double y) => _inner.AcceptsInputAt(x, y);
+        public bool AcceptsInputAt(double x, double y) => AcceptsInput && _inner.AcceptsInputAt(x, y);
 
         public string? CursorAt(double x, double y) => null;
 
