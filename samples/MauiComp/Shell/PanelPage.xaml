@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:shell="clr-namespace:MauiComp.Shell"
+             x:Class="MauiComp.Shell.PanelPage"
+             x:DataType="shell:PanelModel"
+             Background="{StaticResource TaskbarBrush}">
+  <ContentPage.Resources>
+    <shell:BrushSwitchConverter x:Key="TaskBrush" TrueKey="TaskActiveBrush" FalseKey="TaskBrush" />
+  </ContentPage.Resources>
+  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="0">
+    <Border x:Name="LauncherButton"
+            Grid.Column="0"
+            Background="{StaticResource StartBrush}"
+            Stroke="#1E5A22"
+            StrokeThickness="1"
+            StrokeShape="RoundRectangle 0,15,0,15"
+            Margin="0,1,6,1"
+            Padding="12,0,22,0"
+            VerticalOptions="Fill">
+      <Border.GestureRecognizers>
+        <TapGestureRecognizer Tapped="OnLauncherTapped" />
+      </Border.GestureRecognizers>
+      <Label Text=".NET MAUI"
+             FontSize="15"
+             FontAttributes="Bold"
+             TextColor="White"
+             LineBreakMode="NoWrap"
+             VerticalOptions="Center">
+        <Label.Shadow>
+          <Shadow Brush="#66000000" Offset="1,1" Radius="1" />
+        </Label.Shadow>
+      </Label>
+    </Border>
+    <CollectionView Grid.Column="1"
+                    ItemsSource="{Binding Tasks}"
+                    ItemsLayout="HorizontalList"
+                    SelectionMode="None"
+                    Margin="4,0"
+                    HeightRequest="22"
+                    VerticalOptions="Center">
+      <CollectionView.ItemTemplate>
+        <DataTemplate x:DataType="shell:TaskEntry">
+          <Border Background="{Binding Active, Converter={StaticResource TaskBrush}}"
+                  Stroke="#4A2295"
+                  StrokeThickness="1"
+                  StrokeShape="RoundRectangle 3"
+                  Margin="2,0"
+                  Padding="10,0"
+                  WidthRequest="150"
+                  HeightRequest="22"
+                  VerticalOptions="Fill">
+            <Border.GestureRecognizers>
+              <TapGestureRecognizer Command="{Binding Activate}" />
+            </Border.GestureRecognizers>
+            <Label Text="{Binding Title}"
+                   FontSize="13"
+                   TextColor="White"
+                   LineBreakMode="TailTruncation"
+                   VerticalOptions="Center" />
+          </Border>
+        </DataTemplate>
+      </CollectionView.ItemTemplate>
+    </CollectionView>
+    <Grid Grid.Column="2" ColumnDefinitions="1,1,Auto">
+      <BoxView Grid.Column="0" Color="#4F2594" />
+      <BoxView Grid.Column="1" Color="#B8A8F0" />
+      <Border Grid.Column="2"
+              Background="{StaticResource TrayBrush}"
+              StrokeThickness="0"
+              Padding="14,0">
+        <Label x:Name="Clock"
+               Text="{Binding Clock}"
+               FontSize="13"
+               TextColor="#1E0E4C"
+               VerticalOptions="Center" />
+      </Border>
+    </Grid>
+  </Grid>
+</ContentPage>

@@ -65,6 +65,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageVersion Include="Avalonia.Controls.Maui" Version="11.0.0-rc.1.26252.343" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="11.0.0-rc.1.26451.6" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageVersion Include="JAJ.Packages.MiniAudioEx" Version="3.3.6" />
     <PackageVersion Include="K4os.Compression.LZ4" Version="1.3.8" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.6" />

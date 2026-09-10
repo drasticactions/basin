@@ -10,6 +10,7 @@
     <Project Path="samples/EightWm/EightWm.csproj" />
     <Project Path="samples/Inlet/Inlet.csproj" />
     <Project Path="samples/InletWm/InletWm.csproj" />
+    <Project Path="samples/MauiComp/MauiComp.csproj" />
     <Project Path="samples/RetroWm/RetroWm.csproj" />
     <Project Path="samples/TinyComp/TinyComp.csproj" />
     <Project Path="samples/TinyWl/TinyWl.csproj" />
@@ -66,6 +67,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Basin.Tests/Basin.Tests.csproj" />
     <Project Path="tests/BasinChurn/BasinChurn.csproj" />
+    <Project Path="tests/MauiComp.Tests/MauiComp.Tests.csproj" />
     <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:shell="clr-namespace:MauiComp.Shell"
+             x:Class="MauiComp.Shell.StartMenuPage"
+             x:DataType="shell:StartMenuModel"
+             BackgroundColor="Transparent">
+  <Border x:Name="MenuFrame"
+          Background="{StaticResource MenuBrush}"
+          Stroke="{StaticResource RoyaleMenuBorder}"
+          StrokeThickness="1"
+          StrokeShape="Rectangle"
+          Padding="0">
+    <Grid ColumnDefinitions="24,*">
+      <Border Grid.Column="0" Background="{StaticResource BannerBrush}" StrokeThickness="0" Padding="0">
+        <GraphicsView Drawable="{StaticResource Banner}" HorizontalOptions="Fill" VerticalOptions="Fill" />
+      </Border>
+      <VerticalStackLayout Grid.Column="1" Padding="2,3" Spacing="0">
+        <Border x:Name="ProgramsRow" Style="{StaticResource MenuRow}">
+          <Border.GestureRecognizers>
+            <TapGestureRecognizer Command="{Binding Programs}" />
+            <PointerGestureRecognizer PointerEntered="OnRowEntered" PointerExited="OnRowExited" />
+          </Border.GestureRecognizers>
+          <Grid ColumnDefinitions="26,*,16">
+            <Grid Grid.Column="0" WidthRequest="16" HeightRequest="13" HorizontalOptions="Center" VerticalOptions="Center">
+              <Rectangle Fill="#E8C24C" Stroke="#8A6D1E" StrokeThickness="1" Margin="0,3,0,0" />
+              <Rectangle Fill="#F5DE8A" WidthRequest="7" HeightRequest="4" HorizontalOptions="Start" VerticalOptions="Start" Stroke="#8A6D1E" StrokeThickness="1" />
+            </Grid>
+            <Label Grid.Column="1" Text="Programs" Style="{StaticResource MenuText}" />
+            <Polygon Grid.Column="2" Points="0,0 5,4 0,8" Fill="{StaticResource RoyaleText}" HorizontalOptions="Center" VerticalOptions="Center" />
+          </Grid>
+        </Border>
+        <BoxView Style="{StaticResource MenuSeparator}" />
+        <Border x:Name="RunRow" Style="{StaticResource MenuRow}">
+          <Border.GestureRecognizers>
+            <TapGestureRecognizer Command="{Binding Run}" />
+            <PointerGestureRecognizer PointerEntered="OnRowEntered" PointerExited="OnRowExited" />
+          </Border.GestureRecognizers>
+          <Grid ColumnDefinitions="26,*,16">
+            <Grid Grid.Column="0" WidthRequest="16" HeightRequest="13" HorizontalOptions="Center" VerticalOptions="Center">
+              <Rectangle Fill="White" Stroke="#3C2A78" StrokeThickness="1" />
+              <Rectangle Fill="#5433A8" HeightRequest="4" VerticalOptions="Start" Margin="1,1,1,0" />
+            </Grid>
+            <Label Grid.Column="1" Text="Run..." Style="{StaticResource MenuText}" />
+          </Grid>
+        </Border>
+        <BoxView Style="{StaticResource MenuSeparator}" />
+        <Border x:Name="ExitRow" Style="{StaticResource MenuRow}">
+          <Border.GestureRecognizers>
+            <TapGestureRecognizer Command="{Binding Exit}" />
+            <PointerGestureRecognizer PointerEntered="OnRowEntered" PointerExited="OnRowExited" />
+          </Border.GestureRecognizers>
+          <Grid ColumnDefinitions="26,*,16">
+            <Grid Grid.Column="0" WidthRequest="14" HeightRequest="14" HorizontalOptions="Center" VerticalOptions="Center">
+              <Ellipse Fill="#E45D3D" Stroke="#8C2A18" StrokeThickness="1" />
+              <Rectangle Fill="White" WidthRequest="2" HeightRequest="7" VerticalOptions="Start" Margin="0,2,0,0" />
+            </Grid>
+            <Label Grid.Column="1" Text="Exit" Style="{StaticResource MenuText}" />
+          </Grid>
+        </Border>
+      </VerticalStackLayout>
+    </Grid>
+  </Border>
+</ContentPage>

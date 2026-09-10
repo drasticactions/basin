@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+                    x:Class="MauiComp.Shell.RoyaleTheme">
+
+  <Color x:Key="RoyaleCaptionEdge">#5B2AAB</Color>
+  <Color x:Key="RoyaleCaptionBottom">#4F2594</Color>
+  <Color x:Key="RoyaleInactiveEdge">#744DC3</Color>
+  <Color x:Key="RoyaleHighlight">#5433A8</Color>
+  <Color x:Key="RoyaleMenuBorder">#3C2A78</Color>
+  <Color x:Key="RoyaleButtonFace">#ECE9F0</Color>
+  <Color x:Key="RoyaleCaptionText">#FFFFFF</Color>
+  <Color x:Key="RoyaleCaptionShadow">#402A1466</Color>
+  <Color x:Key="RoyaleTrayLine">#4F2594</Color>
+  <Color x:Key="RoyaleTrayLight">#F4F0FF</Color>
+  <Color x:Key="RoyaleText">#000000</Color>
+
+  <LinearGradientBrush x:Key="CaptionActiveBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#8983ED" Offset="0.00" />
+    <GradientStop Color="#7C64EA" Offset="0.14" />
+    <GradientStop Color="#745AE1" Offset="0.46" />
+    <GradientStop Color="#5539D2" Offset="0.50" />
+    <GradientStop Color="#592CB1" Offset="0.92" />
+    <GradientStop Color="#4F2594" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="CaptionInactiveBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#9590E6" Offset="0.00" />
+    <GradientStop Color="#8A83DD" Offset="0.30" />
+    <GradientStop Color="#6E59CB" Offset="0.52" />
+    <GradientStop Color="#6E4FB7" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="CaptionButtonBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#B7ADF8" Offset="0.00" />
+    <GradientStop Color="#8B6AF0" Offset="0.50" />
+    <GradientStop Color="#7A55E8" Offset="0.55" />
+    <GradientStop Color="#6A3FE0" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="CaptionButtonInactiveBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#C4BEF2" Offset="0.00" />
+    <GradientStop Color="#A395E6" Offset="0.50" />
+    <GradientStop Color="#8E7BDA" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="CloseButtonBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#F4B4A4" Offset="0.00" />
+    <GradientStop Color="#E86E4E" Offset="0.50" />
+    <GradientStop Color="#E45D3D" Offset="0.55" />
+    <GradientStop Color="#C4402A" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="TaskbarBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#A599F1" Offset="0.00" />
+    <GradientStop Color="#8983ED" Offset="0.07" />
+    <GradientStop Color="#7157DF" Offset="0.50" />
+    <GradientStop Color="#5739D0" Offset="0.53" />
+    <GradientStop Color="#592CB1" Offset="0.93" />
+    <GradientStop Color="#4F2594" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="TrayBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#F4F0FF" Offset="0.00" />
+    <GradientStop Color="#DDD4FA" Offset="0.50" />
+    <GradientStop Color="#BAAAF0" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="TaskBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#8780ED" Offset="0.00" />
+    <GradientStop Color="#795FE6" Offset="0.48" />
+    <GradientStop Color="#5838CF" Offset="0.55" />
+    <GradientStop Color="#5C30B6" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="TaskActiveBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#481493" Offset="0.00" />
+    <GradientStop Color="#5A2CB8" Offset="0.20" />
+    <GradientStop Color="#6137DC" Offset="0.55" />
+    <GradientStop Color="#7D67E6" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="StartBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#BADEC0" Offset="0.00" />
+    <GradientStop Color="#6CBB71" Offset="0.14" />
+    <GradientStop Color="#43AB4B" Offset="0.48" />
+    <GradientStop Color="#0F9317" Offset="0.52" />
+    <GradientStop Color="#11B619" Offset="0.80" />
+    <GradientStop Color="#0BC90E" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="SkyBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#2B166E" Offset="0.00" />
+    <GradientStop Color="#6D4FD8" Offset="0.45" />
+    <GradientStop Color="#B7A7F3" Offset="0.72" />
+    <GradientStop Color="#E3DCFB" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="HillBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#8B6AF0" Offset="0.00" />
+    <GradientStop Color="#5433A8" Offset="0.35" />
+    <GradientStop Color="#2E1668" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="SwitcherBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#F7F5FB" Offset="0.00" />
+    <GradientStop Color="#ECE9F0" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <SolidColorBrush x:Key="HighlightBrush" Color="#5433A8" />
+  <SolidColorBrush x:Key="CaptionEdgeBrush" Color="#5B2AAB" />
+  <SolidColorBrush x:Key="CaptionInactiveEdgeBrush" Color="#744DC3" />
+
+  <SolidColorBrush x:Key="MenuBrush" Color="#FFFFFF" />
+  <LinearGradientBrush x:Key="BannerBrush" StartPoint="0,1" EndPoint="0,0">
+    <GradientStop Color="#2B166E" Offset="0.00" />
+    <GradientStop Color="#4F2594" Offset="0.45" />
+    <GradientStop Color="#7C64EA" Offset="1.00" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="PushButtonBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#FBFDFD" Offset="0.00" />
+    <GradientStop Color="#F0F3F8" Offset="0.60" />
+    <GradientStop Color="#D8DEEA" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <Style x:Key="MenuRow" TargetType="Border">
+    <Setter Property="StrokeThickness" Value="0" />
+    <Setter Property="StrokeShape" Value="Rectangle" />
+    <Setter Property="HeightRequest" Value="24" />
+    <Setter Property="Padding" Value="2,0,6,0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style x:Key="MenuText" TargetType="Label">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="TextColor" Value="#000000" />
+    <Setter Property="VerticalOptions" Value="Center" />
+    <Setter Property="LineBreakMode" Value="NoWrap" />
+  </Style>
+
+  <Style x:Key="MenuSeparator" TargetType="BoxView">
+    <Setter Property="HeightRequest" Value="1" />
+    <Setter Property="Color" Value="#A7A6AA" />
+    <Setter Property="Margin" Value="28,3,4,3" />
+  </Style>
+
+  <Style x:Key="PushButton" TargetType="Border">
+    <Setter Property="Background" Value="{StaticResource PushButtonBrush}" />
+    <Setter Property="Stroke" Value="#3C2A78" />
+    <Setter Property="StrokeThickness" Value="1" />
+    <Setter Property="StrokeShape" Value="RoundRectangle 3" />
+    <Setter Property="WidthRequest" Value="75" />
+    <Setter Property="HeightRequest" Value="23" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+
+  <Style x:Key="PushButtonText" TargetType="Label">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="TextColor" Value="#000000" />
+    <Setter Property="HorizontalOptions" Value="Center" />
+    <Setter Property="VerticalOptions" Value="Center" />
+  </Style>
+
+  <Style x:Key="CaptionButton" TargetType="Border">
+    <Setter Property="Stroke" Value="White" />
+    <Setter Property="StrokeThickness" Value="1" />
+    <Setter Property="StrokeShape" Value="RoundRectangle 3" />
+    <Setter Property="WidthRequest" Value="21" />
+    <Setter Property="HeightRequest" Value="21" />
+    <Setter Property="VerticalOptions" Value="Center" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <SolidColorBrush x:Key="TransparentBrush" Color="Transparent" />
+
+</ResourceDictionary>

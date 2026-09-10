@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:shell="clr-namespace:MauiComp.Shell"
+             x:Class="MauiComp.Shell.TitlebarPage"
+             x:DataType="shell:TitlebarModel"
+             BackgroundColor="Transparent">
+  <ContentPage.Resources>
+    <shell:BrushSwitchConverter x:Key="CaptionBrush" TrueKey="CaptionActiveBrush" FalseKey="CaptionInactiveBrush" />
+    <shell:BrushSwitchConverter x:Key="CaptionButtonBrush" TrueKey="CaptionButtonBrush" FalseKey="CaptionButtonInactiveBrush" />
+    <shell:BrushSwitchConverter x:Key="CloseBrush" TrueKey="CloseButtonBrush" FalseKey="CaptionButtonInactiveBrush" />
+    <shell:BrushSwitchConverter x:Key="EdgeBrush" TrueKey="CaptionEdgeBrush" FalseKey="CaptionInactiveEdgeBrush" />
+  </ContentPage.Resources>
+  <Border Background="{Binding Active, Converter={StaticResource CaptionBrush}}"
+          Stroke="{Binding Active, Converter={StaticResource EdgeBrush}}"
+          StrokeThickness="1"
+          StrokeShape="RoundRectangle 8,8,0,0"
+          Padding="0">
+    <Grid ColumnDefinitions="*,21,21,21" ColumnSpacing="3" Padding="6,0,4,0">
+      <Label Grid.Column="0"
+             Text="{Binding Title}"
+             FontSize="13"
+             FontAttributes="Bold"
+             LineBreakMode="TailTruncation"
+             VerticalOptions="Center"
+             TextColor="White">
+        <Label.Shadow>
+          <Shadow Brush="#80000000" Offset="1,1" Radius="1" />
+        </Label.Shadow>
+      </Label>
+      <Border x:Name="MinimizeButton" Grid.Column="1" Style="{StaticResource CaptionButton}"
+              Background="{Binding Active, Converter={StaticResource CaptionButtonBrush}}">
+        <Border.GestureRecognizers>
+          <TapGestureRecognizer Command="{Binding Minimize}" />
+        </Border.GestureRecognizers>
+        <Rectangle Fill="White" WidthRequest="8" HeightRequest="3" HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,4" />
+      </Border>
+      <Border x:Name="MaximizeButton" Grid.Column="2" Style="{StaticResource CaptionButton}"
+              Background="{Binding Active, Converter={StaticResource CaptionButtonBrush}}">
+        <Border.GestureRecognizers>
+          <TapGestureRecognizer Command="{Binding Maximize}" />
+        </Border.GestureRecognizers>
+        <Grid WidthRequest="10" HeightRequest="9" HorizontalOptions="Center" VerticalOptions="Center">
+          <Rectangle Stroke="White" StrokeThickness="1" Fill="Transparent" />
+          <Rectangle Fill="White" HeightRequest="3" VerticalOptions="Start" />
+        </Grid>
+      </Border>
+      <Border x:Name="CloseButton" Grid.Column="3" Style="{StaticResource CaptionButton}"
+              Background="{Binding Active, Converter={StaticResource CloseBrush}}">
+        <Border.GestureRecognizers>
+          <TapGestureRecognizer Command="{Binding Close}" />
+        </Border.GestureRecognizers>
+        <Grid WidthRequest="11" HeightRequest="11" HorizontalOptions="Center" VerticalOptions="Center">
+          <Line X1="1" Y1="1" X2="10" Y2="10" Stroke="White" StrokeThickness="2.2" StrokeLineCap="Round" />
+          <Line X1="10" Y1="1" X2="1" Y2="10" Stroke="White" StrokeThickness="2.2" StrokeLineCap="Round" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</ContentPage>

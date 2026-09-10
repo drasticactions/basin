@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Platform;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -21,15 +22,27 @@ public static class BasinPlatform
     public static bool IsStarted => _started;
 
     public static AvaloniaUIHost Start<TApp>(BasinPlatformOptions options)
+        where TApp : Application, new() =>
+        Start<TApp>(options, null);
+
+    public static AvaloniaUIHost Start<TApp>(BasinPlatformOptions options, IApplicationLifetime? lifetime)
         where TApp : Application, new()
     {
         ArgumentNullException.ThrowIfNull(options);
 
         ClaimStart();
-        AppBuilder.Configure<TApp>()
+        var builder = AppBuilder.Configure<TApp>()
             .UseBasin(options)
-            .UseSkia()
-            .SetupWithoutStarting();
+            .UseSkia();
+        if (lifetime is null)
+        {
+            builder.SetupWithoutStarting();
+        }
+        else
+        {
+            builder.SetupWithLifetime(lifetime);
+        }
+
         return Host;
     }
 

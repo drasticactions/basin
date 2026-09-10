@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:shell="clr-namespace:MauiComp.Shell"
+             x:Class="MauiComp.Shell.SwitcherPage"
+             x:DataType="shell:SwitcherModel"
+             BackgroundColor="Transparent">
+  <ContentPage.Resources>
+    <shell:BrushSwitchConverter x:Key="SelectedBrush" TrueKey="HighlightBrush" FalseKey="TransparentBrush" />
+  </ContentPage.Resources>
+  <Border Background="{StaticResource SwitcherBrush}"
+          Stroke="{StaticResource RoyaleHighlight}"
+          StrokeThickness="1"
+          StrokeShape="RoundRectangle 3"
+          Padding="6">
+    <CollectionView ItemsSource="{Binding Entries}" SelectionMode="None">
+      <CollectionView.ItemTemplate>
+        <DataTemplate x:DataType="shell:SwitcherEntry">
+          <Border HeightRequest="30" Padding="8,0" StrokeThickness="0" StrokeShape="RoundRectangle 2"
+                  Background="{Binding Selected, Converter={StaticResource SelectedBrush}}">
+            <Label Text="{Binding Title}" FontSize="14" VerticalOptions="Center" LineBreakMode="TailTruncation"
+                   TextColor="{Binding Selected, Converter={StaticResource SelectedText}}" />
+          </Border>
+        </DataTemplate>
+      </CollectionView.ItemTemplate>
+    </CollectionView>
+  </Border>
+</ContentPage>

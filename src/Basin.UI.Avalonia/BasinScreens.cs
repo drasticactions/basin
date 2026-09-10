@@ -84,7 +84,11 @@ internal sealed class BasinScreens : IScreenImpl
         {
             DisplayName = info.Name;
             Scaling = info.Scale;
-            Bounds = new PixelRect(info.X, info.Y, info.Width, info.Height);
+            Bounds = new PixelRect(
+                (int)Math.Round(info.X * info.Scale),
+                (int)Math.Round(info.Y * info.Scale),
+                (int)Math.Round(info.Width * info.Scale),
+                (int)Math.Round(info.Height * info.Scale));
             WorkingArea = Bounds;
             IsPrimary = info.IsPrimary;
         }

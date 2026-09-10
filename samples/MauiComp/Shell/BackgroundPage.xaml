@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:shell="clr-namespace:MauiComp.Shell"
+             x:Class="MauiComp.Shell.BackgroundPage"
+             x:DataType="shell:BackgroundModel"
+             Background="{StaticResource SkyBrush}">
+  <Grid>
+    <Ellipse Fill="{StaticResource HillBrush}"
+             Aspect="Fill"
+             VerticalOptions="End"
+             HorizontalOptions="Fill"
+             HeightRequest="520"
+             Margin="-260,0,-120,-330" />
+    <Ellipse Fill="#2E1668"
+             Opacity="0.55"
+             Aspect="Fill"
+             VerticalOptions="End"
+             HorizontalOptions="Fill"
+             HeightRequest="360"
+             Margin="-80,0,-420,-250" />
+    <Image Source="{Binding ImagePath}" Aspect="AspectFill" IsVisible="{Binding HasImage}" />
+  </Grid>
+</ContentPage>

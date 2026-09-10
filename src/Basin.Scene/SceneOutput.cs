@@ -1297,8 +1297,25 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     private void DrawSoftwareCursor(IRenderer renderer, IRenderPass pass)
     {
-        if (_softwareCursor.Buffer is { } cursorImage &&
-            (_softwareCursorTexture ??= renderer.ImportTexture(cursorImage)) is { } cursorTexture)
+        if (_softwareCursor.Buffer is not { } cursorImage)
+        {
+            return;
+        }
+
+        if (_softwareCursorTexture is null)
+        {
+            AllocationScope.Pause();
+            try
+            {
+                _softwareCursorTexture = renderer.ImportTexture(cursorImage);
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
+        }
+
+        if (_softwareCursorTexture is { } cursorTexture)
         {
             pass.AddTexture(cursorTexture, new TextureRenderOptions
             {
