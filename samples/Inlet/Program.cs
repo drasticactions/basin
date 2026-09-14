@@ -240,7 +240,7 @@ internal static class Program
 
         if (renderer.Device is { } renderDevice)
         {
-            services.Install(new LinuxDmabufModule(renderer.DmabufTextureFormats, renderDevice.DevicePath));
+            services.Install(new LinuxDmabufModule(renderer.DmabufTextureFormats, renderDevice.DevicePath, captureFormats: renderer.DmabufRenderFormats));
         }
 
         Basin.XWayland.XWaylandModule? xwaylandModule = null;

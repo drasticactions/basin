@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="../../samples/Westonia/Westonia.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal.Prompts.Avalonia/Basin.Portal.Prompts.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
   </ItemGroup>

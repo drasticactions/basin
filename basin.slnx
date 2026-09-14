@@ -2,6 +2,7 @@
 
   <Folder Name="/samples/">
     <Project Path="samples/BasinHeadless/BasinHeadless.csproj" />
+    <Project Path="samples/BasinPortal/BasinPortal.csproj" />
     <Project Path="samples/BasinSwap/BasinSwap.csproj" />
     <Project Path="samples/BlurClient/BlurClient.csproj" />
     <Project Path="samples/Dam/Dam.csproj" />
@@ -21,6 +22,7 @@
     <Project Path="src/Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
     <Project Path="src/Basin.Cli/Basin.Cli.csproj" />
     <Project Path="src/Basin.Config/Basin.Config.csproj" />
+    <Project Path="src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
     <Project Path="src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
     <Project Path="src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
     <Project Path="src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
@@ -30,6 +32,10 @@
     <Project Path="src/Basin.Host/Basin.Host.csproj" />
     <Project Path="src/Basin.Hypr/Basin.Hypr.csproj" />
     <Project Path="src/Basin.Hypr.InputCapture/Basin.Hypr.InputCapture.csproj" />
+    <Project Path="src/Basin.Portal/Basin.Portal.csproj" />
+    <Project Path="src/Basin.Portal.Prompts.Skia/Basin.Portal.Prompts.Skia.csproj" />
+    <Project Path="src/Basin.Portal.Prompts.Avalonia/Basin.Portal.Prompts.Avalonia.csproj" />
+    <Project Path="src/Basin.Portal.Client/Basin.Portal.Client.csproj" />
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
     <Project Path="src/Basin.Rashader/Basin.Rashader.csproj" />
     <Project Path="src/Basin.Rashader.Gl/Basin.Rashader.Gl.csproj" />
@@ -43,7 +49,9 @@
     <Project Path="src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
     <Project Path="src/Basin.Renderers/Basin.Renderers.csproj" />
     <Project Path="src/Basin.Effects/Basin.Effects.csproj" />
+    <Project Path="src/Basin.Eis/Basin.Eis.csproj" />
     <Project Path="src/Basin.Scene/Basin.Scene.csproj" />
+    <Project Path="src/Basin.Screencast.PipeWire/Basin.Screencast.PipeWire.csproj" />
     <Project Path="src/Basin.Testing/Basin.Testing.csproj" />
     <Project Path="src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <Project Path="src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />

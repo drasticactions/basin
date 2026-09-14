@@ -38,7 +38,7 @@ internal sealed class Config
 
     public bool DamageTint { get; set; }
 
-    public FrameStyle FrameStyle { get; set; } = FrameStyle.Beos;
+    public FrameStyle FrameStyle { get; set; } = FrameStyle.Flat;
 
     public int CornerRadius { get; set; }
 
@@ -116,7 +116,7 @@ internal sealed class Config
 
     public bool HyprCtm { get; set; } = true;
 
-    public IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> HyprShortcuts { get; private set; } =
+    public IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> Shortcuts { get; private set; } =
         new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
 
     public IReadOnlyList<Rule> Rules { get; private set; } = [];
@@ -274,11 +274,11 @@ internal sealed class Config
 
         if (reader.Section("frame") is { } frame)
         {
-            FrameStyle = frame.Choice("style", "beos", "beos", "flat", "none") switch
+            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "none") switch
             {
-                "flat" => FrameStyle.Flat,
+                "beos" => FrameStyle.Beos,
                 "none" => FrameStyle.None,
-                _ => FrameStyle.Beos,
+                _ => FrameStyle.Flat,
             };
             CornerRadius = frame.Number("corner_radius", CornerRadius);
         }
@@ -372,10 +372,16 @@ internal sealed class Config
             HyprEnabled = hypr.Flag("enable", HyprEnabled);
             HyprInputCapture = hypr.Flag("input_capture", HyprInputCapture);
             HyprCtm = hypr.Flag("ctm", HyprCtm);
-            if (hypr.Free("shortcuts") is { } shortcuts)
+            if (hypr.Free("shortcuts") is { } renamed)
             {
-                HyprShortcuts = ParseHyprShortcuts(shortcuts, log);
+                log.Warn($"[hypr.shortcuts] is now [shortcuts]; the old table is read this once, rename it");
+                Shortcuts = ParseShortcuts(renamed, "hypr.shortcuts", log);
             }
+        }
+
+        if (reader.Free("shortcuts") is { } shortcuts)
+        {
+            Shortcuts = ParseShortcuts(shortcuts, "shortcuts", log);
         }
 
         if (reader.Free("output") is { } outputs)
@@ -409,8 +415,8 @@ internal sealed class Config
         reader.ReportUnknown();
     }
 
-    private static IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> ParseHyprShortcuts(
-        TomlTable table, BasinLogger log)
+    private static IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> ParseShortcuts(
+        TomlTable table, string section, BasinLogger log)
     {
         var rows = new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
         foreach (var (name, value) in table)
@@ -418,13 +424,13 @@ internal sealed class Config
             var colon = name.IndexOf(':', StringComparison.Ordinal);
             if (colon <= 0 || colon == name.Length - 1)
             {
-                log.Warn($"[hypr.shortcuts] \"{name}\" is not app_id:id, ignored");
+                log.Warn($"[{section}] \"{name}\" is not app_id:id, ignored");
                 continue;
             }
 
             if (value is not string chord || !HotkeyParser.TryParseChord(chord, log, out var keysym, out var modifiers))
             {
-                log.Warn($"[hypr.shortcuts] \"{name}\" names no chord, ignored");
+                log.Warn($"[{section}] \"{name}\" names no chord, ignored");
                 continue;
             }
 

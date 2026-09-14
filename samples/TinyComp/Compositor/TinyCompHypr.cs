@@ -1,16 +1,16 @@
 using Basin;
 using Basin.Diagnostics;
 using Basin.Hypr;
+using Basin.Eis;
 using Basin.Hypr.InputCapture;
 
 namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
-    private HyprShortcuts _hyprShortcuts = null!;
+    private TinyCompShortcuts _shortcuts = null!;
     private HyprCtm? _hyprCtm;
-    private HyprlandGlobalShortcutsManager? _hyprShortcutManager;
-    private HyprlandInputCaptureManager? _inputCapture;
+    private InputCaptureEngine? _inputCapture;
 
     internal void WarnNoCtmShader() =>
         _log.Warn($"{_rendererName} compiles no pixel shader dialect; a CTM on this backend is ignored");
@@ -54,7 +54,7 @@ internal sealed partial class TinyComp
 
     private void WireInputCapture()
     {
-        _inputCapture = _services.Find<HyprlandInputCaptureManager>();
+        _inputCapture = _services.Find<InputCaptureEngine>();
         if (_inputCapture is { } capture)
         {
             capture.WarpRequested += (x, y) => MoveCursor(x, y, (uint)Environment.TickCount);
@@ -64,8 +64,7 @@ internal sealed partial class TinyComp
     private bool CaptureMotion(uint time, double x, double y, double dx, double dy) =>
         _inputCapture is { } capture && capture.NotifyMotion(time, x, y, dx, dy);
 
-    private bool HandleHyprShortcut(uint key, bool pressed) =>
+    private bool HandleGlobalShortcut(uint key, bool pressed) =>
         !_sessionLock.IsLocked
-        && _hyprShortcutManager is { } manager
-        && _hyprShortcuts.HandleKey(key, _seat.Keyboard.RawKeysymFor(key).Value, HeldModifiers(), pressed, manager);
+        && _shortcuts.HandleKey(key, _seat.Keyboard.RawKeysymFor(key).Value, HeldModifiers(), pressed);
 }

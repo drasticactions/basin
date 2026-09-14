@@ -1,4 +1,5 @@
 using Basin.Config;
+using Basin.Freedesktop;
 using InputCodes = Basin.InputCodes;
 using Basin.WindowManager;
 using Basin.WindowManager.Skia;
@@ -42,7 +43,7 @@ internal sealed class Manager
     private readonly Queue<ManagedWindow> _windowActivations = new();
     private readonly Queue<Team> _arrowToggles = new();
     private readonly List<BarRow> _entryScratch = [];
-    private readonly IconCache _icons = new(new IconRaster(new Basin.Cli.IconSearch
+    private readonly IconCache _icons = new(new IconRaster(new Basin.Freedesktop.IconSearch
     {
         OverrideDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "deskbar-wm", "icons"),
@@ -547,7 +548,7 @@ internal sealed class Manager
         {
             if (team.AppId is { Length: > 0 } appId)
             {
-                team.ResolvedName ??= DesktopEntries.NameFor(appId);
+                team.ResolvedName ??= Desktop.FindForAppId(appId)?.Name;
             }
 
             var active = _focusStack.Focused is { } focused && team.Windows.Contains(focused);
@@ -2684,6 +2685,7 @@ internal sealed class Manager
     {
         _config = Config.Load(_noConfig, _log);
         _log.Info($"configuration reloaded");
+        Desktop.Invalidate();
 
         foreach (var binding in _bindings)
         {
@@ -2725,20 +2727,22 @@ internal sealed class Manager
 
     internal RecentItems Recents => _recents;
 
+    internal DesktopEntries Desktop { get; } = new();
+
     internal WorkspaceGrid Workspaces => _workspaces;
 
     internal void SwitchWorkspaceFromMenu(int index) => SwitchWorkspace(index, takeWindow: false);
 
-    internal void LaunchApp(AppEntry app)
+    internal void LaunchApp(DesktopEntry app)
     {
-        var argv = DesktopEntries.SplitExec(app.Exec);
-        if (argv.Length == 0)
+        if (app.LaunchArgv(_config.TerminalCommand.Length == 0 ? null : [.. _config.TerminalCommand, "-e"]) is not { } argv)
         {
+            _log.Debug($"{app.Id} wants a terminal and none is configured; not launched");
             return;
         }
 
         Spawn(argv);
-        _recents.RecordLaunch(app.Id, _config.RecentApplicationsCount);
+        _recents.RecordLaunch(Path.GetFileNameWithoutExtension(app.Id), _config.RecentApplicationsCount);
     }
 
     internal void OpenPath(string path) => Spawn(["xdg-open", path]);
@@ -2908,7 +2912,7 @@ internal sealed class Manager
 
         var rect = parent.ItemRect(index);
         var area = parent.Output.Area;
-        var openLeft = parent.Origin.X + parent.SurfaceSize.Width + 200 > area.Width;
+        var openLeft = parent.OpensLeft || parent.Origin.X + parent.SurfaceSize.Width + 200 > area.Width;
         OpenMenu(
             parent.Output,
             items,

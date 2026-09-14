@@ -1,4 +1,5 @@
 using Basin.Config;
+using Basin.Freedesktop;
 
 using Basin.Diagnostics;
 
@@ -89,9 +90,10 @@ internal sealed class Config
             }
         }
 
+        var desktop = new DesktopEntries();
         foreach (var row in reader.Sections("tile"))
         {
-            if (ReadTile(row, log) is { } tile)
+            if (ReadTile(row, desktop, log) is { } tile)
             {
                 config.Tiles.Add(tile);
             }
@@ -103,22 +105,22 @@ internal sealed class Config
 
     public static string DefaultPath() => TomlConfig.DefaultPath("eight-wm");
 
-    private static Tile? ReadTile(TomlReader row, BasinLogger log)
+    private static Tile? ReadTile(TomlReader row, DesktopEntries desktop, BasinLogger log)
     {
         var name = row.Text("name");
         var exec = row.Text("exec");
         var icon = row.Text("icon");
 
-        if (row.Text("desktop") is { Length: > 0 } desktop)
+        if (row.Text("desktop") is { Length: > 0 } desktopId)
         {
-            if (DesktopEntries.Find(desktop) is not { } entry)
+            if (desktop.Find(desktopId) is not { } entry)
             {
-                log.Debug($"no desktop entry named {desktop}; the tile is dropped");
+                log.Debug($"no desktop entry named {desktopId}; the tile is dropped");
                 return null;
             }
 
             name ??= entry.Name;
-            exec ??= entry.Exec;
+            exec ??= DesktopLaunch.CommandFor(entry);
             icon ??= entry.Icon;
         }
 

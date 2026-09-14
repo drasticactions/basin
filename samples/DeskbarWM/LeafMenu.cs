@@ -1,3 +1,5 @@
+using Basin.Freedesktop;
+
 namespace DeskbarWm;
 
 internal static class LeafMenu
@@ -25,16 +27,35 @@ internal static class LeafMenu
 
     internal static List<MenuItemEntry> BuildApplications(Manager manager)
     {
+        var listable = manager.Desktop.Listable();
         var items = new List<MenuItemEntry>();
-        foreach (var app in DesktopEntries.All())
+        if (manager.Configuration.MenuCategories)
         {
-            var entry = app;
-            items.Add(new MenuItemEntry(app.Name, () => manager.LaunchApp(entry)));
+            foreach (var group in DesktopCategories.Group(listable))
+            {
+                items.Add(new MenuItemEntry(DesktopCategories.DefaultLabel(group.Category), Children: BuildLaunchers(manager, group.Entries)));
+            }
+        }
+        else
+        {
+            items.AddRange(BuildLaunchers(manager, listable));
         }
 
         if (items.Count == 0)
         {
             items.Add(new MenuItemEntry("No applications found", Enabled: false));
+        }
+
+        return items;
+    }
+
+    private static List<MenuItemEntry> BuildLaunchers(Manager manager, IReadOnlyList<DesktopEntry> entries)
+    {
+        var items = new List<MenuItemEntry>(entries.Count);
+        foreach (var app in entries)
+        {
+            var entry = app;
+            items.Add(new MenuItemEntry(app.Name, () => manager.LaunchApp(entry)));
         }
 
         return items;
@@ -66,7 +87,7 @@ internal static class LeafMenu
         var items = new List<MenuItemEntry>();
         foreach (var appId in manager.Recents.RecentApplications)
         {
-            if (DesktopEntries.EntryFor(appId) is { } app)
+            if (manager.Desktop.FindForAppId(appId) is { } app)
             {
                 var entry = app;
                 items.Add(new MenuItemEntry(app.Name, () => manager.LaunchApp(entry)));

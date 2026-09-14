@@ -10,6 +10,11 @@ internal sealed class Session : IDisposable
     private readonly Lock _gate = new();
 
     public Session(string path, string renderer = "pixman", params string[] extra)
+        : this(path, null, renderer, extra)
+    {
+    }
+
+    public Session(string path, IReadOnlyDictionary<string, string>? environment, string renderer = "pixman", params string[] extra)
     {
         var info = new ProcessStartInfo(path)
         {
@@ -18,6 +23,11 @@ internal sealed class Session : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            info.Environment[name] = value;
+        }
+
         info.ArgumentList.Add("--backend");
         info.ArgumentList.Add("headless");
         info.ArgumentList.Add("--renderer");

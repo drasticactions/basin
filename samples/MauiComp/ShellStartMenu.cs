@@ -1,5 +1,6 @@
 using Basin;
 using Basin.Capabilities;
+using Basin.Freedesktop;
 using Basin.Scene;
 using Basin.UI.Avalonia;
 using MauiComp.Shell;
@@ -52,7 +53,7 @@ internal sealed class ShellStartMenu : IDisposable
 
     public Action<string>? Launch { get; set; }
 
-    public Func<IReadOnlyList<AppEntry>>? Programs { get; set; }
+    public Func<IReadOnlyList<DesktopEntry>>? Programs { get; set; }
 
     public void Toggle()
     {
@@ -140,20 +141,34 @@ internal sealed class ShellStartMenu : IDisposable
     private M.MenuFlyout BuildPrograms()
     {
         var flyout = new M.MenuFlyout();
-        var entries = Programs?.Invoke() ?? [];
-        foreach (var entry in entries)
+        var terminal = ExecLine.TerminalFromEnvironment();
+        foreach (var group in DesktopCategories.Group(Programs?.Invoke() ?? []))
         {
-            var item = new M.MenuFlyoutItem { Text = entry.Name };
-            var command = DesktopEntries.CommandLine(entry.Exec);
-            item.Clicked += (_, _) =>
+            var folder = new M.MenuFlyoutSubItem { Text = DesktopCategories.DefaultLabel(group.Category) };
+            foreach (var entry in group.Entries)
             {
-                Close();
-                Launch?.Invoke(command);
-            };
-            flyout.Add(item);
+                if (entry.LaunchArgv(terminal) is not { } argv)
+                {
+                    continue;
+                }
+
+                var command = ExecLine.Join(argv);
+                var item = new M.MenuFlyoutItem { Text = entry.Name };
+                item.Clicked += (_, _) =>
+                {
+                    Close();
+                    Launch?.Invoke(command);
+                };
+                folder.Add(item);
+            }
+
+            if (folder.Count > 0)
+            {
+                flyout.Add(folder);
+            }
         }
 
-        if (entries.Count == 0)
+        if (flyout.Count == 0)
         {
             flyout.Add(new M.MenuFlyoutItem { Text = "(Empty)", IsEnabled = false });
         }

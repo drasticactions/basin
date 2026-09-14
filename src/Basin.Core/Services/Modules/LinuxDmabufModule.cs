@@ -10,12 +10,14 @@ public sealed class LinuxDmabufModule : IProtocolModule
     private readonly string _mainDevicePath;
     private readonly FdLedger? _ledger;
     private readonly IReadOnlyList<(string DevicePath, DrmFormatSet Formats)>? _extraTranches;
+    private readonly DrmFormatSet? _captureFormats;
 
     public LinuxDmabufModule(
         DrmFormatSet formats,
         string mainDevicePath,
         FdLedger? ledger = null,
-        IReadOnlyList<(string DevicePath, DrmFormatSet Formats)>? extraTranches = null)
+        IReadOnlyList<(string DevicePath, DrmFormatSet Formats)>? extraTranches = null,
+        DrmFormatSet? captureFormats = null)
     {
         ArgumentNullException.ThrowIfNull(formats);
         ArgumentException.ThrowIfNullOrEmpty(mainDevicePath);
@@ -23,6 +25,7 @@ public sealed class LinuxDmabufModule : IProtocolModule
         _mainDevicePath = mainDevicePath;
         _ledger = ledger;
         _extraTranches = extraTranches;
+        _captureFormats = captureFormats;
     }
 
     public string WireInterface => "zwp_linux_dmabuf_v1";
@@ -34,8 +37,11 @@ public sealed class LinuxDmabufModule : IProtocolModule
     public void SeedDefaults(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        services.UseDefault<ICaptureDmabufConstraints>(
-            new CaptureDmabufConstraints(_formats, _mainDevicePath));
+        if (_captureFormats is { Count: > 0 } captureFormats)
+        {
+            services.UseDefault<ICaptureDmabufConstraints>(
+                new CaptureDmabufConstraints(captureFormats, _mainDevicePath));
+        }
     }
 
     public IDisposable Install(BasinServices services)

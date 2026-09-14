@@ -42,7 +42,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        if (!fromInputMethod && HandleHyprShortcut(key, pressed))
+        if (!fromInputMethod && HandleGlobalShortcut(key, pressed))
         {
             return;
         }

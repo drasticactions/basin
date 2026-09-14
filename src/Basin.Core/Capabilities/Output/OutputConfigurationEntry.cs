@@ -18,7 +18,6 @@ public readonly record struct OutputConfigurationEntry
 
     public uint? Overscan { get; init; }
 
-
     public OutputRgbRange? RgbRange { get; init; }
 
     public bool? Primary { get; init; }

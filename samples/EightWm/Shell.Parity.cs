@@ -1,3 +1,4 @@
+using Basin.Freedesktop;
 using Basin.Seat;
 using Xkb;
 

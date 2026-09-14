@@ -42,6 +42,27 @@ public sealed class DefaultGlobalShortcuts : IGlobalShortcuts
         return i;
     }
 
+    public bool Trigger(string appId, string id, bool pressed, ulong timestampMs)
+    {
+        ArgumentNullException.ThrowIfNull(appId);
+        ArgumentNullException.ThrowIfNull(id);
+        if (!_shortcuts.TryGetValue((appId, id), out var shortcut))
+        {
+            return false;
+        }
+
+        if (pressed)
+        {
+            _observers.Activated(in shortcut, timestampMs);
+        }
+        else
+        {
+            _observers.Deactivated(in shortcut, timestampMs);
+        }
+
+        return true;
+    }
+
     public void AddObserver(IGlobalShortcutObserver observer) => _observers.Add(observer);
 
     public void RemoveObserver(IGlobalShortcutObserver observer) => _observers.Remove(observer);

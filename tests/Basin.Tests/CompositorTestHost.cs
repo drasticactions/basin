@@ -70,11 +70,11 @@ internal sealed class CompositorTestHost : IDisposable
 
         _fdAllowance = DriverFdResidue.For(renderer);
         TestLogging.WarmStreams();
+        TestLogging.WarmSockets();
         _fdBaseline = FdSnapshot.Take();
         var stack = RendererCatalog.Create(renderer, RenderNodePath);
         Renderer = stack.Renderer;
-
-        stack.DeviceAllocator?.Dispose();
+        DeviceAllocator = stack.DeviceAllocator;
 
         Display = TransportUnderTest == TransportKind.Managed
             ? WlServerDisplay.Create(new ManagedTransport())
@@ -281,6 +281,8 @@ internal sealed class CompositorTestHost : IDisposable
 
     public IRenderer Renderer { get; }
 
+    public IAllocator? DeviceAllocator { get; }
+
     public Scene.Scene Scene { get; }
 
     public MemoryBuffer Target { get; }
@@ -413,6 +415,7 @@ internal sealed class CompositorTestHost : IDisposable
         _sceneOutput?.Dispose();
         _swapchain?.Dispose();
         Scene.Root.Destroy();
+        DeviceAllocator?.Dispose();
         Renderer.Dispose();
         Target.Destroy();
         OutputGlobal.Dispose();

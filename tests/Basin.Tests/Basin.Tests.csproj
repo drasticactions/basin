@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DBusHandlerTypeName>Basin.Tests.PortalClient.TestDBusHandler</DBusHandlerTypeName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +14,18 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+    <PackageReference Include="Tmds.DBus.Generator" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.Request.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.Session.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.Screenshot.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.ScreenCast.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.RemoteDesktop.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.Clipboard.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.InputCapture.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.portal.GlobalShortcuts.xml" DBusGeneratorMode="Proxy" Namespace="Basin.Tests.PortalClient" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,8 +33,10 @@
     <ProjectReference Include="../../samples/Dam/Dam.csproj" />
     <ProjectReference Include="../../samples/EightWm/EightWm.csproj" />
     <ProjectReference Include="../../samples/TinyComp/TinyComp.csproj" />
+    <ProjectReference Include="../../samples/BasinPortal/BasinPortal.csproj" />
     <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
     <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
@@ -47,7 +62,11 @@
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
     <ProjectReference Include="../../src/Basin.Hypr/Basin.Hypr.csproj" />
     <ProjectReference Include="../../src/Basin.Hypr.InputCapture/Basin.Hypr.InputCapture.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal/Basin.Portal.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal.Prompts.Skia/Basin.Portal.Prompts.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Eis/Basin.Eis.csproj" />
     <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../../src/Basin.Screencast.PipeWire/Basin.Screencast.PipeWire.csproj" />
     <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.River/Basin.Shell.River.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />

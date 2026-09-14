@@ -48,7 +48,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Equal(1, config.Outputs);
         Assert.True(config.Transactions);
         Assert.True(config.Offload);
-        Assert.Equal(TinyComp.FrameStyle.Beos, config.FrameStyle);
+        Assert.Equal(TinyComp.FrameStyle.Flat, config.FrameStyle);
         Assert.Equal(0, config.CornerRadius);
         Assert.Null(config.NightLight);
         Assert.Empty(config.Rules);
@@ -90,7 +90,7 @@ public sealed class TinyCompConfigTests : IDisposable
                 input_capture = false
                 ctm = false
 
-                [hypr.shortcuts]
+                [shortcuts]
                 "org.example.app:toggle" = "Super+Shift+p"
                 "no-colon" = "Super+q"
                 "org.example.app:bad" = "Nope+q"
@@ -103,7 +103,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.False(config.HyprInputCapture);
         Assert.False(config.HyprCtm);
         Assert.Contains("hypr.ctm", config.FromFile);
-        var row = Assert.Single(config.HyprShortcuts);
+        var row = Assert.Single(config.Shortcuts);
         Assert.Equal(("org.example.app", "toggle"), row.Key);
         Assert.Equal(Modifiers.Super | Modifiers.Shift, row.Value.Modifiers);
         Assert.Equal(Keysym.FromName("p"), row.Value.Keysym);
@@ -124,7 +124,7 @@ public sealed class TinyCompConfigTests : IDisposable
             Write("[frame]\nstyle = \"lozenge\"\ncorner_radius = 12\n"), BasinLog.For("t"), out var fatal);
 
         Assert.Null(fatal);
-        Assert.Equal(TinyComp.FrameStyle.Beos, config.FrameStyle);
+        Assert.Equal(TinyComp.FrameStyle.Flat, config.FrameStyle);
         Assert.Equal(12, config.CornerRadius);
         Assert.Contains(_lines, line => line.Contains("style", StringComparison.Ordinal));
     }

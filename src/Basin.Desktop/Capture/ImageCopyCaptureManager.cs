@@ -1,5 +1,6 @@
 using Basin.Capabilities;
 using Basin.Desktop.Protocol;
+using Basin.Diagnostics;
 using Wayland;
 using Wayland.Server;
 
@@ -7,6 +8,8 @@ namespace Basin.Desktop;
 
 public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposable
 {
+    private static readonly BasinLogger Log = BasinLog.For("capture");
+
     public const int Version = 1;
 
     private const uint ErrorInvalidOption = 1;
@@ -388,7 +391,18 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
                 return;
             }
 
-            var ok = Session.Render(buffer);
+            bool ok;
+            try
+            {
+                ok = Session.Render(buffer);
+            }
+            catch (InvalidOperationException e)
+            {
+                Log.Warn($"capture frame refused its buffer: {e.Message}");
+                SendFailed(ExtImageCopyCaptureFrameV1.FailureReason.BufferConstraints);
+                return;
+            }
+
             if (!ok)
             {
                 SendFailed(ExtImageCopyCaptureFrameV1.FailureReason.Unknown);

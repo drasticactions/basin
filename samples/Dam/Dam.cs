@@ -105,7 +105,7 @@ internal sealed partial class Dam : IDisposable
 
         if (_renderer.Device is { } renderDevice)
         {
-            _services.Install(new LinuxDmabufModule(_renderer.DmabufTextureFormats, renderDevice.DevicePath));
+            _services.Install(new LinuxDmabufModule(_renderer.DmabufTextureFormats, renderDevice.DevicePath, captureFormats: _renderer.DmabufRenderFormats));
         }
 
         _services.Freeze();

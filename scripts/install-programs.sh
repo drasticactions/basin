@@ -17,7 +17,10 @@
 # CI can also mint.
 #
 # A .desktop file in a publish is installed into the desktop database under
-# $XDG_DATA_HOME instead, because that is where a portal reads it.
+# $XDG_DATA_HOME instead, because that is where a portal reads it. When the
+# set includes tinycomp, westonia or maui-comp, the two xdg-desktop-portal
+# registration files that route the portal interfaces to basin are written
+# under $XDG_DATA_HOME/xdg-desktop-portal as well; --no-portal-files skips them.
 #
 # --ssh DEST installs on another machine instead of this one, and nothing is
 # left here. DEST is anything ssh takes, an alias in ~/.ssh/config included,
@@ -29,6 +32,7 @@
 #   --rid RID     runtime identifier, default the host's, or the remote's
 #   --out DIR     where the programs are installed, default ~/.local/bin
 #   --ssh DEST    install on DEST over ssh rather than on this machine
+#   --no-portal-files  leave the xdg-desktop-portal registration files alone
 #   -n, --dry-run print what an install will do, and change nothing
 #
 
@@ -42,7 +46,10 @@ rid=
 out=
 destination=
 dry=0
+portal_files=1
 excluded=(samples/BlurClient)
+portal_programs=(tinycomp westonia maui-comp xdg-desktop-portal-basin)
+portal_interfaces="org.freedesktop.impl.portal.ScreenCast;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Screenshot;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;org.freedesktop.impl.portal.GlobalShortcuts;org.freedesktop.impl.portal.Access;"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -50,9 +57,10 @@ while [ $# -gt 0 ]; do
         --rid) rid=${2:?--rid needs a value}; shift 2 ;;
         --out) out=${2:?--out needs a value}; shift 2 ;;
         --ssh) destination=${2:?--ssh needs a value}; shift 2 ;;
+        --no-portal-files) portal_files=0; shift ;;
         -n|--dry-run) dry=1; shift ;;
         -h|--help)
-            sed -n '3,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '3,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         -*)
@@ -94,6 +102,38 @@ run_ssh() {
 
 run_login() {
     run_ssh "sh -lc $(quote "$1")"
+}
+
+wants_portal_files() {
+    local project name candidate
+    [ "$portal_files" -eq 1 ] || return 1
+    for project in "${projects[@]}"; do
+        name=$(program_name "$project")
+        for candidate in "${portal_programs[@]}"; do
+            [ "$name" = "$candidate" ] && return 0
+        done
+    done
+    return 1
+}
+
+write_portal_files() {
+    local directory=$1 executable=${2:-}
+    mkdir -p "$directory/portals"
+    printf '[portal]\nDBusName=org.freedesktop.impl.portal.desktop.basin\nInterfaces=%s\nUseIn=basin\n' \
+        "$portal_interfaces" > "$directory/portals/basin.portal"
+    {
+        printf '[preferred]\ndefault=gtk;kde;gnome;\n'
+        printf '%s\n' "$portal_interfaces" | tr ';' '\n' | sed '/^$/d; s/$/=basin;/'
+    } > "$directory/basin-portals.conf"
+    if [ -n "$executable" ]; then
+        printf '[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.basin\nExec=%s\n' \
+            "$executable" > "$directory/basin.service"
+    fi
+}
+
+reload_bus() {
+    command -v busctl >/dev/null 2>&1 || return 0
+    busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig >/dev/null 2>&1 || true
 }
 
 remote_expand() {
@@ -184,10 +224,14 @@ if [ -n "$destination" ]; then
     fi
 
     applications=$(remote_expand '${XDG_DATA_HOME:-$HOME/.local/share}/applications')
+    portal_home=$(remote_expand '${XDG_DATA_HOME:-$HOME/.local/share}/xdg-desktop-portal')
+    services_home=$(remote_expand '${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services')
 else
     : "${out:=${XDG_BIN_HOME:-$HOME/.local/bin}}"
     : "${rid:=$host}"
     applications="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    portal_home="${XDG_DATA_HOME:-$HOME/.local/share}/xdg-desktop-portal"
+    services_home="${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services"
 
     mkdir -p "$out"
     out=$(cd "$out" && pwd)
@@ -201,7 +245,7 @@ echo "version $version, rid $rid"
 installed=()
 
 payload="$stage/payload"
-mkdir -p "$payload/bin" "$payload/applications"
+mkdir -p "$payload/bin" "$payload/applications" "$payload/portal"
 
 for project in "${projects[@]}"; do
     name=$(program_name "$project")
@@ -243,6 +287,21 @@ for project in "${projects[@]}"; do
     rm -rf "$stage/$name"
 done
 
+if wants_portal_files; then
+    if [ -n "$destination" ]; then
+        write_portal_files "$payload/portal" "$out/xdg-desktop-portal-basin"
+    else
+        write_portal_files "$stage/portal" "$out/xdg-desktop-portal-basin"
+        mkdir -p "$portal_home/portals" "$services_home"
+        install_file 644 "$stage/portal/portals/basin.portal" "$portal_home/portals/basin.portal"
+        install_file 644 "$stage/portal/basin-portals.conf" "$portal_home/basin-portals.conf"
+        install_file 644 "$stage/portal/basin.service" "$services_home/org.freedesktop.impl.portal.desktop.basin.service"
+        reload_bus
+    fi
+
+    installed+=("$portal_home/portals/basin.portal" "$portal_home/basin-portals.conf" "$services_home/org.freedesktop.impl.portal.desktop.basin.service")
+fi
+
 if [ -n "$destination" ]; then
     echo
     echo "installing on $destination"
@@ -251,6 +310,8 @@ if [ -n "$destination" ]; then
 set -eu
 out=$1
 applications=$2
+portal_home=$3
+services_home=$4
 mkdir -p "$out"
 work=$(mktemp -d "$out/.basin-install.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
@@ -264,14 +325,21 @@ for file in "$work"/applications/*; do
     mkdir -p "$applications"
     mv -f "$file" "$applications/$(basename "$file")"
 done
+if [ -f "$work/portal/basin-portals.conf" ]; then
+    mkdir -p "$portal_home/portals" "$services_home"
+    mv -f "$work/portal/portals/basin.portal" "$portal_home/portals/basin.portal"
+    mv -f "$work/portal/basin-portals.conf" "$portal_home/basin-portals.conf"
+    [ -f "$work/portal/basin.service" ] && mv -f "$work/portal/basin.service" "$services_home/org.freedesktop.impl.portal.desktop.basin.service"
+    command -v busctl >/dev/null 2>&1 && busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig >/dev/null 2>&1 || true
+fi
 if [ -d "$applications" ] && command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$applications" 2>/dev/null || true
 fi
 SCRIPT
     )
 
-    tar -C "$payload" -cf - bin applications \
-        | run_ssh "sh -c $(quote "$remote") sh $(quote "$out") $(quote "$applications")"
+    tar -C "$payload" -cf - bin applications portal \
+        | run_ssh "sh -c $(quote "$remote") sh $(quote "$out") $(quote "$applications") $(quote "$portal_home") $(quote "$services_home")"
 
     path=$(run_login 'printf "%s\n" "$PATH"' 2>/dev/null | tail -1 || true)
 else

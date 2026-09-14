@@ -4,14 +4,14 @@
     <PackageId>Basin.Hypr.InputCapture</PackageId>
     <RootNamespace>Basin.Hypr.InputCapture</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>hyprland-input-capture-v1 and its EIS bridge for Basin.</Description>
+    <Description>hyprland-input-capture-v1 for Basin, over the Basin.Eis capture engine.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Basin.Tests" />
     <ProjectReference Include="../Basin.Hypr/Basin.Hypr.csproj" />
     <PackageReference Include="WaylandSharpest" />
-    <PackageReference Include="libei-dotnet" />
+    <ProjectReference Include="../Basin.Eis/Basin.Eis.csproj" />
     <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-input-capture-v1.xml" WaylandNamespace="Basin.Hypr.InputCapture.Protocol" />
   </ItemGroup>
 

@@ -104,7 +104,7 @@ internal sealed partial class MauiComp : IDisposable
         _services.Install(DesktopPack.For("maui-comp"));
         if (_renderer.Device is { } renderDevice)
         {
-            _services.Install(new LinuxDmabufModule(_renderer.DmabufTextureFormats, renderDevice.DevicePath));
+            _services.Install(new LinuxDmabufModule(_renderer.DmabufTextureFormats, renderDevice.DevicePath, captureFormats: _renderer.DmabufRenderFormats));
         }
 
         _services.Freeze();
@@ -251,6 +251,7 @@ internal sealed partial class MauiComp : IDisposable
     {
         BasinReport.Line($"RENDERER {RendererName} chrome={_ui.Produces.ToString().ToLowerInvariant()}");
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
+        Basin.Cli.CurrentDesktop.Export("basin", _host.Drm is null ? null : _host.Socket);
 
         _seat?.CenterPointer();
         _uiDriver.Woken += _outputs.ScheduleAll;

@@ -1,6 +1,7 @@
 using Basin;
 using Basin.Desktop;
 using Basin.Diagnostics;
+using Basin.Freedesktop;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 using MauiComp.Shell;
@@ -25,7 +26,7 @@ internal sealed partial class MauiComp
     private ShellSwitcher? _switcher;
     private ShellStartMenu? _startMenu;
     private ShellRunDialog? _runDialog;
-    private List<AppEntry>? _programs;
+    private readonly DesktopEntries _desktop = new();
 
     internal IReadOnlyList<ShellWindow> Windows => _windows;
 
@@ -47,7 +48,7 @@ internal sealed partial class MauiComp
             Scale = () => _outputs.Views.FirstOrDefault()?.Output.Scale ?? 1.0,
             Changed = _outputs.ScheduleAll,
             Launch = Spawn,
-            Programs = () => _programs ??= DesktopEntries.Scan(),
+            Programs = () => _desktop.Listable(),
         };
         _runDialog = new ShellRunDialog(_ui, _mauiSurfaces, _layers.Overlay, _shellSurfaces, Spawn)
         {

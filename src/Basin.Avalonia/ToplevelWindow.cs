@@ -673,21 +673,33 @@ public sealed class ToplevelWindow : Window
 
     private string _clientTitle = "Wayland";
     private string? _titleOverride;
+    private Func<string, string>? _titleDecorator;
 
     internal void ApplyTitle(string title)
     {
         _clientTitle = title;
         if (_titleOverride is null)
         {
-            Title = title;
+            Title = Decorated(title);
         }
     }
 
     public void OverrideTitle(string? title)
     {
         _titleOverride = title;
-        Title = title ?? _clientTitle;
+        Title = title ?? Decorated(_clientTitle);
     }
+
+    public void DecorateTitle(Func<string, string>? decorator)
+    {
+        _titleDecorator = decorator;
+        if (_titleOverride is null)
+        {
+            Title = Decorated(_clientTitle);
+        }
+    }
+
+    private string Decorated(string title) => _titleDecorator is { } decorator ? decorator(title) : title;
 
     internal void ApplyClientSize(int width, int height)
     {

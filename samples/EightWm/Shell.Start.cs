@@ -1,5 +1,6 @@
 using Basin;
 using Basin.Capabilities;
+using Basin.Freedesktop;
 using Basin.Render.Skia;
 using Basin.Scene;
 using Basin.UI.Skia;
@@ -23,6 +24,7 @@ internal sealed partial class Shell
     private Config _config = null!;
     private readonly List<Tile> _tiles = [];
     private readonly List<DesktopEntry> _entries = [];
+    private readonly DesktopEntries _desktop = new();
 
     internal IUIHost UIHost => _uiHost ??= SkiaUIHosts.For(_renderer);
 
@@ -97,7 +99,8 @@ internal sealed partial class Shell
         _entries.Clear();
         if (_config.ScanDesktopFiles)
         {
-            _entries.AddRange(DesktopEntries.Scan());
+            _desktop.Invalidate();
+            _entries.AddRange(_desktop.Listable());
         }
 
         _tiles.AddRange(_config.Tiles);
@@ -111,10 +114,15 @@ internal sealed partial class Shell
                     break;
                 }
 
+                if (DesktopLaunch.CommandFor(entry) is not { } command)
+                {
+                    continue;
+                }
+
                 _tiles.Add(new Tile
                 {
                     Name = entry.Name,
-                    Exec = entry.Exec,
+                    Exec = command,
                     Icon = entry.Icon ?? Path.GetFileNameWithoutExtension(entry.Id),
                     Color = AccentOf(entry.Id),
                     Size = taken % 7 == 0 ? TileSize.Wide : TileSize.Square,

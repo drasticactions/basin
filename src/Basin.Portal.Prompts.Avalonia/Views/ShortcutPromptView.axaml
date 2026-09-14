@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:p="using:Basin.Portal.Prompts.Avalonia"
+             x:Class="Basin.Portal.Prompts.Avalonia.ShortcutPromptView"
+             x:DataType="p:ShortcutPromptModel"
+             Focusable="True">
+  <UserControl.Styles>
+    <StyleInclude Source="avares://Basin.Portal.Prompts.Avalonia/Views/PromptStyles.axaml" />
+  </UserControl.Styles>
+  <Border Classes="basin-prompt">
+    <StackPanel Spacing="12">
+      <DockPanel>
+        <Image Classes="basin-prompt-icon" DockPanel.Dock="Left" Source="{Binding Icon}" IsVisible="{Binding HasIcon}" />
+        <StackPanel Spacing="4">
+          <TextBlock Classes="basin-prompt-title" Text="{Binding Title}" />
+          <TextBlock Classes="basin-prompt-app" Text="{Binding AppLine}" />
+        </StackPanel>
+      </DockPanel>
+      <ItemsControl Name="Rows" ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="p:ShortcutRowModel">
+            <Button Classes="basin-prompt-row" Background="Transparent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="OnRowClick" Tag="{Binding}">
+              <DockPanel>
+                <TextBlock Classes="basin-prompt-body" DockPanel.Dock="Right" Text="{Binding Display}" MinWidth="160" />
+                <TextBlock Classes="basin-prompt-body" Text="{Binding Description}" />
+              </DockPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Classes="basin-prompt-muted" Text="Click a row and press the chord to bind it; Backspace clears it." />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button Classes="basin-prompt-secondary" Name="DenyButton" Content="{Binding DenyLabel}" Command="{Binding Deny}" />
+        <Button Classes="basin-prompt-primary" Name="AcceptButton" Content="{Binding AcceptLabel}" Command="{Binding Accept}" IsDefault="True" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

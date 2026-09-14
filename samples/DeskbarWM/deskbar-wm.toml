@@ -28,6 +28,7 @@ show-time-zone = false
 recent-documents = 10
 recent-folders = 10
 recent-applications = 10
+categories = true          # Applications grouped by main category; false lists them flat
 
 [icons]
 haiku-directory = ""      # a directory of .hvif files; themed icons otherwise

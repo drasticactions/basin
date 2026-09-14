@@ -69,7 +69,7 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
         var canvas = skia.BeginDraw();
         try
         {
-            DrawChrome(canvas, clientBox, state, interaction);
+            DrawChrome(canvas, clientBox, state, interaction, (int)Math.Ceiling(surface.Size.Scale));
         }
         finally
         {
@@ -260,7 +260,7 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
     private static bool Hits(in Box box, double x, double y) =>
         !box.IsEmpty && x >= box.X && x < box.Right && y >= box.Y && y < box.Bottom;
 
-    private void DrawChrome(SKCanvas canvas, in Box clientBox, in FrameState state, in FrameInteraction interaction)
+    private void DrawChrome(SKCanvas canvas, in Box clientBox, in FrameState state, in FrameInteraction interaction, int iconScale)
     {
         var chrome = state.Active ? ChromeActive : ChromeInactive;
         var text = state.Active ? TextActive : TextInactive;
@@ -280,7 +280,7 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
         stroke.StrokeWidth = 1;
         canvas.DrawRect(0.5f, 0.5f, w - 1, h - 1, stroke);
 
-        DrawIcon(canvas, state, text);
+        DrawIcon(canvas, state, text, iconScale);
 
         var titleRight = w - Border - 8;
         if (!_close.IsEmpty)
@@ -357,7 +357,7 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
         canvas.DrawRoundRect(box.X, box.Y, box.Width, box.Height, 4, 4, theme.Fill);
     }
 
-    private void DrawIcon(SKCanvas canvas, in FrameState state, SKColor text)
+    private void DrawIcon(SKCanvas canvas, in FrameState state, SKColor text, int iconScale)
     {
         var box = new SKRect(_icon.X, _icon.Y, _icon.Right, _icon.Bottom);
         if (state.Icon.Pixels is { } pixels && theme.ImageFor(pixels) is { } clientIcon)
@@ -366,7 +366,8 @@ internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
             return;
         }
 
-        if (state.Icon.Name is { Length: > 0 } name && theme.IconFor(name) is { } image)
+        var iconName = state.Icon.Name is { Length: > 0 } named ? named : state.AppId;
+        if (iconName is { Length: > 0 } && theme.IconFor(iconName, iconScale) is { } image)
         {
             canvas.DrawImage(image, box, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
             return;

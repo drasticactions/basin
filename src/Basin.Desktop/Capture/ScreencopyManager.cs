@@ -1,4 +1,5 @@
 using Basin.Capabilities;
+using Basin.Diagnostics;
 using Basin.Desktop.Protocol;
 using Wayland;
 using Wayland.Server;
@@ -7,6 +8,8 @@ namespace Basin.Desktop;
 
 public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
 {
+    private static readonly BasinLogger Log = BasinLog.For("capture");
+
     public const int Version = 3;
 
     private readonly WlGlobal _global;
@@ -297,7 +300,20 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
             }
 
             var source = CaptureSource.Output(Output, _overlayCursor);
-            return capture.Supports(source) && capture.Capture(source, _region, target);
+            if (!capture.Supports(source))
+            {
+                return false;
+            }
+
+            try
+            {
+                return capture.Capture(source, _region, target);
+            }
+            catch (InvalidOperationException e)
+            {
+                Log.Warn($"screencopy frame refused its buffer: {e.Message}");
+                return false;
+            }
         }
     }
 }

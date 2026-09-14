@@ -1,4 +1,5 @@
 using Basin.Desktop;
+using Basin.Eis;
 using static Basin.Hypr.InputCapture.InputCaptureLog;
 
 namespace Basin.Hypr.InputCapture;
@@ -13,7 +14,7 @@ public sealed class HyprlandInputCaptureModule : DesktopModule<HyprlandInputCapt
 
     public override bool ShouldInstall(BasinServices services)
     {
-        if (InputCaptureLibrary.IsAvailable(out var whyNot))
+        if (EisLibrary.IsAvailable(out var whyNot))
         {
             return true;
         }
@@ -22,6 +23,16 @@ public sealed class HyprlandInputCaptureModule : DesktopModule<HyprlandInputCapt
         return false;
     }
 
-    protected override HyprlandInputCaptureManager Create(BasinServices services) =>
-        new(services.Display, services.Loop, services.Require<OutputLayout>(), services.Require<Basin.Seat.Seat>());
+    protected override HyprlandInputCaptureManager Create(BasinServices services)
+    {
+        if (services.Find<InputCaptureEngine>() is { } shared)
+        {
+            return new HyprlandInputCaptureManager(services.Display, shared);
+        }
+
+        var manager = new HyprlandInputCaptureManager(
+            services.Display, services.Loop, services.Require<OutputLayout>(), services.Require<Basin.Seat.Seat>());
+        services.Use(manager.Engine);
+        return manager;
+    }
 }

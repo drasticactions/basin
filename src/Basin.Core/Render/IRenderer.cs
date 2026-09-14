@@ -10,6 +10,8 @@ public interface IRenderer : IDisposable
 
     DrmFormatSet DmabufTextureFormats => DrmFormatSet.Empty;
 
+    DrmFormatSet DmabufRenderFormats => DrmFormatSet.Empty;
+
     IRenderDevice? Device => null;
 
     ColorTransformCapability ColorTransform => ColorTransformCapability.None;

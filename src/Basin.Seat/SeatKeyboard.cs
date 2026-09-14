@@ -5,7 +5,7 @@ using Xkb;
 
 namespace Basin.Seat;
 
-public sealed class SeatKeyboard : IDisposable
+public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, IDisposable
 {
     private readonly Seat _seat;
     private readonly List<IKeyboardGrab> _grabs = [];
@@ -257,6 +257,8 @@ public sealed class SeatKeyboard : IDisposable
     }
 
     public XkbKeysym KeysymFor(uint key) => State?.GetKeyOneSym(key + 8) ?? default;
+
+    public uint KeysymForKeycode(uint keycode) => KeysymFor(keycode).Value;
 
     public XkbKeysym RawKeysymFor(uint key)
     {

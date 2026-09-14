@@ -2,9 +2,34 @@
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
+# Under MSYS/Cygwin a /c/... path reaches dotnet as C:\c\..., so anything handed to
+# a native tool goes through cygpath. Elsewhere the path is already the native one.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+
+project_csproj() {
+    local project=$1
+    set -- "$root/$project"/*.csproj
+    if [ -f "$1" ]; then
+        printf '%s' "$1"
+    fi
+}
+
+is_packable() {
+    local project=$1 file
+    file=$(project_csproj "$project")
+    [ -n "$file" ] || return 1
+    ! grep -q '<IsPackable>false</IsPackable>' "$file"
+}
+
 program_name() {
     local project=$1 file assembly=
-    file=$(set -- "$root/$project"/*.csproj; [ -f "$1" ] && printf '%s' "$1")
+    file=$(project_csproj "$project")
     if [ -n "$file" ]; then
         assembly=$(sed -n 's:.*<AssemblyName>\(.*\)</AssemblyName>.*:\1:p' "$file" | head -1)
     fi

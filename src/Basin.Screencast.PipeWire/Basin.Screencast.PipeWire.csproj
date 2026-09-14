@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Screencast.PipeWire</PackageId>
+    <RootNamespace>Basin.Screencast.PipeWire</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>IScreencastPublisher over PipeWire for Basin: one Video/Source node per stream, MemFd always and DmaBuf when a renderer exports, driven from the compositor loop.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <PackageReference Include="pipewire-dotnet" />
+  </ItemGroup>
+
+</Project>

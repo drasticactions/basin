@@ -8,6 +8,8 @@ public interface IGlobalShortcuts
 
     int Enumerate(Span<GlobalShortcutInfo> shortcuts);
 
+    bool Trigger(string appId, string id, bool pressed, ulong timestampMs);
+
     void AddObserver(IGlobalShortcutObserver observer);
 
     void RemoveObserver(IGlobalShortcutObserver observer);

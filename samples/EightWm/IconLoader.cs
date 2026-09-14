@@ -1,4 +1,4 @@
-using Basin.Cli;
+using Basin.Freedesktop;
 using Basin.Render.Skia;
 using SkiaSharp;
 using Svg.Skia;

@@ -90,6 +90,8 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableRgbFormats;
 
+    public DrmFormatSet DmabufRenderFormats => _device.RenderableFormats;
+
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
     internal SkiaColorTransforms ColorTransforms { get; } = new();

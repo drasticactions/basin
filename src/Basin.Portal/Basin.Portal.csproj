@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Portal</PackageId>
+    <RootNamespace>Basin.Portal</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>The xdg-desktop-portal backend for Basin: the D-Bus side of org.freedesktop.impl.portal.desktop.basin, answering ScreenCast, RemoteDesktop, Screenshot, Clipboard, InputCapture, GlobalShortcuts and Access over capability interfaces a separate process implements as a Wayland client.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../Basin.Eis/Basin.Eis.csproj" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+    <PackageReference Include="Tmds.DBus.Generator" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.ScreenCast.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.RemoteDesktop.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Screenshot.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Clipboard.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.InputCapture.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.GlobalShortcuts.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Access.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Request.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Session.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+  </ItemGroup>
+
+</Project>

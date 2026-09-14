@@ -388,6 +388,8 @@ public sealed class ToplevelWindows : IDisposable
 
     public event Action<ToplevelWindow?>? ScreenWindowChanged;
 
+    public event Action<ToplevelWindow, Wayland.Server.WlClient?>? WindowOpened;
+
     internal void NotifyActivatedUi() => WindowActivatedOnHost?.Invoke();
 
     public Task CloseAllAsync()
@@ -498,6 +500,7 @@ public sealed class ToplevelWindows : IDisposable
             var window = new ToplevelWindow(this, id, info, serverSide, minimum, maximum);
             window.ApplyResizeInsets(insets);
             _windows[id] = window;
+            WindowOpened?.Invoke(window, info.Client);
             Policy.PlaceWindow(window, info);
             if (isScreen)
             {
@@ -1556,6 +1559,7 @@ public sealed class ToplevelWindows : IDisposable
             {
                 var window = new ToplevelWindow(this, id, info, serverSide, (0, 0), (0, 0));
                 _windows[id] = window;
+                WindowOpened?.Invoke(window, info.Client);
                 Policy.PlaceWindow(window, info);
                 window.Show();
                 CountChanged?.Invoke(_windows.Count);

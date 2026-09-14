@@ -55,6 +55,8 @@ public sealed unsafe class GlRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
+    public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
+
     public int DrmFd => _device.DrmFd;
 
     internal GL Gl => _device.Gl;

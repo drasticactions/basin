@@ -294,9 +294,8 @@ public sealed class SceneScreenCapture : IScreenCapture
         {
             var client = source.ClientOnly ? trees.Client ?? content : content;
             Box? popupClip = source.ClientOnly ? box : null;
-            var (originX, originY) = source.ClientOnly ? (box.X, box.Y) : client.ScenePosition;
             var rendered = _scene.RenderSubtrees(
-                renderer, client, trees.Popups, popupClip, target, originX + region.X, originY + region.Y, scale,
+                renderer, client, trees.Popups, popupClip, target, box.X + region.X, box.Y + region.Y, scale,
                 Background, TableFor(null));
             return rendered && (!source.OverlayCursor || DrawCursorOverRegion(box, region, scale, target));
         }

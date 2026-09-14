@@ -14,7 +14,7 @@ internal sealed class RetroIconLoader
 
     private const int DitherSpread = 64;
 
-    private readonly Basin.WindowManager.Skia.IconRaster _loader = new(new Basin.Cli.IconSearch
+    private readonly Basin.WindowManager.Skia.IconRaster _loader = new(new Basin.Freedesktop.IconSearch
     {
         OverrideDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "retro-wm", "icons"),

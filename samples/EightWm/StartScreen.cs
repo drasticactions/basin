@@ -1,5 +1,6 @@
 using Basin;
 using Basin.Capabilities;
+using Basin.Freedesktop;
 using Basin.Render.Skia;
 using Basin.Scene;
 using SkiaSharp;
@@ -18,6 +19,7 @@ internal sealed class StartScreen : IDisposable
     private readonly SKPaint _fill;
     private readonly SKFont _label;
     private readonly SKFont _header;
+    private readonly SKFont _groupHeader;
     private readonly SKFont _badge;
 
     private int _width;
@@ -53,6 +55,7 @@ internal sealed class StartScreen : IDisposable
         _fill = SkiaCensus.Track(new SKPaint { IsAntialias = true });
         _label = SkiaCensus.Track(new SKFont(Fonts.Regular, 15) { Subpixel = true });
         _header = SkiaCensus.Track(new SKFont(Fonts.Semibold, 34) { Subpixel = true });
+        _groupHeader = SkiaCensus.Track(new SKFont(Fonts.Semibold, 20) { Subpixel = true });
         _badge = SkiaCensus.Track(new SKFont(Fonts.Semibold, 22) { Subpixel = true });
         Pan = new Manipulation
         {
@@ -246,17 +249,26 @@ internal sealed class StartScreen : IDisposable
     public void SetApps(IEnumerable<DesktopEntry> entries)
     {
         Apps.Clear();
-        foreach (var entry in entries)
+        foreach (var group in DesktopCategories.Group(entries))
         {
-            Apps.Add(new Tile
+            var label = DesktopCategories.DefaultLabel(group.Category);
+            foreach (var entry in group.Entries)
             {
-                Name = entry.Name,
-                Exec = entry.Exec,
-                Icon = entry.Icon ?? Path.GetFileNameWithoutExtension(entry.Id),
-                Size = TileSize.Small,
-                Color = 0x33ffffff,
-                Group = "Apps",
-            });
+                if (DesktopLaunch.CommandFor(entry) is not { } command)
+                {
+                    continue;
+                }
+
+                Apps.Add(new Tile
+                {
+                    Name = entry.Name,
+                    Exec = command,
+                    Icon = entry.Icon ?? Path.GetFileNameWithoutExtension(entry.Id),
+                    Size = TileSize.Small,
+                    Color = 0x33ffffff,
+                    Group = label,
+                });
+            }
         }
 
         _laid = false;
@@ -395,6 +407,8 @@ internal sealed class StartScreen : IDisposable
                 canvas.Translate(side + (float)AppsPan.Offset, top);
                 foreach (var group in Apps.Groups)
                 {
+                    _fill.Color = new SKColor(0xffffffff).WithAlpha(200);
+                    canvas.DrawText(group.Name, group.Box.X, -14f, SKTextAlign.Left, _groupHeader, _fill);
                     foreach (var tile in group.Tiles)
                     {
                         DrawTile(canvas, tile);
@@ -579,6 +593,7 @@ internal sealed class StartScreen : IDisposable
         _press.Dispose();
         SkiaCensus.Release(_badge);
         SkiaCensus.Release(_header);
+        SkiaCensus.Release(_groupHeader);
         SkiaCensus.Release(_label);
         SkiaCensus.Release(_fill);
         _chrome.Dispose();

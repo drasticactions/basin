@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Portal.Prompts.Skia</PackageId>
+    <RootNamespace>Basin.Portal.Prompts.Skia</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>IPortalPrompts painted with Skia onto surfaces a host supplies, in a compositor or in a portal process: the source, device, area, shortcut and confirmation dialogs the xdg-desktop-portal backend asks for.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Portal/Basin.Portal.csproj" />
+    <ProjectReference Include="../Basin.UI.Skia/Basin.UI.Skia.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Svg.Skia" />
+  </ItemGroup>
+
+</Project>

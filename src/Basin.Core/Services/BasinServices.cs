@@ -12,17 +12,27 @@ public sealed class BasinServices : IDisposable
     private readonly Dictionary<string, IProtocolModule> _modules = [];
     private readonly List<IDisposable> _installed = [];
     private readonly List<Type> _unresolved = [];
+    private readonly WlServerDisplay? _display;
     private bool _disposed;
 
     public BasinServices(WlServerDisplay display, ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(display);
         ArgumentNullException.ThrowIfNull(loop);
-        Display = display;
+        _display = display;
         Loop = loop;
     }
 
-    public WlServerDisplay Display { get; }
+    public BasinServices(ICompositorEventLoop loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        Loop = loop;
+    }
+
+    public WlServerDisplay Display =>
+        _display ?? throw new InvalidOperationException("this registry serves a process with no Wayland display; only modules that install no global can be installed");
+
+    public bool HasDisplay => _display is not null;
 
     public ICompositorEventLoop Loop { get; }
 

@@ -141,6 +141,47 @@ public sealed class ImageCopyCaptureTests
     }
 
     [Fact]
+    public void A_buffer_the_renderer_refuses_fails_the_frame_and_keeps_the_client()
+    {
+        using var host = new CompositorTestHost();
+        using var sources = new ImageCaptureSourceManager(host.Display);
+        var capture = new TestScreenCapture(host) { ThrowsOnCapture = true };
+        using var manager = new ImageCopyCaptureManager(host.Display, host.Buffers, capture);
+
+        var bound = Bind(host);
+        var source = bound.OutputSources.CreateSource(host.Client.Outputs[0]);
+        var session = bound.Capture.CreateSession(source, 0);
+        var sessionEvents = SessionEvents.Attach(session);
+        host.PumpUntil(() => sessionEvents.Done == 1);
+
+        var frame = session.CreateFrame();
+        var frameEvents = FrameEvents.Attach(frame);
+        var target = host.Client.CreateBuffer(160, 120, Fill.Solid(160, 120, 0x00000000));
+        frame.AttachBuffer(target.Proxy);
+        frame.DamageBuffer(0, 0, 160, 120);
+        frame.Capture();
+        host.PumpUntil(() => frameEvents.Ready || frameEvents.Failed);
+        Assert.True(frameEvents.Failed);
+        Assert.Equal((uint)Basin.Desktop.Protocol.ExtImageCopyCaptureFrameV1.FailureReason.BufferConstraints, frameEvents.FailReason);
+        frame.Dispose();
+
+        capture.ThrowsOnCapture = false;
+        var second = session.CreateFrame();
+        var secondEvents = FrameEvents.Attach(second);
+        second.AttachBuffer(target.Proxy);
+        second.DamageBuffer(0, 0, 160, 120);
+        second.Capture();
+        host.PumpToClient();
+        capture.Damage(host.Output, new Box(0, 0, 160, 120));
+        host.PumpUntil(() => secondEvents.Ready || secondEvents.Failed);
+        Assert.True(secondEvents.Ready);
+        second.Dispose();
+
+        session.Destroy();
+        host.PumpToServer();
+    }
+
+    [Fact]
     public void Output_session_gates_frames_on_damage()
     {
         using var host = new CompositorTestHost();
@@ -640,6 +681,44 @@ public sealed class CaptureExclusionTests
         Assert.False(capture.Supports(source));
         Assert.False(capture.TryDescribe(source, out _));
         Assert.False(capture.Capture(source, default, host.Target));
+    }
+
+    [Fact]
+    public void A_toplevel_capture_starts_at_the_reported_frame_not_the_tree_origin()
+    {
+        using var host = new CompositorTestHost();
+        var model = new TestToplevelModel();
+        var index = new Basin.Scene.ToplevelSceneIndex();
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Toplevels = model,
+            Index = index,
+            Background = new RenderColor(0, 0, 0, 1),
+        };
+
+        var tree = new Basin.Scene.SceneTree(host.Scene.Root);
+        tree.SetPosition(30, 30);
+        var chrome = new Basin.Scene.SceneRect(tree, 60, 10, new RenderColor(0, 0, 1, 1));
+        chrome.SetPosition(0, -10);
+        _ = new Basin.Scene.SceneRect(tree, 60, 40, new RenderColor(0, 1, 0, 1));
+
+        var id = model.Add("framed", "app.framed", geometry: new Box(30, 20, 60, 50));
+        index.Set(id, new Basin.Scene.ToplevelCaptureTrees(tree, null));
+
+        var source = CaptureSource.Toplevel(id);
+        Assert.True(capture.TryDescribe(source, out var format));
+        Assert.Equal((60, 50), (format.Width, format.Height));
+        Assert.True(capture.Capture(source, default, host.Target));
+
+        var top = host.Pixel(5, 5);
+        Assert.True((top & 0x000000FFu) > 0xD0, $"the titlebar is not at the top of the capture: {top:X8}");
+        var body = host.Pixel(5, 25);
+        Assert.True((body & 0x0000FF00u) >> 8 > 0xD0, $"the client is not below the titlebar: {body:X8}");
+        var beyond = host.Pixel(5, 55);
+        Assert.True((beyond & 0x00FFFFFFu) < 0x202020u, $"the capture extends past the frame: {beyond:X8}");
+
+        tree.Destroy();
     }
 
     [Fact]

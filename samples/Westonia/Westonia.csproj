@@ -25,6 +25,9 @@
     <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
     <ProjectReference Include="../../src/Basin.Color/Basin.Color.csproj" />
+    <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../../src/Basin.Eis/Basin.Eis.csproj" />
+    <ProjectReference Include="../../src/Basin.Screencast.PipeWire/Basin.Screencast.PipeWire.csproj" />
     <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />

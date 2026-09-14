@@ -665,9 +665,9 @@ public sealed class HyprlandGlobalShortcutsTests
         Assert.Equal(1, registry.Count);
         Assert.True(manager.IsRegistered("org.example.app", "toggle"));
 
-        Assert.True(manager.Trigger("org.example.app", "toggle", pressed: true));
-        Assert.True(manager.Trigger("org.example.app", "toggle", pressed: false));
-        Assert.False(manager.Trigger("org.example.app", "missing", pressed: true));
+        Assert.True(registry.Trigger("org.example.app", "toggle", pressed: true, 1));
+        Assert.True(registry.Trigger("org.example.app", "toggle", pressed: false, 2));
+        Assert.False(registry.Trigger("org.example.app", "missing", pressed: true, 3));
         host.PumpUntil(() => released == 1);
         Assert.Equal(1, pressed);
 

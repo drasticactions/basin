@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using Basin.Diagnostics;
 
@@ -15,6 +17,7 @@ internal static class TestLogging
             : BasinLogLevel.Debug;
         BasinLog.Sink = Sink;
         WarmStreams();
+        WarmSockets();
     }
 
     internal static void WarmStreams()
@@ -22,4 +25,22 @@ internal static class TestLogging
         BasinReport.Flush();
         Sink.Flush();
     }
+
+    internal static void WarmSockets()
+    {
+        if (_socketsWarm)
+        {
+            return;
+        }
+
+        _socketsWarm = true;
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        var buffer = new byte[1];
+        var pending = socket.ReceiveAsync(buffer, SocketFlags.None);
+        socket.SendTo(buffer, socket.LocalEndPoint!);
+        pending.Wait(TimeSpan.FromSeconds(5));
+    }
+
+    private static bool _socketsWarm;
 }

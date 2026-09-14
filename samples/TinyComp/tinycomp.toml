@@ -80,9 +80,13 @@ enable        = true         # advertise the pack at all
 input_capture = true         # hyprland_input_capture_v1, which needs libeis
 ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage elsewhere
 
-# A global shortcut a client registers fires on the chord bound here. Rows are
-# "app_id:id" = "Mod+Mod+Key"; a registration with no row never fires.
-# [hypr.shortcuts]
+# A global shortcut a client registers, over hyprland_global_shortcuts_v1 or the
+# GlobalShortcuts portal, fires on the chord bound here. Rows are
+# "app_id:id" = "Mod+Mod+Key". A portal client that asks for a preferred trigger
+# gets it when it parses and collides with nothing here or in [bindings]; a
+# registration with no row and no accepted preference goes to the bind prompt
+# through the portal and never fires through the hyprland protocol.
+# [shortcuts]
 # "org.example.app:toggle" = "Super+Shift+P"
 
 # The chord is Mod+Mod+Key, where the key is an xkb keysym name.

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Basin.Eis;
 using Basin.Hypr.InputCapture;
 using Libei;
 using Wayland;
@@ -79,7 +80,7 @@ public sealed class HyprlandInputCaptureTests
     [Fact]
     public void A_session_gets_an_eis_fd_and_a_barrier_crossing_captures_the_pointer()
     {
-        Assert.SkipUnless(InputCaptureLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
+        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);
@@ -121,7 +122,7 @@ public sealed class HyprlandInputCaptureTests
     [Fact]
     public void Input_arrives_over_eis_while_captured()
     {
-        Assert.SkipUnless(InputCaptureLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
+        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);
@@ -208,7 +209,7 @@ public sealed class HyprlandInputCaptureTests
     [Fact]
     public void A_barrier_off_the_edge_is_invalid_barrier()
     {
-        Assert.SkipUnless(InputCaptureLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
+        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);
@@ -221,7 +222,7 @@ public sealed class HyprlandInputCaptureTests
     [Fact]
     public void A_duplicate_barrier_id_is_invalid_barrier_id()
     {
-        Assert.SkipUnless(InputCaptureLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
+        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);
@@ -235,7 +236,7 @@ public sealed class HyprlandInputCaptureTests
     [Fact]
     public void Releasing_with_the_wrong_activation_id_is_invalid_activation_id()
     {
-        Assert.SkipUnless(InputCaptureLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
+        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);
@@ -253,7 +254,7 @@ public sealed class HyprlandInputCaptureTests
     [Fact]
     public void A_layout_change_clears_barriers_and_disables_the_session()
     {
-        Assert.SkipUnless(InputCaptureLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
+        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);
@@ -291,7 +292,7 @@ public sealed class HyprlandInputCaptureTests
             .Install(InputCapturePack.Default)
             .Freeze();
         Assert.Equal(
-            InputCaptureLibrary.IsAvailable(out _),
+            EisLibrary.IsAvailable(out _),
             with.Modules.ContainsKey("hyprland_input_capture_manager_v1"));
     }
 }

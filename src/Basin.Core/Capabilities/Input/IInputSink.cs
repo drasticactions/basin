@@ -31,4 +31,6 @@ public interface IInputSink
     bool TouchFrame() => false;
 
     bool TouchCancel() => false;
+
+    InputDeviceCapability Supports() => InputDeviceCapability.Keyboard | InputDeviceCapability.Pointer;
 }

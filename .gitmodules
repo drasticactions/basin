@@ -22,3 +22,6 @@
 [submodule "external/hyprland-protocols"]
 	path = external/hyprland-protocols
 	url = https://github.com/hyprwm/hyprland-protocols.git
+[submodule "external/xdg-desktop-portal"]
+	path = external/xdg-desktop-portal
+	url = https://github.com/flatpak/xdg-desktop-portal.git

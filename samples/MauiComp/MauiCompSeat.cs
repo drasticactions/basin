@@ -75,6 +75,10 @@ internal sealed class MauiCompSeat : IDisposable
 
     public Func<uint, uint, bool, bool>? ButtonHook { get; set; }
 
+    public Func<uint, double, double, double, double, bool>? CaptureHook { get; set; }
+
+    public void Warp(double x, double y) => _pointer.Warp(x, y);
+
     public Func<IUISurface?, bool>? ChromeClick { get; set; }
 
     public Func<double, double, string?>? ChromeCursor { get; set; }
@@ -166,10 +170,17 @@ internal sealed class MauiCompSeat : IDisposable
             return;
         }
 
+        var dx = _pointer.X - _x;
+        var dy = _pointer.Y - _y;
         _x = _pointer.X;
         _y = _pointer.Y;
         _cursor.MoveTo(_x, _y);
         PointerMoved?.Invoke(_x, _y);
+        if (CaptureHook?.Invoke(time, _x, _y, dx, dy) == true)
+        {
+            return;
+        }
+
         if (Grabbing?.Invoke() == true)
         {
             return;

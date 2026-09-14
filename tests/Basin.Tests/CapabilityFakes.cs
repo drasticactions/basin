@@ -40,6 +40,8 @@ internal sealed class TestScreenCapture : IScreenCapture
 
     public CaptureSourceKind Refuses { get; set; } = CaptureSourceKind.None;
 
+    public bool ThrowsOnCapture { get; set; }
+
     public void Damage(IOutput output, Box box) => _damageObservers.Damaged(output, box);
 
     public bool Supports(in CaptureSource source) =>
@@ -63,6 +65,11 @@ internal sealed class TestScreenCapture : IScreenCapture
         if (source.Kind == Refuses)
         {
             return false;
+        }
+
+        if (ThrowsOnCapture)
+        {
+            throw new InvalidOperationException("modifier 0x0 is not renderable for Xrgb8888 here");
         }
 
         var scale = source.OutputTarget?.Scale ?? 1;
@@ -961,9 +968,84 @@ internal sealed class TestScreencastPublisher : IScreencastPublisher
     public bool TryPublish(in ScreencastRequest request, out ScreencastStreamInfo info)
     {
         Requests.Add(request);
-        info = new ScreencastStreamInfo { NodeId = 77 };
+        info = new ScreencastStreamInfo { NodeId = 77 + (uint)Requests.Count - 1 };
         return true;
     }
 
     public void Close(ulong streamId) => ClosedStreams.Add(streamId);
+}
+
+internal sealed class TestShortcutRegistry : IGlobalShortcuts
+{
+    private readonly Dictionary<(string AppId, string Id), GlobalShortcutInfo> _shortcuts = [];
+    private readonly GlobalShortcutObservers _observers = new();
+
+    public HashSet<string> Taken { get; } = [];
+
+    public int Count => _shortcuts.Count;
+
+    public GlobalShortcutInfo this[string appId, string id] => _shortcuts[(appId, id)];
+
+    public bool TryRegister(in GlobalShortcutInfo shortcut)
+    {
+        var key = (shortcut.AppId, shortcut.Id);
+        if (_shortcuts.ContainsKey(key))
+        {
+            return false;
+        }
+
+        var trigger = shortcut.PreferredTrigger;
+        var bound = trigger.Length > 0 && !Taken.Contains(trigger) ? trigger : "";
+        var stored = shortcut with { TriggerDescription = bound };
+        _shortcuts[key] = stored;
+        _observers.Registered(in stored);
+        return true;
+    }
+
+    public void Unregister(string appId, string id)
+    {
+        if (_shortcuts.Remove((appId, id), out var removed))
+        {
+            _observers.Removed(in removed);
+        }
+    }
+
+    public int Enumerate(Span<GlobalShortcutInfo> shortcuts)
+    {
+        if (shortcuts.Length < _shortcuts.Count)
+        {
+            return -1;
+        }
+
+        var i = 0;
+        foreach (var shortcut in _shortcuts.Values)
+        {
+            shortcuts[i++] = shortcut;
+        }
+
+        return i;
+    }
+
+    public bool Trigger(string appId, string id, bool pressed, ulong timestampMs)
+    {
+        if (!_shortcuts.TryGetValue((appId, id), out var shortcut))
+        {
+            return false;
+        }
+
+        if (pressed)
+        {
+            _observers.Activated(in shortcut, timestampMs);
+        }
+        else
+        {
+            _observers.Deactivated(in shortcut, timestampMs);
+        }
+
+        return true;
+    }
+
+    public void AddObserver(IGlobalShortcutObserver observer) => _observers.Add(observer);
+
+    public void RemoveObserver(IGlobalShortcutObserver observer) => _observers.Remove(observer);
 }

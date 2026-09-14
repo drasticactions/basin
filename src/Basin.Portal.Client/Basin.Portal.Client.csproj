@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Portal.Client</PackageId>
+    <RootNamespace>Basin.Portal.Client</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>Client-side implementations of the seams Basin.Portal reads, over standard Wayland protocols: screen capture over ext-image-copy-capture, injection over the virtual devices, the clipboard over ext-data-control, global shortcuts and input capture over the hyprland protocols, a client output layout, seat, keymap and event loop.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Eis/Basin.Eis.csproj" />
+    <ProjectReference Include="../Basin.Portal/Basin.Portal.csproj" />
+    <ProjectReference Include="../Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
+    <PackageReference Include="WaylandSharpest" />
+    <PackageReference Include="xkbcommon-dotnet" />
+    <PackageReference Include="mesa-dotnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(WaylandProtocolsDir)unstable/xdg-output/xdg-output-unstable-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-image-capture-source/ext-image-capture-source-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-data-control/ext-data-control-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(BasinProtocolDir)virtual-keyboard-unstable-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(WlrProtocolsDir)unstable/wlr-virtual-pointer-unstable-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-input-capture-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+    <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-global-shortcuts-v1.xml" WaylandNamespace="Basin.Portal.Client.Protocol" />
+  </ItemGroup>
+
+</Project>

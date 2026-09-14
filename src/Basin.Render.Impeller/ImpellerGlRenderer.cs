@@ -63,6 +63,8 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
+    public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
+
     public ColorTransformCapability ColorTransform => ColorTransformCapability.None;
 
     public bool WaitsOnGpu => _device.WaitsOnGpu;

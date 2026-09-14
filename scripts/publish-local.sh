@@ -130,7 +130,7 @@ cat > "$work/nuget.config" <<EOF
 <configuration>
   <packageSources>
     <clear />
-    <add key="basin-local" value="$out" />
+    <add key="basin-local" value="$(native_path "$out")" />
   </packageSources>
   <packageSourceMapping>
     <clear />
@@ -153,7 +153,8 @@ EOF
     echo '</Project>'
 } > "$work/install.csproj"
 
-dotnet restore "$work/install.csproj" --packages "$cache" --nologo -v quiet
+dotnet restore "$(native_path "$work/install.csproj")" \
+    --packages "$(native_path "$cache")" --nologo -v quiet
 
 for id in "${ids[@]}"; do
     installed="$cache/$(lower "$id")/$folder_version"

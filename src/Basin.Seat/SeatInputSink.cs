@@ -140,4 +140,8 @@ public class SeatInputSink : IInputSink
         router.Cancel();
         return true;
     }
+
+    public virtual InputDeviceCapability Supports() =>
+        InputDeviceCapability.Keyboard | InputDeviceCapability.Pointer |
+        (Seat is { Touch.Router: not null } ? InputDeviceCapability.Touch : InputDeviceCapability.None);
 }

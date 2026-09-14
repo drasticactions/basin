@@ -63,6 +63,8 @@ public sealed class SkiaGlRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
+    public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
+
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
     internal SkiaColorTransforms ColorTransforms { get; } = new();

@@ -31,6 +31,7 @@ internal sealed class MenuSurface : IDisposable
     {
         Output = output;
         Items = items;
+        OpensLeft = alignRight;
         using (var font = new SKFont(Fonts.Sans, Theme.FontSize))
         {
             SurfaceSize = Measure(font);
@@ -66,6 +67,8 @@ internal sealed class MenuSurface : IDisposable
     public IReadOnlyList<MenuItemEntry> Items { get; }
 
     public Point Origin { get; }
+
+    public bool OpensLeft { get; }
 
     public Size SurfaceSize { get; }
 

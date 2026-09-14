@@ -1,4 +1,5 @@
 using Basin.Capabilities;
+using Basin.Diagnostics;
 using Basin.Desktop;
 using Basin.Hypr.Protocol;
 using Wayland;
@@ -8,6 +9,8 @@ namespace Basin.Hypr;
 
 public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, IToplevelObserver, IDisposable
 {
+    private static readonly BasinLogger Log = BasinLog.For("hyprland");
+
     public const int Version = 2;
 
     private const DrmFormat ExportFormat = DrmFormat.Xrgb8888;
@@ -279,8 +282,24 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
                 return;
             }
 
-            if (_target is not { } target || _owner._capture is not { } capture ||
-                !capture.Capture(_source, new Box(0, 0, _format.Width, _format.Height), target))
+            if (_target is not { } target || _owner._capture is not { } capture)
+            {
+                _resource.SendFailed();
+                return;
+            }
+
+            bool captured;
+            try
+            {
+                captured = capture.Capture(_source, new Box(0, 0, _format.Width, _format.Height), target);
+            }
+            catch (InvalidOperationException e)
+            {
+                Log.Warn($"toplevel export frame refused its buffer: {e.Message}");
+                captured = false;
+            }
+
+            if (!captured)
             {
                 _resource.SendFailed();
                 return;

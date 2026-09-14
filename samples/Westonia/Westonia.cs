@@ -128,7 +128,7 @@ internal sealed partial class Westonia : IDisposable
 
         if (_renderer.Device is { } renderDevice)
         {
-            _services.Install(new LinuxDmabufModule(_renderer.DmabufTextureFormats, renderDevice.DevicePath));
+            _services.Install(new LinuxDmabufModule(_renderer.DmabufTextureFormats, renderDevice.DevicePath, captureFormats: _renderer.DmabufRenderFormats));
         }
 
         _layers = new ShellLayers(_scene.Root);
@@ -416,6 +416,7 @@ internal sealed partial class Westonia : IDisposable
     private int RunLoop()
     {
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
+        Basin.Cli.CurrentDesktop.Export("basin", _host.Drm is null ? null : _host.Socket);
 
         _seat?.CenterPointer();
         _uiDriver.Woken += _outputs.ScheduleAll;

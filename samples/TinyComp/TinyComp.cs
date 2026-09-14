@@ -245,8 +245,8 @@ internal sealed partial class TinyComp :
         var drm = backend == BackendKind.Drm;
         _config = config;
         _configPath = configPath;
-        _hyprShortcuts = new HyprShortcuts(log);
-        _hyprShortcuts.Configure(config);
+        _shortcuts = new TinyCompShortcuts(log);
+        _shortcuts.Configure(config);
         var outputCount = config.Outputs;
         var rendererName = config.Renderer;
         _log = log;
@@ -490,8 +490,9 @@ internal sealed partial class TinyComp :
         {
             _hyprCtm = new HyprCtm(this);
             _services.Use<Basin.Capabilities.ICtmControl>(_hyprCtm);
-            _services.Use<Basin.Capabilities.IGlobalShortcuts>(_hyprShortcuts);
         }
+
+        _services.Use<Basin.Capabilities.IGlobalShortcuts>(_shortcuts);
 
         LinuxDmabufModule? dmabufModule = null;
         if (_renderer.Device is { } dmabufDevice)
@@ -499,7 +500,8 @@ internal sealed partial class TinyComp :
             dmabufModule = new LinuxDmabufModule(
                 _renderer.DmabufTextureFormats,
                 dmabufDevice.DevicePath,
-                extraTranches: _blitters.Select(b => (b.DevicePath, b.ImportableFormats)).ToArray());
+                extraTranches: _blitters.Select(b => (b.DevicePath, b.ImportableFormats)).ToArray(),
+                captureFormats: _renderer.DmabufRenderFormats);
         }
 
         _services
@@ -517,7 +519,6 @@ internal sealed partial class TinyComp :
 
         _services.Freeze();
         _dmabufGlobal = dmabufModule?.Global;
-        _hyprShortcutManager = _services.Find<HyprlandGlobalShortcutsManager>();
         WireInputCapture();
 
         _sessionStore = _services.Require<Basin.Capabilities.ISessionStore>();
@@ -813,6 +814,7 @@ internal sealed partial class TinyComp :
     public int Run()
     {
         BasinReport.Line(CompositorLines.Socket(_socket));
+        Basin.Cli.CurrentDesktop.Export("basin", _host.Drm is null ? null : _socket);
 
         if (_channelEndpoint is { } endpoint)
         {

@@ -4,4 +4,5 @@ public readonly record struct GlobalShortcutInfo(
     string AppId,
     string Id,
     string Description,
-    string TriggerDescription);
+    string TriggerDescription,
+    string PreferredTrigger = "");

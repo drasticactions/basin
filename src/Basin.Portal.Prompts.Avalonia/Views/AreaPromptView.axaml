@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:p="using:Basin.Portal.Prompts.Avalonia"
+             x:Class="Basin.Portal.Prompts.Avalonia.AreaPromptView"
+             x:DataType="p:AreaPromptModel"
+             Focusable="True" Cursor="Cross">
+  <UserControl.Styles>
+    <StyleInclude Source="avares://Basin.Portal.Prompts.Avalonia/Views/PromptStyles.axaml" />
+  </UserControl.Styles>
+  <Panel Name="Veil" Background="#60000000">
+    <Border Background="#FF2A2D35" CornerRadius="6" Padding="14,8" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0">
+      <TextBlock Classes="basin-prompt-body" Text="{Binding Hint}" />
+    </Border>
+    <Canvas Name="Band">
+      <Rectangle Name="Rubber" Fill="#605E8AD2" Stroke="#FF5E8AD2" StrokeThickness="1" IsVisible="False" />
+    </Canvas>
+  </Panel>
+</UserControl>

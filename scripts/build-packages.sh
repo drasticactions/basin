@@ -40,10 +40,21 @@ is_packable() {
 }
 
 unresolved_dependencies() {
-    local package=$1 id=$2 version=$3
-    command -v python3 >/dev/null 2>&1 || return 0
-    python3 - "$package" "$id" "$version" <<'PY'
+    local package=$1 id=$2 version=$3 python=
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 &&
+           "$candidate" -c '' >/dev/null 2>&1; then
+            python=$candidate
+            break
+        fi
+    done
+    [ -n "$python" ] || return 0
+    "$python" - "$package" "$id" "$version" <<'PY'
 import re, sys, zipfile
+
+# Windows Python writes \r\n, and the caller splits this on whitespace, so the \r
+# would ride along on every name and match no package id.
+sys.stdout.reconfigure(newline="\n")
 
 package, identifier, version = sys.argv[1:4]
 with zipfile.ZipFile(package) as archive:

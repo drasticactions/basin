@@ -4,7 +4,7 @@ using Wayland.Server;
 
 namespace Basin.Hypr;
 
-public sealed class HyprlandGlobalShortcutsManager : IDisposable
+public sealed class HyprlandGlobalShortcutsManager : IGlobalShortcutObserver, IDisposable
 {
     public const int Version = 1;
 
@@ -17,6 +17,7 @@ public sealed class HyprlandGlobalShortcutsManager : IDisposable
         ArgumentNullException.ThrowIfNull(display);
         ArgumentNullException.ThrowIfNull(registry);
         _registry = registry;
+        _registry.AddObserver(this);
         _global = display.CreateGlobal(HyprlandGlobalShortcutsManagerV1.Interface, Version, OnBind);
     }
 
@@ -26,13 +27,29 @@ public sealed class HyprlandGlobalShortcutsManager : IDisposable
 
     public bool IsRegistered(string appId, string id) => _shortcuts.ContainsKey((appId, id));
 
-    public bool Trigger(string appId, string id, bool pressed)
+    public void ShortcutRegistered(in GlobalShortcutInfo shortcut)
     {
-        ArgumentNullException.ThrowIfNull(appId);
-        ArgumentNullException.ThrowIfNull(id);
-        if (!_shortcuts.TryGetValue((appId, id), out var shortcut) || shortcut.IsDestroyed)
+    }
+
+    public void ShortcutRemoved(in GlobalShortcutInfo shortcut)
+    {
+    }
+
+    public void ShortcutActivated(in GlobalShortcutInfo shortcut, ulong timestampMs) => Send(in shortcut, pressed: true);
+
+    public void ShortcutDeactivated(in GlobalShortcutInfo shortcut, ulong timestampMs) => Send(in shortcut, pressed: false);
+
+    public void Dispose()
+    {
+        _registry.RemoveObserver(this);
+        _global.Dispose();
+    }
+
+    private void Send(in GlobalShortcutInfo info, bool pressed)
+    {
+        if (!_shortcuts.TryGetValue((info.AppId, info.Id), out var shortcut) || shortcut.IsDestroyed)
         {
-            return false;
+            return;
         }
 
         var nanos = MonotonicClock.Nanos;
@@ -48,11 +65,7 @@ public sealed class HyprlandGlobalShortcutsManager : IDisposable
         {
             shortcut.SendReleased(hi, lo, nsec);
         }
-
-        return true;
     }
-
-    public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)
     {
@@ -61,7 +74,7 @@ public sealed class HyprlandGlobalShortcutsManager : IDisposable
         {
             var resource = new HyprlandGlobalShortcutV1Resource(client, manager.Version, e.Shortcut);
             var key = (e.AppId, e.Id);
-            var info = new GlobalShortcutInfo(e.AppId, e.Id, e.Description, e.TriggerDescription);
+            var info = new GlobalShortcutInfo(e.AppId, e.Id, e.Description, e.TriggerDescription, e.TriggerDescription);
             if (_shortcuts.ContainsKey(key) || !_registry.TryRegister(in info))
             {
                 manager.PostError(

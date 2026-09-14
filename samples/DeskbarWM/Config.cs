@@ -40,6 +40,8 @@ internal sealed class Config
 
     public int RecentApplicationsCount { get; private set; } = 10;
 
+    public bool MenuCategories { get; private set; } = true;
+
     public string HaikuIconDirectory { get; private set; } = string.Empty;
 
     public string DesktopWallpaper { get; private set; } = string.Empty;
@@ -210,6 +212,7 @@ internal sealed class Config
                 config.RecentDocumentsCount = menu.Number("recent-documents", config.RecentDocumentsCount);
                 config.RecentFoldersCount = menu.Number("recent-folders", config.RecentFoldersCount);
                 config.RecentApplicationsCount = menu.Number("recent-applications", config.RecentApplicationsCount);
+                config.MenuCategories = menu.Flag("categories", config.MenuCategories);
             }
 
             if (deskbar.Section("clock") is { } clock)

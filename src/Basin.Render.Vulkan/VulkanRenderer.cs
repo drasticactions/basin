@@ -265,6 +265,8 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => Dev.SampleableFormats;
 
+    public DrmFormatSet DmabufRenderFormats => Dev.RenderableFormats;
+
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
     internal VulkanColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)

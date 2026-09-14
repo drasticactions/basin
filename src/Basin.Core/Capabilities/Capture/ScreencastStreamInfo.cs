@@ -6,5 +6,7 @@ public readonly record struct ScreencastStreamInfo
 
     public ulong ObjectSerial { get; init; }
 
+    public bool DmabufOffered { get; init; }
+
     public string? FailureReason { get; init; }
 }

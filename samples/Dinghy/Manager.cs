@@ -47,7 +47,7 @@ internal sealed class Manager
 
     private readonly Dictionary<WmOutput, DesktopSurface> _desktops = [];
     private readonly Dictionary<WmOutput, WallpaperSurface> _wallpapers = [];
-    private readonly IconRaster _icons = new(new Basin.Cli.IconSearch
+    private readonly IconRaster _icons = new(new Basin.Freedesktop.IconSearch
     {
         OverrideDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "dinghy", "icons"),

@@ -20,6 +20,10 @@ public static class InputCodes
 
     public const uint KeyLeftShift = 42;
 
+    public const uint KeySpace = 57;
+
+    public const uint KeyCapsLock = 58;
+
     public const uint KeyN = 49;
 
     public const uint KeyM = 50;
@@ -33,6 +37,8 @@ public static class InputCodes
     public const uint KeyF9 = 67;
 
     public const uint KeyF10 = 68;
+
+    public const uint KeyKpEnter = 96;
 
     public const uint KeyRightCtrl = 97;
 

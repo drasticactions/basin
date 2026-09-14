@@ -29,4 +29,26 @@ public sealed class GlobalShortcutObservers
 
         _observers.EndDispatch();
     }
+
+    public void Activated(in GlobalShortcutInfo shortcut, ulong timestampMs)
+    {
+        var count = _observers.BeginDispatch();
+        for (var i = 0; i < count; i++)
+        {
+            _observers[i]?.ShortcutActivated(in shortcut, timestampMs);
+        }
+
+        _observers.EndDispatch();
+    }
+
+    public void Deactivated(in GlobalShortcutInfo shortcut, ulong timestampMs)
+    {
+        var count = _observers.BeginDispatch();
+        for (var i = 0; i < count; i++)
+        {
+            _observers[i]?.ShortcutDeactivated(in shortcut, timestampMs);
+        }
+
+        _observers.EndDispatch();
+    }
 }

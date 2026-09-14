@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BasinPortal</RootNamespace>
+    <AssemblyName>xdg-desktop-portal-basin</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+    <BasinAvaloniaBackend>true</BasinAvaloniaBackend>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Eis/Basin.Eis.csproj" />
+    <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal/Basin.Portal.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal.Client/Basin.Portal.Client.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal.Prompts.Avalonia/Basin.Portal.Prompts.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal.Prompts.Skia/Basin.Portal.Prompts.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Screencast.PipeWire/Basin.Screencast.PipeWire.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.WindowManager.Skia/Basin.WindowManager.Skia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.HarfBuzz" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+    <PackageReference Include="WaylandSharpest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/fonts/NotoSansCJK-Regular.ttc" LogicalName="NotoSansCJK-Regular.ttc" />
+  </ItemGroup>
+
+</Project>

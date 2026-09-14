@@ -13,6 +13,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Svg.Skia" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Basin.Tests" />
   </ItemGroup>
 
@@ -38,6 +42,10 @@
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
     <ProjectReference Include="../../src/Basin.Hypr/Basin.Hypr.csproj" />
     <ProjectReference Include="../../src/Basin.Hypr.InputCapture/Basin.Hypr.InputCapture.csproj" />
+    <ProjectReference Include="../../src/Basin.Eis/Basin.Eis.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal/Basin.Portal.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal.Prompts.Skia/Basin.Portal.Prompts.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Screencast.PipeWire/Basin.Screencast.PipeWire.csproj" />
     <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />

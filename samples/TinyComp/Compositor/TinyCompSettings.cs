@@ -113,7 +113,7 @@ internal sealed partial class TinyComp
         ApplyPostStages(loaded);
         ApplyScreenShader(loaded);
         ApplyEffectSettings(loaded);
-        _hyprShortcuts.Configure(loaded);
+        _shortcuts.Configure(loaded);
 
         foreach (var view in Views)
         {

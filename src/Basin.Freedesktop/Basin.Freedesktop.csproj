@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Freedesktop</PackageId>
+    <RootNamespace>Basin.Freedesktop</RootNamespace>
+    <Description>The freedesktop.org specifications Basin reads: XDG base directories, desktop entries resolved from an application id, and application icon lookup.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+  </ItemGroup>
+
+</Project>

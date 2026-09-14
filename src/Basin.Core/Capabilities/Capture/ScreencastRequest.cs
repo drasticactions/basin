@@ -7,4 +7,6 @@ public readonly record struct ScreencastRequest
     public required CaptureSource Source { get; init; }
 
     public ScreencastCursorMode Cursor { get; init; }
+
+    public IDmabufCapture? Dmabuf { get; init; }
 }
