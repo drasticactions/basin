@@ -71,6 +71,7 @@ internal sealed partial class TinyComp
             toplevel.Xdg.Committed += ReportGeometry;
             toplevel.TitleChanged += RefreshFrame;
             toplevel.AppIdChanged += RefreshFrame;
+            toplevel.ParentChanged += RefreshFrame;
             toplevel.MinimizeRequested += () => comp.SetMinimized(this, true);
             toplevel.MoveRequested += serial => comp.BeginMove(this, serial);
             toplevel.ResizeRequested += (serial, edges) => comp.BeginResize(this, edges, serial);
@@ -116,6 +117,12 @@ internal sealed partial class TinyComp
         public Workspace? Workspace { get; set; }
 
         public bool Minimized { get; set; }
+
+        public bool Shaded { get; internal set; }
+
+        public bool Above { get; internal set; }
+
+        public bool Sticky { get; internal set; }
 
         public SceneTree? Tree { get; private set; }
 
@@ -501,6 +508,14 @@ internal sealed partial class TinyComp
             LayoutDecorations();
         }
 
+        public bool Modal { get; private set; }
+
+        public void SetModal(bool modal)
+        {
+            Modal = modal;
+            RefreshFrame();
+        }
+
         private FrameState BuildState() => new()
         {
             Title = Toplevel.Title,
@@ -510,8 +525,21 @@ internal sealed partial class TinyComp
             Maximized = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized),
             Fullscreen = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen),
             Resizing = Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Resizing),
-            Capabilities = FrameCapabilities.Maximize | FrameCapabilities.Minimize,
+            Capabilities = FrameCapabilities.WindowMenu | FrameCapabilities.Maximize | FrameCapabilities.Minimize
+                | FrameCapabilities.Shade | FrameCapabilities.Above | FrameCapabilities.Stick,
+            Kind = Toplevel.Parent is null ? FrameKind.Normal : Modal ? FrameKind.ModalDialog : FrameKind.Dialog,
+            Tiled = TilingOf(Toplevel),
+            Shaded = Shaded,
+            Above = Above,
+            Sticky = Sticky,
         };
+
+        private static FrameTiling TilingOf(XdgToplevelWindow toplevel)
+        {
+            var left = toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.TiledLeft);
+            var right = toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.TiledRight);
+            return left == right ? FrameTiling.None : left ? FrameTiling.Left : FrameTiling.Right;
+        }
 
         private void OnFrameAction(FrameAction action)
         {
@@ -532,7 +560,27 @@ internal sealed partial class TinyComp
                 case FrameActionKind.Resize:
                     _comp.BeginResize(this, (ResizeEdges)action.Edges);
                     break;
+                case FrameActionKind.ToggleShade:
+                    _comp.SetShaded(this, !Shaded);
+                    break;
+                case FrameActionKind.ToggleAbove:
+                    _comp.SetAbove(this, !Above);
+                    break;
+                case FrameActionKind.ToggleSticky:
+                    _comp.SetSticky(this, !Sticky);
+                    break;
             }
+        }
+
+        internal void ApplyShade()
+        {
+            if (SceneSurface is { } surface)
+            {
+                surface.Tree.Enabled = !Shaded;
+            }
+
+            LayoutDecorations();
+            RefreshFrame();
         }
 
         public bool Owns(Surface surface)

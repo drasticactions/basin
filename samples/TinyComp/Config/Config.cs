@@ -40,7 +40,15 @@ internal sealed class Config
 
     public FrameStyle FrameStyle { get; set; } = FrameStyle.Flat;
 
+    public string? MetacityTheme { get; set; }
+
+    public string MetacityButtonLayout { get; set; } = "menu:minimize,maximize,close";
+
+    public string MetacityPalette { get; set; } = "light";
+
     public int CornerRadius { get; set; }
+
+    public double FontSize { get; set; } = 14;
 
     public OutputColorProfileSource ColorSource { get; set; } = OutputColorProfileSource.Edid;
 
@@ -187,7 +195,33 @@ internal sealed class Config
         }
 
         config.Apply(new TomlReader(table, log));
+        fatal = config.ValidateMetacity();
         return config;
+    }
+
+    public string? ValidateMetacity()
+    {
+        if (FrameStyle != FrameStyle.Metacity)
+        {
+            return null;
+        }
+
+        var installed = Basin.Frames.Metacity.MetacityThemes.Available();
+        var available = installed.Count == 0 ? "none installed" : string.Join(", ", installed);
+        if (MetacityTheme is not { Length: > 0 } name)
+        {
+            return $"[frame] style = \"metacity\" names no theme in [frame.metacity] theme; installed themes: {available}";
+        }
+
+        try
+        {
+            _ = Basin.Frames.Metacity.MetacityTheme.Load(name);
+            return null;
+        }
+        catch (Basin.Frames.Metacity.MetacityThemeException e)
+        {
+            return $"[frame.metacity] theme = \"{name}\": {e.Message}; installed themes: {available}";
+        }
     }
 
     public static string Template()
@@ -274,13 +308,30 @@ internal sealed class Config
 
         if (reader.Section("frame") is { } frame)
         {
-            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "none") switch
+            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "metacity", "none") switch
             {
                 "beos" => FrameStyle.Beos,
+                "metacity" => FrameStyle.Metacity,
                 "none" => FrameStyle.None,
                 _ => FrameStyle.Flat,
             };
             CornerRadius = frame.Number("corner_radius", CornerRadius);
+            var fontSize = frame.Number("font_size", FontSize);
+            if (fontSize >= 1)
+            {
+                FontSize = fontSize;
+            }
+            else
+            {
+                reader.Log.Warn($"[frame] font_size must be at least 1, keeping {FontSize}");
+            }
+
+            if (frame.Section("metacity") is { } metacity)
+            {
+                MetacityTheme = metacity.Text("theme") ?? MetacityTheme;
+                MetacityButtonLayout = metacity.Text("button_layout") ?? MetacityButtonLayout;
+                MetacityPalette = metacity.Choice("palette", "light", "light", "dark");
+            }
         }
 
         if (reader.Section("color") is { } color)
@@ -495,6 +546,7 @@ internal sealed class Config
             {
                 "beos" => global::TinyComp.FrameStyle.Beos,
                 "flat" => global::TinyComp.FrameStyle.Flat,
+                "metacity" => global::TinyComp.FrameStyle.Metacity,
                 "none" => global::TinyComp.FrameStyle.None,
                 _ => null,
             },

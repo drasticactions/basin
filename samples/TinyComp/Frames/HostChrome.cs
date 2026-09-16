@@ -172,7 +172,7 @@ internal sealed class HostChrome : IDisposable
         Maximized = _frame.Maximized,
         Fullscreen = _frame.Fullscreen,
         Resizing = _frame.Resizing,
-        Capabilities = FrameCapabilities.Maximize | FrameCapabilities.Minimize,
+        Capabilities = FrameCapabilities.WindowMenu | FrameCapabilities.Maximize | FrameCapabilities.Minimize,
     };
 
     private void OnStateChanged() => Relayout();

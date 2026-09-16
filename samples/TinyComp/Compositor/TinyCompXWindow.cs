@@ -302,7 +302,8 @@ internal sealed partial class TinyComp
             Icon = new FrameIcon(null, _iconBuffer),
             Active = _active,
             Maximized = _maximized,
-            Capabilities = FrameCapabilities.Maximize | FrameCapabilities.Minimize,
+            Capabilities = FrameCapabilities.WindowMenu | FrameCapabilities.Maximize | FrameCapabilities.Minimize,
+            Kind = XWin.TransientFor is null ? FrameKind.Normal : FrameKind.Dialog,
         };
 
         public bool Minimized { get; set; }

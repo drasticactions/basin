@@ -270,6 +270,69 @@ internal sealed partial class TinyComp
         }
     }
 
+    internal void SetShaded(Window window, bool shaded)
+    {
+        if (window.Shaded == shaded || window.Tree is null)
+        {
+            return;
+        }
+
+        window.Shaded = shaded;
+        window.ApplyShade();
+        BasinReport.Line($"SHADED {window.Toplevel.AppId} {(shaded ? "yes" : "no")}");
+    }
+
+    internal void SetAbove(Window window, bool above)
+    {
+        if (window.Above == above || window.Tree is null)
+        {
+            return;
+        }
+
+        window.Above = above;
+        window.Tree.Reparent(LayerFor(window));
+        window.Tree.RaiseToTop();
+        RefreshAboveVisibility();
+        window.RefreshFrame();
+        BasinReport.Line($"ABOVE {window.Toplevel.AppId} {(above ? "yes" : "no")}");
+    }
+
+    internal void SetSticky(Window window, bool sticky)
+    {
+        if (window.Sticky == sticky || window.Tree is null)
+        {
+            return;
+        }
+
+        window.Sticky = sticky;
+        if (!sticky && window.Workspace is { } recorded && ViewOf(recorded) is { Active: { } active })
+        {
+            window.Workspace = active;
+        }
+
+        window.Tree.Reparent(LayerFor(window));
+        window.Tree.RaiseToTop();
+        window.RefreshFrame();
+        _workspaceModel.RaiseMembersChanged();
+        BasinReport.Line($"STICKY {window.Toplevel.AppId} {(sticky ? "yes" : "no")}");
+    }
+
+    internal SceneTree LayerFor(Window window) =>
+        window.Above ? _layers.Top
+        : window.Sticky ? _layers.Windows
+        : window.Workspace?.Tree ?? _layers.Windows;
+
+    private void RefreshAboveVisibility()
+    {
+        foreach (var window in _windows)
+        {
+            if (window is { Above: true, Tree: { } tree } && !window.Minimized)
+            {
+                tree.Enabled = window.Sticky || window.Workspace is not { } workspace || ViewOf(workspace)?.Active == workspace;
+            }
+        }
+    }
+
     private void HideMinimized(Window window)
     {
         if (window.Minimized && window.Tree is { IsDestroyed: false } tree)

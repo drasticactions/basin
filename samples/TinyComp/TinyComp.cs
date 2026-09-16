@@ -68,15 +68,19 @@ internal sealed partial class TinyComp :
     private Basin.Capabilities.IUIHost? _uiHost;
     private FrameStyle _frameStyle;
     private FrameTheme? _frameTheme;
+    private MetacityFrames? _metacity;
 
     internal IFrameRenderer? CreateFrameRenderer() => CreateFrameRenderer(_frameStyle);
 
     internal IFrameRenderer? CreateFrameRenderer(FrameStyle style) => style switch
     {
-        FrameStyle.Beos => new BeosFrameRenderer(_frameTheme ??= new FrameTheme()),
-        FrameStyle.Flat => new SkiaFrameRenderer(_frameTheme ??= new FrameTheme()),
+        FrameStyle.Beos => new BeosFrameRenderer(FrameThemeOrLoad()),
+        FrameStyle.Flat => new SkiaFrameRenderer(FrameThemeOrLoad()),
+        FrameStyle.Metacity => (_metacity ??= MetacityFrames.Load(_config, FrameThemeOrLoad())).CreateRenderer(),
         _ => null,
     };
+
+    private FrameTheme FrameThemeOrLoad() => _frameTheme ??= new FrameTheme((float)_config.FontSize);
 
     internal Basin.Capabilities.IUIHost UIHost => _uiHost ??= SkiaUIHosts.For(_renderer);
     private readonly BasinServices _services;
@@ -576,6 +580,8 @@ internal sealed partial class TinyComp :
                 SetMinimized(window, minimized);
             }
         };
+        _services.Require<XdgDialogManager>().ModalChanged += (toplevel, modal) =>
+            FindWindow(toplevel)?.SetModal(modal);
         _xdgToplevels.NoBorderRequested += (toplevel, noBorder) =>
             RecordDecorationPreference(toplevel.Surface, !noBorder);
         _xdgToplevels.CaptureExclusionRequested += (toplevel, excluded) =>
@@ -918,6 +924,7 @@ internal sealed partial class TinyComp :
         _seamTextInput?.Dispose();
         _seamTextInput = null;
         _host.Dispose();
+        _metacity?.Dispose();
         _frameTheme?.Dispose();
         _renderer.Dispose();
     }

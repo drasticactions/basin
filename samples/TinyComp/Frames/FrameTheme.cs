@@ -17,16 +17,17 @@ internal sealed class FrameTheme : IDisposable
     private readonly Dictionary<(string Name, int Scale), SKImage?> _icons = [];
     private bool _disposed;
 
-    public FrameTheme()
+    public FrameTheme(float fontSize)
     {
+        FontSize = fontSize;
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("NotoSansCJK-Regular.ttc")
             ?? throw new InvalidOperationException("embedded frame font missing");
         using var data = SKData.Create(stream);
         Typeface = SkiaTypefaces.FromCollection(data, "Noto Sans CJK JP")
             ?? throw new InvalidOperationException("embedded font has no 'Noto Sans CJK JP' face");
-        TitleFont = SkiaCensus.Track(new SKFont(Typeface, 14) { Subpixel = true });
-        BadgeFont = SkiaCensus.Track(new SKFont(Typeface, 11) { Subpixel = true });
-        TabFont = SkiaCensus.Track(new SKFont(Typeface, 12) { Subpixel = true, Embolden = true });
+        TitleFont = SkiaCensus.Track(new SKFont(Typeface, fontSize) { Subpixel = true });
+        BadgeFont = SkiaCensus.Track(new SKFont(Typeface, MathF.Round(fontSize * 11 / 14)) { Subpixel = true });
+        TabFont = SkiaCensus.Track(new SKFont(Typeface, MathF.Round(fontSize * 12 / 14)) { Subpixel = true, Embolden = true });
         Text = new SkiaShapedTextCache(Typeface);
         Badges = new SkiaShapedTextCache(Typeface);
         TabText = new SkiaShapedTextCache(Typeface);
@@ -45,6 +46,8 @@ internal sealed class FrameTheme : IDisposable
             StrokeCap = SKStrokeCap.Butt,
         });
     }
+
+    public float FontSize { get; }
 
     public SKTypeface Typeface { get; }
 

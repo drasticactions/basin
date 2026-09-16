@@ -13,5 +13,11 @@ public enum WindowCapabilities
 
     Minimize = 8,
 
-    All = WindowMenu | Maximize | Fullscreen | Minimize,
+    Shade = 16,
+
+    Above = 32,
+
+    Stick = 64,
+
+    All = WindowMenu | Maximize | Fullscreen | Minimize | Shade | Above | Stick,
 }

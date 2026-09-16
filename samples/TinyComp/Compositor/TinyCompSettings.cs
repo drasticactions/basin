@@ -108,6 +108,7 @@ internal sealed partial class TinyComp
         }
 
         ApplyNightLight(loaded.NightLight);
+        var metacityFailure = ApplyFrameFont(loaded) ?? ApplyMetacity(loaded);
         ApplyFrameStyle(loaded.FrameStyle);
         ApplyCornerRadius(loaded.CornerRadius);
         ApplyPostStages(loaded);
@@ -128,13 +129,101 @@ internal sealed partial class TinyComp
         BasinReport.Line(
             $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
             + " rules-apply-to-windows-mapped-after-this"
-            + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}"));
+            + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")
+            + (metacityFailure is null ? string.Empty : " metacity=kept"));
     }
 
     private double? ReloadScaleFor(int index, IOutput output) =>
         _scales.Length > 0 ? _scales[Math.Min(index, _scales.Length - 1)]
         : _config.OutputSettingFor(output.Name)?.Scale
             ?? (output is Basin.Backend.Wayland.WaylandOutput hosted ? hosted.HostScale : null);
+
+    private string? ApplyMetacity(Config loaded)
+    {
+        if (loaded.FrameStyle != FrameStyle.Metacity && !_windows.Any(w => w.Rule?.FrameStyle == FrameStyle.Metacity)
+            && !_xwindows.Any(w => w.Rule?.FrameStyle == FrameStyle.Metacity))
+        {
+            return null;
+        }
+
+        if (_metacity is { } current && current.Matches(loaded))
+        {
+            return null;
+        }
+
+        MetacityFrames replacement;
+        try
+        {
+            replacement = MetacityFrames.Load(loaded, FrameThemeOrLoad());
+        }
+        catch (Basin.Frames.Metacity.MetacityThemeException e)
+        {
+            _log.Error($"reload keeps the running metacity theme: {e.Message}");
+            return e.Message;
+        }
+
+        var previous = _metacity;
+        _metacity = replacement;
+        foreach (var window in _windows)
+        {
+            if ((window.Rule?.FrameStyle ?? _frameStyle) == FrameStyle.Metacity)
+            {
+                window.RebuildFrame();
+            }
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            if ((xwindow.Rule?.FrameStyle ?? _frameStyle) == FrameStyle.Metacity)
+            {
+                xwindow.RebuildFrame();
+            }
+        }
+
+        previous?.Dispose();
+        return null;
+    }
+
+    private string? ApplyFrameFont(Config loaded)
+    {
+        if (_frameTheme is not { } previous || previous.FontSize == (float)loaded.FontSize)
+        {
+            return null;
+        }
+
+        var theme = new FrameTheme((float)loaded.FontSize);
+        MetacityFrames? metacity = null;
+        if (_metacity is not null)
+        {
+            try
+            {
+                metacity = MetacityFrames.Load(loaded, theme);
+            }
+            catch (Basin.Frames.Metacity.MetacityThemeException e)
+            {
+                theme.Dispose();
+                _log.Error($"reload keeps the running font size and metacity theme: {e.Message}");
+                return e.Message;
+            }
+        }
+
+        var previousMetacity = _metacity;
+        _frameTheme = theme;
+        _metacity = metacity;
+        foreach (var window in _windows)
+        {
+            window.RebuildFrame();
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            xwindow.RebuildFrame();
+        }
+
+        previousMetacity?.Dispose();
+        previous.Dispose();
+        return null;
+    }
 
     private void ApplyFrameStyle(FrameStyle style)
     {

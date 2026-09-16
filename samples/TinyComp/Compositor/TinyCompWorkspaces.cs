@@ -477,6 +477,7 @@ internal sealed partial class TinyComp
             }
         }
 
+        RefreshAboveVisibility();
         _workspaceModel.RaiseChanged();
         BasinReport.Line($"WORKSPACE {view.Output.Name} {target.Name}");
         if (refocus)
@@ -801,7 +802,7 @@ internal sealed partial class TinyComp
                 }
 
                 w.Workspace = target;
-                w.Tree?.Reparent(target.Tree);
+                w.Tree?.Reparent(LayerFor(w));
                 SaveSession(w.Toplevel);
                 moved = w.Toplevel.AppId;
                 break;
@@ -899,7 +900,7 @@ internal sealed partial class TinyComp
                 if (window.Workspace == workspace)
                 {
                     window.Workspace = fallback?.Active;
-                    window.Tree?.Reparent(fallback?.Active?.Tree ?? _layers.Windows);
+                    window.Tree?.Reparent(LayerFor(window));
                 }
             }
 

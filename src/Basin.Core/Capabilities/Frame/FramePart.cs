@@ -9,6 +9,9 @@ public enum FramePart
     Close,
     Maximize,
     Minimize,
+    Shade,
+    Above,
+    Stick,
 
     Border,
 

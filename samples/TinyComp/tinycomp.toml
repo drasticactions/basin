@@ -11,8 +11,15 @@ scale         = []           # --scale, one entry per output; empty asks the out
 # mode      = "3840x2560@60"  # WIDTHxHEIGHT or WIDTHxHEIGHT@HZ
 
 [frame]
-style         = "flat"       # beos | flat | none
+style         = "flat"       # beos | flat | metacity | none
 corner_radius = 0            # logical pixels
+font_size     = 14           # title size in logical pixels, every style; SIGHUP redraws every frame
+
+# A metacity theme, read from ~/.themes, $XDG_DATA_HOME/themes and $XDG_DATA_DIRS/themes.
+# [frame.metacity]
+# theme         = "Menta"                        # a directory under themes/
+# button_layout = "menu:minimize,maximize,close" # marco's grammar, spacer allowed
+# palette       = "light"                        # light | dark
 
 [color]
 source      = "edid"         # edid | srgb | icc
@@ -105,7 +112,7 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # [[rule]]
 # app_id      = "mpv"        # exact match
 # title_regex = ""           # optional
-# frame       = "none"
+# frame       = "none"         # beos | flat | metacity | none
 # effects     = false        # or per effect: wobbly = false, open = "none"
 # workspace   = 2
 # x = 0

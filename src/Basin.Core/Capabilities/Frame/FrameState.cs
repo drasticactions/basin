@@ -17,4 +17,14 @@ public readonly record struct FrameState
     public bool Resizing { get; init; }
 
     public FrameCapabilities Capabilities { get; init; }
+
+    public FrameKind Kind { get; init; }
+
+    public FrameTiling Tiled { get; init; }
+
+    public bool Shaded { get; init; }
+
+    public bool Above { get; init; }
+
+    public bool Sticky { get; init; }
 }

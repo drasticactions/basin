@@ -9,4 +9,8 @@ public enum FrameActionKind
     Resize,
 
     ShowMenu,
+
+    ToggleShade,
+    ToggleAbove,
+    ToggleSticky,
 }

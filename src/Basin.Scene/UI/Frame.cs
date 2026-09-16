@@ -375,6 +375,9 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
                 case FramePart.Close:
                 case FramePart.Maximize:
                 case FramePart.Minimize:
+                case FramePart.Shade:
+                case FramePart.Above:
+                case FramePart.Stick:
                 case FramePart.Menu:
                 case FramePart.Icon:
                     _titleArmed = false;
@@ -434,6 +437,15 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
             case FramePart.Minimize:
                 Requested?.Invoke(new FrameAction(FrameActionKind.Minimize));
                 break;
+            case FramePart.Shade:
+                Requested?.Invoke(new FrameAction(FrameActionKind.ToggleShade));
+                break;
+            case FramePart.Above:
+                Requested?.Invoke(new FrameAction(FrameActionKind.ToggleAbove));
+                break;
+            case FramePart.Stick:
+                Requested?.Invoke(new FrameAction(FrameActionKind.ToggleSticky));
+                break;
             case FramePart.Menu:
             case FramePart.Icon:
                 OpenMenu(x, y);
@@ -459,6 +471,9 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
             case FramePart.Close:
             case FramePart.Maximize:
             case FramePart.Minimize:
+            case FramePart.Shade:
+            case FramePart.Above:
+            case FramePart.Stick:
             case FramePart.Menu:
             case FramePart.Icon:
                 _titleArmed = false;
@@ -523,6 +538,15 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
                 break;
             case FramePart.Minimize:
                 Requested?.Invoke(new FrameAction(FrameActionKind.Minimize));
+                break;
+            case FramePart.Shade:
+                Requested?.Invoke(new FrameAction(FrameActionKind.ToggleShade));
+                break;
+            case FramePart.Above:
+                Requested?.Invoke(new FrameAction(FrameActionKind.ToggleAbove));
+                break;
+            case FramePart.Stick:
+                Requested?.Invoke(new FrameAction(FrameActionKind.ToggleSticky));
                 break;
             case FramePart.Menu:
             case FramePart.Icon:

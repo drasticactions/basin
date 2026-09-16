@@ -6,5 +6,7 @@ internal enum FrameStyle
 
     Flat,
 
+    Metacity,
+
     None,
 }

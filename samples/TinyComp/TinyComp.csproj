@@ -52,6 +52,7 @@
     <ProjectReference Include="../../src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
   </ItemGroup>

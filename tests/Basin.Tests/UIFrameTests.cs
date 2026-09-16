@@ -466,6 +466,52 @@ public sealed class UIFrameTests
         frame.Dispose();
     }
 
+    [Theory]
+    [InlineData(FramePart.Shade, FrameActionKind.ToggleShade)]
+    [InlineData(FramePart.Above, FrameActionKind.ToggleAbove)]
+    [InlineData(FramePart.Stick, FrameActionKind.ToggleSticky)]
+    public void A_release_over_a_state_button_asks_for_its_toggle(FramePart part, FrameActionKind expected)
+    {
+        using var host = new CompositorTestHost();
+        using var uiHost = new FalsifierUIHost();
+        var frame = new Frame(uiHost, new OnePartFrameRenderer(part), host.Scene.Root);
+        frame.Configure(new Box(20, 40, 64, 48), 1.0, default(FrameState));
+        frame.Commit();
+
+        var actions = new List<FrameActionKind>();
+        frame.Requested += a => actions.Add(a.Kind);
+
+        frame.PointerButton(TitleX, TitleY, pressed: true);
+        Assert.Empty(actions);
+        frame.PointerButton(TitleX, TitleY, pressed: false);
+        Assert.Equal([expected], actions);
+
+        actions.Clear();
+        frame.TouchDown(TitleX, TitleY, 0);
+        frame.TouchUp(TitleX, TitleY, 0);
+        Assert.Equal([expected], actions);
+
+        frame.Dispose();
+    }
+
+    [Fact]
+    public void A_bounded_title_is_shaped_to_the_width_with_an_ellipsis()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "shaping belongs to the host's Skia build");
+        using var theme = new TestFrameTheme();
+        const string title = "A title that is far too long for the room it is given";
+        Assert.True(theme.Text.TryGetBlob(title, theme.Font, out _, out var full));
+        Assert.True(theme.Text.TryGetBlob(title, theme.Font, full / 2, out var bounded, out var width));
+        Assert.True(width <= full / 2);
+        Assert.True(width > 0);
+        Assert.True(theme.Text.TryGetBlob(title, theme.Font, full / 2, out var again, out var widthAgain));
+        Assert.Same(bounded, again);
+        Assert.Equal(width, widthAgain);
+        Assert.True(theme.Text.TryGetBlob(title, theme.Font, full * 2, out var whole, out var wholeWidth));
+        Assert.Equal(full, wholeWidth);
+        Assert.NotSame(bounded, whole);
+    }
+
     private const double TitleX = 40;
     private const double TitleY = 25;
     private const double CloseX = 72;
@@ -945,4 +991,30 @@ internal sealed class ThrowingFrameRenderer : IFrameRenderer
         throw new InvalidOperationException("deliberate renderer failure");
 
     public FramePart PartAt(double x, double y, in FrameState state, double scale) => FramePart.Title;
+}
+
+internal sealed class OnePartFrameRenderer(FramePart part) : IFrameRenderer
+{
+    private const int Border = 4;
+    private const int TitleHeight = 30;
+
+    private int _outerWidth;
+    private int _outerHeight;
+
+    public FrameInsets Measure(in FrameState state, double scale) =>
+        new(Border + TitleHeight, Border, Border, Border);
+
+    public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
+    {
+        var falsifier = (FalsifierUISurface)surface;
+        _outerWidth = clientBox.Width + 2 * Border;
+        _outerHeight = clientBox.Height + TitleHeight + 2 * Border;
+        _ = falsifier.BeginPixels();
+        falsifier.EndPixels();
+    }
+
+    public FramePart PartAt(double x, double y, in FrameState state, double scale) =>
+        x < 0 || y < 0 || x >= _outerWidth || y >= _outerHeight ? FramePart.None
+        : y < Border + TitleHeight ? part
+        : FramePart.Border;
 }

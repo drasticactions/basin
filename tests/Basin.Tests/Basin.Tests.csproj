@@ -37,6 +37,7 @@
     <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
+    <ProjectReference Include="../../src/Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
     <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />

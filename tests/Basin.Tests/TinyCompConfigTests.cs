@@ -50,6 +50,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.True(config.Offload);
         Assert.Equal(TinyComp.FrameStyle.Flat, config.FrameStyle);
         Assert.Equal(0, config.CornerRadius);
+        Assert.Equal(14, config.FontSize);
         Assert.Null(config.NightLight);
         Assert.Empty(config.Rules);
         Assert.Equal(8, config.Bindings.Count);
@@ -118,6 +119,22 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void Font_size_reads_a_fraction_and_refuses_zero()
+    {
+        var config = TinyComp.Config.Load(
+            Write("[frame]\nfont_size = 12.5\n"), BasinLog.For("t"), out var fatal);
+
+        Assert.Null(fatal);
+        Assert.Equal(12.5, config.FontSize);
+
+        config = TinyComp.Config.Load(Write("[frame]\nfont_size = 0\n"), BasinLog.For("t"), out fatal);
+
+        Assert.Null(fatal);
+        Assert.Equal(14, config.FontSize);
+        Assert.Contains(_lines, line => line.Contains("font_size", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_bad_value_keeps_that_key_default_and_warns()
     {
         var config = TinyComp.Config.Load(
@@ -127,6 +144,30 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Equal(TinyComp.FrameStyle.Flat, config.FrameStyle);
         Assert.Equal(12, config.CornerRadius);
         Assert.Contains(_lines, line => line.Contains("style", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Metacity_keys_parse_and_a_missing_theme_is_fatal()
+    {
+        var config = TinyComp.Config.Load(
+            Write("[frame]\nstyle = \"metacity\"\n[frame.metacity]\ntheme = \"NoSuchThemeAnywhere\"\nbutton_layout = \"close:menu\"\npalette = \"dark\"\n"),
+            BasinLog.For("t"),
+            out var fatal);
+        Assert.Equal(TinyComp.FrameStyle.Metacity, config.FrameStyle);
+        Assert.Equal("NoSuchThemeAnywhere", config.MetacityTheme);
+        Assert.Equal("close:menu", config.MetacityButtonLayout);
+        Assert.Equal("dark", config.MetacityPalette);
+        Assert.NotNull(fatal);
+        Assert.Contains("NoSuchThemeAnywhere", fatal);
+        Assert.Contains("installed themes", fatal);
+
+        _ = TinyComp.Config.Load(Write("[frame]\nstyle = \"metacity\"\n"), BasinLog.For("t"), out var unnamed);
+        Assert.NotNull(unnamed);
+        Assert.Contains("names no theme", unnamed);
+
+        var flat = TinyComp.Config.Load(Write("[frame]\nstyle = \"flat\"\n[frame.metacity]\ntheme = \"NoSuchThemeAnywhere\"\n"), BasinLog.For("t"), out var ignored);
+        Assert.Null(ignored);
+        Assert.Equal("NoSuchThemeAnywhere", flat.MetacityTheme);
     }
 
     [Fact]

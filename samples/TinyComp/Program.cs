@@ -91,7 +91,9 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("damage-tint", settings.DamageTint));
         cli.AddReport(_ => BasinCommand.Report("offload", settings.Offload));
         cli.AddReport(_ => BasinCommand.Report("transactions", settings.Transactions));
-        cli.AddReport(_ => BasinCommand.Report("frame", settings.FrameStyle));
+        cli.AddReport(_ => BasinCommand.Report(
+            "frame",
+            settings.FrameStyle == FrameStyle.Metacity ? $"metacity:{settings.MetacityTheme}" : settings.FrameStyle));
         cli.AddReport(_ => BasinCommand.Report("corner-radius", settings.CornerRadius));
         cli.AddReport(_ => BasinCommand.Report("color-source", settings.ColorSource));
         cli.AddReport(_ => BasinCommand.Report("icc", settings.IccProfile));
