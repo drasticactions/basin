@@ -25,7 +25,7 @@
     <PackageVersion Include="liftoff-dotnet" Version="0.5.1" />
     <PackageVersion Include="mesa-dotnet" Version="26.1.5" />
     <PackageVersion Include="pipewire-dotnet" Version="1.6.8" />
-    <PackageVersion Include="pixman-dotnet" Version="0.46.6" />
+    <PackageVersion Include="pixman-dotnet" Version="0.46.7" />
     <PackageVersion Include="seatd-dotnet" Version="0.9.3" />
     <PackageVersion Include="udev-dotnet" Version="261.2.0" />
     <PackageVersion Include="WaylandSharpest" Version="1.27.0" />
