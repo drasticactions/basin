@@ -21,6 +21,30 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
 
     internal ToplevelWindow? ActiveWindow { get; private set; }
 
+    private BasinToplevelView? _view;
+    private BasinToplevelView? _activeView;
+
+    public void AttachView(BasinToplevelView view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        _view = view;
+        view.TextInputMethodClientRequested += (_, e) =>
+        {
+            if (ReferenceEquals(_activeView, view))
+            {
+                e.Client = Client;
+            }
+        };
+        view.TextInput += (_, e) =>
+        {
+            if (ReferenceEquals(_activeView, view) && !string.IsNullOrEmpty(e.Text))
+            {
+                CommitFromHost(e.Text!);
+                e.Handled = true;
+            }
+        };
+    }
+
     public AvaloniaTextInput(Action<Action> postToCompositor)
     {
         ArgumentNullException.ThrowIfNull(postToCompositor);
@@ -69,6 +93,17 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
     public void Activate(Surface surface)
     {
         _active = surface;
+        if (_view is { } view)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _activeView = view;
+                Client.SetVisual(view);
+                RequeryIme(view);
+            });
+            return;
+        }
+
         var id = IdResolver?.Invoke(surface) ?? 0;
         Dispatcher.UIThread.Post(() =>
         {
@@ -88,6 +123,17 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         }
 
         _active = null;
+        if (_view is { } view)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _activeView = null;
+                Client.SetVisual(null);
+                RequeryIme(view);
+            });
+            return;
+        }
+
         Dispatcher.UIThread.Post(() =>
         {
             var window = ActiveWindow;
@@ -97,6 +143,12 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
             window?.RequeryIme();
         });
     }
+
+    private static void RequeryIme(BasinToplevelView view) =>
+        view.RaiseEvent(new TextInputMethodClientRequeryRequestedEventArgs
+        {
+            RoutedEvent = InputMethod.TextInputMethodClientRequeryRequestedEvent,
+        });
 
     public void SurroundingText(string text, uint cursor, uint anchor)
     {

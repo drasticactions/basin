@@ -132,7 +132,6 @@ public sealed unsafe class DrmSyncobjTimeline
         return new DrmSyncobjWaiter(loop, eventFd, ready);
     }
 
-    /// <summary>Arms an existing waiter for a further point on this timeline, so a commit-per-frame path creates no new waiter.</summary>
     public bool Rearm(DrmSyncobjWaiter waiter, ulong point)
     {
         ArgumentNullException.ThrowIfNull(waiter);

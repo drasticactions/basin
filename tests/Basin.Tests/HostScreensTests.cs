@@ -27,12 +27,19 @@ public sealed class HostScreensTests
 
     private sealed class Harness : IDisposable
     {
-        public Harness()
+        public Harness(Action<BasinCompositorHost>? configure = null)
         {
             CompositorTestHost.SkipWithoutWaylandClient();
             BasinCounters.Reset();
             Host = new BasinCompositorHost(new BasinCompositorOptions { AppName = "waylonia-tests" });
-            Host.Screens.Apply([Left, Right]);
+            if (configure is null)
+            {
+                Host.Screens.Apply([Left, Right]);
+            }
+            else
+            {
+                configure(Host);
+            }
 
             int serverFd, clientFd;
             unsafe
@@ -214,4 +221,51 @@ public sealed class HostScreensTests
 
     private static Surface SurfaceOf(Harness harness) =>
         System.Linq.Enumerable.First(harness.Host.Services.Require<CompositorGlobal>().Surfaces);
+
+    [Fact]
+    public void An_advertised_output_is_the_only_output_and_apply_is_refused()
+    {
+        BasinViewOutput? view = null;
+        var harness = new Harness(host =>
+        {
+            view = host.CreateViewOutput(800, 600, 1.5, "shell");
+            host.Screens.Advertise(view.Output, new HostScreenInfo("shell", "shell", 0, 0, 800, 600, 1.5, true));
+        });
+        Assert.Single(harness.Client.Outputs);
+        Assert.Equal("shell", harness.Host.Screens.AdvertisedKey);
+        Assert.Equal(1.5, harness.Host.Screens.DefaultScaling);
+        Assert.Single(harness.Host.Screens.Current);
+        Assert.Equal("shell", harness.Host.Screens.Current.Single().Key);
+
+        Assert.Null(harness.Host.Screens.GlobalFor("waylonia-placeholder"));
+        Assert.NotNull(harness.Host.Screens.GlobalFor("shell"));
+
+        var refused = Assert.Throws<InvalidOperationException>(() => harness.Host.Screens.Apply([Left]));
+        Assert.Contains("shell", refused.Message, StringComparison.Ordinal);
+
+        var surface = harness.Client.Compositor.CreateSurface();
+        var entered = 0;
+        surface.Enter += (_, _) => entered++;
+        var scaleEvents = new List<uint>();
+        var fractional = harness.Client.FractionalScale!.GetFractionalScale(surface);
+        fractional.PreferredScale += (_, e) => scaleEvents.Add(e.Scale);
+        harness.Pump();
+        harness.Host.Screens.EnterScreen(SurfaceOf(harness), "shell");
+        harness.Pump();
+        Assert.Equal(1, entered);
+        Assert.Contains(180u, scaleEvents);
+
+        harness.Host.Screens.Withdraw("shell");
+        harness.Pump();
+        Assert.Null(harness.Host.Screens.AdvertisedKey);
+        harness.Host.Screens.Apply([Left]);
+        harness.Pump();
+        Assert.Equal("DP-1", harness.Host.Screens.DefaultKey);
+
+        fractional.Destroy();
+        surface.Destroy();
+        view!.Dispose();
+        harness.Dispose();
+        LeakTracking.Expect(0, BasinCounters.LiveObjects);
+    }
 }

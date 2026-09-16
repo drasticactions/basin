@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Embedding;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.Threading;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Pixman;
@@ -12,22 +13,30 @@ namespace Basin.UI.Avalonia;
 public sealed class AvaloniaUISurface : IUISurface
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
-    private readonly UISurfaceObservers _observers = new();
+    private readonly UISurfaceObservers _observers;
     private readonly BasinTopLevelImpl _impl;
     private readonly AvaloniaUIHost? _host;
     private readonly EmbeddableControlRoot? _root;
     private readonly TouchDevice _touch = new();
     private readonly IKeyboardDevice _keyboard;
     private readonly HashSet<uint> _pressedKeys = [];
+    private readonly bool _attached;
     private global::Avalonia.Point _pointer;
     private RawInputModifiers _modifiers;
     private bool _pointerInside;
-    private bool _disposed;
+    private volatile bool _damagePending;
+    private volatile bool _disposed;
 
     internal AvaloniaUISurface(BasinTopLevelImpl impl, bool ownsRoot, AvaloniaUIHost? host = null)
     {
         _impl = impl;
         _host = host;
+        _attached = impl.Context.Attached;
+        using (impl.Context.Affinity?.Adopt() ?? default)
+        {
+            _observers = new UISurfaceObservers();
+        }
+
         _keyboard = AvaloniaLocator.Current.GetRequiredService<IKeyboardDevice>();
         impl.Surface = this;
         if (ownsRoot)
@@ -41,6 +50,28 @@ public sealed class AvaloniaUISurface : IUISurface
             _root.StartRendering();
         }
     }
+
+    private void AssertThread()
+    {
+        if (!_attached)
+        {
+            _thread.Assert();
+        }
+    }
+
+    private void OnUiThread(Action action)
+    {
+        if (!_attached || Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(action);
+        }
+    }
+
+    public bool IsAttached => _attached;
 
     public event Action? MoveDragRequested;
 
@@ -63,6 +94,22 @@ public sealed class AvaloniaUISurface : IUISurface
     }
 
     public TopLevel? Root => _root;
+
+    public AvaloniaUISurface? Parent => (_impl as BasinPopupImpl)?.ParentImpl.Surface;
+
+    public AvaloniaUISurface Owner
+    {
+        get
+        {
+            var owner = this;
+            while (owner.Parent is { } parent)
+            {
+                owner = parent;
+            }
+
+            return owner;
+        }
+    }
 
     public bool WantsTextInput => _root?.FocusManager?.GetFocusedElement() is TextBox;
 
@@ -88,7 +135,7 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public bool TryAcquire(out UIFrame frame)
     {
-        _thread.Assert();
+        AssertThread();
         if (_disposed)
         {
             frame = default;
@@ -114,7 +161,7 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public bool AcceptsInputAt(double x, double y)
     {
-        _thread.Assert();
+        AssertThread();
         var size = _impl.Size;
         return !_disposed && AcceptsInput && x >= 0 && y >= 0 && x < size.Width && y < size.Height;
     }
@@ -123,114 +170,151 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public void NotifyPointerEnter(double x, double y)
     {
-        _thread.Assert();
-        if (!Ready)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready)
+            {
+                return;
+            }
 
-        _pointerInside = true;
-        _pointer = new global::Avalonia.Point(x, y);
-        Raise(new RawPointerEventArgs(
-            _impl.MouseDevice, 0, InputRootOf(), RawPointerEventType.Move, _pointer, _modifiers));
+            _pointerInside = true;
+            _pointer = new global::Avalonia.Point(x, y);
+            Raise(new RawPointerEventArgs(
+                _impl.MouseDevice, 0, InputRootOf(), RawPointerEventType.Move, _pointer, _modifiers));
+        });
     }
 
     public void NotifyPointerMotion(uint timeMs, double x, double y)
     {
-        _thread.Assert();
-        if (!Ready)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready)
+            {
+                return;
+            }
 
-        _pointer = new global::Avalonia.Point(x, y);
-        Raise(new RawPointerEventArgs(
-            _impl.MouseDevice, timeMs, InputRootOf(), RawPointerEventType.Move, _pointer, _modifiers));
+            _pointer = new global::Avalonia.Point(x, y);
+            Raise(new RawPointerEventArgs(
+                _impl.MouseDevice, timeMs, InputRootOf(), RawPointerEventType.Move, _pointer, _modifiers));
+        });
     }
 
     public void NotifyPointerButton(uint timeMs, uint button, bool pressed)
     {
-        _thread.Assert();
-        if (!Ready)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready)
+            {
+                return;
+            }
 
-        var type = EvdevInput.PointerEventType(button, pressed);
-        if (type is not { } value)
-        {
-            return;
-        }
+            var type = EvdevInput.PointerEventType(button, pressed);
+            if (type is not { } value)
+            {
+                return;
+            }
 
-        _modifiers = EvdevInput.WithButton(_modifiers, button, pressed);
-        Raise(new RawPointerEventArgs(_impl.MouseDevice, timeMs, InputRootOf(), value, _pointer, _modifiers));
+            _modifiers = EvdevInput.WithButton(_modifiers, button, pressed);
+            Raise(new RawPointerEventArgs(_impl.MouseDevice, timeMs, InputRootOf(), value, _pointer, _modifiers));
+        });
     }
 
     public void NotifyPointerAxis(uint timeMs, double dx, double dy)
     {
-        _thread.Assert();
-        if (!Ready || (dx == 0 && dy == 0))
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready || (dx == 0 && dy == 0))
+            {
+                return;
+            }
 
-        var delta = new Vector(-dx / EvdevInput.AxisStep, -dy / EvdevInput.AxisStep);
-        Raise(new RawMouseWheelEventArgs(_impl.MouseDevice, timeMs, InputRootOf(), _pointer, delta, _modifiers));
+            var delta = new Vector(-dx / EvdevInput.AxisStep, -dy / EvdevInput.AxisStep);
+            Raise(new RawMouseWheelEventArgs(_impl.MouseDevice, timeMs, InputRootOf(), _pointer, delta, _modifiers));
+        });
     }
 
     public void NotifyPointerLeave()
     {
-        _thread.Assert();
-        if (!Ready || !_pointerInside)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready || !_pointerInside)
+            {
+                return;
+            }
 
-        _pointerInside = false;
-        Raise(new RawPointerEventArgs(
-            _impl.MouseDevice, 0, InputRootOf(), RawPointerEventType.LeaveWindow, _pointer, _modifiers));
+            _pointerInside = false;
+            Raise(new RawPointerEventArgs(
+                _impl.MouseDevice, 0, InputRootOf(), RawPointerEventType.LeaveWindow, _pointer, _modifiers));
+        });
+    }
+
+    public void NotifyPressOutside()
+    {
+        AssertThread();
+        OnUiThread(() =>
+        {
+            if (!Ready)
+            {
+                return;
+            }
+
+            Raise(new RawPointerEventArgs(
+                _impl.MouseDevice, 0, InputRootOf(), RawPointerEventType.NonClientLeftButtonDown, _pointer, _modifiers));
+        });
     }
 
     public void NotifyKeyboardEnter(ReadOnlySpan<uint> pressed)
     {
-        _thread.Assert();
-        _pressedKeys.Clear();
-        _modifiers = EvdevInput.PointerModifiers(_modifiers);
-        foreach (var key in pressed)
+        AssertThread();
+        var keys = pressed.ToArray();
+        OnUiThread(() =>
         {
-            _pressedKeys.Add(key);
-            _modifiers = EvdevInput.WithKey(_modifiers, key, pressed: true);
-        }
+            _pressedKeys.Clear();
+            _modifiers = EvdevInput.PointerModifiers(_modifiers);
+            foreach (var key in keys)
+            {
+                _pressedKeys.Add(key);
+                _modifiers = EvdevInput.WithKey(_modifiers, key, pressed: true);
+            }
+        });
     }
 
     public void NotifyKey(uint timeMs, uint key, bool pressed)
     {
-        _thread.Assert();
-        if (!Ready)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready)
+            {
+                return;
+            }
 
-        if (pressed)
-        {
-            _pressedKeys.Add(key);
-        }
-        else
-        {
-            _pressedKeys.Remove(key);
-        }
+            if (pressed)
+            {
+                _pressedKeys.Add(key);
+            }
+            else
+            {
+                _pressedKeys.Remove(key);
+            }
 
-        _modifiers = EvdevInput.WithKey(_modifiers, key, pressed);
-        var physical = EvdevInput.PhysicalKeyOf(key);
-        Raise(new RawKeyEventArgs(
-            _keyboard,
-            timeMs,
-            InputRootOf(),
-            pressed ? RawKeyEventType.KeyDown : RawKeyEventType.KeyUp,
-            physical.ToQwertyKey(),
-            _modifiers,
-            physical,
-            physical.ToQwertyKeySymbol(_modifiers.HasFlag(RawInputModifiers.Shift))));
+            _modifiers = EvdevInput.WithKey(_modifiers, key, pressed);
+            var physical = EvdevInput.PhysicalKeyOf(key);
+            Raise(new RawKeyEventArgs(
+                _keyboard,
+                timeMs,
+                InputRootOf(),
+                pressed ? RawKeyEventType.KeyDown : RawKeyEventType.KeyUp,
+                physical.ToQwertyKey(),
+                _modifiers,
+                physical,
+                physical.ToQwertyKeySymbol(_modifiers.HasFlag(RawInputModifiers.Shift))));
+        });
     }
 
     public void NotifyModifiers(uint depressed, uint latched, uint locked, uint group)
@@ -239,13 +323,16 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public void NotifyKeyboardLeave()
     {
-        _thread.Assert();
-        _pressedKeys.Clear();
-        _modifiers = EvdevInput.PointerModifiers(_modifiers);
-        if (!_disposed)
+        AssertThread();
+        OnUiThread(() =>
         {
-            _impl.LostFocus?.Invoke();
-        }
+            _pressedKeys.Clear();
+            _modifiers = EvdevInput.PointerModifiers(_modifiers);
+            if (!_disposed)
+            {
+                _impl.LostFocus?.Invoke();
+            }
+        });
     }
 
     public void NotifyTouchDown(uint timeMs, int id, double x, double y) =>
@@ -259,25 +346,35 @@ public sealed class AvaloniaUISurface : IUISurface
 
     public void NotifyTouchCancel()
     {
-        _thread.Assert();
-        if (!Ready)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready)
+            {
+                return;
+            }
 
-        Raise(new RawTouchEventArgs(
-            _touch, 0, InputRootOf(), RawPointerEventType.TouchCancel, _pointer, _modifiers, 0));
+            Raise(new RawTouchEventArgs(
+                _touch, 0, InputRootOf(), RawPointerEventType.TouchCancel, _pointer, _modifiers, 0));
+        });
     }
 
     public void NotifyTextCommit(ReadOnlySpan<char> text)
     {
-        _thread.Assert();
-        if (!Ready || text.IsEmpty)
+        AssertThread();
+        if (text.IsEmpty)
         {
             return;
         }
 
-        Raise(new RawTextInputEventArgs(_keyboard, 0, InputRootOf(), new string(text)));
+        var committed = new string(text);
+        OnUiThread(() =>
+        {
+            if (Ready)
+            {
+                Raise(new RawTextInputEventArgs(_keyboard, 0, InputRootOf(), committed));
+            }
+        });
     }
 
     public void NotifyPreedit(ReadOnlySpan<char> text, int cursorBegin, int cursorEnd)
@@ -305,7 +402,10 @@ public sealed class AvaloniaUISurface : IUISurface
             _impl.Dispose();
         }
 
-        _observers.Destroyed(this);
+        if (!_attached)
+        {
+            _observers.Destroyed(this);
+        }
     }
 
     internal void SetHitTestVisible(bool value) => AcceptsInput = value;
@@ -316,7 +416,29 @@ public sealed class AvaloniaUISurface : IUISurface
         PositionY = y;
     }
 
-    internal void NotifyFramePublished() => _observers.Damaged(this, _impl.WholeDamage);
+    internal void NotifyFramePublished()
+    {
+        if (_attached)
+        {
+            _damagePending = true;
+            _host?.RaiseSurfaceDamaged(this);
+            return;
+        }
+
+        _observers.Damaged(this, _impl.WholeDamage);
+    }
+
+    public bool PublishDamage()
+    {
+        if (_disposed || !_damagePending)
+        {
+            return false;
+        }
+
+        _damagePending = false;
+        _observers.Damaged(this, _impl.WholeDamage);
+        return true;
+    }
 
     internal void RequestMoveDrag() => MoveDragRequested?.Invoke();
 
@@ -324,14 +446,17 @@ public sealed class AvaloniaUISurface : IUISurface
 
     private void RaiseTouch(uint timeMs, int id, double x, double y, RawPointerEventType type)
     {
-        _thread.Assert();
-        if (!Ready)
+        AssertThread();
+        OnUiThread(() =>
         {
-            return;
-        }
+            if (!Ready)
+            {
+                return;
+            }
 
-        _pointer = new global::Avalonia.Point(x, y);
-        Raise(new RawTouchEventArgs(_touch, timeMs, InputRootOf(), type, _pointer, _modifiers, id));
+            _pointer = new global::Avalonia.Point(x, y);
+            Raise(new RawTouchEventArgs(_touch, timeMs, InputRootOf(), type, _pointer, _modifiers, id));
+        });
     }
 
     private bool Ready => !_disposed && _impl.InputRoot is not null && _impl.Input is not null;

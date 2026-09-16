@@ -8,7 +8,7 @@ using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
-public sealed class ToplevelWindow : Window
+public sealed class ToplevelWindow : Window, ICaptureTarget
 {
     private readonly ToplevelWindows _manager;
     private readonly int _id;
@@ -617,6 +617,8 @@ public sealed class ToplevelWindow : Window
     }
 
     public Func<uint, bool, bool>? KeyFilter { get; set; }
+
+    public void CaptureInput(bool captured) => _manager.CaptureInput(captured);
 
     public void InjectKey(uint code, bool pressed)
     {

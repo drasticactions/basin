@@ -10,8 +10,8 @@ public sealed class AvaloniaUIHost : IUIHost
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
-    private readonly BasinDispatcherImpl _dispatcher;
-    private readonly BasinRenderTimer _renderTimer;
+    private readonly BasinDispatcherImpl? _dispatcher;
+    private readonly BasinRenderTimer? _renderTimer;
     private readonly BasinPlatformContext _context;
     private readonly List<AvaloniaUISurface> _surfaces = [];
     private bool _disposed;
@@ -27,6 +27,18 @@ public sealed class AvaloniaUIHost : IUIHost
         _context.Host = this;
         _dispatcher.WakeupRequested += OnWakeupRequested;
     }
+
+    internal AvaloniaUIHost(BasinPlatformContext context)
+    {
+        _context = context;
+        _context.Host = this;
+    }
+
+    public bool IsAttached => _context.Attached;
+
+    public event Action<IUISurface>? SurfaceDamaged;
+
+    internal void RaiseSurfaceDamaged(AvaloniaUISurface surface) => SurfaceDamaged?.Invoke(surface);
 
     internal BasinPlatformSettings? Settings { get; init; }
 
@@ -51,7 +63,7 @@ public sealed class AvaloniaUIHost : IUIHost
 
     public UITargetKind Produces => _context.Gpu is null ? UITargetKind.Memory : UITargetKind.Dmabuf;
 
-    public long? NextDueMillis => _disposed ? null : _dispatcher.NextDueMillis;
+    public long? NextDueMillis => _disposed || _dispatcher is null ? null : _dispatcher.NextDueMillis;
 
     public IUISurface? CreateSurface(in UISurfaceOptions options)
     {
@@ -76,7 +88,7 @@ public sealed class AvaloniaUIHost : IUIHost
     public void Pump()
     {
         _thread.Assert();
-        if (_disposed)
+        if (_disposed || _dispatcher is null || _renderTimer is null)
         {
             return;
         }
@@ -101,7 +113,11 @@ public sealed class AvaloniaUIHost : IUIHost
         }
 
         _disposed = true;
-        _dispatcher.WakeupRequested -= OnWakeupRequested;
+        if (_dispatcher is not null)
+        {
+            _dispatcher.WakeupRequested -= OnWakeupRequested;
+        }
+
         foreach (var surface in _surfaces.ToArray())
         {
             surface.Dispose();

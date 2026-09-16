@@ -46,6 +46,37 @@ public static class BasinPlatform
         return Host;
     }
 
+    public static AvaloniaUIHost Attach(BasinPlatformOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.CompositorAffinity is null)
+        {
+            throw new ArgumentException(
+                "an attached host needs CompositorAffinity, the thread that owns the surfaces' buffers.", nameof(options));
+        }
+
+        var screens = new BasinScreens(options.Screens);
+        var consumerFeatures = options.Features;
+        var compositor = new Compositor(options.Gpu?.Graphics, useUiThreadForSynchronousCommits: true);
+        var context = new BasinPlatformContext(compositor, TryGetFeature)
+        {
+            Gpu = options.Gpu,
+            Screens = screens,
+            Affinity = options.CompositorAffinity,
+        };
+        return new AvaloniaUIHost(context);
+
+        object? TryGetFeature(Type featureType)
+        {
+            if (consumerFeatures?.Invoke(featureType) is { } feature)
+            {
+                return feature;
+            }
+
+            return featureType == typeof(IScreenImpl) ? screens : null;
+        }
+    }
+
     public static AppBuilder UseBasin(this AppBuilder builder, BasinPlatformOptions? options = null) =>
         builder
             .UseStandardRuntimePlatformSubsystem()

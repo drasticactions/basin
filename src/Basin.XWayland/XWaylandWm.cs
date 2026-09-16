@@ -62,14 +62,15 @@ public sealed unsafe class XWaylandWm : IDisposable
         var check = _wmWindow;
         SetProperty32(_root, Atom("_NET_SUPPORTING_WM_CHECK"), 33 , &check, 1);
         SetProperty32(_wmWindow, Atom("_NET_SUPPORTING_WM_CHECK"), 33, &check, 1);
-        var supported = stackalloc uint[11]
+        var supported = stackalloc uint[13]
         {
             Atom("_NET_WM_NAME"), Atom("_NET_WM_STATE"), Atom("_NET_WM_STATE_MODAL"),
             Atom("_NET_WM_STATE_FULLSCREEN"), Atom("_NET_ACTIVE_WINDOW"),
             Atom("_NET_WM_WINDOW_TYPE"), Atom("_NET_SUPPORTING_WM_CHECK"), Atom("_NET_CLIENT_LIST"),
             Atom("_NET_WM_STATE_HIDDEN"), Atom("_NET_WM_ALLOWED_ACTIONS"), Atom("_NET_WM_ACTION_MINIMIZE"),
+            Atom("_NET_WM_STATE_MAXIMIZED_VERT"), Atom("_NET_WM_STATE_MAXIMIZED_HORZ"),
         };
-        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 11);
+        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 13);
         _ = Libxcb.xcb_flush(_conn);
 
         if (seat is not null)
@@ -293,12 +294,19 @@ public sealed unsafe class XWaylandWm : IDisposable
             case EventConfigureRequest:
             {
                 var e = (xcb_configure_request_event_t*)ev;
+                _windows.TryGetValue(e->window, out var window);
+                if (window is { AnnouncedMapped: true, OverrideRedirect: false } && ConfigureRequest is { } filter
+                    && !filter(window, new Box(e->x, e->y, e->width, e->height)))
+                {
+                    break;
+                }
+
                 var values = stackalloc uint[4] { (uint)e->x, (uint)e->y, e->width, e->height };
                 _ = Libxcb.xcb_configure_window(
                     _conn, e->window,
                     0x1 | 0x2 | 0x4 | 0x8 ,
                     values);
-                if (_windows.TryGetValue(e->window, out var window))
+                if (window is not null)
                 {
                     (window.X, window.Y, window.Width, window.Height) = (e->x, e->y, e->width, e->height);
                     window.RaiseGeometryChanged();
@@ -344,6 +352,10 @@ public sealed unsafe class XWaylandWm : IDisposable
                     {
                         RefreshWindowType(window);
                     }
+                    else if (e->atom == AtomWmNormalHints)
+                    {
+                        RefreshSizeHints(window);
+                    }
                 }
 
                 break;
@@ -385,15 +397,9 @@ public sealed unsafe class XWaylandWm : IDisposable
                 }
                 else if (e->type == Atom("_NET_WM_STATE"))
                 {
-                    if (_windows.TryGetValue(e->window, out var window) &&
-                        (data[1] == Atom("_NET_WM_STATE_HIDDEN") || data[2] == Atom("_NET_WM_STATE_HIDDEN")))
+                    if (_windows.TryGetValue(e->window, out var window))
                     {
-                        window.RaiseMinimizeRequested(data[0] switch
-                        {
-                            NetWmStateRemove => false,
-                            NetWmStateAdd => true,
-                            _ => !window.Minimized,
-                        });
+                        HandleStateMessage(window, data[0], data[1], data[2]);
                     }
                 }
 
@@ -403,6 +409,35 @@ public sealed unsafe class XWaylandWm : IDisposable
     }
 
     public event Action<XWaylandWindow>? ActivationRequested;
+
+    public Func<XWaylandWindow, Box, bool>? ConfigureRequest { get; set; }
+
+    private void HandleStateMessage(XWaylandWindow window, uint action, uint first, uint second)
+    {
+        if (Mentions("_NET_WM_STATE_HIDDEN"))
+        {
+            window.RaiseMinimizeRequested(Wanted(window.Minimized));
+        }
+
+        if (Mentions("_NET_WM_STATE_FULLSCREEN"))
+        {
+            window.RaiseFullscreenRequested(Wanted(window.FullscreenState));
+        }
+
+        if (Mentions("_NET_WM_STATE_MAXIMIZED_VERT") || Mentions("_NET_WM_STATE_MAXIMIZED_HORZ"))
+        {
+            window.RaiseMaximizeRequested(Wanted(window.MaximizedState));
+        }
+
+        bool Mentions(string name) => first == Atom(name) || second == Atom(name);
+
+        bool Wanted(bool current) => action switch
+        {
+            NetWmStateRemove => false,
+            NetWmStateAdd => true,
+            _ => !current,
+        };
+    }
 
     private void OnSerialCommitted(ulong serial, Surface surface)
     {
@@ -468,9 +503,68 @@ public sealed unsafe class XWaylandWm : IDisposable
 
         var state = Get32Property(window.WindowId, Atom("_NET_WM_STATE"), 4 );
         window.Modal = Array.IndexOf(state, Atom("_NET_WM_STATE_MODAL")) >= 0;
+        window.WantsFullscreen = Array.IndexOf(state, Atom("_NET_WM_STATE_FULLSCREEN")) >= 0;
+        window.WantsMaximized = Array.IndexOf(state, Atom("_NET_WM_STATE_MAXIMIZED_VERT")) >= 0
+            || Array.IndexOf(state, Atom("_NET_WM_STATE_MAXIMIZED_HORZ")) >= 0;
         RefreshDecorationHints(window);
         RefreshIcon(window);
         RefreshWindowType(window);
+        RefreshSizeHints(window);
+    }
+
+    private const uint AtomWmNormalHints = 40;
+
+    private const uint AtomWmSizeHints = 41;
+
+    private const uint SizeHintMinSize = 1 << 4;
+
+    private const uint SizeHintMaxSize = 1 << 5;
+
+    private const uint SizeHintBaseSize = 1 << 8;
+
+    private void RefreshSizeHints(XWaylandWindow window)
+    {
+        var hints = Get32Property(window.WindowId, AtomWmNormalHints, AtomWmSizeHints, 18);
+        var minWidth = 0;
+        var minHeight = 0;
+        var maxWidth = 0;
+        var maxHeight = 0;
+        if (hints.Length >= 9)
+        {
+            var flags = hints[0];
+            if ((flags & SizeHintMinSize) != 0)
+            {
+                minWidth = (int)hints[5];
+                minHeight = (int)hints[6];
+            }
+            else if ((flags & SizeHintBaseSize) != 0 && hints.Length >= 17)
+            {
+                minWidth = (int)hints[15];
+                minHeight = (int)hints[16];
+            }
+
+            if ((flags & SizeHintMaxSize) != 0)
+            {
+                maxWidth = (int)hints[7];
+                maxHeight = (int)hints[8];
+            }
+        }
+
+        minWidth = Math.Max(0, minWidth);
+        minHeight = Math.Max(0, minHeight);
+        maxWidth = Math.Max(0, maxWidth);
+        maxHeight = Math.Max(0, maxHeight);
+        if (minWidth == window.MinWidth && minHeight == window.MinHeight
+            && maxWidth == window.MaxWidth && maxHeight == window.MaxHeight)
+        {
+            return;
+        }
+
+        window.MinWidth = minWidth;
+        window.MinHeight = minHeight;
+        window.MaxWidth = maxWidth;
+        window.MaxHeight = maxHeight;
+        window.RaiseSizeHintsChanged();
     }
 
     private static readonly string[] FocuslessWindowTypes =
@@ -703,9 +797,17 @@ public sealed unsafe class XWaylandWm : IDisposable
         _ = Libxcb.xcb_flush(_conn);
     }
 
-    internal void RaiseWindow(XWaylandWindow window)
+    internal void RaiseWindow(XWaylandWindow window) => Restack(window, StackAbove);
+
+    internal void LowerWindow(XWaylandWindow window) => Restack(window, StackBelow);
+
+    private const uint StackAbove = 0;
+
+    private const uint StackBelow = 1;
+
+    private void Restack(XWaylandWindow window, uint mode)
     {
-        var values = stackalloc uint[1] { 0 };
+        var values = stackalloc uint[1] { mode };
         _ = Libxcb.xcb_configure_window(_conn, window.WindowId, 0x40 , values);
         _ = Libxcb.xcb_flush(_conn);
     }

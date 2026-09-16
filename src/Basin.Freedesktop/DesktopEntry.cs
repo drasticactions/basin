@@ -56,11 +56,6 @@ public sealed class DesktopEntry
 
     public bool IsListable(IReadOnlySet<string>? currentDesktop = null) => IsListable(currentDesktop, null);
 
-    /// <summary>
-    /// The menu rule, with <paramref name="tryExec"/> answering whether a <c>TryExec</c> value
-    /// resolves. Null asks this machine's <c>PATH</c>; a consumer whose entries came from another
-    /// machine passes what that machine said.
-    /// </summary>
     public bool IsListable(IReadOnlySet<string>? currentDesktop, Func<string, bool>? tryExec)
     {
         if (Type != DesktopEntryType.Application || NoDisplay || Exec is null)

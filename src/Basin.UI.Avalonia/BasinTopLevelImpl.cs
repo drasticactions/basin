@@ -24,8 +24,8 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
     {
         _context = context;
         _gpu = context.Gpu?.CreateTarget();
-        Framebuffer = _gpu is null ? new BasinFramebuffer() : null;
-        Surfaces = [this];
+        Framebuffer = _gpu is null ? new BasinFramebuffer(context.Affinity) : null;
+        Surfaces = _gpu is null ? [new FramebufferOnly(this)] : [this];
         MouseDevice = new MouseDevice(new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true));
         Configure((int)_clientSize.Width, (int)_clientSize.Height, _renderScaling);
     }
@@ -203,6 +203,15 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
         ?? Framebuffer!.Configure(logicalWidth, logicalHeight, scale);
 
     private void OnFramePublished() => Surface?.NotifyFramePublished();
+
+    private sealed class FramebufferOnly : IFramebufferPlatformSurface
+    {
+        private readonly BasinTopLevelImpl _impl;
+
+        public FramebufferOnly(BasinTopLevelImpl impl) => _impl = impl;
+
+        public IFramebufferRenderTarget CreateFramebufferRenderTarget() => _impl.CreateFramebufferRenderTarget();
+    }
 
     private sealed class RenderTarget : IFramebufferRenderTarget
     {

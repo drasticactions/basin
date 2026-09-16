@@ -11,7 +11,7 @@ public sealed class BasinCompositorHost : IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
 
-    internal ThreadAffinity Affinity => _thread;
+    public ThreadAffinity Affinity => _thread;
     private bool _disposed;
 
     public BasinCompositorHost(BasinCompositorOptions? options = null)
@@ -136,6 +136,32 @@ public sealed class BasinCompositorHost : IDisposable
     private bool _frameOpen;
 
     public event Action<long>? Composited;
+
+    private string? _screenshotPath;
+    private Action<bool>? _screenshotDone;
+
+    public void RequestScreenshot(string path, Action<bool> done)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        ArgumentNullException.ThrowIfNull(done);
+        _thread.Assert();
+        _screenshotPath = path;
+        _screenshotDone = done;
+    }
+
+    internal bool TakeScreenshotRequest(out string path, out Action<bool> done)
+    {
+        path = _screenshotPath!;
+        done = _screenshotDone!;
+        if (_screenshotPath is null || _screenshotDone is null)
+        {
+            return false;
+        }
+
+        _screenshotPath = null;
+        _screenshotDone = null;
+        return true;
+    }
 
     internal void NotifyComposited() => Composited?.Invoke(Session.Composited);
 

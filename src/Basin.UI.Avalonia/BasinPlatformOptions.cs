@@ -7,6 +7,7 @@ using Avalonia.Rendering;
 using Avalonia.Rendering.Composition;
 using Avalonia.Threading;
 using Basin.Capabilities;
+using Basin.Diagnostics;
 
 namespace Basin.UI.Avalonia;
 
@@ -23,4 +24,8 @@ public sealed class BasinPlatformOptions
     public IAvaloniaGpu? Gpu { get; set; }
 
     public UIThemeVariant Theme { get; set; } = UIThemeVariant.Light;
+
+    public ThreadAffinity? CompositorAffinity { get; set; }
+
+    public Func<Type, object?>? Features { get; set; }
 }

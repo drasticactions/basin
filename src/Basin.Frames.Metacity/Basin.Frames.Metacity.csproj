@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
     <PackageId>Basin.Frames.Metacity</PackageId>
     <RootNamespace>Basin.Frames.Metacity</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

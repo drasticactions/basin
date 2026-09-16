@@ -33,7 +33,7 @@ public sealed class PipeWireScreencastPublisherTests
                 "media.type", "Video",
                 "media.category", "Capture",
                 "media.role", "Screen",
-                "target.object", nodeId.ToString());
+                "node.target", nodeId.ToString());
             _stream = new PipeWireStream(_core, "basin-test-consumer", properties);
             _stream.Process = s =>
             {

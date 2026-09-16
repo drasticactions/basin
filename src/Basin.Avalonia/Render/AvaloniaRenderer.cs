@@ -164,7 +164,7 @@ public sealed class AvaloniaRenderer : IRenderer
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
-        if (target is not AvaloniaFrameTarget)
+        if (target is not AvaloniaFrameTarget frame)
         {
             throw new InvalidOperationException("This renderer draws into the bound lease; only an AvaloniaFrameTarget names a frame.");
         }
@@ -175,6 +175,12 @@ public sealed class AvaloniaRenderer : IRenderer
         }
 
         RenderFences.WaitSyncFile(options.WaitFenceFd);
+        if (Math.Abs(frame.Scale - 1.0) > double.Epsilon)
+        {
+            _canvas.Save();
+            _canvas.Scale((float)(1.0 / frame.Scale));
+        }
+
         return _raster.BeginCanvasPass(target, _canvas);
     }
 

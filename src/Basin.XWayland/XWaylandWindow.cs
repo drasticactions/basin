@@ -43,6 +43,18 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public bool WantsFocus { get; internal set; } = true;
 
+    public bool WantsMaximized { get; internal set; }
+
+    public bool WantsFullscreen { get; internal set; }
+
+    public int MinWidth { get; internal set; }
+
+    public int MinHeight { get; internal set; }
+
+    public int MaxWidth { get; internal set; }
+
+    public int MaxHeight { get; internal set; }
+
     public XWaylandIcon? Icon { get; internal set; }
 
     public Surface? Surface { get; internal set; }
@@ -69,9 +81,15 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public event Action? IconChanged;
 
+    public event Action? SizeHintsChanged;
+
     public event Action? Destroyed;
 
     public event Action<bool>? MinimizeRequested;
+
+    public event Action<bool>? MaximizeRequested;
+
+    public event Action<bool>? FullscreenRequested;
 
     public XWaylandReadiness Readiness { get; set; } = XWaylandReadiness.OnMatchingCommit;
 
@@ -203,7 +221,15 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public void Raise() => _wm.RaiseWindow(this);
 
+    public void Lower() => _wm.LowerWindow(this);
+
     internal void RaiseMinimizeRequested(bool minimized) => MinimizeRequested?.Invoke(minimized);
+
+    internal void RaiseMaximizeRequested(bool maximized) => MaximizeRequested?.Invoke(maximized);
+
+    internal void RaiseFullscreenRequested(bool fullscreen) => FullscreenRequested?.Invoke(fullscreen);
+
+    internal void RaiseSizeHintsChanged() => SizeHintsChanged?.Invoke();
 
     internal void RaiseMapped() => Mapped?.Invoke();
 

@@ -14,11 +14,6 @@ public static class DesktopEntryReader
         return KeyFile.Read(path) is { } groups ? Build(groups, path, id, locale) : null;
     }
 
-    /// <summary>
-    /// Reads one desktop entry from its text rather than from a file on this machine, so a
-    /// consumer that fetched the file from elsewhere reads it by the same rules.
-    /// <paramref name="path"/> is only recorded on the entry and named in diagnostics.
-    /// </summary>
     public static DesktopEntry? ParseText(string text, string path, string id, DesktopLocale locale)
     {
         ArgumentNullException.ThrowIfNull(text);

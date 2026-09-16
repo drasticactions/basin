@@ -17,8 +17,11 @@ public sealed class HostScreens : IDisposable
         public required OutputGlobal Global;
         public required HostScreenInfo Info;
         public double? Noted;
+        public bool Advertised;
         public double Effective => Noted ?? Info.Scaling;
     }
+
+    private string? _advertisedKey;
 
     internal HostScreens(BasinCompositorHost host)
     {
@@ -89,10 +92,63 @@ public sealed class HostScreens : IDisposable
         return list;
     }
 
+    public string? AdvertisedKey => _advertisedKey;
+
+    public void Advertise(Backend.Hosted.HostedOutput output, HostScreenInfo info)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(info);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_advertisedKey is { } current && current != info.Key)
+        {
+            throw new InvalidOperationException(
+                $"the output '{current}' is already advertised; a host advertises one output of its own.");
+        }
+
+        if (_rows.TryGetValue(info.Key, out var row))
+        {
+            if (!ReferenceEquals(row.Output, output))
+            {
+                throw new InvalidOperationException(
+                    $"'{info.Key}' is already a host screen row; an advertised output needs a key of its own.");
+            }
+
+            var moved = LogicalX(row.Info) != LogicalX(info) || LogicalY(row.Info) != LogicalY(info);
+            if (moved)
+            {
+                _host.Layout.Remove(output);
+                _host.Layout.Add(output, LogicalX(info), LogicalY(info));
+            }
+
+            row.Info = info;
+            SyncDefaultScale();
+            return;
+        }
+
+        if (!_sawRealScreens)
+        {
+            _sawRealScreens = true;
+            RemoveRow("waylonia-placeholder");
+        }
+
+        var global = new OutputGlobal(_host.Display, output);
+        _host.Layout.Add(output, LogicalX(info), LogicalY(info));
+        _rows[info.Key] = new Row { Output = output, Global = global, Info = info, Advertised = true };
+        _advertisedKey = info.Key;
+        SyncDefaultScale();
+    }
+
     public void Apply(IReadOnlyList<HostScreenInfo> screens)
     {
         ArgumentNullException.ThrowIfNull(screens);
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_advertisedKey is { } advertised)
+        {
+            throw new InvalidOperationException(
+                $"host screens cannot be applied while the output '{advertised}' is advertised by the consumer; " +
+                "a session shows either the host's monitors or one output of its own, never both.");
+        }
+
         if (screens.Count == 0)
         {
             return;
@@ -197,7 +253,7 @@ public sealed class HostScreens : IDisposable
         }
 
         var snapped = OutputScaling.Snap(scale);
-        if (row.Effective == snapped)
+        if (row.Effective == snapped || row.Advertised)
         {
             row.Noted = snapped;
             SyncDefaultScale();
@@ -328,7 +384,23 @@ public sealed class HostScreens : IDisposable
         _host.Layout.Remove(row.Output);
         var output = row.Output;
         row.Global.Retire();
-        output.Destroy();
+        if (row.Advertised)
+        {
+            _advertisedKey = null;
+        }
+        else
+        {
+            output.Destroy();
+        }
+    }
+
+    public void Withdraw(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        if (_rows.TryGetValue(key, out var row) && row.Advertised)
+        {
+            RemoveRow(key);
+        }
     }
 
     private static (int Width, int Height) ModeOf(HostScreenInfo info, double scale) => (
@@ -351,9 +423,13 @@ public sealed class HostScreens : IDisposable
         {
             _host.Layout.Remove(row.Output);
             row.Global.Dispose();
-            row.Output.Destroy();
+            if (!row.Advertised)
+            {
+                row.Output.Destroy();
+            }
         }
 
         _rows.Clear();
+        _advertisedKey = null;
     }
 }

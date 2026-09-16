@@ -9,6 +9,7 @@ internal sealed class BasinPopupImpl : BasinTopLevelImpl, IPopupImpl, IManagedPo
 {
     private readonly BasinTopLevelImpl _parent;
     private readonly IScreenImpl _screens;
+    private bool _shown;
 
     public BasinPopupImpl(BasinPlatformContext context, BasinTopLevelImpl parent, IScreenImpl screens)
         : base(context)
@@ -20,6 +21,8 @@ internal sealed class BasinPopupImpl : BasinTopLevelImpl, IPopupImpl, IManagedPo
     }
 
     public IPopupPositioner? PopupPositioner { get; }
+
+    internal BasinTopLevelImpl ParentImpl => _parent;
 
     public Action<PixelPoint>? PositionChanged { get; set; }
 
@@ -62,7 +65,12 @@ internal sealed class BasinPopupImpl : BasinTopLevelImpl, IPopupImpl, IManagedPo
 
     public void Show(bool activate, bool isDialog)
     {
-        Context.Host?.AnnouncePopup(Surface!);
+        if (!_shown)
+        {
+            _shown = true;
+            Context.Host?.AnnouncePopup(Surface!);
+        }
+
         if (activate)
         {
             Activated?.Invoke();
@@ -71,7 +79,12 @@ internal sealed class BasinPopupImpl : BasinTopLevelImpl, IPopupImpl, IManagedPo
 
     public void Hide()
     {
-        Context.Host?.DismissPopup(Surface!);
+        if (_shown)
+        {
+            _shown = false;
+            Context.Host?.DismissPopup(Surface!);
+        }
+
         Deactivated?.Invoke();
     }
 
@@ -93,8 +106,9 @@ internal sealed class BasinPopupImpl : BasinTopLevelImpl, IPopupImpl, IManagedPo
 
     public override void Dispose()
     {
-        if (!IsDisposed && Surface is { } surface)
+        if (!IsDisposed && _shown && Surface is { } surface)
         {
+            _shown = false;
             Context.Host?.DismissPopup(surface);
         }
 

@@ -9,6 +9,8 @@ namespace Basin.UI.Avalonia;
 internal sealed class BasinFramebuffer : IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
+    private readonly ThreadAffinity? _owner;
+    private readonly Lock _sync = new();
     private readonly PixmanRegion32 _whole = new();
     private readonly List<MemoryBuffer> _retired = [];
     private MemoryBuffer? _buffer;
@@ -18,15 +20,27 @@ internal sealed class BasinFramebuffer : IDisposable
     private bool _produced;
     private bool _disposed;
 
+    public BasinFramebuffer(ThreadAffinity? owner = null) => _owner = owner;
+
     public UISurfaceSize Size => new(_width, _height, _scale);
 
     public bool Produced => _produced;
 
     public PixmanRegion32 WholeDamage => _whole;
 
+    private void AssertThread()
+    {
+        if (_owner is null)
+        {
+            _thread.Assert();
+        }
+    }
+
+    private ThreadAffinity.Scope Adopt() => _owner?.Adopt() ?? default;
+
     public bool Configure(int logicalWidth, int logicalHeight, double scale)
     {
-        _thread.Assert();
+        AssertThread();
         if (_disposed || logicalWidth <= 0 || logicalHeight <= 0 || scale <= 0)
         {
             return false;
@@ -44,65 +58,82 @@ internal sealed class BasinFramebuffer : IDisposable
             return false;
         }
 
-        Retire();
-        _buffer = new MemoryBuffer(physical.Width, physical.Height, DrmFormat.Argb8888);
-        _produced = false;
-        _width = logicalWidth;
-        _height = logicalHeight;
-        _scale = scale;
+        lock (_sync)
+        {
+            using var scope = Adopt();
+            Retire();
+            _buffer = new MemoryBuffer(physical.Width, physical.Height, DrmFormat.Argb8888);
+            _produced = false;
+            _width = logicalWidth;
+            _height = logicalHeight;
+            _scale = scale;
+        }
+
         return true;
     }
 
     public ILockedFramebuffer? Lock(Action onPublished)
     {
-        _thread.Assert();
-        if (_disposed || _buffer is null)
+        AssertThread();
+        lock (_sync)
         {
-            return null;
-        }
+            if (_disposed || _buffer is null)
+            {
+                return null;
+            }
 
-        var buffer = _buffer;
-        if (!buffer.BeginDataAccess(BufferDataAccess.Read | BufferDataAccess.Write, out var view))
-        {
-            return null;
-        }
+            using var scope = Adopt();
+            var buffer = _buffer;
+            if (!buffer.BeginDataAccess(BufferDataAccess.Read | BufferDataAccess.Write, out var view))
+            {
+                return null;
+            }
 
-        return new Locked(this, buffer, view, onPublished);
+            return new Locked(this, buffer, view, onPublished);
+        }
     }
 
     public bool TryAcquire(out UIFrame frame)
     {
-        _thread.Assert();
-        if (_disposed || !_produced || _buffer is null)
+        AssertThread();
+        lock (_sync)
         {
-            frame = default;
-            return false;
-        }
+            if (_disposed || !_produced || _buffer is null)
+            {
+                frame = default;
+                return false;
+            }
 
-        frame = new UIFrame(_buffer.Lock(), damage: null);
-        return true;
+            using var scope = Adopt();
+            frame = new UIFrame(_buffer.Lock(), damage: null);
+            return true;
+        }
     }
 
     public void Dispose()
     {
-        _thread.Assert();
-        if (_disposed)
+        AssertThread();
+        lock (_sync)
         {
-            return;
-        }
-
-        _disposed = true;
-        Retire();
-        foreach (var buffer in _retired.ToArray())
-        {
-            if (!buffer.IsDestroyed)
+            if (_disposed)
             {
-                buffer.Destroy();
+                return;
             }
-        }
 
-        _retired.Clear();
-        _whole.Dispose();
+            _disposed = true;
+            using var scope = Adopt();
+            Retire();
+            foreach (var buffer in _retired.ToArray())
+            {
+                if (!buffer.IsDestroyed)
+                {
+                    buffer.Destroy();
+                }
+            }
+
+            _retired.Clear();
+            _whole.Dispose();
+        }
     }
 
     private void Retire()
@@ -128,6 +159,16 @@ internal sealed class BasinFramebuffer : IDisposable
                 buffer.Destroy();
             }
         };
+    }
+
+    private void EndAccess(MemoryBuffer buffer)
+    {
+        lock (_sync)
+        {
+            using var scope = Adopt();
+            buffer.EndDataAccess();
+            _produced = true;
+        }
     }
 
     private sealed class Locked : ILockedFramebuffer
@@ -168,8 +209,7 @@ internal sealed class BasinFramebuffer : IDisposable
             }
 
             _disposed = true;
-            _buffer.EndDataAccess();
-            _owner._produced = true;
+            _owner.EndAccess(_buffer);
             _onPublished();
         }
     }
