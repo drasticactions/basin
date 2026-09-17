@@ -30,7 +30,7 @@
     <PackageVersion Include="udev-dotnet" Version="261.2.0" />
     <PackageVersion Include="WaylandSharpest" Version="1.27.0" />
     <PackageVersion Include="xcb-dotnet" Version="1.17.0" />
-    <PackageVersion Include="xkbcommon-dotnet" Version="1.13.5" />
+    <PackageVersion Include="xkbcommon-dotnet" Version="1.13.6" />
   </ItemGroup>
 
   <ItemGroup>
