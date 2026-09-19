@@ -38,6 +38,7 @@
     <Project Path="src/Basin.Portal.Prompts.Avalonia/Basin.Portal.Prompts.Avalonia.csproj" />
     <Project Path="src/Basin.Portal.Client/Basin.Portal.Client.csproj" />
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <Project Path="src/Basin.Hosted/Basin.Hosted.csproj" />
     <Project Path="src/Basin.Rashader/Basin.Rashader.csproj" />
     <Project Path="src/Basin.Rashader.Gl/Basin.Rashader.Gl.csproj" />
     <Project Path="src/Basin.Rashader.Vulkan/Basin.Rashader.Vulkan.csproj" />

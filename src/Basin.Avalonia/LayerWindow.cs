@@ -193,7 +193,7 @@ public sealed class LayerWindow : Window
 
         var screens = Screens;
         var screen = screens.ScreenFromTopLevel(this) ?? screens.ScreenFromWindow(this);
-        if (HostScreens.KeyFor(screens, screen) is { } key)
+        if (AvaloniaScreens.KeyFor(screens, screen) is { } key)
         {
             _manager.HostScreenScaleObserved(key, RenderScaling);
         }

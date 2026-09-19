@@ -4,7 +4,7 @@ using Basin.Diagnostics;
 using Basin.Shell.Xdg;
 using Wayland.Server;
 
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
 public sealed record BasinCompositorOptions
 {
@@ -14,7 +14,7 @@ public sealed record BasinCompositorOptions
 
     public bool ManagedTransport { get; init; } = !OperatingSystem.IsLinux();
 
-    public AvaloniaTextInput? TextInput { get; init; }
+    public Capabilities.ITextInputMethod? TextInput { get; init; }
 
     public IReadOnlyList<IProtocolModule>? ExtraModules { get; init; }
 }

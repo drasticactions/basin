@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Basin.Avalonia;
+using Basin.Hosted;
 using Basin.Diagnostics;
 using Wayland;
 using Xunit;

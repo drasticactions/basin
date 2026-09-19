@@ -777,7 +777,7 @@ public sealed class ToplevelWindow : Window, ICaptureTarget
     {
         var screens = Screens;
         var screen = screens.ScreenFromTopLevel(this) ?? screens.ScreenFromWindow(this);
-        var key = HostScreens.KeyFor(screens, screen);
+        var key = AvaloniaScreens.KeyFor(screens, screen);
         if (key is not null && RenderScaling > 0 && ScaleIsAuthoritative
             && (key != _screenKey || RenderScaling != _observedScale))
         {

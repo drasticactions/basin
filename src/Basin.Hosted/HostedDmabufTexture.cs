@@ -1,10 +1,10 @@
 using Basin.Render.Skia;
 using SkiaSharp;
-using static Basin.Avalonia.AvaloniaLog;
+using static Basin.Hosted.HostedLog;
 
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
-internal sealed class AvaloniaDmabufTexture : ISkiaTexture
+internal sealed class HostedDmabufTexture : ISkiaTexture
 {
     private const uint GlTexture2D = 0x0DE1;
     private const uint GlBgra8 = 0x93A1;
@@ -12,15 +12,15 @@ internal sealed class AvaloniaDmabufTexture : ISkiaTexture
 
     private static uint _glFormat = GlBgra8;
 
-    private readonly AvaloniaRenderer _renderer;
+    private readonly HostedRenderer _renderer;
     private readonly uint _texture;
     private readonly nint _image;
     private readonly GRBackendTexture _backend;
     private readonly SKImage _skImage;
     private readonly int _generation;
 
-    private AvaloniaDmabufTexture(
-        AvaloniaRenderer renderer, uint texture, nint image, GRBackendTexture backend, SKImage skImage,
+    private HostedDmabufTexture(
+        HostedRenderer renderer, uint texture, nint image, GRBackendTexture backend, SKImage skImage,
         int width, int height, int generation)
     {
         _renderer = renderer;
@@ -37,8 +37,8 @@ internal sealed class AvaloniaDmabufTexture : ISkiaTexture
 
     public int Height { get; }
 
-    internal static AvaloniaDmabufTexture? TryImport(
-        AvaloniaRenderer renderer, AvaloniaEglImport egl, GRContext context, in DmabufAttributes attributes)
+    internal static HostedDmabufTexture? TryImport(
+        HostedRenderer renderer, HostedEglImport egl, GRContext context, in DmabufAttributes attributes)
     {
         if (egl.Import(attributes) is not { } native)
         {
@@ -73,7 +73,7 @@ internal sealed class AvaloniaDmabufTexture : ISkiaTexture
             return null;
         }
 
-        return new AvaloniaDmabufTexture(
+        return new HostedDmabufTexture(
             renderer, native.Texture, native.Image, backend, SkiaCensus.Track(image),
             attributes.Width, attributes.Height, renderer.ContextGeneration);
     }

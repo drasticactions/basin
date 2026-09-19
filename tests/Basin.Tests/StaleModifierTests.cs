@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using Basin.Avalonia;
+using Basin.Hosted;
 using Xunit;
 
 namespace Basin.Tests;

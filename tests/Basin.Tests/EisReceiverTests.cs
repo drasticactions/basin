@@ -7,10 +7,9 @@ namespace Basin.Tests;
 
 public sealed class EisReceiverTests
 {
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void A_sender_client_gets_devices_and_its_input_lands_on_the_sink()
     {
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         var sink = new RecordingInputSink();
         var granted = InputDeviceCapability.Pointer | InputDeviceCapability.Keyboard;
@@ -123,10 +122,9 @@ public sealed class EisReceiverTests
         Assert.False(receiver.HasClient);
     }
 
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void A_receiver_client_is_refused()
     {
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         var sink = new RecordingInputSink();
         using var receiver = new EisReceiver(host.Loop, sink, keymap: null, InputDeviceCapability.Pointer);
@@ -152,10 +150,9 @@ public sealed class EisReceiverTests
         Assert.False(receiver.HasClient);
     }
 
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void Disposing_while_a_key_is_held_releases_it()
     {
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         var sink = new RecordingInputSink();
         var receiver = new EisReceiver(host.Loop, sink, keymap: null, InputDeviceCapability.Keyboard);

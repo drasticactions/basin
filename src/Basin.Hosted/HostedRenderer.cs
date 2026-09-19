@@ -1,11 +1,10 @@
-using Avalonia.Skia;
 using Basin.Diagnostics;
 using Basin.Render.Skia;
 using SkiaSharp;
 
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
-public sealed class AvaloniaRenderer : IRenderer
+public sealed class HostedRenderer : IRenderer
 {
     private readonly SkiaRenderer _raster = new();
     private readonly SKPaint _layerPaint;
@@ -14,17 +13,44 @@ public sealed class AvaloniaRenderer : IRenderer
     private GRContext? _lastContext;
     private int _saveCount;
     private bool _lost;
-    private AvaloniaEglImport? _eglImport;
+    private HostedEglImport? _eglImport;
     private readonly List<(uint Texture, nint Image, int Generation)> _pendingEglReleases = [];
 
     public int ContextGeneration { get; private set; }
 
-    public AvaloniaEglImport? EglImport => _eglImport;
+    public HostedEglImport? EglImport => _eglImport;
 
-    public event Action<AvaloniaEglImport>? EglAvailable;
+    public event Action<HostedEglImport>? EglAvailable;
 
     internal void ScheduleEglRelease(uint texture, nint image, int generation) =>
         _pendingEglReleases.Add((texture, image, generation));
+
+    public HostedRenderer()
+    {
+        _layerPaint = SkiaCensus.Track(new SKPaint());
+    }
+
+    public bool IsContextLost => _lost;
+
+    public event Action? ContextReplaced;
+
+    public bool TryEnableEgl(nint eglDisplay)
+    {
+        _thread.Assert();
+        if (_eglImport is not null || !OperatingSystem.IsLinux())
+        {
+            return _eglImport is not null;
+        }
+
+        if (HostedEglImport.TryCreate(eglDisplay) is not { } import)
+        {
+            return false;
+        }
+
+        _eglImport = import;
+        EglAvailable?.Invoke(import);
+        return true;
+    }
 
     private void FlushEglReleases()
     {
@@ -42,38 +68,6 @@ public sealed class AvaloniaRenderer : IRenderer
         }
 
         _pendingEglReleases.Clear();
-    }
-
-    public AvaloniaRenderer()
-    {
-        _layerPaint = SkiaCensus.Track(new SKPaint());
-    }
-
-    public bool IsContextLost => _lost;
-
-    public event Action? ContextReplaced;
-
-    public bool BindFrame(ISkiaSharpApiLease lease)
-    {
-        ArgumentNullException.ThrowIfNull(lease);
-        if (!BindFrame(lease.SkCanvas, lease.GrContext, lease.CurrentOpacity))
-        {
-            return false;
-        }
-
-        if (_eglImport is null && OperatingSystem.IsLinux() && lease.GrContext is not null)
-        {
-            using var platform = lease.TryLeasePlatformGraphicsApi();
-            if (platform?.Context is global::Avalonia.OpenGL.Egl.EglContext egl &&
-                AvaloniaEglImport.TryCreate(egl.Display.Handle) is { } import)
-            {
-                _eglImport = import;
-                EglAvailable?.Invoke(import);
-            }
-        }
-
-        FlushEglReleases();
-        return true;
     }
 
     public bool BindFrame(SKCanvas canvas, GRContext? context, double opacity = 1.0)
@@ -110,6 +104,7 @@ public sealed class AvaloniaRenderer : IRenderer
         }
 
         _canvas = canvas;
+        FlushEglReleases();
         return true;
     }
 
@@ -143,7 +138,7 @@ public sealed class AvaloniaRenderer : IRenderer
         if (buffer.TryGetDmabuf(out var attributes))
         {
             return _eglImport is { } egl && _lastContext is { } context && egl.Formats.Contains(attributes.Format)
-                ? AvaloniaDmabufTexture.TryImport(this, egl, context, attributes)
+                ? HostedDmabufTexture.TryImport(this, egl, context, attributes)
                 : null;
         }
 
@@ -164,9 +159,9 @@ public sealed class AvaloniaRenderer : IRenderer
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
-        if (target is not AvaloniaFrameTarget frame)
+        if (target is not HostedFrameTarget frame)
         {
-            throw new InvalidOperationException("This renderer draws into the bound lease; only an AvaloniaFrameTarget names a frame.");
+            throw new InvalidOperationException("This renderer draws into the bound lease; only an HostedFrameTarget names a frame.");
         }
 
         if (_canvas is null)

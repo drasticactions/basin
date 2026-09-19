@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Basin.Scene;
 using Basin.Shell.Xdg;
+using Basin.Hosted;
 using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;

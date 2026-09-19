@@ -119,10 +119,9 @@ public sealed class HyprlandInputCaptureTests
         HyprlandTestSupport.AssertAlive(host);
     }
 
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void Input_arrives_over_eis_while_captured()
     {
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost();
         using var manager = new HyprlandInputCaptureManager(host.Display, host.Loop, host.Layout, host.Seat);
         var (session, fd) = CreateSession(host);

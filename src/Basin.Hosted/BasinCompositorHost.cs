@@ -3,9 +3,9 @@ using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Shell.Xdg;
 using Wayland.Server;
-using static Basin.Avalonia.AvaloniaLog;
+using static Basin.Hosted.HostedLog;
 
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
 public sealed class BasinCompositorHost : IDisposable
 {
@@ -17,7 +17,7 @@ public sealed class BasinCompositorHost : IDisposable
     public BasinCompositorHost(BasinCompositorOptions? options = null)
     {
         options ??= new BasinCompositorOptions();
-        Renderer = new AvaloniaRenderer();
+        Renderer = new HostedRenderer();
         Display = options.ManagedTransport ? WlServerDisplay.Create(new ManagedTransport()) : WlServerDisplay.Create();
         if (Display.SupportsLocalSocket &&
             string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR")))
@@ -82,7 +82,7 @@ public sealed class BasinCompositorHost : IDisposable
 
     public LinuxDmabufGlobal? Dmabuf => _dmabuf;
 
-    private void OnEglAvailable(AvaloniaEglImport import)
+    private void OnEglAvailable(HostedEglImport import)
     {
         if (_disposed || _dmabuf is not null || !OperatingSystem.IsLinux())
         {
@@ -129,7 +129,7 @@ public sealed class BasinCompositorHost : IDisposable
 
     public HostedWakeSource Wake { get; }
 
-    public AvaloniaRenderer Renderer { get; }
+    public HostedRenderer Renderer { get; }
 
     private readonly List<BasinViewOutput> _views = [];
     private TimeSpan _frameStamp = TimeSpan.MinValue;

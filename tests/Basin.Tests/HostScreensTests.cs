@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Basin.Avalonia;
+using Basin.Hosted;
 using Basin.Diagnostics;
 using Wayland;
 using Xunit;

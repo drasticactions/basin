@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Threading;
 using Basin.Avalonia;
+using Basin.Hosted;
 using Basin.Diagnostics;
 using Wayland;
 using Xunit;

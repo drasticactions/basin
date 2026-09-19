@@ -3,6 +3,7 @@ using Avalonia.Media;
 using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Basin.Diagnostics;
+using Basin.Hosted;
 using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;

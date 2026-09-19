@@ -4,6 +4,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Basin.Capabilities;
 using Basin.Diagnostics;
+using Basin.Hosted;
 using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;

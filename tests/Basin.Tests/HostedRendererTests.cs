@@ -7,6 +7,7 @@ using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using Basin.Avalonia;
+using Basin.Hosted;
 using Basin.Diagnostics;
 using Basin.Render.Skia;
 using SkiaSharp;
@@ -14,7 +15,7 @@ using Xunit;
 
 namespace Basin.Tests;
 
-public sealed class AvaloniaRendererTests
+public sealed class HostedRendererTests
 {
     private const int Width = 160;
     private const int Height = 120;
@@ -71,8 +72,8 @@ public sealed class AvaloniaRendererTests
         var reference = RenderReference();
 
         var (scene, gradient) = BuildScene();
-        var renderer = new AvaloniaRenderer();
-        var target = new AvaloniaFrameTarget(Width, Height);
+        var renderer = new HostedRenderer();
+        var target = new HostedFrameTarget(Width, Height);
         var actual = new MemoryBuffer(Width, Height, DrmFormat.Xrgb8888);
         Assert.True(actual.BeginDataAccess(BufferDataAccess.Read | BufferDataAccess.Write, out var view));
         Assert.True(SkiaRenderer.TryImageInfo(Width, Height, DrmFormat.Xrgb8888, out var info));
@@ -106,8 +107,8 @@ public sealed class AvaloniaRendererTests
     {
         var reference = RenderReference();
         var (scene, gradient) = BuildScene();
-        var renderer = new AvaloniaRenderer();
-        var target = new AvaloniaFrameTarget(Width, Height);
+        var renderer = new HostedRenderer();
+        var target = new HostedFrameTarget(Width, Height);
         var sawLease = false;
         var host = new SceneHost(context =>
         {
@@ -181,7 +182,7 @@ public sealed class AvaloniaRendererTests
     public void A_foreign_target_is_refused()
     {
         BasinCounters.Reset();
-        var renderer = new AvaloniaRenderer();
+        var renderer = new HostedRenderer();
         var target = new MemoryBuffer(8, 8, DrmFormat.Xrgb8888);
         Assert.Throws<InvalidOperationException>(() => renderer.BeginBufferPass(target, new RenderPassOptions()));
         renderer.Dispose();
@@ -193,8 +194,8 @@ public sealed class AvaloniaRendererTests
     public void An_unbound_frame_is_refused()
     {
         BasinCounters.Reset();
-        var renderer = new AvaloniaRenderer();
-        var target = new AvaloniaFrameTarget(8, 8);
+        var renderer = new HostedRenderer();
+        var target = new HostedFrameTarget(8, 8);
         Assert.Throws<InvalidOperationException>(() => renderer.BeginBufferPass(target, new RenderPassOptions()));
         renderer.Dispose();
         target.Destroy();
@@ -205,7 +206,7 @@ public sealed class AvaloniaRendererTests
     public void The_frame_target_carries_no_pixels()
     {
         BasinCounters.Reset();
-        var target = new AvaloniaFrameTarget(32, 16, 2.0);
+        var target = new HostedFrameTarget(32, 16, 2.0);
         Assert.Equal(32, target.Width);
         Assert.Equal(16, target.Height);
         Assert.Equal(2.0, target.Scale);
@@ -218,7 +219,7 @@ public sealed class AvaloniaRendererTests
     public void A_lost_context_answers_no_textures_until_the_next_bind()
     {
         BasinCounters.Reset();
-        var renderer = new AvaloniaRenderer();
+        var renderer = new HostedRenderer();
         var buffer = new MemoryBuffer(16, 16, DrmFormat.Argb8888);
         renderer.NotifyContextLost();
         Assert.True(renderer.IsContextLost);
@@ -241,8 +242,8 @@ public sealed class AvaloniaRendererTests
     {
         BasinCounters.Reset();
         var (scene, gradient) = BuildScene();
-        using var renderer = new AvaloniaRenderer();
-        var target = new AvaloniaFrameTarget(Width, Height);
+        using var renderer = new HostedRenderer();
+        var target = new HostedFrameTarget(Width, Height);
         using var surface = SKSurface.Create(new SKImageInfo(Width, Height, SKColorType.Bgra8888, SKAlphaType.Premul));
 
         void Frame()

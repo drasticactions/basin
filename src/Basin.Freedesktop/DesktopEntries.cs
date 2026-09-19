@@ -54,7 +54,7 @@ public sealed class DesktopEntries
         foreach (var directory in _dataDirectories ?? XdgDirectories.DataDirectories())
         {
             var path = Path.Combine(directory, "applications", id);
-            if (File.Exists(path))
+            if (File.Exists(path) && HasExactName(path, id))
             {
                 return DesktopEntryReader.Parse(path, id, _locale);
             }
@@ -78,6 +78,18 @@ public sealed class DesktopEntries
         var found = Find(appId) ?? Ladder(appId);
         _byAppId[appId] = found;
         return found;
+    }
+
+    private static readonly EnumerationOptions ExactCase = new() { MatchCasing = MatchCasing.CaseSensitive };
+
+    private static bool HasExactName(string path, string id)
+    {
+        foreach (var _ in Directory.EnumerateFiles(Path.GetDirectoryName(path)!, id, ExactCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public void Invalidate()

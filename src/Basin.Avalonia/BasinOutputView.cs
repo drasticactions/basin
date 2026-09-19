@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Rendering.Composition;
 using Avalonia.Threading;
+using Basin.Hosted;
 
 namespace Basin.Avalonia;
 

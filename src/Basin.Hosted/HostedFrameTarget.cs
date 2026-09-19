@@ -1,8 +1,8 @@
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
-public sealed class AvaloniaFrameTarget : BufferBase
+public sealed class HostedFrameTarget : BufferBase
 {
-    public AvaloniaFrameTarget(int width, int height, double scale = 1.0)
+    public HostedFrameTarget(int width, int height, double scale = 1.0)
         : base(width, height)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(width, 0);

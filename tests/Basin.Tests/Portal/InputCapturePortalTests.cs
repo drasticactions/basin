@@ -175,10 +175,9 @@ public sealed class InputCapturePortalTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void Eis_input_arrives_while_captured_and_the_hyprland_front_is_excluded()
     {
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var daemon = PrivateBus.Start();
         using var host = new CompositorTestHost(160, 120);
         var (bus, services, engine) = Setup(host, daemon.Address, new AutoAnswerPrompts());
@@ -273,11 +272,10 @@ public sealed class InputCapturePortalTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void A_capture_session_through_the_distro_frontend_activates_on_the_bus()
     {
         PortalFrontendFixture.SkipUnlessAvailable();
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost(160, 120);
         using var fixture = PortalFrontendFixture.Start(Impl);
         var (bus, services, engine) = Setup(host, fixture.Address, new AutoAnswerPrompts());

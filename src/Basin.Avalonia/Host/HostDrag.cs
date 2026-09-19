@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Basin.Diagnostics;
 using Basin.Seat;
+using Basin.Hosted;
 using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;

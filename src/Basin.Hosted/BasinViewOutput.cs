@@ -4,7 +4,7 @@ using Basin.Diagnostics;
 using Basin.Shell.Xdg;
 using Wayland.Server;
 
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
 public sealed class BasinViewOutput : IDisposable
 {
@@ -16,14 +16,14 @@ public sealed class BasinViewOutput : IDisposable
         _host = host;
         Output = output;
         SceneOutput = sceneOutput;
-        Target = new AvaloniaFrameTarget(output.CurrentMode.Width, output.CurrentMode.Height, output.Scale);
+        Target = new HostedFrameTarget(output.CurrentMode.Width, output.CurrentMode.Height, output.Scale);
     }
 
     public HostedOutput Output { get; }
 
     public Scene.SceneOutput SceneOutput { get; }
 
-    public AvaloniaFrameTarget Target { get; private set; }
+    public HostedFrameTarget Target { get; private set; }
 
     public Action? RequestRender { get; set; }
 
@@ -37,7 +37,7 @@ public sealed class BasinViewOutput : IDisposable
 
         Output.Resize(width, height, scale);
         var stale = Target;
-        Target = new AvaloniaFrameTarget(width, height, scale);
+        Target = new HostedFrameTarget(width, height, scale);
         stale.Destroy();
     }
 

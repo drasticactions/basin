@@ -1,9 +1,9 @@
 using Basin.Diagnostics;
-using static Basin.Avalonia.AvaloniaLog;
+using static Basin.Hosted.HostedLog;
 
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
-public sealed unsafe class AvaloniaEglImport
+public sealed unsafe class HostedEglImport
 {
     private const uint LinuxDmaBufExt = 0x3270;
     private const int AttribWidth = 0x3057;
@@ -30,7 +30,7 @@ public sealed unsafe class AvaloniaEglImport
     private readonly delegate* unmanaged[Cdecl]<int, uint*, void> _deleteTextures;
     private readonly delegate* unmanaged[Cdecl]<uint> _getError;
 
-    private AvaloniaEglImport(nint display)
+    private HostedEglImport(nint display)
     {
         _display = display;
         _createImage = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, int*, nint>)Load("eglCreateImageKHR");
@@ -46,7 +46,7 @@ public sealed unsafe class AvaloniaEglImport
         RenderNodePath = QueryRenderNode();
     }
 
-    public static AvaloniaEglImport? TryCreate(nint eglDisplayHandle)
+    public static HostedEglImport? TryCreate(nint eglDisplayHandle)
     {
         if (eglDisplayHandle == 0)
         {
@@ -55,7 +55,7 @@ public sealed unsafe class AvaloniaEglImport
 
         try
         {
-            var import = new AvaloniaEglImport(eglDisplayHandle);
+            var import = new HostedEglImport(eglDisplayHandle);
             return import.Formats.Count > 0 ? import : null;
         }
         catch (Exception error) when (

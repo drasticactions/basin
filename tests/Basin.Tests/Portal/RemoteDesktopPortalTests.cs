@@ -1,5 +1,4 @@
 using Basin.Capabilities;
-using Basin.Eis;
 using Basin.Portal;
 using Basin.Tests.PortalClient;
 using Libei;
@@ -50,11 +49,10 @@ public sealed class RemoteDesktopPortalTests
         Assert.Equal(expectedDevices, results["devices"].GetUInt32());
     }
 
-    [Fact]
+    [Fact(Skip = EisAvailability.Missing, SkipType = typeof(EisAvailability), SkipUnless = nameof(EisAvailability.Loaded))]
     public void A_remote_desktop_session_through_the_distro_frontend_injects_and_connects_eis()
     {
         PortalFrontendFixture.SkipUnlessAvailable();
-        Assert.SkipUnless(EisLibrary.IsAvailable(out var whyNot), whyNot ?? "libeis");
         using var host = new CompositorTestHost(64, 48);
         using var fixture = PortalFrontendFixture.Start(Impl, CastImpl);
         var sink = new RecordingInputSink();

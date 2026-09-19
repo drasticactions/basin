@@ -2,16 +2,17 @@
 
   <PropertyGroup>
     <BasinPlatforms>linux;macos;windows</BasinPlatforms>
-    <PackageId>Basin.Avalonia</PackageId>
-    <RootNamespace>Basin.Avalonia</RootNamespace>
+    <PackageId>Basin.Hosted</PackageId>
+    <RootNamespace>Basin.Hosted</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Hosts a Basin compositor inside an Avalonia application: the custom visual, the tick, and the host window model.</Description>
+    <Description>The compositor host a foreign toolkit drives: display, loop, scene, desktop pack, hosted session and the renderer that draws into a borrowed Skia canvas, with no toolkit dependency.</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Avalonia" />
     <InternalsVisibleTo Include="Basin.Tests" />
     <InternalsVisibleTo Include="Waylonia.Tests" />
+    <InternalsVisibleTo Include="Waylonia.Core.Tests" />
     <InternalsVisibleTo Include="Waylonia.Ui.Tests" />
   </ItemGroup>
 
@@ -23,9 +24,6 @@
     <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
     <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
-    <ProjectReference Include="../Basin.Hosted/Basin.Hosted.csproj" />
-    <PackageReference Include="Avalonia" />
-    <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="mesa-dotnet" />
   </ItemGroup>
