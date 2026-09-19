@@ -34,6 +34,7 @@
     <ProjectReference Include="../../samples/EightWm/EightWm.csproj" />
     <ProjectReference Include="../../samples/TinyComp/TinyComp.csproj" />
     <ProjectReference Include="../../samples/BasinPortal/BasinPortal.csproj" />
+    <ProjectReference Include="../../samples/Tarn/Tarn/Tarn.csproj" />
     <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
@@ -41,6 +42,10 @@
     <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <ProjectReference Include="../../src/Basin.Video.VideoToolbox/Basin.Video.VideoToolbox.csproj" />
+    <ProjectReference Include="../../src/Basin.Video.MediaCodec/Basin.Video.MediaCodec.csproj" />
+    <ProjectReference Include="../../src/Basin.Video.WebCodecs/Basin.Video.WebCodecs.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Nested/Basin.Shell.Nested.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
@@ -51,6 +56,7 @@
     <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
     <ProjectReference Include="../../src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.Avalonia.View/Basin.Avalonia.View.csproj" />
     <ProjectReference Include="../../src/Basin.Hosted/Basin.Hosted.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />

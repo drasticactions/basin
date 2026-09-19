@@ -134,6 +134,26 @@ public sealed class BasinViewInputTests
     }
 
     [AvaloniaFact]
+    public void A_touch_pointer_losing_capture_is_a_touch_cancel()
+    {
+        using var harness = new Harness();
+        harness.PumpUntil(() => harness.View.Output is not null, "the view never created its output");
+        var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Touch, isPrimary: true);
+        harness.View.RaiseEvent(new PointerCaptureLostEventArgs(harness.View, pointer));
+        harness.PumpUntil(
+            () => harness.Events.Any(static e => e.Kind == BasinViewInputKind.TouchCancel),
+            "the cancel never reached the sink");
+        var cancel = harness.Events.Single(static e => e.Kind == BasinViewInputKind.TouchCancel);
+        Assert.Equal(pointer.Id, cancel.TouchId);
+        Assert.DoesNotContain(harness.Events, static e => e.Kind == BasinViewInputKind.TouchUp);
+
+        var mouse = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+        harness.View.RaiseEvent(new PointerCaptureLostEventArgs(harness.View, mouse));
+        harness.Pump();
+        Assert.Single(harness.Events, static e => e.Kind == BasinViewInputKind.TouchCancel);
+    }
+
+    [AvaloniaFact]
     public void Capture_and_activation_are_reported_to_the_compositor_side()
     {
         using var harness = new Harness();

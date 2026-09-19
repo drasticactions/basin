@@ -92,6 +92,7 @@ public sealed class ToplevelWindows : IDisposable
         {
             MacFullscreenSize.Install();
             MacZoomButton.Install();
+            AvaloniaCursor.NativeFrameCursor ??= MacFrameCursor.For;
         }
 
         Policy = policy ?? new AvaloniaShellPolicy();
@@ -1700,7 +1701,7 @@ public sealed class ToplevelWindows : IDisposable
 
             return 0;
         };
-        textInput.UiWindowResolver = id => _windows.TryGetValue(id, out var window) ? window : null;
+        textInput.UiWindowResolver = id => _windows.TryGetValue(id, out var window) ? window.View : null;
     }
 
     public void AttachDrag(HostDrag drag)

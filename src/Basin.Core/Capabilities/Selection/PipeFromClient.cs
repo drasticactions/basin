@@ -57,6 +57,11 @@ public sealed class PipeFromClient : IPipeFromClient
                     return null;
                 }
 
+                if (!PlatformFacts.HasThreads)
+                {
+                    return null;
+                }
+
                 _ = Monitor.Wait(_lock, (int)Math.Min(remaining, int.MaxValue));
             }
 

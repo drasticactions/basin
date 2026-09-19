@@ -5,7 +5,7 @@ using Xkb;
 
 namespace Basin.Seat;
 
-public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, IDisposable
+public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, IKeySink, IDisposable
 {
     private readonly Seat _seat;
     private readonly List<IKeyboardGrab> _grabs = [];

@@ -25,21 +25,24 @@ public sealed class HostedOutput : OutputBase
 
     public event Action? FrameRequested;
 
-    public void Resize(int width, int height, double scale)
+    public void Resize(int width, int height, double scale) => Reconfigure(width, height, scale, Transform);
+
+    public bool Reconfigure(int width, int height, double scale, OutputTransform transform)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(scale);
         if (CurrentMode.Width == width && CurrentMode.Height == height &&
-            Math.Abs(Scale - scale) < double.Epsilon)
+            Math.Abs(Scale - scale) < double.Epsilon && Transform == transform)
         {
-            return;
+            return true;
         }
 
         using var state = new OutputState();
         state.SetMode(new OutputMode(width, height, CurrentMode.RefreshMilliHz));
         state.SetScale(scale);
-        Commit(state);
+        state.SetTransform(transform);
+        return Commit(state);
     }
 
     public override void RequestFrame()

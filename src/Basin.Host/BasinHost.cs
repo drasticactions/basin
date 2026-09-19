@@ -50,7 +50,7 @@ public sealed class BasinHost : IDisposable
     {
         ArgumentNullException.ThrowIfNull(options);
         var display = options.Transport == HostTransport.Managed
-            ? WlServerDisplay.Create(new ManagedTransport())
+            ? WlServerDisplay.Create(new ManagedTransport(new ManagedTransportOptions { LocalSocket = PlatformFacts.HasLocalClients }))
             : WlServerDisplay.Create();
         string socket;
         if (options.SocketFd >= 0)

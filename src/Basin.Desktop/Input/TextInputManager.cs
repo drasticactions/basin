@@ -40,6 +40,8 @@ public sealed class TextInputManager : IDisposable
 
     public event Action? TextInputDeactivated;
 
+    public event Action<string>? CommitStringUnclaimed;
+
     public void Dispose()
     {
         if (_seat is { } withSeat)
@@ -78,7 +80,17 @@ public sealed class TextInputManager : IDisposable
     private void OnPreedit(PreeditString preedit) =>
         ActiveTextInput()?.ApplyPreedit(preedit.Text, preedit.CursorBegin, preedit.CursorEnd);
 
-    private void OnCommitString(string text) => ActiveTextInput()?.ApplyCommit(text);
+    private void OnCommitString(string text)
+    {
+        if (ActiveTextInput() is { } active)
+        {
+            active.ApplyCommit(text);
+        }
+        else
+        {
+            CommitStringUnclaimed?.Invoke(text);
+        }
+    }
 
     private void OnDeleteSurrounding(uint before, uint after) =>
         ActiveTextInput()?.ApplyDeleteSurrounding(before, after);

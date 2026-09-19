@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -12,10 +13,15 @@ public sealed class WaypipeChannel : IDisposable
     private readonly WaypipeClientTransport _transport = new();
     private readonly WaypipeEngine _engine;
     private readonly WaypipeLimits _limits;
+    private static int _nextChannelId;
+    private readonly int _channelId = Interlocked.Increment(ref _nextChannelId);
     private readonly Stream _stream;
-    private readonly Socket? _socket;
-    private readonly Thread _reader;
+    private readonly Action? _shutdownPeer;
+    private readonly IDisposable? _ownedPeer;
+    private readonly Thread? _reader;
     private byte[] _outbound = new byte[8192];
+    private readonly System.Buffers.ArrayBufferWriter<byte>? _queued;
+    private bool _draining;
     private ZstdSharp.Compressor? _zstdCompressor;
     private int _nextRemoteId = -1;
     private volatile bool _stopping;
@@ -24,18 +30,36 @@ public sealed class WaypipeChannel : IDisposable
     private bool _disposed;
 
     private WaypipeChannel(
-        Stream stream, Socket? socket, WaypipeCompression compression, WaypipeLimits? limits, WaypipeChannelOptions? options)
+        Stream stream,
+        Action? shutdownPeer,
+        IDisposable? ownedPeer,
+        WaypipeCompression compression,
+        WaypipeLimits? limits,
+        WaypipeChannelOptions? options,
+        WaypipePump pump)
     {
         _stream = stream;
-        _socket = socket;
+        _shutdownPeer = shutdownPeer;
+        _ownedPeer = ownedPeer;
+        Pump = pump;
         _limits = limits ?? new WaypipeLimits();
         Options = options ?? new WaypipeChannelOptions();
         Globals = new WaypipeGlobals(Options.CarriesDmabuf, Options.AcceptsVideo && Options.VideoDecoder is not null);
         _engine = new WaypipeEngine(_transport, compression, _limits, Options);
         _engine.Send += OnEngineSend;
+        _engine.Failed += Finish;
         _transport.Outbound += OnOutbound;
-        _reader = new Thread(Read) { IsBackground = true, Name = "basin-waypipe-reader" };
+        if (pump == WaypipePump.Thread)
+        {
+            _reader = new Thread(Read) { IsBackground = true, Name = "basin-waypipe-reader" };
+        }
+        else
+        {
+            _queued = new System.Buffers.ArrayBufferWriter<byte>(16 * 1024);
+        }
     }
+
+    public WaypipePump Pump { get; }
 
     public WaypipeClientTransport Transport => _transport;
 
@@ -47,6 +71,9 @@ public sealed class WaypipeChannel : IDisposable
 
     public event Action<Exception?>? Ended;
 
+    public event Action? Opened;
+
+    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
     public static WaypipeChannel Listen(
         EndPoint endpoint,
         WaypipeCompression compression = WaypipeCompression.Lz4,
@@ -55,6 +82,12 @@ public sealed class WaypipeChannel : IDisposable
         WaypipeChannelOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
+        if (!PlatformFacts.HasDescriptors)
+        {
+            throw new PlatformNotSupportedException(
+                "this host binds no listening socket; attach a connected stream with AttachChannel instead");
+        }
+
         if (endpoint is IPEndPoint ip &&
             (ip.Address.Equals(IPAddress.Any) || ip.Address.Equals(IPAddress.IPv6Any)))
         {
@@ -68,24 +101,56 @@ public sealed class WaypipeChannel : IDisposable
         listener.Bind(endpoint);
         listener.Listen(1);
         var accepted = listener.AcceptAsync(cancellation).AsTask().GetAwaiter().GetResult();
-        return Adopt(new NetworkStream(accepted, ownsSocket: false), accepted, compression, limits, options);
+        return Adopt(
+            new NetworkStream(accepted, ownsSocket: false),
+            () => accepted.Shutdown(SocketShutdown.Both),
+            accepted,
+            compression,
+            limits,
+            options,
+            WaypipePump.Thread);
     }
 
     public static WaypipeChannel AttachChannel(
         Stream stream,
         WaypipeCompression compression = WaypipeCompression.Lz4,
         WaypipeLimits? limits = null,
-        WaypipeChannelOptions? options = null) =>
-        Adopt(stream, null, compression, limits, options);
+        WaypipeChannelOptions? options = null,
+        WaypipePump? pump = null,
+        Action<WaypipeChannel>? configure = null) =>
+        Adopt(stream, null, null, compression, limits, options, pump ?? (PlatformFacts.HasThreads ? WaypipePump.Thread : WaypipePump.Async), configure);
 
     private static WaypipeChannel Adopt(
-        Stream stream, Socket? socket, WaypipeCompression compression, WaypipeLimits? limits, WaypipeChannelOptions? options)
+        Stream stream,
+        Action? shutdownPeer,
+        IDisposable? ownedPeer,
+        WaypipeCompression compression,
+        WaypipeLimits? limits,
+        WaypipeChannelOptions? options,
+        WaypipePump pump,
+        Action<WaypipeChannel>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        var channel = new WaypipeChannel(stream, socket, compression, limits, options);
-        channel._reader.Start();
+        if (pump == WaypipePump.Thread && !PlatformFacts.HasThreads)
+        {
+            throw new PlatformNotSupportedException("this host owns no reader thread; attach with the Async pump");
+        }
+
+        var channel = new WaypipeChannel(stream, shutdownPeer, ownedPeer, compression, limits, options, pump);
+        configure?.Invoke(channel);
+        if (channel._reader is { } reader)
+        {
+            reader.Start();
+        }
+        else
+        {
+            channel._readerTask = channel.ReadAsync();
+        }
+
         return channel;
     }
+
+    private Task? _readerTask;
 
     public int CreateWritablePipe() => OpenPipe(WaypipeMessageType.OpenIWPipe, writable: true);
 
@@ -155,8 +220,8 @@ public sealed class WaypipeChannel : IDisposable
         _stopping = true;
         EndPeer();
         _stream.Dispose();
-        _socket?.Dispose();
-        _reader.Join(1000);
+        _ownedPeer?.Dispose();
+        _reader?.Join(1000);
         _transport.Outbound -= OnOutbound;
         _engine.Send -= OnEngineSend;
         _engine.Dispose();
@@ -172,19 +237,8 @@ public sealed class WaypipeChannel : IDisposable
         {
             var header = new byte[WaypipeWire.ConnectionHeaderLength];
             ReadExactly(header);
-            var connection = WaypipeWire.ParseConnectionHeader(header, _engine.Compression);
-            RequireDecoderFor(connection.VideoCodec);
-
-            Span<byte> version = stackalloc byte[8];
-            BinaryPrimitives.WriteUInt32LittleEndian(version, WaypipeWire.Header(WaypipeMessageType.Version, 8));
-            BinaryPrimitives.WriteUInt32LittleEndian(version[4..], connection.Version);
-            lock (_writeLock)
-            {
-                if (!_closeSent)
-                {
-                    Write(version);
-                }
-            }
+            AnswerConnectionHeader(header);
+            Opened?.Invoke();
 
             var frame = new byte[4];
             var body = new byte[16 * 1024];
@@ -195,19 +249,7 @@ public sealed class WaypipeChannel : IDisposable
                     break;
                 }
 
-                var (length, type) = WaypipeWire.ParseHeader(BinaryPrimitives.ReadUInt32LittleEndian(frame));
-                if (length < 4)
-                {
-                    throw new WaypipeException($"a {type} frame declares {length} bytes, below its own header");
-                }
-
-                if (length > _limits.MaxFrameBytes)
-                {
-                    throw new WaypipeException(
-                        $"a {type} frame declares {length} bytes, over the {_limits.MaxFrameBytes} this channel reads");
-                }
-
-                var payload = WaypipeWire.Padded(length) - 4;
+                var (length, type, payload) = ParseFrameHeader(frame);
                 if (payload > body.Length)
                 {
                     body = new byte[payload];
@@ -226,10 +268,128 @@ public sealed class WaypipeChannel : IDisposable
             failure = _stopping ? null : ex;
         }
 
+        Finish(failure);
+    }
+
+    private async Task ReadAsync()
+    {
+        Exception? failure = null;
+        try
+        {
+            var header = new byte[WaypipeWire.ConnectionHeaderLength];
+            var first = await _stream.ReadAsync(header).ConfigureAwait(true);
+            if (first <= 0)
+            {
+                WaypipeLog.Log.Debug($"async pump {_channelId}: the stream ended before a connection header");
+                Finish(null);
+                return;
+            }
+
+            if (!await TryReadExactlyAsync(header.AsMemory(first)).ConfigureAwait(true))
+            {
+                throw new WaypipeException("the channel ended inside a frame");
+            }
+
+            AnswerConnectionHeader(header);
+            Opened?.Invoke();
+            WaypipeLog.Log.Debug($"async pump {_channelId}: connection header answered");
+
+            var frame = new byte[4];
+            var body = new byte[16 * 1024];
+            while (!_stopping)
+            {
+                if (!await TryReadExactlyAsync(frame).ConfigureAwait(true))
+                {
+                    WaypipeLog.Log.Debug($"async pump {_channelId}: stream ended between frames");
+                    break;
+                }
+
+                var (length, type, payload) = ParseFrameHeader(frame);
+                WaypipeLog.Log.Debug($"async pump {_channelId}: {type} frame of {length} bytes");
+                if (payload > body.Length)
+                {
+                    body = new byte[payload];
+                }
+
+                if (!await TryReadExactlyAsync(body.AsMemory(0, payload)).ConfigureAwait(true))
+                {
+                    throw new WaypipeException("the channel ended inside a frame");
+                }
+
+                if (type == WaypipeMessageType.OpenFile && length >= 12)
+                {
+                    WaypipeLog.Log.Debug($"async pump {_channelId}: OpenFile remote id {BinaryPrimitives.ReadInt32LittleEndian(body)} size {BinaryPrimitives.ReadInt32LittleEndian(body.AsSpan(4))}");
+                }
+
+                try
+                {
+                    _engine.Apply(type, body.AsSpan(0, length - 4));
+                }
+                catch (Exception ex)
+                {
+                    WaypipeLog.Log.Warn($"async pump {_channelId}: applying a {type} frame of {length} bytes failed: {ex}");
+                    throw;
+                }
+
+                if (_engine.Closed)
+                {
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            failure = _stopping ? null : ex;
+        }
+
+        Finish(failure);
+    }
+
+    private void Finish(Exception? failure)
+    {
+        if (failure is not null)
+        {
+            WaypipeLog.Log.Debug($"the channel ended: {failure.Message}");
+        }
+
         _stopping = true;
         EndPeer();
         _transport.EndOfStream();
         End(failure);
+    }
+
+    private void AnswerConnectionHeader(byte[] header)
+    {
+        var connection = WaypipeWire.ParseConnectionHeader(header, _engine.Compression);
+        RequireDecoderFor(connection.VideoCodec);
+
+        Span<byte> version = stackalloc byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(version, WaypipeWire.Header(WaypipeMessageType.Version, 8));
+        BinaryPrimitives.WriteUInt32LittleEndian(version[4..], connection.Version);
+        lock (_writeLock)
+        {
+            if (!_closeSent)
+            {
+                Write(version);
+            }
+        }
+    }
+
+    private (int Length, WaypipeMessageType Type, int Payload) ParseFrameHeader(byte[] frame)
+    {
+        var (length, type) = WaypipeWire.ParseHeader(BinaryPrimitives.ReadUInt32LittleEndian(frame));
+        if (length < 4)
+        {
+            throw new WaypipeException($"a {type} frame declares {length} bytes, below its own header");
+        }
+
+        if (length > _limits.MaxFrameBytes)
+        {
+            throw new WaypipeException(
+                $"a {type} frame declares {length} bytes, over the {_limits.MaxFrameBytes} this channel reads");
+        }
+
+        return (length, type, WaypipeWire.Padded(length) - 4);
     }
 
     private void RequireDecoderFor(WaypipeVideoCodec codec)
@@ -284,17 +444,18 @@ public sealed class WaypipeChannel : IDisposable
                 try
                 {
                     Write(close);
+                    FlushQueuedOnClose();
                 }
-                catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+                catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException or NotSupportedException)
                 {
                 }
             }
 
             try
             {
-                if (_socket is not null)
+                if (_shutdownPeer is not null)
                 {
-                    _socket.Shutdown(SocketShutdown.Both);
+                    _shutdownPeer();
                 }
                 else
                 {
@@ -484,8 +645,26 @@ public sealed class WaypipeChannel : IDisposable
 
     private void Write(ReadOnlySpan<byte> message)
     {
-        _stream.Write(message);
         var padding = WaypipeWire.Padded(message.Length) - message.Length;
+        if (_queued is { } queued)
+        {
+            queued.Write(message);
+            if (padding > 0)
+            {
+                queued.GetSpan(padding)[..padding].Clear();
+                queued.Advance(padding);
+            }
+
+            if (!_draining)
+            {
+                _draining = true;
+                _ = DrainAsync();
+            }
+
+            return;
+        }
+
+        _stream.Write(message);
         if (padding > 0)
         {
             Span<byte> zeros = stackalloc byte[4];
@@ -496,12 +675,81 @@ public sealed class WaypipeChannel : IDisposable
         _stream.Flush();
     }
 
+    private void FlushQueuedOnClose()
+    {
+        if (_queued is not { WrittenCount: > 0 } queued)
+        {
+            return;
+        }
+
+        var pending = queued.WrittenSpan.ToArray();
+        queued.Clear();
+        _stream.Write(pending);
+        _stream.Flush();
+    }
+
+    private async Task DrainAsync()
+    {
+        try
+        {
+            while (!_stopping)
+            {
+                byte[]? chunk;
+                lock (_writeLock)
+                {
+                    var queued = _queued!;
+                    if (queued.WrittenCount == 0)
+                    {
+                        _draining = false;
+                        return;
+                    }
+
+                    chunk = queued.WrittenSpan.ToArray();
+                    queued.Clear();
+                }
+
+                WaypipeLog.Log.Debug($"async pump {_channelId}: writing {chunk.Length} bytes");
+                await _stream.WriteAsync(chunk).ConfigureAwait(true);
+                await _stream.FlushAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (!_stopping)
+            {
+                WaypipeLog.Log.Warn($"the channel's writer failed: {ex}");
+                Finish(ex);
+            }
+        }
+        finally
+        {
+            _draining = false;
+        }
+    }
+
     private void ReadExactly(Span<byte> buffer)
     {
         if (!TryReadExactly(buffer))
         {
             throw new WaypipeException("the channel ended inside a frame");
         }
+    }
+
+    private async ValueTask<bool> TryReadExactlyAsync(Memory<byte> buffer)
+    {
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var got = await _stream.ReadAsync(buffer[read..]).ConfigureAwait(true);
+            if (got <= 0)
+            {
+                return false;
+            }
+
+            read += got;
+        }
+
+        return true;
     }
 
     private bool TryReadExactly(Span<byte> buffer)

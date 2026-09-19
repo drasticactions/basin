@@ -1,8 +1,10 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Basin.Diagnostics;
 
 namespace Basin;
 
+[SupportedOSPlatform("linux")]
 public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
 {
     private const int EpollCloexec = 0x80000;

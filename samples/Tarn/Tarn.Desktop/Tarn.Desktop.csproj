@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>tarn-desktop</AssemblyName>
+    <RootNamespace>Tarn.Desktop</RootNamespace>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Tarn/Tarn.csproj" />
+    <ProjectReference Include="../../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <PackageReference Include="Avalonia.Desktop" />
+  </ItemGroup>
+
+</Project>

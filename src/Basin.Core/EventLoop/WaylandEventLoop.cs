@@ -46,7 +46,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
     {
         _thread.Assert();
         ArgumentNullException.ThrowIfNull(handler);
-        if (OperatingSystem.IsWindows())
+        if (!PlatformFacts.HasPosixSignals)
         {
             var inner = _display.EventLoop.AddSignal(signalNumber, handler);
             BasinCounters.Track();
@@ -137,6 +137,9 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         public void UpdateFd(FdReadiness events) => _inner.UpdateFd((WlFdEvents)events);
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    [System.Runtime.Versioning.SupportedOSPlatform("macos")]
+    [System.Runtime.Versioning.SupportedOSPlatform("freebsd")]
     private sealed class SignalSource : IEventSource
     {
         private const int ONonblock = 0x800;
@@ -163,7 +166,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         internal unsafe SignalSource(WlServerDisplay display, int signalNumber, Action<int> handler)
         {
             var fds = stackalloc int[2];
-            if (OperatingSystem.IsLinux())
+            if (PlatformFacts.HasLinuxSyscalls)
             {
                 if (pipe2(fds, ONonblock | OCloexec) != 0)
                 {

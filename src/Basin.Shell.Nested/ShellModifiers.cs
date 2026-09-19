@@ -1,0 +1,15 @@
+namespace Basin.Shell.Nested;
+
+[Flags]
+public enum ShellModifiers
+{
+    None = 0,
+
+    Shift = 1,
+
+    Ctrl = 2,
+
+    Alt = 4,
+
+    Super = 8,
+}

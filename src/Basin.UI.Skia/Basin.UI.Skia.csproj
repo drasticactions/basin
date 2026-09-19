@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.UI.Skia</PackageId>
     <RootNamespace>Basin.UI.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

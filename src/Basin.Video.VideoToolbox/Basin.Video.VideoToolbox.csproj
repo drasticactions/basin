@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>ios;maccatalyst;macos</BasinPlatforms>
+    <PackageId>Basin.Video.VideoToolbox</PackageId>
+    <RootNamespace>Basin.Video.VideoToolbox</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>An IVideoDecoder over VideoToolbox for the waypipe video streams a session on Apple hardware receives.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+  </ItemGroup>
+
+</Project>

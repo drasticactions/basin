@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.UI.Avalonia</PackageId>
     <RootNamespace>Basin.UI.Avalonia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

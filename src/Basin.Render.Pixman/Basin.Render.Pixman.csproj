@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Render.Pixman</PackageId>
     <RootNamespace>Basin.Render.Pixman</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

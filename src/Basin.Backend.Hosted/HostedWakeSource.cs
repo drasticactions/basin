@@ -8,10 +8,16 @@ public sealed class HostedWakeSource : IDisposable
     private readonly Thread? _thread;
     private readonly int[] _wake = [-1, -1];
     private volatile bool _stopping;
+    private volatile bool _suspended;
 
     public HostedWakeSource(ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
+        if (!PlatformFacts.HasDescriptors || !PlatformFacts.HasThreads)
+        {
+            return;
+        }
+
         try
         {
             _fd = loop.Fd;
@@ -41,14 +47,32 @@ public sealed class HostedWakeSource : IDisposable
 
     public event Action? Ready;
 
-    public void Dispose()
+    public bool IsSuspended => _suspended;
+
+    public void Suspend()
     {
-        if (_stopping)
+        if (_suspended)
         {
             return;
         }
 
-        _stopping = true;
+        _suspended = true;
+        Poke();
+    }
+
+    public void Resume()
+    {
+        if (!_suspended)
+        {
+            return;
+        }
+
+        _suspended = false;
+        Poke();
+    }
+
+    private void Poke()
+    {
         if (_wake[1] >= 0)
         {
             unsafe
@@ -57,7 +81,17 @@ public sealed class HostedWakeSource : IDisposable
                 _ = write(_wake[1], &one, 1);
             }
         }
+    }
 
+    public void Dispose()
+    {
+        if (_stopping)
+        {
+            return;
+        }
+
+        _stopping = true;
+        Poke();
         _thread?.Join(1000);
 
         for (var i = 0; i < _wake.Length; i++)
@@ -75,14 +109,15 @@ public sealed class HostedWakeSource : IDisposable
         var fds = stackalloc PollFd[2];
         while (!_stopping)
         {
-            fds[0].Fd = _fd;
+            fds[0].Fd = _wake[0];
             fds[0].Events = PollIn;
             fds[0].REvents = 0;
-            fds[1].Fd = _wake[0];
+            fds[1].Fd = _fd;
             fds[1].Events = PollIn;
             fds[1].REvents = 0;
 
-            var ready = poll(fds, 2, -1);
+            var suspended = _suspended;
+            var ready = poll(fds, suspended ? 1u : 2u, -1);
             if (ready < 0)
             {
                 if (Marshal.GetLastPInvokeError() == Eintr)
@@ -93,12 +128,19 @@ public sealed class HostedWakeSource : IDisposable
                 return;
             }
 
-            if (_stopping || (fds[1].REvents & PollIn) != 0)
+            if (_stopping)
             {
                 return;
             }
 
             if ((fds[0].REvents & PollIn) != 0)
+            {
+                byte token = 0;
+                _ = read(_wake[0], &token, 1);
+                continue;
+            }
+
+            if (!suspended && (fds[1].REvents & PollIn) != 0)
             {
                 Ready?.Invoke();
                 Thread.Sleep(PollBackoffMillis);
@@ -126,6 +168,9 @@ public sealed class HostedWakeSource : IDisposable
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe nint write(int fd, byte* buffer, nuint count);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe nint read(int fd, byte* buffer, nuint count);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);

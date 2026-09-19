@@ -372,10 +372,12 @@ public sealed class WaypipeChannelTests
         Assert.Equal(0, engine.LiveRemoteIds);
     }
 
-    [Fact]
-    public void A_minted_inbound_pipe_is_announced_and_carries_the_client_bytes_back()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_minted_inbound_pipe_is_announced_and_carries_the_client_bytes_back(WaypipePump pump)
     {
-        using var peer = new LoopbackChannel();
+        using var peer = new LoopbackChannel(pump: pump);
 
         var inbound = new PipeFromClient();
         var slot = peer.Channel.Transport.Slots.Mint(inbound);
@@ -403,10 +405,12 @@ public sealed class WaypipeChannelTests
         Assert.Equal("hello"u8.ToArray(), inbound.ReadToEnd(TimeSpan.FromSeconds(5)));
     }
 
-    [Fact]
-    public void A_region_sent_twice_is_created_again_under_a_fresh_remote_id()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_region_sent_twice_is_created_again_under_a_fresh_remote_id(WaypipePump pump)
     {
-        using var peer = new LoopbackChannel();
+        using var peer = new LoopbackChannel(pump: pump);
 
         var region = new SharedMemoryRegion(64);
         region.Span.Fill(0x5a);
@@ -477,10 +481,12 @@ public sealed class WaypipeChannelTests
         Assert.Contains("names no file", stale.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void A_frame_longer_than_the_channel_reads_ends_it_before_the_body_arrives()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_frame_longer_than_the_channel_reads_ends_it_before_the_body_arrives(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits { MaxFrameBytes = 4096 });
+        using var peer = new ChannelPeer(new WaypipeLimits { MaxFrameBytes = 4096 }, pump);
 
         Span<byte> oversized = stackalloc byte[4];
         BinaryPrimitives.WriteUInt32LittleEndian(
@@ -493,10 +499,12 @@ public sealed class WaypipeChannelTests
         Assert.Equal(0, peer.Channel.Engine.LiveRemoteIds);
     }
 
-    [Fact]
-    public void A_channel_that_opens_more_shared_memory_than_its_budget_is_ended()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_channel_that_opens_more_shared_memory_than_its_budget_is_ended(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits { MaxTotalRegionBytes = 8192 });
+        using var peer = new ChannelPeer(new WaypipeLimits { MaxTotalRegionBytes = 8192 }, pump);
 
         peer.Send(OpenFile(1, 4096));
         peer.Send(OpenFile(2, 4096));
@@ -508,10 +516,12 @@ public sealed class WaypipeChannelTests
         Assert.Equal(2, peer.Channel.Engine.LiveRemoteIds);
     }
 
-    [Fact]
-    public void A_channel_that_opens_more_remote_ids_than_its_budget_is_ended()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_channel_that_opens_more_remote_ids_than_its_budget_is_ended(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits { MaxRemoteIds = 2 });
+        using var peer = new ChannelPeer(new WaypipeLimits { MaxRemoteIds = 2 }, pump);
 
         peer.Send(OpenFile(1, 64));
         peer.Send(OpenFile(2, 64));
@@ -522,10 +532,12 @@ public sealed class WaypipeChannelTests
         Assert.Equal(2, peer.Channel.Engine.LiveRemoteIds);
     }
 
-    [Fact]
-    public void A_pipe_the_channel_never_drains_is_ended_rather_than_buffered_without_bound()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_pipe_the_channel_never_drains_is_ended_rather_than_buffered_without_bound(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits { MaxPipeBytes = 64 });
+        using var peer = new ChannelPeer(new WaypipeLimits { MaxPipeBytes = 64 }, pump);
 
         var open = new byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(open, 11);
@@ -540,10 +552,12 @@ public sealed class WaypipeChannelTests
         Assert.Contains("budget", failure!.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void A_channel_the_peer_closes_ends_without_naming_a_failure()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_channel_the_peer_closes_ends_without_naming_a_failure(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits());
+        using var peer = new ChannelPeer(new WaypipeLimits(), pump);
 
         peer.Send(Frame(WaypipeMessageType.Close, []));
 
@@ -556,10 +570,12 @@ public sealed class WaypipeChannelTests
         }
     }
 
-    [Fact]
-    public void A_channel_that_fails_tells_the_peer_and_closes_the_stream()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_channel_that_fails_tells_the_peer_and_closes_the_stream(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits { MaxRemoteIds = 2 });
+        using var peer = new ChannelPeer(new WaypipeLimits { MaxRemoteIds = 2 }, pump);
 
         peer.Send(OpenFile(1, 64));
         peer.Send(OpenFile(2, 64));
@@ -569,10 +585,12 @@ public sealed class WaypipeChannelTests
         Assert.Equal(WaypipeMessageType.Close, FrameTypes(peer.DrainToEof())[^1]);
     }
 
-    [Fact]
-    public void Disposing_a_channel_tells_the_peer_before_closing_the_stream()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void Disposing_a_channel_tells_the_peer_before_closing_the_stream(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits());
+        using var peer = new ChannelPeer(new WaypipeLimits(), pump);
 
         peer.Channel.Dispose();
 
@@ -608,7 +626,7 @@ public sealed class WaypipeChannelTests
         private readonly System.Threading.ManualResetEventSlim _ended = new(false);
         private Exception? _failure;
 
-        internal ChannelPeer(WaypipeLimits limits, WaypipeCompression compression = WaypipeCompression.None)
+        internal ChannelPeer(WaypipeLimits limits, WaypipePump pump, WaypipeCompression compression = WaypipeCompression.None)
         {
             using var listener = new System.Net.Sockets.Socket(
                 System.Net.Sockets.AddressFamily.InterNetwork,
@@ -627,7 +645,8 @@ public sealed class WaypipeChannelTests
             Channel = WaypipeChannel.AttachChannel(
                 new System.Net.Sockets.NetworkStream(accepted, ownsSocket: true),
                 compression,
-                limits);
+                limits,
+                pump: pump);
             Channel.Ended += ex =>
             {
                 _failure = ex;
@@ -685,10 +704,12 @@ public sealed class WaypipeChannelTests
         }
     }
 
-    [Fact]
-    public void A_zstd_fill_crosses_a_real_channel_and_lands_byte_for_byte()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_zstd_fill_crosses_a_real_channel_and_lands_byte_for_byte(WaypipePump pump)
     {
-        using var peer = new ChannelPeer(new WaypipeLimits(), WaypipeCompression.Zstd);
+        using var peer = new ChannelPeer(new WaypipeLimits(), pump, WaypipeCompression.Zstd);
 
         var contents = new byte[4096];
         for (var i = 0; i < contents.Length; i++)
@@ -708,10 +729,12 @@ public sealed class WaypipeChannelTests
         Assert.True(region.Span.SequenceEqual(contents));
     }
 
-    [Fact]
-    public void An_exported_region_is_filled_with_zstd_on_a_zstd_channel()
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void An_exported_region_is_filled_with_zstd_on_a_zstd_channel(WaypipePump pump)
     {
-        using var peer = new LoopbackChannel(WaypipeCompression.Zstd);
+        using var peer = new LoopbackChannel(WaypipeCompression.Zstd, pump: pump);
 
         var region = new SharedMemoryRegion(4096);
         for (var i = 0; i < 4096; i++)
@@ -736,6 +759,190 @@ public sealed class WaypipeChannelTests
         Assert.True(decoded.AsSpan().SequenceEqual(region.Span));
 
         peer.Channel.Transport.CloseFd(slot);
+    }
+
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public void A_fill_crosses_a_duplex_pipe_without_a_socket(WaypipePump pump)
+    {
+        using var peer = new LoopbackChannel(WaypipeCompression.None, mode: LoopbackChannel.Mode.DuplexPipe, pump: pump);
+        peer.SendConnectionHeader(WaypipeCompression.None);
+
+        var contents = new byte[2048];
+        for (var i = 0; i < contents.Length; i++)
+        {
+            contents[i] = (byte)(i * 7);
+        }
+
+        peer.Send(OpenFile(9, contents.Length));
+        peer.Send(Fill(9, 0, contents.Length, contents, WaypipeCompression.None));
+
+        var version = peer.ReadFrames().Single(f => f.Type == WaypipeMessageType.Version);
+        Assert.Equal(WaypipeWire.ProtocolVersion, BinaryPrimitives.ReadUInt32LittleEndian(version.Body));
+        Assert.True(Wait(() => peer.Channel.Engine.LiveRemoteIds == 1), "the fill never landed");
+        Assert.True(Resolve(peer.Channel.Engine, 9).Span.SequenceEqual(contents));
+    }
+
+    [Fact]
+    public void The_async_pump_writes_without_blocking_a_stream_that_only_writes_asynchronously()
+    {
+        using var peer = new LoopbackChannel(
+            WaypipeCompression.None, mode: LoopbackChannel.Mode.DuplexPipe, pump: WaypipePump.Async, asyncOnlyWrites: true);
+        peer.SendConnectionHeader(WaypipeCompression.None);
+
+        var version = peer.ReadFrames().Single(f => f.Type == WaypipeMessageType.Version);
+        Assert.Equal(WaypipeWire.ProtocolVersion, BinaryPrimitives.ReadUInt32LittleEndian(version.Body));
+
+        var region = new SharedMemoryRegion(4096);
+        region.Span.Fill(0x5a);
+        var slot = peer.Channel.Transport.Slots.Mint(region);
+        var eventBytes = new byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(eventBytes, 3);
+        BinaryPrimitives.WriteUInt32LittleEndian(eventBytes.AsSpan(4), 8u << 16);
+        Assert.Equal(8, peer.Channel.Transport.TryWriteNonBlocking(eventBytes, new[] { slot }));
+
+        var frames = peer.ReadFrames();
+        Assert.Contains(frames, f => f.Type == WaypipeMessageType.OpenFile);
+        Assert.Contains(frames, f => f.Type == WaypipeMessageType.BufferFill);
+        Assert.Contains(frames, f => f.Type == WaypipeMessageType.Protocol);
+        peer.Channel.Transport.CloseFd(slot);
+    }
+
+    [Theory]
+    [InlineData(WaypipePump.Thread)]
+    [InlineData(WaypipePump.Async)]
+    public async Task A_header_already_buffered_before_attach_still_reaches_a_subscriber_that_configures(WaypipePump pump)
+    {
+        var toHost = new System.IO.Pipelines.Pipe();
+        var toPeer = new System.IO.Pipelines.Pipe();
+        var header = new byte[WaypipeWire.ConnectionHeaderLength];
+        WaypipeWire.WriteConnectionHeader(header, WaypipeWire.ProtocolVersion, WaypipeCompression.None);
+        await toHost.Writer.WriteAsync(header, TestContext.Current.CancellationToken);
+
+        var opened = new ManualResetEventSlim(false);
+        using var channel = WaypipeChannel.AttachChannel(
+            new DuplexStream(toHost.Reader.AsStream(), toPeer.Writer.AsStream()),
+            WaypipeCompression.None,
+            pump: pump,
+            configure: attached => attached.Opened += opened.Set);
+
+        Assert.True(Wait(() => opened.IsSet), "the header the stream already held was read before a late subscriber could see it");
+        await toHost.Writer.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task A_web_socket_is_read_as_a_byte_stream_under_the_async_pump()
+    {
+        var cancellation = TestContext.Current.CancellationToken;
+        var toHost = new System.IO.Pipelines.Pipe();
+        var toPeer = new System.IO.Pipelines.Pipe();
+        using var hostSide = System.Net.WebSockets.WebSocket.CreateFromStream(
+            new DuplexStream(toHost.Reader.AsStream(), toPeer.Writer.AsStream()),
+            isServer: false,
+            subProtocol: null,
+            keepAliveInterval: TimeSpan.Zero);
+        using var peerSide = System.Net.WebSockets.WebSocket.CreateFromStream(
+            new DuplexStream(toPeer.Reader.AsStream(), toHost.Writer.AsStream()),
+            isServer: true,
+            subProtocol: null,
+            keepAliveInterval: TimeSpan.Zero);
+
+        using var channel = WaypipeChannel.AttachChannel(
+            new WebSocketStream(hostSide), WaypipeCompression.None, pump: WaypipePump.Async);
+
+        var contents = new byte[1024];
+        for (var i = 0; i < contents.Length; i++)
+        {
+            contents[i] = (byte)(i * 3);
+        }
+
+        var header = new byte[WaypipeWire.ConnectionHeaderLength];
+        WaypipeWire.WriteConnectionHeader(header, WaypipeWire.ProtocolVersion, WaypipeCompression.None);
+        var open = OpenFile(4, contents.Length);
+        var fill = Fill(4, 0, contents.Length, contents, WaypipeCompression.None);
+        var bytes = header.Concat(open).Concat(fill).ToArray();
+        var split = 7;
+        await peerSide.SendAsync(bytes.AsMemory(0, split), System.Net.WebSockets.WebSocketMessageType.Binary, true, cancellation);
+        await peerSide.SendAsync(bytes.AsMemory(split), System.Net.WebSockets.WebSocketMessageType.Binary, true, cancellation);
+
+        Assert.True(Wait(() => channel.Engine.LiveRemoteIds == 1), "the fill never landed");
+        Assert.True(Resolve(channel.Engine, 4).Span.SequenceEqual(contents));
+
+        var answer = new byte[64];
+        var received = await peerSide.ReceiveAsync(answer, cancellation);
+        var (length, type) = WaypipeWire.ParseHeader(BinaryPrimitives.ReadUInt32LittleEndian(answer));
+        Assert.Equal(WaypipeMessageType.Version, type);
+        Assert.Equal(8, length);
+        Assert.True(received.Count >= 8);
+    }
+
+    private static bool Wait(Func<bool> condition, int millis = 5000)
+    {
+        var deadline = Environment.TickCount64 + millis;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (condition())
+            {
+                return true;
+            }
+
+            Thread.Sleep(5);
+        }
+
+        return condition();
+    }
+
+    private sealed class DuplexStream(Stream reader, Stream writer) : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => writer.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => writer.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => reader.Read(buffer, offset, count);
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            reader.ReadAsync(buffer, cancellationToken);
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            reader.ReadAsync(buffer, offset, count, cancellationToken);
+
+        public override void Write(byte[] buffer, int offset, int count) => writer.Write(buffer, offset, count);
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            writer.WriteAsync(buffer, cancellationToken);
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            writer.WriteAsync(buffer, offset, count, cancellationToken);
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                reader.Dispose();
+                writer.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 
     private static SharedMemoryRegion Resolve(WaypipeEngine engine, int remoteId)

@@ -21,9 +21,19 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         {
             fixed (int* fds = _pipe)
             {
-                if (pipe2(fds, OCloexec | ONonblock) != 0)
+                var created = PlatformFacts.HasLinuxSyscalls ? pipe2(fds, OCloexec | ONonblock) : pipe(fds);
+                if (created != 0)
                 {
                     throw new InvalidOperationException("the compositor wake pipe could not be created");
+                }
+
+                if (!PlatformFacts.HasLinuxSyscalls)
+                {
+                    for (var i = 0; i < 2; i++)
+                    {
+                        _ = fcntl(fds[i], FSetFd, FdCloexec);
+                        _ = fcntl(fds[i], FSetFl, fcntl(fds[i], FGetFl, 0) | ONonblockDarwin);
+                    }
                 }
             }
         }
@@ -155,9 +165,20 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
 
     private const int OCloexec = 0x80000;
     private const int ONonblock = 0x800;
+    private const int ONonblockDarwin = 0x0004;
+    private const int FGetFl = 3;
+    private const int FSetFl = 4;
+    private const int FSetFd = 2;
+    private const int FdCloexec = 1;
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int pipe2(int* fds, int flags);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int pipe(int* fds);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int fcntl(int fd, int command, int argument);
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe nint write(int fd, byte* buffer, nuint count);

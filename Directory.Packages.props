@@ -25,10 +25,10 @@
     <PackageVersion Include="liftoff-dotnet" Version="0.5.1" />
     <PackageVersion Include="mesa-dotnet" Version="26.1.5" />
     <PackageVersion Include="pipewire-dotnet" Version="1.6.8" />
-    <PackageVersion Include="pixman-dotnet" Version="0.46.8" />
+    <PackageVersion Include="pixman-dotnet" Version="0.46.9" />
     <PackageVersion Include="seatd-dotnet" Version="0.9.3" />
     <PackageVersion Include="udev-dotnet" Version="261.2.0" />
-    <PackageVersion Include="WaylandSharpest" Version="1.27.0" />
+    <PackageVersion Include="WaylandSharpest" Version="1.27.2" />
     <PackageVersion Include="xcb-dotnet" Version="1.17.0" />
     <PackageVersion Include="xkbcommon-dotnet" Version="1.13.6" />
   </ItemGroup>
@@ -61,6 +61,9 @@
     <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Wayland" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.iOS" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Android" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Browser" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="IgnoresAccessChecksToGenerator" Version="0.8.0" />
   </ItemGroup>
 

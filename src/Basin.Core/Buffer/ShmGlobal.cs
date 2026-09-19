@@ -73,7 +73,7 @@ public sealed class ShmGlobal : IDisposable
 
     private static bool SelectManaged(WlServerDisplay display) =>
         display.Transport is not LibWaylandTransport
-        || !OperatingSystem.IsLinux()
+        || !PlatformFacts.HasLocalClients
         || SelectManagedByEnvironment();
 
     private static bool SelectManagedByEnvironment() =>

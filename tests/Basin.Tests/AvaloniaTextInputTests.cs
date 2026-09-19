@@ -156,7 +156,7 @@ public sealed class AvaloniaTextInputTests
         textInput.SetCursorRectangle(12, 34, 2, 18);
         textInput.Commit();
         harness.PumpUntil(() => harness.TextInput.ActiveWindow is not null);
-        Assert.Same(window, harness.TextInput.ActiveWindow);
+        Assert.Same(window.View, harness.TextInput.ActiveWindow);
         Assert.Equal(new global::Avalonia.Rect(12, 34, 2, 18), harness.TextInput.Client.CursorRectangle);
 
         harness.TextInput.Client.SetPreeditText("にほん", 3);

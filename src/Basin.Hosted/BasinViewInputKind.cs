@@ -11,6 +11,7 @@ public enum BasinViewInputKind : byte
     TouchDown,
     TouchMotion,
     TouchUp,
+    TouchCancel,
     FocusIn,
     FocusOut,
 }

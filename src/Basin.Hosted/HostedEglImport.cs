@@ -46,6 +46,8 @@ public sealed unsafe class HostedEglImport
         RenderNodePath = QueryRenderNode();
     }
 
+    public static bool IsSupported { get; } = OperatingSystem.IsLinux();
+
     public static HostedEglImport? TryCreate(nint eglDisplayHandle)
     {
         if (eglDisplayHandle == 0)

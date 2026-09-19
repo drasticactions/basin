@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace Basin.Diagnostics;
 
@@ -23,6 +24,8 @@ public static class BasinDiagnostics
         WaylandDiagnostics.RouteToBasinLog();
     }
 
+    [UnsupportedOSPlatform("browser")]
+    [UnsupportedOSPlatform("ios")]
     public static Process? StartClient(
         string? command,
         string socket,
@@ -57,6 +60,8 @@ public static class BasinDiagnostics
         return Process.Start(info);
     }
 
+    [UnsupportedOSPlatform("browser")]
+    [UnsupportedOSPlatform("ios")]
     public static void StopClient(Process? process, int timeoutMs = 2000)
     {
         if (process is { HasExited: false })

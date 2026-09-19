@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Shell.Xdg</PackageId>
     <RootNamespace>Basin.Shell.Xdg</RootNamespace>
     <Description>xdg-shell implementation for Basin.</Description>

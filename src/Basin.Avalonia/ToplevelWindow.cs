@@ -77,14 +77,14 @@ public sealed class ToplevelWindow : Window, ICaptureTarget
         };
         TextInputMethodClientRequested += (_, e) =>
         {
-            if (_manager.TextInput is { } textInput && textInput.IsActiveOn(this))
+            if (_manager.TextInput is { } textInput && textInput.IsActiveOn(View))
             {
                 e.Client = textInput.Client;
             }
         };
         TextInput += (_, e) =>
         {
-            if (_manager.TextInput is { } textInput && textInput.IsActiveOn(this) && !string.IsNullOrEmpty(e.Text))
+            if (_manager.TextInput is { } textInput && textInput.IsActiveOn(View) && !string.IsNullOrEmpty(e.Text))
             {
                 textInput.CommitFromHost(e.Text!);
                 e.Handled = true;

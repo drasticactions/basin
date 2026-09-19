@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>portable</BasinPlatforms>
+    <RootNamespace>Tarn</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Basin.Avalonia.View/Basin.Avalonia.View.csproj" />
+    <ProjectReference Include="../../../src/Basin.Shell.Nested/Basin.Shell.Nested.csproj" />
+    <ProjectReference Include="../../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Themes/metacity-theme-1.xml" LogicalName="tarn-metacity-theme-1.xml" />
+  </ItemGroup>
+
+</Project>

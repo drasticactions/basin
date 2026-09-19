@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Backend.Headless</PackageId>
     <RootNamespace>Basin.Backend.Headless</RootNamespace>
     <Description>Headless backend for Basin with virtual outputs.</Description>

@@ -18,14 +18,17 @@ public sealed class BasinCompositorHost : IDisposable
     {
         options ??= new BasinCompositorOptions();
         Renderer = new HostedRenderer();
-        Display = options.ManagedTransport ? WlServerDisplay.Create(new ManagedTransport()) : WlServerDisplay.Create();
-        if (Display.SupportsLocalSocket &&
+        Display = options.ManagedTransport
+            ? WlServerDisplay.Create(new ManagedTransport(new ManagedTransportOptions { LocalSocket = PlatformFacts.HasLocalClients }))
+            : WlServerDisplay.Create();
+        var localClients = Display.SupportsLocalSocket && PlatformFacts.HasLocalClients;
+        if (localClients &&
             string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR")))
         {
             Environment.SetEnvironmentVariable("XDG_RUNTIME_DIR", CreateRuntimeDirectory());
         }
 
-        Socket = Display.SupportsLocalSocket
+        Socket = localClients
             ? options.SocketName is { } name ? AddNamedSocket(name) : Display.AddSocketAuto()
             : string.Empty;
         Loop = new WaylandEventLoop(Display);
@@ -55,21 +58,28 @@ public sealed class BasinCompositorHost : IDisposable
         Services = services.Freeze();
         Shell = Services.Require<XdgShell>();
         Seat = Services.Require<Seat.Seat>();
-        if (OperatingSystem.IsMacOS() || OperatingSystem.IsWindows())
+        if (PlatformFacts.HasHostKeyboardLayout)
         {
             var hostKeymaps = new global::Basin.Seat.HostKeymapSource();
             Seat.Keyboard.KeymapSource = hostKeymaps;
             Seat.Keyboard.SetKeymapFromHost();
             hostKeymaps.Changed += () => _hostKeymapDirty = true;
         }
-        else
+        else if (PlatformFacts.HasSystemXkbData)
         {
             Seat.Keyboard.SetKeymap(global::Basin.Seat.SystemKeymap.Read());
         }
+        else
+        {
+            Seat.Keyboard.SetKeymapFromBuffer(
+                System.Text.Encoding.UTF8.GetBytes(global::Basin.Seat.HostKeyboardLayout.FallbackKeymapText));
+        }
 
+        Keys = new global::Basin.Seat.KeySynthesizer(Seat.Keyboard);
         if (Services.Find<TextInputManager>() is { } textInputManager)
         {
             Seat.Keyboard.FocusChanged += surface => textInputManager.NotifyFocus(surface);
+            textInputManager.CommitStringUnclaimed += TypeUnclaimed;
         }
 
         Session = new HostedSession(Display, Loop) { Frames = frames };
@@ -84,7 +94,7 @@ public sealed class BasinCompositorHost : IDisposable
 
     private void OnEglAvailable(HostedEglImport import)
     {
-        if (_disposed || _dmabuf is not null || !OperatingSystem.IsLinux())
+        if (_disposed || _dmabuf is not null || !HostedEglImport.IsSupported)
         {
             return;
         }
@@ -131,6 +141,63 @@ public sealed class BasinCompositorHost : IDisposable
 
     public HostedRenderer Renderer { get; }
 
+    public global::Basin.Seat.KeySynthesizer Keys { get; }
+
+    private void TypeUnclaimed(string text)
+    {
+        _thread.Assert();
+        Keys.Keymap = Seat.Keyboard.Keymap;
+        Keys.Layout = Seat.Keyboard.State?.SerializeLayout(Xkb.XkbStateComponent.LayoutEffective) ?? 0;
+        Keys.Type(text, (uint)Environment.TickCount);
+    }
+
+    public void CancelTouch()
+    {
+        _thread.Assert();
+        Seat.Touch.NotifyCancel();
+    }
+
+    private bool _suspended;
+
+    public bool IsSuspended => _suspended;
+
+    public void Suspend()
+    {
+        _thread.Assert();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_suspended)
+        {
+            return;
+        }
+
+        _suspended = true;
+        Wake.Suspend();
+        Session.Suspend();
+        foreach (var view in _views)
+        {
+            view.SetPresenting(false);
+        }
+    }
+
+    public void Resume()
+    {
+        _thread.Assert();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_suspended)
+        {
+            return;
+        }
+
+        _suspended = false;
+        Session.Resume();
+        Wake.Resume();
+        foreach (var view in _views)
+        {
+            view.SetPresenting(true);
+            view.RequestRender?.Invoke();
+        }
+    }
+
     private readonly List<BasinViewOutput> _views = [];
     private TimeSpan _frameStamp = TimeSpan.MinValue;
     private bool _frameOpen;
@@ -168,6 +235,11 @@ public sealed class BasinCompositorHost : IDisposable
     public void InvalidateDirtyViews()
     {
         _thread.Assert();
+        if (_suspended)
+        {
+            return;
+        }
+
         foreach (var view in _views)
         {
             if (view.SceneOutput.NeedsRepaint)
@@ -182,7 +254,7 @@ public sealed class BasinCompositorHost : IDisposable
     public bool EnterFrame(TimeSpan stamp)
     {
         _thread.Assert();
-        if (_frameOpen || stamp == _frameStamp)
+        if (_suspended || _frameOpen || stamp == _frameStamp)
         {
             return false;
         }
@@ -218,6 +290,7 @@ public sealed class BasinCompositorHost : IDisposable
         var output = Backend.CreateOutput(new OutputMode(width, height, 60_000), scale, name);
         var sceneOutput = new Scene.SceneOutput(Scene, output);
         var view = new BasinViewOutput(this, output, sceneOutput);
+        view.SetPresenting(!_suspended);
         Session.AddOutput(sceneOutput);
         _views.Add(view);
         return view;
@@ -258,15 +331,13 @@ public sealed class BasinCompositorHost : IDisposable
 
     private static string CreateRuntimeDirectory()
     {
+        if (!PlatformFacts.HasLocalClients)
+        {
+            throw new PlatformNotSupportedException("a runtime directory serves local clients, which this host has none of");
+        }
+
         var directory = Path.Combine(Path.GetTempPath(), $"basin-{Environment.UserName}");
-        if (OperatingSystem.IsWindows())
-        {
-            Directory.CreateDirectory(directory);
-        }
-        else
-        {
-            Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         Log.Debug($"XDG_RUNTIME_DIR is unset; sockets bind under {directory}");
         return directory;
     }

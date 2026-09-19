@@ -12,7 +12,7 @@ public sealed record BasinCompositorOptions
 
     public string? SocketName { get; init; }
 
-    public bool ManagedTransport { get; init; } = !OperatingSystem.IsLinux();
+    public bool ManagedTransport { get; init; } = !PlatformFacts.HasLocalClients || !OperatingSystem.IsLinux();
 
     public Capabilities.ITextInputMethod? TextInput { get; init; }
 

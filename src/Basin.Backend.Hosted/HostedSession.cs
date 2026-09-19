@@ -12,6 +12,8 @@ public sealed class HostedSession : IDisposable
     private readonly List<SceneOutput> _presented = [];
     private readonly OutputState _state = new();
     private bool _inFrame;
+    private bool _suspended;
+    private long _predictedNanos;
     private bool _disposed;
 
     public HostedSession(WlServerDisplay display, ICompositorEventLoop loop)
@@ -39,6 +41,28 @@ public sealed class HostedSession : IDisposable
     public void RequestWakeup() => WakeupRequested?.Invoke();
 
     public long Composited { get; private set; }
+
+    public bool IsSuspended => _suspended;
+
+    public long PredictedVblankNanos => _predictedNanos;
+
+    public void Suspend()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _suspended = true;
+    }
+
+    public void Resume()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_suspended)
+        {
+            return;
+        }
+
+        _suspended = false;
+        _predictedNanos = 0;
+    }
 
     public IReadOnlyList<SceneOutput> Outputs => _outputs;
 
@@ -87,6 +111,7 @@ public sealed class HostedSession : IDisposable
         _inFrame = true;
         _presented.Clear();
         var refresh = _outputs.Count > 0 ? _outputs[0].Output.CurrentMode.RefreshIntervalNanoseconds : 0;
+        targetPresentNanos = Predict(targetPresentNanos, refresh);
         var tick = new FrameTick(targetPresentNanos, refresh);
 
         HostedDispatch.Run(_loop, DispatchWarning, DispatchLimit, DispatchOverran, DispatchExceededLimit);
@@ -98,6 +123,20 @@ public sealed class HostedSession : IDisposable
                 frames.BeginFrame(output.Output, targetPresentNanos);
             }
         }
+    }
+
+    private long Predict(long targetPresentNanos, long refresh)
+    {
+        if (targetPresentNanos <= 0 && refresh > 0)
+        {
+            var now = MonotonicClock.Nanos;
+            targetPresentNanos = _predictedNanos > 0 && now < _predictedNanos + refresh
+                ? _predictedNanos + refresh
+                : now + refresh;
+        }
+
+        _predictedNanos = targetPresentNanos;
+        return targetPresentNanos;
     }
 
     public bool CommitOutput(

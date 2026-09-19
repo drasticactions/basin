@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<metacity_theme>
+  <info>
+    <name>Tarn</name>
+    <author>basin</author>
+    <copyright>basin</copyright>
+    <date>2026</date>
+    <description>The smallest frame a nested shell can draw: a flat titlebar and a close button.</description>
+  </info>
+  <frame_geometry name="normal">
+    <distance name="left_width" value="4"/>
+    <distance name="right_width" value="4"/>
+    <distance name="bottom_height" value="4"/>
+    <distance name="left_titlebar_edge" value="4"/>
+    <distance name="right_titlebar_edge" value="4"/>
+    <aspect_ratio name="button" value="1.0"/>
+    <distance name="title_vertical_pad" value="6"/>
+    <border name="title_border" left="4" right="4" top="4" bottom="4"/>
+    <border name="button_border" left="0" right="0" top="2" bottom="2"/>
+  </frame_geometry>
+  <frame_geometry name="maximized" parent="normal">
+    <distance name="left_width" value="0"/>
+    <distance name="right_width" value="0"/>
+    <distance name="bottom_height" value="0"/>
+    <distance name="left_titlebar_edge" value="0"/>
+    <distance name="right_titlebar_edge" value="0"/>
+  </frame_geometry>
+  <frame_geometry name="border" has_title="false">
+    <distance name="left_width" value="4"/>
+    <distance name="right_width" value="4"/>
+    <distance name="bottom_height" value="4"/>
+    <distance name="left_titlebar_edge" value="0"/>
+    <distance name="right_titlebar_edge" value="0"/>
+    <distance name="button_width" value="0"/>
+    <distance name="button_height" value="0"/>
+    <distance name="title_vertical_pad" value="4"/>
+    <border name="title_border" left="0" right="0" top="0" bottom="0"/>
+    <border name="button_border" left="0" right="0" top="0" bottom="0"/>
+  </frame_geometry>
+  <draw_ops name="background">
+    <rectangle color="gtk:bg[NORMAL]" filled="true" x="0" y="0" width="width" height="height"/>
+    <rectangle color="gtk:dark[NORMAL]" filled="false" x="0" y="0" width="width-1" height="height-1"/>
+  </draw_ops>
+  <draw_ops name="title_unfocused">
+    <title color="gtk:fg[NORMAL]" x="4" y="((height - title_height) / 2) `max` 0"/>
+  </draw_ops>
+  <draw_ops name="title_focused">
+    <rectangle color="gtk:bg[SELECTED]" filled="true" x="0" y="0" width="width" height="height"/>
+    <title color="gtk:fg[SELECTED]" x="4" y="((height - title_height) / 2) `max` 0"/>
+  </draw_ops>
+  <draw_ops name="close">
+    <line color="gtk:fg[NORMAL]" x1="5" y1="5" x2="width - 6" y2="height - 6" width="2"/>
+    <line color="gtk:fg[NORMAL]" x1="5" y1="height - 6" x2="width - 6" y2="5" width="2"/>
+  </draw_ops>
+  <draw_ops name="close_pressed">
+    <rectangle color="gtk:dark[NORMAL]" filled="true" x="0" y="0" width="width" height="height"/>
+    <include name="close"/>
+  </draw_ops>
+  <draw_ops name="blank">
+  </draw_ops>
+  <frame_style name="unfocused" geometry="normal">
+    <piece position="entire_background" draw_ops="background"/>
+    <piece position="title" draw_ops="title_unfocused"/>
+    <button function="close" state="normal" draw_ops="close"/>
+    <button function="close" state="pressed" draw_ops="close_pressed"/>
+    <button function="minimize" state="normal" draw_ops="blank"/>
+    <button function="minimize" state="pressed" draw_ops="blank"/>
+    <button function="maximize" state="normal" draw_ops="blank"/>
+    <button function="maximize" state="pressed" draw_ops="blank"/>
+    <button function="menu" state="normal" draw_ops="blank"/>
+    <button function="menu" state="pressed" draw_ops="blank"/>
+  </frame_style>
+  <frame_style name="focused" geometry="normal" parent="unfocused">
+    <piece position="title" draw_ops="title_focused"/>
+  </frame_style>
+  <frame_style name="maximized_unfocused" geometry="maximized" parent="unfocused"/>
+  <frame_style name="maximized_focused" geometry="maximized" parent="focused"/>
+  <frame_style name="border" geometry="border" parent="unfocused">
+    <piece position="title" draw_ops="blank"/>
+  </frame_style>
+  <frame_style_set name="normal">
+    <frame focus="yes" state="normal" resize="both" style="focused"/>
+    <frame focus="no" state="normal" resize="both" style="unfocused"/>
+    <frame focus="yes" state="maximized" style="maximized_focused"/>
+    <frame focus="no" state="maximized" style="maximized_unfocused"/>
+    <frame focus="yes" state="shaded" style="focused"/>
+    <frame focus="no" state="shaded" style="unfocused"/>
+    <frame focus="yes" state="maximized_and_shaded" style="maximized_focused"/>
+    <frame focus="no" state="maximized_and_shaded" style="maximized_unfocused"/>
+  </frame_style_set>
+  <frame_style_set name="border">
+    <frame focus="yes" state="normal" resize="both" style="border"/>
+    <frame focus="no" state="normal" resize="both" style="border"/>
+    <frame focus="yes" state="maximized" style="border"/>
+    <frame focus="no" state="maximized" style="border"/>
+    <frame focus="yes" state="shaded" style="border"/>
+    <frame focus="no" state="shaded" style="border"/>
+    <frame focus="yes" state="maximized_and_shaded" style="border"/>
+    <frame focus="no" state="maximized_and_shaded" style="border"/>
+  </frame_style_set>
+  <window type="normal" style_set="normal"/>
+  <window type="dialog" style_set="normal"/>
+  <window type="modal_dialog" style_set="normal"/>
+  <window type="menu" style_set="normal"/>
+  <window type="utility" style_set="normal"/>
+  <window type="border" style_set="border"/>
+  <menu_icon function="close" state="normal" draw_ops="close"/>
+</metacity_theme>

@@ -232,6 +232,190 @@ public sealed class WaypipeVideoTests
         Assert.Contains("Av1", error.Message, StringComparison.Ordinal);
     }
 
+    private static (WaypipeClientTransport Transport, WaypipeEngine Engine, FakeAsyncDecoder Fake) AsyncVideoEngine()
+    {
+        var fake = new FakeAsyncDecoder();
+        var transport = new WaypipeClientTransport();
+        var engine = new WaypipeEngine(
+            transport,
+            WaypipeCompression.None,
+            options: new WaypipeChannelOptions { CarriesDmabuf = true, AcceptsVideo = true, VideoDecoder = fake })
+        {
+            ExpectedVideoCodec = VideoCodec.H264,
+        };
+        return (transport, engine, fake);
+    }
+
+    private static byte[] ProtocolMessage(uint objectId, ushort opcode, uint argument)
+    {
+        var body = new byte[12];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(body, objectId);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(body.AsSpan(4), (12u << 16) | opcode);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(body.AsSpan(8), argument);
+        return body;
+    }
+
+    private static byte[] Delivered(WaypipeClientTransport transport)
+    {
+        var buffer = new byte[4096];
+        var fds = new int[8];
+        var (read, _) = transport.TryReadNonBlocking(buffer, Memory<byte>.Empty, fds, Memory<int>.Empty);
+        return read <= 0 ? [] : buffer[..read];
+    }
+
+    private static byte[] Packet(int remoteId, params byte[] payload)
+    {
+        var packet = new byte[4 + payload.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(packet, remoteId);
+        payload.CopyTo(packet.AsSpan(4));
+        return packet;
+    }
+
+    [Fact]
+    public void An_async_decoder_holds_the_commit_until_its_frame_lands()
+    {
+        var (transport, engine, fake) = AsyncVideoEngine();
+        using var _ = transport;
+        using var __ = engine;
+
+        engine.Apply(
+            WaypipeMessageType.OpenDmaVidDstV2,
+            VideoOpenBody(9, (uint)Basin.Transport.Waypipe.VideoFormat.H264, 16, 8, (uint)DrmFormat.Xrgb8888));
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 1, 2, 3));
+        Assert.True(engine.AwaitingFrame);
+        Assert.Single(fake.Pending);
+
+        var commit = ProtocolMessage(4, 6, 0);
+        engine.Apply(WaypipeMessageType.Protocol, commit);
+        Assert.Empty(Delivered(transport));
+
+        var image = Assert.IsAssignableFrom<IRemoteImage>(ImageOf(engine, 9));
+        fake.Complete(fill: 0x5c);
+        Assert.False(engine.AwaitingFrame);
+        Assert.Equal(commit, Delivered(transport));
+        unsafe
+        {
+            var pixels = new ReadOnlySpan<byte>((void*)image.Pixels, 16 * 8 * 4);
+            foreach (var value in pixels)
+            {
+                Assert.Equal(0x5c, value);
+            }
+        }
+    }
+
+    [Fact]
+    public void A_second_packet_for_a_pending_buffer_is_queued_not_dropped()
+    {
+        var (transport, engine, fake) = AsyncVideoEngine();
+        using var _ = transport;
+        using var __ = engine;
+
+        engine.Apply(
+            WaypipeMessageType.OpenDmaVidDstV2,
+            VideoOpenBody(9, (uint)Basin.Transport.Waypipe.VideoFormat.H264, 16, 8, (uint)DrmFormat.Xrgb8888));
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 1));
+        var first = ProtocolMessage(4, 6, 1);
+        engine.Apply(WaypipeMessageType.Protocol, first);
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 2));
+        var second = ProtocolMessage(4, 6, 2);
+        engine.Apply(WaypipeMessageType.Protocol, second);
+
+        Assert.Single(fake.Packets);
+        Assert.Empty(Delivered(transport));
+
+        fake.Complete(fill: 0x11);
+        Assert.Equal(2, fake.Packets.Count);
+        Assert.Equal([2], fake.Packets[1]);
+        Assert.True(engine.AwaitingFrame);
+        Assert.Equal(first, Delivered(transport));
+
+        fake.Complete(fill: 0x22);
+        Assert.False(engine.AwaitingFrame);
+        Assert.Equal(second, Delivered(transport));
+        var image = Assert.IsAssignableFrom<IRemoteImage>(ImageOf(engine, 9));
+        unsafe
+        {
+            Assert.Equal(0x22, *(byte*)image.Pixels);
+        }
+    }
+
+    [Fact]
+    public void A_frame_that_fails_out_of_band_still_releases_the_deferred_messages()
+    {
+        var (transport, engine, fake) = AsyncVideoEngine();
+        using var _ = transport;
+        using var __ = engine;
+
+        engine.Apply(
+            WaypipeMessageType.OpenDmaVidDstV2,
+            VideoOpenBody(9, (uint)Basin.Transport.Waypipe.VideoFormat.H264, 16, 8, (uint)DrmFormat.Xrgb8888));
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 1));
+        var commit = ProtocolMessage(4, 6, 0);
+        engine.Apply(WaypipeMessageType.Protocol, commit);
+
+        fake.Complete(produced: false);
+        Assert.False(engine.AwaitingFrame);
+        Assert.Equal(commit, Delivered(transport));
+    }
+
+    [Fact]
+    public void A_packet_the_async_decoder_refuses_defers_nothing()
+    {
+        var (transport, engine, fake) = AsyncVideoEngine();
+        using var _ = transport;
+        using var __ = engine;
+        fake.Accepts = false;
+
+        engine.Apply(
+            WaypipeMessageType.OpenDmaVidDstV2,
+            VideoOpenBody(9, (uint)Basin.Transport.Waypipe.VideoFormat.H264, 16, 8, (uint)DrmFormat.Xrgb8888));
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 1));
+        Assert.False(engine.AwaitingFrame);
+        var commit = ProtocolMessage(4, 6, 0);
+        engine.Apply(WaypipeMessageType.Protocol, commit);
+        Assert.Equal(commit, Delivered(transport));
+    }
+
+    [Fact]
+    public void Disposing_with_a_frame_pending_releases_the_region_and_the_session()
+    {
+        var (transport, engine, fake) = AsyncVideoEngine();
+        using var _ = transport;
+
+        engine.Apply(
+            WaypipeMessageType.OpenDmaVidDstV2,
+            VideoOpenBody(9, (uint)Basin.Transport.Waypipe.VideoFormat.H264, 16, 8, (uint)DrmFormat.Xrgb8888));
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 1));
+        engine.Apply(WaypipeMessageType.Protocol, ProtocolMessage(4, 6, 0));
+        var image = Assert.IsAssignableFrom<IRemoteImage>(ImageOf(engine, 9));
+
+        engine.Dispose();
+        Assert.True(image.IsReleased);
+        Assert.True(Assert.Single(fake.Sessions).Disposed);
+        fake.Complete(produced: false);
+        Assert.Empty(Delivered(transport));
+    }
+
+    [Fact]
+    public void A_deferred_message_that_fails_reaches_the_failed_event_rather_than_the_completer()
+    {
+        var (transport, engine, fake) = AsyncVideoEngine();
+        using var _ = transport;
+        using var __ = engine;
+        Exception? failure = null;
+        engine.Failed += ex => failure = ex;
+
+        engine.Apply(
+            WaypipeMessageType.OpenDmaVidDstV2,
+            VideoOpenBody(9, (uint)Basin.Transport.Waypipe.VideoFormat.H264, 16, 8, (uint)DrmFormat.Xrgb8888));
+        engine.Apply(WaypipeMessageType.SendDmaVidPacket, Packet(9, 1));
+        engine.Apply(WaypipeMessageType.OpenFile, new byte[] { 9, 0, 0, 0, 16, 0, 0, 0 });
+
+        fake.Complete();
+        var error = Assert.IsType<WaypipeException>(failure);
+        Assert.Contains("already exists", error.Message, StringComparison.Ordinal);
+    }
+
     private static object ImageOf(WaypipeEngine engine, int remoteId)
     {
         var field = typeof(WaypipeEngine).GetField(

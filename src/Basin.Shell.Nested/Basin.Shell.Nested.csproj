@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>portable</BasinPlatforms>
+    <PackageId>Basin.Shell.Nested</PackageId>
+    <RootNamespace>Basin.Shell.Nested</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>The nested shell: one window model for a compositor that lives inside a single host view, with placement, tiling, workspaces, focus policy, keybindings and Metacity frames.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../Basin.Hosted/Basin.Hosted.csproj" />
+    <ProjectReference Include="../Basin.UI.Skia/Basin.UI.Skia.csproj" />
+    <ProjectReference Include="../Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+</Project>

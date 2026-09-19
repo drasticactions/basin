@@ -13,6 +13,8 @@
     <Project Path="samples/InletWm/InletWm.csproj" />
     <Project Path="samples/MauiComp/MauiComp.csproj" />
     <Project Path="samples/RetroWm/RetroWm.csproj" />
+    <Project Path="samples/Tarn/Tarn/Tarn.csproj" />
+    <Project Path="samples/Tarn/Tarn.Desktop/Tarn.Desktop.csproj" />
     <Project Path="samples/TinyComp/TinyComp.csproj" />
     <Project Path="samples/TinyWl/TinyWl.csproj" />
     <Project Path="samples/Westonia/Westonia.csproj" />
@@ -38,6 +40,7 @@
     <Project Path="src/Basin.Portal.Prompts.Avalonia/Basin.Portal.Prompts.Avalonia.csproj" />
     <Project Path="src/Basin.Portal.Client/Basin.Portal.Client.csproj" />
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
+    <Project Path="src/Basin.Avalonia.View/Basin.Avalonia.View.csproj" />
     <Project Path="src/Basin.Hosted/Basin.Hosted.csproj" />
     <Project Path="src/Basin.Rashader/Basin.Rashader.csproj" />
     <Project Path="src/Basin.Rashader.Gl/Basin.Rashader.Gl.csproj" />
@@ -57,10 +60,14 @@
     <Project Path="src/Basin.Testing/Basin.Testing.csproj" />
     <Project Path="src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <Project Path="src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
+    <Project Path="src/Basin.Video.MediaCodec/Basin.Video.MediaCodec.csproj" />
+    <Project Path="src/Basin.Video.VideoToolbox/Basin.Video.VideoToolbox.csproj" />
+    <Project Path="src/Basin.Video.WebCodecs/Basin.Video.WebCodecs.csproj" />
     <Project Path="src/Basin.Seat/Basin.Seat.csproj" />
     <Project Path="src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
     <Project Path="src/Basin.Session/Basin.Session.csproj" />
     <Project Path="src/Basin.Shell.River/Basin.Shell.River.csproj" />
+    <Project Path="src/Basin.Shell.Nested/Basin.Shell.Nested.csproj" />
     <Project Path="src/Basin.Shell.Weston/Basin.Shell.Weston.csproj" />
     <Project Path="src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <Project Path="src/Basin.WindowManager/Basin.WindowManager.csproj" />

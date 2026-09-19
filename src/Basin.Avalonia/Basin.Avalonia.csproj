@@ -24,6 +24,7 @@
     <ProjectReference Include="../Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
     <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
     <ProjectReference Include="../Basin.Hosted/Basin.Hosted.csproj" />
+    <ProjectReference Include="../Basin.Avalonia.View/Basin.Avalonia.View.csproj" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="SkiaSharp" />

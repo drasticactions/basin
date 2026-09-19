@@ -10,7 +10,7 @@ internal sealed class ManagedShmBuffer : BufferBase
 {
     private readonly ShmPool _pool;
     private readonly ShmPool.MappingHold _hold;
-    private readonly nint _address;
+    private readonly int _offset;
     private readonly int _stride;
     private readonly DrmFormat _format;
 
@@ -25,13 +25,15 @@ internal sealed class ManagedShmBuffer : BufferBase
     {
         _pool = pool;
         pool.AddRef();
-        _hold = pool.AcquireReader(out var baseAddress);
-        _address = baseAddress + offset;
+        _hold = pool.AcquireReader(out _);
+        _offset = offset;
         _stride = stride;
         _format = format;
         _writable = pool.IsWritable;
         _guard = guard;
     }
+
+    private nint Address => _hold.Mapping.Address + _offset;
 
     internal bool IsGuarded => _guard is not null;
 
@@ -77,7 +79,7 @@ internal sealed class ManagedShmBuffer : BufferBase
             var rowStart = (long)y1 * _stride + (long)x1 * bpp;
             if (!_guard.TryCopyRows(
                     _shadow + (nint)rowStart, _stride,
-                    _address + (nint)rowStart, _stride,
+                    Address + (nint)rowStart, _stride,
                     (x2 - x1) * bpp, y2 - y1))
             {
                 Log.Warn($"wl_shm: guarded copy faulted (pool truncated?); keeping the previous frame");
@@ -98,7 +100,7 @@ internal sealed class ManagedShmBuffer : BufferBase
                 return false;
             }
 
-            view = new BufferDataView(_address, _stride, _format);
+            view = new BufferDataView(Address, _stride, _format);
             return true;
         }
 
@@ -108,7 +110,7 @@ internal sealed class ManagedShmBuffer : BufferBase
             return true;
         }
 
-        view = new BufferDataView(_address, _stride, _format);
+        view = new BufferDataView(Address, _stride, _format);
         return true;
     }
 

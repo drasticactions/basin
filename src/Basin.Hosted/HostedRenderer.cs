@@ -37,7 +37,7 @@ public sealed class HostedRenderer : IRenderer
     public bool TryEnableEgl(nint eglDisplay)
     {
         _thread.Assert();
-        if (_eglImport is not null || !OperatingSystem.IsLinux())
+        if (_eglImport is not null || !HostedEglImport.IsSupported)
         {
             return _eglImport is not null;
         }

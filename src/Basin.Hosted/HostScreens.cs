@@ -90,6 +90,25 @@ public sealed class HostScreens : IDisposable
         SyncDefaultScale();
     }
 
+    internal void NotifyReconfigured(Backend.Hosted.HostedOutput output)
+    {
+        if (_disposed || _advertisedKey is not { } key || !_rows.TryGetValue(key, out var row) ||
+            !ReferenceEquals(row.Output, output))
+        {
+            return;
+        }
+
+        var mode = output.CurrentMode;
+        var swapped = output.Transform.SwapsAxes();
+        Advertise(output, row.Info with
+        {
+            Width = swapped ? mode.Height : mode.Width,
+            Height = swapped ? mode.Width : mode.Height,
+            Scaling = output.Scale,
+            Transform = output.Transform,
+        });
+    }
+
     public void Apply(IReadOnlyList<HostScreenInfo> screens)
     {
         ArgumentNullException.ThrowIfNull(screens);

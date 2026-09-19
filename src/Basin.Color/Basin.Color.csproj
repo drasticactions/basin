@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Color</PackageId>
     <RootNamespace>Basin.Color</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Transport.Waypipe</PackageId>
     <RootNamespace>Basin.Transport.Waypipe</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

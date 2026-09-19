@@ -65,7 +65,7 @@ public static class DesktopPack
             new SecurityContextModule(),
         ];
 
-        if (OperatingSystem.IsLinux())
+        if (PlatformFacts.HasSyncobj)
         {
             modules.Add(new LinuxDrmSyncobjModule());
         }

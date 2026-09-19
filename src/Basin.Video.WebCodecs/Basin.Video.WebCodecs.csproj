@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>browser</BasinPlatforms>
+    <PackageId>Basin.Video.WebCodecs</PackageId>
+    <RootNamespace>Basin.Video.WebCodecs</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>An IVideoDecoder over the browser's WebCodecs VideoDecoder, asynchronous by the platform's nature.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+  </ItemGroup>
+
+</Project>

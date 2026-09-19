@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>net11.0-ios;net11.0-maccatalyst</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Tarn.iOS</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
+    <ApplicationId>dev.basin.tarn</ApplicationId>
+    <ApplicationTitle>Tarn</ApplicationTitle>
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-ios'))">iossimulator-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$(TargetFramework.Contains('-maccatalyst'))">maccatalyst-arm64</RuntimeIdentifier>
+    <PublishAot>true</PublishAot>
+    <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Tarn/Tarn.csproj" />
+    <ProjectReference Include="../../../src/Basin.Video.VideoToolbox/Basin.Video.VideoToolbox.csproj" />
+    <PackageReference Include="Avalonia.iOS" />
+  </ItemGroup>
+
+</Project>

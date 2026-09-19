@@ -1,5 +1,11 @@
 <Project>
 
+  <PropertyGroup>
+    <BasinPlatforms Condition="'$(BasinPlatforms)' == '' and '$(TargetPlatformIdentifier)' != ''">none</BasinPlatforms>
+    <BasinPlatforms Condition="'$(BasinPlatforms)' == ''">linux</BasinPlatforms>
+    <BasinPlatforms Condition="'$(BasinPlatforms)' == 'portable'">linux;macos;windows;ios;maccatalyst;android;browser</BasinPlatforms>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)' != 'Release' or '$(BasinCounters)' == 'true'">
     <DefineConstants>$(DefineConstants);BASIN_COUNTERS</DefineConstants>
   </PropertyGroup>

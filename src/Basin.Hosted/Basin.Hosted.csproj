@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Hosted</PackageId>
     <RootNamespace>Basin.Hosted</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Basin.Avalonia" />
+    <InternalsVisibleTo Include="Basin.Avalonia.View" />
+    <InternalsVisibleTo Include="Basin.Shell.Nested" />
     <InternalsVisibleTo Include="Basin.Tests" />
     <InternalsVisibleTo Include="Waylonia.Tests" />
     <InternalsVisibleTo Include="Waylonia.Core.Tests" />

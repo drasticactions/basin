@@ -10,6 +10,7 @@ internal sealed class WaypipeImage : IRemoteImage, IFdSlotPayload
     internal WaypipeImage(SharedMemoryRegion region, int width, int height, DrmFormat format, int stride)
     {
         Region = region;
+        region.Touch(region.Size);
         Width = width;
         Height = height;
         Format = format;

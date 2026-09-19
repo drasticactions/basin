@@ -11,6 +11,8 @@ public sealed class WaypipeEngine : IDisposable
     private readonly Dictionary<int, SharedMemoryRegion> _regions = [];
     private readonly Dictionary<int, WaypipeImage> _images = [];
     private readonly Dictionary<int, Basin.Capabilities.IVideoDecodeSession> _decodeSessions = [];
+    private readonly Dictionary<int, Action<nint, bool>> _completions = [];
+    private readonly Queue<(WaypipeMessageType Type, byte[] Body)> _deferred = new();
     private readonly HashSet<int> _unclaimed = [];
     private readonly Dictionary<int, WaypipePipe> _pipes = [];
     private readonly Queue<int> _pending = new();
@@ -20,6 +22,9 @@ public sealed class WaypipeEngine : IDisposable
     private byte[] _scratch = new byte[64 * 1024];
     private Decompressor? _zstd;
     private long _regionBytes;
+    private WaypipeImage? _awaitingImage;
+    private int _awaitingRemoteId = -1;
+    private bool _draining;
     private bool _disposed;
 
     public WaypipeEngine(
@@ -52,9 +57,24 @@ public sealed class WaypipeEngine : IDisposable
 
     public event Action<WaypipeMessageType, int, ReadOnlyMemory<byte>>? Send;
 
+    public event Action<Exception>? Failed;
+
+    public bool AwaitingFrame => _awaitingImage is not null;
+
     public void Apply(WaypipeMessageType type, ReadOnlySpan<byte> body)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_awaitingImage is not null)
+        {
+            _deferred.Enqueue((type, body.ToArray()));
+            return;
+        }
+
+        ApplyCore(type, body);
+    }
+
+    private void ApplyCore(WaypipeMessageType type, ReadOnlySpan<byte> body)
+    {
         switch (type)
         {
             case WaypipeMessageType.Version:
@@ -211,11 +231,19 @@ public sealed class WaypipeEngine : IDisposable
             }
         }
 
-        foreach (var session in _decodeSessions.Values)
+        foreach (var (remoteId, session) in _decodeSessions)
         {
+            Unsubscribe(remoteId, session);
             session.Dispose();
         }
 
+        if (_awaitingImage is not null)
+        {
+            ClearAwaiting();
+        }
+
+        _deferred.Clear();
+        _completions.Clear();
         _unclaimed.Clear();
         _regions.Clear();
         _images.Clear();
@@ -362,7 +390,15 @@ public sealed class WaypipeEngine : IDisposable
         }
 
         var image = CreateImage(remoteId, slice, declaredSize: null);
-        _decodeSessions[remoteId] = _options.VideoDecoder!.Open(codec, image.Width, image.Height, image.Format);
+        var session = _options.VideoDecoder!.Open(codec, image.Width, image.Height, image.Format);
+        _decodeSessions[remoteId] = session;
+        if (session is Basin.Capabilities.IAsyncVideoDecodeSession asynchronous)
+        {
+            Action<nint, bool> completion = (destination, produced) => OnDecodeCompleted(remoteId, destination, produced);
+            asynchronous.Completed += completion;
+            _completions[remoteId] = completion;
+        }
+
         Log.Debug(
             $"remote id {remoteId} is a {codec} stream into a {image.Width}x{image.Height} host region");
     }
@@ -376,15 +412,115 @@ public sealed class WaypipeEngine : IDisposable
 
         if (!_images.TryGetValue(remoteId, out var image) || image.IsReleased)
         {
+            Unsubscribe(remoteId, session);
             session.Dispose();
             _decodeSessions.Remove(remoteId);
             Forget(remoteId);
             return;
         }
 
+        if (session is Basin.Capabilities.IAsyncVideoDecodeSession)
+        {
+            image.AddRef();
+            _awaitingImage = image;
+            _awaitingRemoteId = remoteId;
+            bool accepted;
+            try
+            {
+                accepted = session.Decode(packet, image.Pixels, image.Stride);
+            }
+            catch
+            {
+                if (_awaitingImage is not null)
+                {
+                    ClearAwaiting();
+                }
+
+                throw;
+            }
+
+            if (!accepted && _awaitingImage is not null)
+            {
+                Log.Warn($"a video packet for remote id {remoteId} was not accepted");
+                ClearAwaiting();
+            }
+
+            return;
+        }
+
         if (!session.Decode(packet, image.Pixels, image.Stride))
         {
             Log.Warn($"a video packet for remote id {remoteId} produced no frame");
+        }
+    }
+
+    private void OnDecodeCompleted(int remoteId, nint destination, bool produced)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_awaitingImage is null || _awaitingRemoteId != remoteId)
+        {
+            Log.Warn($"remote id {remoteId} completed a frame this channel was not waiting for");
+            return;
+        }
+
+        if (destination != _awaitingImage.Pixels)
+        {
+            Log.Warn($"remote id {remoteId} completed a frame into a destination other than its own region");
+        }
+
+        if (!produced)
+        {
+            Log.Warn($"a video packet for remote id {remoteId} produced no frame");
+        }
+
+        ClearAwaiting();
+        Drain();
+    }
+
+    private void ClearAwaiting()
+    {
+        var image = _awaitingImage!;
+        _awaitingImage = null;
+        _awaitingRemoteId = -1;
+        image.Release();
+    }
+
+    private void Drain()
+    {
+        if (_draining)
+        {
+            return;
+        }
+
+        _draining = true;
+        try
+        {
+            while (_awaitingImage is null && !_disposed && _deferred.TryDequeue(out var next))
+            {
+                ApplyCore(next.Type, next.Body);
+            }
+        }
+        catch (Exception failure) when (Failed is not null && failure is not OutOfMemoryException)
+        {
+            _deferred.Clear();
+            Failed.Invoke(failure);
+        }
+        finally
+        {
+            _draining = false;
+        }
+    }
+
+    private void Unsubscribe(int remoteId, Basin.Capabilities.IVideoDecodeSession session)
+    {
+        if (session is Basin.Capabilities.IAsyncVideoDecodeSession asynchronous
+            && _completions.Remove(remoteId, out var completion))
+        {
+            asynchronous.Completed -= completion;
         }
     }
 
@@ -506,6 +642,7 @@ public sealed class WaypipeEngine : IDisposable
                 $"a fill for remote id {remoteId} names [{start},{end}) of a {region.Size} byte region");
         }
 
+        region.Touch(end);
         var span = region.Span.Slice(start, end - start);
         Decompress(payload, span);
     }
@@ -527,12 +664,13 @@ public sealed class WaypipeEngine : IDisposable
 
         var decoded = Rent(total);
         Decompress(payload, decoded.AsSpan(0, total));
-        Apply(region.Span, decoded.AsSpan(0, total), diffSize, trailing, remoteId);
+        Apply(region, decoded.AsSpan(0, total), diffSize, trailing, remoteId);
     }
 
     private static void Apply(
-        Span<byte> region, ReadOnlySpan<byte> diff, int diffSize, int trailing, int remoteId)
+        SharedMemoryRegion mapped, ReadOnlySpan<byte> diff, int diffSize, int trailing, int remoteId)
     {
+        var size = mapped.Size;
         var position = 0;
         while (position < diffSize)
         {
@@ -545,24 +683,26 @@ public sealed class WaypipeEngine : IDisposable
             var end = (long)BinaryPrimitives.ReadUInt32LittleEndian(diff[(position + 4)..]) * 4;
             position += 8;
 
-            if (end <= start || end > region.Length || position + (end - start) > diffSize)
+            if (end <= start || end > size || position + (end - start) > diffSize)
             {
                 throw new WaypipeException(
-                    $"a diff for remote id {remoteId} names [{start},{end}) of a {region.Length} byte region");
+                    $"a diff for remote id {remoteId} names [{start},{end}) of a {size} byte region");
             }
 
-            diff.Slice(position, (int)(end - start)).CopyTo(region[(int)start..]);
+            mapped.Touch((int)end);
+            diff.Slice(position, (int)(end - start)).CopyTo(mapped.Span[(int)start..]);
             position += (int)(end - start);
         }
 
         if (trailing > 0)
         {
-            if (trailing > region.Length)
+            if (trailing > size)
             {
                 throw new WaypipeException($"a diff for remote id {remoteId} has more trailing bytes than the region holds");
             }
 
-            diff.Slice(diffSize, trailing).CopyTo(region[(region.Length - trailing)..]);
+            mapped.Touch(size);
+            diff.Slice(diffSize, trailing).CopyTo(mapped.Span[(size - trailing)..]);
         }
     }
 
@@ -671,6 +811,7 @@ public sealed class WaypipeEngine : IDisposable
             _unclaimed.Remove(remoteId);
             if (_decodeSessions.Remove(remoteId, out var session))
             {
+                Unsubscribe(remoteId, session);
                 session.Dispose();
             }
         }
