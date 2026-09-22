@@ -104,6 +104,16 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("close-animation", settings.CloseAnimation));
         cli.AddReport(_ => BasinCommand.Report("switcher", settings.Switcher));
         cli.AddReport(_ => BasinCommand.Report("post", settings.Post));
+        cli.AddReport(_ => BasinCommand.Report("canvas", settings.Canvas.Enabled));
+        cli.AddReport(_ => BasinCommand.Report("canvas-zone", settings.Canvas.ZoneFraction));
+        cli.AddReport(_ => BasinCommand.Report("canvas-extension", settings.Canvas.ExtensionFraction));
+        cli.AddReport(_ => BasinCommand.Report("canvas-edge-scale", settings.Canvas.EdgeScaleValue));
+        cli.AddReport(_ => BasinCommand.Report("canvas-slope", settings.Canvas.SlopeValue));
+        cli.AddReport(_ => BasinCommand.Report("canvas-mesh-cell", settings.Canvas.MeshCellSize));
+        cli.AddReport(_ => BasinCommand.Report("canvas-grid", settings.Canvas.GridMode));
+        cli.AddReport(_ => BasinCommand.Report("canvas-grid-cell", settings.Canvas.GridCellSize));
+        cli.AddReport(_ => BasinCommand.Report("canvas-grid-color", $"#{settings.Canvas.GridRgba:x8}"));
+        cli.AddReport(_ => BasinCommand.Report("canvas-animation-ms", settings.Canvas.AnimationMillis));
         cli.AddReport(_ => BasinCommand.Report("bindings", settings.Bindings.Count));
         cli.AddReport(_ => BasinCommand.Report("rules", settings.Rules.Count));
 

@@ -56,7 +56,7 @@ internal sealed partial class TinyComp
 
         var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
-        var usable = view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea;
+        var usable = FlatArea(view, view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea);
         workspace.TileArea = new Box(origin.X + usable.X, origin.Y + usable.Y, usable.Width, usable.Height);
         workspace.SplitFraction = 0.5;
         ApplySplit(workspace);

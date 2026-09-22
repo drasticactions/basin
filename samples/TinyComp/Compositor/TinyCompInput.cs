@@ -219,7 +219,8 @@ internal sealed partial class TinyComp
             PrepareMenu(frameHit);
             _touchFramePress = frameHit;
             _grabOrigin.FrameTouchSlot = id;
-            frameHit.Frame.TouchDown(x - frameHit.Owner.X, y - frameHit.Owner.Y, id, timeMs);
+            var (touchX, touchY) = OwnerLocal(frameHit.Frame, frameHit.Owner, x, y);
+            frameHit.Frame.TouchDown(touchX, touchY, id, timeMs);
             _grabOrigin.FrameTouchSlot = null;
             if (frameHit.Frame.IsMenuOpen)
             {
@@ -259,7 +260,8 @@ internal sealed partial class TinyComp
         if (_touchFramePress is { } held)
         {
             _touchFramePress = null;
-            held.Frame.TouchUp(x - held.Owner.X, y - held.Owner.Y, id);
+            var (upX, upY) = OwnerLocal(held.Frame, held.Owner, x, y);
+            held.Frame.TouchUp(upX, upY, id);
             if (held.Frame.IsMenuOpen)
             {
                 _openMenu = held.Frame;
@@ -294,12 +296,14 @@ internal sealed partial class TinyComp
             if (_mode == DragMode.Move && _grabWindow is { } dropped)
             {
                 ReassignDraggedWorkspace(dropped);
+                ClearCanvasHomeAfterDrop(dropped);
             }
 
             _grabWindow?.SetResizing(false);
             _mode = DragMode.None;
             _effects.OnGrabEnd();
             _grabWindow = null;
+            SetCanvasGridDragging(false);
         }
     }
 

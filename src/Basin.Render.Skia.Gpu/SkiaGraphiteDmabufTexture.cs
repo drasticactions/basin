@@ -5,6 +5,8 @@ namespace Basin.Render.Skia;
 
 internal sealed class SkiaGraphiteDmabufTexture : ISkiaTexture
 {
+    private readonly SkiaImageShader _meshShader = new();
+
     private readonly SkiaGraphiteRenderer _renderer;
     private readonly VulkanDeviceImage _native;
     private readonly SKGraphiteBackendTexture _backend;
@@ -73,8 +75,11 @@ internal sealed class SkiaGraphiteDmabufTexture : ISkiaTexture
     {
     }
 
+    public SKShader? MeshShader(SKImage image) => _meshShader.For(image);
+
     public void Dispose()
     {
+        _meshShader.Drop();
         SkiaCensus.Release(_image);
         SkiaCensus.Release(_backend);
         _native.Dispose();

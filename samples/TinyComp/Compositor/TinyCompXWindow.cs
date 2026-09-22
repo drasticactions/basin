@@ -180,6 +180,11 @@ internal sealed partial class TinyComp
             Tree.SetPosition(XWin.X, XWin.Y);
             SceneSurface.Tree.SetPosition(0, 0);
             LayoutShadow();
+            if (Framable)
+            {
+                _comp.ApplyCanvas(this);
+            }
+
             ReportGeometry();
             _comp._workspaceModel.RaiseMembersChanged();
             if (_frame is not null && XWin.Width > 0 && XWin.Height > 0)

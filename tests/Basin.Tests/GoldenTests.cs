@@ -397,6 +397,197 @@ public sealed class GoldenTests
         Golden.AssertMatches(host, GoldenName("deformed-window", renderer));
     }
 
+    private static (Basin.Effects.CanvasWarp Left, Basin.Effects.CanvasWarp Right) CanvasWarps()
+    {
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(seam: 24, direction: -1, zoneWidth: 24, extension: 80, edgeScale: 0.2);
+        var right = new Basin.Effects.CanvasWarp();
+        right.Layout(seam: 160 - 24, direction: 1, zoneWidth: 24, extension: 80, edgeScale: 0.2);
+        return (left, right);
+    }
+
+    private static Basin.Scene.SceneMesh CanvasGrid(CompositorTestHost host, Basin.Effects.CanvasWarp left, Basin.Effects.CanvasWarp right) =>
+        new(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                CellSize = 16,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_parked_window(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var (left, right) = CanvasWarps();
+        _ = CanvasGrid(host, left, right);
+
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(left.FarEdge, 40);
+        var canvasNode = new Basin.Scene.SceneTransform(window);
+        using var theme = new TestFrameTheme();
+        using var uiHost = new Basin.UI.Skia.SkiaUIHost();
+        var frame = new Basin.Scene.Frame(uiHost, new TestFrameRenderer(theme), canvasNode);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 64, 48);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(canvasNode);
+        content.Tree.SetPosition(0, 0);
+        frame.Configure(new Box(0, 0, 64, 48), 1.0, new Basin.Capabilities.FrameState { Active = true });
+        frame.Commit();
+
+        canvasNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            SceneX = window.X,
+            CellSize = 8,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-parked-window", renderer));
+        frame.Dispose();
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_straddling_window(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var (left, right) = CanvasWarps();
+        _ = CanvasGrid(host, left, right);
+
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(-20, 30);
+        var canvasNode = new Basin.Scene.SceneTransform(window);
+        _ = new Basin.Scene.SceneRect(canvasNode, 76, 60, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 64, 48);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(canvasNode);
+        content.Tree.SetPosition(6, 6);
+
+        canvasNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            SceneX = window.X,
+            CellSize = 8,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-straddling-window", renderer));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_sloped_window(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(seam: 32, direction: -1, zoneWidth: 32, extension: 100, edgeScale: 0.2, slope: 0.4, center: 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.Layout(seam: 160 - 32, direction: 1, zoneWidth: 32, extension: 100, edgeScale: 0.2, slope: 0.4, center: 60);
+        _ = CanvasGrid(host, left, right);
+
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(-30, 12);
+        var canvasNode = new Basin.Scene.SceneTransform(window);
+        _ = new Basin.Scene.SceneRect(canvasNode, 76, 40, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 28, Fill.Gradient(64, 28));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 64, 28);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(canvasNode);
+        content.Tree.SetPosition(6, 6);
+
+        canvasNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            SceneX = window.X,
+            SceneY = window.Y,
+            CellSize = 8,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-sloped-window", renderer));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_straddling_window_at_fractional_scale(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        using var state = new OutputState();
+        Assert.True(host.Output.Commit(state.SetScale(1.5)));
+
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(seam: 16, direction: -1, zoneWidth: 16, extension: 50, edgeScale: 0.2);
+        var right = new Basin.Effects.CanvasWarp();
+        right.Layout(seam: 107 - 16, direction: 1, zoneWidth: 16, extension: 50, edgeScale: 0.2);
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 107, 80),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                CellSize = 16,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(-14, 20);
+        var canvasNode = new Basin.Scene.SceneTransform(window);
+        _ = new Basin.Scene.SceneRect(canvasNode, 60, 44, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(48, 32, Fill.Gradient(48, 32));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 48, 32);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(canvasNode);
+        content.Tree.SetPosition(6, 6);
+
+        canvasNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            SceneX = window.X,
+            CellSize = 8,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-straddling-window-scaled", renderer));
+    }
+
     private sealed class DeferDestroy(BufferBase buffer) : IDisposable
     {
         public void Dispose() => buffer.Destroy();

@@ -111,10 +111,14 @@ internal sealed partial class TinyComp
             case ["shotraw", var path]:
                 DumpPresented(Views[0], path);
                 break;
+            case ["shotraw", var path, var index]:
+                DumpPresented(Views[int.Parse(index)], path);
+                break;
             case ["where"]:
                 foreach (var window in _windows)
                 {
-                    BasinReport.Line($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")}");
+                    BasinReport.Line($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")} screen={ScreenBoxOf(window).X}");
+                    ReportCanvasWhere(window);
                 }
 
                 foreach (var xwindow in _xwindows)
@@ -136,6 +140,21 @@ internal sealed partial class TinyComp
                 break;
             case ["tile"]:
                 TileWindows();
+                break;
+            case ["canvas", "on"]:
+                SetCanvasEnabled(true);
+                break;
+            case ["canvas", "off"]:
+                SetCanvasEnabled(false);
+                break;
+            case ["park", "left"] when FocusedGrabTarget() is { } parkLeft:
+                Park(parkLeft, CanvasSide.Left);
+                break;
+            case ["park", "right"] when FocusedGrabTarget() is { } parkRight:
+                Park(parkRight, CanvasSide.Right);
+                break;
+            case ["recall"] when FocusedGrabTarget() is { } recall:
+                Recall(recall);
                 break;
             case ["ws"]:
                 PrintWorkspaces();
@@ -480,6 +499,22 @@ internal sealed partial class TinyComp
                 RingBell();
                 return true;
 
+            case KeyAction.CanvasToggle:
+                SetCanvasEnabled(!CanvasActiveAnywhere());
+                return true;
+
+            case KeyAction.ParkLeft when FocusedGrabTarget() is { } parkLeft:
+                Park(parkLeft, CanvasSide.Left);
+                return true;
+
+            case KeyAction.ParkRight when FocusedGrabTarget() is { } parkRight:
+                Park(parkRight, CanvasSide.Right);
+                return true;
+
+            case KeyAction.Recall when FocusedGrabTarget() is { } recall:
+                Recall(recall);
+                return true;
+
             default:
                 return false;
         }
@@ -558,6 +593,7 @@ internal sealed partial class TinyComp
                 trees.Add(card.EffectTree!);
             }
 
+            SuspendCanvas();
             _effects.SwitcherBegin(trees, box, start);
             RestackSwitcher();
             return;
@@ -618,6 +654,7 @@ internal sealed partial class TinyComp
         var selected = _effects.SwitcherSelected;
         _effects.ClearHighlights();
         _effects.SwitcherEnd();
+        ResumeCanvas();
         _switcherDim?.Destroy();
         _switcherDim = null;
         if (focus && selected >= 0 && selected < _switcherWindows.Count)

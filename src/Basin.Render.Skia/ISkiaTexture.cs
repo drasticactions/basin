@@ -8,4 +8,6 @@ public interface ISkiaTexture : ITexture
     bool Acquire(out SKImage image);
 
     void Release();
+
+    SKShader? MeshShader(SKImage image);
 }

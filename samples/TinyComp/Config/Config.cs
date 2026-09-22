@@ -135,6 +135,16 @@ internal sealed class Config
     public OutputSetting? OutputSettingFor(string name) =>
         OutputSettings.TryGetValue(name, out var setting) ? setting : null;
 
+    public CanvasSetting Canvas { get; set; } = CanvasSetting.Defaults;
+
+    public CanvasSetting CanvasFor(string outputName, BasinLogger log) =>
+        OutputSettingFor(outputName)?.Canvas is { } over
+            ? over.Over(Canvas).Constrained($"output.\"{outputName}\"", log)
+            : Canvas;
+
+    public bool CanvasAnywhere =>
+        Canvas.Enabled || OutputSettings.Values.Any(static setting => setting.Canvas?.Enable == true);
+
     public static KeyAction? ActionFromName(string name) => name switch
     {
         "quit" => KeyAction.Quit,
@@ -153,6 +163,10 @@ internal sealed class Config
         "mark-undo" => KeyAction.MarkUndo,
         "mark-clear" => KeyAction.MarkClear,
         "bell" => KeyAction.Bell,
+        "canvas-toggle" => KeyAction.CanvasToggle,
+        "park-left" => KeyAction.ParkLeft,
+        "park-right" => KeyAction.ParkRight,
+        "recall" => KeyAction.Recall,
         _ => null,
     };
 
@@ -410,6 +424,11 @@ internal sealed class Config
             ShaderContinuous = effects.Flag("shader_continuous", ShaderContinuous);
         }
 
+        if (reader.Free("canvas") is { } canvas)
+        {
+            Canvas = CanvasSetting.Parse(canvas, "canvas", log).Over(CanvasSetting.Defaults);
+        }
+
         if (reader.Section("hypr") is { } hypr)
         {
             foreach (var key in new[] { "enable", "input_capture", "ctm" })
@@ -560,6 +579,12 @@ internal sealed class Config
             Y = Number("y"),
             Width = Number("width"),
             Height = Number("height"),
+            Canvas = Text("canvas") switch
+            {
+                "left" => CanvasSide.Left,
+                "right" => CanvasSide.Right,
+                _ => null,
+            },
         };
     }
 
@@ -568,10 +593,15 @@ internal sealed class Config
         double? scale = null;
         OutputTransform? transform = null;
         (int Width, int Height, int? Refresh)? mode = null;
+        TomlTable? canvasKeys = null;
         foreach (var (key, value) in table)
         {
             switch (key)
             {
+                case "enable" or "zone" or "extension" or "edge_scale" or "slope" or "mesh_cell"
+                    or "grid" or "grid_cell" or "grid_color" or "animation_ms":
+                    (canvasKeys ??= [])[key] = value;
+                    break;
                 case "scale" when value is double fractional:
                     scale = fractional;
                     break;
@@ -590,7 +620,13 @@ internal sealed class Config
             }
         }
 
-        return new OutputSetting { Scale = scale, Transform = transform, Mode = mode };
+        return new OutputSetting
+        {
+            Scale = scale,
+            Transform = transform,
+            Mode = mode,
+            Canvas = canvasKeys is null ? null : CanvasSetting.Parse(canvasKeys, $"output.\"{name}\"", log),
+        };
     }
 
     private static OutputTransform? ParseTransform(string text, string name, BasinLogger log)

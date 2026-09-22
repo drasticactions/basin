@@ -26,6 +26,8 @@ internal sealed class Rule : WindowRule
 
     public int? Height { get; init; }
 
+    public CanvasSide? Canvas { get; init; }
+
     public bool WobblyFor(bool fallback) => Effects == false ? false : Wobbly ?? fallback;
 
     public string? OpenFor(string? fallback) => Effects == false ? null : Open ?? fallback;

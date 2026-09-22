@@ -52,6 +52,8 @@ internal sealed partial class TinyComp
             window.DecorationsChanged += xwindow.UpdateDecorations;
             window.MinimizeRequested += minimized => SetMinimized(xwindow, minimized);
             PlaceXByRule(xwindow);
+            ApplyCanvas(xwindow);
+            PlaceRuleCanvas(xwindow, xwindow.Rule);
             _feedback?.OnMapped();
             FocusXWindow(xwindow);
             _effects.OnMapped(xwindow.Tree, xwindow.Rule?.OpenFor(_effects.OpenKind));
@@ -100,6 +102,7 @@ internal sealed partial class TinyComp
             return;
         }
 
+        ForgetCanvas(xwindow);
         if (xwindow.Framable)
         {
             _effects.OnClosing(
@@ -127,6 +130,7 @@ internal sealed partial class TinyComp
         xwindow.Workspace = null;
         _workspaceModel.RaiseMembersChanged();
         DropSwitcherCard(xwindow);
+        LayoutCanvasAll();
     }
 
     private void FocusXWindow(XWindow xwindow)

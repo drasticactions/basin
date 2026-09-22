@@ -135,7 +135,8 @@ internal sealed partial class TinyComp
             case DragMode.Move when _grabWindow is { } window:
                 var beforeX = window.X;
                 var beforeY = window.Y;
-                window.MoveTo((int)(x - _grabX), (int)(y - _grabY));
+                var (canvasX, canvasY) = ToCanvasPointAt(x, y, window);
+                window.MoveTo((int)(canvasX - _grabX), (int)(canvasY - _grabY));
                 _effects.OnMoved(window.X - beforeX, window.Y - beforeY);
                 return true;
 
@@ -144,7 +145,8 @@ internal sealed partial class TinyComp
                 return true;
 
             case DragMode.Resize when _grabWindow is { } window:
-                var box = new ResizeDrag(_grabEdges, _grabStart, _grabX, _grabY).BoxFor(x, y, window.X, window.Y);
+                var (resizeX, resizeY) = ToCanvasPointAt(x, y, window);
+                var box = new ResizeDrag(_grabEdges, _grabStart, _grabX, _grabY).BoxFor(resizeX, resizeY, window.X, window.Y);
                 window.ResizeTo(box.X, box.Y, box.Width, box.Height, _grabEdges);
                 return true;
 
@@ -185,7 +187,7 @@ internal sealed partial class TinyComp
 
     private void UpdateConstraint(Surface? focused)
     {
-        var next = focused is null ? null : _constraints.ConstraintFor(focused);
+        var next = focused is null || IsOnDeformedWindow(focused) ? null : _constraints.ConstraintFor(focused);
         if (_activeConstraint == next)
         {
             return;
@@ -322,12 +324,14 @@ internal sealed partial class TinyComp
             if (_mode == DragMode.Move && _grabWindow is { } dropped)
             {
                 ReassignDraggedWorkspace(dropped);
+                ClearCanvasHomeAfterDrop(dropped);
             }
 
             _grabWindow?.SetResizing(false);
             _mode = DragMode.None;
             _effects.OnGrabEnd();
             _grabWindow = null;
+            SetCanvasGridDragging(false);
             _touchMoveResize?.End();
             _framePress = null;
             if (!pressed)
@@ -368,7 +372,8 @@ internal sealed partial class TinyComp
         {
             _framePress = null;
             PrepareMenu(held);
-            held.Frame.PointerButton(_cursorX - held.Owner.X, _cursorY - held.Owner.Y, pressed: false, time);
+            var (releaseX, releaseY) = OwnerLocal(held.Frame, held.Owner, _cursorX, _cursorY);
+            held.Frame.PointerButton(releaseX, releaseY, pressed: false, time);
             if (held.Frame.IsMenuOpen)
             {
                 _openMenu = held.Frame;
@@ -389,12 +394,13 @@ internal sealed partial class TinyComp
         if (pressed && button == InputCodes.BtnLeft && !_seat.Pointer.HasGrab &&
             _scene.NodeAt(_cursorX, _cursorY) is { Node: { } frameNode } &&
             FindFrame(frameNode) is { } frameHit &&
-            frameHit.Frame.PartAt(_cursorX - frameHit.Owner.X, _cursorY - frameHit.Owner.Y) != FramePart.None)
+            OwnerLocal(frameHit.Frame, frameHit.Owner, _cursorX, _cursorY) is var (pressX, pressY) &&
+            frameHit.Frame.PartAt(pressX, pressY) != FramePart.None)
         {
             FocusFrameOwner(frameHit.Owner);
             _framePress = frameHit;
             PrepareMenu(frameHit);
-            frameHit.Frame.PointerButton(_cursorX - frameHit.Owner.X, _cursorY - frameHit.Owner.Y, pressed: true, time);
+            frameHit.Frame.PointerButton(pressX, pressY, pressed: true, time);
             return;
         }
 
@@ -402,8 +408,7 @@ internal sealed partial class TinyComp
             _scene.NodeAt(_cursorX, _cursorY) is { Node: { } rightNode } &&
             FindFrame(rightNode) is { } rightHit)
         {
-            var localX = _cursorX - rightHit.Owner.X;
-            var localY = _cursorY - rightHit.Owner.Y;
+            var (localX, localY) = OwnerLocal(rightHit.Frame, rightHit.Owner, _cursorX, _cursorY);
             if (rightHit.Frame.PartAt(localX, localY) is FramePart.Title or FramePart.Icon)
             {
                 FocusFrameOwner(rightHit.Owner);
@@ -481,7 +486,7 @@ internal sealed partial class TinyComp
                 continue;
             }
 
-            if (ResizeRing.EdgesAt(window.FrameBox, x, y, margin, corner) is var e && e != ResizeEdges.None)
+            if (ResizeRing.EdgesAt(MapToScreen(window, window.FrameBox), x, y, margin, corner) is var e && e != ResizeEdges.None)
             {
                 (edges, xdgWindow, xWindow) = (e, window, null);
                 return true;
@@ -490,7 +495,7 @@ internal sealed partial class TinyComp
 
         foreach (var xwindow in _xwindows)
         {
-            if (ResizeRing.EdgesAt(xwindow.FrameBox, x, y, margin, corner) is var e && e != ResizeEdges.None)
+            if (ResizeRing.EdgesAt(MapToScreen(xwindow, xwindow.FrameBox), x, y, margin, corner) is var e && e != ResizeEdges.None)
             {
                 (edges, xdgWindow, xWindow) = (e, null, xwindow);
                 return true;
@@ -534,8 +539,7 @@ internal sealed partial class TinyComp
         {
             LeaveFrameHover(except: frameHover.Frame);
             _frameHover = frameHover;
-            var localX = x - frameHover.Owner.X;
-            var localY = y - frameHover.Owner.Y;
+            var (localX, localY) = OwnerLocal(frameHover.Frame, frameHover.Owner, x, y);
             frameHover.Frame.PointerMotion(localX, localY);
             _cursor.ShowNamed(frameHover.Frame.CursorAt(localX, localY) ?? "left_ptr");
             return;
@@ -560,7 +564,7 @@ internal sealed partial class TinyComp
 
     private void PrepareMenu((Frame Frame, IGrabTarget Owner) hit)
     {
-        hit.Frame.MenuOrigin = new Point(hit.Owner.X, hit.Owner.Y);
+        hit.Frame.MenuOrigin = new Point((int)Math.Round(ToScreenFor(hit.Owner, hit.Owner.X)), hit.Owner.Y);
         var output = _layout.OutputAt(_cursorX, _cursorY) ?? Views.FirstOrDefault()?.Output;
         hit.Frame.MenuConstraint = output is null ? default : _layout.BoxOf(output);
     }
@@ -601,5 +605,31 @@ internal sealed partial class TinyComp
         return best > 0 ? best : ScaleAt(box.X, box.Y);
     }
 
-    internal double ScaleForWindow(Window window) => ScaleForBox(window.ScaleBox);
+    internal double ScaleForWindow(Window window) => ScaleForBox(ScreenBoxOf(window));
+
+    private bool IsOnDeformedWindow(Surface surface)
+    {
+        if (_canvasStates.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var window in _windows)
+        {
+            if (window.Owns(surface))
+            {
+                return IsCanvasDeformed(window);
+            }
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            if (xwindow.XWin.Surface == surface)
+            {
+                return IsCanvasDeformed(xwindow);
+            }
+        }
+
+        return false;
+    }
 }

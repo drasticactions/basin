@@ -6,6 +6,8 @@ namespace Basin.Render.Skia;
 
 internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
 {
+    private readonly SkiaImageShader _meshShader = new();
+
     private static readonly HashSet<DrmFormat> Warned = [];
 
     private readonly IBuffer _buffer;
@@ -76,8 +78,11 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
 
     public void Release() => _buffer.EndDataAccess();
 
+    public SKShader? MeshShader(SKImage image) => _meshShader.For(image);
+
     public void Dispose()
     {
+        _meshShader.Drop();
         _buffer.Destroyed -= DropImage;
         DropImage();
     }
@@ -108,6 +113,7 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
 
     private void DropImage()
     {
+        _meshShader.Drop();
         SkiaCensus.Release(_image);
         _image = null;
         _imageData = 0;

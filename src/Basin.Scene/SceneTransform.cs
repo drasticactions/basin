@@ -178,18 +178,30 @@ public sealed class SceneTransform : SceneTree
         {
             localX = x;
             localY = y;
-            return true;
         }
-
-        if (!_invertible)
+        else if (!_invertible)
         {
             localX = 0;
             localY = 0;
             return false;
         }
+        else
+        {
+            (localX, localY) = _inverse.Map(x, y);
+        }
 
-        (localX, localY) = _inverse.Map(x, y);
-        return true;
+        if (_deformer is not IInvertibleMeshTransform invertible)
+        {
+            return true;
+        }
+
+        var bounds = ChildBounds();
+        if (bounds.IsEmpty)
+        {
+            return false;
+        }
+
+        return invertible.TryMapToSource(bounds, localX, localY, out localX, out localY);
     }
 
     internal override Box SubtreeBounds()

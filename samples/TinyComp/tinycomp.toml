@@ -79,6 +79,23 @@ touch_points = false         # draw a ring for every touch contact
 system_bell  = false         # flash the focused window when a client asks for attention
 startup_feedback = "none"    # none | bouncing | blinking | passive
 
+# A canvas wider than the screen. The centre maps to the screen 1:1, and the
+# canvas past each outer edge compresses into a side zone along a smooth curve,
+# so a window pushed past the seam bends across it and parks as a strip at the
+# edge, still visible and still clickable. Every key is live on SIGHUP, and the
+# same keys under an [output."NAME"] table override them for one output.
+[canvas]
+enable       = false         # wider canvas with compressed side zones
+zone         = 0.12          # fraction of the output width each zone takes on screen
+extension    = 0.5           # how far the canvas extends past each seam, as a fraction of the output width
+edge_scale   = 0.2           # draw scale at the far edge; must stay below zone / extension
+slope        = 0.25          # how far the rows fan from the centre row at the far edge; 0 keeps them flat, negative fans inward
+mesh_cell    = 16            # canvas pixels per mesh column inside a zone
+grid         = "always"      # always | drag | never
+grid_cell    = 64            # canvas pixels between grid lines
+grid_color   = "#2a35c0"     # the grid line colour
+animation_ms = 250           # park, recall and toggle
+
 # The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
 # toplevel mapping and export, CTM control, global shortcuts and input capture.
 # Each flag needs a restart to change.
@@ -107,6 +124,11 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 "Alt+Shift+Right" = "carry-next"
 "Alt+n"           = "workspace-new"
 "Alt+Return"    = { exec = "foot" }
+# The canvas actions, unbound by default:
+# "Alt+Shift+h"   = "park-left"
+# "Alt+Shift+l"   = "park-right"
+# "Alt+Shift+j"   = "recall"
+# "Alt+Shift+c"   = "canvas-toggle"
 
 # Per Window/App rules
 # [[rule]]
@@ -119,3 +141,4 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # y = 0
 # width  = 1280
 # height = 720
+# canvas = "left"            # left | right: park the window in a canvas zone at map

@@ -328,6 +328,39 @@ public sealed class OpenCloseAnimationTests
     }
 
     [Fact]
+    public void A_snapshot_keeps_the_transforms_the_window_carried()
+    {
+        using var host = new CompositorTestHost();
+        var window = new SceneTree(host.Scene.Root);
+        window.SetPosition(40, 30);
+        var node = new SceneTransform(window) { Alpha = 0.8f, Matrix = RenderTransform.Translation(4, 2) };
+        var inner = new SceneTree(node) { Alpha = 0.9f };
+        _ = new SceneRect(inner, 60, 40, new RenderColor(0.9f, 0.2f, 0.2f, 1f));
+        var deformer = new SqueezeDeformer { Factor = 0.5 };
+        node.Deformer = deformer;
+
+        host.RenderFrame();
+        var deformed = Basin.Diagnostics.BufferCapture.ReadRgba(host.Target);
+
+        var snapshot = SceneSnapshot.Capture(window, host.Scene.Root);
+        window.Destroy();
+        host.RenderFrame();
+        Assert.Equal(deformed, Basin.Diagnostics.BufferCapture.ReadRgba(host.Target));
+
+        var copy = Assert.IsType<SceneTransform>(snapshot.Tree.Children[0]);
+        Assert.Same(deformer, copy.Deformer);
+        Assert.Equal(0.8f, copy.Alpha);
+        Assert.Equal(node.Matrix, copy.Matrix);
+        Assert.Equal(0.9f, ((SceneTree)copy.Children[0]).Alpha);
+
+        var hit = host.Scene.NodeAt(40 + 4 + 15, 30 + 2 + 7);
+        Assert.NotNull(hit);
+        Assert.Equal(30, hit!.Value.X, 3);
+
+        snapshot.Destroy();
+    }
+
+    [Fact]
     public void A_null_buffer_unmap_still_snapshots_the_last_frame()
     {
         using var host = new CompositorTestHost();

@@ -51,6 +51,7 @@ internal sealed partial class TinyComp
         _driver.Emptied += () => _runLoop.Stop();
         _driver.Painted += OnPainted;
         _driver.ModeChanged += OnModeChanged;
+        _driver.LayoutChanged += LayoutCanvasAll;
         _driver.TransformChanged += OnTransformChanged;
         _driver.StampFrame += OnStampFrame;
         _driver.StampModeset += OnStampModeset;
@@ -102,6 +103,7 @@ internal sealed partial class TinyComp
         view.Tag = new OutputPolicy();
         _presenceTracker.AddOutput(view.Output, view.Global);
         InitWorkspaces(view);
+        LayoutCanvas(view);
         if (view.Scene is { } sceneOutput)
         {
             sceneOutput.BeforeRepaint += tick => StepEffects(view, tick);
@@ -193,6 +195,9 @@ internal sealed partial class TinyComp
         _outputColor?.Remove(view.Global);
         _cursor.RemoveOutput(view.Output);
         DropWorkspacesOf(view);
+        view.Canvas.Grid?.Destroy();
+        view.Canvas.Grid = null;
+        view.Canvas.GridSource = null;
     }
 
     private void OnStampModeset(Basin.Backend.Drm.DrmOutput output, OutputState state)
@@ -265,11 +270,12 @@ internal sealed partial class TinyComp
         }
 
         running |= _post.Step(tick, view.Width, view.Height);
+        running |= StepCanvasMotions(tick);
         if (running)
         {
-            foreach (var animated in Views)
+            for (var i = 0; i < Views.Count; i++)
             {
-                animated.Scheduler?.ScheduleRepaint();
+                Views[i].Scheduler?.ScheduleRepaint();
             }
         }
     }
@@ -280,7 +286,11 @@ internal sealed partial class TinyComp
         MaybeScreenshotDamage(view);
     }
 
-    private void OnModeChanged(OutputView view) => ReapplyPinnedGeometry();
+    private void OnModeChanged(OutputView view)
+    {
+        ReapplyPinnedGeometry();
+        LayoutCanvasAll();
+    }
 
     private void OnTransformChanged(OutputView view, OutputTransform was)
     {
@@ -312,6 +322,9 @@ internal sealed partial class TinyComp
         {
             SceneBuffer b => $"buffer {(b.Buffer is null ? "empty" : $"{b.Buffer.Width}x{b.Buffer.Height}")} opaque={b.IsOpaque}",
             SceneRect r => $"rect {r.Width}x{r.Height}",
+            SceneTransform { Deformer: CanvasWarpTransform canvas } => $"transform canvas sceneX={canvas.SceneX}",
+            SceneTransform { Deformer: { } deformer } => $"transform {deformer.GetType().Name}",
+            SceneTransform => "transform",
             SceneTree => "tree",
             _ => node.GetType().Name,
         };
@@ -577,6 +590,7 @@ internal sealed partial class TinyComp
     private void RefreshOutputLayout()
     {
         ArrangeLayerSurfaces();
+        LayoutCanvasAll();
         ReapplyPinnedGeometry();
         UpdateSurfacePresence();
         foreach (var window in _windows)

@@ -87,6 +87,8 @@ internal sealed class EffectsPolicy : IDisposable
         _slide.Settle(commit);
     }
 
+    public TransformStack StackFor(SceneTree tree) => _runner.StackFor(tree);
+
     public bool SwitcherActive => _switcher.IsActive && !_switcher.IsDismissing;
 
     public int SwitcherSelected => _switcher.Selected;

@@ -229,7 +229,7 @@ internal static class SkiaDraw
 
     private static SKPoint[] _positions = [];
     private static SKPoint[] _texCoords = [];
-    private static SKColor[] _colors = [];
+    private static uint[] _colors = [];
 
     public static void Mesh(
         SKCanvas canvas, SKPaint paint, ISkiaTexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)
@@ -250,14 +250,13 @@ internal static class SkiaDraw
             return;
         }
 
-        SKShader? shader = null;
         try
         {
-            if (_positions.Length != vertices.Length)
+            if (_positions.Length < vertices.Length)
             {
                 _positions = new SKPoint[vertices.Length];
                 _texCoords = new SKPoint[vertices.Length];
-                _colors = new SKColor[vertices.Length];
+                _colors = new uint[vertices.Length];
             }
 
             for (var i = 0; i < vertices.Length; i++)
@@ -267,40 +266,61 @@ internal static class SkiaDraw
                 _texCoords[i] = new SKPoint(vertex.U, vertex.V);
                 var a = Math.Clamp(vertex.Color.A, 0f, 1f);
                 _colors[i] = a <= 0f
-                    ? new SKColor(0, 0, 0, 0)
-                    : new SKColor(
-                        (byte)((Math.Clamp(vertex.Color.R / a, 0f, 1f) * 255f) + 0.5f),
-                        (byte)((Math.Clamp(vertex.Color.G / a, 0f, 1f) * 255f) + 0.5f),
-                        (byte)((Math.Clamp(vertex.Color.B / a, 0f, 1f) * 255f) + 0.5f),
-                        (byte)((a * 255f) + 0.5f));
+                    ? 0u
+                    : (uint)(byte)((a * 255f) + 0.5f) << 24
+                        | (uint)(byte)((Math.Clamp(vertex.Color.R / a, 0f, 1f) * 255f) + 0.5f) << 16
+                        | (uint)(byte)((Math.Clamp(vertex.Color.G / a, 0f, 1f) * 255f) + 0.5f) << 8
+                        | (byte)((Math.Clamp(vertex.Color.B / a, 0f, 1f) * 255f) + 0.5f);
             }
 
             paint.BlendMode = options.Blend == RenderBlend.Additive ? SKBlendMode.Plus : SKBlendMode.SrcOver;
             paint.SetColor(new SKColorF(1f, 1f, 1f, 1f), null);
             if (image is not null)
             {
-                shader = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, LinearSampling);
-                paint.Shader = shader;
+                paint.Shader = texture!.MeshShader(image);
             }
 
-            if (options.Clip is null)
+            nint native;
+            unsafe
             {
-                canvas.DrawVertices(SKVertexMode.Triangles, _positions, _texCoords, _colors, SKBlendMode.Modulate, null!, paint);
+                fixed (SKPoint* positions = _positions)
+                fixed (SKPoint* texCoords = _texCoords)
+                fixed (uint* colors = _colors)
+                {
+                    native = SkiaVerticesNative.MakeCopy(
+                        (int)SKVertexMode.Triangles, vertices.Length, positions, texCoords, colors, 0, null);
+                }
+            }
+
+            if (native == 0)
+            {
                 return;
             }
 
-            foreach (var band in RegionRects.Of(options.Clip))
+            try
             {
-                canvas.Save();
-                canvas.ClipRect(new SKRect(band.X1, band.Y1, band.X2, band.Y2), SKClipOperation.Intersect, false);
-                canvas.DrawVertices(SKVertexMode.Triangles, _positions, _texCoords, _colors, SKBlendMode.Modulate, null!, paint);
-                canvas.Restore();
+                if (options.Clip is null)
+                {
+                    SkiaVerticesNative.Draw(canvas.Handle, native, (int)SKBlendMode.Modulate, paint.Handle);
+                    return;
+                }
+
+                foreach (var band in RegionRects.Of(options.Clip))
+                {
+                    canvas.Save();
+                    canvas.ClipRect(new SKRect(band.X1, band.Y1, band.X2, band.Y2), SKClipOperation.Intersect, false);
+                    SkiaVerticesNative.Draw(canvas.Handle, native, (int)SKBlendMode.Modulate, paint.Handle);
+                    canvas.Restore();
+                }
+            }
+            finally
+            {
+                SkiaVerticesNative.Unref(native);
             }
         }
         finally
         {
             paint.Shader = null;
-            shader?.Dispose();
             paint.BlendMode = SKBlendMode.SrcOver;
             texture?.Release();
         }

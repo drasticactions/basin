@@ -13,6 +13,8 @@ internal static class OutputViewPolicy
 
         public WorkspaceSet<TinyComp.Workspace> Workspaces => view.Policy.Workspaces;
 
+        public CanvasView Canvas => view.Policy.Canvas;
+
         public TinyComp.Workspace? Active
         {
             get => view.Policy.Workspaces.Active;

@@ -9,4 +9,6 @@ internal sealed class OutputSetting
     public OutputTransform? Transform { get; init; }
 
     public (int Width, int Height, int? Refresh)? Mode { get; init; }
+
+    public CanvasSetting? Canvas { get; init; }
 }

@@ -24,7 +24,7 @@ public sealed class SceneSnapshot : IDisposable
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(parent);
 
-        var tree = new SceneTree(parent);
+        var tree = new SceneTree(parent) { Alpha = source.Alpha };
         tree.SetPosition(source.X, source.Y);
         tree.ClipBox = source.ClipBox;
 
@@ -70,9 +70,23 @@ public sealed class SceneSnapshot : IDisposable
 
             switch (child)
             {
+                case SceneTransform transform:
+                {
+                    var copy = new SceneTransform(target)
+                    {
+                        Alpha = transform.Alpha,
+                        Matrix = transform.Matrix,
+                    };
+                    copy.SetPosition(transform.X, transform.Y);
+                    copy.ClipBox = transform.ClipBox;
+                    CopyTree(transform, copy);
+                    copy.Deformer = transform.Deformer;
+                    break;
+                }
+
                 case SceneTree subtree:
                 {
-                    var copy = new SceneTree(target);
+                    var copy = new SceneTree(target) { Alpha = subtree.Alpha };
                     copy.SetPosition(subtree.X, subtree.Y);
                     copy.ClipBox = subtree.ClipBox;
                     CopyTree(subtree, copy);

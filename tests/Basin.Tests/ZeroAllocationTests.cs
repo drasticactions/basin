@@ -273,6 +273,72 @@ public sealed class ZeroAllocationTests
         node.Destroy();
     }
 
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void A_window_sliding_through_a_canvas_zone_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(seam: 24, direction: -1, zoneWidth: 24, extension: 80, edgeScale: 0.2);
+        var right = new Basin.Effects.CanvasWarp();
+        right.Layout(seam: 136, direction: 1, zoneWidth: 24, extension: 80, edgeScale: 0.2);
+        var grid = new Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource { Left = left, Right = right, CellSize = 16 },
+        };
+
+        var window = new Scene.SceneTree(host.Scene.Root);
+        var node = new Scene.SceneTransform(window);
+        _ = new Scene.SceneRect(node, 76, 60, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(node);
+        content.Tree.SetPosition(6, 6);
+        var transform = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, CellSize = 8 };
+        var bounds = new Box(0, 0, 76, 60);
+
+        void Slide(int i)
+        {
+            var x = left.FarEdge + (i % 60);
+            window.SetPosition(x, 30);
+            transform.SceneX = x;
+            Assert.False(transform.IsIdentityFor(bounds));
+            if (ReferenceEquals(node.Deformer, transform))
+            {
+                node.NotifyDeformed();
+            }
+            else
+            {
+                node.Deformer = transform;
+            }
+
+            _ = left.ToCanvas(left.ToScreen(x));
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 120; i++)
+        {
+            Slide(i);
+        }
+
+        NothingAllocated(1000, Slide);
+        grid.Destroy();
+    }
+
     [Fact]
     public void Frame_path_capabilities_allocate_nothing_over_1000_frames()
     {

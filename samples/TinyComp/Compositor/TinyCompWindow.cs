@@ -69,6 +69,7 @@ internal sealed partial class TinyComp
             toplevel.Xdg.Committed += LayoutDecorations;
             toplevel.Xdg.Committed += LayoutShadow;
             toplevel.Xdg.Committed += ReportGeometry;
+            toplevel.Xdg.Committed += () => comp.ApplyCanvas(this);
             toplevel.TitleChanged += RefreshFrame;
             toplevel.AppIdChanged += RefreshFrame;
             toplevel.ParentChanged += RefreshFrame;
@@ -105,6 +106,8 @@ internal sealed partial class TinyComp
                     MoveTo(_restore.X, _restore.Y);
                     toplevel.SetSize(0, 0);
                 }
+
+                comp.LayoutCanvasAll();
             };
         }
 
@@ -141,6 +144,7 @@ internal sealed partial class TinyComp
             X = x;
             Y = y;
             Tree?.SetPosition(x, y);
+            _comp.ApplyCanvas(this);
             ReportGeometry();
             _comp._workspaceModel.RaiseMembersChanged();
 
@@ -278,7 +282,7 @@ internal sealed partial class TinyComp
         {
             var comp = _comp;
             var box = comp._layout.BoxOf(view.Output);
-            var usable = view.UsableArea.IsEmpty ? box with { X = 0, Y = 0 } : view.UsableArea;
+            var usable = comp.FlatArea(view, view.UsableArea.IsEmpty ? box with { X = 0, Y = 0 } : view.UsableArea);
             var insets = _frame?.Measure(BuildState(), comp.ScaleAt(X + 1, Y + 1)) ?? default;
             MoveTo(box.X + usable.X + insets.Left, box.Y + usable.Y + insets.Top);
             Toplevel.SetSize(usable.Width - insets.Left - insets.Right, usable.Height - insets.Top - insets.Bottom);
@@ -347,6 +351,7 @@ internal sealed partial class TinyComp
             SceneSurface?.Tree.RaiseToTop();
             LayoutDecorations();
             ReportGeometry();
+            _comp.ApplyCanvas(this);
             if (CornerRadius > 0 && SceneSurface is not null)
             {
                 _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, CornerRadius);
@@ -409,6 +414,7 @@ internal sealed partial class TinyComp
             _shadow.Texture = texture;
             var (width, height) = GeometrySize;
             _shadow.SetGeometry(new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)));
+            _comp.ApplyCanvas(this);
         }
 
         internal void LayoutShadow()

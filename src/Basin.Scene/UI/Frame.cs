@@ -59,6 +59,8 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
         }
     }
 
+    public SceneTree Tree => _tree;
+
     public FrameInsets Insets { get; private set; }
 
     public IReadOnlyList<SceneBuffer> StripNodes => _strips;

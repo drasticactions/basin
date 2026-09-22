@@ -261,6 +261,35 @@ public sealed partial class Scene
                 var (width, height) = buffer.Size;
                 into.Add(new SurfaceBox(surface, new Box(x, y, width, height)));
                 break;
+            case SceneTransform transform:
+                var start = into.Count;
+                foreach (var child in transform.Children)
+                {
+                    CollectSurfaces(child, x + child.X, y + child.Y, into);
+                }
+
+                if (transform.Deformer is null && transform.Matrix.IsIdentity)
+                {
+                    break;
+                }
+
+                for (var i = start; i < into.Count; i++)
+                {
+                    var box = into[i].Box.Translated(-x, -y);
+                    if (transform.Deformer is { } deformer)
+                    {
+                        box = deformer.MapBounds(box);
+                    }
+
+                    if (!transform.Matrix.IsIdentity && transform.Matrix.TryMapBounds(box, out var hull))
+                    {
+                        box = hull;
+                    }
+
+                    into[i] = new SurfaceBox(into[i].Surface, box.Translated(x, y));
+                }
+
+                break;
             case SceneTree tree:
                 foreach (var child in tree.Children)
                 {

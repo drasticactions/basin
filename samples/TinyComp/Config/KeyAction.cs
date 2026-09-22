@@ -18,4 +18,8 @@ internal enum KeyAction
     MarkUndo,
     MarkClear,
     Bell,
+    CanvasToggle,
+    ParkLeft,
+    ParkRight,
+    Recall,
 }

@@ -179,22 +179,46 @@ public abstract class SceneNode
 
     public bool TryMapSceneToLocal(double sceneX, double sceneY, out double localX, out double localY)
     {
-        ComposeToRoot(checkVisibility: false, out var x, out var y, out var toScene, out var transformed, out _, out _);
-        if (!transformed)
-        {
-            localX = sceneX - x;
-            localY = sceneY - y;
-            return true;
-        }
-
-        if (!toScene.TryInvert(out var inverse))
+        if (!TryMapSceneToParentSpace(sceneX, sceneY, out var x, out var y))
         {
             localX = 0;
             localY = 0;
             return false;
         }
 
-        (localX, localY) = inverse.Map(sceneX, sceneY);
+        return TryMapIntoContent(x, y, out localX, out localY);
+    }
+
+    private bool TryMapSceneToParentSpace(double sceneX, double sceneY, out double x, out double y)
+    {
+        if (Parent is not { } parent)
+        {
+            x = sceneX;
+            y = sceneY;
+            return true;
+        }
+
+        if (!parent.TryMapSceneToParentSpace(sceneX, sceneY, out var parentX, out var parentY))
+        {
+            x = 0;
+            y = 0;
+            return false;
+        }
+
+        return parent.TryMapIntoContent(parentX, parentY, out x, out y);
+    }
+
+    private bool TryMapIntoContent(double x, double y, out double localX, out double localY)
+    {
+        x -= X;
+        y -= Y;
+        if (this is SceneTransform transform)
+        {
+            return transform.TryMapToLocal(x, y, out localX, out localY);
+        }
+
+        localX = x;
+        localY = y;
         return true;
     }
 

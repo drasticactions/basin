@@ -110,7 +110,7 @@ internal sealed partial class TinyComp
     {
         var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
-        var usable = view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea;
+        var usable = FlatArea(view, view.UsableArea.IsEmpty ? origin with { X = 0, Y = 0 } : view.UsableArea);
         var slot = _windows.Count % 8;
         window.MoveTo(origin.X + usable.X + 40 + (slot * 30), origin.Y + usable.Y + 40 + (slot * 30));
     }
@@ -131,14 +131,15 @@ internal sealed partial class TinyComp
 
         var view = Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0];
         var origin = _layout.BoxOf(view.Output);
+        var flat = FlatArea(view, origin with { X = 0, Y = 0 });
         if (width > 0 && height > 0)
         {
             window.ResizeTo(
-                origin.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0), width, height, ResizeEdges.None);
+                origin.X + flat.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0), width, height, ResizeEdges.None);
         }
         else
         {
-            window.MoveTo(origin.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0));
+            window.MoveTo(origin.X + flat.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0));
         }
 
         return true;
@@ -158,6 +159,8 @@ internal sealed partial class TinyComp
             PlaceCascade(window);
         }
 
+        ApplyCanvas(window);
+        PlaceRuleCanvas(window, window.Rule);
         if (window.Workspace is { } mapped && ViewOf(mapped)?.Active != mapped)
         {
             BasinReport.Line($"MAPPED {window.Toplevel.AppId} hidden rule={(window.Rule is null ? "none" : "yes")}");
@@ -175,6 +178,7 @@ internal sealed partial class TinyComp
     {
         BasinReport.Line($"UNMAPPED {window.Toplevel.AppId}");
         _windows.Remove(window);
+        ForgetCanvas(window);
         var workspace = window.Workspace;
         window.Workspace = null;
         if (_focused == window)
@@ -203,6 +207,7 @@ internal sealed partial class TinyComp
 
         _workspaceModel.RaiseMembersChanged();
         DropSwitcherCard(window);
+        LayoutCanvasAll();
     }
 
     private void FocusWindow(Window? window)
@@ -382,13 +387,14 @@ internal sealed partial class TinyComp
         {
             var (geometryWidth, geometryHeight) = window.GeometrySize;
             var box = new Box(window.X, window.Y, Math.Max(geometryWidth, 1), Math.Max(geometryHeight, 1));
+            var cursorX = ToCanvasFor(window, _cursorX);
             if (!minimized)
             {
                 tree.Enabled = true;
-                _ = _effects.OnMinimize(tree, box, default, restoring: true, _cursorX, _cursorY);
+                _ = _effects.OnMinimize(tree, box, default, restoring: true, cursorX, _cursorY);
             }
             else if (!_effects.OnMinimize(
-                tree, box, default, restoring: false, _cursorX, _cursorY,
+                tree, box, default, restoring: false, cursorX, _cursorY,
                 () => HideMinimized(window)))
             {
                 tree.Enabled = false;
@@ -396,6 +402,7 @@ internal sealed partial class TinyComp
         }
 
         _xdgToplevels.SetMinimized(window.Toplevel, minimized);
+        LayoutCanvasAll();
         if (minimized)
         {
             if (_focused == window)
@@ -429,13 +436,14 @@ internal sealed partial class TinyComp
         xwindow.XWin.SetMinimized(minimized);
 
         var box = new Box(xwindow.X, xwindow.Y, Math.Max(xwindow.XWin.Width, 1), Math.Max(xwindow.XWin.Height, 1));
+        var xCursorX = ToCanvasFor(xwindow, _cursorX);
         if (!minimized)
         {
             xwindow.Tree.Enabled = true;
-            _ = _effects.OnMinimize(xwindow.Tree, box, default, restoring: true, _cursorX, _cursorY);
+            _ = _effects.OnMinimize(xwindow.Tree, box, default, restoring: true, xCursorX, _cursorY);
         }
         else if (!_effects.OnMinimize(
-            xwindow.Tree, box, default, restoring: false, _cursorX, _cursorY,
+            xwindow.Tree, box, default, restoring: false, xCursorX, _cursorY,
             () => HideMinimized(xwindow)))
         {
             xwindow.Tree.Enabled = false;
@@ -481,8 +489,10 @@ internal sealed partial class TinyComp
         _mode = DragMode.Move;
         _grabWindow = window;
         var (x, y) = _grabOrigin.For(serial);
-        _grabX = x - window.X;
-        _grabY = y - window.Y;
+        var (canvasX, canvasY) = ToCanvasPointAt(x, y, window);
+        _grabX = canvasX - window.X;
+        _grabY = canvasY - window.Y;
+        SetCanvasGridDragging(true);
         _effects.OnMoveGrab(
             window.EffectTree,
             _grabX,
@@ -500,7 +510,8 @@ internal sealed partial class TinyComp
         _mode = DragMode.Resize;
         _grabWindow = window;
         _grabEdges = edges;
-        (_grabX, _grabY) = _grabOrigin.For(serial);
+        var (originX, originY) = _grabOrigin.For(serial);
+        (_grabX, _grabY) = ToCanvasPointAt(originX, originY, window);
         var (width, height) = window.GeometrySize;
         _grabStart = new Box(window.X, window.Y, width, height);
         var frame = new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1));
@@ -552,12 +563,16 @@ internal sealed partial class TinyComp
             else
             {
                 var geometry = xdg.EffectiveGeometry;
-                x += geometry.X;
-                y += geometry.Y;
                 if (xdg.Role is XdgToplevelWindow toplevel && FindWindow(toplevel) is { } window)
                 {
-                    x += window.X;
-                    y += window.Y;
+                    var screen = ScreenBoxOf(window);
+                    x += screen.X;
+                    y += screen.Y;
+                }
+                else
+                {
+                    x += geometry.X;
+                    y += geometry.Y;
                 }
 
                 return new Point(x, y);
@@ -709,6 +724,7 @@ internal sealed partial class TinyComp
                 }
 
                 view.UsableArea = usable;
+                LayoutCanvas(view);
                 foreach (var (layer, _) in _layerDriver.Surfaces)
                 {
                     if (layer.Output?.Output == output)

@@ -776,8 +776,8 @@ internal sealed partial class TinyComp
             return;
         }
 
-        var (width, height) = window.GeometrySize;
-        var under = _layout.OutputAt(window.X + (width / 2), window.Y + (height / 2));
+        var screen = ScreenBoxOf(window);
+        var under = _layout.OutputAt(screen.X + (screen.Width / 2.0), screen.Y + (screen.Height / 2.0));
         var view = Views.FirstOrDefault(v => v.Output == under);
         if (view is null || view.Active is not { } target || ViewOf(workspace) == view)
         {

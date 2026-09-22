@@ -17,4 +17,6 @@ internal sealed class OutputPolicy
     public ulong GroupId { get; set; }
 
     public WorkspaceSet<TinyComp.Workspace> Workspaces { get; } = new();
+
+    public CanvasView Canvas { get; } = new();
 }

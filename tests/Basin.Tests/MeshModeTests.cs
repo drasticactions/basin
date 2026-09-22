@@ -40,8 +40,111 @@ internal sealed class WaveDeformer : IMeshTransform
     }
 }
 
+internal sealed class SqueezeDeformer : IInvertibleMeshTransform
+{
+    public double Factor { get; set; } = 0.5;
+
+    public Box MapBounds(in Box childBounds) =>
+        new(childBounds.X, childBounds.Y, (int)Math.Ceiling(childBounds.Width * Factor), childBounds.Height);
+
+    public int VertexCount(in Box childBounds) => 6;
+
+    public void WriteVertices(in Box childBounds, Span<MeshVertex> into)
+    {
+        var left = childBounds.X;
+        var top = childBounds.Y;
+        var right = childBounds.Right;
+        var bottom = childBounds.Bottom;
+        var squeezedRight = (float)(left + (childBounds.Width * Factor));
+        var white = new RenderColor(1f, 1f, 1f, 1f);
+        into[0] = new MeshVertex(left, top, left, top, white);
+        into[1] = new MeshVertex(squeezedRight, top, right, top, white);
+        into[2] = new MeshVertex(left, bottom, left, bottom, white);
+        into[3] = new MeshVertex(squeezedRight, top, right, top, white);
+        into[4] = new MeshVertex(squeezedRight, bottom, right, bottom, white);
+        into[5] = new MeshVertex(left, bottom, left, bottom, white);
+    }
+
+    public bool TryMapToSource(in Box childBounds, double x, double y, out double sourceX, out double sourceY)
+    {
+        sourceX = childBounds.X + ((x - childBounds.X) / Factor);
+        sourceY = y;
+        return x >= childBounds.X && x < childBounds.X + (childBounds.Width * Factor)
+            && y >= childBounds.Y && y < childBounds.Bottom;
+    }
+}
+
 public sealed class MeshModeTests
 {
+    [Fact]
+    public void A_hit_through_an_invertible_deformer_lands_at_source_coordinates()
+    {
+        using var host = new CompositorTestHost();
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(80, 40, Fill.Gradient(80, 40));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+
+        var transform = new SceneTransform(host.Scene.Root);
+        transform.SetPosition(10, 20);
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(transform);
+        transform.Deformer = new SqueezeDeformer { Factor = 0.5 };
+
+        var hit = host.Scene.SurfaceAt(10 + 30, 20 + 5);
+        Assert.NotNull(hit);
+        Assert.Equal(60, hit!.Value.X, 3);
+        Assert.Equal(5, hit.Value.Y, 3);
+
+        Assert.Null(host.Scene.SurfaceAt(10 + 50, 20 + 5));
+    }
+
+    [Fact]
+    public void TryMapSceneToLocal_walks_through_an_invertible_deformer()
+    {
+        using var host = new CompositorTestHost();
+        var outer = new SceneTree(host.Scene.Root);
+        outer.SetPosition(100, 50);
+        var transform = new SceneTransform(outer);
+        transform.SetPosition(10, 20);
+        transform.Matrix = RenderTransform.Translation(4, 0);
+        var inner = new SceneTree(transform);
+        inner.SetPosition(3, 3);
+        var rect = new SceneRect(inner, 80, 40, new RenderColor(1f, 0f, 0f, 1f));
+        transform.Deformer = new SqueezeDeformer { Factor = 0.5 };
+
+        Assert.True(rect.TryMapSceneToLocal(100 + 10 + 4 + 3 + 15, 50 + 20 + 3 + 7, out var localX, out var localY));
+        Assert.Equal(30, localX, 3);
+        Assert.Equal(7, localY, 3);
+
+        var hit = host.Scene.NodeAt(100 + 10 + 4 + 3 + 15, 50 + 20 + 3 + 7);
+        Assert.NotNull(hit);
+        Assert.Same(rect, hit!.Value.Node);
+        Assert.Equal(localX, hit.Value.X, 3);
+        Assert.Equal(localY, hit.Value.Y, 3);
+    }
+
+    [Fact]
+    public void A_deformer_without_an_inverse_hits_as_if_undeformed()
+    {
+        using var host = new CompositorTestHost();
+        var transform = new SceneTransform(host.Scene.Root);
+        transform.SetPosition(10, 20);
+        var rect = new SceneRect(transform, 80, 40, new RenderColor(1f, 0f, 0f, 1f));
+        transform.Deformer = new WaveDeformer { Amplitude = 6 };
+
+        var hit = host.Scene.NodeAt(10 + 30, 20 + 5);
+        Assert.NotNull(hit);
+        Assert.Same(rect, hit!.Value.Node);
+        Assert.Equal(30, hit.Value.X, 3);
+        Assert.Equal(5, hit.Value.Y, 3);
+
+        Assert.True(rect.TryMapSceneToLocal(10 + 30, 20 + 5, out var localX, out var localY));
+        Assert.Equal(30, localX, 3);
+        Assert.Equal(5, localY, 3);
+    }
+
     [Fact]
     public void Zero_copy_path_serves_a_bare_buffer_child()
     {

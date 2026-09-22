@@ -6,6 +6,8 @@ namespace Basin.Hosted;
 
 internal sealed class HostedDmabufTexture : ISkiaTexture
 {
+    private readonly SkiaImageShader _meshShader = new();
+
     private const uint GlTexture2D = 0x0DE1;
     private const uint GlBgra8 = 0x93A1;
     private const uint GlRgba8 = 0x8058;
@@ -94,8 +96,11 @@ internal sealed class HostedDmabufTexture : ISkiaTexture
     {
     }
 
+    public SKShader? MeshShader(SKImage image) => _meshShader.For(image);
+
     public void Dispose()
     {
+        _meshShader.Drop();
         SkiaCensus.Release(_skImage);
         SkiaCensus.Release(_backend);
         _renderer.ScheduleEglRelease(_texture, _image, _generation);

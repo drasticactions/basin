@@ -171,6 +171,44 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_canvas_table_reads_every_key_and_clamps_the_edge_scale()
+    {
+        var log = BasinLog.For("t");
+        var config = TinyComp.Config.Load(
+            Write("[canvas]\nenable = true\nzone = 0.1\nextension = 0.4\nedge_scale = 0.15\nslope = 0.4\nmesh_cell = 8\ngrid = \"drag\"\ngrid_cell = 32\ngrid_color = \"#ff0000\"\nanimation_ms = 100\n"
+                + "[output.\"DP-2\"]\nenable = false\nzone = 0.2\n"
+                + "[[rule]]\napp_id = \"foot\"\ncanvas = \"right\"\n"),
+            log,
+            out var fatal);
+        Assert.Null(fatal);
+        Assert.True(config.Canvas.Enabled);
+        Assert.Equal(0.1, config.Canvas.ZoneFraction, 9);
+        Assert.Equal(0.4, config.Canvas.ExtensionFraction, 9);
+        Assert.Equal(0.15, config.Canvas.EdgeScaleValue, 9);
+        Assert.Equal(0.4, config.Canvas.SlopeValue, 9);
+        Assert.Equal(8, config.Canvas.MeshCellSize);
+        Assert.Equal(TinyComp.CanvasGridMode.Drag, config.Canvas.GridMode);
+        Assert.Equal(32, config.Canvas.GridCellSize);
+        Assert.Equal(0xff0000ffu, config.Canvas.GridRgba);
+        Assert.Equal(100, config.Canvas.AnimationMillis);
+        Assert.True(config.CanvasAnywhere);
+
+        var overridden = config.CanvasFor("DP-2", log);
+        Assert.False(overridden.Enabled);
+        Assert.Equal(0.2, overridden.ZoneFraction, 9);
+        Assert.Equal(0.4, overridden.ExtensionFraction, 9);
+        Assert.Same(config.Canvas, config.CanvasFor("DP-1", log));
+        Assert.Equal(TinyComp.CanvasSide.Right, config.Rules[0].Canvas);
+
+        var clamped = TinyComp.Config.Load(
+            Write("[canvas]\nzone = 0.1\nextension = 0.5\nedge_scale = 0.5\n"), log, out _);
+        Assert.Equal(0.8 * 0.1 / 0.5, clamped.Canvas.EdgeScaleValue, 6);
+        Assert.Contains(_lines, line => line.Contains("edge_scale", StringComparison.Ordinal) && line.Contains("clamping", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.KeyAction.ParkLeft, TinyComp.Config.ActionFromName("park-left"));
+        Assert.Equal(TinyComp.KeyAction.CanvasToggle, TinyComp.Config.ActionFromName("canvas-toggle"));
+    }
+
+    [Fact]
     public void An_unknown_key_warns()
     {
         _ = TinyComp.Config.Load(Write("[compositor]\nrenderrer = \"gl\"\n"), BasinLog.For("t"), out _);

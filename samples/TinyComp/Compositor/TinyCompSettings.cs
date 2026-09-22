@@ -115,6 +115,9 @@ internal sealed partial class TinyComp
         ApplyScreenShader(loaded);
         ApplyEffectSettings(loaded);
         _shortcuts.Configure(loaded);
+        _canvasOverride = null;
+        _canvasClosing = false;
+        LayoutCanvasAll();
 
         foreach (var view in Views)
         {
@@ -130,7 +133,8 @@ internal sealed partial class TinyComp
             $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
             + " rules-apply-to-windows-mapped-after-this"
             + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")
-            + (metacityFailure is null ? string.Empty : " metacity=kept"));
+            + (metacityFailure is null ? string.Empty : " metacity=kept")
+            + $" canvas={(loaded.CanvasAnywhere ? "on" : "off")} canvas-edge-scale={loaded.Canvas.EdgeScaleValue:F3}");
     }
 
     private double? ReloadScaleFor(int index, IOutput output) =>
