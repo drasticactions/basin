@@ -174,11 +174,14 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     private BlurSurfaceOptions _current = new();
     private BlurOptions _options = new();
     private BlurStrength _strength = BlurStrength.For(new BlurOptions().Strength);
+    private BlurStrength _widest = BlurStrength.For(new BlurOptions().Strength);
+    private BlurStrength _active = BlurStrength.For(new BlurOptions().Strength);
+    private int _depth = BlurStrength.For(new BlurOptions().Strength).Iterations;
     private bool _disposed;
 
     public BackgroundEffects Supported => BackgroundEffects.Blur | BackgroundEffects.Contrast;
 
-    public int ExpandSize => _strength.ExpandSize;
+    public int ExpandSize => _widest.ExpandSize;
 
     public BlurCorners Corners { get; set; }
 
@@ -188,6 +191,10 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     {
         ArgumentNullException.ThrowIfNull(key);
         _surfaces[key] = options;
+        if (options.Strength is { } strength)
+        {
+            Widen(BlurStrength.For(strength));
+        }
     }
 
     public bool ForgetSurface(object key)
@@ -201,13 +208,22 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         get => _options;
         set
         {
-            var iterations = _strength.Iterations;
             _options = value;
             _strength = BlurStrength.For(value.Strength);
             BlurColorMatrix.Build(value.Saturation, value.Contrast, _colorMatrix);
             EnsureNoise();
-            if (_strength.Iterations != iterations)
+            _widest = _strength;
+            foreach (var surface in _surfaces.Values)
             {
+                if (surface.Strength is { } strength && BlurStrength.For(strength).Iterations > _widest.Iterations)
+                {
+                    _widest = BlurStrength.For(strength);
+                }
+            }
+
+            if (_widest.Iterations != _depth)
+            {
+                _depth = _widest.Iterations;
                 DropPyramids();
             }
         }
@@ -228,8 +244,10 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     public bool Record(in GlBackdropContext context, out GlBackdropResult result)
     {
         var gl = _device.Gl;
-        var levels = _strength.Iterations;
-        var pad = _strength.ExpandSize;
+        _current = context.Key is { } key && _surfaces.TryGetValue(key, out var stored) ? stored : new BlurSurfaceOptions();
+        _active = _current.Strength is { } strength ? BlurStrength.For(strength) : _strength;
+        var levels = _active.Iterations;
+        var pad = _active.ExpandSize;
         var pyramid = PyramidFor(context.TargetWidth, context.TargetHeight);
         var padded = new Box(
                 context.Bounds.X - pad,
@@ -242,7 +260,6 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         _targetWidth = context.TargetWidth;
         _targetHeight = context.TargetHeight;
         _surface = context.Bounds;
-        _current = context.Key is { } key && _surfaces.TryGetValue(key, out var stored) ? stored : new BlurSurfaceOptions();
         BuildSurfaceMatrix();
         gl.Disable(EnableCap.Blend);
         gl.Enable(EnableCap.ScissorTest);
@@ -316,7 +333,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
         gl.Uniform2(program.SrcScale, srcScale, srcScale);
         gl.Uniform2(program.SrcInvSize, 1f / srcWidth, 1f / srcHeight);
-        var halfpixel = plain ? 0f : (float)(0.5 * _strength.Offset);
+        var halfpixel = plain ? 0f : (float)(0.5 * _active.Offset);
         gl.Uniform2(program.Halfpixel, halfpixel / srcWidth, halfpixel / srcHeight);
         gl.Uniform4(
             program.SrcClamp,
@@ -385,8 +402,8 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             return existing;
         }
 
-        var chain = new Level[_strength.Iterations + 1];
-        for (var i = 0; i <= _strength.Iterations; i++)
+        var chain = new Level[_depth + 1];
+        for (var i = 0; i <= _depth; i++)
         {
             chain[i] = CreateLevel(Math.Max(1, width >> i), Math.Max(1, height >> i));
         }
@@ -534,6 +551,20 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.TexSubImage2D<byte>(
             TextureTarget.Texture2D, 0, 0, 0, (uint)side, (uint)side,
             PixelFormat.Red, PixelType.UnsignedByte, pixels);
+    }
+
+    private void Widen(BlurStrength strength)
+    {
+        if (strength.Iterations > _widest.Iterations)
+        {
+            _widest = strength;
+        }
+
+        if (_widest.Iterations > _depth)
+        {
+            _depth = _widest.Iterations;
+            DropPyramids();
+        }
     }
 
     private void DropPyramids()

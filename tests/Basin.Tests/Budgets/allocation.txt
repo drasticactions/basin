@@ -103,3 +103,5 @@ client-managed exact    wm-chrome-repaint              3200
 client-managed exact    wm-input-round               180800
 server     ceiling  quill-frame-repaint           57600
 server     ceiling  quill-frame-repaint-vk        57600
+server     exact    blur-region-commit            10400
+server-managed exact    blur-region-commit            10400

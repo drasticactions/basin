@@ -13,6 +13,4 @@ public interface IBackdropBlur : IBackdropEffect, IBackgroundEffects, IDisposabl
     int ExpandSize { get; }
 
     void SetSurface(object key, in BlurSurfaceOptions options);
-
-    bool ForgetSurface(object key);
 }

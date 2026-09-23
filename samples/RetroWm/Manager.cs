@@ -87,6 +87,7 @@ internal sealed class Manager
         _session.PointerRequest += OnPointerRequest;
         _reload = new WmReloadSignal(wm);
         _reload.Reload += OnReload;
+        WarnWithoutBlur();
         if (wm is { Compositor: { } compositor, Shm: { } shm })
         {
             _compositor = compositor;
@@ -279,6 +280,7 @@ internal sealed class Manager
 
             if (dock.Render(_dockEntries, scale))
             {
+                dock.Blur(_wm.BackgroundEffects, Theme.Blur);
                 dock.Commit();
             }
         }
@@ -1092,9 +1094,21 @@ internal sealed class Manager
             mw.Height + top + bottom);
     }
 
+    private bool _blurWarned;
+
+    private void WarnWithoutBlur()
+    {
+        if (Theme.Blur && !_wm.BackgroundEffects.Supported && !_blurWarned)
+        {
+            _blurWarned = true;
+            _log.Warn($"[ui] blur is set, but the compositor offers no ext-background-effect blur, so nothing is blurred");
+        }
+    }
+
     private void OnReload()
     {
         _config = Config.Load(_noConfig, _log);
+        WarnWithoutBlur();
         _log.Info($"configuration reloaded");
 
         foreach (var (_, binding) in _bindings)

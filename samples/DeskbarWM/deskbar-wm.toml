@@ -37,6 +37,7 @@ haiku-directory = ""      # a directory of .hvif files; themed icons otherwise
 flavor = "haiku"          # "haiku" | "r5"
 tab-color = "#ffcb00"
 font-size = 12
+blur = 0                  # blur behind the Deskbar, tabs and Twitcher; 0 is off
 
 [focus]
 mode = "click"            # "click" | "follow-mouse" | "follow-mouse-warping"

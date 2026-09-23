@@ -60,6 +60,13 @@ public sealed partial class MetacityPainter
         var leftEdge = new Box(0, borders.Top, borders.Left, height - borders.Top - borders.Bottom);
         var rightEdge = new Box(width - borders.Right, borders.Top, borders.Right, leftEdge.Height);
         var bottomEdge = new Box(0, height - borders.Bottom, width, borders.Bottom);
+        if (style.WindowBackground is { } background)
+        {
+            var fill = Resources.Fill;
+            fill.Color = new SKColor(background.Resolve(Palette).ToArgb32()).WithAlpha(style.WindowBackgroundAlpha);
+            canvas.DrawRect(Rect(new Box(0, 0, width, height)), fill);
+        }
+
         var titlebarMiddle = new Box(
             leftTitlebarEdge.Right,
             topTitlebarEdge.Bottom,
@@ -731,10 +738,9 @@ public sealed partial class MetacityPainter
             return;
         }
 
-        var r = Math.Sqrt(corner) + corner;
         for (var i = 0; i < corner; i++)
         {
-            var rowWidth = (int)Math.Floor(0.5 + r - Math.Sqrt(r * r - (r - (i + 0.5)) * (r - (i + 0.5))));
+            var rowWidth = RoundedRegion.MarcoInset(corner, i);
             if (rowWidth <= 0)
             {
                 continue;

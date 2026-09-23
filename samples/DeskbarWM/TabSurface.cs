@@ -27,6 +27,8 @@ internal sealed class TabSurface : IDisposable
     private LookFlavor _lastFlavor;
     private Rect _lastTabRect;
     private string? _lastStrip;
+    private WmBackgroundEffects? _effects;
+    private Basin.Box _blurred;
 
     internal TabSurface(WmWindow window, WlCompositor compositor, WlShm shm, OutputScales scales)
     {
@@ -187,6 +189,24 @@ internal sealed class TabSurface : IDisposable
         return true;
     }
 
+    public void Blur(WmBackgroundEffects effects, bool on, int stripCount)
+    {
+        _effects = effects;
+        var box = !on || _metrics.FrameWidth <= 0
+            ? default
+            : stripCount > 1
+                ? new Basin.Box(0, 0, _metrics.FrameWidth, _metrics.TabHeight)
+                : new Basin.Box(_metrics.TabRect.X, 0, _metrics.TabRect.Width, _metrics.TabRect.Height);
+        if (box == _blurred)
+        {
+            return;
+        }
+
+        _blurred = box;
+        effects.SetBlurRegion(_surface, box.IsEmpty ? [] : [box]);
+        _dirty = true;
+    }
+
     public void SetOffset() =>
         _decoration.SetOffset(-_metrics.BorderWidth, -_metrics.BorderWidth - _metrics.TabHeight);
 
@@ -227,6 +247,7 @@ internal sealed class TabSurface : IDisposable
         }
 
         _disposed = true;
+        _effects?.Forget(_surface);
         _slots.Dispose();
         _decoration.Dispose();
         if (!_surface.IsDestroyed)

@@ -111,6 +111,22 @@ public sealed class MetacityTheme
 
     internal void InsertDrawOpList(string name, MetacityDrawOpList list) => _drawOpLists[name] = list;
 
+    public bool HasTranslucentBackground
+    {
+        get
+        {
+            foreach (var style in _styles.Values)
+            {
+                if (style.WindowBackground is not null && style.WindowBackgroundAlpha < 255)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     internal MetacityFrameStyle? LookupStyle(string name) => _styles.GetValueOrDefault(name);
 
     internal void InsertStyle(string name, MetacityFrameStyle style) => _styles[name] = style;

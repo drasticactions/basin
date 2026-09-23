@@ -18,6 +18,7 @@ internal sealed class MetacityFrames : IDisposable
         ThemeName = config.MetacityTheme!;
         LayoutText = config.MetacityButtonLayout;
         PaletteName = config.MetacityPalette;
+        Frosted = config.MetacityBackdropBlur > 0;
         _palette = PaletteName == "dark" ? MetacityPalette.Dark : MetacityPalette.Light;
         _layout = MetacityButtonLayout.Parse(LayoutText);
         _font = new MetacityFont(frameTheme.Typeface, frameTheme.FontSize);
@@ -30,6 +31,8 @@ internal sealed class MetacityFrames : IDisposable
 
     public string PaletteName { get; }
 
+    public bool Frosted { get; }
+
     public static MetacityFrames Load(Config config, FrameTheme frameTheme)
     {
         var name = config.MetacityTheme ?? throw new MetacityThemeException("[frame.metacity] theme is not set");
@@ -38,9 +41,9 @@ internal sealed class MetacityFrames : IDisposable
 
     public bool Matches(Config config) =>
         config.MetacityTheme == ThemeName && config.MetacityButtonLayout == LayoutText && config.MetacityPalette == PaletteName
-        && _font.Size == (float)config.FontSize;
+        && _font.Size == (float)config.FontSize && (config.MetacityBackdropBlur > 0) == Frosted;
 
-    public IFrameRenderer CreateRenderer() => new MetacityFrameRenderer(_theme, _palette, _layout, _font, _resources);
+    public IFrameRenderer CreateRenderer() => new MetacityFrameRenderer(_theme, _palette, _layout, _font, _resources) { Frosted = Frosted };
 
     public void Dispose()
     {

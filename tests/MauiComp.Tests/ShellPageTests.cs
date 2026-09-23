@@ -119,6 +119,55 @@ public sealed class ShellPageTests
     }
 
     [AvaloniaFact]
+    public void A_frosted_titlebar_keeps_following_its_active_state_with_translucent_brushes()
+    {
+        var model = new TitlebarModel(() => { }, () => { }, () => { }) { Title = "basin", Active = true };
+        var page = new TitlebarPage { BindingContext = model };
+        MauiPages.Layout(page, 400, ShellTitlebar.Height);
+        var caption = MauiPages.Descendants<M.Border>(page).First();
+
+        page.Frosted = true;
+        Assert.Same(RoyaleTheme.Brush("CaptionActiveBrushFrost"), caption.Background);
+        model.Active = false;
+        Assert.Same(RoyaleTheme.Brush("CaptionInactiveBrushFrost"), caption.Background);
+
+        page.Frosted = false;
+        Assert.Same(RoyaleTheme.Brush("CaptionInactiveBrush"), caption.Background);
+        model.Active = true;
+        Assert.Same(RoyaleTheme.Brush("CaptionActiveBrush"), caption.Background);
+    }
+
+    [AvaloniaFact]
+    public void Frosted_chrome_swaps_to_the_translucent_fills_and_back()
+    {
+        var panel = new PanelPage { BindingContext = new PanelModel() };
+        panel.Frosted = true;
+        Assert.Same(RoyaleTheme.Brush("TaskbarBrushFrost"), panel.Background);
+        panel.Frosted = false;
+        Assert.Same(RoyaleTheme.Brush("TaskbarBrush"), panel.Background);
+
+        var menu = new StartMenuPage { BindingContext = new StartMenuModel(() => { }, () => { }, () => { }) };
+        menu.Frosted = true;
+        Assert.Same(RoyaleTheme.Brush("MenuBrushFrost"), MauiPages.Descendants<M.Border>(menu).First().Background);
+
+        var switcher = new SwitcherPage { BindingContext = new SwitcherModel() };
+        switcher.Frosted = true;
+        Assert.Same(RoyaleTheme.Brush("SwitcherBrushFrost"), MauiPages.Descendants<M.Border>(switcher).First().Background);
+
+        foreach (var key in new[] { "TaskbarBrushFrost", "MenuBrushFrost", "SwitcherBrushFrost", "CaptionActiveBrushFrost" })
+        {
+            Assert.True(Alpha(RoyaleTheme.Brush(key)) < 1f, $"{key} is translucent");
+        }
+    }
+
+    private static float Alpha(Microsoft.Maui.Controls.Brush brush) => brush switch
+    {
+        M.SolidColorBrush solid => solid.Color.Alpha,
+        M.GradientBrush gradient => gradient.GradientStops.Max(stop => stop.Color.Alpha),
+        _ => 1f,
+    };
+
+    [AvaloniaFact]
     public void The_start_menu_lists_programs_run_and_exit_in_order()
     {
         var actions = new List<string>();

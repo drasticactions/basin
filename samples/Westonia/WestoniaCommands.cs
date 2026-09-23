@@ -31,6 +31,9 @@ internal sealed partial class Westonia
             case ["shotraw", var path]:
                 WritePresented(path);
                 break;
+            case ["planeshot", var prefix]:
+                WritePlanes(prefix);
+                break;
             case ["where"]:
                 PrintState();
                 break;
@@ -54,6 +57,25 @@ internal sealed partial class Westonia
                 Stop();
                 break;
         }
+    }
+
+    private void WritePlanes(string prefix)
+    {
+        if (_outputs.Views.FirstOrDefault() is not { } view)
+        {
+            BasinReport.Line($"PLANESHOT {prefix} images=0");
+            return;
+        }
+
+        var chrome = new List<Basin.Host.PlaneShotChrome>();
+        var panels = 0;
+        foreach (var elements in _avalonia.Elements.Values)
+        {
+            chrome.Add(new Basin.Host.PlaneShotChrome($"panel{panels++}", null, elements.PanelSurface.Node.Node));
+        }
+
+        chrome.Add(new Basin.Host.PlaneShotChrome("switcher", null, _switcher?.Node));
+        _ = Basin.Host.PlaneShot.Write(view, _renderer, prefix, _scene, chrome);
     }
 
     private void WritePresented(string path)

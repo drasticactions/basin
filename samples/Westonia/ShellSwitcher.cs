@@ -11,6 +11,7 @@ internal sealed class ShellSwitcher : IDisposable
     private const int EntryHeight = 30;
     private const int Width = 320;
     private const int Padding = 18;
+    private const int CornerRadius = 4;
 
     private readonly AvaloniaUIHost _host;
     private readonly ShellLayers _layers;
@@ -20,6 +21,7 @@ internal sealed class ShellSwitcher : IDisposable
     private readonly List<ShellWindow> _order = [];
     private AvaloniaUISurface? _surface;
     private UISurfaceNode? _node;
+    private readonly Pixman.PixmanRegion32 _backdropRegion = new();
     private int _index;
     private bool _disposed;
 
@@ -38,6 +40,10 @@ internal sealed class ShellSwitcher : IDisposable
     public Func<double>? Scale { get; set; }
 
     public Action? Changed { get; set; }
+
+    public IBackdropEffect? Backdrop { get; set; }
+
+    public SceneBuffer? Node => _node?.Node;
 
     public void Open()
     {
@@ -94,6 +100,10 @@ internal sealed class ShellSwitcher : IDisposable
         var y = area.Y + ((area.Height - height) / 2);
         _surface.SetPosition(x, y);
         _node.SetPosition(x, y);
+        if (Backdrop is { } backdrop && RoundedRegion.Fill(_backdropRegion, Width, height, CornerRadius))
+        {
+            _node.Node.SetBackdropEffect(backdrop, _backdropRegion, _node.Node);
+        }
 
         IsOpen = true;
         _index = 1;
@@ -143,6 +153,7 @@ internal sealed class ShellSwitcher : IDisposable
     {
         _disposed = true;
         Close();
+        _backdropRegion.Dispose();
     }
 
     private void Close()

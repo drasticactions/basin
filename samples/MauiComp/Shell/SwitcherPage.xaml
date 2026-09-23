@@ -8,7 +8,8 @@
   <ContentPage.Resources>
     <shell:BrushSwitchConverter x:Key="SelectedBrush" TrueKey="HighlightBrush" FalseKey="TransparentBrush" />
   </ContentPage.Resources>
-  <Border Background="{StaticResource SwitcherBrush}"
+  <Border x:Name="SwitcherFrame"
+          Background="{StaticResource SwitcherBrush}"
           Stroke="{StaticResource RoyaleHighlight}"
           StrokeThickness="1"
           StrokeShape="RoundRectangle 3"

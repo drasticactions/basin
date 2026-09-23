@@ -34,6 +34,8 @@ internal sealed class TitlebarSurface : IDisposable
     private FrameStyle _lastStyle;
     private TitlebarButton? _lastHovered;
     private bool _lastLeftDown;
+    private WmBackgroundEffects? _effects;
+    private Basin.Box _blurred;
 
     internal TitlebarSurface(WmWindow window, WlCompositor compositor, WlShm shm, OutputScales scales)
     {
@@ -226,6 +228,20 @@ internal sealed class TitlebarSurface : IDisposable
         return true;
     }
 
+    public void Blur(WmBackgroundEffects effects, bool on)
+    {
+        _effects = effects;
+        var box = on && _width > 0 ? new Basin.Box(0, 0, _width, _borderWidth + Theme.TitlebarHeight) : default;
+        if (box == _blurred)
+        {
+            return;
+        }
+
+        _blurred = box;
+        effects.SetBlurRegion(_surface, box.IsEmpty ? [] : [box]);
+        _dirty = true;
+    }
+
     public void SetOffset(int swallowTop) =>
         _decoration.SetOffset(-_borderWidth, -_borderWidth - Theme.TitlebarHeight + swallowTop);
 
@@ -282,6 +298,7 @@ internal sealed class TitlebarSurface : IDisposable
         }
 
         _disposed = true;
+        _effects?.Forget(_surface);
         _slots.Dispose();
 
         _decoration.Dispose();

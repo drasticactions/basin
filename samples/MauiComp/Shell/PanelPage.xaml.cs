@@ -12,6 +12,18 @@ public partial class PanelPage
 
     public double StartButtonWidth => LauncherButton.Width;
 
+    private bool _frosted;
+
+    public bool Frosted
+    {
+        get => _frosted;
+        set
+        {
+            _frosted = value;
+            Background = RoyaleTheme.Brush(value ? "TaskbarBrushFrost" : "TaskbarBrush");
+        }
+    }
+
     public Microsoft.Maui.Graphics.Rect? TaskBox(TaskEntry entry)
     {
         foreach (var border in Descendants<Border>(this))

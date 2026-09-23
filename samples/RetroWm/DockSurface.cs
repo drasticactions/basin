@@ -13,6 +13,8 @@ internal sealed class DockSurface : IDisposable
     private const int LabelGap = 2;
 
     private readonly ManagerSurface _surface;
+    private WmBackgroundEffects? _effects;
+    private Basin.Box _blurred;
     private readonly List<(ManagedWindow Window, Rect Cell)> _layout = [];
     private readonly List<DockEntry> _drawn = [];
     private int _drawnScale = -1;
@@ -113,11 +115,27 @@ internal sealed class DockSurface : IDisposable
         return true;
     }
 
+    public void Blur(WmBackgroundEffects effects, bool on)
+    {
+        _effects = effects;
+        var size = _surface.ConfiguredSize;
+        var box = on && size.Width > 0 ? new Basin.Box(0, 0, size.Width, Theme.DockHeight) : default;
+        if (box != _blurred)
+        {
+            _blurred = box;
+            effects.SetBlurRegion(_surface.Surface, box.IsEmpty ? [] : [box]);
+        }
+    }
+
     public void Commit() => _surface.Commit();
 
     public void Invalidate() => _drawnScale = -1;
 
-    public void Dispose() => _surface.Dispose();
+    public void Dispose()
+    {
+        _effects?.Forget(_surface.Surface);
+        _surface.Dispose();
+    }
 
     private bool Dirty(IReadOnlyList<DockEntry> entries, int width, int scale)
     {

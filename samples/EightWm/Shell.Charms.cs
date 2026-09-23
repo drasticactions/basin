@@ -12,7 +12,10 @@ internal sealed partial class Shell
 
     private void AttachCharms(ShellView view)
     {
-        view.Charms = new CharmsBar(UIHost, view.CharmsFrame, view.CharmsClockFrame, view.CharmsPaneFrame);
+        view.Charms = new CharmsBar(UIHost, view.CharmsFrame, view.CharmsClockFrame, view.CharmsPaneFrame)
+        {
+            Backdrop = _charmsBlur,
+        };
         view.DimRect = new SceneRect(view.DimFrame, 1, 1, DimColor) { Enabled = false };
     }
 

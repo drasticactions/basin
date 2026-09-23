@@ -32,6 +32,12 @@ internal sealed class Session : IDisposable
         info.ArgumentList.Add("headless");
         info.ArgumentList.Add("--renderer");
         info.ArgumentList.Add(renderer);
+        if (Array.IndexOf(extra, "--config") < 0)
+        {
+            info.ArgumentList.Add("--config");
+            info.ArgumentList.Add("false");
+        }
+
         foreach (var argument in extra)
         {
             info.ArgumentList.Add(argument);
@@ -52,6 +58,8 @@ internal sealed class Session : IDisposable
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
     }
+
+    public int Id => _process.Id;
 
     public static string? Locate(string name)
     {

@@ -72,6 +72,8 @@ internal sealed partial class TinyComp :
     private QuillDemo? _quillDemo;
     private FrameHosts? _frameHosts;
     private bool _quillBlurClamped;
+    private bool _metacityBlurClamped;
+    private bool _metacityOpaqueWarned;
     private Basin.Frames.Quill.QuillFrameTheme? _quillTheme;
     private FrameStyle _frameStyle;
     private FrameTheme? _frameTheme;
@@ -172,28 +174,56 @@ internal sealed partial class TinyComp :
         return _quillHost;
     }
 
-    internal IBackdropEffect? FrameBackdropEffect(IFrameRenderer renderer)
+    internal void ApplyFrameBackdrop(Frame frame, IFrameRenderer renderer)
     {
-        if (_blurEffect is not IBackdropBlur blur || renderer is not Basin.Frames.Quill.QuillFrameRenderer quill
-            || !quill.Theme.Frosted)
+        if (_blurEffect is not { } blur)
         {
-            return null;
+            return;
         }
 
-        var asked = (int)Math.Round(_config.QuillBackdropBlur);
-        var strength = Math.Clamp(asked, 1, Basin.Effects.BlurStrength.Steps);
-        if (asked != strength && !_quillBlurClamped)
+        int strength;
+        if (renderer is Basin.Frames.Quill.QuillFrameRenderer { Theme.Frosted: true })
         {
-            _quillBlurClamped = true;
-            _log.Warn($"[frame.quill] backdrop_blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {strength}");
+            var asked = (int)Math.Round(_config.QuillBackdropBlur);
+            strength = Math.Clamp(asked, 1, Basin.Effects.BlurStrength.Steps);
+            if (asked != strength && !_quillBlurClamped)
+            {
+                _quillBlurClamped = true;
+                _log.Warn($"[frame.quill] backdrop_blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {strength}");
+            }
+        }
+        else if (renderer is Basin.Frames.Metacity.MetacityFrameRenderer { Frosted: true } metacity)
+        {
+            var asked = (int)Math.Round(_config.MetacityBackdropBlur);
+            strength = Math.Clamp(asked, 1, Basin.Effects.BlurStrength.Steps);
+            if (asked != strength && !_metacityBlurClamped)
+            {
+                _metacityBlurClamped = true;
+                _log.Warn($"[frame.metacity] backdrop_blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {strength}");
+            }
+
+            if (!_metacityOpaqueWarned && !metacity.Painter.Theme.HasTranslucentBackground)
+            {
+                _metacityOpaqueWarned = true;
+                _log.Warn($"[frame.metacity] backdrop_blur is set, but the {metacity.Painter.Theme.Name} theme sets no window_background_alpha, so its frames are opaque and hide the blur");
+            }
+        }
+        else
+        {
+            return;
         }
 
-        if (blur.Options.Strength != strength)
-        {
-            blur.Options = blur.Options with { Strength = strength };
-        }
+        frame.BackdropKey = frame;
+        blur.SetSurface(frame, new BlurSurfaceOptions { Strength = strength });
+        frame.BackdropEffect = blur;
+    }
 
-        return blur;
+    internal void ForgetFrameBackdrop(Frame? frame)
+    {
+        if (frame is not null)
+        {
+            _blurEffect?.ForgetSurface(frame);
+        }
     }
 
     private FrameTheme FrameThemeOrLoad() => _frameTheme ??= new FrameTheme((float)_config.FontSize);
@@ -247,10 +277,9 @@ internal sealed partial class TinyComp :
     private readonly List<IAllocator> _secondaryAllocators = [];
     private readonly List<Basin.Render.Vulkan.VulkanDeviceBlitter> _blitters = [];
 
-    private IBackdropEffect? _blurEffect;
+    private IBackdropBlur? _blurEffect;
     private IPixelShader? _fireShader;
     private int _cornerRadius;
-    private Basin.Desktop.BackgroundEffectManager _backgroundEffects = null!;
     private CrossDeviceImportCache? _blitCache;
     private readonly List<Window> _windows = [];
     private readonly string _socket;
@@ -585,17 +614,10 @@ internal sealed partial class TinyComp :
             _services.Use(frames);
         }
 
-        if (_renderer is Basin.Render.Vulkan.VulkanRenderer vulkanRenderer)
+        if (BackdropBlurs.For(_renderer) is { } blur)
         {
-            var vulkanBlur = new VulkanBackdropBlur(vulkanRenderer.Device);
-            _blurEffect = vulkanBlur;
-            _services.Use<Basin.Capabilities.IBackgroundEffects>(vulkanBlur);
-        }
-        else if (_renderer is Basin.Render.Gl.GlRenderer glRenderer)
-        {
-            var glBlur = new GlBackdropBlur(glRenderer.Device);
-            _blurEffect = glBlur;
-            _services.Use<Basin.Capabilities.IBackgroundEffects>(glBlur);
+            _blurEffect = blur;
+            _services.Use<Basin.Capabilities.IBackgroundEffects>(blur);
         }
 
         _rendererName = rendererName;
@@ -743,7 +765,11 @@ internal sealed partial class TinyComp :
             request.Create(seat => new Basin.Desktop.SceneSeatInput(seat, _scene, _layout));
         transientSeats.SeatCreated += seat => BasinReport.Line($"SEAT {seat.Name}");
         _kdeDecorations = _services.Require<Basin.Desktop.KdeServerDecorationManager>();
-        _backgroundEffects = _services.Require<Basin.Desktop.BackgroundEffectManager>();
+        if (_blurEffect is not null)
+        {
+            _scene.SurfaceBackdrop = new Basin.Desktop.BackgroundBlurDriver(
+                _services.Require<Basin.Desktop.BackgroundEffectManager>(), _blurEffect);
+        }
         _kdeDecorations.ModeRequested += (surface, mode) =>
             RecordDecorationPreference(surface, mode == Basin.Desktop.KdeServerDecorationManager.DecorationMode.Server);
         _services.Require<XdgToplevelIconManager>().IconChanged +=
@@ -901,12 +927,6 @@ internal sealed partial class TinyComp :
                     view.Scheduler?.ScheduleRepaint();
                 }
             }
-
-            if (_blurEffect is not null && _backgroundEffects.BlurRegionOf(surface) is not null &&
-                SceneSurfaceOf(surface) is { } effectScene)
-            {
-                ApplyBlur(effectScene);
-            }
         };
 
         _shell.NewToplevel += toplevel =>
@@ -1051,7 +1071,8 @@ internal sealed partial class TinyComp :
         _shader.Dispose();
         _shadowTexture?.Dispose();
         _dimShader?.Dispose();
-        (_blurEffect as IDisposable)?.Dispose();
+        _scene.SurfaceBackdrop = null;
+        _blurEffect?.Dispose();
         foreach (var shader in _cornerShaders.Values)
         {
             shader.Dispose();

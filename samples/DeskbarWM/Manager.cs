@@ -110,6 +110,7 @@ internal sealed class Manager
         _session.PointerRequest += OnPointerRequest;
         _reload = new WmReloadSignal(wm);
         _reload.Reload += OnReload;
+        WarnWithoutBlur();
         if (wm is { Compositor: { } compositor, Shm: { } shm })
         {
             _compositor = compositor;
@@ -519,6 +520,7 @@ internal sealed class Manager
             }
 
             tab.UpdateInputRegion(_compositor, strip?.Count ?? 0);
+            tab.Blur(_wm.BackgroundEffects, Theme.Blur, strip?.Count ?? 0);
 
             var rendered = tab.Render(
                 mw.Window.Title,
@@ -585,6 +587,7 @@ internal sealed class Manager
             var scale = _scales?.ScaleForName(output.WlOutputName) ?? 1;
             if (bar.Render(_entryScratch, scale, _config))
             {
+                bar.Blur(_wm.BackgroundEffects, Theme.Blur);
                 bar.Commit();
             }
         }
@@ -2232,6 +2235,7 @@ internal sealed class Manager
         var scale = _scales?.ScaleForName(_switcherSurface.Output.WlOutputName) ?? 1;
         if (_switcherSurface.Render(state, _icons, scale))
         {
+            _switcherSurface.Blur(_wm.BackgroundEffects, Theme.Blur);
             _switcherSurface.Commit();
         }
     }
@@ -2681,9 +2685,21 @@ internal sealed class Manager
         }
     }
 
+    private bool _blurWarned;
+
+    private void WarnWithoutBlur()
+    {
+        if (Theme.Blur && !_wm.BackgroundEffects.Supported && !_blurWarned)
+        {
+            _blurWarned = true;
+            _log.Warn($"[look] blur is set, but the compositor offers no ext-background-effect blur, so nothing is blurred");
+        }
+    }
+
     private void OnReload()
     {
         _config = Config.Load(_noConfig, _log);
+        WarnWithoutBlur();
         _log.Info($"configuration reloaded");
         Desktop.Invalidate();
 

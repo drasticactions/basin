@@ -10,6 +10,7 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
     private VulkanDeviceImage? _dmabuf;
     private Image _cpuImage;
     private DeviceMemory _cpuMemory;
+    private ImageView _backdropView;
 
     private SkiaVulkanTarget(VulkanDevice device) => _device = device;
 
@@ -99,6 +100,25 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
         return target;
     }
 
+    public ImageView BackdropView()
+    {
+        if (_backdropView.Handle != 0)
+        {
+            return _backdropView;
+        }
+
+        var viewInfo = new ImageViewCreateInfo
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = Image,
+            ViewType = ImageViewType.Type2D,
+            Format = Format.B8G8R8A8Unorm,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        VulkanDevice.Check(_device.Api.CreateImageView(_device.Device, in viewInfo, null, out _backdropView), "vkCreateImageView(skia backdrop)");
+        return _backdropView;
+    }
+
     public void ReadInto(IBuffer buffer)
     {
         if (!buffer.BeginDataAccess(BufferDataAccess.Write, out var view))
@@ -130,6 +150,12 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
         if (BackendTarget is not null)
         {
             SkiaCensus.Release(BackendTarget);
+        }
+
+        if (_backdropView.Handle != 0)
+        {
+            vk.DestroyImageView(device.Device, _backdropView, null);
+            _backdropView = default;
         }
 
         _dmabuf?.Dispose();

@@ -1,5 +1,6 @@
 using Basin.Capabilities;
 using Basin.UI.Skia;
+using Pixman;
 using SkiaSharp;
 
 namespace Basin.Frames.Metacity;
@@ -15,6 +16,7 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
     private readonly MetacityFrameGeometry _geometry = new();
     private bool _laidOut;
     private bool _shaded;
+    private bool _translucent;
 
     public MetacityFrameRenderer(MetacityPainter painter)
     {
@@ -31,7 +33,39 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
 
     public MetacityFrameGeometry Geometry => _geometry;
 
-    public bool OpaqueChrome => !_laidOut || (!_geometry.HasRoundedCorner && !_shaded);
+    public bool Frosted { get; set; }
+
+    public bool OpaqueChrome => !_laidOut || (!_geometry.HasRoundedCorner && !_shaded && !Frosted && !_translucent);
+
+    public bool BackdropRegion(in FrameState state, double scale, PixmanRegion32 into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        into.Clear();
+        if (!Frosted || !_laidOut)
+        {
+            return false;
+        }
+
+        Span<int> topLeft = stackalloc int[Math.Clamp(_geometry.TopLeftRadius, 0, MaxCornerRows)];
+        Span<int> topRight = stackalloc int[Math.Clamp(_geometry.TopRightRadius, 0, MaxCornerRows)];
+        Span<int> bottomLeft = stackalloc int[Math.Clamp(_geometry.BottomLeftRadius, 0, MaxCornerRows)];
+        Span<int> bottomRight = stackalloc int[Math.Clamp(_geometry.BottomRightRadius, 0, MaxCornerRows)];
+        MarcoCurve(_geometry.TopLeftRadius, topLeft);
+        MarcoCurve(_geometry.TopRightRadius, topRight);
+        MarcoCurve(_geometry.BottomLeftRadius, bottomLeft);
+        MarcoCurve(_geometry.BottomRightRadius, bottomRight);
+        return RoundedRegion.Fill(into, _geometry.Width, _geometry.Height, topLeft, topRight, bottomLeft, bottomRight);
+    }
+
+    private const int MaxCornerRows = 64;
+
+    private static void MarcoCurve(int corner, Span<int> rows)
+    {
+        for (var i = 0; i < rows.Length; i++)
+        {
+            rows[i] = RoundedRegion.MarcoInset(corner, i);
+        }
+    }
 
     public FrameInsets Measure(in FrameState state, double scale) =>
         _painter.Measure(new MetacityFrameInput(state, default));
@@ -42,6 +76,7 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
         var input = new MetacityFrameInput(state, interaction);
         _laidOut = _painter.Layout(input, clientBox.Width, clientBox.Height, _geometry);
         _shaded = state.Shaded;
+        _translucent = _painter.StyleFor(input) is { WindowBackground: not null, WindowBackgroundAlpha: < 255 };
         var canvas = skia.BeginDraw();
         try
         {

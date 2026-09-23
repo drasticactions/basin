@@ -172,4 +172,36 @@
   </Style>
   <SolidColorBrush x:Key="TransparentBrush" Color="Transparent" />
 
+
+  <LinearGradientBrush x:Key="CaptionActiveBrushFrost" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#808983ED" Offset="0.00" />
+    <GradientStop Color="#807C64EA" Offset="0.14" />
+    <GradientStop Color="#80745AE1" Offset="0.46" />
+    <GradientStop Color="#805539D2" Offset="0.50" />
+    <GradientStop Color="#80592CB1" Offset="0.92" />
+    <GradientStop Color="#804F2594" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="CaptionInactiveBrushFrost" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#809590E6" Offset="0.00" />
+    <GradientStop Color="#808A83DD" Offset="0.30" />
+    <GradientStop Color="#806E59CB" Offset="0.52" />
+    <GradientStop Color="#806E4FB7" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="TaskbarBrushFrost" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#80A599F1" Offset="0.00" />
+    <GradientStop Color="#808983ED" Offset="0.07" />
+    <GradientStop Color="#807157DF" Offset="0.50" />
+    <GradientStop Color="#805739D0" Offset="0.53" />
+    <GradientStop Color="#80592CB1" Offset="0.93" />
+    <GradientStop Color="#804F2594" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <LinearGradientBrush x:Key="SwitcherBrushFrost" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#99F7F5FB" Offset="0.00" />
+    <GradientStop Color="#99ECE9F0" Offset="1.00" />
+  </LinearGradientBrush>
+
+  <SolidColorBrush x:Key="MenuBrushFrost" Color="#99FFFFFF" />
 </ResourceDictionary>

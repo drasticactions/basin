@@ -10,6 +10,8 @@ public readonly record struct BlurSurfaceOptions
 
     public bool Blur { get; init; } = true;
 
+    public int? Strength { get; init; }
+
     public BlurCorners Corners { get; init; } = default;
 
     public double Opacity { get; init; } = 1.0;

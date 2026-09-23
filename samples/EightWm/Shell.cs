@@ -16,6 +16,7 @@ internal sealed partial class Shell : IDisposable
     private readonly BasinLogger _log;
 
     private readonly IRenderer _renderer;
+    private readonly Basin.Effects.IBackdropBlur? _charmsBlur;
     private readonly IAllocator? _deviceAllocator;
     private readonly Basin.Host.BasinHost _host;
     private readonly OutputLayout _layout = new();
@@ -73,6 +74,7 @@ internal sealed partial class Shell : IDisposable
 
         var stack = CreateStack(options.Renderer, log);
         _renderer = stack.Renderer;
+        _charmsBlur = Basin.Effects.BackdropBlurs.For(_renderer);
         _deviceAllocator = stack.DeviceAllocator;
 
         _host = Basin.Host.BasinHost.Create(
@@ -378,6 +380,7 @@ internal sealed partial class Shell : IDisposable
         _seat.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
+        _charmsBlur?.Dispose();
         _services.Dispose();
         _deviceAllocator?.Dispose();
         _host.Dispose();

@@ -21,6 +21,7 @@
     <AdditionalFiles Include="$(RiverProtocolDir)river-xkb-config-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)stable/tablet/tablet-v2.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
     <AdditionalFiles Include="$(WaylandProtocolsDir)staging/cursor-shape/cursor-shape-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
+    <AdditionalFiles Include="$(WaylandProtocolsDir)staging/ext-background-effect/ext-background-effect-v1.xml" WaylandNamespace="Basin.WindowManager.Protocol" />
   </ItemGroup>
 
 </Project>

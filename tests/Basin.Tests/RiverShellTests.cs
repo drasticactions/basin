@@ -1769,9 +1769,11 @@ internal sealed class RiverFixture : IDisposable
         int width = 160,
         int height = 120,
         uint managementCap = uint.MaxValue,
-        uint bindingsCap = uint.MaxValue)
+        uint bindingsCap = uint.MaxValue,
+        Action<CompositorTestHost>? beforeConnect = null)
     {
         Host = new CompositorTestHost(width, height);
+        beforeConnect?.Invoke(Host);
         _windowTree = new SceneTree(Host.Scene.Root);
         Server = new RiverWindowManager(
             Host.Display, Host.Loop, Host.Scene, _windowTree, Host.Shell, Host.Layout, [Host.Seat]);

@@ -96,6 +96,8 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
 
     public IBackdropEffect? BackdropEffect { get; set; }
 
+    public object? BackdropKey { get; set; }
+
     public SceneTree? MenuLayer { get; set; }
 
     public Box MenuConstraint { get; set; }
@@ -324,7 +326,7 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
             }
 
             _stripBackdrop.Translate(-box.X, -box.Y);
-            strip.SetBackdropEffect(BackdropEffect, _stripBackdrop, strip);
+            strip.SetBackdropEffect(BackdropEffect, _stripBackdrop, BackdropKey ?? strip);
         }
     }
 

@@ -1,0 +1,10 @@
+theme      = "light"      # light | dark
+background = ""           # an image behind the windows; empty for none
+
+# Backdrop blur behind the chrome.
+[blur]
+strength   = 5            # 1 to 15
+taskbar    = false
+start_menu = true
+switcher   = true
+titlebars  = false

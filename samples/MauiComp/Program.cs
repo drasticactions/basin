@@ -25,13 +25,38 @@ internal static class Program
             Description = "an image to draw behind the windows, on every output",
             HelpName = "PATH",
         });
+        var configPath = cli.Add(CommonOptions.Config("maui-comp"));
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
+
+        var settings = new MauiCompConfig();
+        string? fatal = null;
+        cli.Prepare(result =>
+        {
+            cli.ConfigureLogging(result);
+            settings = MauiCompConfig.Load(result.GetValue(configPath), BasinLog.For("MauiComp"), out fatal);
+            settings.Theme = BasinCommand.Effective(result, theme, settings.Theme, settings.FromFile.Contains("theme"))!;
+            settings.Background = BasinCommand.Effective(result, background, settings.Background, settings.FromFile.Contains("background"));
+            if (result.GetResult(theme) is not (null or { Implicit: true }))
+            {
+                settings.FromFlags.Add("theme");
+            }
+
+            if (result.GetResult(background) is not (null or { Implicit: true }))
+            {
+                settings.FromFlags.Add("background");
+            }
+        });
 
         return cli.Run(args, result =>
         {
             var chosen = result.GetValue(backend);
-            cli.ConfigureLogging(result);
+            if (fatal is { } failure)
+            {
+                BasinLog.For("MauiComp").Error($"{failure}");
+                return 1;
+            }
+
             var options = new MauiCompOptions
             {
                 Backend = chosen.Kind,
@@ -40,10 +65,12 @@ internal static class Program
                 Scales = result.GetValue(scales)!,
                 Frames = result.GetValue(frames),
                 Screenshot = result.GetValue(screenshot),
-                Background = result.GetValue(background),
-                Theme = result.GetValue(theme) == "dark"
+                Background = settings.Background,
+                Theme = settings.Theme == "dark"
                     ? Basin.UI.Avalonia.UIThemeVariant.Dark
                     : Basin.UI.Avalonia.UIThemeVariant.Light,
+                ConfigPath = result.GetValue(configPath),
+                Config = settings,
                 SocketFd = chosen.SocketFd,
             };
 

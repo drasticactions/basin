@@ -31,6 +31,8 @@ internal sealed class ShellOutputs : IDisposable
 
     public event Action<PanelModel>? PanelCreated;
 
+    public Func<IBackdropEffect?>? PanelBackdrop { get; set; }
+
     public void Create(IOutput output, in Box box, double scale)
     {
         if (_disposed || _elements.ContainsKey(output))
@@ -54,8 +56,10 @@ internal sealed class ShellOutputs : IDisposable
             elements.BackgroundScope = _surfaces.Attach(
                 (AvaloniaUISurface)surface, new BackgroundPage { BindingContext = elements.Background });
         elements.PanelSurface.Realized += surface =>
-            elements.PanelScope = _surfaces.Attach(
-                (AvaloniaUISurface)surface, new PanelPage { BindingContext = elements.Panel });
+        {
+            elements.PanelPage = new PanelPage { BindingContext = elements.Panel };
+            elements.PanelScope = _surfaces.Attach((AvaloniaUISurface)surface, elements.PanelPage);
+        };
         PanelCreated?.Invoke(elements.Panel);
         Place(output, box, scale);
     }
@@ -68,7 +72,26 @@ internal sealed class ShellOutputs : IDisposable
         }
 
         elements.BackgroundSurface.Place(box, scale);
-        elements.PanelSurface.Place(box, scale);
+        if (!elements.PanelSurface.Place(box, scale))
+        {
+            return;
+        }
+
+        var panel = elements.PanelSurface.Node;
+        if (PanelBackdrop?.Invoke() is { } backdrop)
+        {
+            using var region = new Pixman.PixmanRegion32(0, 0, (uint)panel.Width, (uint)panel.Height);
+            panel.Node.SetBackdropEffect(backdrop, region, panel.Node);
+        }
+        else
+        {
+            panel.Node.SetBackdropEffect(null, null);
+        }
+
+        if (elements.PanelPage is { } page && page.Frosted != panel.Node.BackdropEffect is not null)
+        {
+            page.Frosted = panel.Node.BackdropEffect is not null;
+        }
     }
 
     public void Remove(IOutput output)

@@ -12,6 +12,8 @@ public sealed class WestonShellSection
 
     public uint PanelColor { get; set; } = 0x90000000;
 
+    public int PanelBlur { get; set; }
+
     public PanelPosition PanelPosition { get; set; } = PanelPosition.Top;
 
     public bool Locking { get; set; } = true;

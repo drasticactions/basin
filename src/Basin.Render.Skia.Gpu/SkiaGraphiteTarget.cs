@@ -15,6 +15,7 @@ public sealed unsafe class SkiaGraphiteTarget : IDisposable
     private Silk.NET.Vulkan.Buffer _readback;
     private DeviceMemory _readbackMemory;
     private void* _readbackMapped;
+    private ImageView _backdropView;
 
     private SkiaGraphiteTarget(VulkanDevice device) => _device = device;
 
@@ -131,6 +132,25 @@ public sealed unsafe class SkiaGraphiteTarget : IDisposable
         return target;
     }
 
+    internal ImageView BackdropView()
+    {
+        if (_backdropView.Handle != 0)
+        {
+            return _backdropView;
+        }
+
+        var viewInfo = new ImageViewCreateInfo
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = Image,
+            ViewType = ImageViewType.Type2D,
+            Format = Format.B8G8R8A8Unorm,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        VulkanDevice.Check(_device.Api.CreateImageView(_device.Device, in viewInfo, null, out _backdropView), "vkCreateImageView(graphite backdrop)");
+        return _backdropView;
+    }
+
     public void ReadInto(IBuffer buffer)
     {
         _device.SubmitImmediate(
@@ -214,6 +234,12 @@ public sealed unsafe class SkiaGraphiteTarget : IDisposable
         if (BackendTexture is not null)
         {
             SkiaCensus.Release(BackendTexture);
+        }
+
+        if (_backdropView.Handle != 0)
+        {
+            vk.DestroyImageView(device.Device, _backdropView, null);
+            _backdropView = default;
         }
 
         _dmabuf?.Dispose();

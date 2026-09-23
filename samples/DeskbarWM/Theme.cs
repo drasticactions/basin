@@ -32,6 +32,8 @@ internal static class Theme
 
     public static float FontSize { get; private set; } = 12f;
 
+    public static bool Blur { get; private set; }
+
     public static void Reset()
     {
         Flavor = LookFlavor.Haiku;
@@ -60,6 +62,7 @@ internal static class Theme
         }
 
         FontSize = (float)look.Number("font-size", (double)FontSize);
+        Blur = look.Number("blur", Blur ? 1 : 0) > 0;
     }
 
     public static SKColor Tint(SKColor color, float tint)

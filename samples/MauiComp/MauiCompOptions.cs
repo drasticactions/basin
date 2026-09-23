@@ -22,4 +22,8 @@ internal sealed record MauiCompOptions
     public string? Screenshot { get; init; }
 
     public UIThemeVariant Theme { get; init; } = UIThemeVariant.Light;
+
+    public string? ConfigPath { get; init; }
+
+    public MauiCompConfig Config { get; init; } = new();
 }

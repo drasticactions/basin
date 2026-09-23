@@ -13,6 +13,8 @@ internal sealed class ShellTitlebar : IDisposable
 
     public const int EdgeWidth = 4;
 
+    private const int CornerRadius = 8;
+
     private static readonly RenderColor ActiveEdge = new(0x5B / 255f, 0x2A / 255f, 0xAB / 255f, 1f);
 
     private static readonly RenderColor InactiveEdge = new(0x74 / 255f, 0x4D / 255f, 0xC3 / 255f, 1f);
@@ -24,6 +26,7 @@ internal sealed class ShellTitlebar : IDisposable
     private readonly TitlebarModel _model;
     private AvaloniaUISurface? _surface;
     private UISurfaceNode? _node;
+    private TitlebarPage? _page;
     private readonly SceneRect[] _edges = new SceneRect[3];
     private bool _framed = true;
     private bool _active;
@@ -176,7 +179,8 @@ internal sealed class ShellTitlebar : IDisposable
             }
 
             _surface = created;
-            _scope = _surfaces.Attach(created, new TitlebarPage { BindingContext = _model });
+            _page = new TitlebarPage { BindingContext = _model };
+            _scope = _surfaces.Attach(created, _page);
             _node = new UISurfaceNode(_window.Tree, created, _index) { PreciseDamage = true };
             _node.Node.LowerToBottom();
             for (var i = 0; i < _edges.Length; i++)
@@ -190,8 +194,14 @@ internal sealed class ShellTitlebar : IDisposable
             _surface.Configure(width, Height, scale);
         }
 
+        var resized = width != _width;
         _width = width;
         _scale = scale;
+        if (resized || _node!.Node.BackdropEffect != Backdrop?.Invoke())
+        {
+            ApplyBackdrop();
+        }
+
         var outer = OuterBox;
         _surface.SetPosition(outer.X, outer.Y);
         _node!.SetPosition(geometry.X - Inset, geometry.Y - Height);
@@ -227,6 +237,38 @@ internal sealed class ShellTitlebar : IDisposable
         rect.SetPosition(x, y);
     }
 
+    public Func<IBackdropEffect?>? Backdrop { get; set; }
+
+    public bool Blurred => _node?.Node.BackdropEffect is not null;
+
+    public Basin.Scene.SceneBuffer? Node => _node?.Node;
+
+    private void ApplyBackdrop()
+    {
+        if (_node is null)
+        {
+            return;
+        }
+
+        if (Backdrop?.Invoke() is not { } backdrop)
+        {
+            _node.Node.SetBackdropEffect(null, null);
+        }
+        else
+        {
+            using var region = new Pixman.PixmanRegion32();
+            if (RoundedRegion.Fill(region, _width, Height, CornerRadius, RoundedCorners.Top))
+            {
+                _node.Node.SetBackdropEffect(backdrop, region, _node.Node);
+            }
+        }
+
+        if (_page is { } page)
+        {
+            page.Frosted = _node.Node.BackdropEffect is not null;
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -247,6 +289,7 @@ internal sealed class ShellTitlebar : IDisposable
         _node = null;
         _scope?.Dispose();
         _scope = null;
+        _page = null;
         _surface?.Dispose();
         _surface = null;
     }

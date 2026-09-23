@@ -11,7 +11,8 @@
     <shell:BrushSwitchConverter x:Key="CloseBrush" TrueKey="CloseButtonBrush" FalseKey="CaptionButtonInactiveBrush" />
     <shell:BrushSwitchConverter x:Key="EdgeBrush" TrueKey="CaptionEdgeBrush" FalseKey="CaptionInactiveEdgeBrush" />
   </ContentPage.Resources>
-  <Border Background="{Binding Active, Converter={StaticResource CaptionBrush}}"
+  <Border x:Name="Caption"
+          Background="{Binding Active, Converter={StaticResource CaptionBrush}}"
           Stroke="{Binding Active, Converter={StaticResource EdgeBrush}}"
           StrokeThickness="1"
           StrokeShape="RoundRectangle 8,8,0,0"

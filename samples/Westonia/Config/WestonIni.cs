@@ -344,6 +344,9 @@ public sealed class WestonIni
             case "panel-color":
                 Shell.PanelColor = Color(value, Shell.PanelColor);
                 return;
+            case "panel-blur":
+                Shell.PanelBlur = Math.Clamp(Int(value, Shell.PanelBlur), 0, Basin.Effects.BlurStrength.Steps);
+                return;
             case "panel-position":
                 Shell.PanelPosition = value switch
                 {

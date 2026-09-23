@@ -41,48 +41,8 @@ public sealed class QuillFrameRenderer : IFrameRenderer
             return false;
         }
 
-        var width = _geometry.Width;
-        var height = _geometry.Height;
-        if (width <= 0 || height <= 0)
-        {
-            return false;
-        }
-
-        var radius = (int)Math.Round(Math.Min(_theme.CornerRadius, Math.Min(width, height) / 2.0));
-        if (radius <= 0)
-        {
-            into.UnionRect(into, 0, 0, (uint)width, (uint)height);
-            return true;
-        }
-
-        for (var y = 0; y < radius; y++)
-        {
-            AddCornerRow(into, width, y, Inset(radius, y));
-            AddCornerRow(into, width, height - 1 - y, Inset(radius, y));
-        }
-
-        var straight = height - (2 * radius);
-        if (straight > 0)
-        {
-            into.UnionRect(into, 0, radius, (uint)width, (uint)straight);
-        }
-
-        return !into.IsEmpty;
-    }
-
-    private static int Inset(int radius, int row)
-    {
-        var dy = radius - row - 0.5;
-        return (int)Math.Round(radius - Math.Sqrt((radius * radius) - (dy * dy)));
-    }
-
-    private static void AddCornerRow(PixmanRegion32 into, int width, int y, int inset)
-    {
-        var run = width - (2 * inset);
-        if (run > 0 && y >= 0)
-        {
-            into.UnionRect(into, inset, y, (uint)run, 1);
-        }
+        var radius = (int)Math.Round(Math.Max(0f, _theme.CornerRadius));
+        return RoundedRegion.Fill(into, _geometry.Width, _geometry.Height, radius);
     }
 
     public FrameInsets Measure(in FrameState state, double scale) => new(

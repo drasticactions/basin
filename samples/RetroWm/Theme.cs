@@ -53,10 +53,13 @@ internal static class Theme
 
     public static bool DockLabels { get; set; }
 
+    public static bool Blur { get; set; }
+
     static Theme() => Reset();
 
     public static void Reset()
     {
+        Blur = false;
         BorderWidth = 3;
         FontSize = 12f;
         Fonts.SetConfigured(null);
@@ -85,6 +88,7 @@ internal static class Theme
     {
         BorderWidth = Math.Max(Int(ui, "border_width") ?? BorderWidth, 1);
         FontSize = Float(ui, "font_size") ?? FontSize;
+        Blur = (Int(ui, "blur") ?? (Blur ? 1 : 0)) > 0;
         if (ui.TryGetValue("font", out var font) && font is string face)
         {
             Fonts.SetConfigured(face);

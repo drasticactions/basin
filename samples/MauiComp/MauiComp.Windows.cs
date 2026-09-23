@@ -40,6 +40,7 @@ internal sealed partial class MauiComp
             Scale = () => _outputs.Views.FirstOrDefault()?.Output.Scale ?? 1.0,
             Changed = _outputs.ScheduleAll,
             Chosen = Focus,
+            Backdrop = () => BlurWhen(_config.BlurSwitcher),
         };
 
         _startMenu = new ShellStartMenu(_ui, _mauiSurfaces, _layers.Overlay, _shellSurfaces, OpenRun, Stop)
@@ -49,6 +50,7 @@ internal sealed partial class MauiComp
             Changed = _outputs.ScheduleAll,
             Launch = Spawn,
             Programs = () => _desktop.Listable(),
+            Backdrop = () => BlurWhen(_config.BlurStartMenu),
         };
         _runDialog = new ShellRunDialog(_ui, _mauiSurfaces, _layers.Overlay, _shellSurfaces, Spawn)
         {
@@ -332,7 +334,10 @@ internal sealed partial class MauiComp
             window,
             () => window.Window.Close(),
             () => SetMaximized(window, !window.Maximized),
-            () => Minimize(window));
+            () => Minimize(window))
+        {
+            Backdrop = () => BlurWhen(_config.BlurTitlebars),
+        };
         window.Titlebar.Update(_outputs.Views.FirstOrDefault()?.Output.Scale ?? 1.0);
         window.Titlebar.SetActive(ReferenceEquals(window, _focused));
         window.Titlebar.Visible = !window.Fullscreen;

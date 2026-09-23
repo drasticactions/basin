@@ -36,6 +36,8 @@ internal sealed class CharmsBar : IDisposable
     private readonly SKFont _title;
     private readonly SKFont _body;
 
+    private readonly Pixman.PixmanRegion32 _backdropRegion = new();
+
     private int _width;
     private int _height;
     private double _scale = 1;
@@ -86,6 +88,12 @@ internal sealed class CharmsBar : IDisposable
     public string Clock { get; set; } = string.Empty;
 
     public string Date { get; set; } = string.Empty;
+
+    public IBackdropEffect? Backdrop { get; set; }
+
+    public SceneBuffer BarNode => _bar.Node;
+
+    public SceneBuffer PaneNode => _pane.Node;
 
     public void Resize(int width, int height, double scale)
     {
@@ -200,7 +208,8 @@ internal sealed class CharmsBar : IDisposable
 
         try
         {
-            canvas.Clear(new SKColor(0xf01f1f1f));
+            canvas.Clear(new SKColor(Backdrop is null ? 0xf01f1f1fu : 0xc01f1f1fu));
+            ApplyBackdrop(_bar);
             const float spacing = CharmSpacing;
             var first = (float)((box.Height / 2.0) - (spacing * ((CharmCount - 1) / 2.0)));
             var centerX = box.Width / 2f;
@@ -266,7 +275,8 @@ internal sealed class CharmsBar : IDisposable
 
         try
         {
-            canvas.Clear(new SKColor(0xf02b2b2b));
+            canvas.Clear(new SKColor(Backdrop is null ? 0xf02b2b2bu : 0xc02b2b2bu));
+            ApplyBackdrop(_pane);
             _fill.Color = SKColors.White;
             const float left = 28f;
             canvas.DrawText(
@@ -368,8 +378,22 @@ internal sealed class CharmsBar : IDisposable
         }
     }
 
+    private void ApplyBackdrop(ChromeSurface surface)
+    {
+        if (Backdrop is not { } backdrop)
+        {
+            return;
+        }
+
+        var node = surface.Node;
+        _backdropRegion.Clear();
+        _backdropRegion.UnionRect(_backdropRegion, 0, 0, (uint)surface.Width, (uint)surface.Height);
+        node.SetBackdropEffect(backdrop, _backdropRegion, node);
+    }
+
     public void Dispose()
     {
+        _backdropRegion.Dispose();
         SkiaCensus.Release(_body);
         SkiaCensus.Release(_title);
         SkiaCensus.Release(_date);

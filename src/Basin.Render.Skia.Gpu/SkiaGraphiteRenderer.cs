@@ -17,6 +17,9 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     private readonly SKPaint _paint;
     private readonly SkiaVulkanSync _sync;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
+    private readonly SkiaBackdropCopy _backdropCopy;
+    private SKGraphiteBackendTexture? _backdropCopyBackend;
+    private SKImage? _backdropCopyImage;
 
     internal readonly List<VulkanDeviceImage> ForeignThisFrame = [];
 
@@ -62,6 +65,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
         _paint = SkiaCensus.Track(new SKPaint());
         _pass = new SkiaGraphiteRenderPass(this, _paint);
         _sync = new SkiaVulkanSync(_device);
+        _backdropCopy = new SkiaBackdropCopy(_device);
     }
 
     public VulkanDevice Device => _device;
@@ -87,6 +91,53 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     public SKGraphiteRecorder Recorder => _recorder;
 
     internal SkiaVulkanSync Sync => _sync;
+
+    public bool SupportsBackdropEffects => true;
+
+    internal SkiaBackdropCopy BackdropCopy => _backdropCopy;
+
+    internal SKImage? BackdropImage(Silk.NET.Vulkan.Extent2D extent)
+    {
+        if (_backdropCopyImage is { } cached && _backdropCopy.Matches(extent))
+        {
+            return cached;
+        }
+
+        ReleaseBackdropCopy();
+        _backdropCopy.Create(extent);
+        _backdropCopyBackend = SkiaCensus.Track(SKGraphiteBackendTexture.CreateVulkan(
+            (int)extent.Width, (int)extent.Height,
+            new SKGraphiteVkTextureInfo
+            {
+                SampleCount = 1,
+                Format = (int)SkiaVulkanRenderer.VkFormatR16G16B16A16Sfloat,
+                ImageTiling = (int)SkiaVulkanRenderer.VkImageTilingOptimal,
+                ImageUsageFlags = SkiaVulkanRenderer.VkUsageRenderTarget,
+                SharingMode = 0,
+                AspectMask = 1,
+            },
+            (int)SkiaVulkanRenderer.VkImageLayoutShaderReadOnly,
+            _device.QueueFamily,
+            (nint)_backdropCopy.Image.Handle));
+        var wrapped = SKImage.FromTexture(_recorder, _backdropCopyBackend, SKColorType.RgbaF16, SKAlphaType.Premul);
+        if (wrapped is null)
+        {
+            ReleaseBackdropCopy();
+            return null;
+        }
+
+        _backdropCopyImage = SkiaCensus.Track(wrapped);
+        return _backdropCopyImage;
+    }
+
+    private void ReleaseBackdropCopy()
+    {
+        SkiaCensus.Release(_backdropCopyImage);
+        SkiaCensus.Release(_backdropCopyBackend);
+        _backdropCopyImage = null;
+        _backdropCopyBackend = null;
+        _backdropCopy.Release();
+    }
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableRgbFormats;
 
@@ -161,6 +212,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     {
         _thread.Assert();
         DropTargets();
+        ReleaseBackdropCopy();
         ColorTransforms.Dispose();
         SkiaCensus.Release(_paint);
         SkiaCensus.Release(_recorder);

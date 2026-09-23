@@ -460,6 +460,36 @@ public sealed class DegradationTests
     }
 
     [Fact]
+    public void Background_blur_on_a_renderer_without_backdrops_blurs_nothing()
+    {
+        using var host = new CompositorTestHost();
+        var blur = Basin.Effects.BackdropBlurs.For(host.Renderer);
+        Assert.Null(blur);
+        using var manager = new BackgroundEffectManager(host.Display, host.Compositor, blur);
+        var window = MappedToplevel.Map(host, host.Client);
+
+        uint? capabilities = null;
+        var proxy = Bind<Basin.Desktop.Protocol.ExtBackgroundEffectManagerV1>(
+            host, "ext_background_effect_manager_v1", 1,
+            p => p.Capabilities += (_, e) => capabilities = (uint)e.Flags);
+        host.PumpUntil(() => capabilities is not null);
+        Assert.Equal(0u, capabilities);
+
+        var effect = proxy.GetBackgroundEffect(window.Surface);
+        var region = host.Client.Compositor.CreateRegion();
+        region.Add(0, 0, 10, 10);
+        effect.SetBlurRegion(region);
+        region.Destroy();
+        window.Surface.Commit();
+        host.PumpToServer();
+        host.RenderFrame();
+
+        Assert.Null(host.Scene.SurfaceBackdrop);
+        Assert.All(host.SurfaceScenes, scene => Assert.Null(scene.Content.BackdropEffect));
+        AssertClientAlive(host);
+    }
+
+    [Fact]
     public void Fullscreen_shell_without_an_output_presents_nothing()
     {
         using var host = new CompositorTestHost();

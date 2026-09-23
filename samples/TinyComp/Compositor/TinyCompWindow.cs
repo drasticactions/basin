@@ -35,7 +35,6 @@ internal sealed partial class TinyComp
                 Tree.SetPosition(X, Y);
                 SceneSurface = new SceneSurface(Tree, toplevel.Surface);
                 comp.RefreshSurfaceLuts();
-                comp.ApplyBlur(SceneSurface);
                 comp.ApplyCorners(SceneSurface, CornerRadius);
                 comp.OnWindowMapped(this);
                 comp._effects.CancelClosing(toplevel.Surface);
@@ -54,6 +53,7 @@ internal sealed partial class TinyComp
                 _shadow = null;
                 SceneSurface?.Destroy();
                 SceneSurface = null;
+                comp.ForgetFrameBackdrop(_frame);
                 _frame?.Dispose();
                 _frame = null;
                 if (Tree is { } gone)
@@ -324,6 +324,7 @@ internal sealed partial class TinyComp
             {
                 _cornerRig?.Dispose();
                 _cornerRig = null;
+                _comp.ForgetFrameBackdrop(_frame);
                 _frame?.Dispose();
                 _frame = null;
                 if (SceneSurface is not null)
@@ -346,7 +347,7 @@ internal sealed partial class TinyComp
                 MenuLayer = _comp._layers.Overlay,
                 TouchSlop = TouchGripSlop,
             };
-            _frame.BackdropEffect = _comp.FrameBackdropEffect(renderer);
+            _comp.ApplyFrameBackdrop(_frame, renderer);
             _frame.Requested += OnFrameAction;
             _frame.Faulted += e => _comp.Log.Error($"frame fault {Toplevel.AppId}: {e.Message}");
             SceneSurface?.Tree.RaiseToTop();
@@ -368,6 +369,7 @@ internal sealed partial class TinyComp
 
             _cornerRig?.Dispose();
             _cornerRig = null;
+            _comp.ForgetFrameBackdrop(_frame);
             _frame.Dispose();
             _frame = null;
             SetDecorated(true);

@@ -56,6 +56,8 @@ internal sealed class Config
 
     public double QuillBackdropBlur { get; set; }
 
+    public double MetacityBackdropBlur { get; set; }
+
     public double QuillFrostOpacity { get; set; } = 0.44;
 
     public int CornerRadius { get; set; }
@@ -358,6 +360,7 @@ internal sealed class Config
                 MetacityTheme = metacity.Text("theme") ?? MetacityTheme;
                 MetacityButtonLayout = metacity.Text("button_layout") ?? MetacityButtonLayout;
                 MetacityPalette = metacity.Choice("palette", "light", "light", "dark");
+                MetacityBackdropBlur = metacity.Number("backdrop_blur", MetacityBackdropBlur);
             }
 
             if (frame.Section("quill") is { } quill)

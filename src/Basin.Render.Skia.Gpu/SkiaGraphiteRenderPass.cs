@@ -1,14 +1,19 @@
 using Basin.Render.Skia;
 using Basin.Capabilities;
 using Basin.Diagnostics;
+using Basin.Render.Vulkan;
 using Pixman;
+using Silk.NET.Vulkan;
 using SkiaSharp;
 
 namespace Basin.Render.Skia;
 
 internal sealed class SkiaGraphiteRenderPass : IRenderPass
 {
+    private static readonly SKSamplingOptions NearestSampling = new(SKFilterMode.Nearest);
+
     private readonly SkiaGraphiteRenderer _renderer;
+    private int _acquired;
     private readonly SKPaint _paint;
     private IBuffer? _target;
     private SkiaGraphiteTarget? _entry;
@@ -61,6 +66,80 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
         SkiaDraw.Shader(_entry!.Canvas, _paint, shader, options);
     }
 
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        if (effect is not IVulkanBackdropEffect vulkanEffect)
+        {
+            throw new ArgumentException("effect does not belong to this renderer");
+        }
+
+        if (bounds.IsEmpty)
+        {
+            return;
+        }
+
+        var entry = _entry!;
+        AcquireForeign();
+        var recording = GraphiteNative.RecorderSnap(_renderer.Recorder.Handle);
+        if (recording != 0)
+        {
+            _ = _renderer.Context.InsertRecording(new SKGraphiteInsertRecordingInfo { Recording = recording });
+            _ = _renderer.Context.Submit(new SKGraphiteSubmitInfo());
+            GraphiteNative.RecordingDelete(recording);
+        }
+
+        var extent = new Extent2D((uint)_target.Width, (uint)_target.Height);
+        var image = _renderer.BackdropImage(extent);
+        if (!_renderer.BackdropCopy.Run(
+                vulkanEffect, entry.Image, entry.BackdropView(), ImageLayout.ColorAttachmentOptimal,
+                extent, bounds, key, out var source)
+            || image is null)
+        {
+            return;
+        }
+
+        var canvas = entry.Canvas;
+        var srcRect = SKRect.Create(source.X, source.Y, source.Width, source.Height);
+        var dstRect = SKRect.Create(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        _paint.BlendMode = SKBlendMode.Src;
+        _paint.SetColor(new SKColorF(1f, 1f, 1f, 1f), null);
+        if (clip is null)
+        {
+            canvas.DrawImage(image, srcRect, dstRect, NearestSampling, _paint);
+        }
+        else
+        {
+            foreach (var band in RegionRects.Of(clip))
+            {
+                canvas.Save();
+                canvas.ClipRect(new SKRect(band.X1, band.Y1, band.X2, band.Y2), SKClipOperation.Intersect, false);
+                canvas.DrawImage(image, srcRect, dstRect, NearestSampling, _paint);
+                canvas.Restore();
+            }
+        }
+
+        _paint.BlendMode = SKBlendMode.SrcOver;
+    }
+
+    private void AcquireForeign()
+    {
+        if (_renderer.ForeignThisFrame.Count <= _acquired)
+        {
+            return;
+        }
+
+        _renderer.Device.SubmitImmediate((_renderer, _acquired), static (state, commands) =>
+        {
+            var foreign = state.Item1.ForeignThisFrame;
+            for (var i = state.Item2; i < foreign.Count; i++)
+            {
+                foreign[i].RecordForeignAcquire(commands);
+            }
+        });
+        _acquired = _renderer.ForeignThisFrame.Count;
+    }
+
     private int _scopedSubmits;
 
     public bool Submit()
@@ -90,16 +169,8 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
         _target = null;
         _entry = null;
 
-        if (_renderer.ForeignThisFrame.Count > 0)
-        {
-            _renderer.Device.SubmitImmediate(_renderer, static (renderer, commands) =>
-            {
-                foreach (var image in renderer.ForeignThisFrame)
-                {
-                    image.RecordForeignAcquire(commands);
-                }
-            });
-        }
+        AcquireForeign();
+        _acquired = 0;
 
         var recording = GraphiteNative.RecorderSnap(_renderer.Recorder.Handle);
         var inserted = SKGraphiteInsertStatus.Success;

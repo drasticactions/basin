@@ -229,6 +229,7 @@ internal sealed partial class TinyComp
         {
             _cornerRig?.Dispose();
             _cornerRig = null;
+            _comp.ForgetFrameBackdrop(_frame);
             _frame?.Dispose();
             _frame = null;
         }
@@ -266,7 +267,7 @@ internal sealed partial class TinyComp
                 MenuLayer = _comp._layers.Overlay,
                 TouchSlop = TouchGripSlop,
             };
-            _frame.BackdropEffect = _comp.FrameBackdropEffect(renderer);
+            _comp.ApplyFrameBackdrop(_frame, renderer);
             _frame.Requested += OnFrameAction;
             _frame.Faulted += e => _comp.Log.Error($"frame fault {XWin.Class}: {e.Message}");
             SceneSurface.Tree.RaiseToTop();

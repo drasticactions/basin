@@ -229,6 +229,12 @@ internal static class Program
             .With(colorPack)
             .Use<IInputSink>(injectedInput);
 
+        using var blur = Basin.Effects.BackdropBlurs.For(renderer);
+        if (blur is not null)
+        {
+            services.Use<IBackgroundEffects>(blur);
+        }
+
         Basin.Backend.Libinput.LibinputTabletSource? tablets = null;
         if (libinput is not null)
         {
@@ -251,6 +257,11 @@ internal static class Program
         }
 
         services.Freeze();
+
+        if (blur is not null)
+        {
+            scene.SurfaceBackdrop = new BackgroundBlurDriver(services.Require<BackgroundEffectManager>(), blur);
+        }
 
         var compositor = services.Require<CompositorGlobal>();
         var seat = services.Require<Basin.Seat.Seat>();

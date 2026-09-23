@@ -10,6 +10,7 @@ internal sealed class ShellSwitcher : IDisposable
 {
     private const int EntryHeight = 30;
     private const int Width = 320;
+    private const int CornerRadius = 3;
     private const int Padding = 16;
 
     private readonly AvaloniaUIHost _host;
@@ -39,6 +40,12 @@ internal sealed class ShellSwitcher : IDisposable
     public Func<double>? Scale { get; set; }
 
     public Action? Changed { get; set; }
+
+    public Func<IBackdropEffect?>? Backdrop { get; set; }
+
+    public bool Blurred => _node?.Node.BackdropEffect is not null;
+
+    public Basin.Scene.SceneBuffer? Node => _node?.Node;
 
     public Action<ShellWindow>? Chosen { get; set; }
 
@@ -81,7 +88,8 @@ internal sealed class ShellSwitcher : IDisposable
             return;
         }
 
-        _scope = _surfaces.Attach(_surface, new SwitcherPage { BindingContext = _model });
+        var page = new SwitcherPage { BindingContext = _model };
+        _scope = _surfaces.Attach(_surface, page);
         _node = new UISurfaceNode(_layer, _surface, _index) { PreciseDamage = true };
 
         var area = Area?.Invoke() ?? new Box(0, 0, 1280, 720);
@@ -89,6 +97,15 @@ internal sealed class ShellSwitcher : IDisposable
         var y = area.Y + ((area.Height - height) / 2);
         _surface.SetPosition(x, y);
         _node.SetPosition(x, y);
+        if (Backdrop?.Invoke() is { } backdrop)
+        {
+            using var region = new Pixman.PixmanRegion32();
+            if (RoundedRegion.Fill(region, Width, height, CornerRadius))
+            {
+                _node.Node.SetBackdropEffect(backdrop, region, _node.Node);
+                page.Frosted = true;
+            }
+        }
 
         IsOpen = true;
         _selected = 1;

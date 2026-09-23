@@ -68,11 +68,14 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     private BlurSurfaceOptions _current = new();
     private BlurOptions _options = new();
     private BlurStrength _strength = BlurStrength.For(new BlurOptions().Strength);
+    private BlurStrength _widest = BlurStrength.For(new BlurOptions().Strength);
+    private BlurStrength _active = BlurStrength.For(new BlurOptions().Strength);
+    private int _depth = BlurStrength.For(new BlurOptions().Strength).Iterations;
     private bool _disposed;
 
     public BackgroundEffects Supported => BackgroundEffects.Blur | BackgroundEffects.Contrast;
 
-    public int ExpandSize => _strength.ExpandSize;
+    public int ExpandSize => _widest.ExpandSize;
 
     public BlurCorners Corners { get; set; }
 
@@ -82,6 +85,10 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     {
         ArgumentNullException.ThrowIfNull(key);
         _surfaces[key] = options;
+        if (options.Strength is { } strength)
+        {
+            Widen(BlurStrength.For(strength));
+        }
     }
 
     public bool ForgetSurface(object key)
@@ -95,7 +102,6 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         get => _options;
         set
         {
-            var iterations = _strength.Iterations;
             _options = value;
             _strength = BlurStrength.For(value.Strength);
             BlurColorMatrix.Build(value.Saturation, value.Contrast, _colorMatrix);
@@ -107,8 +113,18 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             }
 
             UploadNoise();
-            if (_strength.Iterations != iterations)
+            _widest = _strength;
+            foreach (var surface in _surfaces.Values)
             {
+                if (surface.Strength is { } strength && BlurStrength.For(strength).Iterations > _widest.Iterations)
+                {
+                    _widest = BlurStrength.For(strength);
+                }
+            }
+
+            if (_widest.Iterations != _depth)
+            {
+                _depth = _widest.Iterations;
                 DropPyramids();
             }
         }
@@ -224,8 +240,9 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         _surface = context.Bounds;
         _current = context.Key is { } key && _surfaces.TryGetValue(key, out var stored) ? stored : new BlurSurfaceOptions();
         BuildSurfaceMatrix();
-        var levels = _strength.Iterations;
-        var pad = _strength.ExpandSize;
+        _active = _current.Strength is { } strength ? BlurStrength.For(strength) : _strength;
+        var levels = _active.Iterations;
+        var pad = _active.ExpandSize;
         var pyramid = PyramidFor(context.TargetExtent);
 
         var padded = new Box(context.Bounds.X - pad, context.Bounds.Y - pad, context.Bounds.Width + (2 * pad), context.Bounds.Height + (2 * pad))
@@ -237,7 +254,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
                 commands, _onscreen, pyramid.Chain[0], _plainSet,
                 srcScale: 1f, RegionAtLevel(padded, 0), srcLevel: 0, plain: true);
             MakeSampleable(commands, pyramid.Chain[0].Image);
-            result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds);
+            result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds) { Image = pyramid.Chain[0].Image };
             return true;
         }
 
@@ -257,7 +274,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             MakeSampleable(commands, pyramid.Chain[i].Image);
         }
 
-        result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds);
+        result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds) { Image = pyramid.Chain[0].Image };
         return true;
     }
 
@@ -299,7 +316,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         var viewport = new Viewport(0, 0, dst.Extent.Width, dst.Extent.Height, 0, 1);
         vk.CmdSetViewport(commands, 0, 1, in viewport);
         vk.CmdSetScissor(commands, 0, 1, in region);
-        var halfpixel = plain ? 0f : (float)(0.5 * _strength.Offset);
+        var halfpixel = plain ? 0f : (float)(0.5 * _active.Offset);
         var corners = _current.Corners.IsSquare ? Corners : _current.Corners;
         var parameters = _current.ContrastParameters;
         var frost = _current.Contrast && parameters.Frost ? parameters.FrostColor : 0u;
@@ -370,8 +387,8 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             return existing;
         }
 
-        var chain = new Level[_strength.Iterations + 1];
-        for (var i = 0; i <= _strength.Iterations; i++)
+        var chain = new Level[_depth + 1];
+        for (var i = 0; i <= _depth; i++)
         {
             chain[i] = CreateLevel(new Extent2D(
                 Math.Max(1, target.Width >> i),
@@ -397,7 +414,8 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             ArrayLayers = 1,
             Samples = SampleCountFlags.Count1Bit,
             Tiling = ImageTiling.Optimal,
-            Usage = ImageUsageFlags.ColorAttachmentBit | ImageUsageFlags.SampledBit,
+            Usage = ImageUsageFlags.ColorAttachmentBit | ImageUsageFlags.SampledBit
+                | ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit,
             InitialLayout = ImageLayout.Undefined,
         };
         VulkanDevice.Check(vk.CreateImage(_device.Device, in imageInfo, null, out level.Image), "vkCreateImage(blur level)");
@@ -812,6 +830,20 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         _ = vk.DeviceWaitIdle(_device.Device);
         vk.DestroyBuffer(_device.Device, staging, null);
         vk.FreeMemory(_device.Device, stagingMemory, null);
+    }
+
+    private void Widen(BlurStrength strength)
+    {
+        if (strength.Iterations > _widest.Iterations)
+        {
+            _widest = strength;
+        }
+
+        if (_widest.Iterations > _depth)
+        {
+            _depth = _widest.Iterations;
+            DropPyramids();
+        }
     }
 
     private void DropPyramids()

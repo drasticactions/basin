@@ -19,6 +19,8 @@ internal sealed class MenuSurface : IDisposable
     private const uint BorderColor = 0x000000FF;
 
     private readonly ManagerSurface _surface;
+    private WmBackgroundEffects? _effects;
+    private Basin.Box _blurred;
     private (int Scale, int? Hovered)? _lastKey;
 
     internal MenuSurface(
@@ -189,9 +191,24 @@ internal sealed class MenuSurface : IDisposable
         return true;
     }
 
+    public void Blur(WmBackgroundEffects effects, bool on)
+    {
+        _effects = effects;
+        var box = on ? new Basin.Box(ShadowLeft, ShadowTop, MenuWidth, MenuHeight) : default;
+        if (box != _blurred)
+        {
+            _blurred = box;
+            effects.SetBlurRegion(_surface.Surface, box.IsEmpty ? [] : [box]);
+        }
+    }
+
     public void Commit() => _surface.Commit();
 
-    public void Dispose() => _surface.Dispose();
+    public void Dispose()
+    {
+        _effects?.Forget(_surface.Surface);
+        _surface.Dispose();
+    }
 
     private int MenuWidth => SurfaceSize.Width - ShadowLeft - ShadowRight;
 

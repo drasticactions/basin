@@ -23,6 +23,7 @@ internal sealed class AvaloniaShell : IDisposable
     private readonly Bitmap? _backgroundImage;
     private readonly UISurfaceIndex _index;
     private readonly List<LauncherModel> _launchers = [];
+    private readonly Pixman.PixmanRegion32 _backdropRegion = new();
     private bool _disposed;
 
     public AvaloniaShell(
@@ -51,6 +52,8 @@ internal sealed class AvaloniaShell : IDisposable
     }
 
     public PanelPosition PanelPosition { get; set; }
+
+    public IBackdropEffect? PanelBackdrop { get; set; }
 
     public IReadOnlyDictionary<IOutput, ShellElements> Elements => _elements;
 
@@ -119,9 +122,12 @@ internal sealed class AvaloniaShell : IDisposable
 
         var box = new Box(x, y, width, height);
         elements.BackgroundSurface.Place(box, scale);
-        if (PanelPosition != PanelPosition.None)
+        if (PanelPosition != PanelPosition.None && elements.PanelSurface.Place(box, scale) && PanelBackdrop is { } backdrop)
         {
-            elements.PanelSurface.Place(box, scale);
+            var panel = elements.PanelSurface.Node;
+            _backdropRegion.Clear();
+            _backdropRegion.UnionRect(_backdropRegion, 0, 0, (uint)panel.Width, (uint)panel.Height);
+            panel.Node.SetBackdropEffect(backdrop, _backdropRegion, panel.Node);
         }
     }
 
@@ -169,6 +175,7 @@ internal sealed class AvaloniaShell : IDisposable
 
         _elements.Clear();
         _backgroundImage?.Dispose();
+        _backdropRegion.Dispose();
     }
 
     private Box PanelBox(in Box output)

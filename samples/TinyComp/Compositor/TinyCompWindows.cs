@@ -614,14 +614,6 @@ internal sealed partial class TinyComp
         return null;
     }
 
-    private void ApplyBlur(SceneSurface scene)
-    {
-        if (_blurEffect is not null && _backgroundEffects.BlurRegionOf(scene.Surface) is { } region)
-        {
-            scene.Content.SetBackdropEffect(_blurEffect, region);
-        }
-    }
-
     private void ApplyCorners(SceneSurface scene, int radius)
     {
         var shader = CornerShaderFor(radius);
@@ -629,24 +621,6 @@ internal sealed partial class TinyComp
         {
             scene.Content.TextureShader = shader;
         }
-    }
-
-    private SceneSurface? SceneSurfaceOf(Surface surface)
-    {
-        if (FindWindow(surface) is { SceneSurface: { } windowScene })
-        {
-            return windowScene;
-        }
-
-        foreach (var (layer, scene) in _layerDriver.Surfaces)
-        {
-            if (layer.Surface == surface && scene is not null)
-            {
-                return scene;
-            }
-        }
-
-        return null;
     }
 
     private Window? FindWindow(Surface surface)

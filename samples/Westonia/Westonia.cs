@@ -41,6 +41,7 @@ internal sealed partial class Westonia : IDisposable
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
     private WestoniaSeat? _seat;
     private ShellSwitcher? _switcher;
+    private Basin.Effects.IBackdropBlur? _panelBlur;
     private bool _decorate = true;
     private ShellWorkspaces? _workspaces;
     private ShellLock? _lock;
@@ -203,9 +204,20 @@ internal sealed partial class Westonia : IDisposable
             Theme = options.Theme,
             Gpu = _gpu,
         });
+        _panelBlur = _ini.Shell.PanelBlur > 0 ? Basin.Effects.BackdropBlurs.For(_renderer) : null;
+        if (_panelBlur is not null)
+        {
+            _panelBlur.Options = _panelBlur.Options with { Strength = _ini.Shell.PanelBlur };
+        }
+        else if (_ini.Shell.PanelBlur > 0)
+        {
+            log.Warn($"panel-blur needs a renderer with backdrop effects, and {rendererName} has none");
+        }
+
         _avalonia = new AvaloniaShell(_ui, _layers, _ini, log, Spawn, _shellSurfaces)
         {
             PanelPosition = _ini.Shell.PanelPosition,
+            PanelBackdrop = _panelBlur,
         };
         _shell.Avalonia = _avalonia;
         _uiDriver = new UIDriver(_ui, _host.Loop)
@@ -324,6 +336,7 @@ internal sealed partial class Westonia : IDisposable
             Area = () => _layout.BoxOf(_outputs.Views[0].Output),
             Scale = () => _outputs.Views.FirstOrDefault()?.Output.Scale ?? 1.0,
             Changed = () => _outputs.ScheduleAll(),
+            Backdrop = _panelBlur,
         };
 
         _shell.Seat = Seat;
@@ -557,6 +570,7 @@ internal sealed partial class Westonia : IDisposable
         _gpu?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
+        _panelBlur?.Dispose();
         _services.Dispose();
         _deviceAllocator?.Dispose();
         _host.Dispose();

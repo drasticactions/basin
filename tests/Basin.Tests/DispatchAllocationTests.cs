@@ -178,6 +178,60 @@ public sealed class DispatchAllocationTests
     }
 
     [Fact]
+    public void A_blur_region_commit_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        using var manager = new BackgroundEffectManager(host.Display, host.Compositor, new BlurOnly());
+        host.Scene.SurfaceBackdrop = new BackgroundBlurDriver(manager, new NoBackdrop());
+        var window = MappedToplevel.Map(host, host.Client);
+        var proxy = Bind<Basin.Desktop.Protocol.ExtBackgroundEffectManagerV1>(
+            host, "ext_background_effect_manager_v1", BackgroundEffectManager.Version);
+        var effect = proxy.GetBackgroundEffect(window.Surface);
+        var region = host.Client.Compositor.CreateRegion();
+        region.Add(0, 0, 40, 30);
+        host.PumpToClient();
+
+        BlurRounds(host, window.Surface, effect, region, Rounds);
+        host.Loop.Dispatch(0);
+        host.RenderFrame();
+
+        BlurRounds(host, window.Surface, effect, region, Rounds);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        host.Loop.Dispatch(0);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(host.SurfaceScenes.Exists(scene => scene.Content.HasActiveBackdrop));
+        Budgets.Check("server", "blur-region-commit", allocated);
+    }
+
+    private static void BlurRounds(
+        CompositorTestHost host,
+        WlSurface surface,
+        Basin.Desktop.Protocol.ExtBackgroundEffectSurfaceV1 effect,
+        WlRegion region,
+        int rounds)
+    {
+        for (var i = 0; i < rounds; i++)
+        {
+            effect.SetBlurRegion(region);
+            surface.Commit();
+        }
+
+        host.Client.Display.Flush();
+    }
+
+    private sealed class BlurOnly : IBackgroundEffects
+    {
+        public BackgroundEffects Supported => BackgroundEffects.Blur;
+    }
+
+    private sealed class NoBackdrop : IBackdropEffect
+    {
+    }
+
+    [Fact]
     public void A_frame_with_a_client_committing_stays_within_budget()
     {
         Budgets.Require();

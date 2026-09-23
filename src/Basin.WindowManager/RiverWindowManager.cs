@@ -59,6 +59,8 @@ public sealed class RiverWindowManager : IDisposable
         RiverWindowManagerV1? wm = null;
         RiverXkbBindingsV1? xkbBindings = null;
         RiverLayerShellV1? layerShell = null;
+        var backgroundEffects = new WmBackgroundEffects();
+        using var settle = display.CreateQueue("basin-background-effect");
         WlCompositor? compositor = null;
         WlShm? shm = null;
         _registry = _display.GetRegistry();
@@ -76,6 +78,9 @@ public sealed class RiverWindowManager : IDisposable
                     break;
                 case "river_layer_shell_v1":
                     layerShell = _registry.Bind<RiverLayerShellV1>(e.Name, 1);
+                    break;
+                case "ext_background_effect_manager_v1":
+                    backgroundEffects.Bind(_registry.Bind<ExtBackgroundEffectManagerV1>(e.Name, 1), settle);
                     break;
                 case "wl_compositor":
                     compositor = _registry.Bind<WlCompositor>(e.Name, Math.Min(e.Version, 6));
@@ -109,6 +114,9 @@ public sealed class RiverWindowManager : IDisposable
         _manageContext = new ManageContext(this, _renderContext);
         Bindings = new WmBindings(this, xkbBindings);
         LayerShell = layerShell is null ? null : new WmLayerShell(this, layerShell);
+        backgroundEffects.Settle(settle, wait: pumpServer is null);
+        backgroundEffects.Attach(compositor);
+        BackgroundEffects = backgroundEffects;
 
         _wm.Unavailable += (_, _) => OnUnavailable();
         _wm.Finished += (_, _) => _finished = true;
@@ -134,6 +142,8 @@ public sealed class RiverWindowManager : IDisposable
     public WmBindings Bindings { get; }
 
     public WmLayerShell? LayerShell { get; }
+
+    public WmBackgroundEffects BackgroundEffects { get; }
 
     public IWmEventLoop Loop => _loop;
 
@@ -343,6 +353,7 @@ public sealed class RiverWindowManager : IDisposable
 
         Bindings.Dispose();
         LayerShell?.Dispose();
+        BackgroundEffects.Dispose();
         _wm.Destroy();
         _registry.Dispose();
         _loop.Clear();

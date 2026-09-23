@@ -269,6 +269,99 @@ public sealed class MetacityFrameTests
         surface.Dispose();
     }
 
+    [Fact]
+    public void A_window_background_alpha_shows_where_no_op_paints()
+    {
+        var text = MetacityParserTests.Wrap(
+            MetacityParserTests.Geometry
+            + "<draw_ops name=\"empty\"/>"
+            + MetacityParserTests.MinimalStyle.Replace(
+                "<frame_style name=\"s\" geometry=\"g\">",
+                "<frame_style name=\"s\" geometry=\"g\" background=\"#204080\" alpha=\"0.5\">",
+                StringComparison.Ordinal));
+        var theme = MetacityParserTests.ParseText(text, 1);
+        Assert.True(theme.HasTranslucentBackground);
+
+        using var skia = new TestFrameTheme();
+        using var font = new MetacityFont(skia.Typeface, 14);
+        using var resources = new MetacityResources();
+        var renderer = new MetacityFrameRenderer(theme, MetacityPalette.Light, MetacityButtonLayout.Parse(string.Empty), font, resources);
+        using var host = new SkiaUIHost();
+        var state = new FrameState { Title = "t", Active = true };
+        var insets = renderer.Measure(state, 1.0);
+        var surface = host.CreateSurface(new UISurfaceOptions { Target = UITargetKind.Memory, Width = 100 + insets.Left + insets.Right, Height = 40 + insets.Top + insets.Bottom, Scale = 1.0 });
+        Assert.NotNull(surface);
+        renderer.Draw(surface, new Box(insets.Left, insets.Top, 100, 40), state, default);
+        Assert.False(renderer.OpaqueChrome);
+        Assert.True(surface.TryAcquire(out var frame));
+        var buffer = (MemoryBuffer)frame.Buffer!;
+        var pixels = BufferCapture.ReadRgba(buffer);
+        var alpha = pixels[((1 * buffer.Width) + (buffer.Width / 2)) * 4 + 3];
+        Assert.InRange(alpha, 126, 129);
+        frame.Dispose();
+        surface.Dispose();
+    }
+
+    [Fact]
+    public void A_theme_without_a_background_is_not_translucent()
+    {
+        using var rig = new Rig();
+        Assert.False(rig.Theme.HasTranslucentBackground);
+    }
+
+    [Fact]
+    public void A_frosted_frame_hands_the_scene_its_rounded_outline()
+    {
+        var text = MetacityParserTests.Wrap(
+            MetacityParserTests.Geometry.Replace(
+                "<frame_geometry name=\"g\">",
+                "<frame_geometry name=\"g\" rounded_top_left=\"5\" rounded_top_right=\"5\">",
+                StringComparison.Ordinal)
+            + "<draw_ops name=\"empty\"/>"
+            + MetacityParserTests.StyleFor(2000));
+        var theme = MetacityParserTests.ParseText(text, 2);
+        using var skia = new TestFrameTheme();
+        using var font = new MetacityFont(skia.Typeface, 14);
+        using var resources = new MetacityResources();
+        var renderer = new MetacityFrameRenderer(theme, MetacityPalette.Light, MetacityButtonLayout.Parse(string.Empty), font, resources);
+        using var host = new SkiaUIHost();
+        var state = new FrameState { Title = "t", Active = true };
+        var insets = renderer.Measure(state, 1.0);
+        var surface = host.CreateSurface(new UISurfaceOptions { Target = UITargetKind.Memory, Width = 100 + insets.Left + insets.Right, Height = 40 + insets.Top + insets.Bottom, Scale = 1.0 });
+        Assert.NotNull(surface);
+        renderer.Draw(surface, new Box(insets.Left, insets.Top, 100, 40), state, default);
+        using var region = new Pixman.PixmanRegion32();
+
+        Assert.False(renderer.BackdropRegion(state, 1.0, region));
+        Assert.True(renderer.OpaqueChrome || renderer.Geometry.HasRoundedCorner);
+
+        renderer.Frosted = true;
+        Assert.False(renderer.OpaqueChrome);
+        Assert.True(renderer.BackdropRegion(state, 1.0, region));
+        var geometry = renderer.Geometry;
+        Assert.Equal(5, geometry.TopLeftRadius);
+        var extents = region.Extents;
+        Assert.Equal((0, 0, geometry.Width, geometry.Height), (extents.X1, extents.Y1, extents.X2, extents.Y2));
+        Assert.False(region.Contains(0, 0));
+        Assert.False(region.Contains(geometry.Width - 1, 0));
+        Assert.True(region.Contains(geometry.Width / 2, 0));
+        Assert.True(region.Contains(0, geometry.Height - 1));
+        Assert.Equal(RoundedRegion.MarcoInset(5, 0), FirstInside(region, 0));
+
+        surface.Dispose();
+
+        static int FirstInside(Pixman.PixmanRegion32 region, int row)
+        {
+            var x = 0;
+            while (!region.Contains(x, row))
+            {
+                x++;
+            }
+
+            return x;
+        }
+    }
+
     [Theory]
     [InlineData(1.0)]
     [InlineData(1.7)]

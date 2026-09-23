@@ -11,6 +11,8 @@ internal sealed class DeskbarSurface : IDisposable
     private const int WindowIndent = 22;
 
     private readonly ManagerSurface _surface;
+    private WmBackgroundEffects? _effects;
+    private Basin.Box _blurred;
     private readonly List<BarRow> _rows = [];
     private readonly List<Rect> _rowRects = [];
     private DeskbarPlacement? _appliedPlacement;
@@ -233,11 +235,27 @@ internal sealed class DeskbarSurface : IDisposable
         return true;
     }
 
+    public void Blur(WmBackgroundEffects effects, bool on)
+    {
+        _effects = effects;
+        var size = _surface.ConfiguredSize;
+        var box = on && !size.IsEmpty ? new Basin.Box(0, 0, size.Width, size.Height) : default;
+        if (box != _blurred)
+        {
+            _blurred = box;
+            effects.SetBlurRegion(_surface.Surface, box.IsEmpty ? [] : [box]);
+        }
+    }
+
     public void Commit() => _surface.Commit();
 
     public void Invalidate() => _lastKey = null;
 
-    public void Dispose() => _surface.Dispose();
+    public void Dispose()
+    {
+        _effects?.Forget(_surface.Surface);
+        _surface.Dispose();
+    }
 
     private bool HasArrow(TeamEntry entry) =>
         entry.Team.Windows.Count > 0 && !_isHorizontal;

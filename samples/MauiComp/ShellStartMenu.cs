@@ -55,6 +55,12 @@ internal sealed class ShellStartMenu : IDisposable
 
     public Func<IReadOnlyList<DesktopEntry>>? Programs { get; set; }
 
+    public Func<IBackdropEffect?>? Backdrop { get; set; }
+
+    public bool Blurred => _node?.Node.BackdropEffect is not null;
+
+    public Basin.Scene.SceneBuffer? Node => _node?.Node;
+
     public void Toggle()
     {
         if (IsOpen)
@@ -95,6 +101,13 @@ internal sealed class ShellStartMenu : IDisposable
         var y = area.Y + area.Height - ShellOutputs.PanelThickness - Height;
         _surface.SetPosition(x, y);
         _node.SetPosition(x, y);
+        if (Backdrop?.Invoke() is { } backdrop)
+        {
+            using var region = new Pixman.PixmanRegion32(0, 0, Width, Height);
+            _node.Node.SetBackdropEffect(backdrop, region, _node.Node);
+            _page.Frosted = true;
+        }
+
         Changed?.Invoke();
     }
 

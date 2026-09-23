@@ -72,6 +72,7 @@ internal sealed partial class MauiComp : IDisposable
     {
         _options = options;
         _log = log;
+        _config = options.Config;
 
         var rendererName = options.Renderer;
         var stack = RendererCatalog.CreateWithFallback(
@@ -167,6 +168,13 @@ internal sealed partial class MauiComp : IDisposable
             BackgroundImage = options.Background is { Length: > 0 } path && File.Exists(path) ? path : null,
         };
         _shell.PanelCreated += WirePanel;
+        _blur = Basin.Effects.BackdropBlurs.For(_renderer);
+        if (_blur is not null)
+        {
+            _blur.Options = _blur.Options with { Strength = _config.BlurStrength };
+        }
+
+        _shell.PanelBackdrop = () => BlurWhen(_config.BlurTaskbar);
         _uiDriver = new UIDriver(_ui, _host.Loop)
         {
             PopupLayer = _layers.Overlay,
@@ -249,6 +257,7 @@ internal sealed partial class MauiComp : IDisposable
 
     private int RunLoop()
     {
+        var hangup = _host.Loop.AddSignal(Signal.Hangup, _ => Reload());
         BasinReport.Line($"RENDERER {RendererName} chrome={_ui.Produces.ToString().ToLowerInvariant()}");
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
         Basin.Cli.CurrentDesktop.Export("basin", _host.Drm is null ? null : _host.Socket);
@@ -265,6 +274,7 @@ internal sealed partial class MauiComp : IDisposable
         _loop.Frames = _options.Frames;
         _loop.Run();
         _loop.Iterating -= _uiDriver.Pump;
+        hangup.Remove();
 
         _uiDriver.Woken -= _outputs.ScheduleAll;
         _stdinCommands?.Stop();
@@ -344,6 +354,7 @@ internal sealed partial class MauiComp : IDisposable
         _gpu?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
+        _blur?.Dispose();
         _services.Dispose();
         _deviceAllocator?.Dispose();
         _host.Dispose();

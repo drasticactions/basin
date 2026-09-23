@@ -20,6 +20,7 @@ public sealed class SkiaGlRenderer : IRenderer
     private readonly SkiaGlRenderPass _pass;
     private readonly SKPaint _paint;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
+    private readonly Dictionary<(uint Texture, int Width, int Height), (GRBackendTexture Backend, SKImage Image)> _backdropImages = [];
 
     public SkiaGlRenderer(string devicePath = "/dev/dri/renderD128")
     {
@@ -60,6 +61,31 @@ public sealed class SkiaGlRenderer : IRenderer
     }
 
     public GRContext Context => _context;
+
+    public bool SupportsBackdropEffects => true;
+
+    internal bool BackdropImage(uint texture, int width, int height, out SKImage image)
+    {
+        if (_backdropImages.TryGetValue((texture, width, height), out var cached))
+        {
+            image = cached.Image;
+            return true;
+        }
+
+        var backend = SkiaCensus.Track(new GRBackendTexture(
+            width, height, mipmapped: false, new GRGlTextureInfo(GlTexture2D, texture, GlRgba8)));
+        var wrapped = SKImage.FromTexture(_context, backend, GRSurfaceOrigin.TopLeft, SKColorType.Rgba8888, SKAlphaType.Premul);
+        if (wrapped is null)
+        {
+            SkiaCensus.Release(backend);
+            image = null!;
+            return false;
+        }
+
+        image = SkiaCensus.Track(wrapped);
+        _backdropImages[(texture, width, height)] = (backend, image);
+        return true;
+    }
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
@@ -170,6 +196,14 @@ public sealed class SkiaGlRenderer : IRenderer
     {
         _thread.Assert();
         DropTargets();
+        foreach (var (backend, image) in _backdropImages.Values)
+        {
+            SkiaCensus.Release(image);
+            SkiaCensus.Release(backend);
+        }
+
+        _backdropImages.Clear();
+        _pass.ReleaseBackdropCopy(_device.Gl);
         ColorTransforms.Dispose();
         RenderFences.CloseFence(_completionFence);
         _completionFence = -1;

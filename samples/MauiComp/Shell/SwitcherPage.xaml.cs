@@ -7,4 +7,16 @@ public partial class SwitcherPage
         Resources.Add("SelectedText", new SelectedTextConverter());
         InitializeComponent();
     }
+
+    private bool _frosted;
+
+    public bool Frosted
+    {
+        get => _frosted;
+        set
+        {
+            _frosted = value;
+            SwitcherFrame.Background = RoyaleTheme.Brush(value ? "SwitcherBrushFrost" : "SwitcherBrush");
+        }
+    }
 }

@@ -1,3 +1,4 @@
+using Basin.Host;
 using Basin.Cli;
 using Basin.Diagnostics;
 
@@ -28,6 +29,9 @@ internal sealed partial class MauiComp
                 break;
             case ["shotraw", var path]:
                 WritePresented(path);
+                break;
+            case ["planeshot", var prefix]:
+                WritePlanes(prefix);
                 break;
             case ["where"]:
                 PrintState();
@@ -65,6 +69,32 @@ internal sealed partial class MauiComp
                 Stop();
                 break;
         }
+    }
+
+    private void WritePlanes(string prefix)
+    {
+        if (_outputs.Views.FirstOrDefault() is not { } view)
+        {
+            BasinReport.Line($"PLANESHOT {prefix} images=0");
+            return;
+        }
+
+        var chrome = new List<PlaneShotChrome>();
+        var panels = 0;
+        foreach (var elements in _shell.Elements.Values)
+        {
+            chrome.Add(new PlaneShotChrome($"panel{panels++}", null, elements.PanelSurface.Node.Node));
+        }
+
+        chrome.Add(new PlaneShotChrome("startmenu", null, _startMenu?.Node));
+        chrome.Add(new PlaneShotChrome("switcher", null, _switcher?.Node));
+        var titles = 0;
+        foreach (var window in _windows)
+        {
+            chrome.Add(new PlaneShotChrome($"titlebar{titles++}", null, window.Titlebar?.Node));
+        }
+
+        _ = PlaneShot.Write(view, _renderer, prefix, _scene, chrome);
     }
 
     private void WritePresented(string path)
@@ -143,6 +173,28 @@ internal sealed partial class MauiComp
             }
         }
 
+        var blurredTitlebars = 0;
+        foreach (var window in _windows)
+        {
+            if (window.Titlebar?.Blurred == true)
+            {
+                blurredTitlebars++;
+            }
+        }
+
+        var blurredPanels = 0;
+        foreach (var elements in _shell.Elements.Values)
+        {
+            if (elements.PanelSurface.Node.Node.BackdropEffect is not null)
+            {
+                blurredPanels++;
+            }
+        }
+
+        BasinReport.Line(
+            $"BLUR {(_blur is null ? "unavailable" : $"strength={_blur.Options.Strength}")} taskbar={blurredPanels} "
+            + $"startmenu={(_startMenu?.Blurred == true ? "on" : "off")} switcher={(_switcher?.Blurred == true ? "on" : "off")} "
+            + $"titlebars={blurredTitlebars}");
         BasinReport.Line($"POPUPS {_uiDriver.Popups.Count}");
         BasinReport.Line($"SCOPES {_mauiSurfaces.Live}");
         var hit = _scene.SurfaceAt(_seat?.PointerX ?? 0, _seat?.PointerY ?? 0);

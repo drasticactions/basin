@@ -35,6 +35,48 @@ public sealed class ZeroAllocationTests
     }
 
     [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public void A_frosted_node_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        using var blur = Basin.Effects.BackdropBlurs.For(host.Renderer);
+        Assert.SkipWhen(blur is null, $"{renderer} runs no backdrop effects");
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var veil = new MemoryBuffer(40, 30, DrmFormat.Argb8888);
+        var node = new Scene.SceneBuffer(host.Scene.Root);
+        node.SetBuffer(veil);
+        node.SetPosition(10, 10);
+        using var region = new Pixman.PixmanRegion32(0, 0, 40, 30);
+        var key = new object();
+        blur!.SetSurface(key, new Basin.Effects.BlurSurfaceOptions { Strength = 3 });
+        node.SetBackdropEffect(blur, region, key);
+
+        for (var i = 0; i < 20; i++)
+        {
+            node.SetPosition(10 + (i % 2), 10);
+            host.CommitFrame();
+        }
+
+        NothingAllocated(1000, i =>
+        {
+            node.SetPosition(10 + (i % 2), 10);
+            host.CommitFrame();
+        });
+        node.Destroy();
+        veil.Destroy();
+    }
+
+    [Theory]
     [InlineData("pixman")]
     [InlineData("gl")]
     [InlineData("vulkan")]

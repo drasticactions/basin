@@ -13,6 +13,18 @@ public partial class StartMenuPage
 
     public MenuFlyout? Programs { get; set; }
 
+    private bool _frosted;
+
+    public bool Frosted
+    {
+        get => _frosted;
+        set
+        {
+            _frosted = value;
+            MenuFrame.Background = RoyaleTheme.Brush(value ? "MenuBrushFrost" : "MenuBrush");
+        }
+    }
+
     public bool IsProgramsOpen =>
         Programs?.Handler?.PlatformView is AC.ContextMenu { IsOpen: true };
 

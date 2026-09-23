@@ -20,6 +20,7 @@ font_size     = 14           # title size in logical pixels, every style; SIGHUP
 # theme         = "Menta"                        # a directory under themes/
 # button_layout = "menu:minimize,maximize,close" # marco's grammar, spacer allowed
 # palette       = "light"                        # light | dark
+# backdrop_blur = 0                              # blur strength, 1 to 15; 0 turns the frost off
 
 # The Prowl.Quill frames. They run on every GPU renderer. vulkan, skia-vulkan and
 # skia-graphite draw them on the renderer's own VulkanDevice, with no GL. gl and
@@ -31,8 +32,7 @@ font_size     = 14           # title size in logical pixels, every style; SIGHUP
 # corner_radius = 8          # logical pixels, 0 for square corners
 # font_size     = 13         # title size in logical pixels
 # backdrop_blur = 0          # blur strength, 1 to 15; 0 turns the frost off. It is not a pixel
-#                            # radius, and it is the shared blur effect's strength, so it also
-#                            # sets what a client's ext-background-effect blur gets
+#                            # radius
 # frost_opacity = 0.44       # how much titlebar color sits over the blur, 0 to 1.
 #                            # 0 is clear glass, 1 hides the blur entirely
 

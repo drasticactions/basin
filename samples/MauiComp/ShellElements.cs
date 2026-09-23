@@ -9,6 +9,8 @@ internal sealed class ShellElements : IDisposable
 
     public required OutputUISurface PanelSurface { get; init; }
 
+    public PanelPage? PanelPage { get; set; }
+
     public BackgroundModel Background { get; } = new();
 
     public PanelModel Panel { get; } = new();

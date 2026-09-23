@@ -52,6 +52,20 @@ public sealed class WestonIniTests
     }
 
     [Theory]
+    [InlineData("0", 0)]
+    [InlineData("6", 6)]
+    [InlineData("40", 15)]
+    [InlineData("-3", 0)]
+    [InlineData("soft", 0)]
+    public void Panel_blur_is_a_strength_off_by_default(string value, int expected)
+    {
+        Assert.Equal(0, WestonIni.FromLines([]).Shell.PanelBlur);
+        var ini = WestonIni.FromLines(["[shell]", $"panel-blur={value}"]);
+
+        Assert.Equal(expected, ini.Shell.PanelBlur);
+    }
+
+    [Theory]
     [InlineData("minutes", ClockFormat.Minutes)]
     [InlineData("seconds", ClockFormat.Seconds)]
     [InlineData("minutes-24h", ClockFormat.Minutes24H)]

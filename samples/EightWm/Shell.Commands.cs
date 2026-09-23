@@ -1,3 +1,4 @@
+using Basin.Host;
 using System.Globalization;
 using Basin;
 using Basin.Cli;
@@ -183,6 +184,13 @@ internal sealed partial class Shell
             case ["shotnow", var path]:
                 _shotPath = path;
                 _shotView = 0;
+                break;
+
+            case ["planeshot", var prefix]:
+                PlaneShot.Write(CommandView.Driver, _renderer, prefix, _scene,
+                    CommandView.Charms is { } charms
+                        ? [new PlaneShotChrome("charms", null, charms.BarNode), new PlaneShotChrome("pane", null, charms.PaneNode)]
+                        : null);
                 break;
 
             case ["shot", var path]:

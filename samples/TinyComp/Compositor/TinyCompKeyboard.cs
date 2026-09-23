@@ -270,61 +270,17 @@ internal sealed partial class TinyComp
 
     private void DumpPlanes(OutputView view, string prefix)
     {
-        var written = 0;
-        if (view.LastPresentedBuffer is { IsDestroyed: false } primary &&
-            BufferCapture.TryWritePng(primary, _renderer, $"{prefix}.primary.png"))
-        {
-            BasinReport.Line($"PLANE primary {primary.Width}x{primary.Height} {prefix}.primary.png");
-            written++;
-        }
-
-        if (view.Scene?.PresentedLayers is { } layers)
-        {
-            for (var i = 0; i < layers.Count; i++)
-            {
-                var layer = layers[i];
-                if (layer.Buffer is not { IsDestroyed: false } buffer)
-                {
-                    continue;
-                }
-
-                var name = $"{prefix}.layer{i}.png";
-                if (BufferCapture.TryWritePng(buffer, _renderer, name))
-                {
-                    BasinReport.Line(
-                        $"PLANE layer{i} accepted={layer.Accepted} dst={layer.DstBox} src={layer.SrcBox} "
-                        + $"alpha={layer.Alpha:F2} opaque={layer.Opaque} {buffer.Width}x{buffer.Height} {name}");
-                    written++;
-                }
-            }
-        }
-
-        if (view.Output is IHardwareCursor cursorOwner &&
-            cursorOwner.TryPresentedCursor(out var sprite, out var where) &&
-            BufferCapture.TryWritePng(sprite, _renderer, $"{prefix}.cursor.png"))
-        {
-            BasinReport.Line($"PLANE cursor dst={where} {prefix}.cursor.png");
-            written++;
-        }
-
+        var chrome = new List<Basin.Host.PlaneShotChrome>();
         foreach (var window in _windows)
         {
-            if (window.Frame?.PresentedChrome is not { IsDestroyed: false } chrome)
+            if (window.Frame?.PresentedChrome is { IsDestroyed: false } presented)
             {
-                continue;
-            }
-
-            var name = $"{prefix}.chrome-{window.Toplevel.AppId}.png";
-            if (BufferCapture.TryWritePng(chrome, _renderer, name))
-            {
-                BasinReport.Line(
-                    $"PLANE chrome {window.Toplevel.AppId} outer={window.Frame.OuterBounds} "
-                    + $"{chrome.Width}x{chrome.Height} {name}");
-                written++;
+                chrome.Add(new Basin.Host.PlaneShotChrome(
+                    $"frame-{window.Toplevel.AppId}", presented, Detail: $"outer={window.Frame.OuterBounds}"));
             }
         }
 
-        BasinReport.Line($"PLANESHOT {prefix} images={written}");
+        _ = Basin.Host.PlaneShot.Write(view, _renderer, prefix, _scene, chrome);
     }
 
     private void DumpPresented(OutputView view, string path)

@@ -18,6 +18,8 @@ internal sealed class Config
 
     public bool DesktopWallpaper { get; private set; } = true;
 
+    public bool Blur { get; private set; }
+
     public IReadOnlyList<Rule> Rules { get; private set; } = [];
 
     public IReadOnlyList<Hotkey> Hotkeys { get; private set; } = [];
@@ -52,6 +54,11 @@ internal sealed class Config
         config.LauncherCommand = reader.Words("launcher_cmd") ?? config.LauncherCommand;
         config.LockCommand = reader.Words("lock_cmd") ?? config.LockCommand;
         config.DesktopWallpaper = reader.Flag("desktop_wallpaper", config.DesktopWallpaper);
+
+        if (reader.Section("blur") is { } blur)
+        {
+            config.Blur = blur.Number("strength", 0) > 0;
+        }
 
         if (reader.Free("ui") is { } uiTable)
         {
