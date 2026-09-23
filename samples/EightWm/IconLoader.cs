@@ -1,3 +1,7 @@
+using Avalonia;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Basin.Freedesktop;
 using Basin.Render.Skia;
 using SkiaSharp;
@@ -7,17 +11,22 @@ namespace EightWm;
 
 internal sealed class IconLoader : IDisposable
 {
-    private readonly Dictionary<(string AppId, int SizePx), SKImage?> _cache = [];
+    private readonly Dictionary<(string AppId, int SizePx), WriteableBitmap?> _cache = [];
 
-    public SKImage? Load(string appId, int sizePx)
+    public IImage? Load(string appId, int sizePx)
     {
+        if (sizePx <= 0)
+        {
+            return null;
+        }
+
         var key = (appId, sizePx);
         if (_cache.TryGetValue(key, out var cached))
         {
             return cached;
         }
 
-        SKImage? image = null;
+        WriteableBitmap? image = null;
         try
         {
             image = LoadUncached(appId, sizePx);
@@ -26,26 +35,23 @@ internal sealed class IconLoader : IDisposable
         {
         }
 
-        if (image is not null)
-        {
-            SkiaCensus.Track(image);
-        }
-
         _cache[key] = image;
         return image;
     }
 
-    public void Dispose()
+    public void Clear()
     {
         foreach (var image in _cache.Values)
         {
-            SkiaCensus.Release(image);
+            image?.Dispose();
         }
 
         _cache.Clear();
     }
 
-    private static SKImage? LoadUncached(string appId, int sizePx)
+    public void Dispose() => Clear();
+
+    private static WriteableBitmap? LoadUncached(string appId, int sizePx)
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var search = new IconSearch
@@ -53,48 +59,51 @@ internal sealed class IconLoader : IDisposable
             OverrideDirectory = Path.Combine(home, ".config", "eight-wm", "icons"),
         };
 
-        return search.Find(appId) is { } path ? Rasterize(path, sizePx) : null;
+        if (search.Find(appId) is not { } path)
+        {
+            return null;
+        }
+
+        var raster = SkiaCensus.Track(new SKBitmap(new SKImageInfo(sizePx, sizePx, SKColorType.Bgra8888, SKAlphaType.Premul)));
+        try
+        {
+            return Rasterize(path, raster) ? Copy(raster) : null;
+        }
+        finally
+        {
+            SkiaCensus.Release(raster);
+        }
     }
 
-    private static SKImage? Rasterize(string path, int sizePx)
+    private static bool Rasterize(string path, SKBitmap target)
     {
-        var info = new SKImageInfo(sizePx, sizePx, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var sizePx = target.Width;
+        using var canvas = new SKCanvas(target);
+        canvas.Clear(SKColors.Transparent);
         if (path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
         {
             using var svg = new SKSvg();
             if (svg.Load(path) is not { } picture || picture.CullRect.Width <= 0 || picture.CullRect.Height <= 0)
             {
-                return null;
-            }
-
-            using var surface = SKSurface.Create(info);
-            if (surface is null)
-            {
-                return null;
+                return false;
             }
 
             var bounds = picture.CullRect;
             var scale = Math.Min(sizePx / bounds.Width, sizePx / bounds.Height);
-            surface.Canvas.Translate(
+            canvas.Translate(
                 (sizePx - (bounds.Width * scale)) / 2f,
                 (sizePx - (bounds.Height * scale)) / 2f);
-            surface.Canvas.Scale(scale);
-            surface.Canvas.Translate(-bounds.Left, -bounds.Top);
-            surface.Canvas.DrawPicture(picture);
-            surface.Canvas.Flush();
-            return surface.Snapshot();
+            canvas.Scale(scale);
+            canvas.Translate(-bounds.Left, -bounds.Top);
+            canvas.DrawPicture(picture);
+            canvas.Flush();
+            return true;
         }
 
         using var bitmap = SKBitmap.Decode(path);
         if (bitmap is null || bitmap.Width <= 0 || bitmap.Height <= 0)
         {
-            return null;
-        }
-
-        using var rasterSurface = SKSurface.Create(info);
-        if (rasterSurface is null)
-        {
-            return null;
+            return false;
         }
 
         var fit = Math.Min(sizePx / (float)bitmap.Width, sizePx / (float)bitmap.Height);
@@ -102,12 +111,28 @@ internal sealed class IconLoader : IDisposable
         var height = bitmap.Height * fit;
         using var image = SKImage.FromBitmap(bitmap);
         using var paint = new SKPaint();
-        rasterSurface.Canvas.DrawImage(
+        canvas.DrawImage(
             image,
             new SKRect((sizePx - width) / 2f, (sizePx - height) / 2f, (sizePx + width) / 2f, (sizePx + height) / 2f),
             new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear),
             paint);
-        rasterSurface.Canvas.Flush();
-        return rasterSurface.Snapshot();
+        canvas.Flush();
+        return true;
+    }
+
+    private static unsafe WriteableBitmap Copy(SKBitmap source)
+    {
+        var bitmap = new WriteableBitmap(
+            new PixelSize(source.Width, source.Height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using var frame = bitmap.Lock();
+        var rowBytes = Math.Min(frame.RowBytes, source.RowBytes);
+        var from = (byte*)source.GetPixels();
+        var to = (byte*)frame.Address;
+        for (var row = 0; row < source.Height; row++)
+        {
+            Buffer.MemoryCopy(from + (row * source.RowBytes), to + (row * frame.RowBytes), frame.RowBytes, rowBytes);
+        }
+
+        return bitmap;
     }
 }

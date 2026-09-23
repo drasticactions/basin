@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.TitleBarView"
+             x:DataType="local:TitleModel">
+  <UserControl.Styles>
+    <Style Selector="Button.close">
+      <Setter Property="Width" Value="64" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Height" Value="48" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.close:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.close:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#E81123" />
+    </Style>
+  </UserControl.Styles>
+  <ThemeVariantScope RequestedThemeVariant="Dark">
+    <Border Background="#F01F1F1F">
+      <Grid ColumnDefinitions="*,64">
+        <TextBlock Text="{Binding Title}"
+                   Margin="16,0"
+                   FontSize="15"
+                   Foreground="White"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+        <Button x:Name="CloseButton"
+                Grid.Column="1"
+                Classes="close"
+                Command="{Binding CloseCommand}">
+          <Path Data="M0,0 L14,14 M14,0 L0,14"
+                Stroke="White"
+                StrokeThickness="2"
+                Width="14"
+                Height="14" />
+        </Button>
+        <Border Grid.ColumnSpan="2"
+                Width="40"
+                Height="2"
+                Margin="0,0,0,2"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Background="#44FFFFFF"
+                IsHitTestVisible="False" />
+      </Grid>
+    </Border>
+  </ThemeVariantScope>
+</UserControl>

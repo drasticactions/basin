@@ -83,6 +83,10 @@ public sealed class EdgeSwipeRecognizer
 
     public double Velocity => _velocity;
 
+    public double X => _releaseX;
+
+    public double Y => _releaseY;
+
     public EdgeSwipeOutcome Outcome { get; private set; }
 
     public EdgeSwipeZone Zone { get; private set; }

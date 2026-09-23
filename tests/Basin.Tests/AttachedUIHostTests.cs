@@ -149,4 +149,51 @@ public sealed class AttachedUIHostTests
         Assert.Equal(1, clicks);
         surface.Dispose();
     }
+
+    [AvaloniaFact]
+    public void Each_touch_contact_is_released_where_it_last_was_and_cancel_reaches_every_contact()
+    {
+        var owner = ThreadAffinity.Capture();
+        using var host = Attach(owner);
+        var surface = (AvaloniaUISurface)host.CreateSurface(new UISurfaceOptions
+        {
+            Target = UITargetKind.Memory,
+            Width = 300,
+            Height = 40,
+            Scale = 1.0,
+        })!;
+        var releases = new List<global::Avalonia.Point>();
+        var root = new Border { Background = global::Avalonia.Media.Brushes.Red, Width = 300, Height = 40 };
+        root.AddHandler(
+            global::Avalonia.Input.InputElement.PointerReleasedEvent,
+            (_, e) => releases.Add(e.GetPosition(root)),
+            global::Avalonia.Interactivity.RoutingStrategies.Bubble,
+            handledEventsToo: true);
+        var lost = 0;
+        root.AddHandler(
+            global::Avalonia.Input.InputElement.PointerCaptureLostEvent,
+            (_, _) => lost++,
+            global::Avalonia.Interactivity.RoutingStrategies.Bubble | global::Avalonia.Interactivity.RoutingStrategies.Direct,
+            handledEventsToo: true);
+        surface.Content = root;
+        Pump();
+
+        surface.NotifyTouchDown(1, 5, 20, 20);
+        surface.NotifyTouchDown(2, 6, 150, 20);
+        surface.NotifyTouchMotion(3, 6, 160, 25);
+        surface.NotifyTouchUp(4, 5);
+        surface.NotifyTouchUp(5, 6);
+        Pump();
+        Assert.Equal([new global::Avalonia.Point(20, 20), new global::Avalonia.Point(160, 25)], releases);
+
+        releases.Clear();
+        lost = 0;
+        surface.NotifyTouchDown(6, 7, 40, 10);
+        surface.NotifyTouchDown(7, 8, 80, 10);
+        surface.NotifyTouchCancel();
+        Pump();
+        Assert.Empty(releases);
+        Assert.Equal(2, lost);
+        surface.Dispose();
+    }
 }

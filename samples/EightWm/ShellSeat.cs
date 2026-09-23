@@ -172,6 +172,10 @@ internal sealed partial class ShellSeat :
 
         _touchDriving = true;
         _cursor.Hide();
+        if (_buttonSurface is null)
+        {
+            _shell.Router.PointerLeave();
+        }
     }
 
     private void UsePointer()
@@ -209,6 +213,23 @@ internal sealed partial class ShellSeat :
         _touch.Router.Frame();
     }
 
+    internal void DragTouch(double x, double y, double dx, double dy, int steps)
+    {
+        var time = (uint)Environment.TickCount;
+        _seat.SetCapability(SeatCapability.Touch, true);
+        _touch.Router.Down(time, 0, x, y);
+        _touch.Router.Frame();
+        for (var step = 1; step <= steps; step++)
+        {
+            time += 16;
+            _touch.Router.Motion(time, 0, x + (dx * step / steps), y + (dy * step / steps));
+            _touch.Router.Frame();
+        }
+
+        _touch.Router.Up(time + 16, 0);
+        _touch.Router.Frame();
+    }
+
     internal void DescribeCursor(IOutput output, ImageDescription? description) =>
         _cursor.Describe(output, description);
 
@@ -243,6 +264,12 @@ internal sealed partial class ShellSeat :
             }
         }
         else if (_shell.HandleSuperRelease(view, symbol))
+        {
+            _seat.Keyboard.NotifyKeyConsumed(key, pressed);
+            return;
+        }
+
+        if (_shell.Router.Key(timeMs, key, pressed))
         {
             _seat.Keyboard.NotifyKeyConsumed(key, pressed);
             return;
@@ -301,17 +328,10 @@ internal sealed partial class ShellSeat :
         }
 
         _cursor.MoveTo(_pointer.X, _pointer.Y);
-        if (_splitView is { } dragging)
+        if (_splitView is { } dragging && _splitTouch < 0)
         {
             _shell.DragSplitter(dragging, _pointer.X - dragging.Box.X, _pointer.Y - dragging.Box.Y);
             TakeCursor(Shell.SplitterCursor(dragging));
-            _idle.NotifyActivity();
-            return;
-        }
-
-        _shell.TrackStartContact(_pointer.X - _startView, _pointer.Y - _startViewY);
-        if (_shell.StartMove(_pointer.X - _startView, _pointer.Y - _startViewY, PointerTouchId))
-        {
             _idle.NotifyActivity();
             return;
         }
@@ -328,11 +348,31 @@ internal sealed partial class ShellSeat :
         if (fromMotion)
         {
             _shell.TrackCorner(hoverView, _pointer.X - hoverView.Box.X, _pointer.Y - hoverView.Box.Y);
-            _shell.HoverCharms(hoverView, _pointer.X - hoverView.Box.X, _pointer.Y - hoverView.Box.Y);
             _shell.HoverTitle(hoverView, _pointer.X - hoverView.Box.X, _pointer.Y - hoverView.Box.Y);
         }
 
         var hit = _scene.SurfaceAt(_pointer.X, _pointer.Y);
+        if (_shell.ShellCursorAt(hoverView, _pointer.X - hoverView.Box.X, _pointer.Y - hoverView.Box.Y) is { } owned)
+        {
+            _shell.Router.PointerLeave();
+            TakeCursor(owned);
+            _idle.NotifyActivity();
+            return;
+        }
+
+        if (_touchDriving && !fromMotion)
+        {
+            return;
+        }
+
+        var route = _shell.Router.PointerMotion(timeMs, _pointer.X, _pointer.Y);
+        if (route.Surface is not null)
+        {
+            TakeCursor(route.Cursor ?? Shell.PointerCursor);
+            _idle.NotifyActivity();
+            return;
+        }
+
         if (_shell.ChromeCursorAt(
                 hoverView, _pointer.X - hoverView.Box.X, _pointer.Y - hoverView.Box.Y,
                 hit?.Surface) is { } chrome)
@@ -369,8 +409,6 @@ internal sealed partial class ShellSeat :
             return;
         }
 
-        var view = _shell.ViewAt(_pointer.X, _pointer.Y);
-        _shell.RefreshHot(view, _pointer.X - view.Box.X, _pointer.Y - view.Box.Y);
         ProcessCursorMotion((uint)Environment.TickCount, fromMotion: false);
     }
 
@@ -382,8 +420,6 @@ internal sealed partial class ShellSeat :
     }
 
     private ShellView? _splitView;
-    private double _startView;
-    private double _startViewY;
 
     internal const int PointerTouchId = -2;
 
@@ -413,14 +449,29 @@ internal sealed partial class ShellSeat :
         RouteButton(timeMs, button, pressed);
     }
 
+    private IUISurface? _buttonSurface;
+    private int _buttonsOnSurface;
+
     private void RouteButton(uint timeMs, uint button, bool pressed)
     {
         _idle.NotifyActivity();
         UsePointer();
-        if (button == InputCodes.BtnLeft && !pressed && _splitView is { } dragging)
+        if (button == InputCodes.BtnLeft && !pressed && _splitTouch < 0 && _splitView is { } dragging)
         {
-            _shell.EndSplitDrag(dragging);
+            _shell.EndSplitDrag(dragging, commit: true);
             _splitView = null;
+            return;
+        }
+
+        if (!pressed && _buttonSurface is { } held)
+        {
+            _shell.Router.PointerButton(timeMs, button, pressed: false, held);
+            if (--_buttonsOnSurface <= 0)
+            {
+                _buttonSurface = null;
+                _buttonsOnSurface = 0;
+            }
+
             return;
         }
 
@@ -429,11 +480,6 @@ internal sealed partial class ShellSeat :
             var releaseView = _shell.ViewAt(_pointer.X, _pointer.Y);
             if (_shell.ChromeRelease(
                     releaseView, _pointer.X - releaseView.Box.X, _pointer.Y - releaseView.Box.Y, PointerTouchId))
-            {
-                return;
-            }
-
-            if (_shell.StartRelease(_pointer.X - _startView, _pointer.Y - _startViewY, PointerTouchId))
             {
                 return;
             }
@@ -455,22 +501,22 @@ internal sealed partial class ShellSeat :
             }
 
             var view = charmsView;
-            if (_shell.BeginSplitDrag(view, _pointer.X - view.Box.X, _pointer.Y - view.Box.Y))
+            if (_splitView is null && _shell.BeginSplitDrag(view, _pointer.X - view.Box.X, _pointer.Y - view.Box.Y))
             {
                 _splitView = view;
                 _seat.Pointer.NotifyClearFocus();
                 return;
             }
 
-            if (_scene.SurfaceAt(_pointer.X, _pointer.Y) is null)
+            if (PressChrome(timeMs, button))
             {
-                _startView = view.Box.X;
-                _startViewY = view.Box.Y;
-                if (_shell.StartPress(view, _pointer.X - view.Box.X, _pointer.Y - view.Box.Y, PointerTouchId))
-                {
-                    return;
-                }
+                return;
             }
+        }
+
+        if (pressed && button != InputCodes.BtnLeft && PressChrome(timeMs, button))
+        {
+            return;
         }
 
         if (button == InputCodes.BtnRight && pressed && _scene.SurfaceAt(_pointer.X, _pointer.Y) is { Surface: { } target })
@@ -488,14 +534,34 @@ internal sealed partial class ShellSeat :
         }
     }
 
+    private bool PressChrome(uint timeMs, uint button)
+    {
+        var view = _shell.ViewAt(_pointer.X, _pointer.Y);
+        if (_shell.ShellCursorAt(view, _pointer.X - view.Box.X, _pointer.Y - view.Box.Y) is not null)
+        {
+            return false;
+        }
+
+        _shell.Router.PointerMotion(timeMs, _pointer.X, _pointer.Y);
+        if (_shell.Router.Hovered is not { } surface)
+        {
+            return false;
+        }
+
+        _seat.Pointer.NotifyClearFocus();
+        _buttonSurface = surface;
+        _buttonsOnSurface++;
+        _shell.Router.PointerButton(timeMs, button, pressed: true, surface);
+        return true;
+    }
+
     private void OnAxis(uint timeMs, PointerAxis axis)
     {
         _idle.NotifyActivity();
-        if (ControlHeld && axis.Axis == Wayland.WlPointer.Axis.VerticalScroll && axis.Value != 0)
+        var horizontal = axis.Axis == Wayland.WlPointer.Axis.HorizontalScroll;
+        if (_buttonSurface is null && _shell.Router.Hovered is { } surface &&
+            _shell.Router.PointerAxis(timeMs, horizontal ? axis.Value : 0, horizontal ? 0 : axis.Value, surface))
         {
-            var view = _shell.ViewAt(_pointer.X, _pointer.Y);
-            _shell.ToggleZoom(
-                view, zoomOut: axis.Value > 0, _pointer.X - view.Box.X, _pointer.Y - view.Box.Y);
             return;
         }
 
@@ -527,20 +593,20 @@ internal sealed partial class ShellSeat :
             return true;
         }
 
-        if (_splitTouch < 0 && _shell.BeginSplitDrag(view, x - view.Box.X, y - view.Box.Y))
+        if (_splitView is null && _shell.BeginSplitDrag(view, x - view.Box.X, y - view.Box.Y))
         {
             _splitView = view;
             _splitTouch = id;
             return true;
         }
 
-        if (_scene.SurfaceAt(x, y) is not null)
+        if (_shell.ShellCursorAt(view, x - view.Box.X, y - view.Box.Y) is null &&
+            _shell.Router.TouchDown(timeMs, id, x, y))
         {
-            return false;
+            return true;
         }
 
-        _shell.StartPress(view, x - view.Box.X, y - view.Box.Y, id);
-        return true;
+        return false;
     }
 
     void ITouchChrome.Motion(int id, uint timeMs, double x, double y)
@@ -557,7 +623,12 @@ internal sealed partial class ShellSeat :
             return;
         }
 
-        _ = _shell.StartMove(x - view.Box.X, y - view.Box.Y, id);
+        if (_shell.Router.TouchMotion(timeMs, id, x, y))
+        {
+            return;
+        }
+
+
     }
 
     void ITouchChrome.Release(int id, uint timeMs, double x, double y)
@@ -567,7 +638,7 @@ internal sealed partial class ShellSeat :
             _splitTouch = -1;
             if (_splitView is { } dragging)
             {
-                _shell.EndSplitDrag(dragging);
+                _shell.EndSplitDrag(dragging, commit: true);
                 _splitView = null;
             }
 
@@ -580,15 +651,21 @@ internal sealed partial class ShellSeat :
             return;
         }
 
-        _ = _shell.StartRelease(x - view.Box.X, y - view.Box.Y, id);
+        if (_shell.Router.TouchUp(timeMs, id))
+        {
+            return;
+        }
+
+
     }
 
     void ITouchChrome.Cancel()
     {
         _shell.ChromeCancel();
+        _shell.Router.TouchCancel();
         if (_splitView is { } dragging)
         {
-            _shell.EndSplitDrag(dragging);
+            _shell.EndSplitDrag(dragging, commit: false);
             _splitView = null;
         }
 

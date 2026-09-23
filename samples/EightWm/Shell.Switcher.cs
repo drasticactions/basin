@@ -341,6 +341,9 @@ internal sealed partial class Shell
 
                 break;
 
+            case ScreenEdge.Top when FinishTopEdge(view, edges):
+                break;
+
             case ScreenEdge.Top:
                 switch (edges.Zone)
                 {
@@ -444,6 +447,12 @@ internal sealed partial class Shell
 
     internal void TrackEdgeGesture(ShellView view, EdgeSwipeRecognizer edges)
     {
+        if (edges.Edge == ScreenEdge.Top)
+        {
+            TrackTopEdge(view, edges);
+            return;
+        }
+
         if (edges.Edge == ScreenEdge.Left && view.SwitcherDocked && view.Switcher is { } rail)
         {
             var width = rail.Box.Width;

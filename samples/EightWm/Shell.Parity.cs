@@ -77,7 +77,7 @@ internal sealed partial class Shell
 
         if (!super)
         {
-            return control && HandleZoomKeys(view, symbol) || TypeOnStart(view, symbol, shift);
+            return !control && !alt && TypeOnStart(view, symbol, shift);
         }
 
         if (symbol == KeyTab)
@@ -137,34 +137,13 @@ internal sealed partial class Shell
         return true;
     }
 
-    private bool HandleZoomKeys(ShellView view, XkbKeysym symbol)
-    {
-        if (symbol == ZoomIn || symbol == ZoomEqual)
-        {
-            ToggleZoom(view, zoomOut: false);
-            return true;
-        }
-
-        if (symbol == ZoomOut)
-        {
-            ToggleZoom(view, zoomOut: true);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static readonly XkbKeysym ZoomIn = XkbKeysym.FromName("plus");
-    private static readonly XkbKeysym ZoomEqual = XkbKeysym.FromName("equal");
-    private static readonly XkbKeysym ZoomOut = XkbKeysym.FromName("minus");
-
     private readonly System.Text.StringBuilder _filter = new();
 
     internal string Filter => _filter.ToString();
 
     private bool TypeOnStart(ShellView view, XkbKeysym symbol, bool shift)
     {
-        if (view.Start is not { } start || !view.Background.Enabled)
+        if (view.Start is null || !view.Background.Enabled)
         {
             return false;
         }
@@ -177,7 +156,7 @@ internal sealed partial class Shell
             }
 
             _filter.Clear();
-            ApplyFilter(view, start);
+            ApplyFilter(view);
             return true;
         }
 
@@ -189,7 +168,7 @@ internal sealed partial class Shell
             }
 
             _filter.Length--;
-            ApplyFilter(view, start);
+            ApplyFilter(view);
             return true;
         }
 
@@ -201,33 +180,24 @@ internal sealed partial class Shell
 
         _ = shift;
         _filter.Append(text);
-        ApplyFilter(view, start);
+        ApplyFilter(view);
         return true;
     }
 
-    private void ApplyFilter(ShellView view, StartScreen start)
+    private void ApplyFilter(ShellView view)
     {
         var text = _filter.ToString();
         if (text.Length == 0)
         {
+            view.StartModel.Filter = string.Empty;
             ShowApps(view, false);
             BasinReport.Line($"FILTER none");
             return;
         }
 
-        var matches = new List<DesktopEntry>();
-        foreach (var entry in _entries)
-        {
-            if (entry.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
-            {
-                matches.Add(entry);
-            }
-        }
-
-        start.SetApps(matches);
-        start.AppsVisible = true;
-        start.AppsPan.Reset(0);
-        BasinReport.Line($"FILTER {text} matches={matches.Count}");
+        ShowApps(view, true);
+        view.StartModel.Filter = text;
+        BasinReport.Line($"FILTER {text} matches={view.StartModel.FilteredApps.Count}");
     }
 
     internal HotCorner CornerAt(ShellView view, double localX, double localY)

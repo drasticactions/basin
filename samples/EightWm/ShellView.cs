@@ -12,11 +12,15 @@ internal sealed class ShellView
         Root = new SceneTree(scene.Root);
         Background = new SceneTree(Root);
         BackgroundFrame = new SceneTransform(Background);
+        StartFrame = new SceneTransform(BackgroundFrame);
+        AppsFrame = new SceneTransform(BackgroundFrame) { Enabled = false };
         Vacant = new SceneTree(Root);
         Apps = new SceneTree(Root);
         Rails = new SceneTree(Root);
         Preview = new SceneTree(Root);
         Dragging = new SceneTree(Root);
+        FlipLayer = new SceneTree(Root);
+        FlipFrame = new SceneTransform(FlipLayer) { Enabled = false };
         SplashLayer = new SceneTree(Root);
         SplashFrame = new SceneTransform(SplashLayer);
         Dim = new SceneTree(Root);
@@ -45,6 +49,28 @@ internal sealed class ShellView
 
     public Tween StartMotion;
 
+    public SceneTransform StartFrame { get; }
+
+    public SceneTransform AppsFrame { get; }
+
+    public Tween StartPageMotion;
+
+    public Tween AppsMotion;
+
+    public StartModel StartModel { get; } = new();
+
+    public AvaloniaChrome? Start { get; set; }
+
+    public AvaloniaChrome? AppsSurface { get; set; }
+
+    public StartView? StartView { get; set; }
+
+    public AppsView? AppsView { get; set; }
+
+    public bool AppsVisible { get; set; }
+
+    public double IconScale { get; set; }
+
     public SceneTree Vacant { get; }
 
     public SceneRect? VacantFill { get; set; }
@@ -59,21 +85,33 @@ internal sealed class ShellView
 
     public SceneTree Dragging { get; }
 
+    public SceneTree FlipLayer { get; }
+
+    public SceneTransform FlipFrame { get; }
+
+    public AvaloniaChrome? FlipFace { get; set; }
+
+    public FlipModel FlipModel { get; } = new();
+
+    public LaunchFlip? Flip { get; set; }
+
+    public SceneTransform? RecededPage { get; set; }
+
+    public SceneRect? BackgroundFill { get; set; }
+
     public SceneTree SplashLayer { get; }
 
     public SceneTransform SplashFrame { get; }
 
-    public StartScreen? Start { get; set; }
+    public AvaloniaChrome? Splash { get; set; }
 
-    public ChromeSurface? Splash { get; set; }
+    public SplashModel SplashModel { get; } = new();
 
     public Tween SplashMotion;
 
-    public string SplashTitle { get; set; } = string.Empty;
-
-    public uint SplashColor { get; set; }
-
     public long SplashDeadlineMillis { get; set; }
+
+    public Box SplashBox { get; set; }
 
     public SceneTree Dim { get; }
 
@@ -131,6 +169,8 @@ internal sealed class ShellView
 
     public int DraggingSplitter { get; set; } = -1;
 
+    public int SplitPosition { get; set; }
+
     public bool IsPortrait => Box.Height > Box.Width;
 
     public void Reposition() => Root.SetPosition(Driver.Box.X, Driver.Box.Y);
@@ -145,8 +185,12 @@ internal sealed class ShellView
         Charms = null;
         Start?.Dispose();
         Start = null;
+        AppsSurface?.Dispose();
+        AppsSurface = null;
         Splash?.Dispose();
         Splash = null;
+        FlipFace?.Dispose();
+        FlipFace = null;
     }
 
     public void Destroy()

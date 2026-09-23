@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.ClockView"
+             x:DataType="local:CharmsModel"
+             IsHitTestVisible="False">
+  <Canvas>
+    <TextBlock Canvas.Top="0" Text="{Binding Clock}" FontSize="84" FontWeight="Light" Foreground="White" />
+    <TextBlock Canvas.Top="104" Text="{Binding Date}" FontSize="26" FontWeight="Light" Foreground="White" />
+  </Canvas>
+</UserControl>

@@ -34,6 +34,11 @@ public static class BasinPlatform
         var builder = AppBuilder.Configure<TApp>()
             .UseBasin(options)
             .UseSkia();
+        if (options.Configure is { } configure)
+        {
+            builder = configure(builder);
+        }
+
         if (lifetime is null)
         {
             builder.SetupWithoutStarting();

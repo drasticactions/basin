@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.SplashView"
+             x:DataType="local:SplashModel">
+  <Border Background="{Binding Fill}">
+    <TextBlock Text="{Binding Title}"
+               Classes="win-type-xx-large"
+               FontWeight="SemiLight"
+               Foreground="White"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center" />
+  </Border>
+</UserControl>

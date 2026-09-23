@@ -90,5 +90,6 @@
     <Project Path="tests/BasinChurn/BasinChurn.csproj" />
     <Project Path="tests/MauiComp.Tests/MauiComp.Tests.csproj" />
     <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
+    <Project Path="tests/EightWm.Tests/EightWm.Tests.csproj" />
   </Folder>
 </Solution>

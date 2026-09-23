@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.FlipFaceView"
+             x:DataType="local:FlipModel">
+  <Grid Background="{Binding Tile.Fill}" ClipToBounds="True">
+    <Image Source="{Binding Tile.IconImage}"
+           Width="{Binding IconSize}"
+           Height="{Binding IconSize}"
+           Margin="{Binding IconMargin}"
+           HorizontalAlignment="Center"
+           VerticalAlignment="Center" />
+    <TextBlock Text="{Binding Tile.Name}"
+               IsVisible="{Binding ShowName}"
+               Margin="8,0,8,6"
+               FontSize="15"
+               Foreground="White"
+               TextTrimming="CharacterEllipsis"
+               VerticalAlignment="Bottom" />
+  </Grid>
+</UserControl>

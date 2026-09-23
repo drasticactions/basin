@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:win="https://github.com/avawin"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.StartView"
+             x:DataType="local:StartModel"
+             Background="{Binding Background}">
+  <UserControl.Resources>
+    <DataTemplate x:Key="TileTemplate" x:DataType="local:Tile">
+      <local:TileView />
+    </DataTemplate>
+    <DataTemplate x:Key="GroupHeader" x:DataType="local:TileGroupModel">
+      <TextBlock Text="{Binding Name}" />
+    </DataTemplate>
+    <DataTemplate x:Key="GroupTile" x:DataType="local:TileGroupModel">
+      <Grid Width="230" Height="230" Background="#33FFFFFF">
+        <TextBlock Text="{Binding Name}" Classes="win-type-x-large" Foreground="White" Margin="12,8,12,0" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{Binding Count}" Classes="win-type-medium" Foreground="White" Margin="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+  <Grid x:Name="Root" Background="Transparent">
+    <TextBlock Text="Start"
+               Classes="win-type-xx-large"
+               Foreground="White"
+               Margin="60,70,0,0"
+               HorizontalAlignment="Left"
+               VerticalAlignment="Top"
+               IsHitTestVisible="False" />
+    <win:SemanticZoom x:Name="Zoom"
+                      IsZoomedOut="{Binding ZoomedOut, Mode=TwoWay}"
+                      EnableButton="False"
+                      Margin="0,130,0,80">
+      <win:SemanticZoom.ZoomedInView>
+        <win:ListView x:Name="Tiles"
+                      ItemsSource="{Binding Tiles}"
+                      GroupKeySelector="{Binding GroupKey}"
+                      GroupsSource="{Binding Groups}"
+                      GroupsKeySelector="{Binding GroupsKey}"
+                      GroupHeaderTemplate="{StaticResource GroupHeader}"
+                      ItemTemplate="{StaticResource TileTemplate}"
+                      SelectionMode="Multi"
+                      SelectionStyle="Bordered"
+                      TapBehavior="InvokeOnly"
+                      SwipeBehavior="Select"
+                      ItemsReorderable="True"
+                      PressFeedback="Tilt"
+                      Margin="60,0,0,0" />
+      </win:SemanticZoom.ZoomedInView>
+      <win:SemanticZoom.ZoomedOutView>
+        <win:ListView x:Name="GroupList"
+                      ItemsSource="{Binding Groups}"
+                      ItemTemplate="{StaticResource GroupTile}"
+                      SelectionMode="None"
+                      TapBehavior="InvokeOnly"
+                      Margin="60,0,0,0">
+          <win:ListView.Layout>
+            <win:GridLayout Orientation="Horizontal" />
+          </win:ListView.Layout>
+        </win:ListView>
+      </win:SemanticZoom.ZoomedOutView>
+    </win:SemanticZoom>
+    <Button x:Name="AppsArrow"
+            Classes="pagearrow"
+            Margin="60,0,0,24"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Command="{Binding ShowAppsCommand}">
+      <Path Data="M8,1 L8,15 M2,9 L8,15 L14,9" />
+    </Button>
+  </Grid>
+</UserControl>

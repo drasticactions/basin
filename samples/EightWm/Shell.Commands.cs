@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.VisualTree;
 using Basin.Host;
 using System.Globalization;
 using Basin;
@@ -133,6 +135,10 @@ internal sealed partial class Shell
                 ToggleZoom(CommandView, which == "out");
                 break;
 
+            case ["apps", "sort", var sort]:
+                AppsSortCommand(sort);
+                break;
+
             case ["apps", var state]:
                 ShowApps(CommandView, state == "on");
                 break;
@@ -151,6 +157,12 @@ internal sealed partial class Shell
 
             case ["touch", var tx, var ty]:
                 _seat.TapAt(CommandView.Box.Width * Fraction(tx), CommandView.Box.Height * Fraction(ty));
+                break;
+
+            case ["touchdrag", var tx, var ty, var tdx, var tdy]:
+                _seat.DragTouch(
+                    CommandView.Box.Width * Fraction(tx), CommandView.Box.Height * Fraction(ty),
+                    CommandView.Box.Width * Fraction(tdx), CommandView.Box.Height * Fraction(tdy), 12);
                 break;
 
             case ["mousedown"]:
@@ -210,7 +222,7 @@ internal sealed partial class Shell
                 break;
 
             case ["settings"]:
-                BasinReport.Line($"SETTINGS hot_corners={(HotCornersOn ? "on" : "off")} " + $"animations={(AnimationsOn ? "on" : "off")} edge_band={EdgeBandNow} " + $"min_width={MinWidthNow} max_cells={Configuration.MaxCells} " + $"start_output={StartOutputNow} rules={Configuration.Rules.Count}");
+                BasinReport.Line($"SETTINGS hot_corners={(HotCornersOn ? "on" : "off")} " + $"animations={(AnimationsOn ? "on" : "off")} edge_band={EdgeBandNow} " + $"min_width={MinWidthNow} max_cells={Configuration.MaxCells} " + $"start_output={StartOutputNow} rules={Configuration.Rules.Count} " + $"theme={(DarkNow ? "dark" : "light")} accent=#{AccentNow & 0xffffff:x6}");
                 break;
 
             case ["quit"]:
@@ -319,10 +331,10 @@ internal sealed partial class Shell
                 BasinReport.Line($"  rail {State(view.SwitcherDocked)} box={Fmt(rail.Box)}");
             }
 
-            if (view.Start is { } start)
+            if (view.StartView is { } start)
             {
-                start.Layout();
-                BasinReport.Line($"  start grid={start.Grid.Width}x{start.Grid.Height} rows={start.Grid.Rows}");
+                var (width, height, rows) = StartExtent(start);
+                BasinReport.Line($"  start grid={width:F0}x{height:F0} rows={rows}");
             }
         }
     }
@@ -363,55 +375,94 @@ internal sealed partial class Shell
         }
     }
 
+    private static (double Width, double Height, int Rows) StartExtent(StartView start)
+    {
+        var scroller = start.TileList.GetVisualDescendants().OfType<Avalonia.Controls.ScrollViewer>().FirstOrDefault();
+        var extent = scroller?.Extent ?? default;
+        return (extent.Width, extent.Height, (int)(extent.Height / Tile.Cell));
+    }
+
+    private static double ScrollOf(Avalonia.Controls.Control list) =>
+        list.GetVisualDescendants().OfType<Avalonia.Controls.ScrollViewer>().FirstOrDefault()?.Offset.X ?? 0;
+
+    private static Basin.Box? TileBox(ShellView view, int index)
+    {
+        if (view.StartView is not { } start || start.TileList.ContainerFromIndex(index) is not { } container ||
+            container.TranslatePoint(default, start) is not { } origin)
+        {
+            return null;
+        }
+
+        return new Basin.Box(
+            (int)Math.Round(origin.X + view.StartFrame.X),
+            (int)Math.Round(origin.Y + view.StartFrame.Y),
+            (int)Math.Round(container.Bounds.Width),
+            (int)Math.Round(container.Bounds.Height));
+    }
+
+    private Tile? TileOf(ShellView view, string which)
+    {
+        var index = Number(which);
+        var tiles = view.StartModel.Tiles;
+        if (index >= 0 && index < tiles.Count)
+        {
+            return tiles[index];
+        }
+
+        BasinReport.Line($"ERR no tile {which}");
+        return null;
+    }
+
     private void PrintTiles()
     {
         var view = CommandView;
-        if (view.Start is not { } start)
+        if (view.StartView is not { } start)
         {
             BasinReport.Line($"ERR no start screen");
             return;
         }
 
-        start.Layout();
-        BasinReport.Line($"TILES groups={start.Grid.Groups.Count} rows={start.Grid.Rows} width={start.Grid.Width} " + $"pan={start.Pan.Offset:F0} axis={start.Pan.Axis} apps={start.AppsPan.Offset:F0}");
-        var index = 0;
-        foreach (var group in start.Grid.Groups)
+        var (width, _, rows) = StartExtent(start);
+        var apps = view.AppsView is { } appsView ? ScrollOf(appsView.List) : 0;
+        BasinReport.Line($"TILES groups={view.StartModel.Groups.Count} rows={rows} width={width:F0} " + $"pan={-ScrollOf(start.TileList):F0} axis=Horizontal apps={-apps:F0}");
+        var tiles = view.StartModel.Tiles;
+        for (var index = 0; index < tiles.Count; index++)
         {
-            foreach (var tile in group.Tiles)
-            {
-                BasinReport.Line($"TILE {index} group={group.Name} name={tile.Name} " + $"box={tile.Box.X},{tile.Box.Y},{tile.Box.Width}x{tile.Box.Height}");
-                index++;
-            }
+            var tile = tiles[index];
+            var box = TileBox(view, index) is { } placed
+                ? $"{placed.X},{placed.Y},{placed.Width}x{placed.Height}"
+                : "-";
+            BasinReport.Line($"TILE {index} group={tile.Group} name={tile.Name} box={box}");
         }
+    }
+
+    private void AppsSortCommand(string which)
+    {
+        var sort = which switch
+        {
+            "name" => AppsSort.Name,
+            "date" => AppsSort.DateInstalled,
+            "used" => AppsSort.MostUsed,
+            "category" => AppsSort.Category,
+            _ => (AppsSort?)null,
+        };
+        if (sort is not { } chosen)
+        {
+            BasinReport.Line($"ERR no sort '{which}'");
+            return;
+        }
+
+        ShowApps(CommandView, true);
+        CommandView.StartModel.AppsSort = chosen;
     }
 
     private void TapCommand(string which)
     {
         var view = CommandView;
-        if (view.Start is not { } start)
+        if (TileOf(view, which) is { } tile)
         {
-            BasinReport.Line($"ERR no start screen");
-            return;
+            LaunchTile(view, tile);
         }
-
-        start.Layout();
-        var wanted = Number(which);
-        var index = 0;
-        foreach (var group in start.Grid.Groups)
-        {
-            foreach (var tile in group.Tiles)
-            {
-                if (index++ != wanted)
-                {
-                    continue;
-                }
-
-                LaunchTile(view, tile);
-                return;
-            }
-        }
-
-        BasinReport.Line($"ERR no tile {which}");
     }
 
     private void TitleGrabCommand()
@@ -604,77 +655,52 @@ internal sealed partial class Shell
         return null;
     }
 
+    internal const int PressTouchId = 90;
+
     private void PressCommand(string which, double fractionX, double fractionY)
     {
         var view = CommandView;
-        if (view.Start is not { } start)
+        var index = Number(which);
+        if (TileOf(view, which) is not { } tile)
         {
-            BasinReport.Line($"ERR no start screen");
             return;
         }
 
-        start.Layout();
-        var wanted = Number(which);
-        var index = 0;
-        foreach (var group in start.Grid.Groups)
+        if (TileBox(view, index) is not { } box)
         {
-            foreach (var tile in group.Tiles)
-            {
-                if (index++ != wanted)
-                {
-                    continue;
-                }
-
-                var x = tile.Box.X + (tile.Box.Width * fractionX) + StartScreen.SidePadding + start.Pan.Offset;
-                var y = tile.Box.Y + (tile.Box.Height * fractionY) + StartScreen.TopPadding;
-                start.Pressed = tile;
-                start.SetContact(x, y);
-                BasinReport.Line($"PRESS {tile.Name} at {fractionX},{fractionY}");
-                return;
-            }
+            BasinReport.Line($"ERR tile {which} is not realized");
+            return;
         }
 
-        BasinReport.Line($"ERR no tile {which}");
+        var x = view.Box.X + box.X + (box.Width * fractionX);
+        var y = view.Box.Y + box.Y + (box.Height * fractionY);
+        _router.TouchDown((uint)Environment.TickCount, PressTouchId, x, y);
+        BasinReport.Line($"PRESS {tile.Name} at {fractionX},{fractionY}");
     }
 
     private void ReleaseCommand()
     {
-        if (CommandView.Start is { } start)
-        {
-            start.Pressed = null;
-            BasinReport.Line($"RELEASE");
-        }
+        _router.TouchCancel();
+        BasinReport.Line($"RELEASE");
     }
 
     private void SelectCommand(string which)
     {
         var view = CommandView;
-        if (view.Start is not { } start)
+        if (view.StartView is not { } start || TileOf(view, which) is null)
         {
-            BasinReport.Line($"ERR no start screen");
             return;
         }
 
-        start.Layout();
-        var wanted = Number(which);
-        var index = 0;
-        foreach (var group in start.Grid.Groups)
+        var index = Number(which);
+        if (start.TileList.Selection.IsSelected(index))
         {
-            foreach (var tile in group.Tiles)
-            {
-                if (index++ != wanted)
-                {
-                    continue;
-                }
-
-                tile.Selected = !tile.Selected;
-                start.Invalidate();
-                BasinReport.Line($"SELECT {tile.Name} {(tile.Selected ? "on" : "off")}");
-                return;
-            }
+            start.TileList.Selection.Deselect(index);
         }
-
-        BasinReport.Line($"ERR no tile {which}");
+        else
+        {
+            start.TileList.Selection.Select(index);
+        }
     }
 
     private void PrintMru()

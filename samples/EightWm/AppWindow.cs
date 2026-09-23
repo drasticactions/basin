@@ -53,6 +53,8 @@ internal sealed class AppWindow : IShellApp, IClosable
 
     public Box Cell { get; set; }
 
+    public long FocusStamp { get; set; }
+
     public bool Closing { get; set; }
 
     public bool IsAttributable => X11 is null;

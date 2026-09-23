@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:win="https://github.com/avawin"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.CharmPaneView"
+             x:DataType="local:CharmPaneModel">
+  <UserControl.Styles>
+    <Style Selector="Button.swatch">
+      <Setter Property="Width" Value="40" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Margin" Value="0,0,6,6" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Stretch" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+  </UserControl.Styles>
+  <win:SettingsFlyout x:Name="Flyout"
+                      IsInline="True"
+                      PaneWidth="Narrow"
+                      Header="{Binding Title}"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Stretch">
+    <Panel>
+      <TextBlock IsVisible="{Binding !IsSettings}" Text="{Binding Text}" TextWrapping="Wrap" />
+      <StackPanel x:Name="SettingsPanel"
+                  x:DataType="local:SettingsModel"
+                  DataContext="{Binding $parent[local:CharmPaneView].((local:CharmPaneModel)DataContext).Settings}"
+                  IsVisible="{Binding $parent[local:CharmPaneView].((local:CharmPaneModel)DataContext).IsSettings}"
+                  Classes="win-settings-section">
+        <TextBlock Text="Theme" Classes="win-type-medium" />
+        <ToggleSwitch x:Name="ThemeSwitch" OnContent="Dark" OffContent="Light" IsChecked="{Binding Dark}" />
+        <TextBlock Text="Accent" Classes="win-type-medium" />
+        <ItemsControl x:Name="AccentList" ItemsSource="{Binding Accents}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="local:AccentSwatch">
+              <Button Classes="swatch" Command="{Binding ChooseCommand}">
+                <Border Background="{Binding Fill}">
+                  <Border BorderBrush="{DynamicResource WinTextBrush}"
+                          BorderThickness="3"
+                          IsVisible="{Binding IsCurrent}" />
+                </Border>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="Animations" Classes="win-type-medium" />
+        <ToggleSwitch x:Name="AnimationsSwitch" OnContent="On" OffContent="Off" IsChecked="{Binding Animations}" />
+        <TextBlock Text="Hot corners" Classes="win-type-medium" />
+        <ToggleSwitch x:Name="HotCornersSwitch" OnContent="On" OffContent="Off" IsChecked="{Binding HotCorners}" />
+      </StackPanel>
+    </Panel>
+  </win:SettingsFlyout>
+</UserControl>

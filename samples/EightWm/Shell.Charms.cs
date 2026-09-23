@@ -12,10 +12,14 @@ internal sealed partial class Shell
 
     private void AttachCharms(ShellView view)
     {
-        view.Charms = new CharmsBar(UIHost, view.CharmsFrame, view.CharmsClockFrame, view.CharmsPaneFrame)
+        view.Charms = new CharmsBar(
+            _ui, _chromeIndex, view.CharmsFrame, view.CharmsClockFrame, view.CharmsPaneFrame,
+            charm => ActivateCharm(view, charm),
+            () => ClosePane(view))
         {
             Backdrop = _charmsBlur,
         };
+        AttachSettings(view.Charms.Pane.Settings);
         view.DimRect = new SceneRect(view.DimFrame, 1, 1, DimColor) { Enabled = false };
     }
 
@@ -109,8 +113,14 @@ internal sealed partial class Shell
 
         if (charms.ClosingPane && !charms.PaneMotion.IsRunning)
         {
+            if (charms.PaneSurface is { } pane && ReferenceEquals(_router.KeyboardFocus, pane))
+            {
+                _router.SetKeyboardFocus(null);
+            }
+
             charms.RetirePane();
             Tween.Reset(view.CharmsPaneFrame);
+            SyncChromeFocus(view);
         }
 
         UpdateDim(view, charms);
@@ -152,9 +162,6 @@ internal sealed partial class Shell
 
     internal void ToggleCharms(ShellView view) => ShowCharms(view, view.Charms is not { Visible: true });
 
-    internal Charm CharmAt(ShellView view, double localX, double localY) =>
-        view.Charms is { Visible: true } charms ? charms.CharmAt(localX, localY) : Charm.None;
-
     internal bool ActivateCharm(ShellView view, Charm charm)
     {
         if (view.Charms is not { Visible: true } charms || charm == Charm.None)
@@ -182,6 +189,7 @@ internal sealed partial class Shell
             ref charms.PaneMotion, view.CharmsPaneFrame, Animation.ShowPanel,
             offsetScale: PanelTravel(CharmsBar.PaneWidth));
         charms.Draw();
+        _router.SetKeyboardFocus(charms.PaneSurface);
         BasinReport.Line($"CHARM {charm}");
         ShowCharms(view, false, keepPane: true);
         return true;
@@ -256,24 +264,14 @@ internal sealed partial class Shell
             return false;
         }
 
-        if (charms.Visible)
+        if (charms.Visible && localX >= charms.BarBox.X)
         {
-            var charm = charms.CharmAt(localX, localY);
-            if (charm != Charm.None)
-            {
-                ActivateCharm(view, charm);
-                return true;
-            }
-
-            if (localX >= charms.BarBox.X)
-            {
-                return true;
-            }
+            return false;
         }
 
         if (charms.OpenPane != Charm.None && !charms.ClosingPane && localX >= charms.PaneBox.X)
         {
-            return true;
+            return false;
         }
 
         if (charms.Visible)
@@ -286,22 +284,5 @@ internal sealed partial class Shell
         }
 
         return true;
-    }
-
-    internal void HoverCharms(ShellView view, double localX, double localY)
-    {
-        if (view.Charms is not { Visible: true } charms)
-        {
-            return;
-        }
-
-        var hot = charms.CharmAt(localX, localY);
-        if (hot == charms.Hot)
-        {
-            return;
-        }
-
-        charms.Hot = hot;
-        charms.Draw();
     }
 }

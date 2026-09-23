@@ -376,6 +376,69 @@ internal sealed class AppHost<T>
         return true;
     }
 
+    public Box SlotBox(int index)
+    {
+        if (index < 0 || index >= _widths.Count)
+        {
+            return default;
+        }
+
+        var offset = 0;
+        for (var i = 0; i < index; i++)
+        {
+            offset += _widths[i] + Gutter;
+        }
+
+        return Portrait
+            ? new Box(Area.X, Area.Y + offset, Area.Width, _widths[index])
+            : new Box(Area.X + offset, Area.Y, _widths[index], Area.Height);
+    }
+
+    public int CollapseTarget(int splitter, int position)
+    {
+        if (splitter < 0 || splitter >= _widths.Count - 1)
+        {
+            return -1;
+        }
+
+        var before = 0;
+        for (var i = 0; i < splitter; i++)
+        {
+            before += _widths[i] + Gutter;
+        }
+
+        var first = position - before;
+        var second = _widths[splitter] + _widths[splitter + 1] - first;
+        if (first < MinimumOf(splitter) / 2)
+        {
+            return splitter;
+        }
+
+        return second < MinimumOf(splitter + 1) / 2 ? splitter + 1 : -1;
+    }
+
+    public T? Collapse(int splitter, int slot)
+    {
+        if (splitter < 0 || splitter >= _widths.Count - 1 || (slot != splitter && slot != splitter + 1))
+        {
+            return null;
+        }
+
+        var neighbor = slot == splitter ? splitter + 1 : splitter;
+        _widths[neighbor] += _widths[slot] + Gutter;
+        var app = _slots[slot];
+        if (app is null)
+        {
+            DropSlot(slot);
+        }
+        else
+        {
+            Eject(app);
+        }
+
+        return app;
+    }
+
     public bool TrySplit(T app, int at, double fraction)
     {
         if (_cells.Contains(app))

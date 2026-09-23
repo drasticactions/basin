@@ -22,6 +22,10 @@ public sealed class AvaloniaUISurface : IUISurface
     private readonly HashSet<uint> _pressedKeys = [];
     private readonly bool _attached;
     private global::Avalonia.Point _pointer;
+    private const int TouchCapacity = 10;
+    private readonly int[] _touchIds = new int[TouchCapacity];
+    private readonly global::Avalonia.Point[] _touchPoints = new global::Avalonia.Point[TouchCapacity];
+    private readonly bool[] _touchLive = new bool[TouchCapacity];
     private RawInputModifiers _modifiers;
     private bool _pointerInside;
     private volatile bool _damagePending;
@@ -342,7 +346,7 @@ public sealed class AvaloniaUISurface : IUISurface
         RaiseTouch(timeMs, id, x, y, RawPointerEventType.TouchUpdate);
 
     public void NotifyTouchUp(uint timeMs, int id) =>
-        RaiseTouch(timeMs, id, _pointer.X, _pointer.Y, RawPointerEventType.TouchEnd);
+        RaiseTouch(timeMs, id, double.NaN, double.NaN, RawPointerEventType.TouchEnd);
 
     public void NotifyTouchCancel()
     {
@@ -354,8 +358,17 @@ public sealed class AvaloniaUISurface : IUISurface
                 return;
             }
 
-            Raise(new RawTouchEventArgs(
-                _touch, 0, InputRootOf(), RawPointerEventType.TouchCancel, _pointer, _modifiers, 0));
+            for (var slot = 0; slot < TouchCapacity; slot++)
+            {
+                if (!_touchLive[slot])
+                {
+                    continue;
+                }
+
+                _touchLive[slot] = false;
+                Raise(new RawTouchEventArgs(
+                    _touch, 0, InputRootOf(), RawPointerEventType.TouchCancel, _touchPoints[slot], _modifiers, _touchIds[slot]));
+            }
         });
     }
 
@@ -454,9 +467,47 @@ public sealed class AvaloniaUISurface : IUISurface
                 return;
             }
 
-            _pointer = new global::Avalonia.Point(x, y);
-            Raise(new RawTouchEventArgs(_touch, timeMs, InputRootOf(), type, _pointer, _modifiers, id));
+            var slot = TouchSlot(id, type == RawPointerEventType.TouchBegin);
+            if (slot >= 0 && !double.IsNaN(x))
+            {
+                _touchPoints[slot] = new global::Avalonia.Point(x, y);
+            }
+
+            var point = slot >= 0 ? _touchPoints[slot]
+                : double.IsNaN(x) ? default : new global::Avalonia.Point(x, y);
+            if (slot >= 0 && type == RawPointerEventType.TouchEnd)
+            {
+                _touchLive[slot] = false;
+            }
+
+            Raise(new RawTouchEventArgs(_touch, timeMs, InputRootOf(), type, point, _modifiers, id));
         });
+    }
+
+    private int TouchSlot(int id, bool begin)
+    {
+        var free = -1;
+        for (var slot = 0; slot < TouchCapacity; slot++)
+        {
+            if (_touchLive[slot] && _touchIds[slot] == id)
+            {
+                return slot;
+            }
+
+            if (free < 0 && !_touchLive[slot])
+            {
+                free = slot;
+            }
+        }
+
+        if (!begin || free < 0)
+        {
+            return -1;
+        }
+
+        _touchIds[free] = id;
+        _touchLive[free] = true;
+        return free;
     }
 
     private bool Ready => !_disposed && _impl.InputRoot is not null && _impl.Input is not null;

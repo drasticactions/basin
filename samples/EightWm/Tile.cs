@@ -1,9 +1,15 @@
-using Basin;
+using Avalonia.Media;
 
 namespace EightWm;
 
-internal sealed class Tile
+public sealed class Tile : ObservableModel
 {
+    private string? _peek;
+    private string? _badge;
+    private bool _selected;
+    private IImage? _iconImage;
+    private int _launches;
+
     public required string Name { get; init; }
 
     public required string Exec { get; init; }
@@ -16,35 +22,69 @@ internal sealed class Tile
 
     public string? Icon { get; init; }
 
+    public string? DesktopId { get; init; }
+
     public string? PeekCommand { get; init; }
 
     public string? BadgeCommand { get; init; }
 
     public int PeekIntervalSeconds { get; init; } = 60;
 
-    public Box Box { get; set; }
-
-    public string? Peek { get; set; }
-
-    public string? Badge { get; set; }
-
-    public long NextPollMillis { get; set; }
-
-    public Tween Press;
-
-    public Tween Check;
-
-    public bool Selected { get; set; }
-
-    public double DragX { get; set; }
-
-    public double DragY { get; set; }
-
-    public static (int Width, int Height) UnitsOf(TileSize size) => size switch
+    public string? Peek
     {
-        TileSize.Small => (1, 1),
-        TileSize.Wide => (4, 2),
-        TileSize.Large => (4, 4),
-        _ => (2, 2),
+        get => _peek;
+        set => Set(ref _peek, value);
+    }
+
+    public string? Badge
+    {
+        get => _badge;
+        set => Set(ref _badge, value);
+    }
+
+    public bool Selected
+    {
+        get => _selected;
+        set => Set(ref _selected, value);
+    }
+
+    public IImage? IconImage
+    {
+        get => _iconImage;
+        set => Set(ref _iconImage, value);
+    }
+
+    public DateTime Installed { get; init; }
+
+    public int Launches
+    {
+        get => _launches;
+        set => Set(ref _launches, value);
+    }
+
+    public IBrush Fill => new SolidColorBrush(Avalonia.Media.Color.FromUInt32(Color));
+
+    public double Width => SpanOf(Size).Width - (2 * Margin);
+
+    public double Height => SpanOf(Size).Height - (2 * Margin);
+
+    public double IconSize => Math.Round(Math.Min(Width, Height - LabelHeight) * 0.5);
+
+    public double IconLift => LabelHeight * 0.4;
+
+    public const double Cell = 80;
+
+    public const double Margin = 5;
+
+    public const double LabelHeight = 26;
+
+    internal long NextPollMillis { get; set; }
+
+    public static (double Width, double Height) SpanOf(TileSize size) => size switch
+    {
+        TileSize.Small => (Cell, Cell),
+        TileSize.Wide => (4 * Cell, 2 * Cell),
+        TileSize.Large => (4 * Cell, 4 * Cell),
+        _ => (2 * Cell, 2 * Cell),
     };
 }

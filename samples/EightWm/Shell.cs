@@ -41,6 +41,14 @@ internal sealed partial class Shell : IDisposable
 
     private Basin.XWayland.XWaylandServer? _xServer;
 
+    private readonly OutputScreens _screens;
+    private readonly Basin.UI.Avalonia.BasinGlGpu? _gpu;
+    private readonly Basin.UI.Avalonia.AvaloniaUIHost _ui;
+    private readonly UISurfaceIndex _chromeIndex = new();
+    private readonly SceneTree _popupLayer;
+    private readonly UIDriver _uiDriver;
+    private readonly UISurfaceRouter _router;
+
     public static int Run(ShellOptions options, BasinLogger log, out long rendered)
     {
         BasinCounters.Reset();
@@ -182,6 +190,24 @@ internal sealed partial class Shell : IDisposable
         _outputs.BeforeRepaint += driver => AdvanceAnimations(ViewOf(driver));
         _fifo = _services.Find<FifoManager>();
 
+        _screens = new OutputScreens(_outputs, _layout);
+        _gpu = _renderer.Device is { } uiDevice
+            ? Basin.UI.Avalonia.BasinGlGpu.TryCreate(
+                uiDevice.DevicePath, uiDevice as Basin.Render.Gl.GlDevice, _renderer.DmabufTextureFormats)
+            : null;
+        _ui = Basin.UI.Avalonia.BasinPlatform.Start<EightWmApp>(new Basin.UI.Avalonia.BasinPlatformOptions
+        {
+            EventLoop = _host.Loop,
+            Screens = _screens,
+            Selection = _services.Find<Basin.Capabilities.ISelectionStore>(),
+            Theme = Basin.UI.Avalonia.UIThemeVariant.Dark,
+            Gpu = _gpu,
+            Configure = builder => AvaWin.AppBuilderExtensions.WithAvaWinFonts(builder),
+        });
+        _popupLayer = new SceneTree(_scene.Root);
+        _uiDriver = new UIDriver(_ui, _host.Loop) { Index = _chromeIndex, PopupLayer = _popupLayer };
+        _router = new UISurfaceRouter(_scene, _chromeIndex);
+
         _seat = new ShellSeat(_host, _services, this, _outputs, _scene, _layout, cursorTheme, inputSink, log);
 
         LoadConfig();
@@ -199,6 +225,7 @@ internal sealed partial class Shell : IDisposable
         _outputs.Added += driver => AttachCharms(ViewOf(driver));
         _outputs.Added += driver => AttachTitle(ViewOf(driver));
         _outputs.Added += driver => AttachSwitcher(ViewOf(driver));
+        _outputs.Added += _ => _popupLayer.RaiseToTop();
         _outputs.CreateInitialOutputs();
         if (_options.Backend == BackendKind.Drm && Views.Count == 0)
         {
@@ -217,6 +244,7 @@ internal sealed partial class Shell : IDisposable
             view.Host.MaxCells = _config.MaxCells;
         }
 
+        ApplySettings();
         if (_host.Parent is { } parent)
         {
             parent.ParentGone += Stop;
@@ -278,10 +306,15 @@ internal sealed partial class Shell : IDisposable
             Spawn(command);
         }
 
+        _uiDriver.Woken += _outputs.ScheduleAll;
+        _uiDriver.Start();
+        _loop.Iterating += _uiDriver.Pump;
         _loop.Iterated += OnIterated;
         _loop.Frames = _options.Frames;
         _loop.Run();
         _loop.Iterated -= OnIterated;
+        _loop.Iterating -= _uiDriver.Pump;
+        _uiDriver.Woken -= _outputs.ScheduleAll;
 
         if (_options.Screenshot is { Length: > 0 } path && Views.Count > 0)
         {
@@ -299,15 +332,6 @@ internal sealed partial class Shell : IDisposable
 
     private void OnIterated()
     {
-
-        foreach (var view in Views)
-        {
-            if (view.Background.Enabled && view.Start is { Dirty: true })
-            {
-                view.Scheduler?.ScheduleRepaint();
-            }
-        }
-
         ExpireCloseTimers();
         ExpireSplashes();
         PollTiles();
@@ -373,11 +397,21 @@ internal sealed partial class Shell : IDisposable
             fallback => log.Warn($"{(fallback.Describe())}"));
     }
 
+    internal Basin.UI.Avalonia.AvaloniaUIHost Ui => _ui;
+
+    internal UISurfaceIndex ChromeIndex => _chromeIndex;
+
+    internal UISurfaceRouter Router => _router;
+
     public void Dispose()
     {
         _colorPack?.Luts.Dispose();
         ReleaseChrome();
+        _uiDriver.Dispose();
+        _screens.Dispose();
         _seat.Dispose();
+        _ui.Dispose();
+        _gpu?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _charmsBlur?.Dispose();

@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.CharmsBarView"
+             x:DataType="local:CharmsModel">
+  <UserControl.Styles>
+    <Style Selector="Button.charm">
+      <Setter Property="Height" Value="96" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.charm:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#33FFFFFF" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.charm:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#55FFFFFF" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.charm PathIcon">
+      <Setter Property="Width" Value="22" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Margin" Value="0,27,0,0" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Button.charm TextBlock">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="Margin" Value="0,0,0,19" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
+  </UserControl.Styles>
+  <ThemeVariantScope RequestedThemeVariant="Dark">
+    <Border Background="{Binding BarFill}">
+      <StackPanel VerticalAlignment="Center">
+        <Button x:Name="Search" Classes="charm" Command="{Binding ActivateCommand}" CommandParameter="Search">
+          <Panel>
+            <PathIcon Data="{StaticResource CharmSearch}" />
+            <TextBlock Text="Search" />
+          </Panel>
+        </Button>
+        <Button x:Name="Share" Classes="charm" Command="{Binding ActivateCommand}" CommandParameter="Share">
+          <Panel>
+            <PathIcon Data="{StaticResource CharmShare}" />
+            <TextBlock Text="Share" />
+          </Panel>
+        </Button>
+        <Button x:Name="Start" Classes="charm" Command="{Binding ActivateCommand}" CommandParameter="Start">
+          <Panel>
+            <PathIcon Data="{StaticResource CharmStart}" />
+            <TextBlock Text="Start" />
+          </Panel>
+        </Button>
+        <Button x:Name="Devices" Classes="charm" Command="{Binding ActivateCommand}" CommandParameter="Devices">
+          <Panel>
+            <PathIcon Data="{StaticResource CharmDevices}" />
+            <TextBlock Text="Devices" />
+          </Panel>
+        </Button>
+        <Button x:Name="Settings" Classes="charm" Command="{Binding ActivateCommand}" CommandParameter="Settings">
+          <Panel>
+            <PathIcon Data="{StaticResource CharmSettings}" />
+            <TextBlock Text="Settings" />
+          </Panel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </ThemeVariantScope>
+</UserControl>

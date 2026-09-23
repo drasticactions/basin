@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.TileView"
+             x:DataType="local:Tile"
+             Width="{Binding Width}"
+             Height="{Binding Height}">
+  <Grid Background="{Binding Fill}" ClipToBounds="True">
+    <Image Source="{Binding IconImage}"
+           Width="{Binding IconSize}"
+           Height="{Binding IconSize}"
+           Margin="0,0,0,21"
+           HorizontalAlignment="Center"
+           VerticalAlignment="Center" />
+    <TextBlock x:Name="PeekText"
+               Text="{Binding Peek}"
+               Margin="8,6,8,0"
+               FontSize="15"
+               Foreground="White"
+               TextTrimming="CharacterEllipsis"
+               VerticalAlignment="Top" />
+    <TextBlock Text="{Binding Name}"
+               Margin="8,0,8,6"
+               FontSize="15"
+               Foreground="White"
+               TextTrimming="CharacterEllipsis"
+               VerticalAlignment="Bottom" />
+    <TextBlock x:Name="BadgeText"
+               Text="{Binding Badge}"
+               Margin="0,0,8,4"
+               FontSize="22"
+               FontWeight="SemiBold"
+               Foreground="White"
+               HorizontalAlignment="Right"
+               VerticalAlignment="Bottom" />
+  </Grid>
+</UserControl>

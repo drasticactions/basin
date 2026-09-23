@@ -28,4 +28,6 @@ public sealed class BasinPlatformOptions
     public ThreadAffinity? CompositorAffinity { get; set; }
 
     public Func<Type, object?>? Features { get; set; }
+
+    public Func<AppBuilder, AppBuilder>? Configure { get; set; }
 }

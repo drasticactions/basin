@@ -56,6 +56,17 @@ internal static class Program
             HelpName = "STATE",
             DefaultValueFactory = _ => "on",
         }.AcceptOnlyFromAmong("on", "off"));
+        var theme = cli.Add(new Option<string>("--theme")
+        {
+            Description = "the chrome theme: dark | light",
+            HelpName = "THEME",
+            DefaultValueFactory = _ => "dark",
+        }.AcceptOnlyFromAmong("dark", "light"));
+        var accent = cli.Add(new Option<string?>("--accent")
+        {
+            Description = "the accent color, as #rrggbb",
+            HelpName = "COLOR",
+        });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var client = cli.Add(CommonOptions.Client());
         var frames = cli.Add(CommonOptions.Frames());
@@ -78,6 +89,8 @@ internal static class Program
             Note("edge_band", edgeBand);
             Note("min_width", minWidth);
             Note("start_output", startOutput);
+            Note("theme", theme);
+            Note("accent", accent);
 
             var options = new ShellOptions
             {
@@ -95,6 +108,8 @@ internal static class Program
                 MinWidth = result.GetValue(minWidth),
                 EdgeBand = result.GetValue(edgeBand),
                 XWayland = result.GetValue(xwayland) == "on",
+                Dark = result.GetValue(theme) != "light",
+                Accent = Basin.Config.TomlColor.Argb(result.GetValue(accent), Shell.DefaultAccent) | 0xff000000,
                 SocketFd = chosen.SocketFd,
                 Explicit = explicitly,
             };

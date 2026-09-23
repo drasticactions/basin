@@ -2,7 +2,7 @@ using Basin;
 
 namespace EightWm;
 
-internal enum TileSize
+public enum TileSize
 {
     Small,
 

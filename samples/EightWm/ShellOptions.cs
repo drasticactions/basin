@@ -32,6 +32,10 @@ internal sealed record ShellOptions
 
     public bool XWayland { get; init; } = true;
 
+    public bool Dark { get; init; } = true;
+
+    public uint Accent { get; init; } = Shell.DefaultAccent;
+
     public int SocketFd { get; init; } = -1;
 
     public HashSet<string> Explicit { get; init; } = [];

@@ -10,6 +10,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <NoWarn>$(NoWarn);IL2104</NoWarn>
+    <BasinAvaloniaBackend>true</BasinAvaloniaBackend>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,11 +38,17 @@
     <ProjectReference Include="../../src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
-    <ProjectReference Include="../../src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
-    <ProjectReference Include="../../src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.HarfBuzz" />
+    <PackageReference Include="AvaWin.Theme" />
+    <PackageReference Include="AvaWin.Controls" />
+    <PackageReference Include="AvaWin.Animations" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
     <PackageReference Include="Svg.Skia" />
@@ -49,11 +57,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Basin.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="../../assets/fonts/Selawik-Regular.ttf" LogicalName="Selawik-Regular.ttf" />
-    <EmbeddedResource Include="../../assets/fonts/Selawik-Semibold.ttf" LogicalName="Selawik-Semibold.ttf" />
+    <InternalsVisibleTo Include="EightWm.Tests" />
   </ItemGroup>
 
 </Project>

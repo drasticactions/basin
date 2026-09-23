@@ -33,6 +33,10 @@ internal sealed class Config
 
     public int StartOutput { get; private set; }
 
+    public bool Dark { get; private set; } = true;
+
+    public uint Accent { get; private set; } = Shell.DefaultAccent;
+
     public static Config Load(string? path, BasinLogger log)
     {
         var config = new Config();
@@ -57,6 +61,13 @@ internal sealed class Config
             config.MinWidth = shell.Number("min_width", config.MinWidth);
             config.MaxCells = Math.Clamp(shell.Number("max_cells", config.MaxCells), 1, 8);
             config.StartOutput = Math.Max(0, shell.Number("start_output", config.StartOutput));
+            config.Dark = shell.Text("theme") switch
+            {
+                "light" => false,
+                "dark" or null => true,
+                var other => Warn(log, $"[shell] theme '{other}' is neither dark nor light; dark is used", true),
+            };
+            config.Accent = TomlColor.Argb(shell.Text("accent"), config.Accent) | 0xff000000;
         }
 
         var rules = new List<Rule>();
@@ -101,6 +112,12 @@ internal sealed class Config
 
         reader.ReportUnknown();
         return config;
+    }
+
+    private static T Warn<T>(BasinLogger log, string message, T value)
+    {
+        log.Warn($"{message}");
+        return value;
     }
 
     public static string DefaultPath() => TomlConfig.DefaultPath("eight-wm");

@@ -83,23 +83,20 @@ internal sealed partial class Shell
         return view.StartVisible ? key | 64 : key;
     }
 
-    internal void RefreshHot(ShellView view, double localX, double localY)
-    {
-        HoverCharms(view, localX, localY);
-        HotTitle(view, localX, localY);
-    }
-
-    internal string? ChromeCursorAt(ShellView view, double localX, double localY, Surface? hit)
+    internal string? ShellCursorAt(ShellView view, double localX, double localY)
     {
         if (view.Splash is { Enabled: true })
         {
             return PointerCursor;
         }
 
-        if (SplittersLive(view) && view.Host.SplitterAt(localX, localY, SplitterSlop) >= 0)
-        {
-            return SplitterCursor(view);
-        }
+        return SplittersLive(view) && view.Host.SplitterAt(localX, localY, SplitterSlop) >= 0
+            ? SplitterCursor(view)
+            : null;
+    }
+
+    internal string? ChromeCursorAt(ShellView view, double localX, double localY, Surface? hit)
+    {
 
         if (view.Charms is { AnyVisible: true } charms &&
             ((charms.Visible && Covers(charms.BarBox, localX, localY)) ||
@@ -109,11 +106,6 @@ internal sealed partial class Shell
         }
 
         if (view is { SwitcherDocked: true, Switcher: { } rail } && Covers(rail.Box, localX, localY))
-        {
-            return PointerCursor;
-        }
-
-        if (view.Title is { Visible: true } title && title.Holds(localX, localY))
         {
             return PointerCursor;
         }

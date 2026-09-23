@@ -1,9 +1,3 @@
-using Basin;
-using Basin.Capabilities;
-using Basin.Render.Skia;
-using Basin.Scene;
-using SkiaSharp;
-
 namespace EightWm;
 
 internal enum Charm

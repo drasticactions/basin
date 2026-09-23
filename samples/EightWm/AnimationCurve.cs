@@ -7,4 +7,6 @@ internal enum AnimationCurve
     Linear,
 
     Departure,
+
+    EaseInOut,
 }

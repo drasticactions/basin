@@ -20,7 +20,11 @@ internal sealed partial class Shell
         Animation.DragSourceEnd, MotionAxis.None, Track.None,
         new Track(from, 1, PutDownMillis, 0, AnimationCurve.Deceleration), Track.None, 0, 0);
 
-    private void AttachTitle(ShellView view) => view.Title = new AppTitleBar(UIHost, view.TitleFrame);
+    private void AttachTitle(ShellView view) => view.Title = new AppTitleBar(_ui, _chromeIndex, view.TitleFrame, () =>
+    {
+        ShowTitle(view, false);
+        CloseFocused();
+    });
 
     internal void ShowTitle(ShellView view, bool visible)
     {
@@ -47,6 +51,7 @@ internal sealed partial class Shell
         if (visible)
         {
             var app = Focused!;
+            title.App = app;
             title.Resize(app.Cell.IsEmpty ? AppArea(view) : app.Cell, view.Scale);
             title.Title = app.Title.Length > 0 ? app.Title : app.AppId;
         }
@@ -62,6 +67,28 @@ internal sealed partial class Shell
         {
             SettleTitle(view, title);
         }
+    }
+
+    private void SyncTitle(ShellView view)
+    {
+        if (view.Title is not { Visible: true, Dragging: false } title || title.App is not { } app)
+        {
+            return;
+        }
+
+        if (!view.Host.Holds(app) || app.Cell.IsEmpty)
+        {
+            ShowTitle(view, false);
+            return;
+        }
+
+        if (title.Box.X == app.Cell.X && title.Box.Y == app.Cell.Y && title.Box.Width == app.Cell.Width && title.Scale == view.Scale)
+        {
+            return;
+        }
+
+        title.Resize(app.Cell, view.Scale);
+        title.Draw();
     }
 
     internal void ToggleTitle(ShellView view) => ShowTitle(view, view.Title is not { Visible: true });
@@ -119,24 +146,6 @@ internal sealed partial class Shell
         if (title.HasLeft(localY))
         {
             ShowTitle(view, false);
-            return;
-        }
-
-        HotTitle(view, localX, localY);
-    }
-
-    internal void HotTitle(ShellView view, double localX, double localY)
-    {
-        if (view.Title is not { Visible: true } title || _titleDrag is not null)
-        {
-            return;
-        }
-
-        var hot = title.HoldsClose(localX, localY);
-        if (hot != title.HotClose)
-        {
-            title.HotClose = hot;
-            title.Draw();
         }
     }
 
@@ -156,9 +165,7 @@ internal sealed partial class Shell
 
         if (title.HoldsClose(localX, localY))
         {
-            ShowTitle(view, false);
-            CloseFocused();
-            return true;
+            return false;
         }
 
         if (Focused is not { } app)
@@ -227,6 +234,51 @@ internal sealed partial class Shell
             EdgeSwipeZone.Right => LandingBox(view, app, view.Host.SlotCount),
             _ => AppArea(view),
         };
+
+    internal const double EdgeLiftTravel = 96;
+
+    private const int EdgeContact = int.MinValue;
+
+    private void TrackTopEdge(ShellView view, EdgeSwipeRecognizer edges)
+    {
+        if (_titleDrag is null)
+        {
+            if (edges.Y < EdgeLiftTravel || view.StartVisible || view.Title is null ||
+                Focused is not { Cell.IsEmpty: false } app || !ReferenceEquals(HomeOf(app), view))
+            {
+                return;
+            }
+
+            _titleDrag = app;
+            _titleView = view;
+            _titleTouch = EdgeContact;
+            _titleGrabX = Math.Clamp(edges.X, app.Cell.X, app.Cell.Right - 1);
+            _titleGrabY = app.Cell.Y;
+            _titleMoved = false;
+            BasinReport.Line($"TITLE lift {app.AppId}");
+        }
+
+        TitleMove(view, edges.X, edges.Y, EdgeContact);
+    }
+
+    private bool FinishTopEdge(ShellView view, EdgeSwipeRecognizer edges)
+    {
+        if (_titleTouch != EdgeContact)
+        {
+            return false;
+        }
+
+        if (edges.Outcome == EdgeSwipeOutcome.Cancelled)
+        {
+            TitleCancel();
+        }
+        else
+        {
+            TitleRelease(view, edges.X, edges.Y, EdgeContact);
+        }
+
+        return true;
+    }
 
     internal AppWindow? DraggedTitle => _titleDrag;
 
@@ -338,6 +390,7 @@ internal sealed partial class Shell
     {
         if (Snap(app, view, at))
         {
+            FillVacancy(view, app);
             return;
         }
 
@@ -346,7 +399,19 @@ internal sealed partial class Shell
         Focus(app);
     }
 
-    internal void Fill(ShellView view, AppWindow app)
+    private void FillVacancy(ShellView view, AppWindow snapped)
+    {
+        if (!view.Host.HasVacancy || view.Host.Previous() is not { Closing: false, IsTransient: false } other ||
+            ReferenceEquals(other, snapped) || !ReferenceEquals(HomeOf(other), view) || !Snap(other, view, view.Host.VacantSlot))
+        {
+            return;
+        }
+
+        Focus(snapped);
+        BasinReport.Line($"SNAP fill {other.AppId}");
+    }
+
+        internal void Fill(ShellView view, AppWindow app)
     {
         foreach (var other in view.Host.Cells.ToArray())
         {

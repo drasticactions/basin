@@ -18,6 +18,7 @@ internal static class Curves
         {
             AnimationCurve.Deceleration => Bezier(t, 0.1, 0.9, 0.2, 1.0),
             AnimationCurve.Departure => Bezier(t, 0.11, 0.5, 0.24, 0.96),
+            AnimationCurve.EaseInOut => Bezier(t, 0.42, 0, 0.58, 1),
             _ => t,
         };
     }

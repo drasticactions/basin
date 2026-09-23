@@ -7,7 +7,7 @@ internal sealed partial class Shell
     private long _clockMillis;
 
     internal bool AnimationsOn =>
-        _options.Explicit.Contains("animations") ? _options.Animations : _config.Animations;
+        _liveAnimations ?? (_options.Explicit.Contains("animations") ? _options.Animations : _config.Animations);
 
     internal long ClockMillis => _clockMillis;
 
@@ -30,13 +30,17 @@ internal sealed partial class Shell
             return;
         }
 
+        _clockMillis = Environment.TickCount64;
         app.Motion.OffsetScale = offsetScale;
         app.Motion.Start(spec, _clockMillis, index);
         app.Motion.Apply(app.Frame);
         Kick();
     }
 
-    internal void Animate(ref Tween tween, SceneTransform node, Animation name, int index = 0, double offsetScale = 1)
+    internal void Animate(ref Tween tween, SceneTransform node, Animation name, int index = 0, double offsetScale = 1) =>
+        Animate(ref tween, node, AnimationCatalog.Of(name), index, offsetScale);
+
+    internal void Animate(ref Tween tween, SceneTransform node, in AnimationSpec spec, int index = 0, double offsetScale = 1)
     {
         if (!AnimationsOn)
         {
@@ -46,8 +50,9 @@ internal sealed partial class Shell
             return;
         }
 
+        _clockMillis = Environment.TickCount64;
         tween.OffsetScale = offsetScale;
-        tween.Start(AnimationCatalog.Of(name), _clockMillis, index);
+        tween.Start(spec, _clockMillis, index);
         tween.Apply(node);
         Kick();
     }
@@ -65,6 +70,12 @@ internal sealed partial class Shell
     {
         _clockMillis = Environment.TickCount64;
         PaintStart(view);
+        AdvanceFlip(view, _clockMillis);
+        if (view.Flip is not null)
+        {
+            view.Scheduler?.ScheduleRepaint();
+        }
+
         if (AnimationsOn)
         {
             foreach (var app in _apps)
@@ -81,7 +92,6 @@ internal sealed partial class Shell
             AdvanceCharms(view, _clockMillis);
             AdvanceTitle(view, _clockMillis);
             AdvanceSwitcher(view, _clockMillis);
-            AdvanceTiles(view, _clockMillis);
             if (Animating(view))
             {
                 view.Scheduler?.ScheduleRepaint();
@@ -106,7 +116,8 @@ internal sealed partial class Shell
             }
         }
 
-        if (view.StartMotion.IsRunning || view.SplashMotion.IsRunning || view.SwitcherMotion.IsRunning)
+        if (view.StartMotion.IsRunning || view.SplashMotion.IsRunning || view.SwitcherMotion.IsRunning ||
+            view.StartPageMotion.IsRunning || view.AppsMotion.IsRunning)
         {
             return true;
         }
@@ -122,60 +133,7 @@ internal sealed partial class Shell
             return true;
         }
 
-        return view.Background.Enabled && view.Start is { } start && Animating(start);
-    }
-
-    private static bool Animating(StartScreen start)
-    {
-        if (start.ZoomMotion.IsRunning || start.Pan.IsSettling || start.AppsPan.IsSettling)
-        {
-            return true;
-        }
-
-        foreach (var group in start.Grid.Groups)
-        {
-            foreach (var tile in group.Tiles)
-            {
-                if (tile.Press.IsRunning || tile.Check.IsRunning)
-                {
-                    return true;
-                }
-            }
-        }
-
         return false;
-    }
-
-    private static void AdvanceTiles(ShellView view, long nowMillis)
-    {
-        if (view.Start is not { } start || !view.Background.Enabled)
-        {
-            return;
-        }
-
-        if (start.ZoomMotion.IsRunning)
-        {
-            start.ZoomMotion.Advance(nowMillis);
-        }
-
-        _ = start.Pan.Advance(nowMillis);
-        _ = start.AppsPan.Advance(nowMillis);
-
-        foreach (var group in start.Grid.Groups)
-        {
-            foreach (var tile in group.Tiles)
-            {
-                if (tile.Press.IsRunning)
-                {
-                    tile.Press.Advance(nowMillis);
-                }
-
-                if (tile.Check.IsRunning)
-                {
-                    tile.Check.Advance(nowMillis);
-                }
-            }
-        }
     }
 
     private void AdvanceShellAnimations(ShellView view, long nowMillis)
@@ -185,10 +143,27 @@ internal sealed partial class Shell
             view.StartMotion.Advance(nowMillis);
             view.StartMotion.Apply(view.BackgroundFrame);
         }
+
+        if (view.StartPageMotion.IsRunning)
+        {
+            view.StartPageMotion.Advance(nowMillis);
+            view.StartPageMotion.Apply(view.StartFrame);
+        }
+
+        if (view.AppsMotion.IsRunning)
+        {
+            view.AppsMotion.Advance(nowMillis);
+            view.AppsMotion.Apply(view.AppsFrame);
+            if (!view.AppsMotion.IsRunning && !view.AppsVisible)
+            {
+                view.AppsFrame.Enabled = false;
+            }
+        }
     }
 
     internal void SettleAnimations()
     {
+        AvaWin.Animations.WinAnimations.TimeScale = 0;
         foreach (var app in _apps)
         {
             app.Motion.Settle();
@@ -197,8 +172,14 @@ internal sealed partial class Shell
 
         foreach (var view in Views)
         {
+            FinishFlip(view);
             view.StartMotion.Settle();
             view.StartMotion.Apply(view.BackgroundFrame);
+            view.StartPageMotion.Settle();
+            view.StartPageMotion.Apply(view.StartFrame);
+            view.AppsMotion.Settle();
+            view.AppsMotion.Apply(view.AppsFrame);
+            view.AppsFrame.Enabled = view.AppsVisible;
 
             view.SwitcherMotion.Settle();
             view.SwitcherMotion.Apply(view.SwitcherFrame);

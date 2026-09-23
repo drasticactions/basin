@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:win="https://github.com/avawin"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.AppsView"
+             x:DataType="local:StartModel"
+             Background="{Binding Background}">
+  <UserControl.Resources>
+    <DataTemplate x:Key="AppTemplate" x:DataType="local:Tile">
+      <Grid Width="200" Height="50" ColumnDefinitions="40,*">
+        <Border Width="40" Height="40" Background="{Binding Fill}" VerticalAlignment="Center">
+          <Image Source="{Binding IconImage}" Width="30" Height="30" />
+        </Border>
+        <TextBlock Grid.Column="1"
+                   Text="{Binding Name}"
+                   Margin="10,0,4,0"
+                   FontSize="15"
+                   Foreground="White"
+                   TextWrapping="Wrap"
+                   MaxLines="2"
+                   TextTrimming="CharacterEllipsis"
+                   VerticalAlignment="Center" />
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="AppGroupHeader" x:DataType="x:String">
+      <StackPanel Width="190">
+        <TextBlock Text="{Binding}" FontSize="15" Foreground="White" TextTrimming="CharacterEllipsis" />
+        <Border Height="2" Margin="0,6,0,0" Background="White" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+  <UserControl.Styles>
+    <Style Selector="win|ListViewItem">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.sort">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.sort:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.sort:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#33FFFFFF" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+  </UserControl.Styles>
+  <Grid x:Name="Root" Background="Transparent">
+    <StackPanel Orientation="Horizontal" Margin="60,70,0,0" VerticalAlignment="Top" HorizontalAlignment="Left">
+      <TextBlock Text="Apps" Classes="win-type-xx-large" Foreground="White" VerticalAlignment="Bottom" />
+      <Button x:Name="SortButton" Classes="sort" Margin="16,0,0,4" VerticalAlignment="Bottom">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <TextBlock Text="{Binding AppsSortLabel}" FontSize="26" FontWeight="Light" />
+          <PathIcon Data="M0,0 L6,6 L12,0" Width="12" Height="7" VerticalAlignment="Center" Margin="0,6,0,0" />
+        </StackPanel>
+        <Button.Flyout>
+          <MenuFlyout Placement="BottomEdgeAlignedLeft">
+            <MenuItem Header="by name" Command="{Binding SortCommand}" CommandParameter="Name" />
+            <MenuItem Header="by date installed" Command="{Binding SortCommand}" CommandParameter="DateInstalled" />
+            <MenuItem Header="by most used" Command="{Binding SortCommand}" CommandParameter="MostUsed" />
+            <MenuItem Header="by category" Command="{Binding SortCommand}" CommandParameter="Category" />
+          </MenuFlyout>
+        </Button.Flyout>
+      </Button>
+    </StackPanel>
+    <win:SearchBox x:Name="Search"
+                   Width="250"
+                   Margin="0,80,60,0"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Top"
+                   QueryText="{Binding Filter, Mode=TwoWay}" />
+    <win:ListView x:Name="AppList"
+                  ItemsSource="{Binding FilteredApps}"
+                  GroupKeySelector="{Binding AppsGroupKey}"
+                  GroupHeaderTemplate="{StaticResource AppGroupHeader}"
+                  ItemTemplate="{StaticResource AppTemplate}"
+                  SelectionMode="None"
+                  TapBehavior="InvokeOnly"
+                  PressFeedback="None"
+                  Margin="60,140,0,80">
+      <win:ListView.Layout>
+        <win:GridLayout Orientation="Horizontal" />
+      </win:ListView.Layout>
+    </win:ListView>
+    <Button x:Name="StartArrow"
+            Classes="pagearrow"
+            Margin="60,0,0,24"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Command="{Binding HideAppsCommand}">
+      <Path Data="M8,15 L8,1 M2,7 L8,1 L14,7" />
+    </Button>
+  </Grid>
+</UserControl>

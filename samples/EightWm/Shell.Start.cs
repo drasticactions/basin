@@ -1,10 +1,7 @@
+using Avalonia.Media;
+using AvaWin.Controls;
 using Basin;
-using Basin.Capabilities;
 using Basin.Freedesktop;
-using Basin.Render.Skia;
-using Basin.Scene;
-using Basin.UI.Skia;
-using SkiaSharp;
 
 using Basin.Diagnostics;
 
@@ -19,14 +16,11 @@ internal sealed partial class Shell
         0xff9f00a7, 0xff7e3878, 0xff603cba, 0xff2b5797,
     ];
 
-    private IUIHost? _uiHost;
     private IconLoader? _icons;
     private Config _config = null!;
     private readonly List<Tile> _tiles = [];
     private readonly List<DesktopEntry> _entries = [];
     private readonly DesktopEntries _desktop = new();
-
-    internal IUIHost UIHost => _uiHost ??= SkiaUIHosts.For(_renderer);
 
     internal IconLoader Icons => _icons ??= new IconLoader();
 
@@ -34,7 +28,7 @@ internal sealed partial class Shell
 
     internal IReadOnlyList<Tile> Tiles => _tiles;
 
-    internal bool HotCornersOn => Setting("hot_corners") ? _options.HotCorners : _config.HotCorners;
+    internal bool HotCornersOn => _liveHotCorners ?? (Setting("hot_corners") ? _options.HotCorners : _config.HotCorners);
 
     internal double EdgeBandNow => Setting("edge_band") ? _options.EdgeBand : _config.EdgeBand;
 
@@ -47,28 +41,18 @@ internal sealed partial class Shell
     private void LoadConfig()
     {
         _config = Config.Load(_options.ConfigPath, _log);
-        Fonts.SetConfigured(_config.Font);
         BuildTiles();
     }
 
     internal void Reload()
     {
-        var previous = _config;
         _config = Config.Load(_options.ConfigPath, _log);
-        if (!ReferenceEquals(previous?.Font, _config.Font))
-        {
-            Fonts.SetConfigured(_config.Font);
-        }
-
         BuildTiles();
         foreach (var view in Views)
         {
             view.Host.MaxCells = _config.MaxCells;
-            view.Start?.SetTiles(_tiles, _config.GroupOrder);
-            if (view.Start is { } start)
-            {
-                start.Background = _config.Background;
-            }
+            view.StartModel.Background = new SolidColorBrush(Color.FromUInt32(_config.Background));
+            view.IconScale = 0;
         }
 
         foreach (var app in _apps)
@@ -76,6 +60,8 @@ internal sealed partial class Shell
             ApplyRules(app);
         }
 
+        ClearLiveSettings();
+        ApplySettings();
         RelayoutAll();
         BasinReport.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
     }
@@ -124,6 +110,7 @@ internal sealed partial class Shell
                     Name = entry.Name,
                     Exec = command,
                     Icon = entry.Icon ?? Path.GetFileNameWithoutExtension(entry.Id),
+                    DesktopId = entry.Id,
                     Color = AccentOf(entry.Id),
                     Size = taken % 7 == 0 ? TileSize.Wide : TileSize.Square,
                     Group = taken < 12 ? "Main" : "More",
@@ -134,7 +121,8 @@ internal sealed partial class Shell
 
         foreach (var view in Views)
         {
-            view.Start?.SetTiles(_tiles, _config.GroupOrder);
+            view.StartModel.SetTiles(_tiles, _config.GroupOrder);
+            view.IconScale = 0;
         }
     }
 
@@ -151,16 +139,81 @@ internal sealed partial class Shell
 
     private void AttachStart(ShellView view)
     {
-        view.Start = new StartScreen(UIHost, view.BackgroundFrame, Icons, _config.Background);
-        view.Start.SetTiles(_tiles, _config.GroupOrder);
-        view.Splash = new ChromeSurface(UIHost, view.SplashFrame) { Enabled = false };
+        var model = view.StartModel;
+        model.Background = new SolidColorBrush(Color.FromUInt32(_config.Background));
+        model.SetTiles(_tiles, _config.GroupOrder);
+        model.TileInvoked += tile => LaunchTile(view, tile);
+        model.AppsRequested += visible =>
+        {
+            if (_config.AppsView)
+            {
+                ShowApps(view, visible);
+            }
+        };
+        model.ZoomChanged += zoomedOut => BasinReport.Line($"ZOOM {(zoomedOut ? "out" : "in")}");
+        model.AppsSortChanged += sort => BasinReport.Line($"APPS sort={sort}");
+
+        var start = new StartView { DataContext = model };
+        start.TileList.SelectionChanged += (_, e) => ReportSelection(e);
+        start.TileList.ItemDragDrop += (_, e) => ReportReorder(model, e);
+        view.StartView = start;
+        view.Start = new AvaloniaChrome(view.StartFrame, _ui, _chromeIndex, start) { Enabled = false };
+
+        var apps = new AppsView { DataContext = model };
+        view.AppsView = apps;
+        view.AppsSurface = new AvaloniaChrome(view.AppsFrame, _ui, _chromeIndex, apps) { Enabled = false };
+
+        view.Splash = new AvaloniaChrome(
+            view.SplashFrame, _ui, _chromeIndex, new SplashView { DataContext = view.SplashModel })
+        {
+            Enabled = false,
+            InputEnabled = false,
+        };
+
+        view.FlipFace = new AvaloniaChrome(
+            view.FlipFrame, _ui, _chromeIndex, new FlipFaceView { DataContext = view.FlipModel })
+        {
+            Enabled = false,
+            InputEnabled = false,
+        };
+        view.BackgroundFill = new Basin.Scene.SceneRect(view.Background, 1, 1, DesktopColor);
+        view.BackgroundFill.LowerToBottom();
     }
 
-    private void InvalidateStart()
+    private static void ReportSelection(Avalonia.Controls.SelectionChangedEventArgs e)
     {
-        foreach (var view in Views)
+        foreach (var item in e.RemovedItems)
         {
-            view.Start?.Invalidate();
+            if (item is Tile tile)
+            {
+                tile.Selected = false;
+                BasinReport.Line($"SELECT {tile.Name} off");
+            }
+        }
+
+        foreach (var item in e.AddedItems)
+        {
+            if (item is Tile tile)
+            {
+                tile.Selected = true;
+                BasinReport.Line($"SELECT {tile.Name} on");
+            }
+        }
+    }
+
+    private static void ReportReorder(StartModel model, ListViewDragEventArgs e)
+    {
+        if (e.Indexes.Count == 0 || e.Items[0] is not Tile tile)
+        {
+            return;
+        }
+
+        var from = e.Indexes[0];
+        var first = model.Tiles.IndexOf(model.Tiles.First(other => other.Group == tile.Group));
+        var to = e.InsertIndex > from ? e.InsertIndex - 1 : e.InsertIndex;
+        if (to != from)
+        {
+            BasinReport.Line($"REORDER {tile.Name} {from - first}->{to - first}");
         }
     }
 
@@ -171,308 +224,157 @@ internal sealed partial class Shell
             return;
         }
 
-        start.Resize(view.Box.Width, view.Box.Height, view.Scale);
-        if (start.Dirty)
+        var box = new Box(0, 0, view.Box.Width, view.Box.Height);
+        if (view.BackgroundFill is { } fill)
         {
-            start.Draw();
+            fill.Color = DesktopColor;
+            fill.Width = box.Width;
+            fill.Height = box.Height;
         }
 
+        start.Place(box, view.Scale);
+        view.AppsSurface?.Place(box, view.Scale);
         start.Enabled = true;
+        if (view.AppsSurface is { } apps)
+        {
+            apps.Enabled = true;
+        }
+
+        if (view.IconScale != view.Scale)
+        {
+            view.IconScale = view.Scale;
+            ApplyIcons(view);
+        }
+
+        SyncChromeFocus(view);
     }
 
-    internal bool StartTapped(ShellView view, double localX, double localY, bool pressed)
+    internal void SyncChromeFocus(ShellView view)
     {
-        if (view.Start is not { } start || !view.Background.Enabled)
+        var focus = _router.KeyboardFocus;
+        if (focus is not null && view.Charms?.PaneSurface is { } pane && ReferenceEquals(focus, pane))
         {
-            return false;
-        }
-
-        var tile = start.TileAt(localX, localY);
-        if (pressed)
-        {
-            start.Pressed = tile;
-            start.SetContact(localX, localY);
-            if (tile is not null && AnimationsOn)
-            {
-                tile.Press.Start(AnimationCatalog.Of(Animation.PointerDown), _clockMillis);
-            }
-
-            return tile is not null;
-        }
-
-        var released = start.Pressed;
-        start.Pressed = null;
-        if (released is null || !ReferenceEquals(released, tile))
-        {
-            return false;
-        }
-
-        if (AnimationsOn)
-        {
-            released.Press.Start(AnimationCatalog.Of(Animation.PointerUp), _clockMillis);
-        }
-
-        LaunchTile(view, released);
-        return true;
-    }
-
-    private ShellView? _startPan;
-    private int _startPanTouch = -1;
-    private bool _startPanned;
-
-    internal bool StartPress(ShellView view, double localX, double localY, int touchId)
-    {
-        if (view.Start is not { } start || !view.Background.Enabled || _startPan is not null)
-        {
-            return false;
-        }
-
-        _startPan = view;
-        _startPanTouch = touchId;
-        _startPanned = false;
-        if (start.AppsVisible)
-        {
-            start.AppsPan.Begin(localX, localY, _clockMillis);
-        }
-        else
-        {
-            start.Pan.Begin(localX, localY, _clockMillis);
-        }
-
-        if (StartTapped(view, localX, localY, pressed: true) && start.Pressed is { } tile)
-        {
-            start.Slide.Begin(tile, localY);
-        }
-
-        return true;
-    }
-
-    internal void TrackStartContact(double localX, double localY) =>
-        _startPan?.Start?.SetContact(localX, localY);
-
-    internal bool StartMove(double localX, double localY, int touchId)
-    {
-        if (_startPan is not { Start: { } start } view || touchId != _startPanTouch)
-        {
-            return false;
-        }
-
-        if (start.Slide.IsActive)
-        {
-            var stage = start.Slide.Update(localY);
-            if (stage == CrossSlideStage.Detached && start.Slide.Tile is { } dragged)
-            {
-                dragged.DragX = 0;
-                dragged.DragY = start.Slide.Travel;
-                _startPanned = true;
-                start.Pressed = null;
-                return true;
-            }
-
-            if (Math.Abs(start.Slide.Travel) >= start.Slide.SelectThreshold)
-            {
-                _startPanned = true;
-                start.Pressed = null;
-                return true;
-            }
-        }
-
-        if (start.AppsVisible)
-        {
-            start.AppsPan.Pan(localX, localY, _clockMillis);
-            if (start.AppsPan.Axis != PanAxis.Undecided)
-            {
-                _startPanned = true;
-                start.Pressed = null;
-                start.Slide.Abort();
-            }
-
-            return true;
-        }
-
-        start.Pan.Pan(localX, localY, _clockMillis);
-        if (start.Pan.Axis == PanAxis.Horizontal)
-        {
-            _startPanned = true;
-            start.Pressed = null;
-            start.Slide.Abort();
-        }
-
-        _ = view;
-        return true;
-    }
-
-    internal bool StartRelease(double localX, double localY, int touchId)
-    {
-        if (_startPan is not { Start: { } start } view || touchId != _startPanTouch)
-        {
-            return false;
-        }
-
-        _startPan = null;
-        _startPanTouch = -1;
-        var panned = _startPanned;
-
-        var slid = start.Slide.Tile;
-        var stage = start.Slide.Release();
-        if (stage is CrossSlideStage.Selected or CrossSlideStage.Detached && slid is not null)
-        {
-            FinishCrossSlide(view, start, slid, stage);
-            return true;
-        }
-
-        if (start.AppsVisible)
-        {
-            start.AppsPan.Release(_clockMillis);
-            if (start.AppsPan.Axis == PanAxis.Vertical && start.AppsPan.Velocity > 200)
-            {
-                ShowApps(view, false);
-                return true;
-            }
-        }
-        else
-        {
-            var vertical = start.Pan.Axis == PanAxis.Vertical;
-            var speed = start.Pan.Velocity;
-            start.Pan.Release(_clockMillis, GroupSnapPoints(start));
-            if (vertical && speed > 200 && _config.AppsView)
-            {
-                ShowApps(view, true);
-                return true;
-            }
-        }
-
-        if (!panned)
-        {
-            if (start.ZoomedOut && start.GroupAt(localX, localY) is { } group)
-            {
-                ZoomToGroup(view, start, group);
-                return true;
-            }
-
-            StartTapped(view, localX, localY, pressed: false);
-        }
-        else
-        {
-            start.Pressed = null;
-        }
-
-        return true;
-    }
-
-    private void FinishCrossSlide(ShellView view, StartScreen start, Tile tile, CrossSlideStage stage)
-    {
-        tile.DragX = 0;
-        tile.DragY = 0;
-        if (stage == CrossSlideStage.Selected)
-        {
-            tile.Selected = !tile.Selected;
-            if (AnimationsOn)
-            {
-                tile.Check.Start(
-                    AnimationCatalog.Of(tile.Selected ? Animation.SwipeSelect : Animation.SwipeDeselect),
-                    _clockMillis);
-            }
-
-            start.Invalidate();
-            BasinReport.Line($"SELECT {tile.Name} {(tile.Selected ? "on" : "off")}");
             return;
         }
 
-        Reorder(start, tile);
-        _ = view;
-    }
-
-    private void Reorder(StartScreen start, Tile tile)
-    {
-        foreach (var group in start.Grid.Groups)
+        var startSurface = view.Start?.Surface;
+        var appsSurface = view.AppsSurface?.Surface;
+        if (view.Background.Enabled)
         {
-            var index = group.Tiles.IndexOf(tile);
-            if (index < 0)
+            var wanted = view.AppsVisible ? appsSurface : startSurface;
+            if (wanted is not null)
             {
-                continue;
+                _router.SetKeyboardFocus(wanted);
             }
-
-            group.Tiles.RemoveAt(index);
-            var target = Math.Clamp(index + (start.Slide.Travel > 0 ? 1 : -1), 0, group.Tiles.Count);
-            group.Tiles.Insert(target, tile);
-            start.SetTiles(AllTilesOf(start), _config.GroupOrder);
-            BasinReport.Line($"REORDER {tile.Name} {index}->{target}");
-            return;
+        }
+        else if (focus is not null && (ReferenceEquals(focus, startSurface) || ReferenceEquals(focus, appsSurface)))
+        {
+            _router.SetKeyboardFocus(null);
         }
     }
 
-    private static List<Tile> AllTilesOf(StartScreen start)
+    private void ApplyIcons(ShellView view)
     {
-        var all = new List<Tile>();
-        foreach (var group in start.Grid.Groups)
+        foreach (var tile in view.StartModel.Tiles)
         {
-            all.AddRange(group.Tiles);
+            tile.IconImage = tile.Icon is { Length: > 0 } icon
+                ? Icons.Load(icon, (int)Math.Round(tile.IconSize * view.Scale))
+                : null;
         }
 
-        return all;
+        foreach (var app in view.StartModel.Apps)
+        {
+            app.IconImage = app.Icon is { Length: > 0 } icon
+                ? Icons.Load(icon, (int)Math.Round(AppIconSize * view.Scale))
+                : null;
+        }
+    }
+
+    internal const double AppIconSize = 30;
+
+    private readonly Dictionary<string, int> _launches = [];
+
+    private static DateTime InstalledAt(string path)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(path);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    private List<Tile> AppTiles()
+    {
+        var apps = new List<Tile>();
+        foreach (var group in DesktopCategories.Group(_entries))
+        {
+            var label = DesktopCategories.DefaultLabel(group.Category);
+            foreach (var entry in group.Entries)
+            {
+                if (DesktopLaunch.CommandFor(entry) is not { } command)
+                {
+                    continue;
+                }
+
+                apps.Add(new Tile
+                {
+                    Name = entry.Name,
+                    Exec = command,
+                    Icon = entry.Icon ?? Path.GetFileNameWithoutExtension(entry.Id),
+                    DesktopId = entry.Id,
+                    Size = TileSize.Small,
+                    Color = AccentOf(entry.Id),
+                    Group = label,
+                    Installed = InstalledAt(entry.Path),
+                    Launches = _launches.GetValueOrDefault(command),
+                });
+            }
+        }
+
+        return apps;
     }
 
     internal void ShowApps(ShellView view, bool visible)
     {
-        if (view.Start is not { } start || start.AppsVisible == visible)
+        if (view.Start is null || view.AppsVisible == visible)
         {
             return;
         }
 
-        if (visible)
+        if (visible && view.StartModel.Apps.Count == 0)
         {
-            start.SetApps(_entries);
+            view.StartModel.SetApps(AppTiles());
+            view.IconScale = 0;
         }
 
-        start.AppsVisible = visible;
-        start.AppsPan.Reset(0);
-        Animate(ref view.StartMotion, view.BackgroundFrame, Animation.EnterPage, offsetScale: view.Scale);
+        view.AppsVisible = visible;
+        view.AppsFrame.Enabled = true;
+        view.StartFrame.Enabled = true;
+        double height = view.Box.Height;
+        var startFrom = view.StartPageMotion.IsRunning ? view.StartPageMotion.Offset : visible ? 0 : -height;
+        var appsFrom = view.AppsMotion.IsRunning ? view.AppsMotion.Offset : visible ? height : 0;
+        Animate(ref view.StartPageMotion, view.StartFrame, PageSlide(startFrom, visible ? -height : 0));
+        Animate(ref view.AppsMotion, view.AppsFrame, PageSlide(appsFrom, visible ? 0 : height));
+        if (!AnimationsOn)
+        {
+            view.AppsFrame.Enabled = visible;
+        }
+
+        SyncChromeFocus(view);
+        _outputs.RepaintNow(view.Driver);
         BasinReport.Line($"APPS {(visible ? "on" : "off")}");
     }
 
-    internal void ToggleZoom(ShellView view, bool zoomOut, double centerX = -1, double centerY = -1)
-    {
-        if (view.Start is not { } start || start.ZoomedOut == zoomOut)
-        {
-            return;
-        }
+    internal const uint PageSlideMillis = 550;
 
-        var x = centerX < 0 ? view.Box.Width / 2.0 : centerX;
-        var y = centerY < 0 ? view.Box.Height / 2.0 : centerY;
-        start.SetZoom(
-            zoomOut,
-            x,
-            y,
-            AnimationCatalog.Of(AnimationsOn ? Animation.CrossFadeIn : Animation.FadeIn),
-            _clockMillis);
-        if (!AnimationsOn)
-        {
-            start.SetZoomNow(zoomOut);
-        }
+    private static AnimationSpec PageSlide(double from, double to) => new(
+        Animation.EnterPage, MotionAxis.Y,
+        new Track(from, to, PageSlideMillis, 0, AnimationCurve.Deceleration), Track.None, Track.None, 0, 0);
 
-        BasinReport.Line($"ZOOM {(zoomOut ? "out" : "in")}");
-    }
-
-    private void ZoomToGroup(ShellView view, StartScreen start, TileGroup group)
-    {
-        ToggleZoom(view, zoomOut: false);
-        start.Pan.Reset(-group.Box.X);
-        BasinReport.Line($"ZOOM group={group.Name}");
-    }
-
-    private readonly double[] _snapScratch = new double[64];
-
-    private ReadOnlySpan<double> GroupSnapPoints(StartScreen start)
-    {
-        var count = Math.Min(start.Grid.Groups.Count, _snapScratch.Length);
-        for (var i = 0; i < count; i++)
-        {
-            _snapScratch[i] = -start.Grid.Groups[i].Box.X;
-        }
-
-        return _snapScratch.AsSpan(0, count);
-    }
+    internal void ToggleZoom(ShellView view, bool zoomOut) => view.StartModel.ZoomedOut = zoomOut;
 
     private readonly List<(Tile Tile, System.Diagnostics.Process Process, bool IsBadge)> _polls = [];
 
@@ -509,24 +411,11 @@ internal sealed partial class Shell
             var line = output.Split('\n')[0].Trim();
             if (isBadge)
             {
-                if (tile.Badge != line)
-                {
-                    tile.Badge = line;
-                    InvalidateStart();
-                    if (AnimationsOn)
-                    {
-                        tile.Check.Start(AnimationCatalog.Of(Animation.UpdateBadge), _clockMillis);
-                    }
-                }
+                tile.Badge = line;
             }
-            else if (tile.Peek != line)
+            else
             {
                 tile.Peek = line;
-                InvalidateStart();
-                if (AnimationsOn)
-                {
-                    tile.Press.Start(AnimationCatalog.Of(Animation.Peek), _clockMillis);
-                }
             }
         }
 
@@ -596,60 +485,43 @@ internal sealed partial class Shell
         _polls.Clear();
     }
 
-    internal void LaunchTile(ShellView view, Tile tile)
-    {
-        ShowSplash(view, tile.Name, tile.Color);
-        Spawn(tile.Exec);
-        BasinReport.Line($"LAUNCH {tile.Name}");
-    }
-
     internal const long SplashTimeoutMillis = 10_000;
 
-    internal void ShowSplash(ShellView view, string title, uint color)
+    internal void ShowSplash(ShellView view, string title, uint color, in Box box)
+    {
+        if (!PrepareSplash(view, title, color, box))
+        {
+            return;
+        }
+
+        Animate(ref view.SplashMotion, view.SplashFrame, Animation.FadeIn);
+    }
+
+    private static bool PrepareSplash(ShellView view, string title, uint color, in Box box)
     {
         if (view.Splash is not { } splash)
         {
-            return;
+            return false;
         }
 
-        view.SplashTitle = title;
-        view.SplashColor = color;
+        view.SplashModel.Title = title;
+        view.SplashModel.Fill = new Avalonia.Media.SolidColorBrush(color);
         view.SplashDeadlineMillis = Environment.TickCount64 + SplashTimeoutMillis;
+        view.SplashBox = box;
         splash.Enabled = true;
         view.SplashFrame.Enabled = true;
+        view.SplashMotion.Stop();
         Tween.Reset(view.SplashFrame);
         PaintSplash(view);
+        return true;
     }
 
-    private void PaintSplash(ShellView view)
+    private static void PaintSplash(ShellView view)
     {
-        if (view.Splash is not { } splash || !splash.Enabled ||
-            !splash.Place(new Box(0, 0, view.Box.Width, view.Box.Height), view.Scale))
+        if (view.Splash is { Enabled: true } splash)
         {
-            return;
-        }
-
-        if (splash.BeginDraw() is not { } canvas)
-        {
-            return;
-        }
-
-        try
-        {
-            canvas.Clear(new SKColor(view.SplashColor));
-            using var paint = new SKPaint { IsAntialias = true, Color = SKColors.White };
-            using var font = new SKFont(Fonts.Semibold, 42) { Subpixel = true };
-            canvas.DrawText(
-                view.SplashTitle,
-                view.Box.Width / 2f,
-                view.Box.Height / 2f,
-                SKTextAlign.Center,
-                font,
-                paint);
-        }
-        finally
-        {
-            splash.EndDraw();
+            var box = view.SplashBox.IsEmpty ? new Box(0, 0, view.Box.Width, view.Box.Height) : view.SplashBox;
+            splash.Place(box, view.Scale);
         }
     }
 
@@ -678,8 +550,9 @@ internal sealed partial class Shell
         {
             if (view.Splash is { Enabled: true } && now >= view.SplashDeadlineMillis)
             {
-                BasinReport.Line($"SPLASH timeout {view.SplashTitle}");
+                BasinReport.Line($"SPLASH timeout {view.SplashModel.Title}");
                 DismissSplash(view, crossFade: false);
+                RestorePage(view);
             }
         }
     }
@@ -693,7 +566,7 @@ internal sealed partial class Shell
 
         view.SplashMotion.Advance(nowMillis);
         view.SplashMotion.Apply(view.SplashFrame);
-        if (!view.SplashMotion.IsRunning)
+        if (!view.SplashMotion.IsRunning && view.SplashMotion.Name == Animation.CrossFadeOut)
         {
             splash.Enabled = false;
             Tween.Reset(view.SplashFrame);
@@ -710,8 +583,5 @@ internal sealed partial class Shell
 
         _icons?.Dispose();
         _icons = null;
-        Fonts.Release();
-        _uiHost?.Dispose();
-        _uiHost = null;
     }
 }

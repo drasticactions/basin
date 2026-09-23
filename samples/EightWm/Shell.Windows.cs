@@ -245,10 +245,18 @@ internal sealed partial class Shell
             app.PlaceCentered(CellOfParent(app, view));
             view.Dim.Enabled = true;
         }
-        else
+        else if (view.Flip is { Revealing: false, App: null } flip)
         {
             view.Host.Replace(app);
+            flip.App = app;
+            Relayout(view);
+        }
+        else
+        {
+            FinishFlip(view);
+            view.Host.Replace(app);
             view.StartVisible = false;
+            RestorePage(view);
             Relayout(view);
             Animate(app, Animation.EnterPage, offsetScale: view.Scale);
             DismissSplash(view, crossFade: true);
@@ -281,6 +289,12 @@ internal sealed partial class Shell
         }
 
         var view = HomeOf(app);
+        if (view.Flip is { } flip && ReferenceEquals(flip.App, app))
+        {
+            flip.App = null;
+            FinishFlip(view);
+        }
+
         _homes.Remove(app);
         view.Host.Forget(app);
         if (!app.Slot.IsDestroyed)
@@ -343,6 +357,8 @@ internal sealed partial class Shell
         _scalesStale = true;
         SyncVacancy(view);
         SyncRails(view);
+        SyncTitle(view);
+        SyncChromeFocus(view);
     }
 
     private static readonly RenderColor PreviewColor = new(0.35f, 0.35f, 0.35f, 0.35f);
@@ -477,13 +493,53 @@ internal sealed partial class Shell
         }
 
         var position = (int)Math.Round(view.Host.Portrait ? localY : localX) - (view.Host.Gutter / 2);
+        view.SplitPosition = position;
         if (view.Host.TrySetSplit(view.DraggingSplitter, position))
         {
             Relayout(view);
         }
+
+        var closing = view.Host.CollapseTarget(view.DraggingSplitter, position);
+        if (closing >= 0)
+        {
+            ShowPreview(view, view.Host.SlotBox(closing));
+        }
+        else
+        {
+            HidePreview(view);
+        }
     }
 
-    internal void EndSplitDrag(ShellView view) => view.DraggingSplitter = -1;
+    internal void EndSplitDrag(ShellView view, bool commit)
+    {
+        var splitter = view.DraggingSplitter;
+        view.DraggingSplitter = -1;
+        HidePreview(view);
+        if (!commit || splitter < 0)
+        {
+            return;
+        }
+
+        var closing = view.Host.CollapseTarget(splitter, view.SplitPosition);
+        if (closing < 0)
+        {
+            return;
+        }
+
+        var app = view.Host.Collapse(splitter, closing);
+        if (view.Host.IsEmpty)
+        {
+            view.StartVisible = true;
+        }
+
+        Relayout(view);
+        if (view.Host.Active is { } next)
+        {
+            Focus(next);
+        }
+
+        BasinReport.Line(app is null ? "COLLAPSE vacancy" : $"COLLAPSE {app.AppId}");
+    }
 
     internal bool Snap(AppWindow app, ShellView view, int at, double fraction = 0.5)
     {
@@ -557,6 +613,7 @@ internal sealed partial class Shell
         }
 
         app.SetActivated(true);
+        app.FocusStamp = ++_focusClock;
         app.Slot.RaiseToTop();
         _capture.Stack.RaiseChanged();
         HomeOf(app).Host.Activate(app);
@@ -578,6 +635,8 @@ internal sealed partial class Shell
 
     internal void ToggleStart(ShellView view)
     {
+        FinishFlip(view);
+        RestorePage(view);
         CloseOtherChrome(view, ChromePanel.Switcher);
         if (view.StartVisible && view.Host.Mru.Count == 0)
         {
