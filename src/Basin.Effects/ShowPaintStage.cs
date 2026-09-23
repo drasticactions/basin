@@ -32,10 +32,10 @@ public sealed class ShowPaintStage : IPostStage
             return;
         }
 
-        var colour = Palette[_next];
+        var color = Palette[_next];
         _next = (_next + 1) % Palette.Length;
         var alpha = Math.Clamp(Alpha, 0f, 1f);
-        var tint = new RenderColor(colour.R * alpha, colour.G * alpha, colour.B * alpha, alpha);
+        var tint = new RenderColor(color.R * alpha, color.G * alpha, color.B * alpha, alpha);
         foreach (var rect in RegionRects.Of(damage))
         {
             pass.AddRect(tint, new Box(rect.X1, rect.Y1, rect.X2 - rect.X1, rect.Y2 - rect.Y1));

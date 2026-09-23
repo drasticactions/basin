@@ -26,6 +26,7 @@
     <Project Path="src/Basin.Config/Basin.Config.csproj" />
     <Project Path="src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
     <Project Path="src/Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
+    <Project Path="src/Basin.Frames.Quill/Basin.Frames.Quill.csproj" />
     <Project Path="src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
     <Project Path="src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
     <Project Path="src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
@@ -76,6 +77,9 @@
     <Project Path="src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
     <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <Project Path="src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+    <Project Path="src/Basin.UI.Quill/Basin.UI.Quill.csproj" />
+    <Project Path="src/Basin.UI.Quill.Gl/Basin.UI.Quill.Gl.csproj" />
+    <Project Path="src/Basin.UI.Quill.Vulkan/Basin.UI.Quill.Vulkan.csproj" />
     <Project Path="src/Basin.XWayland/Basin.XWayland.csproj" />
   </Folder>
   <Folder Name="/external/">

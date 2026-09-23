@@ -55,6 +55,9 @@
     <ProjectReference Include="../../src/Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Quill.Gl/Basin.UI.Quill.Gl.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Quill.Vulkan/Basin.UI.Quill.Vulkan.csproj" />
+    <ProjectReference Include="../../src/Basin.Frames.Quill/Basin.Frames.Quill.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -39,6 +39,8 @@ public sealed class SkiaGlUIHost : IUIHost
         _ownsContext = true;
     }
 
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     public UITargetKind Produces => UITargetKind.Dmabuf;
 
     public long? NextDueMillis => null;

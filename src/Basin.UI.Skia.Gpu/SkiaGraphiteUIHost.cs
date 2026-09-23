@@ -30,6 +30,8 @@ public sealed class SkiaGraphiteUIHost : IUISurfaceObserver, IUIHost
         _allocator = allocator;
     }
 
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     public UITargetKind Produces => _allocator is null ? UITargetKind.Memory : UITargetKind.Dmabuf;
 
     public long? NextDueMillis => null;

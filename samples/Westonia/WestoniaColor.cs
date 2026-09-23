@@ -19,7 +19,7 @@ internal sealed partial class Westonia
         _color = _services.Find<ColorManager>();
         if (_color is null)
         {
-            _log.Info($"no colour manager: this compositor offers no colour management");
+            _log.Info($"no color manager: this compositor offers no color management");
             return;
         }
 

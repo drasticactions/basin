@@ -4,6 +4,8 @@ public interface IUIHost : IDisposable
 {
     UITargetKind Produces { get; }
 
+    Type SurfaceContract => typeof(IUISurface);
+
     IUISurface? CreateSurface(in UISurfaceOptions options);
 
     long? NextDueMillis { get; }

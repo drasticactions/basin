@@ -43,14 +43,14 @@ public static class BufferCapture
             return false;
         }
 
-        var copy = new MemoryBuffer(buffer.Width, buffer.Height, DrmFormat.Xrgb8888);
+        var whole = new Box(0, 0, buffer.Width, buffer.Height);
+        var copy = new MemoryBuffer(
+            buffer.Width, buffer.Height, buffer.Format.HasAlpha() ? DrmFormat.Argb8888 : DrmFormat.Xrgb8888);
         try
         {
             var pass = renderer.BeginBufferPass(copy, new RenderPassOptions());
-            pass.AddTexture(texture, new TextureRenderOptions
-            {
-                DstBox = new Box(0, 0, buffer.Width, buffer.Height),
-            });
+            pass.AddRect(new RenderColor(0f, 0f, 0f, 0f), whole);
+            pass.AddTexture(texture, new TextureRenderOptions { DstBox = whole });
             pass.Submit();
             return TryReadRgba(copy, out rgba);
         }

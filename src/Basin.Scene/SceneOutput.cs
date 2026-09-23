@@ -1117,6 +1117,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     public IBuffer? LastTarget { get; private set; }
 
+    public IReadOnlyList<OutputLayer> PresentedLayers => _layers;
+
     private int GatherSampledFences(out bool owned)
     {
         var fence = -1;

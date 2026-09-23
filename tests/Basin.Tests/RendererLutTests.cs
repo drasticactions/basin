@@ -260,7 +260,7 @@ public sealed class RendererLutTests
         AssertNear((byte)Math.Round(expected[1] * 255), g3, "sdr on p3 green");
         AssertNear((byte)Math.Round(expected[2] * 255), b3, "sdr on p3 blue");
         var (_, r4, g4, b4) = PixelAt(wide, 20, 4);
-        AssertNear(r3, r4, "rect matches the surface painted the same colour");
+        AssertNear(r3, r4, "rect matches the surface painted the same color");
         AssertNear(g3, g4, "rect green matches");
         AssertNear(b3, b4, "rect blue matches");
 

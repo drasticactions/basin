@@ -2,6 +2,8 @@ namespace Basin.Capabilities;
 
 public interface IFrameRenderer
 {
+    Type SurfaceContract => typeof(IUISurface);
+
     FrameInsets Measure(in FrameState state, double scale);
 
     void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction);
@@ -9,6 +11,8 @@ public interface IFrameRenderer
     FramePart PartAt(double x, double y, in FrameState state, double scale);
 
     bool OpaqueChrome => false;
+
+    bool BackdropRegion(in FrameState state, double scale, Pixman.PixmanRegion32 into) => false;
 
     string? CursorFor(FramePart part) => null;
 

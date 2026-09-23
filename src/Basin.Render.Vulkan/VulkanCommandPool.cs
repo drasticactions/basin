@@ -13,6 +13,8 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
         public ulong Point;
         public bool Recording;
 
+        public bool Exportable;
+
         public Semaphore Binary;
     }
 
@@ -89,10 +91,12 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
 
     public int ExportSyncFile(CommandBuffer commands)
     {
-        if (_semaphoreFd is not { } ext)
+        if (_semaphoreFd is not { } ext || !SlotOf(commands).Exportable)
         {
             return -1;
         }
+
+        SlotOf(commands).Exportable = false;
 
         var info = new SemaphoreGetFdInfoKHR
         {
@@ -169,7 +173,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
         return BeginSlot(oldest);
     }
 
-    public ulong Submit(CommandBuffer commands)
+    public ulong Submit(CommandBuffer commands, bool exportable = false)
     {
         var vk = _device.Api;
         VulkanDevice.Check(vk.EndCommandBuffer(commands), "vkEndCommandBuffer");
@@ -193,7 +197,8 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
         };
         var signalCount = 1u;
         var binary = SlotOf(commands).Binary;
-        if (binary.Handle != 0)
+        SlotOf(commands).Exportable = exportable && binary.Handle != 0;
+        if (exportable && binary.Handle != 0)
         {
             signalInfos[1] = new SemaphoreSubmitInfo
             {
@@ -216,7 +221,8 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
         return point;
     }
 
-    public bool TrySubmitFrame(CommandBuffer stage, CommandBuffer render, ReadOnlySpan<Semaphore> waits, out ulong renderPoint)
+    public bool TrySubmitFrame(
+        CommandBuffer stage, CommandBuffer render, ReadOnlySpan<Semaphore> waits, bool exportable, out ulong renderPoint)
     {
         var vk = _device.Api;
         var hasStage = stage.Handle != 0;
@@ -284,7 +290,8 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             };
             var renderSignalCount = 1u;
             var binary = SlotOf(render).Binary;
-            if (binary.Handle != 0)
+            SlotOf(render).Exportable = exportable && binary.Handle != 0;
+            if (exportable && binary.Handle != 0)
             {
                 renderSignals[1] = new SemaphoreSubmitInfo
                 {
@@ -340,6 +347,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
 
         _ = _device.Api.ResetCommandBuffer(commands, 0);
         slot.Recording = false;
+        slot.Exportable = false;
         slot.Point = 0;
     }
 

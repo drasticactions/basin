@@ -407,13 +407,13 @@ internal sealed partial class Shell
         for (var step = 1; step <= 8; step++)
         {
             time += 16;
-            var travelled = reach * step / 8;
+            var traveled = reach * step / 8;
             var (x, y) = edge switch
             {
-                ScreenEdge.Left => (startX + travelled, startY),
-                ScreenEdge.Right => (startX - travelled, startY),
-                ScreenEdge.Top => (startX, startY + travelled),
-                _ => (startX, startY - travelled),
+                ScreenEdge.Left => (startX + traveled, startY),
+                ScreenEdge.Right => (startX - traveled, startY),
+                ScreenEdge.Top => (startX, startY + traveled),
+                _ => (startX, startY - traveled),
             };
             _synthetic.Update(1, x, y, time);
         }

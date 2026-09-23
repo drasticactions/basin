@@ -63,8 +63,8 @@ server-managed exact    attach-and-damage              3200
 server-managed exact    pointer-axis                      0
 channel    exact    remote-frame                   6400
 channel    exact    remote-dmabuf-frame            6400
-server     exact    popup-cycle                  868800
-server-managed exact    popup-cycle                  894400
+server     exact    popup-cycle                  878400
+server-managed exact    popup-cycle                  904000
 server     exact    color-representation-set          0
 server-managed exact    color-representation-set          0
 server     exact    frame-with-a-client            8000
@@ -92,12 +92,14 @@ server-managed ceiling  nested-frame                  64000
 server     exact    transaction-configure-round   47200
 server     exact    xwayland-event-round              0
 server     exact    post-stage-frame                  0
-server     exact    effect-animation-frame         1328
+server     exact    effect-animation-frame         1088
 server-managed exact    transaction-configure-round   46400
 server-managed exact    xwayland-event-round          19200
 server-managed exact    post-stage-frame                  0
-server-managed exact    effect-animation-frame         1328
+server-managed exact    effect-animation-frame         1088
 client     exact    wm-chrome-repaint              3200
 client     exact    wm-input-round               180800
 client-managed exact    wm-chrome-repaint              3200
 client-managed exact    wm-input-round               180800
+server     ceiling  quill-frame-repaint           57600
+server     ceiling  quill-frame-repaint-vk        57600

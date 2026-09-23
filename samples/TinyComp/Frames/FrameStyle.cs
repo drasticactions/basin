@@ -8,5 +8,7 @@ internal enum FrameStyle
 
     Metacity,
 
+    Quill,
+
     None,
 }

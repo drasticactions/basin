@@ -7,7 +7,7 @@ namespace Basin.Tests;
 public sealed class SceneMirrorTests
 {
     private static readonly RenderColor Red = new(1f, 0f, 0f, 1f);
-    private static readonly RenderColor Grey = new(0.25f, 0.25f, 0.25f, 1f);
+    private static readonly RenderColor Gray = new(0.25f, 0.25f, 0.25f, 1f);
 
     [Fact]
     public void A_mirror_draws_the_source_at_its_own_position()
@@ -86,7 +86,7 @@ public sealed class SceneMirrorTests
 
         var boxes = new List<Box>();
         host.Scene.Damaged += (_, box) => boxes.Add(box);
-        rect.Color = Grey;
+        rect.Color = Gray;
 
         Assert.Contains(boxes, box => box.X == 60 && box.Y == 10 && box.Width == 30 && box.Height == 30);
         Assert.Contains(boxes, box => box.X == 100 && box.Y == 60 && box.Width == 30 && box.Height == 30);
@@ -104,7 +104,7 @@ public sealed class SceneMirrorTests
 
         var boxes = new List<Box>();
         host.Scene.Damaged += (_, box) => boxes.Add(box);
-        rect.Color = Grey;
+        rect.Color = Gray;
 
         Assert.DoesNotContain(boxes, box => box.X == 100 && box.Y == 60);
     }
@@ -155,7 +155,7 @@ public sealed class SceneMirrorTests
         var oracle = new MemoryBuffer(160, 120, DrmFormat.Xrgb8888);
         var options = new SceneCommitOptions { AllowDirectScanout = false };
 
-        var below = new SceneRect(host.Scene.Root, 160, 120, Grey);
+        var below = new SceneRect(host.Scene.Root, 160, 120, Gray);
         var source = new SceneTree(host.Scene.Root);
         _ = new SceneRect(source, 40, 40, Red);
         source.Enabled = false;
@@ -183,7 +183,7 @@ public sealed class SceneMirrorTests
         var oracle = new MemoryBuffer(160, 120, DrmFormat.Xrgb8888);
         var options = new SceneCommitOptions { AllowDirectScanout = false };
 
-        _ = new SceneRect(host.Scene.Root, 160, 120, Grey);
+        _ = new SceneRect(host.Scene.Root, 160, 120, Gray);
         var source = new SceneTree(host.Scene.Root);
         source.SetPosition(8, 8);
         _ = new SceneRect(source, 40, 30, Red);

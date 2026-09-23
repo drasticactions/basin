@@ -53,6 +53,8 @@ public sealed class SkiaVulkanUIHost : IUIHost
         _ownsContext = true;
     }
 
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     public UITargetKind Produces => _allocator is null ? UITargetKind.Memory : UITargetKind.Dmabuf;
 
     private ulong[]? _modifiers;

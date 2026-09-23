@@ -11,7 +11,7 @@ scale         = []           # --scale, one entry per output; empty asks the out
 # mode      = "3840x2560@60"  # WIDTHxHEIGHT or WIDTHxHEIGHT@HZ
 
 [frame]
-style         = "flat"       # beos | flat | metacity | none
+style         = "flat"       # beos | flat | metacity | quill | none
 corner_radius = 0            # logical pixels
 font_size     = 14           # title size in logical pixels, every style; SIGHUP redraws every frame
 
@@ -20,6 +20,21 @@ font_size     = 14           # title size in logical pixels, every style; SIGHUP
 # theme         = "Menta"                        # a directory under themes/
 # button_layout = "menu:minimize,maximize,close" # marco's grammar, spacer allowed
 # palette       = "light"                        # light | dark
+
+# The Prowl.Quill frames. They run on every GPU renderer. vulkan, skia-vulkan and
+# skia-graphite draw them on the renderer's own VulkanDevice, with no GL. gl and
+# skia-gl share their GlDevice, and impeller gets a GlDevice of its own on the same
+# render node. pixman and skia cannot import the chrome buffer, so those runs log
+# the reason and fall back to the flat frames.
+# [frame.quill]
+# palette       = "dark"     # dark | light
+# corner_radius = 8          # logical pixels, 0 for square corners
+# font_size     = 13         # title size in logical pixels
+# backdrop_blur = 0          # blur strength, 1 to 15; 0 turns the frost off. It is not a pixel
+#                            # radius, and it is the shared blur effect's strength, so it also
+#                            # sets what a client's ext-background-effect blur gets
+# frost_opacity = 0.44       # how much titlebar color sits over the blur, 0 to 1.
+#                            # 0 is clear glass, 1 hides the blur entirely
 
 [color]
 source      = "edid"         # edid | srgb | icc
@@ -79,7 +94,7 @@ touch_points = false         # draw a ring for every touch contact
 system_bell  = false         # flash the focused window when a client asks for attention
 startup_feedback = "none"    # none | bouncing | blinking | passive
 
-# A canvas wider than the screen. The centre maps to the screen 1:1, and the
+# A canvas wider than the screen. The center maps to the screen 1:1, and the
 # canvas past each outer edge compresses into a side zone along a smooth curve,
 # so a window pushed past the seam bends across it and parks as a strip at the
 # edge, still visible and still clickable. Every key is live on SIGHUP, and the
@@ -89,11 +104,11 @@ enable       = false         # wider canvas with compressed side zones
 zone         = 0.12          # fraction of the output width each zone takes on screen
 extension    = 0.5           # how far the canvas extends past each seam, as a fraction of the output width
 edge_scale   = 0.2           # draw scale at the far edge; must stay below zone / extension
-slope        = 0.25          # how far the rows fan from the centre row at the far edge; 0 keeps them flat, negative fans inward
+slope        = 0.25          # how far the rows fan from the center row at the far edge; 0 keeps them flat, negative fans inward
 mesh_cell    = 16            # canvas pixels per mesh column inside a zone
 grid         = "always"      # always | drag | never
 grid_cell    = 64            # canvas pixels between grid lines
-grid_color   = "#2a35c0"     # the grid line colour
+grid_color   = "#2a35c0"     # the grid line color
 animation_ms = 250           # park, recall and toggle
 
 # The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,

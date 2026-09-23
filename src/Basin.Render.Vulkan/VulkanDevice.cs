@@ -233,17 +233,28 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
     public int ExportQueueFence()
     {
         var commands = Ring.Acquire();
-        _ = Ring.Submit(commands);
+        _ = Ring.Submit(commands, exportable: true);
         return Ring.ExportSyncFile(commands);
     }
 
     public bool PublishWriteFence(in DmabufAttributes attributes) => PublishWriteFence(attributes, null);
 
-    public bool PublishWriteFence(in DmabufAttributes attributes, VulkanDeviceImage? release)
+    public bool PublishWriteFence(in DmabufAttributes attributes, VulkanDeviceImage? release) =>
+        PublishWriteFence(Ring.Acquire(), attributes, release, out _);
+
+    public CommandBuffer BeginCommands() => Ring.Acquire();
+
+    public ulong Submit(CommandBuffer commands) => Ring.Submit(commands);
+
+    public bool IsComplete(ulong point) => point <= Ring.ReadCompleted();
+
+    public void WaitFor(ulong point) => Ring.Wait(point);
+
+    public bool PublishWriteFence(
+        CommandBuffer commands, in DmabufAttributes attributes, VulkanDeviceImage? release, out ulong point)
     {
-        var commands = Ring.Acquire();
         release?.RecordForeignRelease(commands);
-        _ = Ring.Submit(commands);
+        point = Ring.Submit(commands, exportable: true);
         var fence = Ring.ExportSyncFile(commands);
         if (fence < 0)
         {

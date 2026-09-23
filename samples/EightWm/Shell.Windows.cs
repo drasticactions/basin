@@ -384,9 +384,9 @@ internal sealed partial class Shell
             return;
         }
 
-        var colour = DesktopColor;
-        var fill = view.VacantFill ??= new SceneRect(view.Vacant, 1, 1, colour);
-        fill.Color = colour;
+        var color = DesktopColor;
+        var fill = view.VacantFill ??= new SceneRect(view.Vacant, 1, 1, color);
+        fill.Color = color;
         fill.Width = box.Width;
         fill.Height = box.Height;
         fill.SetPosition(box.X, box.Y);

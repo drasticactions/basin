@@ -9,6 +9,8 @@ namespace TinyComp;
 
 internal sealed class SkiaFrameRenderer(FrameTheme theme) : IFrameRenderer
 {
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     public bool OpaqueChrome => true;
 
     private const int Border = 4;

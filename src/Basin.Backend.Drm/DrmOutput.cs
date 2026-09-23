@@ -1441,6 +1441,21 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    public bool TryPresentedCursor(
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IBuffer? buffer, out Box destination)
+    {
+        if (!_cursorVisible || _cursorBuffer.Buffer is not { IsDestroyed: false } sprite)
+        {
+            buffer = null;
+            destination = default;
+            return false;
+        }
+
+        buffer = sprite;
+        destination = new Box(_cursorX - _hotspotX, _cursorY - _hotspotY, sprite.Width, sprite.Height);
+        return true;
+    }
+
     private void AddCursorProperties(DrmAtomicBuilder builder)
     {
         var cursor = _cursorProps!;

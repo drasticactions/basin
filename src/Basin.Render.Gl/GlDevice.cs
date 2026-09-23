@@ -63,6 +63,8 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
 
     public EglDisplay Egl => _egl;
 
+    public EglContext Context => _context;
+
     public Basin.Render.Gbm.GbmAllocator CreateAllocator(Basin.Diagnostics.FdLedger? ledger = null) =>
         new(_gbm, SampleableFormats, ledger);
 

@@ -13,13 +13,19 @@ internal static class Golden
 
     public static void AssertMatches(MemoryBuffer target, string name, int tolerance = 0, [CallerFilePath] string sourcePath = "")
     {
-        var rgba = BufferCapture.ReadRgba(target);
+        AssertMatches(BufferCapture.ReadRgba(target), target.Width, target.Height, name, tolerance, sourcePath);
+    }
+
+    public static void AssertMatches(
+        byte[] rgba, int targetWidth, int targetHeight, string name, int tolerance = 0,
+        [CallerFilePath] string sourcePath = "")
+    {
         var goldenPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, "Goldens", $"{name}.png");
 
         if (Environment.GetEnvironmentVariable("BASIN_UPDATE_GOLDENS") == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(goldenPath)!);
-            File.WriteAllBytes(goldenPath, PngCodec.Encode(rgba, target.Width, target.Height));
+            File.WriteAllBytes(goldenPath, PngCodec.Encode(rgba, targetWidth, targetHeight));
             return;
         }
 
@@ -30,9 +36,9 @@ internal static class Golden
         }
 
         var (expected, width, height) = PngCodec.Decode(File.ReadAllBytes(goldenPath));
-        if (width != target.Width || height != target.Height)
+        if (width != targetWidth || height != targetHeight)
         {
-            throw new InvalidOperationException($"Golden '{name}' is {width}x{height}, target is {target.Width}x{target.Height}.");
+            throw new InvalidOperationException($"Golden '{name}' is {width}x{height}, target is {targetWidth}x{targetHeight}.");
         }
 
         var differing = 0;

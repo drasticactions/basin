@@ -235,7 +235,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         {
             BlurPass(
                 commands, _onscreen, pyramid.Chain[0], _plainSet,
-                srcScale: 1f, RegionAtLevel(padded, 0), plain: true);
+                srcScale: 1f, RegionAtLevel(padded, 0), srcLevel: 0, plain: true);
             MakeSampleable(commands, pyramid.Chain[0].Image);
             result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds);
             return true;
@@ -244,7 +244,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         for (var i = 1; i <= levels; i++)
         {
             var srcSet = i == 1 ? BackdropSetFor(context.Backdrop) : pyramid.Chain[i - 1].Set;
-            BlurPass(commands, _down, pyramid.Chain[i], srcSet, srcScale: 2f, RegionAtLevel(padded, i));
+            BlurPass(commands, _down, pyramid.Chain[i], srcSet, srcScale: 2f, RegionAtLevel(padded, i), i - 1);
             MakeSampleable(commands, pyramid.Chain[i].Image);
         }
 
@@ -253,7 +253,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             var src = pyramid.Chain[i + 1];
             BlurPass(
                 commands, i == 0 ? _onscreen : _up, pyramid.Chain[i], src.Set,
-                srcScale: 0.5f, RegionAtLevel(padded, i));
+                srcScale: 0.5f, RegionAtLevel(padded, i), i + 1);
             MakeSampleable(commands, pyramid.Chain[i].Image);
         }
 
@@ -271,7 +271,8 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     }
 
     private void BlurPass(
-        CommandBuffer commands, Pipeline pipeline, Level dst, DescriptorSet srcSet, float srcScale, Rect2D region, bool plain = false)
+        CommandBuffer commands, Pipeline pipeline, Level dst, DescriptorSet srcSet, float srcScale, Rect2D region,
+        int srcLevel, bool plain = false)
     {
         var vk = _device.Api;
         if (region.Offset.X + region.Extent.Width > dst.Extent.Width)
@@ -305,6 +306,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         var constants = new Push
         {
             SrcScale = srcScale,
+            Reserved = 1 << srcLevel,
             OpacityValue = (float)Math.Clamp(Opacity * _current.Opacity, 0, 1),
             IntensityValue = _current.Contrast ? (float)parameters.Intensity : 1f,
             HalfpixelX = halfpixel,

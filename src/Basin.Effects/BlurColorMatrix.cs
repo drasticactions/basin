@@ -8,7 +8,7 @@ public static class BlurColorMatrix
     {
         if (into.Length < Length)
         {
-            throw new ArgumentException($"the colour matrix needs {Length} floats", nameof(into));
+            throw new ArgumentException($"the color matrix needs {Length} floats", nameof(into));
         }
 
         var red = (1.0 - saturation) * 0.2126;

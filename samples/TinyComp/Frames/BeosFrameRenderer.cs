@@ -7,6 +7,8 @@ namespace TinyComp;
 
 internal sealed class BeosFrameRenderer(FrameTheme theme) : IFrameRenderer
 {
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     private const int Border = 5;
     private const int TabHeight = 22;
     private const int TabPad = 5;

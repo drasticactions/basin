@@ -11,6 +11,7 @@
 
   <PropertyGroup>
     <AvaloniaVersion>12.1.2</AvaloniaVersion>
+    <ProwlQuillVersion>3.5.6</ProwlQuillVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -49,6 +50,10 @@
     <PackageVersion Include="HarfBuzzSharp" Version="$(HarfBuzzSharpVersion)" />
     <PackageVersion Include="HarfBuzzSharp.NativeAssets.Linux" Version="$(HarfBuzzSharpVersion)" />
     <PackageVersion Include="HarfBuzzSharp.NativeAssets.WebAssembly" Version="$(HarfBuzzSharpVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Prowl.Quill" Version="$(ProwlQuillVersion)" />
   </ItemGroup>
 
   <ItemGroup>

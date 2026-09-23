@@ -109,6 +109,7 @@ internal sealed partial class TinyComp
 
         ApplyNightLight(loaded.NightLight);
         var metacityFailure = ApplyFrameFont(loaded) ?? ApplyMetacity(loaded);
+        ApplyQuill(loaded);
         ApplyFrameStyle(loaded.FrameStyle);
         ApplyCornerRadius(loaded.CornerRadius);
         ApplyPostStages(loaded);
@@ -227,6 +228,39 @@ internal sealed partial class TinyComp
         previousMetacity?.Dispose();
         previous.Dispose();
         return null;
+    }
+
+    private void ApplyQuill(Config loaded)
+    {
+        if (_quillTheme is not { } theme)
+        {
+            return;
+        }
+
+        var wanted = QuillThemeOf(loaded);
+        if (theme.CornerRadius == wanted.CornerRadius && theme.FontSize == wanted.FontSize
+            && theme.Frosted == wanted.Frosted && theme.FrostAlpha == wanted.FrostAlpha
+            && theme.Text.Equals(wanted.Text))
+        {
+            return;
+        }
+
+        _quillTheme = wanted;
+        foreach (var window in _windows)
+        {
+            if ((window.Rule?.FrameStyle ?? _frameStyle) == FrameStyle.Quill)
+            {
+                window.RebuildFrame();
+            }
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            if ((xwindow.Rule?.FrameStyle ?? _frameStyle) == FrameStyle.Quill)
+            {
+                xwindow.RebuildFrame();
+            }
+        }
     }
 
     private void ApplyFrameStyle(FrameStyle style)

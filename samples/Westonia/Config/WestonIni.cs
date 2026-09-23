@@ -490,7 +490,7 @@ public sealed class WestonIni
     }
 
     private void Refuse(string section, string key) =>
-        Refusals.Add($"weston.ini: [{section}] {key} is not honoured");
+        Refusals.Add($"weston.ini: [{section}] {key} is not honored");
 
     private static ShellAnimation Animation(string value, ShellAnimation fallback) => value switch
     {

@@ -29,7 +29,7 @@ public sealed class CtmStage : IPostStage
     {
         if (rowMajor3x3.Length != 9)
         {
-            throw new ArgumentException("a colour transform matrix has nine components", nameof(rowMajor3x3));
+            throw new ArgumentException("a color transform matrix has nine components", nameof(rowMajor3x3));
         }
 
         _thread.Assert();

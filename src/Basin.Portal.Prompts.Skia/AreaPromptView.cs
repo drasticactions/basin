@@ -15,7 +15,7 @@ public sealed class AreaPromptView : SkiaPromptView
     private bool _dragging;
 
     public AreaPromptView(SkiaPromptTheme theme, in AreaPrompt prompt, int width, int height)
-        : base(theme, prompt.PickPoint ? "Pick a colour" : "Select an area", SkiaPortalPrompts.AppLine(prompt.AppId, prompt.DisplayName), prompt.IconPath)
+        : base(theme, prompt.PickPoint ? "Pick a color" : "Select an area", SkiaPortalPrompts.AppLine(prompt.AppId, prompt.DisplayName), prompt.IconPath)
     {
         _width = width;
         _height = height;

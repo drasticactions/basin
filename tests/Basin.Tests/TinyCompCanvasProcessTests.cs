@@ -14,7 +14,7 @@ public sealed class TinyCompCanvasProcessTests
         using var session = CanvasSession.Start();
         Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
         var before = session!.Shot("before");
-        Assert.True(Saturated(before, ZoneWidth, before.Width - ZoneWidth) > 0, "the client draws in the centre before the park");
+        Assert.True(Saturated(before, ZoneWidth, before.Width - ZoneWidth) > 0, "the client draws in the center before the park");
 
         session.Send("park left");
         session.WaitForLine("PARK ");
@@ -62,7 +62,7 @@ public sealed class TinyCompCanvasProcessTests
         Assert.NotNull(line);
         var recalled = session.Shot("recalled");
         Assert.Equal(0, Saturated(recalled, 0, ZoneWidth));
-        Assert.True(Saturated(recalled, ZoneWidth, recalled.Width - ZoneWidth) > 0, "the client draws in the centre again");
+        Assert.True(Saturated(recalled, ZoneWidth, recalled.Width - ZoneWidth) > 0, "the client draws in the center again");
         Assert.Equal(homeX, session.WindowPosition().X);
     }
 
@@ -234,7 +234,7 @@ public sealed class TinyCompCanvasProcessTests
             var path = Path.Combine(_runtimeDir, $"{name}.png");
             Send($"shotraw {path}");
             var line = WaitForLine("SHOTRAW ");
-            Assert.True(line == $"SHOTRAW {path}", line ?? "no SHOTRAW line");
+            Assert.True(line is not null && line.StartsWith($"SHOTRAW {path}", StringComparison.Ordinal), line ?? "no SHOTRAW line");
             var (rgba, width, height) = PngCodec.Decode(File.ReadAllBytes(path));
             return new Shot(rgba, width, height);
         }

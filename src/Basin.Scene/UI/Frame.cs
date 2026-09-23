@@ -7,13 +7,15 @@ namespace Basin.Scene;
 public sealed class Frame : IUISurfaceObserver, IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
-    private readonly IUIHost _host;
+    private readonly FrameHosts _hosts;
     private readonly IFrameRenderer _renderer;
     private readonly SceneTree _tree;
     private readonly SceneBuffer[] _strips;
     private readonly Box[] _stripBoxes;
     private readonly PixmanRegion32 _scratch = new();
     private readonly PixmanRegion32 _interactionDamage = new();
+    private readonly PixmanRegion32 _backdrop = new();
+    private readonly PixmanRegion32 _stripBackdrop = new();
 
     private IUISurface? _surface;
     private UIFrame _shown;
@@ -47,8 +49,15 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
     private Point _menuSceneOffset;
 
     public Frame(IUIHost host, IFrameRenderer renderer, SceneTree parent)
+        : this(new FrameHosts(host), renderer, parent)
     {
-        _host = host;
+    }
+
+    public Frame(FrameHosts hosts, IFrameRenderer renderer, SceneTree parent)
+    {
+        ArgumentNullException.ThrowIfNull(hosts);
+        ArgumentNullException.ThrowIfNull(renderer);
+        _hosts = hosts;
         _renderer = renderer;
         _tree = new SceneTree(parent);
         _strips = new SceneBuffer[4];
@@ -60,6 +69,8 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
     }
 
     public SceneTree Tree => _tree;
+
+    public IBuffer? PresentedChrome => _shown.Buffer;
 
     public FrameInsets Insets { get; private set; }
 
@@ -82,6 +93,8 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
     }
 
     public event Action<FrameAction>? Requested;
+
+    public IBackdropEffect? BackdropEffect { get; set; }
 
     public SceneTree? MenuLayer { get; set; }
 
@@ -143,10 +156,17 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
         {
             if (_surface is null)
             {
-                var target = (_host.Produces & UITargetKind.Dmabuf) != 0
+                if (_hosts.For(_renderer) is not { } host)
+                {
+                    Fault(new InvalidOperationException(
+                        $"No UI host can draw this frame: {_hosts.Describe(_renderer)}."));
+                    return;
+                }
+
+                var target = (host.Produces & UITargetKind.Dmabuf) != 0
                     ? UITargetKind.Dmabuf
                     : UITargetKind.Memory;
-                _surface = _host.CreateSurface(new UISurfaceOptions
+                _surface = host.CreateSurface(new UISurfaceOptions
                 {
                     Target = target,
                     Width = outerWidth,
@@ -245,6 +265,8 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
             strip.NotifyContentChanged();
         }
 
+        ApplyBackdrop();
+
         _shown.Dispose();
         _shown = _pending;
         _pending = default;
@@ -260,6 +282,50 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
 
         DismissMenu();
         Committed?.Invoke();
+    }
+
+    private void ApplyBackdrop()
+    {
+        var wanted = BackdropEffect is not null && !_faulted;
+        _backdrop.Clear();
+        if (wanted)
+        {
+            try
+            {
+                wanted = _renderer.BackdropRegion(_pendingState, _pendingScale, _backdrop);
+            }
+            catch (Exception e)
+            {
+                Fault(e);
+                return;
+            }
+        }
+
+        for (var i = 0; i < 4; i++)
+        {
+            var strip = _strips[i];
+            if (strip.IsDestroyed)
+            {
+                continue;
+            }
+
+            if (!wanted || !strip.Enabled)
+            {
+                strip.SetBackdropEffect(null, null);
+                continue;
+            }
+
+            var box = _stripBoxes[i];
+            _stripBackdrop.IntersectRect(_backdrop, box.X, box.Y, (uint)box.Width, (uint)box.Height);
+            if (_stripBackdrop.IsEmpty)
+            {
+                strip.SetBackdropEffect(null, null);
+                continue;
+            }
+
+            _stripBackdrop.Translate(-box.X, -box.Y);
+            strip.SetBackdropEffect(BackdropEffect, _stripBackdrop, strip);
+        }
     }
 
     public bool HasPendingFor(in Box geometry, double scale)
@@ -824,6 +890,8 @@ public sealed class Frame : IUISurfaceObserver, IDisposable
         TearDown();
         _scratch.Dispose();
         _interactionDamage.Dispose();
+        _backdrop.Dispose();
+        _stripBackdrop.Dispose();
     }
 
     private void RedrawShown(FramePart changed, FramePart alsoChanged)

@@ -137,8 +137,8 @@ public sealed class DropShadowTests
             }
         }
 
-        var centre = texture.Center.Width * texture.Center.Height;
-        Assert.Equal((padded.Width * padded.Height) - ((padded.Width - 272) * (padded.Height - 272) * centre), area);
+        var center = texture.Center.Width * texture.Center.Height;
+        Assert.Equal((padded.Width * padded.Height) - ((padded.Width - 272) * (padded.Height - 272) * center), area);
     }
 
     [Fact]

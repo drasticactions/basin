@@ -62,23 +62,23 @@ internal static class Theme
         FontSize = (float)look.Number("font-size", (double)FontSize);
     }
 
-    public static SKColor Tint(SKColor colour, float tint)
+    public static SKColor Tint(SKColor color, float tint)
     {
         if (tint >= 1f)
         {
             var factor = 2f - tint;
             return new SKColor(
-                (byte)Math.Clamp(colour.Red * factor, 0f, 255f),
-                (byte)Math.Clamp(colour.Green * factor, 0f, 255f),
-                (byte)Math.Clamp(colour.Blue * factor, 0f, 255f),
-                colour.Alpha);
+                (byte)Math.Clamp(color.Red * factor, 0f, 255f),
+                (byte)Math.Clamp(color.Green * factor, 0f, 255f),
+                (byte)Math.Clamp(color.Blue * factor, 0f, 255f),
+                color.Alpha);
         }
 
         return new SKColor(
-            (byte)Math.Clamp(255f - ((255f - colour.Red) * tint), 0f, 255f),
-            (byte)Math.Clamp(255f - ((255f - colour.Green) * tint), 0f, 255f),
-            (byte)Math.Clamp(255f - ((255f - colour.Blue) * tint), 0f, 255f),
-            colour.Alpha);
+            (byte)Math.Clamp(255f - ((255f - color.Red) * tint), 0f, 255f),
+            (byte)Math.Clamp(255f - ((255f - color.Green) * tint), 0f, 255f),
+            (byte)Math.Clamp(255f - ((255f - color.Blue) * tint), 0f, 255f),
+            color.Alpha);
     }
 
     public static SKColor TabColor(bool active) => active ? FocusTabColor : InactiveTabColor;

@@ -722,8 +722,8 @@ public sealed class ProjectionFrustumTests
         var far = Projection.Frustum(rect, FrustumEdge.Top, 0, 30);
         var (nearX, nearY) = near.Map(0, 0);
         var (farX, farY) = far.Map(0, 0);
-        Assert.True(farX > nearX, "a pushed-back corner shrinks toward the centre");
-        Assert.True(farY > nearY, "a pushed-back corner shrinks toward the centre");
+        Assert.True(farX > nearX, "a pushed-back corner shrinks toward the center");
+        Assert.True(farY > nearY, "a pushed-back corner shrinks toward the center");
     }
 
     [Fact]
@@ -1235,7 +1235,7 @@ public sealed class FallApartEffectTests
         var laterOffset = later[0].X - later[0].U;
         Assert.True(Math.Sign(earlyOffset) == Math.Sign(laterOffset) || earlyOffset == 0,
             $"cell zero reversed direction: {earlyOffset} then {laterOffset}");
-        Assert.True(Math.Abs(laterOffset) > Math.Abs(earlyOffset), "the cell keeps travelling");
+        Assert.True(Math.Abs(laterOffset) > Math.Abs(earlyOffset), "the cell keeps traveling");
 
         var second = new FallApartEffect();
         second.Begin(new TransformStack(new SceneTree(host.Scene.Root)), Tick(0), new AnimationDuration(1000));
@@ -1535,7 +1535,7 @@ public sealed class ColorBlindnessStageTests
         var stage = new ColorBlindnessStage(shader) { Mode = ColorBlindnessMode.Monochrome };
         var (r, g, b) = Through(host, stage, new RenderColor(0.5f, 0.5f, 0.5f, 1f));
         Assert.True(Math.Abs(r - 128) <= 4 && Math.Abs(g - 128) <= 4 && Math.Abs(b - 128) <= 4,
-            $"mid grey came out as {r},{g},{b}; an encode applied twice brightens it to about 188");
+            $"mid gray came out as {r},{g},{b}; an encode applied twice brightens it to about 188");
     }
 
     [Fact]
@@ -1586,7 +1586,7 @@ public sealed class ZoomStageTests
     }
 
     [Fact]
-    public void Centred_tracking_pins_the_cursor_to_the_middle_and_clamps_at_the_edges()
+    public void Centered_tracking_pins_the_cursor_to_the_middle_and_clamps_at_the_edges()
     {
         var stage = Settled(new ZoomOptions { MouseTracking = ZoomTracking.Centered }, 2.0);
         stage.SetCursor(960, 540, 0);
@@ -2349,6 +2349,6 @@ public sealed class InvertStageTests
 
         var (gr, gg, gb) = Through(host, stage, new RenderColor(0.5f, 0.5f, 0.5f, 1f));
         Assert.True(Math.Abs(gr - 128) <= 4 && Math.Abs(gg - 128) <= 4 && Math.Abs(gb - 128) <= 4,
-            $"mid grey inverted to {gr},{gg},{gb}; an encode applied twice brightens it to about 188");
+            $"mid gray inverted to {gr},{gg},{gb}; an encode applied twice brightens it to about 188");
     }
 }

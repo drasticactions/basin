@@ -87,18 +87,6 @@ internal static class Program
         toplevel.SetAppId("basin-blur-client");
         toplevel.SetMinSize(Frame * 8, Frame * 8);
 
-        if (effects is not null)
-        {
-            var effect = effects.GetBackgroundEffect(surface);
-            var region = compositor.CreateRegion();
-
-            region.Add(0, 0, 1 << 24, 1 << 24);
-            effect.SetBlurRegion(region);
-            region.Destroy();
-            display.Roundtrip();
-            BasinReport.Line($"CAPABILITIES {capabilities} (1 = blur promised)");
-        }
-
         var closed = false;
         var drawn = false;
         var needRedraw = false;
@@ -121,6 +109,16 @@ internal static class Program
                 needRedraw = true;
             }
         };
+
+        if (effects is not null)
+        {
+            var effect = effects.GetBackgroundEffect(surface);
+            var region = compositor.CreateRegion();
+
+            region.Add(0, 0, 1 << 24, 1 << 24);
+            effect.SetBlurRegion(region);
+            region.Destroy();
+        }
 
         if (hasPointer && seat is not null)
         {
@@ -148,32 +146,42 @@ internal static class Program
         }
 
         surface.Commit();
-        display.Flush();
+        display.Roundtrip();
+        if (effects is not null)
+        {
+            BasinReport.Line($"CAPABILITIES {capabilities} (1 = blur promised)");
+        }
 
         ShmBuffer? shown = null;
-        while (!closed)
+        try
         {
-            display.Dispatch();
-            if (!needRedraw || closed)
+            while (!closed)
             {
-                continue;
-            }
+                if (needRedraw)
+                {
+                    needRedraw = false;
+                    var buffer = new ShmBuffer(shm, width, height);
+                    Paint(buffer);
+                    surface.Attach(buffer.Proxy, 0, 0);
+                    surface.Damage(0, 0, width, height);
+                    surface.Commit();
+                    display.Flush();
 
-            needRedraw = false;
-            var buffer = new ShmBuffer(shm, width, height);
-            Paint(buffer);
-            surface.Attach(buffer.Proxy, 0, 0);
-            surface.Damage(0, 0, width, height);
-            surface.Commit();
-            display.Flush();
+                    buffer.Proxy.Release += (_, _) => buffer.Dispose();
+                    shown = buffer;
+                    if (!drawn)
+                    {
+                        drawn = true;
+                        BasinReport.Line($"MAPPED {width}x{height}");
+                    }
+                }
 
-            buffer.Proxy.Release += (_, _) => buffer.Dispose();
-            shown = buffer;
-            if (!drawn)
-            {
-                drawn = true;
-                BasinReport.Line($"MAPPED {width}x{height}");
+                display.Dispatch();
             }
+        }
+        catch (WaylandException)
+        {
+            log.Info($"the compositor closed the connection");
         }
 
         shown?.Dispose();

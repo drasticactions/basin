@@ -8,6 +8,8 @@ public sealed class SkiaUIHost : IUIHost
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private bool _disposed;
 
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     public UITargetKind Produces => UITargetKind.Memory;
 
     public long? NextDueMillis => null;

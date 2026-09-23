@@ -968,7 +968,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
 
         var waits = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_waitSemaphores)[.._waitCount];
         var render = _render;
-        var submitted = _renderer.Dev.Ring.TrySubmitFrame(_stage, _render, waits, out var point);
+        var submitted = _renderer.Dev.Ring.TrySubmitFrame(_stage, _render, waits, !entry.IsCpuReadback, out var point);
         if (submitted)
         {
             _renderer.Dev.Staging.MarkSubmitted(point);

@@ -95,7 +95,7 @@ internal sealed class SkiaTexture : ISkiaTexture, IRefreshableTexture
             if (Warned.Add(view.Format))
             {
                 Log.Warn(
-                    $"skia: fourcc 0x{(uint)view.Format:x8} has no raster colour type, so surfaces using it stay blank");
+                    $"skia: fourcc 0x{(uint)view.Format:x8} has no raster color type, so surfaces using it stay blank");
             }
 
             return;

@@ -1,3 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
+using Pixman;
+
 namespace Basin;
 
 public interface IHardwareCursor
@@ -7,4 +10,11 @@ public interface IHardwareCursor
     void MoveCursor(int x, int y);
 
     bool CursorAwaitingFrame => false;
+
+    bool TryPresentedCursor([NotNullWhen(true)] out IBuffer? buffer, out Box destination)
+    {
+        buffer = null;
+        destination = default;
+        return false;
+    }
 }

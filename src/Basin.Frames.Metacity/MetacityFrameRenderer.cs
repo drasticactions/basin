@@ -6,6 +6,8 @@ namespace Basin.Frames.Metacity;
 
 public sealed partial class MetacityFrameRenderer : IFrameRenderer
 {
+    public Type SurfaceContract => typeof(ISkiaUISurface);
+
     private const int CornerZone = 16;
     private const int TopResizeHeight = 4;
 

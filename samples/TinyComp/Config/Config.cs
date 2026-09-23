@@ -38,6 +38,8 @@ internal sealed class Config
 
     public bool DamageTint { get; set; }
 
+    public bool QuillDemo { get; set; }
+
     public FrameStyle FrameStyle { get; set; } = FrameStyle.Flat;
 
     public string? MetacityTheme { get; set; }
@@ -45,6 +47,16 @@ internal sealed class Config
     public string MetacityButtonLayout { get; set; } = "menu:minimize,maximize,close";
 
     public string MetacityPalette { get; set; } = "light";
+
+    public string QuillPalette { get; set; } = "dark";
+
+    public double QuillCornerRadius { get; set; } = 8;
+
+    public double QuillFontSize { get; set; } = 13;
+
+    public double QuillBackdropBlur { get; set; }
+
+    public double QuillFrostOpacity { get; set; } = 0.44;
 
     public int CornerRadius { get; set; }
 
@@ -322,10 +334,11 @@ internal sealed class Config
 
         if (reader.Section("frame") is { } frame)
         {
-            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "metacity", "none") switch
+            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "metacity", "quill", "none") switch
             {
                 "beos" => FrameStyle.Beos,
                 "metacity" => FrameStyle.Metacity,
+                "quill" => FrameStyle.Quill,
                 "none" => FrameStyle.None,
                 _ => FrameStyle.Flat,
             };
@@ -345,6 +358,15 @@ internal sealed class Config
                 MetacityTheme = metacity.Text("theme") ?? MetacityTheme;
                 MetacityButtonLayout = metacity.Text("button_layout") ?? MetacityButtonLayout;
                 MetacityPalette = metacity.Choice("palette", "light", "light", "dark");
+            }
+
+            if (frame.Section("quill") is { } quill)
+            {
+                QuillPalette = quill.Choice("palette", "dark", "dark", "light");
+                QuillCornerRadius = quill.Number("corner_radius", QuillCornerRadius);
+                QuillFontSize = quill.Number("font_size", QuillFontSize);
+                QuillBackdropBlur = quill.Number("backdrop_blur", QuillBackdropBlur);
+                QuillFrostOpacity = quill.Number("frost_opacity", QuillFrostOpacity);
             }
         }
 
@@ -566,6 +588,7 @@ internal sealed class Config
                 "beos" => global::TinyComp.FrameStyle.Beos,
                 "flat" => global::TinyComp.FrameStyle.Flat,
                 "metacity" => global::TinyComp.FrameStyle.Metacity,
+                "quill" => global::TinyComp.FrameStyle.Quill,
                 "none" => global::TinyComp.FrameStyle.None,
                 _ => null,
             },

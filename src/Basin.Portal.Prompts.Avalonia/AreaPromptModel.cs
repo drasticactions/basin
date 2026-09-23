@@ -5,7 +5,7 @@ namespace Basin.Portal.Prompts.Avalonia;
 public sealed class AreaPromptModel : PromptModel
 {
     public AreaPromptModel(in AreaPrompt prompt, int width, int height)
-        : base(prompt.PickPoint ? "Pick a colour" : "Select an area", prompt.AppId, prompt.DisplayName, prompt.IconPath)
+        : base(prompt.PickPoint ? "Pick a color" : "Select an area", prompt.AppId, prompt.DisplayName, prompt.IconPath)
     {
         PickPoint = prompt.PickPoint;
         Width = width;

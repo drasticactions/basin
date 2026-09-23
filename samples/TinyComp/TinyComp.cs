@@ -66,6 +66,13 @@ internal sealed partial class TinyComp :
     private readonly Basin.Desktop.KdeServerDecorationManager _kdeDecorations;
     private readonly Dictionary<Surface, bool> _ssdPreference = [];
     private Basin.Capabilities.IUIHost? _uiHost;
+    private Basin.Capabilities.IUIHost? _quillHost;
+    private string? _quillDeclined;
+    private readonly string? _renderNode;
+    private QuillDemo? _quillDemo;
+    private FrameHosts? _frameHosts;
+    private bool _quillBlurClamped;
+    private Basin.Frames.Quill.QuillFrameTheme? _quillTheme;
     private FrameStyle _frameStyle;
     private FrameTheme? _frameTheme;
     private MetacityFrames? _metacity;
@@ -77,12 +84,123 @@ internal sealed partial class TinyComp :
         FrameStyle.Beos => new BeosFrameRenderer(FrameThemeOrLoad()),
         FrameStyle.Flat => new SkiaFrameRenderer(FrameThemeOrLoad()),
         FrameStyle.Metacity => (_metacity ??= MetacityFrames.Load(_config, FrameThemeOrLoad())).CreateRenderer(),
+        FrameStyle.Quill => CreateQuillFrameRenderer(),
         _ => null,
     };
+
+    private IFrameRenderer CreateQuillFrameRenderer()
+    {
+        if (QuillHost() is null)
+        {
+            _log.Error($"[frame] style = \"quill\" cannot run beside the {_config.Renderer} renderer: {_quillDeclined}; the flat frames are used instead");
+            return new SkiaFrameRenderer(FrameThemeOrLoad());
+        }
+
+        return new Basin.Frames.Quill.QuillFrameRenderer(QuillThemeOrLoad());
+    }
+
+    private Basin.Frames.Quill.QuillFrameTheme QuillThemeOrLoad() => _quillTheme ??= QuillThemeOf(_config);
+
+    private static Basin.Frames.Quill.QuillFrameTheme QuillThemeOf(Config config)
+    {
+        var theme = config.QuillPalette == "light"
+            ? Basin.Frames.Quill.QuillFrameTheme.Light()
+            : new Basin.Frames.Quill.QuillFrameTheme();
+        theme.CornerRadius = (float)config.QuillCornerRadius;
+        theme.FontSize = (float)config.QuillFontSize;
+        theme.Frosted = config.QuillBackdropBlur > 0;
+        theme.FrostAlpha = (byte)Math.Clamp(Math.Round(config.QuillFrostOpacity * 255), 0, 255);
+        return theme;
+    }
+
+    private Basin.Capabilities.IUIHost? QuillHost()
+    {
+        if (_quillHost is not null)
+        {
+            return _quillHost;
+        }
+
+        if (_quillDeclined is not null)
+        {
+            return null;
+        }
+
+        if (_renderer.Device is Basin.Render.Vulkan.VulkanDevice vulkan)
+        {
+            var host = Basin.UI.Quill.QuillVulkanUIHost.TryCreate(
+                vulkan, vulkan.DevicePath, _renderer.DmabufTextureFormats, out var vulkanDeclined, allocator: _allocator);
+            if (host is not null)
+            {
+                _log.Info($"quill frames share the {_config.Renderer} renderer's VulkanDevice");
+                _quillHost = host;
+                FrameHosts.Add(_quillHost);
+                return _quillHost;
+            }
+
+            _log.Warn($"quill frames cannot draw on the {_config.Renderer} renderer's VulkanDevice: {vulkanDeclined}; trying a GlDevice");
+        }
+
+        var shared = _renderer switch
+        {
+            Basin.Render.Gl.GlRenderer gl => gl.Device,
+            Basin.Render.Skia.SkiaGlRenderer skia => skia.Device,
+            _ => null,
+        };
+
+        var glHost = Basin.UI.Quill.QuillUIHost.TryCreate(
+            shared,
+            _renderer.Device?.DevicePath ?? _renderNode,
+            _renderer.DmabufTextureFormats,
+            out _quillDeclined,
+            allocator: shared is null ? null : _allocator);
+        if (glHost is null)
+        {
+            return null;
+        }
+
+        if (glHost.OwnsDevice)
+        {
+            _log.Info($"quill frames draw on their own GlDevice on {glHost.Device.DevicePath} beside the {_config.Renderer} renderer");
+        }
+        else
+        {
+            _log.Info($"quill frames share the {_config.Renderer} renderer's GlDevice");
+        }
+
+        _quillHost = glHost;
+        FrameHosts.Add(_quillHost);
+        return _quillHost;
+    }
+
+    internal IBackdropEffect? FrameBackdropEffect(IFrameRenderer renderer)
+    {
+        if (_blurEffect is not IBackdropBlur blur || renderer is not Basin.Frames.Quill.QuillFrameRenderer quill
+            || !quill.Theme.Frosted)
+        {
+            return null;
+        }
+
+        var asked = (int)Math.Round(_config.QuillBackdropBlur);
+        var strength = Math.Clamp(asked, 1, Basin.Effects.BlurStrength.Steps);
+        if (asked != strength && !_quillBlurClamped)
+        {
+            _quillBlurClamped = true;
+            _log.Warn($"[frame.quill] backdrop_blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {strength}");
+        }
+
+        if (blur.Options.Strength != strength)
+        {
+            blur.Options = blur.Options with { Strength = strength };
+        }
+
+        return blur;
+    }
 
     private FrameTheme FrameThemeOrLoad() => _frameTheme ??= new FrameTheme((float)_config.FontSize);
 
     internal Basin.Capabilities.IUIHost UIHost => _uiHost ??= SkiaUIHosts.For(_renderer);
+
+    internal FrameHosts FrameHosts => _frameHosts ??= new FrameHosts(UIHost);
     private readonly BasinServices _services;
     private readonly SceneScreenCapture _capture;
     private readonly SceneDmabufCapture _dmabufCapture;
@@ -354,6 +472,7 @@ internal sealed partial class TinyComp :
                 _scene.CrossDeviceImport = _blitCache.Get;
             }
 
+            _renderNode = _drm.RenderNodePath;
             var stack = CreateStack(ref rendererName, _drm.RenderNodePath);
             _renderer = stack.Renderer;
 
@@ -363,7 +482,8 @@ internal sealed partial class TinyComp :
         {
             _backend = _host.Parent;
 
-            var stack = CreateStack(ref rendererName, Basin.Renderers.RendererCatalog.FindRenderNode());
+            _renderNode = Basin.Renderers.RendererCatalog.FindRenderNode();
+            var stack = CreateStack(ref rendererName, _renderNode);
             _renderer = stack.Renderer;
 
             _allocator = stack.DeviceAllocator;
@@ -813,6 +933,18 @@ internal sealed partial class TinyComp :
         ApplyEffectSettings(config);
     }
 
+    private void StartQuillDemo()
+    {
+        if (QuillHost() is not { } host)
+        {
+            _log.Warn($"quill demo: {_quillDeclined}, so the mock is unavailable");
+            return;
+        }
+
+        var scale = Views.Count > 0 ? Views[0].Output.Scale : 1.0;
+        _quillDemo = new QuillDemo(_layers.Overlay, host, _loop, scale, _log);
+    }
+
     public long Rendered => _driver.PrimaryRendered;
 
     private IReadOnlyList<Basin.Host.OutputView> Views => _driver.Views;
@@ -840,6 +972,11 @@ internal sealed partial class TinyComp :
             _display.SetGlobalFilter((client, _, interfaceName) =>
                 client != remote || globals.Carries(interfaceName));
             _log.Info($"channel attached; replaying it as one client");
+        }
+
+        if (_config.QuillDemo)
+        {
+            StartQuillDemo();
         }
 
         var hangup = _loop.AddSignal(Signal.Hangup, _ => Reload());
@@ -873,6 +1010,10 @@ internal sealed partial class TinyComp :
         }
 
         _hostChrome.Clear();
+        _quillDemo?.Dispose();
+        _quillDemo = null;
+        _quillHost?.Dispose();
+        _quillHost = null;
         _uiHost?.Dispose();
 
         _colorPack.Luts.Dispose();

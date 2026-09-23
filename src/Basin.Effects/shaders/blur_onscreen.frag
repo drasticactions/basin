@@ -17,6 +17,9 @@ layout(set = 0, binding = 0) uniform sampler2D src;
 layout(set = 1, binding = 0) uniform sampler2D noiseTex;
 layout(set = 2, binding = 0) uniform sampler2D plainTex;
 layout(location = 0) out vec4 color;
+vec2 g_lo;
+vec2 g_hi;
+vec4 tap(sampler2D s, vec2 uv) { return texture(s, clamp(uv, g_lo, g_hi)); }
 float basin_rounded_box(vec2 position, vec2 center, vec2 extents, vec4 radius) {
     vec2 p = position - center;
     float r = p.x > 0.0
@@ -29,14 +32,16 @@ void main() {
     vec2 texSize = vec2(textureSize(src, 0));
     vec2 uv = gl_FragCoord.xy * pc.srcScale / texSize;
     vec2 hp = pc.halfpixelTexels / texSize;
-    vec4 sum = texture(src, uv + vec2(-hp.x * 2.0, 0.0));
-    sum += texture(src, uv + vec2(-hp.x, hp.y)) * 2.0;
-    sum += texture(src, uv + vec2(0.0, hp.y * 2.0));
-    sum += texture(src, uv + vec2(hp.x, hp.y)) * 2.0;
-    sum += texture(src, uv + vec2(hp.x * 2.0, 0.0));
-    sum += texture(src, uv + vec2(hp.x, -hp.y)) * 2.0;
-    sum += texture(src, uv + vec2(0.0, -hp.y * 2.0));
-    sum += texture(src, uv + vec2(-hp.x, -hp.y)) * 2.0;
+    g_lo = (pc.box.xy - pc.box.zw) / (texSize * pc.reserved) + (0.5 / texSize);
+    g_hi = (pc.box.xy + pc.box.zw) / (texSize * pc.reserved) - (0.5 / texSize);
+    vec4 sum = tap(src, uv + vec2(-hp.x * 2.0, 0.0));
+    sum += tap(src, uv + vec2(-hp.x, hp.y)) * 2.0;
+    sum += tap(src, uv + vec2(0.0, hp.y * 2.0));
+    sum += tap(src, uv + vec2(hp.x, hp.y)) * 2.0;
+    sum += tap(src, uv + vec2(hp.x * 2.0, 0.0));
+    sum += tap(src, uv + vec2(hp.x, -hp.y)) * 2.0;
+    sum += tap(src, uv + vec2(0.0, -hp.y * 2.0));
+    sum += tap(src, uv + vec2(-hp.x, -hp.y)) * 2.0;
     vec4 blurred = sum / 12.0;
     vec4 base = vec4(mix(blurred.rgb, pc.frost.rgb, pc.frost.a), blurred.a);
     vec3 tinted = vec3(

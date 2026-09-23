@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.UI.Quill.Vulkan</PackageId>
+    <RootNamespace>Basin.UI.Quill</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Prowl.Quill GPU UI adapter for Basin, drawing compositor chrome on Vulkan.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <ProjectReference Include="../Basin.UI.Quill/Basin.UI.Quill.csproj" />
+    <PackageReference Include="Prowl.Quill" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

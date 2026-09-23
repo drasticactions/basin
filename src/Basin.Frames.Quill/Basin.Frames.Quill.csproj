@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Frames.Quill</PackageId>
+    <RootNamespace>Basin.Frames.Quill</RootNamespace>
+    <Description>Prowl.Quill window frames for Basin, drawn on GLES or Vulkan.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/fonts/Selawik-Regular.ttf" LogicalName="Selawik-Regular.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.UI.Quill/Basin.UI.Quill.csproj" />
+    <PackageReference Include="Prowl.Quill" />
+  </ItemGroup>
+
+</Project>

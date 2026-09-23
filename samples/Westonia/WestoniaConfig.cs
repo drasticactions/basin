@@ -45,7 +45,7 @@ internal sealed partial class Westonia
             {
                 if (SettingFor(key) is not { } setting)
                 {
-                    _log.Warn($"weston.ini: [libinput] {key} is not honoured");
+                    _log.Warn($"weston.ini: [libinput] {key} is not honored");
                     continue;
                 }
 
@@ -149,7 +149,7 @@ internal sealed partial class Westonia
 
             if (section.IccProfile is { Length: > 0 } profile)
             {
-                _log.Info($"weston.ini: [output] {section.Name} icc_profile={profile} is applied through the colour manager");
+                _log.Info($"weston.ini: [output] {section.Name} icc_profile={profile} is applied through the color manager");
             }
         }
     }

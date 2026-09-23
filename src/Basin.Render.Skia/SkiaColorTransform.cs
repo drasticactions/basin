@@ -112,7 +112,7 @@ internal sealed class SkiaColorTransform : IDisposable
     internal static SkiaColorTransform Create(in ColorTransformParameters parameters)
     {
         var effect = SKRuntimeEffect.CreateColorFilter(Sksl, out var errors)
-            ?? throw new InvalidOperationException($"colour transform effect failed to compile: {errors}");
+            ?? throw new InvalidOperationException($"color transform effect failed to compile: {errors}");
         SkiaCensus.Track(effect);
         var m = parameters.Matrix;
         var uniforms = new SKRuntimeEffectUniforms(effect)
@@ -146,7 +146,7 @@ internal sealed class SkiaColorTransform : IDisposable
             },
         };
         var filter = effect.ToColorFilter(uniforms)
-            ?? throw new InvalidOperationException("colour transform effect rejected its uniforms.");
+            ?? throw new InvalidOperationException("color transform effect rejected its uniforms.");
         return new SkiaColorTransform(parameters, effect, SkiaCensus.Track(filter));
     }
 

@@ -32,6 +32,11 @@ internal static class Program
             DefaultValueFactory = _ => true,
         }, report: false);
 
+        var quillDemo = cli.Add(new Option<bool>("--quill-demo")
+        {
+            Description = "draw one Prowl.Quill chrome mock beside the Skia chrome, on the gl renderer only",
+        }, report: false);
+
         var framesOption = cli.Add(CommonOptions.Frames(), report: false);
         var transport = cli.Add(CommonOptions.Transport());
         var channel = cli.Add(CommonOptions.WaypipeListen());
@@ -72,6 +77,7 @@ internal static class Program
             settings.Offload = Layered(offload, "offload", settings.Offload);
             settings.FullRepaint = Layered(fullRepaint, "full_repaint", settings.FullRepaint);
             settings.DamageTint = Layered(damageTint, "damage_tint", settings.DamageTint);
+            settings.QuillDemo = result.GetValue(quillDemo);
 
             Given(renderer, "renderer");
             Given(outputs, "outputs");
@@ -89,6 +95,7 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("frames", settings.Frames));
         cli.AddReport(_ => BasinCommand.Report("full-repaint", settings.FullRepaint));
         cli.AddReport(_ => BasinCommand.Report("damage-tint", settings.DamageTint));
+        cli.AddReport(_ => BasinCommand.Report("quill-demo", settings.QuillDemo));
         cli.AddReport(_ => BasinCommand.Report("offload", settings.Offload));
         cli.AddReport(_ => BasinCommand.Report("transactions", settings.Transactions));
         cli.AddReport(_ => BasinCommand.Report(
@@ -126,16 +133,28 @@ internal static class Program
                 return 1;
             }
 
-            using var comp = new TinyComp(
+            int status;
+            long rendered;
+            using (var comp = new TinyComp(
                 settings,
                 result.GetValue(backend).Kind,
                 result.GetValue(backend).SocketFd,
                 log,
                 result.GetValue(transport).Kind == TransportKind.Managed,
                 result.GetValue(channel),
-                result.GetValue(configPath));
-            var status = comp.Run();
-            cli.ReportFrames(comp.Rendered);
+                result.GetValue(configPath)))
+            {
+                status = comp.Run();
+                rendered = comp.Rendered;
+            }
+
+            BasinReport.Line(CompositorLines.Frames(rendered));
+            if (BasinCounters.Enabled && (BasinCounters.LiveObjects != 0 || BasinCounters.PendingFrees != 0))
+            {
+                log.Error($"{BasinCounters.CensusReport()}");
+            }
+
+            cli.ReportFrames(rendered);
             return status;
         });
     }

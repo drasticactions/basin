@@ -22,15 +22,17 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         uniform vec2 u_srcScale;
         uniform vec2 u_srcInvSize;
         uniform vec2 u_halfpixel;
+        uniform vec4 u_srcClamp;
         out vec4 color;
+        vec4 tap(sampler2D s, vec2 uv) { return texture(s, clamp(uv, u_srcClamp.xy, u_srcClamp.zw)); }
         void main() {
             vec2 uv = gl_FragCoord.xy * u_srcScale * u_srcInvSize;
             vec2 hp = u_halfpixel;
-            vec4 sum = texture(src, uv) * 4.0;
-            sum += texture(src, uv - hp);
-            sum += texture(src, uv + hp);
-            sum += texture(src, uv + vec2(hp.x, -hp.y));
-            sum += texture(src, uv - vec2(hp.x, -hp.y));
+            vec4 sum = tap(src, uv) * 4.0;
+            sum += tap(src, uv - hp);
+            sum += tap(src, uv + hp);
+            sum += tap(src, uv + vec2(hp.x, -hp.y));
+            sum += tap(src, uv - vec2(hp.x, -hp.y));
             color = sum / 8.0;
         }
         """;
@@ -47,6 +49,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         uniform vec4 u_colorMatrix2;
         uniform sampler2D u_noise;
         uniform vec2 u_noiseSize;
+        uniform vec4 u_srcClamp;
         uniform sampler2D u_plain;
         uniform vec2 u_targetSize;
         uniform vec4 u_box;
@@ -55,6 +58,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         uniform float u_intensity;
         uniform vec4 u_frost;
         out vec4 color;
+        vec4 tap(sampler2D s, vec2 uv) { return texture(s, clamp(uv, u_srcClamp.xy, u_srcClamp.zw)); }
         float basin_rounded_box(vec2 position, vec2 center, vec2 extents, vec4 radius) {
             vec2 p = position - center;
             float r = p.x > 0.0
@@ -66,14 +70,14 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         void main() {
             vec2 uv = gl_FragCoord.xy * u_srcScale * u_srcInvSize;
             vec2 hp = u_halfpixel;
-            vec4 sum = texture(src, uv + vec2(-hp.x * 2.0, 0.0));
-            sum += texture(src, uv + vec2(-hp.x, hp.y)) * 2.0;
-            sum += texture(src, uv + vec2(0.0, hp.y * 2.0));
-            sum += texture(src, uv + vec2(hp.x, hp.y)) * 2.0;
-            sum += texture(src, uv + vec2(hp.x * 2.0, 0.0));
-            sum += texture(src, uv + vec2(hp.x, -hp.y)) * 2.0;
-            sum += texture(src, uv + vec2(0.0, -hp.y * 2.0));
-            sum += texture(src, uv + vec2(-hp.x, -hp.y)) * 2.0;
+            vec4 sum = tap(src, uv + vec2(-hp.x * 2.0, 0.0));
+            sum += tap(src, uv + vec2(-hp.x, hp.y)) * 2.0;
+            sum += tap(src, uv + vec2(0.0, hp.y * 2.0));
+            sum += tap(src, uv + vec2(hp.x, hp.y)) * 2.0;
+            sum += tap(src, uv + vec2(hp.x * 2.0, 0.0));
+            sum += tap(src, uv + vec2(hp.x, -hp.y)) * 2.0;
+            sum += tap(src, uv + vec2(0.0, -hp.y * 2.0));
+            sum += tap(src, uv + vec2(-hp.x, -hp.y)) * 2.0;
             vec4 blurred = sum / 12.0;
             vec4 base = vec4(mix(blurred.rgb, u_frost.rgb, u_frost.a), blurred.a);
             vec3 tinted = vec3(
@@ -100,18 +104,20 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         uniform vec2 u_srcScale;
         uniform vec2 u_srcInvSize;
         uniform vec2 u_halfpixel;
+        uniform vec4 u_srcClamp;
         out vec4 color;
+        vec4 tap(sampler2D s, vec2 uv) { return texture(s, clamp(uv, u_srcClamp.xy, u_srcClamp.zw)); }
         void main() {
             vec2 uv = gl_FragCoord.xy * u_srcScale * u_srcInvSize;
             vec2 hp = u_halfpixel;
-            vec4 sum = texture(src, uv + vec2(-hp.x * 2.0, 0.0));
-            sum += texture(src, uv + vec2(-hp.x, hp.y)) * 2.0;
-            sum += texture(src, uv + vec2(0.0, hp.y * 2.0));
-            sum += texture(src, uv + vec2(hp.x, hp.y)) * 2.0;
-            sum += texture(src, uv + vec2(hp.x * 2.0, 0.0));
-            sum += texture(src, uv + vec2(hp.x, -hp.y)) * 2.0;
-            sum += texture(src, uv + vec2(0.0, -hp.y * 2.0));
-            sum += texture(src, uv + vec2(-hp.x, -hp.y)) * 2.0;
+            vec4 sum = tap(src, uv + vec2(-hp.x * 2.0, 0.0));
+            sum += tap(src, uv + vec2(-hp.x, hp.y)) * 2.0;
+            sum += tap(src, uv + vec2(0.0, hp.y * 2.0));
+            sum += tap(src, uv + vec2(hp.x, hp.y)) * 2.0;
+            sum += tap(src, uv + vec2(hp.x * 2.0, 0.0));
+            sum += tap(src, uv + vec2(hp.x, -hp.y)) * 2.0;
+            sum += tap(src, uv + vec2(0.0, -hp.y * 2.0));
+            sum += tap(src, uv + vec2(-hp.x, -hp.y)) * 2.0;
             color = sum / 12.0;
         }
         """;
@@ -122,6 +128,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         public int SrcScale;
         public int SrcInvSize;
         public int Halfpixel;
+        public int SrcClamp;
         public int ColorMatrix0;
         public int ColorMatrix1;
         public int ColorMatrix2;
@@ -243,7 +250,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         {
             BlurPass(
                 _onscreen, pyramid.Chain[0], context.Backdrop, context.TargetWidth, context.TargetHeight,
-                srcScale: 1f, RegionAtLevel(padded, 0), plain: true);
+                srcScale: 1f, RegionAtLevel(padded, 0), context.Bounds, plain: true);
             gl.Disable(EnableCap.ScissorTest);
             var flat = pyramid.Chain[0];
             result = new GlBackdropResult(flat.Texture, flat.Width, flat.Height, context.Bounds);
@@ -255,7 +262,10 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             var srcTexture = i == 1 ? context.Backdrop : pyramid.Chain[i - 1].Texture;
             var srcWidth = i == 1 ? context.TargetWidth : pyramid.Chain[i - 1].Width;
             var srcHeight = i == 1 ? context.TargetHeight : pyramid.Chain[i - 1].Height;
-            BlurPass(_down, pyramid.Chain[i], srcTexture, srcWidth, srcHeight, srcScale: 2f, RegionAtLevel(padded, i));
+            var srcValid = i == 1 ? context.Bounds : RegionAtLevel(context.Bounds, i - 1);
+            BlurPass(
+                _down, pyramid.Chain[i], srcTexture, srcWidth, srcHeight, srcScale: 2f,
+                RegionAtLevel(padded, i), srcValid);
         }
 
         for (var i = levels - 1; i >= 0; i--)
@@ -263,7 +273,8 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             var src = pyramid.Chain[i + 1];
             BlurPass(
                 i == 0 ? _onscreen : _up,
-                pyramid.Chain[i], src.Texture, src.Width, src.Height, srcScale: 0.5f, RegionAtLevel(padded, i));
+                pyramid.Chain[i], src.Texture, src.Width, src.Height, srcScale: 0.5f,
+                RegionAtLevel(padded, i), RegionAtLevel(context.Bounds, i + 1));
         }
 
         gl.Disable(EnableCap.ScissorTest);
@@ -281,7 +292,9 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         return new Box(x, y, right - x, bottom - y);
     }
 
-    private void BlurPass(Program program, Level dst, uint srcTexture, int srcWidth, int srcHeight, float srcScale, Box region, bool plain = false)
+    private void BlurPass(
+        Program program, Level dst, uint srcTexture, int srcWidth, int srcHeight, float srcScale, Box region,
+        in Box srcValid, bool plain = false)
     {
         var gl = _device.Gl;
         var width = Math.Min(region.Width, dst.Width - region.X);
@@ -305,6 +318,12 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.Uniform2(program.SrcInvSize, 1f / srcWidth, 1f / srcHeight);
         var halfpixel = plain ? 0f : (float)(0.5 * _strength.Offset);
         gl.Uniform2(program.Halfpixel, halfpixel / srcWidth, halfpixel / srcHeight);
+        gl.Uniform4(
+            program.SrcClamp,
+            (srcValid.X + 0.5f) / srcWidth,
+            (srcValid.Y + 0.5f) / srcHeight,
+            (srcValid.Right - 0.5f) / srcWidth,
+            (srcValid.Bottom - 0.5f) / srcHeight);
         if (program.ColorMatrix0 >= 0)
         {
             gl.Uniform4(program.ColorMatrix0, _surfaceMatrix[0], _surfaceMatrix[1], _surfaceMatrix[2], _surfaceMatrix[3]);
@@ -426,6 +445,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             Handle = handle,
             SrcScale = gl.GetUniformLocation(handle, "u_srcScale"),
             SrcInvSize = gl.GetUniformLocation(handle, "u_srcInvSize"),
+            SrcClamp = gl.GetUniformLocation(handle, "u_srcClamp"),
             Halfpixel = gl.GetUniformLocation(handle, "u_halfpixel"),
             ColorMatrix0 = gl.GetUniformLocation(handle, "u_colorMatrix0"),
             ColorMatrix1 = gl.GetUniformLocation(handle, "u_colorMatrix1"),
