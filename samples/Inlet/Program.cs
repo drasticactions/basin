@@ -860,6 +860,7 @@ internal static class Program
             }
         }
 
+        host.DisconnectClients();
         totalRendered = driver.PrimaryRendered;
 
         startup?.Stop(log);

@@ -255,6 +255,7 @@ internal sealed partial class Dam : IDisposable
 
     public void Dispose()
     {
+        _host.DisconnectClients();
         _ipc?.Dispose();
         _ipc = null;
         _colorPack?.Luts.Dispose();

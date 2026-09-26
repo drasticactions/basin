@@ -1024,6 +1024,7 @@ internal sealed partial class TinyComp :
 
     public void Dispose()
     {
+        _host.DisconnectClients();
         _pointerRefresh?.Dispose();
         _ipc?.Dispose();
         _ipc = null;

@@ -414,6 +414,7 @@ internal sealed partial class Shell : IDisposable
 
     public void Dispose()
     {
+        _host.DisconnectClients();
         _colorPack?.Luts.Dispose();
         ReleaseChrome();
         _uiDriver.Dispose();

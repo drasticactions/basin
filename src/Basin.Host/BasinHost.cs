@@ -114,6 +114,17 @@ public sealed class BasinHost : IDisposable
         return output.Commit(modeset);
     }
 
+    public void DisconnectClients()
+    {
+        foreach (var client in Display.Clients)
+        {
+            if (!client.IsDestroyed)
+            {
+                client.Destroy();
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)

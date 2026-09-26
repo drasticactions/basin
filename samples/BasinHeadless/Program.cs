@@ -256,6 +256,7 @@ internal static class Program
             }
         }
 
+        host.DisconnectClients();
         interrupt.Remove();
         terminate.Remove();
         ipc?.Dispose();

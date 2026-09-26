@@ -120,6 +120,7 @@ internal static class Program
 
         shot.Destroy();
         BasinDiagnostics.StopClient(client);
+        host.DisconnectClients();
         target.Destroy();
         BasinReport.Line($"CAPTURES {capture.Captures} CLIPBOARD {clipboard.History} BELLS {bell.Rings}");
         return ok ? 0 : 1;
