@@ -156,8 +156,33 @@ public sealed class IpcApprovalTests
         Assert.Equal([IpcApprovalAnswer.AllowOnce], answers);
     }
 
+    [Fact]
+    public void The_answer_is_recorded_before_the_held_call_completes()
+    {
+        var broker = new IpcApprovalBroker();
+        var gate = new Gate(broker);
+        using var rig = IpcFullRig.Create(register: server =>
+        {
+            server.Approvals = broker;
+            server.Interceptor = gate;
+        });
+        var person = rig.Connect();
+        var agent = rig.Connect();
+        _ = person.Call("""{"method":"ipc/subscribe","params":{"events":["approval/requested"]}}""");
+
+        agent.Send("""{"id":1,"method":"process/spawn","params":{"argv":["true"]}}""");
+        var id = Event(person).GetProperty("id").GetInt64();
+        _ = person.Call($$$"""{"method":"approval/answer","params":{"id":{{{id}}},"answer":"deny"}}""");
+        Assert.Equal(IpcErrorCodes.Refused, Code(Reply(agent, 1)));
+        Assert.Equal(IpcApprovalAnswer.Deny, gate.AnswerSeenAfter);
+    }
+
     private sealed class Gate(IpcApprovalBroker broker) : IIpcInterceptor
     {
+        private IpcApproval? _last;
+
+        public IpcApprovalAnswer? AnswerSeenAfter { get; private set; }
+
         public IpcDecision Before(string method, ReadOnlySpan<byte> parameters, IpcCallContext context)
         {
             if (method != IpcMethodNames.ProcessSpawn || broker.IsAllowedForRun(method))
@@ -165,12 +190,16 @@ public sealed class IpcApprovalTests
                 return IpcDecision.Allow;
             }
 
-            _ = broker.Request(context.Hold(), "the agent wants to start a program");
+            _last = broker.Request(context.Hold(), "the agent wants to start a program");
             return IpcDecision.Defer;
         }
 
         public void After(string method, IpcCallOutcome outcome, TimeSpan elapsed, IpcCallContext context)
         {
+            if (method == IpcMethodNames.ProcessSpawn)
+            {
+                AnswerSeenAfter = _last?.Answer;
+            }
         }
     }
 }

@@ -19,4 +19,6 @@ public sealed record BasinCompositorOptions
     public IReadOnlyList<IProtocolModule>? ExtraModules { get; init; }
 
     public Action<BasinCompositorHost, BasinServices>? ConfigureServices { get; init; }
+
+    public bool Dmabuf { get; init; } = true;
 }

@@ -336,7 +336,21 @@ public sealed class IpcHostedTests
         Assert.All(rig.Harness.Shell.Windows, window => Assert.True(window.Maximized));
     }
 
-    private sealed class StubContent(string title, string appId) : IWindowContent
+    [Fact]
+    public void Maximize_placement_centers_a_compositor_dialog_instead_of_maximizing_it()
+    {
+        using var rig = new IpcHostedRig(new ShellSettings { Placement = PlacementMode.Maximize });
+        var shell = rig.Harness.Shell;
+        var window = shell.Adopt(new StubContent("Approve", "org.basin.dialog", centered: true), publish: false);
+        Assert.False(window.Maximized);
+        var area = shell.WorkArea;
+        var frame = window.FrameBox;
+        Assert.InRange(frame.X + (frame.Width / 2) - (area.X + (area.Width / 2)), -1, 1);
+        Assert.InRange(frame.Y + (frame.Height / 2) - (area.Y + (area.Height / 2)), -1, 1);
+        shell.Release(window);
+    }
+
+    private sealed class StubContent(string title, string appId, bool centered = false) : IWindowContent
     {
         private Basin.Scene.SceneTree? _tree;
 
@@ -368,7 +382,7 @@ public sealed class IpcHostedTests
 
         public bool ServerDecorated => false;
 
-        public bool Centered => false;
+        public bool Centered => centered;
 
         public Basin.Capabilities.FrameCapabilities Capabilities => default;
 

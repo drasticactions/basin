@@ -111,10 +111,7 @@ public sealed class OutputGlobal : IDisposable
         _disposed = true;
         _overrides.Clear();
         _output.Committed -= OnOutputCommitted;
-        if (ByOutput.TryGetValue(_output, out var current) && current == this)
-        {
-            ByOutput.Remove(_output);
-        }
+        _ = ByOutput.TryRemove(new KeyValuePair<IOutput, OutputGlobal>(_output, this));
 
         _global.Dispose();
     }
@@ -122,8 +119,8 @@ public sealed class OutputGlobal : IDisposable
     public void Retire(int graceMillis = GlobalRetirement.DefaultGraceMillis) =>
         GlobalRetirement.Retire(_display, _global, Dispose, graceMillis);
 
-    private static readonly Dictionary<WlOutputResource, OutputGlobal> ByResource = [];
-    private static readonly Dictionary<IOutput, OutputGlobal> ByOutput = [];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<WlOutputResource, OutputGlobal> ByResource = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<IOutput, OutputGlobal> ByOutput = new();
 
     public static OutputGlobal? For(IOutput output) =>
         output is null ? null : ByOutput.GetValueOrDefault(output);
@@ -157,7 +154,7 @@ public sealed class OutputGlobal : IDisposable
         resource.Destroyed += (_, _) =>
         {
             _resources.Remove(resource);
-            ByResource.Remove(resource);
+            ByResource.TryRemove(resource, out _);
         };
         SendState(resource, sendName: true, sendDescription: true);
         ResourceBound?.Invoke(resource);

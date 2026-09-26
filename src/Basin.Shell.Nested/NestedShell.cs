@@ -641,7 +641,8 @@ public sealed partial class NestedShell : IDisposable
             : Placement.Place(request);
         window.MoveFrameTo(origin.X, origin.Y);
         if (parentFrame is null
-            && (_settings.Placement == PlacementMode.Maximize || Placement.ShouldMaximize(width, height, WorkArea)))
+            && ((_settings.Placement == PlacementMode.Maximize && !window.Content.Centered)
+                || Placement.ShouldMaximize(width, height, WorkArea)))
         {
             SetMaximized(window, true);
         }

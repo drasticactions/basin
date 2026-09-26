@@ -161,6 +161,22 @@ public sealed class HostedSession : IDisposable
         return composited;
     }
 
+    public void MarkPresented(SceneOutput output)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(output);
+        if (!_inFrame)
+        {
+            throw new InvalidOperationException("MarkPresented outside a frame.");
+        }
+
+        output.Ring.Commit();
+        if (!_presented.Contains(output))
+        {
+            _presented.Add(output);
+        }
+    }
+
     public void EndFrame()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

@@ -630,7 +630,6 @@ internal sealed partial class ShellSeat :
             return;
         }
 
-
     }
 
     void ITouchChrome.Release(int id, uint timeMs, double x, double y)
@@ -657,7 +656,6 @@ internal sealed partial class ShellSeat :
         {
             return;
         }
-
 
     }
 

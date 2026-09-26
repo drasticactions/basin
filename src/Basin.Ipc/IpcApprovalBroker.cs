@@ -102,6 +102,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
             _allowedForRun.Add(approval.Method);
         }
 
+        approval.Record(answer);
         if (!approval.Call.IsDone)
         {
             if (answer is IpcApprovalAnswer.AllowOnce or IpcApprovalAnswer.AllowRun)
@@ -116,7 +117,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
 
         try
         {
-            approval.Finish(answer);
+            approval.Finish();
         }
         catch (Exception exception)
         {

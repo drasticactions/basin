@@ -29,9 +29,7 @@ public sealed class IpcApproval
 
     internal IEventSource? Timer { get; set; }
 
-    internal void Finish(IpcApprovalAnswer answer)
-    {
-        Answer = answer;
-        Answered?.Invoke(this);
-    }
+    internal void Record(IpcApprovalAnswer answer) => Answer = answer;
+
+    internal void Finish() => Answered?.Invoke(this);
 }

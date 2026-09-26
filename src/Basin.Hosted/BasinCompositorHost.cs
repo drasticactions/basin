@@ -86,7 +86,10 @@ public sealed class BasinCompositorHost : IDisposable
         Session = new HostedSession(Display, Loop) { Frames = frames };
         Screens = new HostScreens(this);
         Wake = new HostedWakeSource(Loop);
-        Renderer.EglAvailable += OnEglAvailable;
+        if (options.Dmabuf)
+        {
+            Renderer.EglAvailable += OnEglAvailable;
+        }
     }
 
     private LinuxDmabufGlobal? _dmabuf;
@@ -298,6 +301,8 @@ public sealed class BasinCompositorHost : IDisposable
     }
 
     internal void ForgetView(BasinViewOutput view) => _views.Remove(view);
+
+    internal IReadOnlyList<BasinViewOutput> Views => _views;
 
     public void Dispose()
     {
