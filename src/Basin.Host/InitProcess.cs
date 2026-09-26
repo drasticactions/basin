@@ -2,9 +2,9 @@ using System.Runtime.InteropServices;
 
 using Basin.Diagnostics;
 
-namespace Inlet;
+namespace Basin.Host;
 
-internal sealed class InitProcess
+public sealed class InitProcess
 {
     private const int ResourceOpenFiles = 7;
 
@@ -37,6 +37,19 @@ internal sealed class InitProcess
 
         public ulong Maximum;
     }
+
+    private const int FileExists = 0;
+
+    private const int FileExecutable = 1;
+
+    private const int ErrorNoEntry = 2;
+
+    private const int ErrorNotDirectory = 20;
+
+    private const int ErrorAccess = 13;
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int access([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int getrlimit(int resource, out RLimit limit);
@@ -77,6 +90,52 @@ internal sealed class InitProcess
     [DllImport("libc", SetLastError = true)]
     private static extern int kill(int pid, int signal);
 
+    public static bool TryFind(IReadOnlyList<string> directories, BasinLogger log, out string? found)
+    {
+        ArgumentNullException.ThrowIfNull(directories);
+        found = null;
+
+        var root = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        if (string.IsNullOrEmpty(root))
+        {
+            var home = Environment.GetEnvironmentVariable("HOME");
+            if (string.IsNullOrEmpty(home))
+            {
+                return true;
+            }
+
+            root = Path.Combine(home, ".config");
+        }
+
+        foreach (var directory in directories)
+        {
+            var path = Path.Combine(root, directory, "init");
+            if (access(path, FileExecutable) == 0)
+            {
+                found = path;
+                return true;
+            }
+
+            var error = Marshal.GetLastPInvokeError();
+            if (error == ErrorAccess && access(path, FileExists) == 0)
+            {
+                log.Error($"failed to run init executable {path}: the file is not executable");
+                return false;
+            }
+
+            if (error is ErrorNoEntry or ErrorNotDirectory)
+            {
+                log.Debug($"no init executable at {path}");
+            }
+            else
+            {
+                log.Error($"failed to run init executable {path}: {(Marshal.GetPInvokeErrorMessage(error))}");
+            }
+        }
+
+        return true;
+    }
+
     public static void RaiseFileLimit(BasinLogger log)
     {
         if (getrlimit(ResourceOpenFiles, out var original) != 0)
@@ -94,7 +153,7 @@ internal sealed class InitProcess
             return;
         }
 
-        log.Info($"raised the file descriptor limit of the Inlet process to {raised.Current}");
+        log.Info($"raised the file descriptor limit of the compositor process to {raised.Current}");
     }
 
     public static InitProcess? Start(string command, string socket, string? display, BasinLogger log)
@@ -208,7 +267,7 @@ internal sealed class InitProcess
         var raised = Raised(original);
         if (setrlimit(ResourceOpenFiles, in raised) != 0)
         {
-            log.Error($"failed to raise the file descriptor limit of the Inlet process again");
+            log.Error($"failed to raise the file descriptor limit of the compositor process again");
         }
     }
 

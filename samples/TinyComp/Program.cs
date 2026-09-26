@@ -37,6 +37,12 @@ internal static class Program
             Description = "draw one Prowl.Quill chrome mock beside the Skia chrome, on the gl renderer only",
         }, report: false);
 
+        var commandOption = cli.Add(new Option<string?>("--command", "-c")
+        {
+            Description = "run `sh -c <command>` on startup instead of the init executable",
+            HelpName = "CMD",
+        });
+
         var framesOption = cli.Add(CommonOptions.Frames(), report: false);
         var transport = cli.Add(CommonOptions.Transport());
         var channel = cli.Add(CommonOptions.WaypipeListen());
@@ -154,6 +160,13 @@ internal static class Program
                 return 1;
             }
 
+            var init = result.GetValue(commandOption);
+            if (init is null && result.GetValue(configPath) is null
+                && !Basin.Host.InitProcess.TryFind(["tinycomp"], log, out init))
+            {
+                return 1;
+            }
+
             int status;
             long rendered;
             using (var comp = new TinyComp(
@@ -164,7 +177,8 @@ internal static class Program
                 result.GetValue(transport).Kind == TransportKind.Managed,
                 result.GetValue(channel),
                 result.GetValue(configPath),
-                IpcCli.Read(cli, result)))
+                IpcCli.Read(cli, result),
+                init))
             {
                 status = comp.Run();
                 rendered = comp.Rendered;

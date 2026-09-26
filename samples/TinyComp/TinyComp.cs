@@ -322,6 +322,10 @@ internal sealed partial class TinyComp :
     }
 
     private readonly string? _channelEndpoint;
+
+    private readonly string? _init;
+
+    private Basin.Host.InitProcess? _initProcess;
     private Basin.Transport.Waypipe.WaypipeChannel? _channel;
     private Config _config;
     private readonly string? _configPath;
@@ -389,12 +393,13 @@ internal sealed partial class TinyComp :
         return _fireShader;
     }
 
-    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null, Basin.Cli.IpcChoice? ipc = null)
+    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null, Basin.Cli.IpcChoice? ipc = null, string? init = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         var drm = backend == BackendKind.Drm;
         _config = config;
         _configPath = configPath;
+        _init = init;
         _shortcuts = new TinyCompShortcuts(log);
         _shortcuts.Configure(config);
         var outputCount = config.Outputs;
@@ -1022,6 +1027,11 @@ internal sealed partial class TinyComp :
             StartQuillDemo();
         }
 
+        if (_init is { } init)
+        {
+            _initProcess = Basin.Host.InitProcess.Start(init, _socket, _xwayland?.DisplayName, _log);
+        }
+
         var hangup = _loop.AddSignal(Signal.Hangup, _ => Reload());
         _runLoop.Frames = _frames;
         _runLoop.Run();
@@ -1032,6 +1042,8 @@ internal sealed partial class TinyComp :
     public void Dispose()
     {
         _host.DisconnectClients();
+        _initProcess?.Stop(_log);
+        _initProcess = null;
         _pointerRefresh?.Dispose();
         _hotCornerTimer?.Remove();
         _hotCornerTimer = null;

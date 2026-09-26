@@ -1,24 +1,10 @@
-using System.Runtime.InteropServices;
-
 using Basin.Diagnostics;
+using Basin.Host;
 
 namespace Inlet;
 
 internal static class InitFile
 {
-    private const int FileExists = 0;
-
-    private const int FileExecutable = 1;
-
-    private const int ErrorNoEntry = 2;
-
-    private const int ErrorNotDirectory = 20;
-
-    private const int ErrorAccess = 13;
-
-    [DllImport("libc", SetLastError = true)]
-    private static extern int access([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
-
     public static bool TryResolve(string? command, BasinLogger log, out string? startup)
     {
         startup = null;
@@ -27,7 +13,7 @@ internal static class InitFile
         {
             startup = command;
         }
-        else if (!TrySearch(log, out startup))
+        else if (!InitProcess.TryFind(["inlet", "river"], log, out startup))
         {
             return false;
         }
@@ -39,52 +25,6 @@ internal static class InitFile
         }
 
         return !MentionsRiverctl(startup, log);
-    }
-
-    private static bool TrySearch(BasinLogger log, out string? found)
-    {
-        found = null;
-
-        var root = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        if (string.IsNullOrEmpty(root))
-        {
-            var home = Environment.GetEnvironmentVariable("HOME");
-            if (string.IsNullOrEmpty(home))
-            {
-                return true;
-            }
-
-            root = Path.Combine(home, ".config");
-        }
-
-        string[] directories = ["inlet", "river"];
-        foreach (var directory in directories)
-        {
-            var path = Path.Combine(root, directory, "init");
-            if (access(path, FileExecutable) == 0)
-            {
-                found = path;
-                return true;
-            }
-
-            var error = Marshal.GetLastPInvokeError();
-            if (error == ErrorAccess && access(path, FileExists) == 0)
-            {
-                log.Error($"failed to run init executable {path}: the file is not executable");
-                return false;
-            }
-
-            if (error is ErrorNoEntry or ErrorNotDirectory)
-            {
-                log.Debug($"no init executable at {path}");
-            }
-            else
-            {
-                log.Error($"failed to run init executable {path}: {(Marshal.GetPInvokeErrorMessage(error))}");
-            }
-        }
-
-        return true;
     }
 
     private static bool MentionsRiverctl(string command, BasinLogger log)
