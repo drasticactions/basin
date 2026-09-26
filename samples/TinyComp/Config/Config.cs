@@ -183,6 +183,10 @@ internal sealed class Config
         "park-up" => KeyAction.ParkUp,
         "park-down" => KeyAction.ParkDown,
         "recall" => KeyAction.Recall,
+        "shelf-smaller" => KeyAction.ShelfSmaller,
+        "shelf-larger" => KeyAction.ShelfLarger,
+        "shelf-reset" => KeyAction.ShelfReset,
+        "canvas-mode" => KeyAction.CanvasMode,
         _ => null,
     };
 
@@ -634,7 +638,9 @@ internal sealed class Config
             {
                 case "enable" or "zone" or "extension" or "edge_scale" or "slope" or "mesh_cell"
                     or "grid" or "grid_cell" or "grid_color" or "animation_ms" or "sides" or "corner" or "corner_radius"
-                    or "window" or "min_scale" or "scale_reach":
+                    or "window" or "min_scale" or "scale_reach" or "shelf" or "shelf_scale" or "shelf_min_scale"
+                    or "shelf_step" or "shelf_shape" or "slope_window"
+                    or "drag":
                     (canvasKeys ??= [])[key] = value;
                     break;
                 case "scale" when value is double fractional:

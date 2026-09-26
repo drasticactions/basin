@@ -931,6 +931,76 @@ public sealed class DispatchAllocationTests
     }
 
     [Fact]
+    public void A_canvas_terrace_drag_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var left = new Basin.Effects.CanvasWarp();
+        left.LayoutTerrace(30, -1, 14, 16, 0.4, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.LayoutTerrace(130, 1, 14, 16, 0.4, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, 60);
+        var map = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right };
+        var scale = new Basin.Effects.CanvasScale();
+        var window = new SceneTree(host.Scene.Root);
+        var node = new SceneTransform(window);
+        _ = new SceneRect(node, 60, 40, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var transform = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, CellSize = 8 };
+        var local = new Box(0, 0, 60, 40);
+
+        long DragRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                var cursorX = 60.0 + (i * 90.0 / rounds);
+                var (grabX, grabY) = map.ToCanvasPoint(cursorX, 40.5);
+                var box = new Box((int)Math.Round(grabX - 20), (int)Math.Round(grabY - 10), 60, 40);
+                window.SetPosition(box.X, box.Y);
+                transform.SceneX = box.X;
+                transform.SceneY = box.Y;
+                transform.PreAnchorX = box.X + 20;
+                transform.PreAnchorY = box.Y + 10;
+                transform.PreScale = scale.SolveFit(map, box, 0.2, box.X + 20, box.Y + 10);
+                if (transform.IsIdentityFor(local))
+                {
+                    node.Deformer = null;
+                    node.Matrix = RenderTransform.Identity;
+                }
+                else if (transform.IsPastFeet(local))
+                {
+                    node.Deformer = null;
+                    var placement = transform.ShelfPlacement(local);
+                    node.Matrix = RenderTransform.Multiply(
+                        RenderTransform.Translation(-box.X, -box.Y),
+                        RenderTransform.Multiply(placement, RenderTransform.Translation(box.X, box.Y)));
+                }
+                else
+                {
+                    node.Matrix = RenderTransform.Identity;
+                    if (ReferenceEquals(node.Deformer, transform))
+                    {
+                        node.NotifyDeformed();
+                    }
+                    else
+                    {
+                        node.Deformer = transform;
+                    }
+                }
+
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = DragRounds(Rounds);
+        Budgets.Check("server", "canvas-terrace-drag", DragRounds(Rounds));
+    }
+
+    [Fact]
     public void A_transaction_configure_round_stays_within_budget()
     {
         Budgets.Require();

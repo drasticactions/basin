@@ -49,7 +49,7 @@ internal sealed partial class TinyComp
         }
     }
 
-    private void LayoutCanvas(OutputView view)
+    private void LayoutCanvas(OutputView view, bool animating = false)
     {
         if (view.Tag is not OutputPolicy || !_layout.Contains(view.Output))
         {
@@ -57,44 +57,89 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
-        var settings = _config.CanvasFor(view.Output.Name, _log);
+        var previous = canvas.Settings;
+        var settings = animating ? previous : _config.CanvasFor(view.Output.Name, _log);
+        if (!animating)
+        {
+            ForgetStaleOverrides(canvas, previous, settings);
+        }
+
         canvas.Settings = settings;
+        var mode = canvas.ModeOverride ?? settings.WindowMode;
+        var terrace = mode == CanvasWindowMode.Terrace;
         var box = _layout.BoxOf(view.Output);
         var enabled = CanvasWanted(view) && !box.IsEmpty;
         canvas.Enabled = enabled;
         var fullscreen = AnyFullscreenOn(view);
         var usable = UsableBox(view, box);
         var sides = settings.SideSet;
-        var zone = (int)Math.Round(settings.ZoneFraction * box.Width);
+        var (terraceZone, terraceShelf) = settings.TerraceFractions;
+        var zoneFraction = terrace ? terraceZone : settings.ZoneFractionFor(mode);
+        var zone = (int)Math.Round(zoneFraction * box.Width);
         var extension = (int)Math.Round(settings.ExtensionFraction * box.Width);
-        var zoneY = (int)Math.Round(settings.ZoneFraction * box.Height);
+        var zoneY = (int)Math.Round(zoneFraction * box.Height);
         var extensionY = (int)Math.Round(settings.ExtensionFraction * box.Height);
+        var shelf = terrace ? (int)Math.Round(terraceShelf * box.Width) : 0;
+        var shelfY = terrace ? (int)Math.Round(terraceShelf * box.Height) : 0;
         var open = enabled && !fullscreen;
-        var horizontal = open && zone > 0 && extension > 0;
-        var vertical = open && zoneY > 0 && extensionY > 0;
+        var horizontal = open && zone > 0 && (terrace || extension > 0);
+        var vertical = open && zoneY > 0 && (terrace || extensionY > 0);
         var leftActive = horizontal && sides.HasFlag(CanvasSide.Left) && !HasNeighbour(view.Output, box, CanvasSide.Left);
         var rightActive = horizontal && sides.HasFlag(CanvasSide.Right) && !HasNeighbour(view.Output, box, CanvasSide.Right);
         var topActive = vertical && sides.HasFlag(CanvasSide.Top) && !HasNeighbour(view.Output, box, CanvasSide.Top);
         var bottomActive = vertical && sides.HasFlag(CanvasSide.Bottom) && !HasNeighbour(view.Output, box, CanvasSide.Bottom);
         var centerY = usable.Y + (usable.Height / 2.0);
         var centerX = usable.X + (usable.Width / 2.0);
-        var changed = canvas.Left.Layout(
-            usable.X + zone, -1, leftActive ? zone : 0, leftActive ? extension : 0, settings.EdgeScaleValue,
-            settings.SlopeValue, centerY);
-        changed |= canvas.Right.Layout(
-            usable.Right - zone, 1, rightActive ? zone : 0, rightActive ? extension : 0, settings.EdgeScaleValue,
-            settings.SlopeValue, centerY);
-        changed |= canvas.Top.Layout(
-            usable.Y + zoneY, -1, topActive ? zoneY : 0, topActive ? extensionY : 0, settings.EdgeScaleValue,
-            settings.SlopeValue, centerX);
-        changed |= canvas.Bottom.Layout(
-            usable.Bottom - zoneY, 1, bottomActive ? zoneY : 0, bottomActive ? extensionY : 0, settings.EdgeScaleValue,
-            settings.SlopeValue, centerX);
-        var modeChanged = canvas.Mode != settings.WindowMode;
+        bool changed;
+        if (terrace)
+        {
+            var wasTerrace = canvas.Terraces;
+            var left = ShelfScaleFor(view, CanvasSide.Left, settings, wasTerrace && leftActive);
+            var right = ShelfScaleFor(view, CanvasSide.Right, settings, wasTerrace && rightActive);
+            var top = ShelfScaleFor(view, CanvasSide.Top, settings, wasTerrace && topActive);
+            var bottom = ShelfScaleFor(view, CanvasSide.Bottom, settings, wasTerrace && bottomActive);
+            changed = canvas.Left.LayoutTerrace(
+                usable.X + shelf + zone, -1, leftActive ? zone : 0, shelf, left, CanvasWarp.TerraceExponent,
+                settings.SlopeValue, centerY);
+            changed |= canvas.Right.LayoutTerrace(
+                usable.Right - shelf - zone, 1, rightActive ? zone : 0, shelf, right, CanvasWarp.TerraceExponent,
+                settings.SlopeValue, centerY);
+            changed |= canvas.Top.LayoutTerrace(
+                usable.Y + shelfY + zoneY, -1, topActive ? zoneY : 0, shelfY, top, CanvasWarp.TerraceExponent,
+                settings.SlopeValue, centerX);
+            changed |= canvas.Bottom.LayoutTerrace(
+                usable.Bottom - shelfY - zoneY, 1, bottomActive ? zoneY : 0, shelfY, bottom, CanvasWarp.TerraceExponent,
+                settings.SlopeValue, centerX);
+        }
+        else
+        {
+            ClearShelves(view);
+            changed = canvas.Left.Layout(
+                usable.X + zone, -1, leftActive ? zone : 0, leftActive ? extension : 0, settings.EdgeScaleValue,
+                settings.SlopeValue, centerY);
+            changed |= canvas.Right.Layout(
+                usable.Right - zone, 1, rightActive ? zone : 0, rightActive ? extension : 0, settings.EdgeScaleValue,
+                settings.SlopeValue, centerY);
+            changed |= canvas.Top.Layout(
+                usable.Y + zoneY, -1, topActive ? zoneY : 0, topActive ? extensionY : 0, settings.EdgeScaleValue,
+                settings.SlopeValue, centerX);
+            changed |= canvas.Bottom.Layout(
+                usable.Bottom - zoneY, 1, bottomActive ? zoneY : 0, bottomActive ? extensionY : 0, settings.EdgeScaleValue,
+                settings.SlopeValue, centerX);
+        }
+
+        var separable = terrace && settings.ShapeValue == ShelfShape.Flat;
+        if (canvas.Map.Separable != separable)
+        {
+            canvas.Map.Separable = separable;
+            changed = true;
+        }
+
+        var modeChanged = canvas.Mode != mode;
         if (modeChanged || canvas.Scale.MinScale != Math.Clamp(settings.MinScaleValue, 0.05, 1.0) ||
             canvas.Scale.Reach != Math.Clamp(settings.ScaleReachValue, 1.0, 16.0))
         {
-            canvas.Mode = settings.WindowMode;
+            canvas.Mode = mode;
             canvas.Scale.MinScale = settings.MinScaleValue;
             canvas.Scale.Reach = settings.ScaleReachValue;
             changed = true;
@@ -114,6 +159,15 @@ internal sealed partial class TinyComp
         }
 
         canvas.Generation++;
+        if (animating)
+        {
+            ResolveShelfPins(view);
+            ApplyCanvasToView(view);
+            canvas.Grid?.NotifyMeshChanged();
+            view.Scheduler?.ScheduleRepaint();
+            return;
+        }
+
         var active = !canvas.Left.IsIdentity ? canvas.Left : !canvas.Right.IsIdentity ? canvas.Right
             : !canvas.Top.IsIdentity ? canvas.Top : !canvas.Bottom.IsIdentity ? canvas.Bottom : null;
         _report.Line(
@@ -121,7 +175,9 @@ internal sealed partial class TinyComp
             + $" top={canvas.Top.ZoneWidth} bottom={canvas.Bottom.ZoneWidth} corner={(canvas.Map.CornerTaper ? "taper" : "radius")}:{canvas.Map.CornerRadius:F2}"
             + $" extension={active?.Extension ?? 0} edge_scale={(active?.EdgeScale ?? settings.EdgeScaleValue):F3}"
             + $" exponent={(active?.Exponent ?? 0):F2} slope={(active?.Slope ?? 0):F2}"
-            + $" window={settings.WindowName} min_scale={canvas.Scale.MinScale:F2} reach={canvas.Scale.Reach:F2}");
+            + $" window={CanvasSetting.NameOf(mode)} min_scale={canvas.Scale.MinScale:F2} reach={canvas.Scale.Reach:F2}"
+            + $" shelf={canvas.Right.ShelfWidth} shelf_scale={ShelfScaleNames(canvas)} shelf_min={settings.ShelfMinScaleValue:F2}"
+            + $" shelf_shape={(canvas.Map.Separable ? "flat" : "square")} slope_window={settings.OnSlopeName}");
         KeepParkedInside(view, modeChanged);
         ApplyCanvasToView(view);
         canvas.Grid?.NotifyMeshChanged();
@@ -201,8 +257,12 @@ internal sealed partial class TinyComp
         };
         var color = settings.GridRenderColor;
         var alpha = GridAlphaFor(settings);
+        var spacing = canvas.Terraces ? TerraceGridSpacing : 0.0;
         var changed = source.CellSize != settings.GridCellSize || source.Color != color || source.Alpha != alpha ||
-            source.CornerRadius != canvas.Map.CornerRadius || source.CornerTaper != canvas.Map.CornerTaper;
+            source.CornerRadius != canvas.Map.CornerRadius || source.CornerTaper != canvas.Map.CornerTaper ||
+            source.MinLineSpacing != spacing || source.Separable != canvas.Map.Separable;
+        source.MinLineSpacing = spacing;
+        source.Separable = canvas.Map.Separable;
         source.CornerRadius = canvas.Map.CornerRadius;
         source.CornerTaper = canvas.Map.CornerTaper;
         source.CellSize = settings.GridCellSize;
@@ -283,10 +343,10 @@ internal sealed partial class TinyComp
 
             var box = _layout.BoxOf(candidate.Output);
             var canvas = candidate.Canvas;
-            var spanLeft = canvas.Left.IsIdentity ? box.X : canvas.Left.FarEdge;
-            var spanRight = canvas.Right.IsIdentity ? box.Right : canvas.Right.FarEdge;
-            var spanTop = canvas.Top.IsIdentity ? box.Y : canvas.Top.FarEdge;
-            var spanBottom = canvas.Bottom.IsIdentity ? box.Bottom : canvas.Bottom.FarEdge;
+            var spanLeft = canvas.Left.IsIdentity ? box.X : SpanEdge(canvas.Left);
+            var spanRight = canvas.Right.IsIdentity ? box.Right : SpanEdge(canvas.Right);
+            var spanTop = canvas.Top.IsIdentity ? box.Y : SpanEdge(canvas.Top);
+            var spanBottom = canvas.Bottom.IsIdentity ? box.Bottom : SpanEdge(canvas.Bottom);
             var overlapX = Math.Min(windowRight, spanRight) - Math.Max(window.X, spanLeft);
             var overlapY = Math.Min(windowBottom, spanBottom) - Math.Max(window.Y, spanTop);
             if (overlapX <= 0 || overlapY <= 0)
@@ -332,14 +392,14 @@ internal sealed partial class TinyComp
         var canvas = view.Canvas;
         foreach (var (window, state) in _canvasStates)
         {
-            if (state.Home is null || state.MotionX.IsRunning || state.MotionY.IsRunning ||
+            if (state.Home is null || state.MotionX.IsRunning || state.MotionY.IsRunning || state.ShelfPinned ||
                 window.EffectTree is not { IsDestroyed: false } || ViewOfWindow(window) != view)
             {
                 continue;
             }
 
             var box = CanvasBoxOf(window);
-            if (canvas.Scales || modeChanged)
+            if (canvas.Scales || canvas.Terraces || modeChanged)
             {
                 var (side, end) = ZonesHolding(canvas, box);
                 if (side is null && end is null)
@@ -438,6 +498,12 @@ internal sealed partial class TinyComp
         if (canvas.Scales)
         {
             ApplyCanvasScale(window, tree, canvas, state);
+            return;
+        }
+
+        if (canvas.Terraces)
+        {
+            ApplyCanvasTerrace(window, tree, canvas, state);
             return;
         }
 
@@ -566,7 +632,7 @@ internal sealed partial class TinyComp
     {
         var frame = new OverrideRedirectFrame(xwin, new SceneTransform(_layers.Overlay)) { Owner = OverrideRedirectOwner(xwin) };
         _overrideRedirects.Add(frame);
-        if (frame.Owner is { } owner && ViewOfWindow(owner) is { Canvas.Scales: true } &&
+        if (frame.Owner is { } owner && ViewOfWindow(owner) is { Canvas: { Scales: true } or { Terraces: true } } &&
             _canvasStates.TryGetValue(owner, out var state))
         {
             frame.Node.Matrix = state.Placement;
@@ -696,6 +762,12 @@ internal sealed partial class TinyComp
     private void BeginCanvasGrab(IGrabTarget window, double x, double y)
     {
         _canvasScaleDrag = false;
+        if (ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Terraces: true } terraced)
+        {
+            BeginTerraceGrab(window, terraced, x, y);
+            return;
+        }
+
         if (ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas.Scales: true })
         {
             return;
@@ -720,6 +792,7 @@ internal sealed partial class TinyComp
         state.DragStartY = y;
         state.DragScaleCorrection = drawn - view.Canvas.Scale.HandPlacementFor(
             view.Canvas.Map, CanvasBoxOf(window), window.X + _grabX, window.Y + _grabY, x, y).M11;
+        (state.DragFieldX, state.DragFieldY) = view.Canvas.ToCanvasPoint(x, y);
         _canvasScaleDrag = true;
     }
 
@@ -728,6 +801,11 @@ internal sealed partial class TinyComp
         var placement = _canvasStates.TryGetValue(window, out var anchored) && anchored.Anchor is { } anchor
             ? canvas.Scale.AnchoredPlacementFor(canvas.Map, CanvasBoxOf(window), window.X + anchor.X, window.Y + anchor.Y)
             : canvas.Scale.PlacementFor(canvas.Map, CanvasBoxOf(window));
+        return SnapPlacement(window, placement);
+    }
+
+    private RenderTransform SnapPlacement(IGrabTarget window, in RenderTransform placement)
+    {
         if (placement.IsIdentity || window.EffectTree is not { } tree || ContentOf(window) is not { } content ||
             ViewOfWindow(window) is not { } view)
         {
@@ -803,7 +881,7 @@ internal sealed partial class TinyComp
 
     private void BeginCanvasResize(IGrabTarget window, ResizeEdges edges)
     {
-        if (ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas.Scales: true } ||
+        if (ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas: { Scales: true } or { Terraces: true } } resized ||
             !_canvasStates.TryGetValue(window, out var state) || state.Placement.IsIdentity)
         {
             return;
@@ -820,6 +898,12 @@ internal sealed partial class TinyComp
         (state.ResizeScreenX, state.ResizeScreenY) = state.Placement.Map(left ? start.Right : start.X, top ? start.Bottom : start.Y);
         state.ResizeEdges = edges;
         state.Resizing = true;
+        state.ResizeHeldScale = resized.Canvas.Terraces && state.Region is not CanvasRegion.Shelf &&
+            !(state.Region == CanvasRegion.Corner && resized.Canvas.Map.Separable);
+        if (resized.Canvas.Terraces)
+        {
+            state.Anchor = ((left ? start.Right : start.X) - window.X, (top ? start.Bottom : start.Y) - window.Y);
+        }
     }
 
     private bool ResizeCanvasScaled(IGrabTarget window, double x, double y, out double canvasX, out double canvasY)
@@ -827,12 +911,40 @@ internal sealed partial class TinyComp
         canvasX = x;
         canvasY = y;
         if (!_canvasStates.TryGetValue(window, out var state) || !state.Resizing ||
-            ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas.Scales: true } view)
+            ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas: { Scales: true } or { Terraces: true } } view)
         {
             return false;
         }
 
         var edges = state.ResizeEdges;
+        if (view.Canvas.Terraces && state.ResizeHeldScale)
+        {
+            var heldFixedX = state.ResizeFixedLeft ? state.ResizeStart.Right : state.ResizeStart.X;
+            var heldFixedY = state.ResizeFixedTop ? state.ResizeStart.Bottom : state.ResizeStart.Y;
+            canvasX = heldFixedX + ((x - state.ResizeScreenX) / state.ResizeScale);
+            canvasY = heldFixedY + ((y - state.ResizeScreenY) / state.ResizeScale);
+            ApplyCanvas(window);
+            return true;
+        }
+
+        if (view.Canvas.Terraces)
+        {
+            (state.ResizeScale, canvasX, canvasY) = view.Canvas.Scale.TerraceResizeCursor(
+                view.Canvas.Map,
+                state.ResizeStart,
+                (edges & ResizeEdges.Left) != ResizeEdges.None,
+                (edges & ResizeEdges.Right) != ResizeEdges.None,
+                (edges & ResizeEdges.Top) != ResizeEdges.None,
+                (edges & ResizeEdges.Bottom) != ResizeEdges.None,
+                state.ResizeScreenX,
+                state.ResizeScreenY,
+                x,
+                y,
+                view.Canvas.Settings.ShelfMinScaleValue);
+            ApplyCanvas(window);
+            return true;
+        }
+
         (state.ResizeScale, canvasX, canvasY) = view.Canvas.Scale.ResizeCursor(
             view.Canvas.Map,
             state.ResizeStart,
@@ -858,6 +970,15 @@ internal sealed partial class TinyComp
         var (fieldX, fieldY) = ToCanvasPointAt(x, y);
         var movedX = x - state.DragCursorX;
         var movedY = y - state.DragCursorY;
+        if (ViewOfWindow(window) is { Canvas: { Settings.DragValue: CanvasDrag.Grid } canvas })
+        {
+            var (stretchX, stretchY) = canvas.Map.AxisStretch(state.DragFieldX, state.DragFieldY);
+            fieldX = state.DragFieldX + (movedX / stretchX);
+            fieldY = state.DragFieldY + (movedY / stretchY);
+        }
+
+        state.DragFieldX = fieldX;
+        state.DragFieldY = fieldY;
         state.DragCursorX = x;
         state.DragCursorY = y;
         var nextX = (int)Math.Round(fieldX - state.DragGrabX);
@@ -894,6 +1015,12 @@ internal sealed partial class TinyComp
         state.Dragging = false;
         state.Resizing = false;
         var from = state.Placement;
+        if (view.Canvas.Terraces)
+        {
+            EndTerraceGrab(window, view, state, from, dropped);
+            return;
+        }
+
         var rest = view.Canvas.Scales ? RestingPlacement(window, view.Canvas) : from;
         if (from != rest)
         {
@@ -918,6 +1045,10 @@ internal sealed partial class TinyComp
         transform.Bottom = canvas.Bottom;
         transform.CornerRadius = canvas.Map.CornerRadius;
         transform.CornerTaper = canvas.Map.CornerTaper;
+        transform.PreScale = 1.0;
+        transform.PreStretchX = 1.0;
+        transform.PreStretchY = 1.0;
+        transform.Separable = canvas.Map.Separable;
     }
 
     private static Box UsableBox(OutputView view, in Box box) =>
@@ -957,13 +1088,20 @@ internal sealed partial class TinyComp
     }
 
     internal double CanvasScaleOf(IGrabTarget window) =>
-        _canvasStates.TryGetValue(window, out var state) && ViewOfWindow(window) is { Canvas.Scales: true } ? state.Scale : 1.0;
+        _canvasStates.TryGetValue(window, out var state) && ViewOfWindow(window) is { Canvas: { Scales: true } or { Terraces: true } }
+            ? state.Scale
+            : 1.0;
 
     private bool BlocksConstraints(IGrabTarget window)
     {
         if (!_canvasStates.TryGetValue(window, out var state))
         {
             return false;
+        }
+
+        if (ViewOfWindow(window) is { Canvas.Terraces: true })
+        {
+            return state.Placement.IsIdentity ? state.Deformed : IsCanvasMoving(state);
         }
 
         if (ViewOfWindow(window) is not { Canvas.Scales: true })
@@ -975,7 +1113,8 @@ internal sealed partial class TinyComp
     }
 
     private static bool IsCanvasMoving(CanvasWindowState state) =>
-        state.Dragging || state.Resizing || state.MotionX.IsRunning || state.MotionY.IsRunning || state.Blend.IsRunning;
+        state.Dragging || state.Resizing || state.MotionX.IsRunning || state.MotionY.IsRunning || state.Blend.IsRunning ||
+        state.ShelfPinned;
 
     private void AnnounceSurfaceScale(Surface surface, double scale) =>
         _fractionalScale.AnnounceScale(surface, scale * CanvasOfferFor(surface));
@@ -1019,11 +1158,11 @@ internal sealed partial class TinyComp
             state.OfferRefused = true;
         }
 
-        var wanted = canvas.Scales && !state.OfferRefused && !_canvasSuspended && !IsCanvasMoving(state) &&
+        var wanted = (canvas.Scales || canvas.Terraces) && !state.OfferRefused && !_canvasSuspended && !IsCanvasMoving(state) &&
             !state.Placement.IsIdentity && state.Scale < 1.0
             ? Math.Round(state.Scale * 120) / 120
             : 1.0;
-        if (wanted == state.OfferedScale)
+        if (wanted == state.OfferedScale || (state.OfferedScale < 1.0 && wanted < 1.0 && size != state.OfferSize))
         {
             return;
         }
@@ -1078,6 +1217,12 @@ internal sealed partial class TinyComp
                 : canvas.Scale.PlacementFor(canvas.Map, CanvasBoxOf(window));
             return canvas.Scale.DrawnBox(placement, box);
         }
+
+        if (canvas.Terraces && _canvasStates.TryGetValue(window, out var terraced) && !terraced.Placement.IsIdentity)
+        {
+            return canvas.Scale.DrawnBox(terraced.Placement, box);
+        }
+
         if (_canvasStates.TryGetValue(window, out var state) && ReferenceEquals(state.Transform.Left, canvas.Left))
         {
             var transform = state.Transform;
@@ -1097,6 +1242,13 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
+        if (window is not null && ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Terraces: true } &&
+            _canvasStates.TryGetValue(window, out var terraced) && !terraced.Placement.IsIdentity &&
+            terraced.Placement.TryInvert(out var shelfInverse))
+        {
+            return shelfInverse.Map(x, y);
+        }
+
         if (window is not null && ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Scales: true })
         {
             if (_canvasStates.TryGetValue(window, out var scaled) && !scaled.Placement.IsIdentity &&
@@ -1226,6 +1378,11 @@ internal sealed partial class TinyComp
     {
         var offsetX = window.X - box.X;
         var offsetY = window.Y - box.Y;
+        if (canvas.Terraces && (side is not null || end is not null))
+        {
+            return TerraceParkTargets(canvas, window, box, side, end);
+        }
+
         if (canvas.Scales && (side is not null || end is not null))
         {
             return HandParkTarget(canvas, window, box, side, end);
@@ -1294,12 +1451,17 @@ internal sealed partial class TinyComp
 
     private static string ParkScale(CanvasView canvas, IGrabTarget window, in Box box, int x, int y)
     {
+        var moved = box.Translated(x - window.X, y - window.Y);
+        if (canvas.Terraces)
+        {
+            return $" scale={canvas.Scale.ShelfScaleFor(canvas.Map, moved, canvas.Settings.ShelfMinScaleValue):F3}";
+        }
+
         if (!canvas.Scales)
         {
             return string.Empty;
         }
 
-        var moved = box.Translated(x - window.X, y - window.Y);
         var placement = canvas.Scale.AnchoredPlacementFor(
             canvas.Map, moved, moved.X + (moved.Width / 2.0), moved.Y + (moved.Height / 2.0));
         return $" scale={placement.M11:F3}";
@@ -1372,6 +1534,7 @@ internal sealed partial class TinyComp
 
     private void BeginCanvasMotion(IGrabTarget window, CanvasWindowState state, bool vertical, int target, long nanos)
     {
+        state.ShelfPinned = false;
         var motion = vertical ? state.MotionY : state.MotionX;
         motion.Begin(vertical ? window.Y : window.X, target, nanos);
         if (!motion.IsRunning)
@@ -1520,7 +1683,18 @@ internal sealed partial class TinyComp
     {
         foreach (var (window, state) in _canvasStates)
         {
-            if (window.EffectTree is not { IsDestroyed: false } || ViewOfWindow(window) is not { Canvas.Scales: true } view)
+            if (window.EffectTree is not { IsDestroyed: false } || ViewOfWindow(window) is not { } view)
+            {
+                continue;
+            }
+
+            if (view.Canvas.Terraces)
+            {
+                BlendTerraceWindow(window, view.Canvas, state, nanos);
+                continue;
+            }
+
+            if (!view.Canvas.Scales)
             {
                 continue;
             }
@@ -1591,7 +1765,8 @@ internal sealed partial class TinyComp
             $"CANVASWIN {NameOf(window)} canvas={window.X},{window.Y} screen={screen.X},{screen.Y}"
             + $" width={screen.Width} height={screen.Height}"
             + $" deformed={(IsCanvasDeformed(window) ? "yes" : "no")}"
-            + $" mode={view.Canvas.Settings.WindowName} scale={(_canvasStates.TryGetValue(window, out var scaled) ? scaled.Scale : 1.0):F3}"
+            + $" mode={CanvasSetting.NameOf(view.Canvas.Mode)} scale={(_canvasStates.TryGetValue(window, out var scaled) ? scaled.Scale : 1.0):F3}"
+            + (view.Canvas.Terraces ? TerraceWhere(window) : string.Empty)
             + $" home={(_canvasStates.TryGetValue(window, out var state) && state.Home is { } home ? $"{home.X},{home.Y}" : "none")}");
     }
 

@@ -640,6 +640,126 @@ public sealed class GoldenTests
 
     [Theory]
     [MemberData(nameof(Renderers))]
+    public void Golden_canvas_terrace(string renderer) => CanvasTerrace(renderer, 0.25, "canvas-terrace");
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_terrace_flat(string renderer) => CanvasTerrace(renderer, 0.0, "canvas-terrace-flat", separable: true);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_terrace_plateau(string renderer) => CanvasTerrace(renderer, -0.4, "canvas-terrace-plateau");
+
+    private static void CanvasTerrace(string renderer, double slope, string name, bool separable = false)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var left = new Basin.Effects.CanvasWarp();
+        left.LayoutTerrace(30, -1, 14, 16, 0.4, Basin.Effects.CanvasWarp.TerraceExponent, slope, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.LayoutTerrace(130, 1, 14, 16, 0.4, Basin.Effects.CanvasWarp.TerraceExponent, slope, 60);
+        var top = new Basin.Effects.CanvasWarp();
+        top.LayoutTerrace(22, -1, 10, 12, 0.5, Basin.Effects.CanvasWarp.TerraceExponent, slope, 80);
+        var bottom = new Basin.Effects.CanvasWarp(1);
+        bottom.LayoutTerrace(98, 1, 10, 12, 0.5, Basin.Effects.CanvasWarp.TerraceExponent, slope, 80);
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                Top = top,
+                Bottom = bottom,
+                CellSize = 16,
+                MinLineSpacing = 8,
+                Separable = separable,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+        var map = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, Top = top, Bottom = bottom, Separable = separable };
+        var scale = new Basin.Effects.CanvasScale();
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(36, 24, Fill.Gradient(36, 24));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 36, 24);
+        surface.Commit();
+        host.PumpToServer();
+        var sloped = TerraceWindow(host, map, scale, new Box(112, 30, 36, 24), new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(sloped);
+        content.Tree.SetPosition(0, 0);
+
+        var resting = new Box(0, 58, 28, 20);
+        resting = resting with { X = scale.TerraceParkTarget(map, left, resting, 0.2) };
+        _ = TerraceWindow(host, map, scale, resting, new RenderColor(0.3f, 0.6f, 0.35f, 1f));
+
+        var wide = new Box(0, 80, 100, 14);
+        wide = wide with { X = scale.TerraceParkTarget(map, right, wide, 0.2) };
+        _ = TerraceWindow(host, map, scale, wide, new RenderColor(0.7f, 0.35f, 0.2f, 1f));
+
+        if (separable)
+        {
+            var corner = new Box(0, 0, 20, 14);
+            var (cornerX, cornerY) = scale.TerraceCornerParkTarget(map, left, top, corner, 0.2);
+            _ = TerraceWindow(host, map, scale, new Box(cornerX, cornerY, 20, 14), new RenderColor(0.8f, 0.7f, 0.2f, 1f));
+        }
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName(name, renderer));
+    }
+
+    private static Basin.Scene.SceneTransform TerraceWindow(
+        CompositorTestHost host,
+        Basin.Effects.CanvasWarpTransform map,
+        Basin.Effects.CanvasScale scale,
+        in Box box,
+        RenderColor color)
+    {
+        var anchorX = box.X + (box.Width / 2.0);
+        var anchorY = box.Y + (box.Height / 2.0);
+        var transform = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = map.Left,
+            Right = map.Right,
+            Top = map.Top,
+            Bottom = map.Bottom,
+            SceneX = box.X,
+            SceneY = box.Y,
+            CellSize = 4,
+            PreScale = scale.SolveFit(map, box, 0.2, anchorX, anchorY),
+            PreAnchorX = anchorX,
+            PreAnchorY = anchorY,
+            Separable = map.Separable,
+        };
+        if (map.Separable)
+        {
+            var (localX, localY) = map.LocalScale(anchorX, anchorY);
+            var even = Math.Min(localX, localY);
+            transform.PreStretchX = even / localX;
+            transform.PreStretchY = even / localY;
+        }
+
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(box.X, box.Y);
+        var node = new Basin.Scene.SceneTransform(window);
+        var local = new Box(0, 0, box.Width, box.Height);
+        if (transform.IsPastFeet(local))
+        {
+            node.Matrix = LocalPlacement(transform.ShelfPlacement(local), box.X, box.Y);
+        }
+        else
+        {
+            node.Deformer = transform;
+        }
+
+        _ = new Basin.Scene.SceneRect(node, box.Width, box.Height, color);
+        return node;
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
     public void Golden_canvas_scale_drag(string renderer)
     {
         SkipWithoutGpu(renderer);

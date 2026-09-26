@@ -9,6 +9,7 @@ public sealed class CanvasGridSource : IMeshSource
     private readonly CanvasWarpTransform _map = new();
     private int _cellSize = 64;
     private float _alpha = 1f;
+    private double _minSpacing;
 
     public CanvasWarp? Left
     {
@@ -50,6 +51,18 @@ public sealed class CanvasGridSource : IMeshSource
     {
         get => _cellSize;
         set => _cellSize = Math.Max(2, value);
+    }
+
+    public bool Separable
+    {
+        get => _map.Separable;
+        set => _map.Separable = value;
+    }
+
+    public double MinLineSpacing
+    {
+        get => _minSpacing;
+        set => _minSpacing = Math.Max(0.0, value);
     }
 
     public RenderColor Color { get; set; } = new(0.16f, 0.21f, 0.75f, 1f);
@@ -102,8 +115,22 @@ public sealed class CanvasGridSource : IMeshSource
         }
 
         var first = FirstVertical(bounds);
-        var last = LastVertical(bounds);
-        return last < first ? 0 : (int)((last - first) / _cellSize) + 1;
+        var total = Candidates(first, LastVertical(bounds));
+        if (_minSpacing <= 0)
+        {
+            return total;
+        }
+
+        var count = 0;
+        for (var i = 0; i < total; i++)
+        {
+            if (DrawsColumn(first + ((long)i * _cellSize)))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     public int HorizontalLines(in Box bounds)
@@ -114,8 +141,22 @@ public sealed class CanvasGridSource : IMeshSource
         }
 
         var first = FirstHorizontal(bounds);
-        var last = LastHorizontal(bounds);
-        return last < first ? 0 : (int)((last - first) / _cellSize) + 1;
+        var total = Candidates(first, LastHorizontal(bounds));
+        if (_minSpacing <= 0)
+        {
+            return total;
+        }
+
+        var count = 0;
+        for (var i = 0; i < total; i++)
+        {
+            if (DrawsRow(first + ((long)i * _cellSize)))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     public int ColumnSegments(in Box bounds)
@@ -135,7 +176,8 @@ public sealed class CanvasGridSource : IMeshSource
             return 0;
         }
 
-        return 1 + ZoneSegments(Left, bounds.X, bounds.Right) + ZoneSegments(Right, bounds.X, bounds.Right);
+        return 1 + ZoneSegments(Left, bounds.X, bounds.Right) + ZoneSegments(Right, bounds.X, bounds.Right)
+            + ShelfSegment(Left, bounds) + ShelfSegment(Right, bounds);
     }
 
     public int ZoneRowSegments(in Box bounds)
@@ -155,11 +197,45 @@ public sealed class CanvasGridSource : IMeshSource
             return 0;
         }
 
-        var rows = HorizontalLines(bounds);
-        var zoneRows = ZoneRows(bounds, rows);
-        return ((VerticalLines(bounds) * ColumnSegments(bounds))
-            + ((rows - zoneRows) * RowSegments(bounds))
-            + (zoneRows * ZoneRowSegments(bounds))) * 6;
+        if (Separable)
+        {
+            return (VerticalLines(bounds) + HorizontalLines(bounds)) * 6;
+        }
+
+        var count = VerticalLines(bounds) * ColumnSegments(bounds);
+        var zoneRowSegments = ZoneRowSegments(bounds);
+        var rowSegments = 1 + ZoneSegments(Left, bounds.X, bounds.Right) + ZoneSegments(Right, bounds.X, bounds.Right);
+        var leftShelf = ShelfSegment(Left, bounds);
+        var rightShelf = ShelfSegment(Right, bounds);
+        var first = FirstHorizontal(bounds);
+        var total = Candidates(first, LastHorizontal(bounds));
+        for (var i = 0; i < total; i++)
+        {
+            var y = first + ((long)i * _cellSize);
+            if (!DrawsRow(y))
+            {
+                continue;
+            }
+
+            if (EndAt(y) is not null)
+            {
+                count += zoneRowSegments;
+                continue;
+            }
+
+            count += rowSegments;
+            if (leftShelf > 0 && DrawsShelfRow(Left!, y))
+            {
+                count++;
+            }
+
+            if (rightShelf > 0 && DrawsShelfRow(Right!, y))
+            {
+                count++;
+            }
+        }
+
+        return count * 6;
     }
 
     public void WriteVertices(in Box bounds, Span<MeshVertex> into)
@@ -171,13 +247,25 @@ public sealed class CanvasGridSource : IMeshSource
 
         var color = new RenderColor(Color.R * _alpha, Color.G * _alpha, Color.B * _alpha, Color.A * _alpha);
         var write = 0;
+        if (Separable)
+        {
+            WriteStraight(bounds, into, color);
+            return;
+        }
+
         var first = FirstVertical(bounds);
-        var count = VerticalLines(bounds);
+        var count = Candidates(first, LastVertical(bounds));
         var topActive = Top is { IsIdentity: false };
         var bottomActive = Bottom is { IsIdentity: false };
         for (var i = 0; i < count; i++)
         {
-            var canvasX = (double)(first + ((long)i * _cellSize));
+            var column = first + ((long)i * _cellSize);
+            if (!DrawsColumn(column))
+            {
+                continue;
+            }
+
+            var canvasX = (double)column;
             var exact = ToScreen(canvasX);
             var x = (float)Math.Round(exact);
             var shift = x - exact;
@@ -196,7 +284,9 @@ public sealed class CanvasGridSource : IMeshSource
         }
 
         var firstRow = FirstHorizontal(bounds);
-        var rows = HorizontalLines(bounds);
+        var rows = Candidates(firstRow, LastHorizontal(bounds));
+        var leftShelf = ShelfSegment(Left, bounds) > 0;
+        var rightShelf = ShelfSegment(Right, bounds) > 0;
         var leftSegments = ZoneSegments(Left, bounds.X, bounds.Right);
         var rightSegments = ZoneSegments(Right, bounds.X, bounds.Right);
         var flatLeft = leftSegments > 0 ? Left!.Seam : bounds.X;
@@ -206,6 +296,11 @@ public sealed class CanvasGridSource : IMeshSource
         for (var i = 0; i < rows; i++)
         {
             var y = firstRow + ((long)i * _cellSize);
+            if (!DrawsRow(y))
+            {
+                continue;
+            }
+
             if (EndAt(y) is { } end)
             {
                 var screenY = end.ToScreen(y);
@@ -229,22 +324,112 @@ public sealed class CanvasGridSource : IMeshSource
             for (var segment = 0; segment < leftSegments; segment++)
             {
                 var x1 = Left!.Seam - (segment * SegmentWidth);
-                var x0 = Math.Max(bounds.X, x1 - SegmentWidth);
+                var x0 = Math.Max(Left.Terrace ? Math.Max(bounds.X, Left.Foot) : bounds.X, x1 - SegmentWidth);
                 WriteRow(into, ref write, x0, x1, y, color);
             }
 
             for (var segment = 0; segment < rightSegments; segment++)
             {
                 var x0 = Right!.Seam + (segment * SegmentWidth);
-                var x1 = Math.Min(bounds.Right, x0 + SegmentWidth);
+                var x1 = Math.Min(Right.Terrace ? Math.Min(bounds.Right, Right.Foot) : bounds.Right, x0 + SegmentWidth);
                 WriteRow(into, ref write, x0, x1, y, color);
+            }
+
+            if (leftShelf && DrawsShelfRow(Left!, y))
+            {
+                WriteRow(into, ref write, bounds.X, Left!.Foot, y, color);
+            }
+
+            if (rightShelf && DrawsShelfRow(Right!, y))
+            {
+                WriteRow(into, ref write, Right!.Foot, bounds.Right, y, color);
             }
         }
     }
 
+    private void WriteStraight(in Box bounds, Span<MeshVertex> into, in RenderColor color)
+    {
+        var write = 0;
+        var first = FirstVertical(bounds);
+        var columns = Candidates(first, LastVertical(bounds));
+        for (var i = 0; i < columns; i++)
+        {
+            var column = first + ((long)i * _cellSize);
+            if (!DrawsColumn(column))
+            {
+                continue;
+            }
+
+            var x = (float)Math.Round(ToScreen(column));
+            WriteColumn(into, ref write, (x, bounds.Y), (x, bounds.Bottom), color);
+        }
+
+        var firstRow = FirstHorizontal(bounds);
+        var rows = Candidates(firstRow, LastHorizontal(bounds));
+        for (var i = 0; i < rows; i++)
+        {
+            var row = firstRow + ((long)i * _cellSize);
+            if (!DrawsRow(row))
+            {
+                continue;
+            }
+
+            var y = Math.Round(ToScreenY(row));
+            WriteSegment(into, ref write, bounds.X, (float)y, bounds.Right, (float)y, color);
+        }
+    }
+
+    private int Candidates(long first, long last) => last < first ? 0 : (int)((last - first) / _cellSize) + 1;
+
+    private bool DrawsColumn(long canvasX)
+    {
+        if (_minSpacing <= 0)
+        {
+            return true;
+        }
+
+        var warp = Left is { IsIdentity: false } left && left.ContainsCanvas(canvasX) ? left
+            : Right is { IsIdentity: false } right && right.ContainsCanvas(canvasX) ? right
+            : null;
+        return warp is null || OnStride(canvasX, warp.ScaleAt(canvasX));
+    }
+
+    private bool DrawsRow(long canvasY)
+    {
+        if (_minSpacing <= 0)
+        {
+            return true;
+        }
+
+        return EndAt(canvasY) is not { IsIdentity: false } end || OnStride(canvasY, end.ScaleAt(canvasY));
+    }
+
+    private bool DrawsShelfRow(CanvasWarp side, long canvasY) => _minSpacing <= 0 || OnStride(canvasY, side.EdgeScale);
+
+    private bool OnStride(long canvas, double scale)
+    {
+        var stride = 1L;
+        while (scale * _cellSize * stride < _minSpacing && stride < 1L << 20)
+        {
+            stride <<= 1;
+        }
+
+        return canvas / _cellSize % stride == 0;
+    }
+
+    private static int ShelfSegment(CanvasWarp? warp, in Box bounds)
+    {
+        if (warp is not { IsIdentity: false, Terrace: true } shelf)
+        {
+            return 0;
+        }
+
+        return shelf.Direction < 0 ? (shelf.Foot > bounds.X ? 1 : 0) : (shelf.Foot < bounds.Right ? 1 : 0);
+    }
+
     private static int ZoneSegments(CanvasWarp? warp, int boundsStart, int boundsEnd)
     {
-        if (warp is not { IsIdentity: false } zone || zone.Slope == 0)
+        if (warp is not { IsIdentity: false } zone || (zone.Slope == 0 && !zone.Terrace))
         {
             return 0;
         }
@@ -255,26 +440,68 @@ public sealed class CanvasGridSource : IMeshSource
     }
 
     private static int CornerSegments(CanvasWarp? warp) =>
-        warp is { IsIdentity: false } zone ? Math.Max(1, (zone.ZoneWidth + SegmentWidth - 1) / SegmentWidth) : 0;
+        warp is { IsIdentity: false } zone
+            ? Math.Max(1, ((int)Math.Ceiling(zone.ZoneWidth * CornerDepth(zone)) + SegmentWidth - 1) / SegmentWidth)
+            : 0;
 
-    private int ZoneRows(in Box bounds, int rows)
+    private static double CornerDepth(CanvasWarp zone) =>
+        zone.Terrace && zone.ZoneWidth > 0 ? (zone.ZoneWidth + (2.0 * zone.ShelfWidth)) / zone.ZoneWidth : 1.0;
+
+    private static double TerraceFan(CanvasWarp? low, CanvasWarp? high)
     {
-        if (Top is not { IsIdentity: false } && Bottom is not { IsIdentity: false })
+        var fan = 1.0;
+        if (low is { IsIdentity: false, Terrace: true })
         {
-            return 0;
+            fan = Math.Min(fan, low.MinFan);
         }
 
-        var first = FirstHorizontal(bounds);
-        var zoneRows = 0;
-        for (var i = 0; i < rows; i++)
+        if (high is { IsIdentity: false, Terrace: true })
         {
-            if (EndAt(first + ((long)i * _cellSize)) is not null)
-            {
-                zoneRows++;
-            }
+            fan = Math.Min(fan, high.MinFan);
         }
 
-        return zoneRows;
+        return fan;
+    }
+
+    private static double TerraceCenter(CanvasWarp? low, CanvasWarp? high) =>
+        low is { IsIdentity: false, Terrace: true } ? low.Center : high?.Center ?? 0.0;
+
+    private double ReachY(double screenY)
+    {
+        var canvasY = ToCanvasY(screenY);
+        var fan = TerraceFan(Left, Right);
+        if (fan >= 1.0 || Separable)
+        {
+            return canvasY;
+        }
+
+        var center = TerraceCenter(Left, Right);
+        if ((screenY < center ? Top : Bottom) is { IsIdentity: false })
+        {
+            return canvasY;
+        }
+
+        var reach = center + ((screenY - center) / fan);
+        return screenY < center ? Math.Min(canvasY, reach) : Math.Max(canvasY, reach);
+    }
+
+    private double ReachX(double screenX)
+    {
+        var canvasX = ToCanvas(screenX);
+        var fan = TerraceFan(Top, Bottom);
+        if (fan >= 1.0 || Separable)
+        {
+            return canvasX;
+        }
+
+        var center = TerraceCenter(Top, Bottom);
+        if ((screenX < center ? Left : Right) is { IsIdentity: false })
+        {
+            return canvasX;
+        }
+
+        var reach = center + ((screenX - center) / fan);
+        return screenX < center ? Math.Min(canvasX, reach) : Math.Max(canvasX, reach);
     }
 
     private CanvasWarp? EndAt(double canvasY) =>
@@ -293,7 +520,12 @@ public sealed class CanvasGridSource : IMeshSource
         var reach = _map.CornerReach(across);
         var depth = end.DepthAt(end.Seam + (end.Direction * reach * end.Extension));
         var segments = CornerSegments(end);
-        var crease = CreaseStep(end, across, reach, depth, segments);
+        if (end.Terrace)
+        {
+            depth = CornerDepth(end);
+        }
+
+        var crease = end.Terrace ? -1 : CreaseStep(end, across, reach, depth, segments);
         var previous = ColumnPoint(end, canvasX, shift, 0.0);
         for (var j = 1; j <= segments; j++)
         {
@@ -316,7 +548,12 @@ public sealed class CanvasGridSource : IMeshSource
         var reach = _map.CornerReach(across);
         var depth = side.DepthAt(side.Seam + (side.Direction * reach * side.Extension));
         var segments = CornerSegments(side);
-        var crease = CreaseStep(side, across, reach, depth, segments);
+        if (side.Terrace)
+        {
+            depth = CornerDepth(side);
+        }
+
+        var crease = side.Terrace ? -1 : CreaseStep(side, across, reach, depth, segments);
         var previous = RowPoint(side, canvasY, 0.0);
         for (var j = 1; j <= segments; j++)
         {
@@ -373,43 +610,57 @@ public sealed class CanvasGridSource : IMeshSource
         return center + ((y - center) * fan);
     }
 
-    private static void WriteColumn(Span<MeshVertex> into, ref int write, (float X, float Y) from, (float X, float Y) to, in RenderColor color)
+    private void WriteColumn(Span<MeshVertex> into, ref int write, (float X, float Y) from, (float X, float Y) to, in RenderColor color)
     {
+        if (Terraced && Math.Abs(to.X - from.X) > Math.Abs(to.Y - from.Y))
+        {
+            MeshGrid.WriteCell(
+                into.Slice(write, 6), 0, 0, 0, 0,
+                (from.X, from.Y), (to.X, to.Y), (to.X, to.Y + 1), (from.X, from.Y + 1), color);
+            write += 6;
+            return;
+        }
+
         MeshGrid.WriteCell(
             into.Slice(write, 6), 0, 0, 0, 0,
             (from.X, from.Y), (from.X + 1, from.Y), (to.X + 1, to.Y), (to.X, to.Y), color);
         write += 6;
     }
 
-    private static void WriteRow(Span<MeshVertex> into, ref int write, (double X, double Y) from, (double X, double Y) to, in RenderColor color)
+    private void WriteRow(Span<MeshVertex> into, ref int write, (double X, double Y) from, (double X, double Y) to, in RenderColor color) =>
+        WriteSegment(into, ref write, (float)from.X, (float)from.Y, (float)to.X, (float)to.Y, color);
+
+    private void WriteRow(Span<MeshVertex> into, ref int write, int x0, int x1, long y, in RenderColor color) =>
+        WriteSegment(into, ref write, x0, (float)RowY(x0, y), x1, (float)RowY(x1, y), color);
+
+    private void WriteSegment(Span<MeshVertex> into, ref int write, float x0, float y0, float x1, float y1, in RenderColor color)
     {
-        var x0 = (float)from.X;
-        var y0 = (float)from.Y;
-        var x1 = (float)to.X;
-        var y1 = (float)to.Y;
+        if (Terraced && Math.Abs(y1 - y0) > Math.Abs(x1 - x0))
+        {
+            MeshGrid.WriteCell(
+                into.Slice(write, 6), 0, 0, 0, 0,
+                (x0, y0), (x0 + 1, y0), (x1 + 1, y1), (x1, y1), color);
+            write += 6;
+            return;
+        }
+
         MeshGrid.WriteCell(
             into.Slice(write, 6), 0, 0, 0, 0,
             (x0, y0), (x1, y1), (x1, y1 + 1), (x0, y0 + 1), color);
         write += 6;
     }
 
-    private void WriteRow(Span<MeshVertex> into, ref int write, int x0, int x1, long y, in RenderColor color)
-    {
-        var y0 = (float)RowY(x0, y);
-        var y1 = (float)RowY(x1, y);
-        MeshGrid.WriteCell(
-            into.Slice(write, 6), 0, 0, 0, 0,
-            (x0, y0), (x1, y1), (x1, y1 + 1), (x0, y0 + 1), color);
-        write += 6;
-    }
+    private bool Terraced =>
+        Left is { IsIdentity: false, Terrace: true } || Right is { IsIdentity: false, Terrace: true } ||
+        Top is { IsIdentity: false, Terrace: true } || Bottom is { IsIdentity: false, Terrace: true };
 
-    private long FirstHorizontal(in Box bounds) => Ceiling((long)Math.Ceiling(ToCanvasY(bounds.Y)), _cellSize);
+    private long FirstHorizontal(in Box bounds) => Ceiling((long)Math.Ceiling(ReachY(bounds.Y)), _cellSize);
 
-    private long LastHorizontal(in Box bounds) => Floor((long)Math.Floor(ToCanvasY(bounds.Bottom - 1)), _cellSize);
+    private long LastHorizontal(in Box bounds) => Floor((long)Math.Floor(ReachY(bounds.Bottom - 1)), _cellSize);
 
-    private long FirstVertical(in Box bounds) => Ceiling((long)Math.Ceiling(ToCanvas(bounds.X)), _cellSize);
+    private long FirstVertical(in Box bounds) => Ceiling((long)Math.Ceiling(ReachX(bounds.X)), _cellSize);
 
-    private long LastVertical(in Box bounds) => Floor((long)Math.Floor(ToCanvas(bounds.Right - 1)), _cellSize);
+    private long LastVertical(in Box bounds) => Floor((long)Math.Floor(ReachX(bounds.Right - 1)), _cellSize);
 
     private static long Ceiling(long value, int cell)
     {

@@ -532,4 +532,235 @@ public sealed class CanvasWarpTransformTests
         var back = transform.ToCanvasPoint(past.X, past.Y);
         Assert.True(Math.Abs(back.X - 500) < 0.5 && Math.Abs(back.Y - (704 + 600)) < 0.5, $"and inverts: {back}");
     }
+
+    private static CanvasWarpTransform Terrace(bool ends = false)
+    {
+        var left = new CanvasWarp();
+        left.LayoutTerrace(seam: 180, direction: -1, zoneWidth: 80, shelfWidth: 100, shelfScale: 0.4, exponent: 2.0, slope: 0.25, center: 400);
+        var right = new CanvasWarp(1);
+        right.LayoutTerrace(seam: 1600 - 180, direction: 1, zoneWidth: 80, shelfWidth: 100, shelfScale: 0.5, exponent: 2.0, slope: -0.2, center: 400);
+        var transform = new CanvasWarpTransform { Left = left, Right = right, CellSize = 8 };
+        if (ends)
+        {
+            var top = new CanvasWarp();
+            top.LayoutTerrace(seam: 90, direction: -1, zoneWidth: 40, shelfWidth: 50, shelfScale: 0.4, exponent: 2.0, slope: 0.25, center: 800);
+            var bottom = new CanvasWarp(1);
+            bottom.LayoutTerrace(seam: 800 - 90, direction: 1, zoneWidth: 40, shelfWidth: 50, shelfScale: 0.6, exponent: 2.0, slope: 0.25, center: 800);
+            transform.Top = top;
+            transform.Bottom = bottom;
+        }
+
+        return transform;
+    }
+
+    [Fact]
+    public void A_pre_scale_of_one_changes_nothing()
+    {
+        var plain = Transform(80);
+        var scaled = Transform(80);
+        scaled.PreScale = 1.0;
+        scaled.PreAnchorX = 37;
+        scaled.PreAnchorY = 11;
+        var bounds = new Box(0, 0, 100, 60);
+        Assert.Equal(plain.VertexCount(bounds), scaled.VertexCount(bounds));
+        var a = new MeshVertex[plain.VertexCount(bounds)];
+        var b = new MeshVertex[a.Length];
+        plain.WriteVertices(bounds, a);
+        scaled.WriteVertices(bounds, b);
+        Assert.Equal(a, b);
+        Assert.Equal(plain.MapBounds(bounds), scaled.MapBounds(bounds));
+    }
+
+    [Fact]
+    public void A_pre_scale_round_trips_through_the_inverse_and_bounds_the_mesh()
+    {
+        var transform = Terrace();
+        transform.SceneX = 1300;
+        transform.SceneY = 200;
+        transform.PreScale = 0.5;
+        transform.PreAnchorX = 1300 + 170;
+        transform.PreAnchorY = 200 + 40;
+        var bounds = new Box(0, 0, 300, 200);
+        for (var x = 1; x < 300; x += 23)
+        {
+            for (var y = 1; y < 200; y += 19)
+            {
+                var (screenX, screenY) = transform.ToScreenPoint(1300 + x, 200 + y);
+                Assert.True(transform.TryMapToSource(bounds, screenX - 1300, screenY - 200, out var sourceX, out var sourceY));
+                Assert.True(Math.Abs(sourceX - x) < 0.05 && Math.Abs(sourceY - y) < 0.05, $"({x},{y}) came back as ({sourceX},{sourceY})");
+            }
+        }
+
+        var vertices = new MeshVertex[transform.VertexCount(bounds)];
+        transform.WriteVertices(bounds, vertices);
+        var minX = float.MaxValue;
+        var maxX = float.MinValue;
+        var minY = float.MaxValue;
+        var maxY = float.MinValue;
+        foreach (var vertex in vertices)
+        {
+            minX = Math.Min(minX, vertex.X);
+            maxX = Math.Max(maxX, vertex.X);
+            minY = Math.Min(minY, vertex.Y);
+            maxY = Math.Max(maxY, vertex.Y);
+            Assert.InRange(vertex.U, -0.01f, 300.01f);
+            Assert.InRange(vertex.V, -0.01f, 200.01f);
+        }
+
+        var mapped = transform.MapBounds(bounds);
+        Assert.Equal((int)Math.Floor(minX), mapped.X);
+        Assert.Equal((int)Math.Ceiling(maxX), mapped.Right);
+        Assert.Equal((int)Math.Floor(minY), mapped.Y);
+        Assert.Equal((int)Math.Ceiling(maxY), mapped.Bottom);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(0.7)]
+    public void The_shelf_placement_equals_the_mesh_past_the_feet(double preScale)
+    {
+        foreach (var (sceneX, sceneY, width, height, ends) in new[]
+        {
+            (1600 - 180 + 200 + 10, 300, 120, 90, false),
+            (180 - 200 - 130, 100, 120, 500, false),
+            (500, -300, 200, 80, true),
+            (1600 + 150, -250, 60, 50, true),
+        })
+        {
+            var transform = Terrace(ends);
+            transform.SceneX = sceneX;
+            transform.SceneY = sceneY;
+            transform.PreScale = preScale;
+            transform.PreAnchorX = sceneX + (width / 3.0);
+            transform.PreAnchorY = sceneY + (height / 4.0);
+            var bounds = new Box(0, 0, width, height);
+            Assert.True(transform.IsPastFeet(bounds), $"the box at {sceneX},{sceneY} is not past the feet");
+            Assert.False(transform.IsIdentityFor(bounds));
+            var placement = transform.ShelfPlacement(bounds);
+            var vertices = new MeshVertex[transform.VertexCount(bounds)];
+            transform.WriteVertices(bounds, vertices);
+            if (ends && sceneX > 1600)
+            {
+                var inner = transform.ToScreenPoint(sceneX, sceneY + height);
+                var (innerX, innerY) = placement.Map(sceneX, sceneY + height);
+                Assert.True(Math.Abs(innerX - inner.X) < 1e-6 && Math.Abs(innerY - inner.Y) < 1e-6, "the corner rule keeps the inner corner on the ring");
+                Assert.Equal(0.4 * preScale, placement.M11, 9);
+                continue;
+            }
+
+            foreach (var vertex in vertices)
+            {
+                var (x, y) = placement.Map(sceneX + vertex.U, sceneY + vertex.V);
+                var tolerance = 1e-3;
+                Assert.True(
+                    Math.Abs(x - (sceneX + vertex.X)) < tolerance && Math.Abs(y - (sceneY + vertex.Y)) < tolerance,
+                    $"({vertex.U},{vertex.V}) meshes to ({sceneX + vertex.X},{sceneY + vertex.Y}) but places at ({x},{y})");
+            }
+        }
+    }
+
+    [Fact]
+    public void A_box_on_the_slope_is_not_past_the_feet()
+    {
+        var transform = Terrace();
+        transform.SceneX = 1600 - 180 + 50;
+        Assert.False(transform.IsPastFeet(new Box(0, 0, 100, 100)));
+        transform.SceneX = 600;
+        Assert.False(transform.IsPastFeet(new Box(0, 0, 100, 100)));
+        Assert.True(transform.IsIdentityFor(new Box(0, 0, 100, 100)));
+        var warp = Transform(1000);
+        Assert.False(warp.IsPastFeet(new Box(0, 0, 100, 100)));
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(0.7)]
+    public void A_separable_terrace_shelf_placement_equals_the_mesh_on_shelves_and_in_corners(double preScale)
+    {
+        foreach (var (sceneX, sceneY, width, height) in new[]
+        {
+            (1600 - 180 + 200 + 10, 300, 120, 90),
+            (500, -300, 200, 80),
+            (1600 + 150, -250, 60, 50),
+            (-400, 900, 70, 40),
+        })
+        {
+            var transform = Terrace(ends: true);
+            transform.Separable = true;
+            transform.SceneX = sceneX;
+            transform.SceneY = sceneY;
+            transform.PreScale = preScale;
+            transform.PreAnchorX = sceneX + (width / 3.0);
+            transform.PreAnchorY = sceneY + (height / 4.0);
+            var (localX, localY) = transform.LocalScale(transform.PreAnchorX, transform.PreAnchorY);
+            var even = Math.Min(localX, localY);
+            transform.PreStretchX = even / localX;
+            transform.PreStretchY = even / localY;
+            var bounds = new Box(0, 0, width, height);
+            Assert.True(transform.IsPastFeet(bounds), $"the box at {sceneX},{sceneY} is not past the feet");
+            var placement = transform.ShelfPlacement(bounds);
+            Assert.Equal(placement.M11, placement.M22, 9);
+            Assert.Equal(even * preScale, placement.M11, 9);
+            var vertices = new MeshVertex[transform.VertexCount(bounds)];
+            transform.WriteVertices(bounds, vertices);
+            foreach (var vertex in vertices)
+            {
+                var (x, y) = placement.Map(sceneX + vertex.U, sceneY + vertex.V);
+                Assert.True(
+                    Math.Abs(x - (sceneX + vertex.X)) < 1e-3 && Math.Abs(y - (sceneY + vertex.Y)) < 1e-3,
+                    $"({vertex.U},{vertex.V}) meshes to ({sceneX + vertex.X},{sceneY + vertex.Y}) but places at ({x},{y})");
+            }
+        }
+    }
+
+    [Fact]
+    public void A_separable_map_keeps_rows_straight_and_inverts()
+    {
+        var transform = Terrace(ends: true);
+        transform.Separable = true;
+        for (var x = -600; x < 2200; x += 97)
+        {
+            for (var y = -500; y < 1300; y += 89)
+            {
+                var (screenX, screenY) = transform.ToScreenPoint(x, y);
+                Assert.Equal(transform.Top!.ContainsCanvas(y) ? transform.Top.ToScreen(y)
+                    : transform.Bottom!.ContainsCanvas(y) ? transform.Bottom.ToScreen(y) : y, screenY, 9);
+                var (backX, backY) = transform.ToCanvasPoint(screenX, screenY);
+                Assert.True(Math.Abs(backX - x) < 0.02 && Math.Abs(backY - y) < 0.02, $"({x},{y}) came back as ({backX},{backY})");
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_flat_placement_is_the_identity_in_the_center_and_the_shelf_placement_on_a_shelf(bool separable)
+    {
+        var transform = Terrace(ends: true);
+        transform.Separable = separable;
+        transform.PreAnchorX = 800;
+        transform.PreAnchorY = 400;
+        Assert.True(transform.FlatPlacement().IsIdentity);
+
+        foreach (var (sceneX, sceneY, width, height) in new[] { (1600 - 180 + 200 + 10, 300, 120, 90), (500, -300, 200, 80) })
+        {
+            transform.SceneX = sceneX;
+            transform.SceneY = sceneY;
+            transform.PreScale = 0.8;
+            transform.PreAnchorX = sceneX + (width / 3.0);
+            transform.PreAnchorY = sceneY + (height / 4.0);
+            var (localX, localY) = transform.LocalScale(transform.PreAnchorX, transform.PreAnchorY);
+            var even = Math.Min(localX, localY);
+            transform.PreStretchX = separable ? even / localX : 1.0;
+            transform.PreStretchY = separable ? even / localY : 1.0;
+            var bounds = new Box(0, 0, width, height);
+            Assert.True(transform.IsPastFeet(bounds));
+            var shelf = transform.ShelfPlacement(bounds);
+            var flat = transform.FlatPlacement();
+            Assert.Equal(shelf.M11, flat.M11, 9);
+            Assert.Equal(shelf.M22, flat.M22, 9);
+            Assert.Equal(shelf.M13, flat.M13, 6);
+            Assert.Equal(shelf.M23, flat.M23, 6);
+        }
+    }
 }

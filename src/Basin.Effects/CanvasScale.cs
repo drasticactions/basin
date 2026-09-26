@@ -353,6 +353,228 @@ public sealed class CanvasScale
         return ScaleFor(map, box) - k;
     }
 
+    public double FitFor(CanvasWarpTransform map, in Box canvasBox, double shelfMin) =>
+        Math.Min(
+            AxisFit(Across(map.Left, map.Right, canvasBox.X, canvasBox.Width), canvasBox.Width, shelfMin),
+            AxisFit(Across(map.Top, map.Bottom, canvasBox.Y, canvasBox.Height), canvasBox.Height, shelfMin));
+
+    public double FitAtDepth(CanvasWarpTransform map, in Box canvasBox, double shelfMin, double leadingX, double leadingY) =>
+        Math.Min(
+            AxisFitAtDepth(Across(map.Left, map.Right, canvasBox.X, canvasBox.Width), canvasBox.Width, shelfMin, leadingX),
+            AxisFitAtDepth(Across(map.Top, map.Bottom, canvasBox.Y, canvasBox.Height), canvasBox.Height, shelfMin, leadingY));
+
+    public double SolveFit(CanvasWarpTransform map, in Box canvasBox, double shelfMin, double anchorX, double anchorY)
+    {
+        var rest = FitFor(map, canvasBox, shelfMin);
+        if (rest >= 1.0)
+        {
+            return 1.0;
+        }
+
+        var sideX = Across(map.Left, map.Right, canvasBox.X, canvasBox.Width);
+        var sideY = Across(map.Top, map.Bottom, canvasBox.Y, canvasBox.Height);
+        if (FitResidual(map, canvasBox, shelfMin, sideX, sideY, anchorX, anchorY, 1.0) <= 0)
+        {
+            return 1.0;
+        }
+
+        var low = rest;
+        var high = 1.0;
+        for (var i = 0; i < ResizeIterations; i++)
+        {
+            var middle = 0.5 * (low + high);
+            if (FitResidual(map, canvasBox, shelfMin, sideX, sideY, anchorX, anchorY, middle) > 0)
+            {
+                high = middle;
+            }
+            else
+            {
+                low = middle;
+            }
+        }
+
+        return 0.5 * (low + high);
+    }
+
+    public double ShelfScaleFor(CanvasWarpTransform map, in Box canvasBox, double shelfMin)
+    {
+        var sideX = Across(map.Left, map.Right, canvasBox.X, canvasBox.Width);
+        var sideY = Across(map.Top, map.Bottom, canvasBox.Y, canvasBox.Height);
+        var k = Math.Min(
+            sideX is { Terrace: true } ? sideX.EdgeScale : 1.0,
+            sideY is { Terrace: true } ? sideY.EdgeScale : 1.0);
+        return k * FitFor(map, canvasBox, shelfMin);
+    }
+
+    public int TerraceParkTarget(CanvasWarpTransform map, CanvasWarp side, in Box canvasBox, double shelfMin)
+    {
+        var vertical = ReferenceEquals(side, map.Top) || ReferenceEquals(side, map.Bottom);
+        if (side.IsIdentity || !side.Terrace)
+        {
+            return ParkTarget(map, side, canvasBox);
+        }
+
+        var size = vertical ? canvasBox.Height : canvasBox.Width;
+        var fit = AxisFit(side, size, shelfMin);
+        var outer = side.FarEdge + (side.Direction * side.ShelfWidth / side.EdgeScale);
+        var center = outer - (side.Direction * size * fit / 2.0);
+        return (int)Math.Round(center - (size / 2.0));
+    }
+
+    public (int X, int Y) TerraceCornerParkTarget(
+        CanvasWarpTransform map, CanvasWarp side, CanvasWarp end, in Box canvasBox, double shelfMin)
+    {
+        if (side.IsIdentity || end.IsIdentity || !side.Terrace || !end.Terrace)
+        {
+            return CornerParkTarget(map, side, end, canvasBox);
+        }
+
+        return TerraceCornerTarget(map, side, end, canvasBox, shelfMin, side.OuterEdge, end.OuterEdge);
+    }
+
+    public (int X, int Y) TerraceCornerTarget(
+        CanvasWarpTransform map, CanvasWarp side, CanvasWarp end, in Box canvasBox, double shelfMin, double outerX, double outerY)
+    {
+        var width = canvasBox.Width;
+        var height = canvasBox.Height;
+        var fit = Math.Min(
+            AxisFitAtDepth(side, width, shelfMin, outerX),
+            AxisFitAtDepth(end, height, shelfMin, outerY));
+        var even = Math.Min(side.EdgeScale, end.EdgeScale);
+        var fitX = map.Separable ? fit * even / side.EdgeScale : fit;
+        var fitY = map.Separable ? fit * even / end.EdgeScale : fit;
+        var (outerCanvasX, outerCanvasY) = map.ToCanvasPoint(outerX, outerY);
+        var x = outerCanvasX - (width / 2.0) - (side.Direction * width * fitX / 2.0);
+        var y = outerCanvasY - (height / 2.0) - (end.Direction * height * fitY / 2.0);
+        return ((int)Math.Round(x), (int)Math.Round(y));
+    }
+
+    public (double Scale, double X, double Y) TerraceResizeCursor(
+        CanvasWarpTransform map,
+        in Box start,
+        bool left,
+        bool right,
+        bool top,
+        bool bottom,
+        double fixedScreenX,
+        double fixedScreenY,
+        double cursorX,
+        double cursorY,
+        double shelfMin)
+    {
+        var fixedX = left ? start.Right : start.X;
+        var fixedY = top ? start.Bottom : start.Y;
+        var resizeX = left || right;
+        var resizeY = top || bottom;
+        var high = ShelfScaleFor(map, start, 1.0);
+        var low = Math.Min(Math.Max(shelfMin, 0.01), high);
+        if (TerraceResidual(map, start, left, resizeX, top, resizeY, fixedX, fixedY, fixedScreenX, fixedScreenY, cursorX, cursorY, shelfMin, high) >= 0)
+        {
+            low = high;
+        }
+        else
+        {
+            for (var i = 0; i < ResizeIterations; i++)
+            {
+                var middle = 0.5 * (low + high);
+                if (TerraceResidual(map, start, left, resizeX, top, resizeY, fixedX, fixedY, fixedScreenX, fixedScreenY, cursorX, cursorY, shelfMin, middle) >= 0)
+                {
+                    low = middle;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+        }
+
+        var k = low;
+        return (k, fixedX + ((cursorX - fixedScreenX) / k), fixedY + ((cursorY - fixedScreenY) / k));
+    }
+
+    private double TerraceResidual(
+        CanvasWarpTransform map,
+        in Box start,
+        bool left,
+        bool resizeX,
+        bool top,
+        bool resizeY,
+        int fixedX,
+        int fixedY,
+        double fixedScreenX,
+        double fixedScreenY,
+        double cursorX,
+        double cursorY,
+        double shelfMin,
+        double k)
+    {
+        var box = start;
+        if (resizeX)
+        {
+            var width = Math.Max(1, (int)Math.Round(Math.Abs(cursorX - fixedScreenX) / k));
+            box = box with { X = left ? fixedX - width : fixedX, Width = width };
+        }
+
+        if (resizeY)
+        {
+            var height = Math.Max(1, (int)Math.Round(Math.Abs(cursorY - fixedScreenY) / k));
+            box = box with { Y = top ? fixedY - height : fixedY, Height = height };
+        }
+
+        return ShelfScaleFor(map, box, shelfMin) - k;
+    }
+
+    private double FitResidual(
+        CanvasWarpTransform map,
+        in Box canvasBox,
+        double shelfMin,
+        CanvasWarp? sideX,
+        CanvasWarp? sideY,
+        double anchorX,
+        double anchorY,
+        double fit)
+    {
+        var leadingX = Leading(sideX, anchorX, canvasBox.X, canvasBox.Width, fit);
+        var leadingY = Leading(sideY, anchorY, canvasBox.Y, canvasBox.Height, fit);
+        return fit - FitAtDepth(map, canvasBox, shelfMin, leadingX, leadingY);
+    }
+
+    private static double Leading(CanvasWarp? warp, double anchor, int start, int size, double fit)
+    {
+        if (warp is null)
+        {
+            return 0.0;
+        }
+
+        double outer = warp.Direction < 0 ? start : start + size;
+        return warp.ToScreen(anchor + ((outer - anchor) * fit));
+    }
+
+    private static double AxisFit(CanvasWarp? warp, int size, double shelfMin)
+    {
+        if (warp is not { IsIdentity: false, Terrace: true } || size <= 0)
+        {
+            return 1.0;
+        }
+
+        var k = warp.EdgeScale;
+        return Math.Min(1.0, Math.Max(warp.ShelfWidth / (size * k), shelfMin / k));
+    }
+
+    private static double AxisFitAtDepth(CanvasWarp? warp, int size, double shelfMin, double leading)
+    {
+        var rest = AxisFit(warp, size, shelfMin);
+        if (rest >= 1.0 || warp is null)
+        {
+            return 1.0;
+        }
+
+        var span = warp.ZoneWidth + warp.ShelfWidth;
+        var t = span > 0 ? Math.Clamp(warp.Direction * (leading - warp.Seam) / span, 0.0, 1.0) : 1.0;
+        var eased = t * t * (3.0 - (2.0 * t));
+        return 1.0 + ((rest - 1.0) * eased);
+    }
+
     private static double ScreenDepth(CanvasWarp? warp, double screen) =>
         warp is null || warp.IsIdentity ? 0.0 : warp.DepthAtScreen(screen);
 

@@ -426,4 +426,134 @@ public sealed class CanvasScaleTests
         Assert.True(Math.Abs(drawn.Right - previous.Right) <= bound, $"right {previous} -> {drawn}");
         Assert.True(Math.Abs(drawn.Bottom - previous.Bottom) <= bound, $"bottom {previous} -> {drawn}");
     }
+
+    private static CanvasWarpTransform TerraceMap()
+    {
+        var map = new CanvasWarpTransform();
+        var left = new CanvasWarp();
+        left.LayoutTerrace(seam: 180, direction: -1, zoneWidth: 80, shelfWidth: 100, shelfScale: 0.4, exponent: 2.0, slope: 0.25, center: 450);
+        var right = new CanvasWarp(1);
+        right.LayoutTerrace(seam: 1600 - 180, direction: 1, zoneWidth: 80, shelfWidth: 100, shelfScale: 0.5, exponent: 2.0, slope: 0.25, center: 450);
+        var top = new CanvasWarp();
+        top.LayoutTerrace(seam: 180, direction: -1, zoneWidth: 80, shelfWidth: 100, shelfScale: 0.45, exponent: 2.0, slope: 0.25, center: 800);
+        var bottom = new CanvasWarp(1);
+        bottom.LayoutTerrace(seam: 900 - 180, direction: 1, zoneWidth: 80, shelfWidth: 100, shelfScale: 0.6, exponent: 2.0, slope: 0.25, center: 800);
+        map.Left = left;
+        map.Right = right;
+        map.Top = top;
+        map.Bottom = bottom;
+        return map;
+    }
+
+    [Fact]
+    public void The_fit_is_one_at_the_seam_the_rest_value_at_the_screen_edge_and_held_at_the_floor()
+    {
+        var map = TerraceMap();
+        var right = map.Right!;
+        var scale = new CanvasScale();
+        var narrow = new Box(right.Seam + 50, 300, 150, 100);
+        Assert.Equal(1.0, scale.FitFor(map, narrow, 0.2), 9);
+        var wide = new Box(right.Seam + 50, 300, 400, 100);
+        Assert.Equal(100.0 / (400 * 0.5), scale.FitFor(map, wide, 0.2), 9);
+        var huge = new Box(right.Seam + 50, 300, 2000, 100);
+        Assert.Equal(0.2 / 0.5, scale.FitFor(map, huge, 0.2), 9);
+        Assert.Equal(1.0, scale.FitFor(map, huge, 0.6), 9);
+
+        Assert.Equal(1.0, scale.FitAtDepth(map, wide, 0.2, right.Seam, 0), 9);
+        Assert.Equal(0.5, scale.FitAtDepth(map, wide, 0.2, right.OuterEdge, 0), 9);
+        Assert.Equal(0.4, scale.FitAtDepth(map, huge, 0.2, right.OuterEdge + 300, 0), 9);
+        var middle = scale.FitAtDepth(map, wide, 0.2, right.Foot, 0);
+        Assert.InRange(middle, 0.5, 1.0);
+
+        var flat = new Box(600, 300, 400, 100);
+        Assert.Equal(1.0, scale.SolveFit(map, flat, 0.2, 800, 350), 9);
+    }
+
+    [Fact]
+    public void The_solved_fit_puts_the_leading_edge_where_the_drive_says()
+    {
+        var map = TerraceMap();
+        var right = map.Right!;
+        var scale = new CanvasScale();
+        for (var x = right.Seam - 300; x < right.FarEdge + 300; x += 41)
+        {
+            var box = new Box(x, 300, 400, 100);
+            var anchorX = x + 130.0;
+            var fit = scale.SolveFit(map, box, 0.2, anchorX, 350);
+            var leading = right.ToScreen(anchorX + ((box.Right - anchorX) * fit));
+            Assert.Equal(fit, scale.FitAtDepth(map, box, 0.2, leading, 0), 6);
+        }
+    }
+
+    [Theory]
+    [InlineData("left")]
+    [InlineData("right")]
+    [InlineData("top")]
+    [InlineData("bottom")]
+    public void A_terrace_park_puts_the_outer_edge_on_the_screen_edge(string name)
+    {
+        var map = TerraceMap();
+        var side = name switch
+        {
+            "left" => map.Left!,
+            "right" => map.Right!,
+            "top" => map.Top!,
+            _ => map.Bottom!,
+        };
+        var vertical = name is "top" or "bottom";
+        var scale = new CanvasScale();
+        foreach (var size in new[] { 150, 450, 800 })
+        {
+            var box = vertical ? new Box(700, 400, 120, size) : new Box(700, 400, size, 120);
+            var origin = scale.TerraceParkTarget(map, side, box, 0.2);
+            var parked = vertical ? box with { Y = origin } : box with { X = origin };
+            var anchorX = parked.X + (parked.Width / 2.0);
+            var anchorY = parked.Y + (parked.Height / 2.0);
+            var fit = scale.SolveFit(map, parked, 0.2, anchorX, anchorY);
+            Assert.Equal(scale.FitFor(map, parked, 0.2), fit, 2);
+            var transform = new CanvasWarpTransform
+            {
+                Left = map.Left, Right = map.Right, Top = map.Top, Bottom = map.Bottom,
+                PreScale = fit, PreAnchorX = anchorX, PreAnchorY = anchorY,
+            };
+            double outer;
+            if (vertical)
+            {
+                outer = transform.ToScreenPoint(anchorX, side.Direction < 0 ? parked.Y : parked.Bottom).Y;
+            }
+            else
+            {
+                outer = transform.ToScreenPoint(side.Direction < 0 ? parked.X : parked.Right, anchorY).X;
+            }
+
+            Assert.True(Math.Abs(outer - side.OuterEdge) < 1.0, $"{name} {size}: the outer edge is at {outer}, not {side.OuterEdge}");
+            var local = new Box(parked.X, parked.Y, parked.Width, parked.Height);
+            var past = side.Direction < 0
+                ? (vertical ? transform.ToScreenPoint(anchorX, parked.Bottom).Y : transform.ToScreenPoint(parked.Right, anchorY).X) <= side.Foot + 1
+                : (vertical ? transform.ToScreenPoint(anchorX, parked.Y).Y : transform.ToScreenPoint(parked.X, anchorY).X) >= side.Foot - 1;
+            Assert.Equal(size != 800, past);
+            Assert.Equal(size != 800, size * side.EdgeScale * fit <= side.ShelfWidth + 1);
+            _ = local;
+        }
+    }
+
+    [Fact]
+    public void A_terrace_corner_park_puts_the_meshed_outer_corner_on_the_screen_corner()
+    {
+        var map = TerraceMap();
+        var scale = new CanvasScale();
+        var box = new Box(700, 400, 150, 120);
+        var (x, y) = scale.TerraceCornerParkTarget(map, map.Right!, map.Bottom!, box, 0.2);
+        var parked = box with { X = x, Y = y };
+        var fit = scale.FitFor(map, parked, 0.2);
+        var transform = new CanvasWarpTransform
+        {
+            Left = map.Left, Right = map.Right, Top = map.Top, Bottom = map.Bottom,
+            PreScale = fit, PreAnchorX = parked.X + (parked.Width / 2.0), PreAnchorY = parked.Y + (parked.Height / 2.0),
+        };
+        Assert.True(transform.IsPastFeet(parked), $"the parked box {parked} is not past both feet");
+        var (outerX, outerY) = transform.ToScreenPoint(parked.Right, parked.Bottom);
+        Assert.True(Math.Abs(outerX - map.Right!.OuterEdge) < 1.5, $"outer x {outerX}");
+        Assert.True(Math.Abs(outerY - map.Bottom!.OuterEdge) < 1.5, $"outer y {outerY}");
+    }
 }

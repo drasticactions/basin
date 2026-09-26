@@ -449,6 +449,107 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
     [InlineData("impeller")]
+    public void A_terrace_with_a_shelf_window_and_a_slope_window_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var left = new Basin.Effects.CanvasWarp();
+        var right = new Basin.Effects.CanvasWarp(1);
+        void Lay(double shelfScale)
+        {
+            left.LayoutTerrace(30, -1, 14, 16, shelfScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, 60);
+            right.LayoutTerrace(130, 1, 14, 16, shelfScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, 60);
+        }
+
+        Lay(0.4);
+        var grid = new Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource { Left = left, Right = right, CellSize = 16, MinLineSpacing = 8 },
+        };
+        var map = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right };
+        var scale = new Basin.Effects.CanvasScale();
+
+        var shelfWindow = new Scene.SceneTree(host.Scene.Root);
+        var shelfNode = new Scene.SceneTransform(shelfWindow);
+        _ = new Scene.SceneRect(shelfNode, 28, 20, new RenderColor(0.3f, 0.6f, 0.35f, 1f));
+        var shelfTransform = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, CellSize = 8 };
+
+        var slopeWindow = new Scene.SceneTree(host.Scene.Root);
+        var slopeNode = new Scene.SceneTransform(slopeWindow);
+        _ = new Scene.SceneRect(slopeNode, 76, 40, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 30, Fill.Gradient(64, 30));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(slopeNode);
+        content.Tree.SetPosition(6, 6);
+        var slopeTransform = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, CellSize = 8 };
+        var local = new Box(0, 0, 76, 40);
+
+        void Frame(int i)
+        {
+            Lay(0.4 - ((i % 20) * 0.005));
+            grid.NotifyMeshChanged();
+
+            var resting = new Box(0, 70, 28, 20);
+            resting = resting with { X = scale.TerraceParkTarget(map, left, resting, 0.2) };
+            shelfWindow.SetPosition(resting.X, resting.Y);
+            shelfTransform.SceneX = resting.X;
+            shelfTransform.SceneY = resting.Y;
+            shelfTransform.PreAnchorX = resting.X + 14;
+            shelfTransform.PreAnchorY = resting.Y + 10;
+            shelfTransform.PreScale = scale.SolveFit(map, resting, 0.2, resting.X + 14, resting.Y + 10);
+            var shelfLocal = new Box(0, 0, 28, 20);
+            Assert.True(shelfTransform.IsPastFeet(shelfLocal));
+            var placement = shelfTransform.ShelfPlacement(shelfLocal);
+            shelfNode.Matrix = RenderTransform.Multiply(
+                RenderTransform.Translation(-resting.X, -resting.Y),
+                RenderTransform.Multiply(placement, RenderTransform.Translation(resting.X, resting.Y)));
+
+            var sliding = new Box(right.Seam - 60 + (i % 70), 20, 76, 40);
+            slopeWindow.SetPosition(sliding.X, sliding.Y);
+            slopeTransform.SceneX = sliding.X;
+            slopeTransform.SceneY = sliding.Y;
+            slopeTransform.PreAnchorX = sliding.X + 20.5;
+            slopeTransform.PreAnchorY = sliding.Y + 4.5;
+            slopeTransform.PreScale = scale.SolveFit(map, sliding, 0.2, sliding.X + 20.5, sliding.Y + 4.5);
+            if (!slopeTransform.IsIdentityFor(local) && !slopeTransform.IsPastFeet(local))
+            {
+                if (ReferenceEquals(slopeNode.Deformer, slopeTransform))
+                {
+                    slopeNode.NotifyDeformed();
+                }
+                else
+                {
+                    slopeNode.Deformer = slopeTransform;
+                }
+            }
+
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 140; i++)
+        {
+            Frame(i);
+        }
+
+        NothingAllocated(1000, Frame);
+        grid.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
     public void A_window_sliding_through_a_canvas_zone_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

@@ -369,6 +369,22 @@ internal sealed partial class TinyComp
                 Recall(recall);
                 return true;
 
+            case KeyAction.ShelfSmaller:
+                AdjustShelf(null, null, -1, reset: false);
+                return true;
+
+            case KeyAction.ShelfLarger:
+                AdjustShelf(null, null, 1, reset: false);
+                return true;
+
+            case KeyAction.ShelfReset:
+                AdjustShelf(null, null, 0, reset: true);
+                return true;
+
+            case KeyAction.CanvasMode:
+                _ = SetCanvasMode(null);
+                return true;
+
             default:
                 return false;
         }

@@ -163,3 +163,5 @@ server-managed exact    ipc-event-flush                2400
 server-managed exact    title-commit                   6400
 server-managed ceiling  quill-frame-repaint-vk        57600
 server-managed ceiling  quill-frame-repaint           57600
+server     exact    canvas-terrace-drag             584
+server-managed exact    canvas-terrace-drag             584

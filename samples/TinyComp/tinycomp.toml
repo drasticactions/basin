@@ -104,7 +104,7 @@ enable       = false         # wider canvas with compressed edge zones
 sides        = ["left", "right"]  # any of left, right, top, bottom
 corner       = "round"       # round | square | taper: how zones meet where two edges both have one
 # corner_radius = 1.0        # 0.0 square to 1.0 round; beats round or square, and sets taper's starting radius
-zone         = 0.12          # fraction of the output width (height for top and bottom) each zone takes on screen
+# zone       = 0.12          # fraction of the output width (height for top and bottom) each zone takes on screen, 0.08 in terrace mode
 extension    = 0.5           # how far the canvas extends past each seam, as a fraction of the same dimension
 edge_scale   = 0.2           # draw scale at the far edge; must stay below zone / extension
 slope        = 0.25          # how far the rows fan from the center row at the far edge; 0 keeps them flat, negative fans inward
@@ -113,9 +113,16 @@ grid         = "always"      # always | drag | never
 grid_cell    = 64            # canvas pixels between grid lines
 grid_color   = "#2a35c0"     # the grid line color
 animation_ms = 250           # park, recall and toggle
-window       = "warp"        # warp | scale: bend a window along the zone, or draw it flat and smaller
+window       = "warp"        # warp | scale | terrace: bend a window along the zone, draw it flat and smaller, or rest it flat on a shelf past a slope
 min_scale    = 0.35          # scale mode: the smallest a window draws, as a fraction of its size
 scale_reach  = 1.0           # scale mode: 1.0 follows the zone curve; larger spreads the shrink deeper
+shelf        = 0.10          # terrace mode: the shelf's screen width, as a fraction of the same dimension as zone
+shelf_scale  = 0.4           # terrace mode: the shelf's draw scale, or a table such as { left = 0.4, right = 0.3 }
+shelf_min_scale = 0.2        # terrace mode: the smallest a window too wide for the shelf shrinks to
+shelf_step   = 0.05          # terrace mode: the step of shelf-smaller and shelf-larger
+shelf_shape  = "square"      # terrace mode: square | flat: square shelf cells with curved corners, or straight lines with flat corners
+slope_window = "bend"        # terrace mode: bend | flat: bend a window along the slope, or keep it a flat rectangle that shrinks
+drag         = "cursor"      # scale and terrace modes: cursor | grid: keep the grabbed point under the cursor, or move it along the grid rows
 
 # The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
 # toplevel mapping and export, CTM control, global shortcuts and input capture.
@@ -152,6 +159,10 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # "Alt+Shift+m"   = "park-down"
 # "Alt+Shift+j"   = "recall"
 # "Alt+Shift+c"   = "canvas-toggle"
+# "Alt+Shift+minus" = "shelf-smaller"
+# "Alt+Shift+equal" = "shelf-larger"
+# "Alt+Shift+0"   = "shelf-reset"
+# "Alt+Shift+t"   = "canvas-mode"
 
 # Per Window/App rules
 # [[rule]]

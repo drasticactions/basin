@@ -177,6 +177,96 @@ internal sealed partial class TinyComp
             }
         });
 
+        _report.Register(methods, "tinycomp/shelf", "shelf", (ref IpcParams p, IpcReply reply) =>
+        {
+            CanvasSide? side = null;
+            if (p.TryGetString("side", out var sideName))
+            {
+                side = sideName switch
+                {
+                    "left" => CanvasSide.Left,
+                    "right" => CanvasSide.Right,
+                    "top" => CanvasSide.Top,
+                    "bottom" => CanvasSide.Bottom,
+                    _ => CanvasSide.None,
+                };
+            }
+
+            double? scale = p.TryGetDouble("scale", out var value) ? value : null;
+            var step = p.TryGetString("step", out var stepName) ? stepName : null;
+            var reset = (p.TryGetBool("reset", out var resetFlag) && resetFlag) || step == "reset";
+            if (p.Failed)
+            {
+                return;
+            }
+
+            if (side == CanvasSide.None)
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, "side is left, right, top or bottom");
+                return;
+            }
+
+            if (step is not (null or "smaller" or "larger" or "reset"))
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, "step is smaller, larger or reset");
+                return;
+            }
+
+            if (scale is { } asked && !double.IsFinite(asked))
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, "scale is a number");
+                return;
+            }
+
+            if (reset || scale is not null || step is not null)
+            {
+                AdjustShelf(side, scale, step == "smaller" ? -1 : step == "larger" ? 1 : 0, reset);
+            }
+            else
+            {
+                ReportShelves();
+            }
+
+            WriteShelves(reply.Result);
+        });
+        _report.AddLine(methods, "tinycomp/shelf", "shelf {step:smaller|larger|reset}");
+        _report.AddLine(methods, "tinycomp/shelf", "shelf {side:left|right|top|bottom} {step:smaller|larger|reset}");
+        _report.AddLine(methods, "tinycomp/shelf", "shelf {scale:number}");
+        _report.AddLine(methods, "tinycomp/shelf", "shelf {side:left|right|top|bottom} {scale:number}");
+
+        _report.Register(methods, "tinycomp/canvas-mode", "canvas mode [{mode:warp|scale|terrace}]", (ref IpcParams p, IpcReply reply) =>
+        {
+            CanvasWindowMode? mode = null;
+            if (p.TryGetString("mode", out var modeName))
+            {
+                mode = modeName switch
+                {
+                    "warp" => CanvasWindowMode.Warp,
+                    "scale" => CanvasWindowMode.Scale,
+                    "terrace" => CanvasWindowMode.Terrace,
+                    _ => null,
+                };
+                if (mode is null)
+                {
+                    reply.Error(IpcErrorCodes.InvalidParams, "mode is warp, scale or terrace");
+                    return;
+                }
+            }
+
+            if (p.Failed)
+            {
+                return;
+            }
+
+            if (SetCanvasMode(mode) is { } inForce)
+            {
+                var json = reply.Result;
+                json.WriteStartObject();
+                json.WriteString("mode", CanvasSetting.NameOf(inForce));
+                json.WriteEndObject();
+            }
+        });
+
         _report.Register(methods, "tinycomp/ws", "ws", PrintWorkspaces);
 
         _report.Register(methods, "tinycomp/ws-step", "ws {direction:next|prev}", (ref IpcParams p, IpcReply _) =>

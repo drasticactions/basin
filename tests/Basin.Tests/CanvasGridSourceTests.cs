@@ -258,4 +258,108 @@ public sealed class CanvasGridSourceTests
 
         Assert.Equal(sentinel, vertices[count]);
     }
+
+    private static CanvasGridSource TerraceGrid(bool ends, double shelfScale = 0.4)
+    {
+        var left = new CanvasWarp();
+        left.LayoutTerrace(seam: 180, direction: -1, zoneWidth: 80, shelfWidth: 100, shelfScale: shelfScale, exponent: 2.0, slope: 0.25, center: 300);
+        var right = new CanvasWarp(1);
+        right.LayoutTerrace(seam: 1200 - 180, direction: 1, zoneWidth: 80, shelfWidth: 100, shelfScale: shelfScale, exponent: 2.0, slope: 0.0, center: 300);
+        var source = new CanvasGridSource { CellSize = 32, Left = left, Right = right };
+        if (ends)
+        {
+            var top = new CanvasWarp();
+            top.LayoutTerrace(seam: 100, direction: -1, zoneWidth: 40, shelfWidth: 60, shelfScale: shelfScale, exponent: 2.0, slope: 0.25, center: 600);
+            var bottom = new CanvasWarp(1);
+            bottom.LayoutTerrace(seam: 600 - 100, direction: 1, zoneWidth: 40, shelfWidth: 60, shelfScale: shelfScale, exponent: 2.0, slope: 0.25, center: 600);
+            source.Top = top;
+            source.Bottom = bottom;
+        }
+
+        return source;
+    }
+
+    [Theory]
+    [InlineData(false, 0.0)]
+    [InlineData(true, 0.0)]
+    [InlineData(false, 8.0)]
+    [InlineData(true, 8.0)]
+    public void A_terrace_grid_writes_exactly_the_vertices_it_counts(bool ends, double spacing)
+    {
+        var source = TerraceGrid(ends, 0.1);
+        source.MinLineSpacing = spacing;
+        var bounds = new Box(0, 0, 1200, 600);
+        var count = source.VertexCount(bounds);
+        var vertices = new MeshVertex[count + 1];
+        var sentinel = new MeshVertex(-7, -7, -7, -7, default);
+        vertices[count] = sentinel;
+        source.WriteVertices(bounds, vertices);
+        Assert.Equal(sentinel, vertices[count]);
+        Assert.NotEqual(default, vertices[count - 1]);
+    }
+
+    [Fact]
+    public void Terrace_columns_continue_past_the_foot_at_the_shelf_spacing()
+    {
+        var source = TerraceGrid(ends: false);
+        var bounds = new Box(0, 0, 1200, 600);
+        var right = source.Right!;
+        var shelf = new List<double>();
+        for (var x = right.FarEdge; x < right.FarEdge + 1000; x += 32)
+        {
+            var screen = right.ToScreen(x);
+            if (screen < bounds.Right)
+            {
+                shelf.Add(screen);
+            }
+        }
+
+        Assert.True(shelf.Count > 5, "the shelf shows columns");
+        for (var i = 1; i < shelf.Count; i++)
+        {
+            Assert.Equal(0.4 * 32, shelf[i] - shelf[i - 1], 6);
+        }
+
+        var flat = new CanvasGridSource { CellSize = 32 };
+        Assert.True(source.HorizontalLines(bounds) > flat.HorizontalLines(bounds), "the shelves show rows the center cannot");
+    }
+
+    [Fact]
+    public void The_minimum_spacing_skips_shelf_lines_and_keeps_the_center()
+    {
+        var source = TerraceGrid(ends: false, shelfScale: 0.1);
+        var bounds = new Box(0, 0, 1200, 600);
+        var all = source.VerticalLines(bounds);
+        source.MinLineSpacing = 8;
+        var thinned = source.VerticalLines(bounds);
+        Assert.True(thinned < all, $"{thinned} of {all} columns");
+        var center = new CanvasGridSource { CellSize = 32 };
+        var flatColumns = 0;
+        for (var x = 180; x <= 1020; x += 32)
+        {
+            flatColumns++;
+        }
+
+        Assert.True(thinned >= flatColumns);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(8.0)]
+    public void A_separable_terrace_grid_writes_straight_lines_it_counts(double spacing)
+    {
+        var source = TerraceGrid(ends: true, 0.1);
+        source.Separable = true;
+        source.MinLineSpacing = spacing;
+        var bounds = new Box(0, 0, 1200, 600);
+        var count = source.VertexCount(bounds);
+        Assert.Equal((source.VerticalLines(bounds) + source.HorizontalLines(bounds)) * 6, count);
+        var vertices = new MeshVertex[count];
+        source.WriteVertices(bounds, vertices);
+        for (var i = 0; i < count; i += 6)
+        {
+            var straight = vertices[i].X == vertices[i + 5].X || vertices[i].Y == vertices[i + 1].Y;
+            Assert.True(straight, $"segment {i / 6} bends");
+        }
+    }
 }

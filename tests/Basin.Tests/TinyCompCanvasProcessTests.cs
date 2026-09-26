@@ -414,6 +414,91 @@ public sealed class TinyCompCanvasProcessTests
         };
     }
 
+    [Fact]
+    public void Terrace_mode_parks_on_the_shelf_and_a_shelf_change_keeps_the_outer_edge()
+    {
+        using var session = CanvasSession.Start(clientPath: SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("canvas mode terrace");
+        Assert.Equal("CANVASMODE view=0 window=terrace", session.WaitForLine("CANVASMODE "));
+        session.Send("park right");
+        Assert.Contains(" scale=0.400", session.WaitForLine("PARK "));
+        Thread.Sleep(400);
+        var parked = session.CanvasFields();
+        Assert.Equal("shelf", parked["region"]);
+        Assert.Equal(0.4, double.Parse(parked["k"], CultureInfo.InvariantCulture), 2);
+        var (_, _, before, _, home) = session.CanvasWindow();
+        Assert.NotEqual("none", home);
+        Assert.InRange(before.Right, 1276, 1280);
+
+        session.Send("shelf smaller");
+        Assert.Equal("SHELF view=0 side=right scale=0.35 from=0.40", session.WaitForLine("SHELF "));
+        Thread.Sleep(400);
+        var smaller = session.CanvasFields();
+        Assert.Equal("shelf", smaller["region"]);
+        Assert.Equal(0.35, double.Parse(smaller["k"], CultureInfo.InvariantCulture), 2);
+        var (_, _, after, _, _) = session.CanvasWindow();
+        Assert.True(Math.Abs(after.Right - before.Right) <= 2, $"the outer edge moved from {before} to {after}");
+        Assert.True(Math.Abs((after.Y + (after.Height / 2)) - (before.Y + (before.Height / 2))) <= 2, $"the center moved from {before} to {after}");
+        Assert.True(after.Width < before.Width, $"the window did not shrink: {before} to {after}");
+
+        session.Send("shelf");
+        Assert.Equal("SHELF view=0 window=terrace scales=0.40,0.35,0.40,0.40", session.WaitForLine("SHELF "));
+        session.Send("shelf reset");
+        Assert.Equal("SHELF view=0 side=right scale=0.40 from=0.35", session.WaitForLine("SHELF "));
+        session.Send("recall");
+        session.WaitForLine("RECALL ");
+        Thread.Sleep(400);
+        var recalled = session.CanvasFields();
+        Assert.Equal(home, recalled["canvas"]);
+        Assert.Equal("1.000", recalled["k"]);
+    }
+
+    [Fact]
+    public void A_shelf_step_on_a_warp_output_is_refused()
+    {
+        using var session = CanvasSession.Start();
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        session!.Send("shelf larger");
+        Assert.Equal("SHELF view=0 refused: window=warp", session.WaitForLine("SHELF "));
+        session.Send("canvas mode");
+        Assert.Equal("CANVASMODE view=0 window=scale", session.WaitForLine("CANVASMODE "));
+        session.Send("canvas mode");
+        Assert.Equal("CANVASMODE view=0 window=terrace", session.WaitForLine("CANVASMODE "));
+        session.Send("canvas mode");
+        Assert.Equal("CANVASMODE view=0 window=warp", session.WaitForLine("CANVASMODE "));
+    }
+
+    [Fact]
+    public void A_click_on_a_shelf_window_reaches_the_client_at_true_surface_coordinates()
+    {
+        using var session = CanvasSession.Start(
+            "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\nwindow = \"terrace\"\n", SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("park right");
+        session.WaitForLine("PARK ");
+        _ = session.Shot("shelf");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        var scale = session.CanvasScale();
+        Assert.InRange(scale, 0.3, 0.5);
+        foreach (var (fx, fy) in new[] { (0.5, 0.5), (0.2, 0.8), (0.9, 0.3) })
+        {
+            var x = Math.Round(screen.X + (screen.Width * fx), 2);
+            var y = Math.Round(screen.Y + (screen.Height * fy), 2);
+            session.Send(string.Create(CultureInfo.InvariantCulture, $"move {x} {y}"));
+            session.Send("button 272 1");
+            session.Send("button 272 0");
+            var line = session.WaitForClientLine("BUTTON ");
+            Assert.NotNull(line);
+            var parts = line!.Split(' ');
+            var localX = double.Parse(parts[2], CultureInfo.InvariantCulture);
+            var localY = double.Parse(parts[3], CultureInfo.InvariantCulture);
+            Assert.True(
+                Math.Abs(localX - ((x - screen.X) / scale)) < 4.0 && Math.Abs(localY - ((y - screen.Y) / scale)) < 4.0,
+                $"a click at ({x},{y}) reached ({localX},{localY}) on a window drawn at {screen} and {scale}");
+        }
+    }
+
     private static string? SsdWin([CallerFilePath] string sourcePath = "") => WlClient("ssdwin", sourcePath);
 
     private static string? WlClient(string name, string sourcePath)
@@ -649,6 +734,24 @@ public sealed class TinyCompCanvasProcessTests
             Assert.True(at > 0, line);
             var end = line.IndexOf(' ', at + 1);
             return double.Parse(line[(at + 7)..(end < 0 ? line.Length : end)], CultureInfo.InvariantCulture);
+        }
+
+        public Dictionary<string, string> CanvasFields()
+        {
+            Send("where");
+            var line = WaitForLine("CANVASWIN ");
+            Assert.NotNull(line);
+            var fields = new Dictionary<string, string>();
+            foreach (var part in line!.Split(' '))
+            {
+                var equals = part.IndexOf('=');
+                if (equals > 0)
+                {
+                    fields[part[..equals]] = part[(equals + 1)..];
+                }
+            }
+
+            return fields;
         }
 
         public (int X, int Y, Box Screen, bool Deformed, string Home) CanvasWindow()

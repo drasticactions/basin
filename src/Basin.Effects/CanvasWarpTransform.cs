@@ -14,6 +14,9 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
     private double _maxFan = double.PositiveInfinity;
     private double _maxColumnFan = double.PositiveInfinity;
     private double _cornerRadius = 1.0;
+    private double _preScale = 1.0;
+    private double _stretchX = 1.0;
+    private double _stretchY = 1.0;
 
     public CanvasWarp? Left { get; set; }
 
@@ -26,6 +29,30 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
     public int SceneX { get; set; }
 
     public int SceneY { get; set; }
+
+    public double PreScale
+    {
+        get => _preScale;
+        set => _preScale = value > 0 && double.IsFinite(value) ? Math.Min(value, 1.0) : 1.0;
+    }
+
+    public double PreStretchX
+    {
+        get => _stretchX;
+        set => _stretchX = value > 0 && double.IsFinite(value) ? Math.Min(value, 1.0) : 1.0;
+    }
+
+    public double PreStretchY
+    {
+        get => _stretchY;
+        set => _stretchY = value > 0 && double.IsFinite(value) ? Math.Min(value, 1.0) : 1.0;
+    }
+
+    public bool Separable { get; set; }
+
+    public double PreAnchorX { get; set; }
+
+    public double PreAnchorY { get; set; }
 
     public double MaxFan
     {
@@ -98,8 +125,39 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             ? side.Center + ((screenY - side.Center) / RowFan(side, side.FanAtScreen(screenX), side.DepthAtScreen(screenX)))
             : screenY;
 
-    public (double X, double Y) ToScreenPoint(double canvasX, double canvasY)
+    public (double X, double Y) ToScreenPoint(double canvasX, double canvasY) => Warp(PreX(canvasX), PreY(canvasY));
+
+    public (double X, double Y) ToCanvasPoint(double screenX, double screenY)
     {
+        var (x, y) = Unwarp(screenX, screenY);
+        return (UnPreX(x), UnPreY(y));
+    }
+
+    public (double X, double Y) LocalScale(double canvasX, double canvasY) =>
+        (Math.Min(Left?.ScaleAt(canvasX) ?? 1.0, Right?.ScaleAt(canvasX) ?? 1.0),
+         Math.Min(Top?.ScaleAt(canvasY) ?? 1.0, Bottom?.ScaleAt(canvasY) ?? 1.0));
+
+    private double FactorX => _preScale * _stretchX;
+
+    private double FactorY => _preScale * _stretchY;
+
+    private double PreX(double x) => FactorX == 1.0 ? x : PreAnchorX + ((x - PreAnchorX) * FactorX);
+
+    private double PreY(double y) => FactorY == 1.0 ? y : PreAnchorY + ((y - PreAnchorY) * FactorY);
+
+    private double UnPreX(double x) => FactorX == 1.0 ? x : PreAnchorX + ((x - PreAnchorX) / FactorX);
+
+    private double UnPreY(double y) => FactorY == 1.0 ? y : PreAnchorY + ((y - PreAnchorY) / FactorY);
+
+    private (double X, double Y) Warp(double canvasX, double canvasY)
+    {
+        if (Separable)
+        {
+            return (
+                SideAt(canvasX) is { } flatSide ? flatSide.ToScreen(canvasX) : canvasX,
+                EndAt(canvasY) is { } flatEnd ? flatEnd.ToScreen(canvasY) : canvasY);
+        }
+
         var side = SideAt(canvasX);
         var end = EndAt(canvasY);
         if (end is null)
@@ -139,8 +197,15 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             ring.RimY + (sin * (ring.EdgeY - ring.RimY)));
     }
 
-    public (double X, double Y) ToCanvasPoint(double screenX, double screenY)
+    private (double X, double Y) Unwarp(double screenX, double screenY)
     {
+        if (Separable)
+        {
+            return (
+                SideAtScreen(screenX) is { } flatSide ? flatSide.ToCanvas(screenX) : screenX,
+                EndAtScreen(screenY) is { } flatEnd ? flatEnd.ToCanvas(screenY) : screenY);
+        }
+
         var side = SideAtScreen(screenX);
         var canvasY = screenY;
         if (side is not null)
@@ -176,8 +241,8 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
 
     public bool IsIdentityFor(in Box childBounds)
     {
-        var x0 = SceneX + childBounds.X;
-        var x1 = SceneX + childBounds.Right;
+        var x0 = PreX(SceneX + childBounds.X);
+        var x1 = PreX(SceneX + childBounds.Right);
         if (Left is { } left && (left.ContainsCanvas(x0) || left.ContainsCanvas(x1)))
         {
             return false;
@@ -188,8 +253,8 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return false;
         }
 
-        var y0 = SceneY + childBounds.Y;
-        var y1 = SceneY + childBounds.Bottom;
+        var y0 = PreY(SceneY + childBounds.Y);
+        var y1 = PreY(SceneY + childBounds.Bottom);
         if (Top is { } top && (top.ContainsCanvas(y0) || top.ContainsCanvas(y1)))
         {
             return false;
@@ -203,6 +268,110 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return true;
     }
 
+    public bool IsPastFeet(in Box childBounds)
+    {
+        var x0 = PreX(SceneX + childBounds.X);
+        var x1 = PreX(SceneX + childBounds.Right);
+        var y0 = PreY(SceneY + childBounds.Y);
+        var y1 = PreY(SceneY + childBounds.Bottom);
+        var held = false;
+        return PastFoot(Left, x0, x1, ref held) && PastFoot(Right, x0, x1, ref held) &&
+            PastFoot(Top, y0, y1, ref held) && PastFoot(Bottom, y0, y1, ref held) && held;
+    }
+
+    public RenderTransform ShelfPlacement(in Box childBounds)
+    {
+        var x0 = PreX(SceneX + childBounds.X);
+        var x1 = PreX(SceneX + childBounds.Right);
+        var y0 = PreY(SceneY + childBounds.Y);
+        var y1 = PreY(SceneY + childBounds.Bottom);
+        var side = Holding(Left, Right, x0, x1);
+        var end = Holding(Top, Bottom, y0, y1);
+        var fx = FactorX;
+        var fy = FactorY;
+        if (Separable)
+        {
+            var kx = side?.EdgeScale ?? 1.0;
+            var bx = side is null ? 0.0 : side.Foot - (kx * side.FarEdge);
+            var ky = end?.EdgeScale ?? 1.0;
+            var by = end is null ? 0.0 : end.Foot - (ky * end.FarEdge);
+            return new RenderTransform(
+                kx * fx, 0, bx + (kx * PreAnchorX * (1.0 - fx)),
+                0, ky * fy, by + (ky * PreAnchorY * (1.0 - fy)),
+                0, 0, 1);
+        }
+
+        if (side is not null && end is not null)
+        {
+            var innerX = side.Direction < 0 ? x1 : x0;
+            var innerY = end.Direction < 0 ? y1 : y0;
+            var (screenX, screenY) = Warp(innerX, innerY);
+            return CanvasScale.About(
+                Math.Min(side.EdgeScale, end.EdgeScale) * _preScale, UnPreX(innerX), UnPreY(innerY), screenX, screenY);
+        }
+
+        if (side is not null)
+        {
+            var k = side.EdgeScale;
+            return new RenderTransform(
+                k * fx, 0, side.Foot - (k * side.FarEdge) + (k * PreAnchorX * (1.0 - fx)),
+                0, k * fy, (side.Center * (1.0 - k)) + (k * PreAnchorY * (1.0 - fy)),
+                0, 0, 1);
+        }
+
+        if (end is not null)
+        {
+            var k = end.EdgeScale;
+            return new RenderTransform(
+                k * fx, 0, (end.Center * (1.0 - k)) + (k * PreAnchorX * (1.0 - fx)),
+                0, k * fy, end.Foot - (k * end.FarEdge) + (k * PreAnchorY * (1.0 - fy)),
+                0, 0, 1);
+        }
+
+        return fx == 1.0 && fy == 1.0
+            ? RenderTransform.Identity
+            : new RenderTransform(
+                fx, 0, PreAnchorX * (1.0 - fx),
+                0, fy, PreAnchorY * (1.0 - fy),
+                0, 0, 1);
+    }
+
+    public (double X, double Y) AxisStretch(double canvasX, double canvasY)
+    {
+        const double step = 0.5;
+        var right = Warp(canvasX + step, canvasY).X - Warp(canvasX - step, canvasY).X;
+        var down = Warp(canvasX, canvasY + step).Y - Warp(canvasX, canvasY - step).Y;
+        return (Math.Max(right / (2.0 * step), 0.01), Math.Max(down / (2.0 * step), 0.01));
+    }
+
+    public RenderTransform FlatPlacement()
+    {
+        var (localX, localY) = LocalScale(PreAnchorX, PreAnchorY);
+        var (screenX, screenY) = Warp(PreAnchorX, PreAnchorY);
+        return CanvasScale.About(Math.Min(localX, localY) * _preScale, PreAnchorX, PreAnchorY, screenX, screenY);
+    }
+
+    private static bool PastFoot(CanvasWarp? warp, double start, double end, ref bool held)
+    {
+        if (warp is not { IsIdentity: false } zone || !(zone.ContainsCanvas(start) || zone.ContainsCanvas(end)))
+        {
+            return true;
+        }
+
+        held = true;
+        if (!zone.Terrace)
+        {
+            return false;
+        }
+
+        return zone.Direction < 0 ? end <= zone.FarEdge : start >= zone.FarEdge;
+    }
+
+    private static CanvasWarp? Holding(CanvasWarp? low, CanvasWarp? high, double start, double end) =>
+        low is { IsIdentity: false } && (low.ContainsCanvas(start) || low.ContainsCanvas(end)) ? low
+        : high is { IsIdentity: false } && (high.ContainsCanvas(start) || high.ContainsCanvas(end)) ? high
+        : null;
+
     public Box MapBounds(in Box childBounds)
     {
         if (childBounds.IsEmpty)
@@ -210,10 +379,10 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return childBounds;
         }
 
-        var x0 = SceneX + childBounds.X;
-        var x1 = SceneX + childBounds.Right;
-        var y0 = SceneY + childBounds.Y;
-        var y1 = SceneY + childBounds.Bottom;
+        var x0 = PreX(SceneX + childBounds.X);
+        var x1 = PreX(SceneX + childBounds.Right);
+        var y0 = PreY(SceneY + childBounds.Y);
+        var y1 = PreY(SceneY + childBounds.Bottom);
         var (leftSeam, rightSeam) = ColumnSpan();
         var (topSeam, bottomSeam) = RowSpan(y0, y1);
         var minX = double.PositiveInfinity;
@@ -226,7 +395,7 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             var column = x0;
             while (true)
             {
-                var (x, y) = ToScreenPoint(column, row);
+                var (x, y) = Warp(column, row);
                 minX = Math.Min(minX, x);
                 maxX = Math.Max(maxX, x);
                 minY = Math.Min(minY, y);
@@ -261,10 +430,10 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return 0;
         }
 
-        var x0 = SceneX + childBounds.X;
-        var x1 = SceneX + childBounds.Right;
-        var y0 = SceneY + childBounds.Y;
-        var y1 = SceneY + childBounds.Bottom;
+        var x0 = PreX(SceneX + childBounds.X);
+        var x1 = PreX(SceneX + childBounds.Right);
+        var y0 = PreY(SceneY + childBounds.Y);
+        var y1 = PreY(SceneY + childBounds.Bottom);
         var (leftSeam, rightSeam) = ColumnSpan();
         var (topSeam, bottomSeam) = RowSpan(y0, y1);
         return Spans(x0, x1, leftSeam, rightSeam) * Spans(y0, y1, topSeam, bottomSeam) * 6;
@@ -277,10 +446,10 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return;
         }
 
-        var x0 = SceneX + childBounds.X;
-        var x1 = SceneX + childBounds.Right;
-        var y0 = SceneY + childBounds.Y;
-        var y1 = SceneY + childBounds.Bottom;
+        var x0 = PreX(SceneX + childBounds.X);
+        var x1 = PreX(SceneX + childBounds.Right);
+        var y0 = PreY(SceneY + childBounds.Y);
+        var y1 = PreY(SceneY + childBounds.Bottom);
         var (leftSeam, rightSeam) = ColumnSpan();
         var (topSeam, bottomSeam) = RowSpan(y0, y1);
         var count = 0;
@@ -561,14 +730,14 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return (leftSeam, Math.Max(leftSeam, rightSeam));
     }
 
-    private (int Start, int End) RowSpan(int y0, int y1)
+    private (double Start, double End) RowSpan(double y0, double y1)
     {
         var start = Top is { IsIdentity: false } top ? Math.Clamp(top.Seam, y0, y1) : y0;
         var end = Bottom is { IsIdentity: false } bottom ? Math.Clamp(bottom.Seam, y0, y1) : y1;
         return (start, Math.Max(start, end));
     }
 
-    private int NextEdge(int cursor, int end, int flatStart, int flatEnd)
+    private double NextEdge(double cursor, double end, double flatStart, double flatEnd)
     {
         if (cursor < flatStart)
         {
@@ -583,7 +752,7 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return Math.Min(end, cursor + _cellSize);
     }
 
-    private int Spans(int start, int end, int flatStart, int flatEnd)
+    private int Spans(double start, double end, double flatStart, double flatEnd)
     {
         var count = 0;
         var cursor = start;
@@ -596,18 +765,18 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return count;
     }
 
-    private void Emit(int canvasLeft, int canvasRight, int canvasTop, int canvasBottom, int index, Span<MeshVertex> into)
+    private void Emit(double canvasLeft, double canvasRight, double canvasTop, double canvasBottom, int index, Span<MeshVertex> into)
     {
-        var (topLeftX, topLeftY) = ToScreenPoint(canvasLeft, canvasTop);
-        var (topRightX, topRightY) = ToScreenPoint(canvasRight, canvasTop);
-        var (bottomRightX, bottomRightY) = ToScreenPoint(canvasRight, canvasBottom);
-        var (bottomLeftX, bottomLeftY) = ToScreenPoint(canvasLeft, canvasBottom);
+        var (topLeftX, topLeftY) = Warp(canvasLeft, canvasTop);
+        var (topRightX, topRightY) = Warp(canvasRight, canvasTop);
+        var (bottomRightX, bottomRightY) = Warp(canvasRight, canvasBottom);
+        var (bottomLeftX, bottomLeftY) = Warp(canvasLeft, canvasBottom);
         MeshGrid.WriteCell(
             into.Slice(index * 6, 6),
-            canvasLeft - SceneX,
-            canvasTop - SceneY,
-            canvasRight - SceneX,
-            canvasBottom - SceneY,
+            (float)(UnPreX(canvasLeft) - SceneX),
+            (float)(UnPreY(canvasTop) - SceneY),
+            (float)(UnPreX(canvasRight) - SceneX),
+            (float)(UnPreY(canvasBottom) - SceneY),
             ((float)(topLeftX - SceneX), (float)(topLeftY - SceneY)),
             ((float)(topRightX - SceneX), (float)(topRightY - SceneY)),
             ((float)(bottomRightX - SceneX), (float)(bottomRightY - SceneY)),

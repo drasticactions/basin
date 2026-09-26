@@ -22,6 +22,22 @@ internal sealed class CanvasSetting
 
     public const double DefaultScaleReach = 1.0;
 
+    public const double DefaultTerraceZone = 0.08;
+
+    public const double DefaultShelf = 0.10;
+
+    public const double DefaultShelfScale = 0.4;
+
+    public const double DefaultShelfMinScale = 0.2;
+
+    public const double DefaultShelfStep = 0.05;
+
+    public const double MinShelfScale = 0.1;
+
+    public const double MaxShelfScale = 0.9;
+
+    private const double MaxTerraceReach = 0.45;
+
     public bool? Enable { get; init; }
 
     public double? Zone { get; init; }
@@ -54,10 +70,23 @@ internal sealed class CanvasSetting
 
     public double? ScaleReach { get; init; }
 
+    public double? Shelf { get; init; }
+
+    public ShelfScales? ShelfScale { get; init; }
+
+    public double? ShelfMinScale { get; init; }
+
+    public double? ShelfStep { get; init; }
+
+    public ShelfShape? Shape { get; init; }
+
+    public SlopeWindow? OnSlope { get; init; }
+
+    public CanvasDrag? Drag { get; init; }
+
     public static CanvasSetting Defaults { get; } = new()
     {
         Enable = false,
-        Zone = DefaultZone,
         Extension = DefaultExtension,
         EdgeScale = DefaultEdgeScale,
         Slope = DefaultSlope,
@@ -72,11 +101,51 @@ internal sealed class CanvasSetting
         Window = CanvasWindowMode.Warp,
         MinScale = DefaultMinScale,
         ScaleReach = DefaultScaleReach,
+        Shelf = DefaultShelf,
+        ShelfScale = ShelfScales.All(DefaultShelfScale),
+        ShelfMinScale = DefaultShelfMinScale,
+        ShelfStep = DefaultShelfStep,
+        Shape = ShelfShape.Square,
+        OnSlope = SlopeWindow.Bend,
+        Drag = CanvasDrag.Cursor,
     };
 
     public bool Enabled => Enable ?? false;
 
-    public double ZoneFraction => Zone ?? DefaultZone;
+    public double ZoneFraction => ZoneFractionFor(WindowMode);
+
+    public double ZoneFractionFor(CanvasWindowMode mode) => Zone ?? (mode == CanvasWindowMode.Terrace ? DefaultTerraceZone : DefaultZone);
+
+    public double ShelfFraction => Shelf ?? DefaultShelf;
+
+    public ShelfScales ShelfScaleValues => ShelfScale ?? ShelfScales.All(DefaultShelfScale);
+
+    public double ShelfMinScaleValue => ShelfMinScale ?? DefaultShelfMinScale;
+
+    public double ShelfStepValue => ShelfStep ?? DefaultShelfStep;
+
+    public ShelfShape ShapeValue => Shape ?? ShelfShape.Square;
+
+    public string ShapeName => ShapeValue == ShelfShape.Flat ? "flat" : "square";
+
+    public SlopeWindow OnSlopeValue => OnSlope ?? SlopeWindow.Bend;
+
+    public string OnSlopeName => OnSlopeValue == SlopeWindow.Flat ? "flat" : "bend";
+
+    public CanvasDrag DragValue => Drag ?? CanvasDrag.Cursor;
+
+    public string DragName => DragValue == CanvasDrag.Grid ? "grid" : "cursor";
+
+    public (double Zone, double Shelf) TerraceFractions
+    {
+        get
+        {
+            var zone = ZoneFractionFor(CanvasWindowMode.Terrace);
+            var shelf = ShelfFraction;
+            var reach = zone + shelf;
+            return reach > MaxTerraceReach ? (zone * MaxTerraceReach / reach, shelf * MaxTerraceReach / reach) : (zone, shelf);
+        }
+    }
 
     public double ExtensionFraction => Extension ?? DefaultExtension;
 
@@ -102,7 +171,14 @@ internal sealed class CanvasSetting
 
     public CanvasWindowMode WindowMode => Window ?? CanvasWindowMode.Warp;
 
-    public string WindowName => WindowMode == CanvasWindowMode.Scale ? "scale" : "warp";
+    public string WindowName => NameOf(WindowMode);
+
+    public static string NameOf(CanvasWindowMode mode) => mode switch
+    {
+        CanvasWindowMode.Scale => "scale",
+        CanvasWindowMode.Terrace => "terrace",
+        _ => "warp",
+    };
 
     public double MinScaleValue => MinScale ?? DefaultMinScale;
 
@@ -180,6 +256,13 @@ internal sealed class CanvasSetting
         Window = Window ?? fallback.Window,
         MinScale = MinScale ?? fallback.MinScale,
         ScaleReach = ScaleReach ?? fallback.ScaleReach,
+        Shelf = Shelf ?? fallback.Shelf,
+        ShelfScale = ShelfScale ?? fallback.ShelfScale,
+        ShelfMinScale = ShelfMinScale ?? fallback.ShelfMinScale,
+        ShelfStep = ShelfStep ?? fallback.ShelfStep,
+        Shape = Shape ?? fallback.Shape,
+        OnSlope = OnSlope ?? fallback.OnSlope,
+        Drag = Drag ?? fallback.Drag,
     };
 
     public static CanvasSetting Parse(TomlTable table, string section, BasinLogger log)
@@ -201,6 +284,13 @@ internal sealed class CanvasSetting
         CanvasWindowMode? window = null;
         double? minScale = null;
         double? scaleReach = null;
+        double? shelf = null;
+        ShelfScales? shelfScale = null;
+        double? shelfMinScale = null;
+        double? shelfStep = null;
+        ShelfShape? shelfShape = null;
+        SlopeWindow? onSlope = null;
+        CanvasDrag? drag = null;
         foreach (var (key, value) in table)
         {
             switch (key)
@@ -273,11 +363,12 @@ internal sealed class CanvasSetting
                     {
                         "warp" => CanvasWindowMode.Warp,
                         "scale" => CanvasWindowMode.Scale,
+                        "terrace" => CanvasWindowMode.Terrace,
                         _ => null,
                     };
                     if (window is null)
                     {
-                        log.Warn($"[{section}] window \"{mode}\" is not warp|scale, keeping warp");
+                        log.Warn($"[{section}] window \"{mode}\" is not warp|scale|terrace, keeping warp");
                         window = CanvasWindowMode.Warp;
                     }
 
@@ -287,6 +378,60 @@ internal sealed class CanvasSetting
                     break;
                 case "scale_reach" when Fraction(value) is { } reach:
                     scaleReach = Math.Clamp(reach, 1.0, 16.0);
+                    break;
+                case "shelf" when Fraction(value) is { } shelfValue:
+                    shelf = Math.Clamp(shelfValue, 0.02, 0.4);
+                    break;
+                case "shelf_scale" when Fraction(value) is { } every:
+                    shelfScale = ShelfScales.All(Math.Clamp(every, MinShelfScale, MaxShelfScale));
+                    break;
+                case "shelf_scale" when value is TomlTable sideScales:
+                    shelfScale = ParseShelfScales(sideScales, section, log);
+                    break;
+                case "shelf_min_scale" when Fraction(value) is { } shelfFloor:
+                    shelfMinScale = Math.Clamp(shelfFloor, 0.01, 1.0);
+                    break;
+                case "shelf_step" when Fraction(value) is { } step:
+                    shelfStep = Math.Clamp(step, 0.01, 0.5);
+                    break;
+                case "shelf_shape" when value is string shapeName:
+                    shelfShape = shapeName switch
+                    {
+                        "square" => ShelfShape.Square,
+                        "flat" => ShelfShape.Flat,
+                        _ => null,
+                    };
+                    if (shelfShape is null)
+                    {
+                        log.Warn($"[{section}] shelf_shape \"{shapeName}\" is not square|flat, ignored");
+                    }
+
+                    break;
+                case "slope_window" when value is string slopeName:
+                    onSlope = slopeName switch
+                    {
+                        "bend" => SlopeWindow.Bend,
+                        "flat" => SlopeWindow.Flat,
+                        _ => null,
+                    };
+                    if (onSlope is null)
+                    {
+                        log.Warn($"[{section}] slope_window \"{slopeName}\" is not bend|flat, ignored");
+                    }
+
+                    break;
+                case "drag" when value is string dragName:
+                    drag = dragName switch
+                    {
+                        "cursor" => CanvasDrag.Cursor,
+                        "grid" => CanvasDrag.Grid,
+                        _ => null,
+                    };
+                    if (drag is null)
+                    {
+                        log.Warn($"[{section}] drag \"{dragName}\" is not cursor|grid, ignored");
+                    }
+
                     break;
                 case "sides" when value is TomlArray list:
                     sides = ParseSides(list, section, log);
@@ -315,6 +460,13 @@ internal sealed class CanvasSetting
             Window = window,
             MinScale = minScale,
             ScaleReach = scaleReach,
+            Shelf = shelf,
+            ShelfScale = shelfScale,
+            ShelfMinScale = shelfMinScale,
+            ShelfStep = shelfStep,
+            Shape = shelfShape,
+            OnSlope = onSlope,
+            Drag = drag,
         };
         if (corner is { } shaped && cornerRadius is { } exact && shaped != exact)
         {
@@ -327,12 +479,76 @@ internal sealed class CanvasSetting
             log.Warn($"[{section}] min_scale {dead} is below edge_scale {constrained.EdgeScaleValue:F3} and has no effect");
         }
 
+        if (shelfMinScale is not null || shelfScale is not null)
+        {
+            var floor = constrained.ShelfMinScaleValue;
+            var scales = constrained.ShelfScaleValues;
+            var off = CanvasSide.None;
+            foreach (var side in (ReadOnlySpan<CanvasSide>)[CanvasSide.Left, CanvasSide.Right, CanvasSide.Top, CanvasSide.Bottom])
+            {
+                if (floor >= scales.For(side))
+                {
+                    off |= side;
+                }
+            }
+
+            if (off != CanvasSide.None)
+            {
+                log.Warn($"[{section}] shelf_min_scale {floor} is at or above shelf_scale on {NamesOf(off)}: the fit shrink is off there");
+            }
+        }
+
         return constrained;
+    }
+
+    private static ShelfScales ParseShelfScales(TomlTable table, string section, BasinLogger log)
+    {
+        var left = DefaultShelfScale;
+        var right = DefaultShelfScale;
+        var top = DefaultShelfScale;
+        var bottom = DefaultShelfScale;
+        foreach (var (key, value) in table)
+        {
+            if (Fraction(value) is not { } scale)
+            {
+                log.Warn($"[{section}] shelf_scale.{key} is not a number, ignored");
+                continue;
+            }
+
+            scale = Math.Clamp(scale, MinShelfScale, MaxShelfScale);
+            switch (key)
+            {
+                case "left":
+                    left = scale;
+                    break;
+                case "right":
+                    right = scale;
+                    break;
+                case "top":
+                    top = scale;
+                    break;
+                case "bottom":
+                    bottom = scale;
+                    break;
+                default:
+                    log.Warn($"[{section}] shelf_scale.{key} is not left|right|top|bottom, ignored");
+                    break;
+            }
+        }
+
+        return new ShelfScales(left, right, top, bottom);
     }
 
     public CanvasSetting Constrained(string section, BasinLogger log)
     {
-        var zone = ZoneFraction;
+        if (WindowMode == CanvasWindowMode.Terrace &&
+            ZoneFractionFor(CanvasWindowMode.Terrace) + ShelfFraction > MaxTerraceReach)
+        {
+            var (fitZone, fitShelf) = TerraceFractions;
+            log.Warn($"[{section}] shelf {ShelfFraction} and zone {ZoneFractionFor(CanvasWindowMode.Terrace)} leave no flat center, scaling them to {fitShelf:F3} and {fitZone:F3}");
+        }
+
+        var zone = ZoneFractionFor(CanvasWindowMode.Warp);
         var extension = ExtensionFraction;
         var edge = EdgeScaleValue;
         if (extension < zone)
@@ -371,6 +587,13 @@ internal sealed class CanvasSetting
             Window = Window,
             MinScale = MinScale,
             ScaleReach = ScaleReach,
+            Shelf = Shelf,
+            ShelfScale = ShelfScale,
+            ShelfMinScale = ShelfMinScale,
+            ShelfStep = ShelfStep,
+            Shape = Shape,
+            OnSlope = OnSlope,
+            Drag = Drag,
         };
     }
 

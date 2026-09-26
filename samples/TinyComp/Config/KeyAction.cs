@@ -24,4 +24,8 @@ internal enum KeyAction
     ParkUp,
     ParkDown,
     Recall,
+    ShelfSmaller,
+    ShelfLarger,
+    ShelfReset,
+    CanvasMode,
 }

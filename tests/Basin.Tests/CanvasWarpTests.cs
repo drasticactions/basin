@@ -150,4 +150,94 @@ public sealed class CanvasWarpTests
         Assert.False(warp.ContainsCanvas(-200));
         Assert.False(warp.Layout(0, -1, 0, 500, 0.2));
     }
+
+    private static CanvasWarp RightTerrace(double scale = 0.4, double slope = 0.25)
+    {
+        var warp = new CanvasWarp(1);
+        Assert.True(warp.LayoutTerrace(
+            seam: 3440 - 344 - 275, direction: 1, zoneWidth: 275, shelfWidth: 344, shelfScale: scale,
+            exponent: CanvasWarp.TerraceExponent, slope: slope, center: 720));
+        return warp;
+    }
+
+    [Fact]
+    public void A_terrace_derives_its_extension_so_the_slope_ends_at_the_foot()
+    {
+        for (var tenth = 1; tenth <= 9; tenth++)
+        {
+            var scale = tenth / 10.0;
+            var warp = RightTerrace(scale);
+            Assert.True(warp.Terrace);
+            Assert.Equal(CanvasWarp.TerraceExtension(275, scale, CanvasWarp.TerraceExponent), warp.Extension);
+            Assert.Equal(warp.Foot, warp.ToScreen(warp.FarEdge), 6);
+            Assert.Equal(3440, warp.OuterEdge);
+            Assert.Equal(scale, warp.EdgeScale, 9);
+            Assert.InRange(warp.Exponent, 1.8, 2.2);
+        }
+
+        Assert.Equal(458, CanvasWarp.TerraceExtension(275, 0.4, 2.0));
+    }
+
+    [Fact]
+    public void A_terrace_scale_and_fan_are_smooth_at_the_foot()
+    {
+        foreach (var slope in new[] { 0.25, 0.0, -0.4 })
+        {
+            var warp = RightTerrace(slope: slope);
+            var far = warp.FarEdge;
+            var inside = (warp.ToScreen(far) - warp.ToScreen(far - 0.5)) / 0.5;
+            var outside = (warp.ToScreen(far + 0.5) - warp.ToScreen(far)) / 0.5;
+            Assert.True(Math.Abs(inside - outside) < 1e-3, $"slope {slope}: {inside} against {outside}");
+            Assert.True(Math.Abs(warp.ScaleAt(far - 0.5) - warp.ScaleAt(far + 0.5)) < 1e-3);
+            var fanInside = (warp.FanAt(far) - warp.FanAt(far - 0.5)) / 0.5;
+            var fanOutside = (warp.FanAt(far + 0.5) - warp.FanAt(far)) / 0.5;
+            Assert.True(Math.Abs(fanInside - fanOutside) < 1e-3, $"slope {slope}: fan {fanInside} against {fanOutside}");
+        }
+    }
+
+    [Fact]
+    public void A_terrace_shelf_is_a_uniform_scale_that_inverts()
+    {
+        var warp = RightTerrace();
+        for (var depth = 0; depth < 2000; depth += 37)
+        {
+            var x = warp.FarEdge + depth;
+            Assert.Equal(warp.Foot + (0.4 * depth), warp.ToScreen(x), 6);
+            Assert.Equal(720 + ((100 - 720) * 0.4), warp.ToScreenY(x, 100), 6);
+            Assert.Equal(x, warp.ToCanvas(warp.ToScreen(x)), 6);
+            Assert.Equal(100, warp.ToCanvasY(warp.ToScreen(x), warp.ToScreenY(x, 100)), 6);
+        }
+    }
+
+    [Fact]
+    public void The_terrace_fan_runs_from_one_to_the_shelf_scale_and_the_slope_bows_it()
+    {
+        var warp = RightTerrace();
+        Assert.Equal(1.0, warp.FanAt(warp.Seam), 9);
+        Assert.Equal(0.4, warp.FanAt(warp.FarEdge), 9);
+        Assert.Equal(0.4, warp.FanAt(warp.FarEdge + 500), 9);
+        Assert.Equal(0.95, CanvasWarp.TerraceFan(0.5, 0.4, 0.25), 9);
+        Assert.True(CanvasWarp.TerraceFan(0.5, 0.4, 0.25) > CanvasWarp.TerraceFan(0.5, 0.4, 0.0));
+        Assert.True(CanvasWarp.TerraceFan(0.5, 0.4, -0.3) < CanvasWarp.TerraceFan(0.5, 0.4, 0.0));
+
+        var clamped = RightTerrace(slope: -0.9);
+        Assert.True(clamped.Slope > -0.9, $"the slope {clamped.Slope} was not clamped");
+        Assert.InRange(clamped.Slope, -0.65, -0.55);
+        Assert.True(clamped.MinFan >= CanvasWarp.MinTerraceFan - 1e-9, $"the fan falls to {clamped.MinFan}");
+        for (var x = clamped.Seam; x <= clamped.FarEdge; x++)
+        {
+            Assert.True(clamped.FanAt(x) >= CanvasWarp.MinTerraceFan - 1e-4);
+        }
+    }
+
+    [Fact]
+    public void Laying_out_warp_after_terrace_restores_the_warp_curve()
+    {
+        var warp = RightTerrace();
+        Assert.True(warp.Layout(seam: 3440 - 413, direction: 1, zoneWidth: 413, extension: 1720, edgeScale: 0.2));
+        Assert.False(warp.Terrace);
+        Assert.Equal(0, warp.ShelfWidth);
+        Assert.Equal(18.94, warp.Exponent, 2);
+        Assert.Equal(1.0, warp.FanAt(warp.FarEdge + 10), 9);
+    }
 }

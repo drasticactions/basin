@@ -72,4 +72,28 @@ internal sealed class CanvasWindowState
     public bool OfferRefused { get; set; }
 
     public RenderTransform BlendFrom { get; set; } = RenderTransform.Identity;
+
+    public double Fit { get; set; } = 1.0;
+
+    public CanvasRegion Region { get; set; }
+
+    public double AppliedFit { get; set; } = 1.0;
+
+    public double AppliedAnchorX { get; set; }
+
+    public double AppliedAnchorY { get; set; }
+
+    public bool ShelfPinned { get; set; }
+
+    public bool ResizeHeldScale { get; set; }
+
+    public double DragFieldX { get; set; }
+
+    public double DragFieldY { get; set; }
+
+    public CanvasSide PinSide { get; set; }
+
+    public double PinOuter { get; set; }
+
+    public double PinCenter { get; set; }
 }

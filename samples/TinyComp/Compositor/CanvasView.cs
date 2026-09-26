@@ -21,6 +21,19 @@ internal sealed class CanvasView
 
     public bool Scales => Mode == CanvasWindowMode.Scale;
 
+    public bool Terraces => Mode == CanvasWindowMode.Terrace;
+
+    public CanvasWindowMode? ModeOverride { get; set; }
+
+    public double[] ShelfOverride { get; } = [double.NaN, double.NaN, double.NaN, double.NaN];
+
+    public double[] ShelfTarget { get; } = [double.NaN, double.NaN, double.NaN, double.NaN];
+
+    public CanvasMotion[] ShelfMotion { get; } = [new(), new(), new(), new()];
+
+    public bool ShelfAnimating =>
+        ShelfMotion[0].IsRunning || ShelfMotion[1].IsRunning || ShelfMotion[2].IsRunning || ShelfMotion[3].IsRunning;
+
     public SceneMesh? Grid { get; set; }
 
     public CanvasGridSource? GridSource { get; set; }

@@ -583,7 +583,7 @@ internal sealed partial class TinyComp
                 {
                     var content = window.ScaleBox;
                     if (_canvasStates.TryGetValue(window, out var scaled) && !scaled.Placement.IsIdentity &&
-                        ViewOfWindow(window) is { Canvas.Scales: true })
+                        ViewOfWindow(window) is { Canvas: { Scales: true } or { Terraces: true } })
                     {
                         var (drawnX, drawnY) = scaled.Placement.Map(content.X, content.Y);
                         x += (int)Math.Round(drawnX);

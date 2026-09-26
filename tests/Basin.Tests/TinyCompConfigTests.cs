@@ -261,7 +261,7 @@ public sealed class TinyCompConfigTests : IDisposable
 
         var unknown = TinyComp.Config.Load(Write("[canvas]\nwindow = \"bend\"\n"), log, out _).Canvas;
         Assert.Equal(TinyComp.CanvasWindowMode.Warp, unknown.WindowMode);
-        Assert.Contains(_lines, line => line.Contains("window \"bend\" is not warp|scale, keeping warp", StringComparison.Ordinal));
+        Assert.Contains(_lines, line => line.Contains("window \"bend\" is not warp|scale|terrace, keeping warp", StringComparison.Ordinal));
 
         var dead = TinyComp.Config.Load(Write("[canvas]\nedge_scale = 0.2\nmin_scale = 0.1\n"), log, out _).Canvas;
         Assert.Equal(0.1, dead.MinScaleValue, 9);
@@ -270,6 +270,89 @@ public sealed class TinyCompConfigTests : IDisposable
         var off = TinyComp.Config.Load(Write("[canvas]\nmin_scale = 1\nscale_reach = 40\n"), log, out _).Canvas;
         Assert.Equal(1.0, off.MinScaleValue, 9);
         Assert.Equal(16.0, off.ScaleReachValue, 9);
+    }
+
+    [Fact]
+    public void The_canvas_terrace_mode_reads_its_shelf_keys_and_its_own_zone_default()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Load(Write("[canvas]\nenable = true\n"), log, out _).Canvas;
+        Assert.Equal(0.12, defaults.ZoneFraction, 9);
+        Assert.Equal(0.08, defaults.ZoneFractionFor(TinyComp.CanvasWindowMode.Terrace), 9);
+        Assert.Equal(0.10, defaults.ShelfFraction, 9);
+        Assert.Equal(TinyComp.ShelfScales.All(0.4), defaults.ShelfScaleValues);
+        Assert.Equal(0.2, defaults.ShelfMinScaleValue, 9);
+        Assert.Equal(0.05, defaults.ShelfStepValue, 9);
+
+        var config = TinyComp.Config.Load(
+            Write("[canvas]\nwindow = \"terrace\"\nshelf = 0.12\nshelf_scale = 0.35\nshelf_min_scale = 0.15\nshelf_step = 0.1\n"
+                + "[output.\"DP-2\"]\nshelf_scale = { right = 0.3, top = 2.0 }\nshelf = 0.08\nzone = 0.1\n"),
+            log,
+            out var fatal);
+        Assert.Null(fatal);
+        var canvas = config.Canvas;
+        Assert.Equal(TinyComp.CanvasWindowMode.Terrace, canvas.WindowMode);
+        Assert.Equal("terrace", canvas.WindowName);
+        Assert.Equal(0.08, canvas.ZoneFraction, 9);
+        Assert.Equal(0.12, canvas.ShelfFraction, 9);
+        Assert.Equal(TinyComp.ShelfScales.All(0.35), canvas.ShelfScaleValues);
+        Assert.Equal(0.15, canvas.ShelfMinScaleValue, 9);
+        Assert.Equal(0.1, canvas.ShelfStepValue, 9);
+
+        var second = config.CanvasFor("DP-2", log);
+        Assert.Equal(new TinyComp.ShelfScales(0.4, 0.3, 0.9, 0.4), second.ShelfScaleValues);
+        Assert.Equal(0.08, second.ShelfFraction, 9);
+        Assert.Equal(0.1, second.ZoneFraction, 9);
+        Assert.Equal(0.1, second.ZoneFractionFor(TinyComp.CanvasWindowMode.Warp), 9);
+        Assert.Equal(0.15, second.ShelfMinScaleValue, 9);
+        Assert.Equal("0.40,0.30,0.90,0.40", second.ShelfScaleValues.Names);
+        Assert.Equal(TinyComp.ShelfShape.Square, second.ShapeValue);
+        var flat = TinyComp.Config.Load(Write("[canvas]\nshelf_shape = \"flat\"\n[output.\"DP-2\"]\nshelf_shape = \"square\"\n"), log, out _);
+        Assert.Equal(TinyComp.ShelfShape.Flat, flat.Canvas.ShapeValue);
+        Assert.Equal("flat", flat.Canvas.ShapeName);
+        Assert.Equal(TinyComp.ShelfShape.Square, flat.CanvasFor("DP-2", log).ShapeValue);
+        _ = TinyComp.Config.Load(Write("[canvas]\nshelf_shape = \"round\"\n"), log, out _);
+        Assert.Contains(_lines, line => line.Contains("shelf_shape \"round\" is not square|flat", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.SlopeWindow.Bend, flat.Canvas.OnSlopeValue);
+        var flatSlope = TinyComp.Config.Load(Write("[canvas]\nslope_window = \"flat\"\n[output.\"DP-2\"]\nslope_window = \"bend\"\n"), log, out _);
+        Assert.Equal(TinyComp.SlopeWindow.Flat, flatSlope.Canvas.OnSlopeValue);
+        Assert.Equal("flat", flatSlope.Canvas.OnSlopeName);
+        Assert.Equal(TinyComp.SlopeWindow.Bend, flatSlope.CanvasFor("DP-2", log).OnSlopeValue);
+        _ = TinyComp.Config.Load(Write("[canvas]\nslope_window = \"wave\"\n"), log, out _);
+        Assert.Contains(_lines, line => line.Contains("slope_window \"wave\" is not bend|flat", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.CanvasDrag.Cursor, flat.Canvas.DragValue);
+        var grid = TinyComp.Config.Load(Write("[canvas]\ndrag = \"grid\"\n[output.\"DP-2\"]\ndrag = \"cursor\"\n"), log, out _);
+        Assert.Equal(TinyComp.CanvasDrag.Grid, grid.Canvas.DragValue);
+        Assert.Equal("grid", grid.Canvas.DragName);
+        Assert.Equal(TinyComp.CanvasDrag.Cursor, grid.CanvasFor("DP-2", log).DragValue);
+        _ = TinyComp.Config.Load(Write("[canvas]\ndrag = \"hand\"\n"), log, out _);
+        Assert.Contains(_lines, line => line.Contains("drag \"hand\" is not cursor|grid", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_canvas_terrace_keys_warn_about_a_dead_fit_and_a_missing_center()
+    {
+        var log = BasinLog.For("t");
+        var dead = TinyComp.Config.Load(
+            Write("[canvas]\nwindow = \"terrace\"\nshelf_scale = { left = 0.3 }\nshelf_min_scale = 0.35\n"), log, out _).Canvas;
+        Assert.Equal(0.35, dead.ShelfMinScaleValue, 9);
+        Assert.Contains(_lines, line => line.Contains("shelf_min_scale 0.35 is at or above shelf_scale on left", StringComparison.Ordinal));
+
+        var crowded = TinyComp.Config.Load(
+            Write("[canvas]\nwindow = \"terrace\"\nshelf = 0.4\nzone = 0.3\n"), log, out _).Canvas;
+        Assert.Contains(_lines, line => line.Contains("leave no flat center", StringComparison.Ordinal));
+        var (zone, shelf) = crowded.TerraceFractions;
+        Assert.Equal(0.45, zone + shelf, 9);
+        Assert.Equal(0.3 / 0.4, zone / shelf, 9);
+
+        var badSide = TinyComp.Config.Load(
+            Write("[canvas]\nshelf_scale = { middle = 0.5 }\n"), log, out _).Canvas;
+        Assert.Equal(TinyComp.ShelfScales.All(0.4), badSide.ShelfScaleValues);
+        Assert.Contains(_lines, line => line.Contains("shelf_scale.middle is not left|right|top|bottom", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.KeyAction.ShelfSmaller, TinyComp.Config.ActionFromName("shelf-smaller"));
+        Assert.Equal(TinyComp.KeyAction.ShelfLarger, TinyComp.Config.ActionFromName("shelf-larger"));
+        Assert.Equal(TinyComp.KeyAction.ShelfReset, TinyComp.Config.ActionFromName("shelf-reset"));
+        Assert.Equal(TinyComp.KeyAction.CanvasMode, TinyComp.Config.ActionFromName("canvas-mode"));
     }
 
     [Fact]

@@ -4,4 +4,5 @@ internal enum CanvasWindowMode
 {
     Warp,
     Scale,
+    Terrace,
 }

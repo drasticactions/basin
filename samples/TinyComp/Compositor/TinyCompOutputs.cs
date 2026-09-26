@@ -271,6 +271,7 @@ internal sealed partial class TinyComp
 
         running |= _post.Step(tick, view.Width, view.Height);
         running |= StepCanvasMotions(tick);
+        running |= StepShelfMotions(tick);
         if (running)
         {
             for (var i = 0; i < Views.Count; i++)
