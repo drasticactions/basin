@@ -39,6 +39,59 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_overview_keeps_its_own_sides_and_an_output_table_overrides_them()
+    {
+        var log = BasinLog.For("t");
+        var config = TinyComp.Config.Parse(
+            "[canvas]\nsides = [\"top\"]\nshelf = 0.2\ngrid = \"never\"\n"
+            + "[overview]\nsides = [\"left\", \"bottom\"]\ndesktop_grid = true\n"
+            + "[output.\"DP-2\".overview]\nsides = [\"right\"]\nwall = \"step\"\nenable = false\ngesture = false\n",
+            log, out var fatal);
+        Assert.Null(fatal);
+        var first = config.OverviewCanvasFor("DP-1", log);
+        Assert.Equal(TinyComp.CanvasSide.Left | TinyComp.CanvasSide.Bottom, first.SideSet);
+        Assert.True(first.DesktopGridValue);
+        Assert.Equal(0.10, first.ShelfFraction, 9);
+        Assert.Equal(TinyComp.CanvasGridMode.Always, first.GridMode);
+        Assert.Equal(TinyComp.CanvasSide.Top, config.CanvasFor("DP-1", log).SideSet);
+
+        var second = config.OverviewCanvasFor("DP-2", log);
+        Assert.Equal(TinyComp.CanvasSide.Right, second.SideSet);
+        Assert.True(second.DesktopGridValue);
+        Assert.False(config.OverviewFor("DP-2").Enabled);
+        Assert.True(config.OverviewFor("DP-2").Steps);
+        Assert.Contains(_lines, line => line.Contains("gesture: not an output key", StringComparison.Ordinal));
+
+        var empty = TinyComp.Config.Parse("[canvas]\nsides = [\"top\"]\n", log, out _);
+        Assert.Equal(TinyComp.CanvasSide.Horizontal, empty.OverviewCanvasFor("DP-1", log).SideSet);
+    }
+
+    [Fact]
+    public void The_overview_anchor_defaults_to_fill_and_an_output_can_center_it()
+    {
+        var log = BasinLog.For("t");
+        var config = TinyComp.Config.Parse("[output.\"DP-2\".overview]\nanchor = \"center\"\n", log, out var fatal);
+        Assert.Null(fatal);
+        Assert.Equal(TinyComp.OverviewAnchor.Fill, config.OverviewFor("DP-1").AnchorValue);
+        Assert.Equal(TinyComp.OverviewAnchor.Center, config.OverviewFor("DP-2").AnchorValue);
+        _ = TinyComp.Config.Parse("[overview]\nanchor = \"left\"\n", log, out _);
+        Assert.Contains(_lines, line => line.Contains("anchor \"left\" is not fill|center", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_canvas_wallpaper_defaults_to_the_desktop_and_an_output_can_take_the_whole_output()
+    {
+        var log = BasinLog.For("t");
+        var config = TinyComp.Config.Parse(
+            "[canvas]\nenable = true\n[output.\"DP-2\"]\nwallpaper = \"output\"\n", log, out var fatal);
+        Assert.Null(fatal);
+        Assert.Equal(TinyComp.CanvasWallpaper.Desktop, config.CanvasFor("DP-1", log).WallpaperValue);
+        Assert.Equal(TinyComp.CanvasWallpaper.Output, config.CanvasFor("DP-2", log).WallpaperValue);
+        var bad = TinyComp.Config.Parse("[canvas]\nwallpaper = \"stretch\"\n", log, out _);
+        Assert.Equal(TinyComp.CanvasWallpaper.Desktop, bad.CanvasFor("DP-1", log).WallpaperValue);
+    }
+
+    [Fact]
     public void The_background_reads_a_hex_color_and_keeps_the_default_for_anything_else()
     {
         var config = TinyComp.Config.Parse("[compositor]\nbackground = \"#ff8000\"\n", BasinLog.For("t"), out var fatal);
@@ -352,23 +405,23 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
-    public void Step_mode_warns_once_about_the_canvas_keys_it_ignores()
+    public void Step_mode_warns_once_about_the_overview_keys_it_ignores()
     {
         var log = BasinLog.For("t");
-        const string canvas = "[canvas]\nshelf = 0.2\nslope_window = \"flat\"\ncorner = \"square\"\ndrag = \"grid\"\ngrid = \"always\"\n";
-        _ = TinyComp.Config.Load(Write(canvas + "[overview]\nwall = \"step\"\n"), log, out _);
-        var warnings = _lines.Where(line => line.Contains("ignores [canvas]", StringComparison.Ordinal)).ToList();
+        const string keys = "shelf = 0.2\nslope_window = \"flat\"\ncorner = \"square\"\ndrag = \"grid\"\ngrid = \"always\"\n";
+        _ = TinyComp.Config.Load(Write("[overview]\nwall = \"step\"\n" + keys), log, out _);
+        var warnings = _lines.Where(line => line.Contains("wall = \"step\" ignores", StringComparison.Ordinal)).ToList();
         Assert.Single(warnings);
         Assert.Contains("shelf, slope_window, corner, drag = \"grid\"", warnings[0], StringComparison.Ordinal);
         Assert.DoesNotContain("grid = \"always\"", warnings[0], StringComparison.Ordinal);
 
         _lines.Clear();
-        _ = TinyComp.Config.Load(Write(canvas), log, out _);
-        Assert.DoesNotContain(_lines, line => line.Contains("ignores [canvas]", StringComparison.Ordinal));
+        _ = TinyComp.Config.Load(Write("[canvas]\n" + keys + "[overview]\nwall = \"step\"\n"), log, out _);
+        Assert.DoesNotContain(_lines, line => line.Contains("ignores", StringComparison.Ordinal));
 
         _lines.Clear();
-        _ = TinyComp.Config.Load(Write("[canvas]\ndrag = \"cursor\"\n[output.\"DP-1\"]\nmesh_cell = 8\noverview_wall = \"step\"\n"), log, out _);
-        Assert.Contains(_lines, line => line.EndsWith("ignores [canvas] mesh_cell", StringComparison.Ordinal));
+        _ = TinyComp.Config.Load(Write("[overview]\ndrag = \"cursor\"\n[output.\"DP-1\".overview]\nmesh_cell = 8\nwall = \"step\"\n"), log, out _);
+        Assert.Contains(_lines, line => line.EndsWith("ignores mesh_cell", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -379,11 +432,15 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Contains(_lines, line => line.Contains("overview is off", StringComparison.Ordinal));
 
         _lines.Clear();
-        var config = TinyComp.Config.Load(Write("[canvas]\nshelf_scale = 0.9\n[overview]\nscale = 0.5\n"), log, out _);
+        var config = TinyComp.Config.Load(Write("[overview]\nscale = 0.5\nshelf_scale = 0.9\n"), log, out _);
         Assert.Contains(_lines, line => line.Contains("overview clamps it", StringComparison.Ordinal));
         Assert.DoesNotContain(_lines, line => line.Contains("overview is off", StringComparison.Ordinal));
-        Assert.Equal(TinyComp.ShelfScales.All(0.5), config.Overview.ShelfScalesFor(config.Canvas));
-        Assert.Equal(0.9, config.Canvas.ShelfScaleValues.Left, 9);
+        Assert.Equal(TinyComp.ShelfScales.All(0.5), config.Overview.ShelfScalesFor(config.Overview.TerraceValue));
+        Assert.Equal(0.9, config.Overview.TerraceValue.ShelfScaleValues.Left, 9);
+
+        _lines.Clear();
+        _ = TinyComp.Config.Load(Write("[canvas]\nshelf_scale = 0.9\n[overview]\nscale = 0.5\n"), log, out _);
+        Assert.DoesNotContain(_lines, line => line.Contains("overview clamps it", StringComparison.Ordinal));
 
         var outputs = TinyComp.Config.Load(
             Write("[overview]\nscale = 0.7\n[output.\"DP-2\"]\noverview = false\noverview_scale = 0.6\n"), log, out var fatal);

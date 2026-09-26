@@ -127,6 +127,8 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("canvas-grid", settings.Canvas.GridMode));
         cli.AddReport(_ => BasinCommand.Report("canvas-grid-cell", settings.Canvas.GridCellSize));
         cli.AddReport(_ => BasinCommand.Report("canvas-grid-color", $"#{settings.Canvas.GridRgba:x8}"));
+        cli.AddReport(_ => BasinCommand.Report("canvas-desktop-grid", settings.Canvas.DesktopGridValue));
+        cli.AddReport(_ => BasinCommand.Report("canvas-wallpaper", settings.Canvas.WallpaperName));
         cli.AddReport(_ => BasinCommand.Report("canvas-animation-ms", settings.Canvas.AnimationMillis));
         cli.AddReport(_ => BasinCommand.Report("canvas-sides", settings.Canvas.SideNames));
         cli.AddReport(_ => BasinCommand.Report("canvas-corner", settings.Canvas.CornerName));
@@ -153,6 +155,15 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("overview-texture-scale", settings.Overview.TextureScaleValue));
         cli.AddReport(_ => BasinCommand.Report("overview-shelf-color", $"#{settings.Overview.ShelfRgba:x8}"));
         cli.AddReport(_ => BasinCommand.Report("overview-texture-grid", settings.Overview.TextureGridValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-anchor", settings.Overview.AnchorName));
+        cli.AddReport(_ => BasinCommand.Report("overview-sides", settings.Overview.TerraceValue.SideNames));
+        cli.AddReport(_ => BasinCommand.Report("overview-shelf", settings.Overview.TerraceValue.ShelfFraction));
+        cli.AddReport(_ => BasinCommand.Report("overview-shelf-scale", settings.Overview.TerraceValue.ShelfScaleValues.Names));
+        cli.AddReport(_ => BasinCommand.Report("overview-slope", settings.Overview.TerraceValue.SlopeValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-slope-window", settings.Overview.TerraceValue.OnSlopeName));
+        cli.AddReport(_ => BasinCommand.Report("overview-grid", settings.Overview.TerraceValue.GridMode));
+        cli.AddReport(_ => BasinCommand.Report("overview-desktop-grid", settings.Overview.TerraceValue.DesktopGridValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-animation-ms", settings.Overview.TerraceValue.AnimationMillis));
         cli.AddReport(_ => BasinCommand.Report("bindings", settings.Bindings.Count));
         cli.AddReport(_ => BasinCommand.Report("rules", settings.Rules.Count));
 

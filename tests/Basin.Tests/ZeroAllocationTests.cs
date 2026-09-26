@@ -449,7 +449,22 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
     [InlineData("impeller")]
-    public void A_terrace_with_a_shelf_window_and_a_slope_window_allocates_nothing_over_1000_frames(string renderer)
+    public void A_terrace_with_a_shelf_window_and_a_slope_window_allocates_nothing_over_1000_frames(string renderer) =>
+        Terrace(renderer, desktopLines: true);
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void A_terrace_without_desktop_lines_allocates_nothing_over_1000_frames(string renderer) =>
+        Terrace(renderer, desktopLines: false);
+
+    private static void Terrace(string renderer, bool desktopLines)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
         using var host = new CompositorTestHost(renderer: renderer);
@@ -466,7 +481,10 @@ public sealed class ZeroAllocationTests
         var grid = new Scene.SceneMesh(host.Scene.Root)
         {
             Bounds = new Box(0, 0, 160, 120),
-            Source = new Basin.Effects.CanvasGridSource { Left = left, Right = right, CellSize = 16, MinLineSpacing = 8 },
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left, Right = right, CellSize = 16, MinLineSpacing = 8, DesktopLines = desktopLines,
+            },
         };
         var map = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right };
         var scale = new Basin.Effects.CanvasScale();

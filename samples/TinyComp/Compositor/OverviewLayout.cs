@@ -30,6 +30,23 @@ internal static class OverviewLayout
         return new OverviewSide(true, border, shelf, slope);
     }
 
+    public static OverviewSide WallFull(int outer, int usable, double center, int direction, double scale, int least)
+    {
+        var zoomed = center + ((outer - center) * scale);
+        var border = (int)Math.Floor(direction * (usable - zoomed));
+        return border < Math.Max(1, least) ? new OverviewSide(false, border, 0, 0) : new OverviewSide(true, border, 0, border);
+    }
+
+    public static CanvasStepSides StepSidesOf(CanvasSide sides)
+    {
+        var step = CanvasStepSides.None;
+        step |= (sides & CanvasSide.Left) != 0 ? CanvasStepSides.Left : 0;
+        step |= (sides & CanvasSide.Right) != 0 ? CanvasStepSides.Right : 0;
+        step |= (sides & CanvasSide.Top) != 0 ? CanvasStepSides.Top : 0;
+        step |= (sides & CanvasSide.Bottom) != 0 ? CanvasStepSides.Bottom : 0;
+        return step;
+    }
+
     public static int MinShelf(int size) => Math.Max(16, (int)Math.Round(0.02 * size));
 
     public static OverviewSide StepFull(int outer, int usable, double center, int direction, double scale, double wallFraction, int size)
@@ -59,13 +76,18 @@ internal static class OverviewLayout
     }
 
     public static bool LayoutStep(
-        CanvasStepMap map, in Box box, in Box usable, ReadOnlySpan<OverviewSide> full, double progress, double scale, double shelfScale)
+        CanvasStepMap map, in Box box, in Box usable, ReadOnlySpan<OverviewSide> full, double progress, double scale, double shelfScale) =>
+        LayoutStep(
+            map, box, usable, full, progress, scale, shelfScale, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0),
+            CanvasStepSides.Left | CanvasStepSides.Right | CanvasStepSides.Top | CanvasStepSides.Bottom);
+
+    public static bool LayoutStep(
+        CanvasStepMap map, in Box box, in Box usable, ReadOnlySpan<OverviewSide> full, double progress, double scale, double shelfScale,
+        double centerX, double centerY, CanvasStepSides shelves)
     {
         progress = Math.Clamp(progress, 0.0, 1.0);
         var zoom = 1.0 + ((scale - 1.0) * progress);
         var shelf = 1.0 + ((Math.Min(shelfScale, scale) - 1.0) * progress);
-        var centerX = box.X + (box.Width / 2.0);
-        var centerY = box.Y + (box.Height / 2.0);
         var left = EdgeAt(box.X, centerX, zoom);
         var right = EdgeAt(box.Right, centerX, zoom);
         var top = EdgeAt(box.Y, centerY, zoom);
@@ -83,7 +105,7 @@ internal static class OverviewLayout
         var innerLeft = left - wallLeft;
         var innerTop = top - wallTop;
         var inner = new FBox(innerLeft, innerTop, right + wallRight - innerLeft, bottom + wallBottom - innerTop);
-        return map.Layout(centerX, centerY, zoom, shelf, outline, inner, usable, sides);
+        return map.Layout(centerX, centerY, zoom, shelf, outline, inner, usable, sides, shelves);
     }
 
     public static double EdgeAt(int outer, double center, double zoom) => center + ((outer - center) * zoom);

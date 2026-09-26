@@ -362,4 +362,184 @@ public sealed class CanvasGridSourceTests
             Assert.True(straight, $"segment {i / 6} bends");
         }
     }
+    private static MeshVertex[] Write(CanvasGridSource source, in Box bounds)
+    {
+        var count = source.VertexCount(bounds);
+        var vertices = new MeshVertex[count + 6];
+        var sentinel = new MeshVertex(-7, -7, -7, -7, default);
+        for (var i = 0; i < vertices.Length; i++)
+        {
+            vertices[i] = sentinel;
+        }
+
+        source.WriteVertices(bounds, vertices.AsSpan(0, count));
+        for (var i = 0; i < count; i++)
+        {
+            Assert.NotEqual(sentinel, vertices[i]);
+        }
+
+        Assert.Equal(sentinel, vertices[count]);
+        return vertices[..count];
+    }
+
+    private static List<(float X0, float Y0, float X1, float Y1)> Quads(MeshVertex[] vertices)
+    {
+        var quads = new List<(float, float, float, float)>();
+        for (var i = 0; i < vertices.Length; i += 6)
+        {
+            var x0 = float.MaxValue;
+            var y0 = float.MaxValue;
+            var x1 = float.MinValue;
+            var y1 = float.MinValue;
+            for (var j = i; j < i + 6; j++)
+            {
+                x0 = Math.Min(x0, vertices[j].X);
+                y0 = Math.Min(y0, vertices[j].Y);
+                x1 = Math.Max(x1, vertices[j].X);
+                y1 = Math.Max(y1, vertices[j].Y);
+            }
+
+            quads.Add((x0, y0, x1, y1));
+        }
+
+        return quads;
+    }
+
+    private static void AssertClear(MeshVertex[] vertices, double left, double top, double right, double bottom, double corner = 0)
+    {
+        var quads = Quads(vertices);
+        for (var i = 0; i < quads.Count; i++)
+        {
+            var (x0, y0, x1, y1) = quads[i];
+            var cx = (x0 + x1) / 2.0;
+            var cy = (y0 + y1) / 2.0;
+            var inside = cx > left + 1 && cx < right - 1 && cy > top + 1 && cy < bottom - 1;
+            var rounded = (cx < left + corner || cx > right - corner) && (cy < top + corner || cy > bottom - corner);
+            inside &= !rounded;
+            Assert.False(inside, $"segment {i} ({x0},{y0})-({x1},{y1}) lies on the plateau");
+        }
+    }
+
+    private static int Multiples(int cell, int low, int high)
+    {
+        var count = 0;
+        for (var v = ((low / cell) + 1) * cell; v < high; v += cell)
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    [Fact]
+    public void Without_desktop_lines_a_left_and_right_terrace_clears_the_plateau()
+    {
+        var source = TerraceGrid(ends: false);
+        var bounds = new Box(0, 0, 1200, 600);
+        var all = source.VertexCount(bounds);
+        var rows = source.HorizontalLines(bounds);
+        source.DesktopLines = false;
+        var vertices = Write(source, bounds);
+        Assert.Equal(all - ((Multiples(32, 180, 1020) + rows) * 6), vertices.Length);
+        AssertClear(vertices, 180, double.MinValue, 1020, double.MaxValue);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(1.0)]
+    public void Without_desktop_lines_four_sides_keep_their_corners_and_end_rows(double radius)
+    {
+        var source = TerraceGrid(ends: true);
+        source.CornerRadius = radius;
+        var bounds = new Box(0, 0, 1200, 600);
+        var all = source.VertexCount(bounds);
+        source.DesktopLines = false;
+        var vertices = Write(source, bounds);
+        Assert.Equal(all - ((Multiples(32, 180, 1020) + Multiples(32, 100, 500)) * 6), vertices.Length);
+        AssertClear(vertices, 180, 100, 1020, 500, radius > 0 ? 48 : 0);
+        var quads = Quads(vertices);
+        Assert.Contains(quads, q => q.Y0 < 100 && q.Y1 <= 101 && q.X0 <= 192 && q.X1 >= 192);
+        Assert.Contains(quads, q => q.Y0 >= 500 && q.Y1 > 501 && q.X0 <= 192 && q.X1 >= 192);
+        Assert.Contains(quads, q => q.Y1 < 100 && q.X1 - q.X0 > 600);
+    }
+
+    [Fact]
+    public void Without_desktop_lines_a_separable_terrace_stops_its_lines_at_the_seams()
+    {
+        var source = TerraceGrid(ends: true);
+        source.Separable = true;
+        var bounds = new Box(0, 0, 1200, 600);
+        var lines = source.VerticalLines(bounds) + source.HorizontalLines(bounds);
+        source.DesktopLines = false;
+        var vertices = Write(source, bounds);
+        Assert.Equal((lines + Multiples(32, 180, 1020) + Multiples(32, 100, 500)) * 6, vertices.Length);
+        AssertClear(vertices, 180, 100, 1020, 500);
+        var quads = Quads(vertices);
+        var column = quads.FindAll(q => q.X0 == 192);
+        Assert.Equal(2, column.Count);
+        Assert.Contains(column, q => q.Y0 == 0 && q.Y1 == 100);
+        Assert.Contains(column, q => q.Y0 == 500 && q.Y1 == 600);
+        var row = quads.FindAll(q => q.Y0 == 128);
+        Assert.Equal(2, row.Count);
+        Assert.Contains(row, q => q.X0 == 0 && q.X1 == 180);
+        Assert.Contains(row, q => q.X0 == 1020 && q.X1 == 1200);
+    }
+
+    [Fact]
+    public void Without_desktop_lines_a_zoomed_terrace_clears_the_zoomed_plateau()
+    {
+        var source = TerraceGrid(ends: true);
+        source.ViewScale = 0.75;
+        source.ViewCenterX = 600;
+        source.ViewCenterY = 300;
+        source.DesktopLines = false;
+        var vertices = Write(source, new Box(0, 0, 1200, 600));
+        double Zoom(double v, double center) => center + ((v - center) * 0.75);
+        AssertClear(vertices, Zoom(180, 600), Zoom(100, 300), Zoom(1020, 600), Zoom(500, 300), 48);
+        Assert.Contains(Quads(vertices), q => q.X1 < Zoom(180, 600));
+    }
+
+    [Fact]
+    public void Without_desktop_lines_a_warp_zone_with_no_slope_keeps_its_rows()
+    {
+        var left = new CanvasWarp();
+        left.Layout(seam: 120, direction: -1, zoneWidth: 120, extension: 480, edgeScale: 0.15);
+        var source = new CanvasGridSource { CellSize = 60, Left = left, DesktopLines = false };
+        var bounds = new Box(0, 0, 600, 300);
+        var vertices = Write(source, bounds);
+        var quads = Quads(vertices);
+        Assert.Contains(quads, q => q.Y0 == 60 && q.X0 == 0 && q.X1 == 120);
+        Assert.DoesNotContain(quads, q => q.Y0 == 60 && q.X1 > 121);
+        AssertClear(vertices, 120, double.MinValue, 600 + 2, double.MaxValue);
+    }
+
+    [Fact]
+    public void Without_desktop_lines_a_line_on_a_seam_stays()
+    {
+        var source = TerraceGrid(ends: true);
+        source.CellSize = 20;
+        source.DesktopLines = false;
+        var quads = Quads(Write(source, new Box(0, 0, 1200, 600)));
+        Assert.Contains(quads, q => q.X0 == 180 && q.X1 == 181 && q.Y0 <= 100 && q.Y1 >= 500);
+        Assert.Contains(quads, q => q.X0 == 1020 && q.X1 == 1021 && q.Y0 <= 100 && q.Y1 >= 500);
+        Assert.Contains(quads, q => q.Y0 == 100 && q.Y1 == 101 && q.X0 <= 180 && q.X1 >= 1020);
+        Assert.DoesNotContain(quads, q => q.X0 == 200 && q.X1 == 201 && q.Y0 <= 100 && q.Y1 >= 500);
+    }
+
+    [Theory]
+    [MemberData(nameof(SideMasks))]
+    public void Without_desktop_lines_the_vertex_count_matches_the_write_for_every_subset(int mask)
+    {
+        foreach (var separable in new[] { false, true })
+        {
+            foreach (var spacing in new[] { 0.0, 20.0 })
+            {
+                var source = FourSides(mask);
+                source.Separable = separable;
+                source.MinLineSpacing = spacing;
+                source.DesktopLines = false;
+                Write(source, new Box(0, 0, 600, 400));
+            }
+        }
+    }
 }

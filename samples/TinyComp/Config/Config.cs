@@ -170,6 +170,9 @@ internal sealed class Config
     public OverviewSetting OverviewFor(string outputName) =>
         OutputSettingFor(outputName)?.Overview is { } over ? over.Over(Overview) : Overview;
 
+    public CanvasSetting OverviewCanvasFor(string outputName, BasinLogger log) =>
+        new CanvasSetting { Enable = CanvasFor(outputName, log).Enable }.Over(OverviewFor(outputName).TerraceValue);
+
     public bool CanvasAnywhere =>
         Canvas.Enabled || OutputSettings.Values.Any(static setting => setting.Canvas?.Enable == true);
 
@@ -528,13 +531,16 @@ internal sealed class Config
 
         if (reader.Free("canvas") is { } canvas)
         {
-            NoteCanvasKeys(canvas);
             Canvas = CanvasSetting.Parse(canvas, "canvas", log).Over(CanvasSetting.Defaults);
         }
 
         if (reader.Free("overview") is { } overview)
         {
             Overview = OverviewSetting.Parse(overview, "overview", log).Over(OverviewSetting.Defaults);
+            if (Overview.TerraceTable is { } terraceKeys)
+            {
+                NoteCanvasKeys(terraceKeys);
+            }
         }
 
         if (reader.Section("settings") is { } settings)
@@ -631,7 +637,7 @@ internal sealed class Config
     {
         foreach (var setting in OutputSettings.Values)
         {
-            if (setting.CanvasKeys is { } keys)
+            if (setting.Overview?.TerraceTable is { } keys)
             {
                 NoteCanvasKeys(keys);
             }
@@ -645,7 +651,7 @@ internal sealed class Config
         var ignored = StepIgnoredKeys.Where(_canvasKeys.Contains).Select(key => key == "drag" ? "drag = \"grid\"" : key).ToArray();
         if (ignored.Length > 0)
         {
-            log.Warn($"[overview] wall = \"step\" ignores [canvas] {string.Join(", ", ignored)}");
+            log.Warn($"[overview] wall = \"step\" ignores {string.Join(", ", ignored)}");
         }
     }
 
@@ -666,7 +672,7 @@ internal sealed class Config
         }
 
         var scale = Overview.ScaleValue;
-        var scales = Canvas.ShelfScaleValues;
+        var scales = Overview.TerraceValue.ShelfScaleValues;
         var over = CanvasSide.None;
         foreach (var side in CanvasSides.Each)
         {
@@ -678,7 +684,7 @@ internal sealed class Config
 
         if (Overview.Enabled && over != CanvasSide.None)
         {
-            log.Warn($"[canvas] shelf_scale on {CanvasSetting.NamesOf(over)} is above [overview] scale {scale:F2}: overview clamps it to {scale:F2}");
+            log.Warn($"[overview] shelf_scale on {CanvasSetting.NamesOf(over)} is above scale {scale:F2}: overview clamps it to {scale:F2}");
         }
     }
 
@@ -792,6 +798,42 @@ internal sealed class Config
         };
     }
 
+    private static OverviewSetting? OutputOverview(
+        string name, TomlTable? keys, bool? enable, double? scale, OverviewWall? wall, BasinLogger log)
+    {
+        if (keys is null)
+        {
+            return enable is null && scale is null && wall is null
+                ? null
+                : new OverviewSetting { Enable = enable, Scale = scale, Wall = wall };
+        }
+
+        var section = $"output.\"{name}\".overview";
+        var accepted = new TomlTable();
+        foreach (var (key, value) in keys)
+        {
+            if (key is "enable" or "scale" or "wall" or "anchor" || Array.IndexOf(OverviewSetting.TerraceKeys, key) >= 0)
+            {
+                accepted[key] = value;
+            }
+            else
+            {
+                log.Warn($"[{section}] {key}: not an output key, ignored");
+            }
+        }
+
+        var parsed = OverviewSetting.Parse(accepted, section, log);
+        return new OverviewSetting
+        {
+            Enable = parsed.Enable,
+            Scale = scale ?? parsed.Scale,
+            Wall = wall ?? parsed.Wall,
+            Anchor = parsed.Anchor,
+            Terrace = parsed.Terrace,
+            TerraceTable = parsed.TerraceTable,
+        };
+    }
+
     private static OutputSetting ParseOutputSetting(string name, TomlTable table, BasinLogger log)
     {
         double? scale = null;
@@ -801,12 +843,13 @@ internal sealed class Config
         bool? overview = null;
         double? overviewScale = null;
         OverviewWall? overviewWall = null;
+        TomlTable? overviewKeys = null;
         foreach (var (key, value) in table)
         {
             switch (key)
             {
                 case "enable" or "zone" or "extension" or "edge_scale" or "slope" or "mesh_cell"
-                    or "grid" or "grid_cell" or "grid_color" or "animation_ms" or "sides" or "corner" or "corner_radius"
+                    or "grid" or "grid_cell" or "grid_color" or "desktop_grid" or "wallpaper" or "animation_ms" or "sides" or "corner" or "corner_radius"
                     or "window" or "min_scale" or "scale_reach" or "shelf" or "shelf_scale" or "shelf_min_scale"
                     or "shelf_step" or "shelf_shape" or "slope_window"
                     or "drag":
@@ -814,6 +857,9 @@ internal sealed class Config
                     break;
                 case "overview" when value is bool overviewFlag:
                     overview = overviewFlag;
+                    break;
+                case "overview" when value is TomlTable overviewTable:
+                    overviewKeys = overviewTable;
                     break;
                 case "overview_wall" when value is string wallName:
                     overviewWall = OverviewSetting.WallFromName(wallName);
@@ -850,9 +896,7 @@ internal sealed class Config
             Transform = transform,
             Mode = mode,
             Canvas = canvasKeys is null ? null : CanvasSetting.Parse(canvasKeys, $"output.\"{name}\"", log),
-            Overview = overview is null && overviewScale is null && overviewWall is null
-                ? null
-                : new OverviewSetting { Enable = overview, Scale = overviewScale, Wall = overviewWall },
+            Overview = OutputOverview(name, overviewKeys, overview, overviewScale, overviewWall, log),
             CanvasKeys = canvasKeys,
         };
     }

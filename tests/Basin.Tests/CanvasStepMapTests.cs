@@ -19,6 +19,38 @@ public sealed class CanvasStepMapTests
     }
 
     [Fact]
+    public void A_left_shelf_filled_to_the_other_edges_walls_the_rest_and_shelves_only_the_left()
+    {
+        var map = new CanvasStepMap();
+        Span<TinyComp.OverviewSide> full = stackalloc TinyComp.OverviewSide[4];
+        full[0] = TinyComp.OverviewLayout.StepFull(0, 0, 3440, -1, 0.75, 0.04, 3440);
+        full[2] = TinyComp.OverviewLayout.WallFull(0, 0, 720, -1, 0.75, 1);
+        full[3] = TinyComp.OverviewLayout.WallFull(1440, 1440, 720, 1, 0.75, 1);
+        Assert.Equal(new TinyComp.OverviewSide(true, 180, 0, 180), full[2]);
+        var box = new Box(0, 0, 3440, 1440);
+        _ = TinyComp.OverviewLayout.LayoutStep(map, box, box, full, 1.0, 0.75, 0.4, 3440, 720, CanvasStepSides.Left);
+
+        Assert.Equal(new FBox(860, 180, 2580, 1080), map.Outline);
+        Assert.Equal(CanvasStepSides.Left | CanvasStepSides.Top | CanvasStepSides.Bottom, map.Sides);
+        Assert.Equal(CanvasStepSides.Left, map.Shelves);
+        Assert.Equal(0, map.Inner.Y);
+        Assert.Equal(1440, map.Inner.Bottom);
+        Assert.Equal(180, map.WallWidth(CanvasStepSides.Top));
+        Assert.Equal(0, map.WallWidth(CanvasStepSides.Right));
+        Assert.True(map.ShelfStrip(CanvasStepSides.Top).IsEmpty);
+        Assert.Equal(new FBox(0, 0, map.Inner.X, 1440), map.ShelfStrip(CanvasStepSides.Left));
+
+        Assert.Equal(CanvasStepPlane.Desktop, map.PlaneAt(2000, -5000));
+        Assert.Equal(CanvasStepPlane.Shelf, map.PlaneAt(-5000, 720));
+        Assert.False(map.TryToCanvas(2000, 90, out _, out _, out _));
+        Assert.False(map.TryToCanvas(2000, 0, out _, out _, out _));
+        Assert.True(map.TryToCanvas(300, 700, out var plane, out _, out _));
+        Assert.Equal(CanvasStepPlane.Shelf, plane);
+        Assert.True(map.TryToCanvas(2000, 700, out plane, out _, out _));
+        Assert.Equal(CanvasStepPlane.Desktop, plane);
+    }
+
+    [Fact]
     public void The_two_planes_are_uniform_scales_about_the_center()
     {
         var map = Map();

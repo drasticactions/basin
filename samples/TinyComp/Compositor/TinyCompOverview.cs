@@ -46,14 +46,44 @@ internal sealed partial class TinyComp
 
     private static int Direction(CanvasSide side) => side is CanvasSide.Left or CanvasSide.Top ? -1 : 1;
 
-    private static (int Outer, int Edge, double Center, int Size) SideFrame(CanvasSide side, in Box box, in Box usable)
+    private static (int Outer, int Edge, double Center, int Size) SideFrame(
+        CanvasSide side, in Box box, in Box usable, OverviewView overview)
     {
         var horizontal = (side & CanvasSide.Horizontal) != 0;
         var direction = Direction(side);
         var outer = horizontal ? (direction < 0 ? box.X : box.Right) : (direction < 0 ? box.Y : box.Bottom);
         var edge = horizontal ? (direction < 0 ? usable.X : usable.Right) : (direction < 0 ? usable.Y : usable.Bottom);
-        var center = horizontal ? box.X + (box.Width / 2.0) : box.Y + (box.Height / 2.0);
+        var center = horizontal ? overview.CenterX : overview.CenterY;
         return (outer, edge, center, horizontal ? box.Width : box.Height);
+    }
+
+    private bool OverviewWants(OutputView view, in Box box, CanvasSide side) =>
+        view.Canvas.Settings.SideSet.HasFlag(side) && !HasNeighbour(view.Output, box, side);
+
+    private CanvasSide AnchorOverview(OutputView view, in Box box)
+    {
+        var overview = OverviewOf(view);
+        var fill = overview.Settings.AnchorValue == OverviewAnchor.Fill;
+        var left = OverviewWants(view, box, CanvasSide.Left);
+        var right = OverviewWants(view, box, CanvasSide.Right);
+        var top = OverviewWants(view, box, CanvasSide.Top);
+        var bottom = OverviewWants(view, box, CanvasSide.Bottom);
+        overview.CenterX = !fill || left == right ? box.X + (box.Width / 2.0) : left ? box.Right : box.X;
+        overview.CenterY = !fill || top == bottom ? box.Y + (box.Height / 2.0) : top ? box.Bottom : box.Y;
+        var walls = CanvasSide.None;
+        if (fill && !left && !right)
+        {
+            walls |= HasNeighbour(view.Output, box, CanvasSide.Left) ? 0 : CanvasSide.Left;
+            walls |= HasNeighbour(view.Output, box, CanvasSide.Right) ? 0 : CanvasSide.Right;
+        }
+
+        if (fill && !top && !bottom)
+        {
+            walls |= HasNeighbour(view.Output, box, CanvasSide.Top) ? 0 : CanvasSide.Top;
+            walls |= HasNeighbour(view.Output, box, CanvasSide.Bottom) ? 0 : CanvasSide.Bottom;
+        }
+
+        return walls;
     }
 
     private void LayoutOverviewFull(OutputView view, in Box box, bool animating)
@@ -68,11 +98,12 @@ internal sealed partial class TinyComp
         var settings = canvas.Settings;
         var scale = overview.Settings.ScaleValue;
         var usable = UsableBox(view, box);
+        var walls = AnchorOverview(view, box);
         var switched = overview.Steps != overview.Settings.Steps;
         overview.Steps = overview.Settings.Steps;
         if (overview.Steps)
         {
-            LayoutStepSides(view, box, usable);
+            LayoutStepSides(view, box, usable, walls);
             if (!canvas.Overview || switched)
             {
                 if (switched)
@@ -93,14 +124,17 @@ internal sealed partial class TinyComp
 
         var active = CanvasSide.None;
         var border = CanvasSide.None;
+        var walled = CanvasSide.None;
         foreach (var side in CanvasSides.Each)
         {
             var index = SideIndex(side);
-            var (outer, edge, center, size) = SideFrame(side, box, usable);
-            var wanted = settings.SideSet.HasFlag(side) && !HasNeighbour(view.Output, box, side);
+            var (outer, edge, center, size) = SideFrame(side, box, usable, overview);
+            var wanted = OverviewWants(view, box, side);
             var full = wanted
                 ? OverviewLayout.Full(outer, edge, center, Direction(side), scale, settings.ShelfFraction, size)
-                : new OverviewSide(false, 0, 0, 0);
+                : walls.HasFlag(side)
+                    ? OverviewLayout.WallFull(outer, edge, center, Direction(side), scale, OverviewLayout.MinSlope(size) + 8)
+                    : new OverviewSide(false, 0, 0, 0);
             if (wanted && !full.Active)
             {
                 border |= side;
@@ -108,7 +142,14 @@ internal sealed partial class TinyComp
 
             if (full.Active)
             {
-                active |= side;
+                if (wanted)
+                {
+                    active |= side;
+                }
+                else
+                {
+                    walled |= side;
+                }
             }
 
             overview.FullSides[index] = full;
@@ -116,7 +157,7 @@ internal sealed partial class TinyComp
             overview.SlopeScreen[index] = full.Slope;
             var target = Math.Min(ShelfScaleInForce(canvas, side), scale);
             var end = OverviewLayout.At(full, 1.0, outer, edge, center, Direction(side), scale, target);
-            var fan = (side & CanvasSide.Horizontal) != 0 ? box.Y + (box.Height / 2.0) : box.X + (box.Width / 2.0);
+            var fan = (side & CanvasSide.Horizontal) != 0 ? overview.CenterY : overview.CenterX;
             var fullWarp = FullWarpOf(overview, side);
             _ = fullWarp.LayoutTerrace(
                 outer, Direction(side), end.Zone, end.Shelf, end.EdgeScale, CanvasWarp.TerraceExponent, settings.SlopeValue, fan);
@@ -125,10 +166,11 @@ internal sealed partial class TinyComp
 
         overview.Sides = active;
         overview.BorderSides = border;
+        overview.WallSides = walled;
         var map = overview.Full;
         map.ViewScale = scale;
-        map.ViewCenterX = box.X + (box.Width / 2.0);
-        map.ViewCenterY = box.Y + (box.Height / 2.0);
+        map.ViewCenterX = overview.CenterX;
+        map.ViewCenterY = overview.CenterY;
         map.Separable = settings.ShapeValue == ShelfShape.Flat;
         map.CornerRadius = settings.CornerRadiusValue;
         map.CornerTaper = settings.CornerTaperValue;
@@ -157,8 +199,8 @@ internal sealed partial class TinyComp
 
         var scale = overview.Settings.ScaleValue;
         var usable = UsableBox(view, box);
-        var centerX = box.X + (box.Width / 2.0);
-        var centerY = box.Y + (box.Height / 2.0);
+        var centerX = overview.CenterX;
+        var centerY = overview.CenterY;
         var wasOverview = canvas.Overview;
         var changed = !wasOverview;
         canvas.Overview = true;
@@ -172,7 +214,7 @@ internal sealed partial class TinyComp
         foreach (var side in CanvasSides.Each)
         {
             var index = SideIndex(side);
-            var (outer, edge, center, _) = SideFrame(side, box, usable);
+            var (outer, edge, center, _) = SideFrame(side, box, usable, overview);
             var full = overview.FullSides[index];
             var shelfScale = Math.Min(ShelfScaleFor(view, side, settings, wasOverview && full.Active && !animating), scale);
             var now = OverviewLayout.At(full, overview.Value, outer, edge, center, Direction(side), scale, shelfScale);
@@ -354,7 +396,8 @@ internal sealed partial class TinyComp
             CultureInfo.InvariantCulture,
             $"OVERVIEW output={view.Output.Name} open={(overview.Open ? "true" : "false")} progress={overview.Value:F2}"
             + $" scale={overview.Settings.ScaleValue:F2} sides={CanvasSetting.NamesOf(overview.Sides)}"
-            + $" shelf={overview.ShelfScreen[index]} slope={overview.SlopeScreen[index]} wall={overview.Settings.WallName}") + StepTextureNames(view);
+            + $" shelf={overview.ShelfScreen[index]} slope={overview.SlopeScreen[index]} wall={overview.Settings.WallName}") + StepTextureNames(view)
+            + $" anchor={overview.Settings.AnchorName} walls={CanvasSetting.NamesOf(overview.WallSides)}";
         if (overview.BorderSides == CanvasSide.None)
         {
             return line;

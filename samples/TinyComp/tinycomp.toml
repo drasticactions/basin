@@ -113,6 +113,8 @@ mesh_cell    = 16            # canvas pixels per mesh cell inside a zone
 grid         = "always"      # always | drag | never
 grid_cell    = 64            # canvas pixels between grid lines
 grid_color   = "#2a35c0"     # the grid line color
+desktop_grid = false         # terrace mode: true draws the grid on the desktop as well as on the slopes and shelves
+wallpaper    = "desktop"     # desktop | output: background and bottom layer surfaces fill the area inside the seams, or the whole output
 animation_ms = 250           # park, recall and toggle
 window       = "warp"        # warp | scale | terrace: bend a window along the zone, draw it flat and smaller, or rest it flat on a shelf past a slope
 min_scale    = 0.35          # scale mode: the smallest a window draws, as a fraction of its size
@@ -126,10 +128,11 @@ slope_window = "bend"        # terrace mode: bend | flat: bend a window along th
 drag         = "cursor"      # scale and terrace modes: cursor | grid: keep the grabbed point under the cursor, or move it along the grid rows
 
 # Overview: on demand, the desktop zooms out and a slope and a shelf rise on
-# each [canvas] side. It reads sides, shelf, shelf_scale, slope_window, grid,
-# drag and animation_ms from [canvas], and is off on any output with the canvas
-# enabled. Every key is live on SIGHUP. An [output."NAME"] table takes
-# overview = false, overview_scale and overview_wall.
+# each side it names. Its sides, shelves and grid are its own and do not read
+# [canvas], so the canvas toggle switches between the two sets. It is off on
+# any output with the canvas enabled. Every key is live on SIGHUP. An
+# [output."NAME".overview] table takes enable, scale, wall, anchor and the side,
+# shelf and grid keys for one output.
 [overview]
 enable        = true         # the actions, the gesture and the hot corner
 scale         = 0.75         # the zoom of the sunk desktop, 0.3 to 0.95
@@ -140,6 +143,7 @@ gesture_fingers = 4          # 4 or 5; 3 is the workspace swipe
 hot_corner    = "top-left"   # top-left | top-right | bottom-left | bottom-right | none
 hot_corner_ms = 150          # how long the pointer stays in the corner before it fires
 wall          = "slope"      # slope | step: a slope down to the shelf, or a flat shelf below a drawn wall
+anchor        = "fill"       # fill | center: pin the desktop against sides without a shelf and wall in the rest, or sink it into the center
 wall_width    = 0.04         # step: the wall's screen width, as a fraction of the output width or height
 wall_color    = "#262a3a"    # step: the base color of the walls
 wall_shade    = 0.25         # step: how much lighter the top and left walls are, and darker the others
@@ -148,6 +152,23 @@ shelf_texture = "none"       # step: the same, for the shelf floor
 texture_scale = 1.0          # step: canvas pixels per texel, 0.25 to 8
 shelf_color   = "#3a3d44"    # step: the tint of the shelf floor texture
 texture_grid  = true         # step: false turns off every grid line while a texture is set
+sides         = ["left", "right"]  # any of left, right, top, bottom
+corner        = "round"      # slope: round | square | taper: how two sides meet
+# corner_radius = 1.0        # slope: 0.0 square to 1.0 round; beats round or square
+slope         = 0.25         # slope: how far the rows fan from the center row at the far edge
+mesh_cell     = 16           # slope: canvas pixels per mesh cell on a slope
+shelf         = 0.10         # slope: the shelf's screen width, as a fraction of the output width or height
+shelf_scale   = 0.4          # the shelf's draw scale, capped at scale, or a table such as { left = 0.4, right = 0.3 }
+shelf_min_scale = 0.2        # the smallest a window too wide for the shelf shrinks to
+shelf_step    = 0.05         # the step of shelf-smaller and shelf-larger
+shelf_shape   = "square"     # slope: square | flat
+slope_window  = "bend"       # slope: bend | flat: bend a window along the slope, or keep it a flat rectangle
+drag          = "cursor"     # slope: cursor | grid
+grid          = "always"     # always | drag | never
+grid_cell     = 64           # canvas pixels between grid lines
+grid_color    = "#2a35c0"    # the grid line color
+desktop_grid  = false        # true draws the grid on the zoomed desktop as well as on the slopes and shelves
+animation_ms  = 250          # the open and close
 
 [settings]
 palette   = "dark"           # dark | light: the settings panel

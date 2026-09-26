@@ -58,7 +58,7 @@ internal sealed partial class TinyComp
 
         var canvas = view.Canvas;
         var previous = canvas.Settings;
-        var settings = animating ? previous : _config.CanvasFor(view.Output.Name, _log);
+        var settings = animating ? previous : SettingsFor(view);
         if (!animating)
         {
             ForgetStaleOverrides(canvas, previous, settings);
@@ -68,6 +68,11 @@ internal sealed partial class TinyComp
         if (OverviewInUse(view))
         {
             LayoutOverview(view, _layout.BoxOf(view.Output), animating);
+            if (!animating)
+            {
+                SetLayerArea(view, (settings.WallpaperValue == CanvasWallpaper.Desktop, null, null, null, null));
+            }
+
             return;
         }
 
@@ -164,6 +169,16 @@ internal sealed partial class TinyComp
         }
 
         changed |= LayoutCanvasGrid(view, box, enabled && settings.GridMode != CanvasGridMode.Never);
+        if (!animating && !fullscreen)
+        {
+            SetLayerArea(view, (
+                settings.WallpaperValue == CanvasWallpaper.Desktop,
+                canvas.Left.IsIdentity ? null : canvas.Left.Seam,
+                canvas.Top.IsIdentity ? null : canvas.Top.Seam,
+                canvas.Right.IsIdentity ? null : canvas.Right.Seam,
+                canvas.Bottom.IsIdentity ? null : canvas.Bottom.Seam));
+        }
+
         if (!changed)
         {
             return;
@@ -193,6 +208,44 @@ internal sealed partial class TinyComp
         ApplyCanvasToView(view);
         canvas.Grid?.NotifyMeshChanged();
         view.Scheduler?.ScheduleRepaint();
+    }
+
+    private CanvasSetting SettingsFor(OutputView view)
+    {
+        var canvas = _config.CanvasFor(view.Output.Name, _log);
+        return (_canvasOverride ?? canvas.Enabled) || !_config.OverviewFor(view.Output.Name).Enabled
+            ? canvas
+            : _config.OverviewCanvasFor(view.Output.Name, _log);
+    }
+
+    private void SetLayerArea(OutputView view, (bool Confine, int? Left, int? Top, int? Right, int? Bottom) area)
+    {
+        if (view.Canvas.LayerArea == area)
+        {
+            return;
+        }
+
+        view.Canvas.LayerArea = area;
+        if (_layerDriver is not null)
+        {
+            _layerDriver.Rearrange();
+        }
+    }
+
+    private bool ConfineLayer(LayerSurface layer, IOutput output) =>
+        layer.Layer is LayerKind.Background or LayerKind.Bottom && layer.ExclusiveZone <= 0 &&
+        ViewOf(output) is { Tag: OutputPolicy } view && view.Canvas.LayerArea.Confine;
+
+    private Box ConfinedLayerBox(LayerSurface layer, IOutput output, Box usable)
+    {
+        var box = _layout.BoxOf(output);
+        var area = ViewOf(output)?.Canvas.LayerArea ?? default;
+        var reach = layer.ExclusiveZone < 0 || usable.IsEmpty ? box : usable.Translated(box.X, box.Y);
+        var left = area.Left ?? reach.X;
+        var top = area.Top ?? reach.Y;
+        var right = area.Right ?? reach.Right;
+        var bottom = area.Bottom ?? reach.Bottom;
+        return new Box(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
     }
 
     private bool HasNeighbour(IOutput output, in Box box, CanvasSide side)
@@ -274,6 +327,9 @@ internal sealed partial class TinyComp
             source.MinLineSpacing != spacing || source.Separable != canvas.Map.Separable ||
             source.ViewScale != canvas.Map.ViewScale || source.ViewCenterX != canvas.Map.ViewCenterX ||
             source.ViewCenterY != canvas.Map.ViewCenterY;
+        var desktop = !canvas.Terraces || settings.DesktopGridValue;
+        changed |= source.DesktopLines != desktop;
+        source.DesktopLines = desktop;
         source.ViewScale = canvas.Map.ViewScale;
         source.ViewCenterX = canvas.Map.ViewCenterX;
         source.ViewCenterY = canvas.Map.ViewCenterY;

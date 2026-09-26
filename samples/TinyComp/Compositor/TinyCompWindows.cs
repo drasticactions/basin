@@ -696,6 +696,8 @@ internal sealed partial class TinyComp
             DefaultOutput = _ => Views.Count > 0
                 ? (Views.FirstOrDefault(v => _layout.OutputAt(_cursorX, _cursorY) == v.Output) ?? Views[0]).Global
                 : null,
+            Confine = ConfineLayer,
+            ConfinedBox = ConfinedLayerBox,
         };
         _layerDriver.TrackPopups(_shell);
         _layerDriver.PopupSceneCreated += (_, _, _) => RefreshSurfaceLuts();

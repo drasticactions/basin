@@ -56,6 +56,10 @@ internal sealed class CanvasSetting
 
     public uint? GridColor { get; init; }
 
+    public bool? DesktopGrid { get; init; }
+
+    public CanvasWallpaper? Wallpaper { get; init; }
+
     public int? AnimationMs { get; init; }
 
     public CanvasSide? Sides { get; init; }
@@ -94,6 +98,8 @@ internal sealed class CanvasSetting
         Grid = CanvasGridMode.Always,
         GridCell = 64,
         GridColor = DefaultGridColor,
+        DesktopGrid = false,
+        Wallpaper = CanvasWallpaper.Desktop,
         AnimationMs = 250,
         Sides = CanvasSide.Horizontal,
         CornerRadius = 1.0,
@@ -160,6 +166,12 @@ internal sealed class CanvasSetting
     public int GridCellSize => GridCell ?? 64;
 
     public uint GridRgba => GridColor ?? DefaultGridColor;
+
+    public bool DesktopGridValue => DesktopGrid ?? false;
+
+    public CanvasWallpaper WallpaperValue => Wallpaper ?? CanvasWallpaper.Desktop;
+
+    public string WallpaperName => WallpaperValue == CanvasWallpaper.Output ? "output" : "desktop";
 
     public int AnimationMillis => AnimationMs ?? 250;
 
@@ -249,6 +261,8 @@ internal sealed class CanvasSetting
         Grid = Grid ?? fallback.Grid,
         GridCell = GridCell ?? fallback.GridCell,
         GridColor = GridColor ?? fallback.GridColor,
+        DesktopGrid = DesktopGrid ?? fallback.DesktopGrid,
+        Wallpaper = Wallpaper ?? fallback.Wallpaper,
         AnimationMs = AnimationMs ?? fallback.AnimationMs,
         Sides = Sides ?? fallback.Sides,
         CornerRadius = CornerRadius ?? fallback.CornerRadius,
@@ -276,6 +290,8 @@ internal sealed class CanvasSetting
         CanvasGridMode? grid = null;
         int? gridCell = null;
         uint? gridColor = null;
+        bool? desktopGrid = null;
+        CanvasWallpaper? wallpaper = null;
         int? animation = null;
         CanvasSide? sides = null;
         double? corner = null;
@@ -332,6 +348,22 @@ internal sealed class CanvasSetting
                     break;
                 case "grid_color" when TomlColor.Rgba(value) is { } rgba:
                     gridColor = rgba;
+                    break;
+                case "desktop_grid" when value is bool desktop:
+                    desktopGrid = desktop;
+                    break;
+                case "wallpaper" when value is string wallpaperName:
+                    wallpaper = wallpaperName switch
+                    {
+                        "desktop" => CanvasWallpaper.Desktop,
+                        "output" => CanvasWallpaper.Output,
+                        _ => null,
+                    };
+                    if (wallpaper is null)
+                    {
+                        log.Warn($"[{section}] wallpaper \"{wallpaperName}\" is not desktop|output, ignored");
+                    }
+
                     break;
                 case "animation_ms" when value is long millis:
                     animation = (int)Math.Clamp(millis, 0, 10_000);
@@ -453,6 +485,8 @@ internal sealed class CanvasSetting
             Grid = grid,
             GridCell = gridCell,
             GridColor = gridColor,
+            DesktopGrid = desktopGrid,
+            Wallpaper = wallpaper,
             AnimationMs = animation,
             Sides = sides,
             CornerRadius = cornerRadius ?? corner,
@@ -580,6 +614,8 @@ internal sealed class CanvasSetting
             Grid = Grid,
             GridCell = GridCell,
             GridColor = GridColor,
+            DesktopGrid = DesktopGrid,
+            Wallpaper = Wallpaper,
             AnimationMs = AnimationMs,
             Sides = Sides,
             CornerRadius = CornerRadius,

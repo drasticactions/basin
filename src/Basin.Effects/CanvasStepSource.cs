@@ -84,7 +84,7 @@ public sealed class CanvasStepSource : IMeshSource
 
         foreach (var side in Order)
         {
-            if (map.WallWidth(side) > 0)
+            if (map.WallWidth(side) > 0 && (map.Shelves & side) != 0)
             {
                 BaseLine(map, side, into, ref count, write);
             }
@@ -164,7 +164,7 @@ public sealed class CanvasStepSource : IMeshSource
     {
         var u = map.Outer;
         var b = map.Inner;
-        var sides = map.Sides;
+        var sides = map.Shelves;
         var left = (sides & CanvasStepSides.Left) != 0;
         var right = (sides & CanvasStepSides.Right) != 0;
         if (left)

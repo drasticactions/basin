@@ -20,18 +20,28 @@ public sealed class CanvasStepMap
 
     public CanvasStepSides Sides { get; private set; }
 
+    public CanvasStepSides Shelves { get; private set; }
+
     public bool IsIdentity => Zoom == 1.0 && ShelfScale == 1.0;
 
     public bool Layout(
-        double centerX, double centerY, double zoom, double shelfScale, in FBox outline, in FBox inner, in FBox outer, CanvasStepSides sides)
+        double centerX, double centerY, double zoom, double shelfScale, in FBox outline, in FBox inner, in FBox outer, CanvasStepSides sides) =>
+        Layout(centerX, centerY, zoom, shelfScale, outline, inner, outer, sides, sides);
+
+    public bool Layout(
+        double centerX, double centerY, double zoom, double shelfScale, in FBox outline, in FBox inner, in FBox outer,
+        CanvasStepSides sides, CanvasStepSides shelves)
     {
         zoom = zoom > 0 && double.IsFinite(zoom) ? zoom : 1.0;
         shelfScale = shelfScale > 0 && double.IsFinite(shelfScale) ? shelfScale : 1.0;
+        shelves &= sides;
         if (CenterX == centerX && CenterY == centerY && Zoom == zoom && ShelfScale == shelfScale &&
-            Outline == outline && Inner == inner && Outer == outer && Sides == sides)
+            Outline == outline && Inner == inner && Outer == outer && Sides == sides && Shelves == shelves)
         {
             return false;
         }
+
+        Shelves = shelves;
 
         CenterX = centerX;
         CenterY = centerY;
@@ -67,10 +77,10 @@ public sealed class CanvasStepMap
     {
         var x = CenterX + ((canvasX - CenterX) * ShelfScale);
         var y = CenterY + ((canvasY - CenterY) * ShelfScale);
-        var shelf = ((Sides & CanvasStepSides.Left) != 0 && x <= Inner.X) ||
-            ((Sides & CanvasStepSides.Right) != 0 && x >= Inner.Right) ||
-            ((Sides & CanvasStepSides.Top) != 0 && y <= Inner.Y) ||
-            ((Sides & CanvasStepSides.Bottom) != 0 && y >= Inner.Bottom);
+        var shelf = ((Shelves & CanvasStepSides.Left) != 0 && x <= Inner.X) ||
+            ((Shelves & CanvasStepSides.Right) != 0 && x >= Inner.Right) ||
+            ((Shelves & CanvasStepSides.Top) != 0 && y <= Inner.Y) ||
+            ((Shelves & CanvasStepSides.Bottom) != 0 && y >= Inner.Bottom);
         return shelf ? CanvasStepPlane.Shelf : CanvasStepPlane.Desktop;
     }
 
@@ -123,8 +133,8 @@ public sealed class CanvasStepMap
             return false;
         }
 
-        var depth = WallDepth(screenX, screenY, out _);
-        if (depth > 0.0 && depth < 1.0)
+        var depth = WallDepth(screenX, screenY, out var side);
+        if (depth > 0.0 && (depth < 1.0 || (side & Shelves) != side))
         {
             return false;
         }
@@ -191,7 +201,7 @@ public sealed class CanvasStepMap
 
     public FBox ShelfStrip(CanvasStepSides side)
     {
-        if (side == CanvasStepSides.None || (Sides & side) != side)
+        if (side == CanvasStepSides.None || (Shelves & side) != side)
         {
             return default;
         }

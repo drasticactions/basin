@@ -43,6 +43,12 @@ internal sealed class OverviewView
 
     public CanvasSide BorderSides { get; set; }
 
+    public CanvasSide WallSides { get; set; }
+
+    public double CenterX { get; set; }
+
+    public double CenterY { get; set; }
+
     public int[] ShelfScreen { get; } = new int[4];
 
     public int[] SlopeScreen { get; } = new int[4];

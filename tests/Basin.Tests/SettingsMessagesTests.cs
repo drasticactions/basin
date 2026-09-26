@@ -44,7 +44,7 @@ public sealed class SettingsMessagesTests
         "[canvas] shelf 0.4 and zone 0.3 leave no flat center, scaling them to 0.250 and 0.200",
         "[canvas] extension 0.1 is below zone 0.12, raising it to 0.12",
         "[overview] gesture_fingers 3 is the workspace swipe's count, keeping 4",
-        "[canvas] shelf_scale on left is above [overview] scale 0.75: overview clamps it to 0.75",
+        "[overview] shelf_scale on left is above scale 0.75: overview clamps it to 0.75",
         "[overview] is on and so is [canvas] enable: overview is off on every output with the canvas enabled",
         "[canvas] corner_radius 0.5 overrides corner",
         "[canvas] shelf_min_scale 0.5 is at or above shelf_scale on left: the fit shrink is off there",

@@ -10,8 +10,12 @@ public sealed class LayerShellSceneDriver
     private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _surfaces = [];
     private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _scratch = [];
     private readonly Dictionary<LayerSurface, ArrangeInputs> _arranged = [];
+    private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _confined = [];
+    private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _single = [];
     private readonly PopupPlacer _popups;
     private bool _trackingPopups;
+    private bool _arranging;
+    private bool _again;
 
     public LayerShellSceneDriver(LayerShell shell, OutputLayout layout, Func<LayerSurface, SceneTree> treeFor)
     {
@@ -34,6 +38,10 @@ public sealed class LayerShellSceneDriver
     public Func<LayerSurface, OutputGlobal?>? DefaultOutput { get; set; }
 
     public Func<LayerSurface, Box>? PopupBounds { get; set; }
+
+    public Func<LayerSurface, IOutput, bool>? Confine { get; set; }
+
+    public Func<LayerSurface, IOutput, Box, Box>? ConfinedBox { get; set; }
 
     public IReadOnlyList<(LayerSurface Layer, SceneSurface? Scene)> Surfaces => _surfaces;
 
@@ -141,6 +149,32 @@ public sealed class LayerShellSceneDriver
 
     public void Rearrange()
     {
+        if (_arranging)
+        {
+            _again = true;
+            return;
+        }
+
+        _arranging = true;
+        try
+        {
+            do
+            {
+                _again = false;
+                RearrangeOnce();
+            }
+            while (_again);
+        }
+        finally
+        {
+            _arranging = false;
+        }
+
+        Arranged?.Invoke();
+    }
+
+    private void RearrangeOnce()
+    {
         _arranged.Clear();
         foreach (var entry in _surfaces)
         {
@@ -151,21 +185,35 @@ public sealed class LayerShellSceneDriver
         foreach (var (output, _) in _layout.Outputs)
         {
             _scratch.Clear();
+            _confined.Clear();
             foreach (var entry in _surfaces)
             {
                 var target = entry.Layer.Output?.Output;
                 if (target == output || (target is null && first))
                 {
-                    _scratch.Add(entry);
+                    if (Confine is { } confine && confine(entry.Layer, output))
+                    {
+                        _confined.Add(entry);
+                    }
+                    else
+                    {
+                        _scratch.Add(entry);
+                    }
                 }
             }
 
             first = false;
-            var usable = LayerArrangement.Arrange(_layout.BoxOf(output), _scratch);
+            var box = _layout.BoxOf(output);
+            var usable = LayerArrangement.Arrange(box, _scratch);
             UsableAreaChanged?.Invoke(output, usable);
+            foreach (var entry in _confined)
+            {
+                _single.Clear();
+                _single.Add(entry);
+                var area = ConfinedBox is { } boxOf ? boxOf(entry.Layer, output, usable) : box;
+                _ = LayerArrangement.Arrange(area, _single);
+            }
         }
-
-        Arranged?.Invoke();
     }
 
     private void OnNewSurface(LayerSurface layer)

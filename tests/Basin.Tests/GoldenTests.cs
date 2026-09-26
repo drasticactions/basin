@@ -650,7 +650,16 @@ public sealed class GoldenTests
     [MemberData(nameof(Renderers))]
     public void Golden_canvas_terrace_plateau(string renderer) => CanvasTerrace(renderer, -0.4, "canvas-terrace-plateau");
 
-    private static void CanvasTerrace(string renderer, double slope, string name, bool separable = false)
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_terrace_bare(string renderer) => CanvasTerrace(renderer, 0.25, "canvas-terrace-bare", desktopLines: false);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_terrace_flat_bare(string renderer) =>
+        CanvasTerrace(renderer, 0.0, "canvas-terrace-flat-bare", separable: true, desktopLines: false);
+
+    private static void CanvasTerrace(string renderer, double slope, string name, bool separable = false, bool desktopLines = true)
     {
         SkipWithoutGpu(renderer);
         using var host = new CompositorTestHost(renderer: renderer);
@@ -674,6 +683,7 @@ public sealed class GoldenTests
                 CellSize = 16,
                 MinLineSpacing = 8,
                 Separable = separable,
+                DesktopLines = desktopLines,
                 Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
             },
         };
@@ -722,7 +732,12 @@ public sealed class GoldenTests
     [MemberData(nameof(Renderers))]
     public void Golden_overview_half(string renderer) => CanvasOverview(renderer, 0.5, "overview-half", fourSides: false, scale: 0.75);
 
-    private static void CanvasOverview(string renderer, double progress, string name, bool fourSides, double scale)
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_open_bare(string renderer) =>
+        CanvasOverview(renderer, 1.0, "overview-open-bare", fourSides: false, scale: 0.75, desktopLines: false);
+
+    private static void CanvasOverview(string renderer, double progress, string name, bool fourSides, double scale, bool desktopLines = true)
     {
         SkipWithoutGpu(renderer);
         using var host = new CompositorTestHost(renderer: renderer);
@@ -771,6 +786,7 @@ public sealed class GoldenTests
                 ViewCenterX = centerX,
                 ViewCenterY = centerY,
                 Alpha = (float)progress,
+                DesktopLines = desktopLines,
                 Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
             },
         };

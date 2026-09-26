@@ -77,10 +77,6 @@ internal sealed class SettingsForm
                             {
                                 Shortcuts(paper, theme);
                             }
-                            else if (section == SettingsCatalog.Canvas)
-                            {
-                                SettingsWidgets.Note(paper, theme, "canvas-note", "The overview reads sides, shelf, shelf_scale, slope_window, grid, drag and animation_ms from here.");
-                            }
 
                             break;
                     }
@@ -615,7 +611,13 @@ internal sealed class SettingsForm
         SettingsWidgets.EnumRow(paper, theme, "transform", "Transform", OutputSlot(table, "transform", SettingKind.Choice, "(automatic)"), ["(automatic)", .. SettingsCatalog.Transforms]);
         var modes = connected?.Modes ?? [];
         SettingsWidgets.EnumRow(paper, theme, "mode", "Mode", OutputSlot(table, "mode", SettingKind.Choice, "(automatic)"), ["(automatic)", .. modes]);
-        SettingsWidgets.EnumRow(paper, theme, "overview", "Overview", OutputSlot(table, "overview", SettingKind.Choice, "(inherit)", onOff: true), InheritOnOff);
+        var overviewTable = table + ".overview";
+        var overviewFlag = _draft.Document.RawValue(table, "overview");
+        var overviewSub = _draft.Document.Keys(overviewTable).Count > 0;
+        var overviewSlot = overviewSub
+            ? OutputSlot(overviewTable, "enable", SettingKind.Choice, "(inherit)", onOff: true)
+            : OutputSlot(table, "overview", SettingKind.Choice, "(inherit)", onOff: true);
+        SettingsWidgets.EnumRow(paper, theme, "overview", "Overview", overviewSlot, InheritOnOff);
         SettingsWidgets.TextRow(paper, theme, "overview_scale", "Overview scale", OutputSlot(table, "overview_scale", SettingKind.Literal), "inherit");
         SettingsWidgets.EnumRow(paper, theme, "overview_wall", "Overview wall", OutputSlot(table, "overview_wall", SettingKind.Choice, "(inherit)"), ["(inherit)", "slope", "step"]);
         SettingsWidgets.Heading(paper, theme, "canvas-overrides", "Canvas overrides");
@@ -629,6 +631,30 @@ internal sealed class SettingsForm
 
             var inherited = _draft.Document.RawValue("canvas", key.Key) ?? key.Default ?? "automatic";
             SettingsWidgets.TextRow(paper, theme, key.Key, key.Label, OutputSlot(table, key.Key, SettingKind.Literal), inherited);
+        }
+
+        SettingsWidgets.Heading(paper, theme, "overview-overrides", "Overview overrides");
+        if (overviewFlag is not null)
+        {
+            SettingsWidgets.Note(
+                paper, theme, "overview-overrides-flag",
+                $"This output sets overview = {overviewFlag}. Move it to enable in an [{overviewTable}] table to override the overview here.",
+                theme.Warning);
+        }
+        else
+        {
+            SettingsWidgets.Note(paper, theme, "overview-overrides-note", "Each value is a TOML literal, and an empty field inherits [overview].");
+            foreach (var key in SettingsCatalog.Keys)
+            {
+                if (key.Section != SettingsCatalog.Overview || (key.Key != "anchor" && Array.IndexOf(OverviewSetting.TerraceKeys, key.Key) < 0))
+                {
+                    continue;
+                }
+
+                var inherited = _draft.Document.RawValue("overview", key.Key) ?? key.Default ?? "automatic";
+                SettingsWidgets.TextRow(
+                    paper, theme, "overview-" + key.Key, key.Label, OutputSlot(overviewTable, key.Key, SettingKind.Literal), inherited);
+            }
         }
 
         paper.PopID();

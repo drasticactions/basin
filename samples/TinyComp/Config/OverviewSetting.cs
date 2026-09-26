@@ -43,6 +43,12 @@ internal sealed class OverviewSetting
 
     public const uint DefaultShelfColor = 0x3a3d44ff;
 
+    public static readonly string[] TerraceKeys =
+    [
+        "sides", "shelf", "shelf_scale", "shelf_min_scale", "shelf_step", "slope", "slope_window", "shelf_shape",
+        "corner", "corner_radius", "mesh_cell", "drag", "grid", "grid_cell", "grid_color", "desktop_grid", "animation_ms",
+    ];
+
     public bool? Enable { get; init; }
 
     public double? Scale { get; init; }
@@ -77,6 +83,12 @@ internal sealed class OverviewSetting
 
     public bool? TextureGrid { get; init; }
 
+    public OverviewAnchor? Anchor { get; init; }
+
+    public CanvasSetting? Terrace { get; init; }
+
+    public TomlTable? TerraceTable { get; init; }
+
     public static OverviewSetting Defaults { get; } = new()
     {
         Enable = true,
@@ -96,6 +108,8 @@ internal sealed class OverviewSetting
         TextureScale = DefaultTextureScale,
         ShelfColor = DefaultShelfColor,
         TextureGrid = true,
+        Anchor = OverviewAnchor.Fill,
+        Terrace = CanvasSetting.Defaults,
     };
 
     public bool Enabled => Enable ?? true;
@@ -139,6 +153,12 @@ internal sealed class OverviewSetting
     public uint ShelfRgba => ShelfColor ?? DefaultShelfColor;
 
     public bool TextureGridValue => TextureGrid ?? true;
+
+    public CanvasSetting TerraceValue => Terrace ?? CanvasSetting.Defaults;
+
+    public OverviewAnchor AnchorValue => Anchor ?? OverviewAnchor.Fill;
+
+    public string AnchorName => AnchorValue == OverviewAnchor.Center ? "center" : "fill";
 
     public RenderColor ShelfRenderColor => Premultiplied(ShelfRgba);
 
@@ -217,6 +237,9 @@ internal sealed class OverviewSetting
         TextureScale = TextureScale ?? fallback.TextureScale,
         ShelfColor = ShelfColor ?? fallback.ShelfColor,
         TextureGrid = TextureGrid ?? fallback.TextureGrid,
+        Anchor = Anchor ?? fallback.Anchor,
+        Terrace = Terrace is null ? fallback.Terrace : fallback.Terrace is null ? Terrace : Terrace.Over(fallback.Terrace),
+        TerraceTable = TerraceTable ?? fallback.TerraceTable,
     };
 
     public static OverviewSetting Parse(TomlTable table, string section, BasinLogger log)
@@ -238,8 +261,16 @@ internal sealed class OverviewSetting
         double? textureScale = null;
         uint? shelfColor = null;
         bool? textureGrid = null;
+        TomlTable? terrace = null;
+        OverviewAnchor? anchor = null;
         foreach (var (key, value) in table)
         {
+            if (Array.IndexOf(TerraceKeys, key) >= 0)
+            {
+                (terrace ??= [])[key] = value;
+                continue;
+            }
+
             switch (key)
             {
                 case "enable" when value is bool flag:
@@ -320,6 +351,19 @@ internal sealed class OverviewSetting
                 case "texture_grid" when value is bool grid:
                     textureGrid = grid;
                     break;
+                case "anchor" when value is string anchorName:
+                    anchor = anchorName switch
+                    {
+                        "fill" => OverviewAnchor.Fill,
+                        "center" => OverviewAnchor.Center,
+                        _ => null,
+                    };
+                    if (anchor is null)
+                    {
+                        log.Warn($"[{section}] anchor \"{anchorName}\" is not fill|center, ignored");
+                    }
+
+                    break;
                 default:
                     log.Warn($"[{section}] {key}: unknown key or wrong type, ignored");
                     break;
@@ -356,6 +400,9 @@ internal sealed class OverviewSetting
             TextureScale = textureScale,
             ShelfColor = shelfColor,
             TextureGrid = textureGrid,
+            Anchor = anchor,
+            Terrace = terrace is null ? null : CanvasSetting.Parse(terrace, section, log),
+            TerraceTable = terrace,
         };
     }
 

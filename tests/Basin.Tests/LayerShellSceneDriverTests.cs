@@ -152,6 +152,88 @@ public sealed class LayerShellSceneDriverTests
         layerShell.Dispose();
     }
 
+    private static (Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1 Proxy, Func<(int Width, int Height)> Size) MapLayer(
+        CompositorTestHost host,
+        Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1 shellProxy,
+        Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer layer,
+        Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor anchor,
+        int height,
+        int exclusive)
+    {
+        var client = host.Client;
+        var surface = client.Compositor.CreateSurface();
+        var proxy = shellProxy.GetLayerSurface(surface, client.Outputs[0], layer, "test");
+        proxy.SetAnchor(anchor);
+        proxy.SetSize(0, (uint)height);
+        proxy.SetExclusiveZone(exclusive);
+        var size = (Width: 0, Height: 0);
+        var serial = 0u;
+        proxy.Configure += (_, e) =>
+        {
+            serial = e.Serial;
+            size = ((int)e.Width, (int)e.Height);
+            proxy.AckConfigure(e.Serial);
+            if (size.Width > 0 && size.Height > 0)
+            {
+                var buffer = client.CreateBuffer(size.Width, size.Height, Fill.Solid(size.Width, size.Height, 0xFF285577));
+                surface.Attach(buffer.Proxy, 0, 0);
+                surface.Damage(0, 0, size.Width, size.Height);
+            }
+
+            surface.Commit();
+        };
+        surface.Commit();
+        host.PumpUntil(() => serial != 0);
+        host.PumpToServer();
+        return (proxy, () => size);
+    }
+
+    [Fact]
+    public void A_confined_background_arranges_into_the_box_the_consumer_names()
+    {
+        using var host = new CompositorTestHost();
+        var layerShell = new LayerShell(host.Display, host.Compositor);
+        var layers = new SceneLayers(host.Scene.Root);
+        var driver = new LayerShellSceneDriver(layerShell, host.Layout, layers);
+        var seenUsable = new List<Basin.Box>();
+        driver.Confine = (layer, _) => layer.Layer == LayerKind.Background;
+        driver.ConfinedBox = (_, output, usable) =>
+        {
+            seenUsable.Add(usable);
+            var box = host.Layout.BoxOf(output);
+            return new Basin.Box(box.X + 10, box.Y + usable.Y, box.Width - 20, usable.Height);
+        };
+        var nested = 0;
+        driver.UsableAreaChanged += (_, _) =>
+        {
+            if (nested++ < 3)
+            {
+                driver.Rearrange();
+            }
+        };
+        var arranged = 0;
+        driver.Arranged += () => arranged++;
+
+        var shellProxy = BindLayerShell(host, host.Client);
+        var all = Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Top | Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Bottom |
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Left | Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Right;
+        var top = Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Top | Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Left |
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Right;
+        var (_, panelSize) = MapLayer(host, shellProxy, Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, top, 8, 8);
+        var (_, wallpaperSize) = MapLayer(host, shellProxy, Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Background, all, 0, -1);
+        host.PumpUntil(() => driver.Surfaces.Count == 2 && driver.Surfaces[1].Scene is not null);
+
+        var output = host.Layout.BoxOf(host.Output);
+        Assert.Equal(output.Width, panelSize().Width);
+        Assert.Equal((output.Width - 20, output.Height - 8), wallpaperSize());
+        Assert.Contains(seenUsable, usable => usable.Y == 8);
+        var wallpaper = driver.Surfaces[1].Scene!;
+        Assert.Equal(output.X + 10, wallpaper.Tree.X);
+        Assert.Equal(output.Y + 8, wallpaper.Tree.Y);
+        Assert.True(arranged > 0);
+        layerShell.Dispose();
+    }
+
     private static Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1 BindLayerShell(
         CompositorTestHost host, ShmTestClient client, uint version = 4)
     {

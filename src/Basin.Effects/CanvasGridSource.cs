@@ -78,6 +78,8 @@ public sealed class CanvasGridSource : IMeshSource
 
     public RenderColor Color { get; set; } = new(0.16f, 0.21f, 0.75f, 1f);
 
+    public bool DesktopLines { get; set; } = true;
+
     public float Alpha
     {
         get => _alpha;
@@ -222,12 +224,21 @@ public sealed class CanvasGridSource : IMeshSource
 
         if (Separable)
         {
-            return (VerticalLinesWarped(bounds) + HorizontalLinesWarped(bounds)) * 6;
+            return StraightSegments(bounds) * 6;
         }
 
         var count = VerticalLinesWarped(bounds) * ColumnSegmentsWarped(bounds);
+        if (!DesktopLines)
+        {
+            count -= HiddenColumns(bounds);
+        }
+
         var zoneRowSegments = ZoneRowSegmentsWarped(bounds);
-        var rowSegments = 1 + ZoneSegments(Left, bounds.X, bounds.Right) + ZoneSegments(Right, bounds.X, bounds.Right);
+        var leftSegments = ZoneSegments(Left, bounds.X, bounds.Right);
+        var rightSegments = ZoneSegments(Right, bounds.X, bounds.Right);
+        var rowSegments = 1 + leftSegments + rightSegments;
+        var plateauSegments = rowSegments - 1 + PlateauParts(
+            bounds, leftSegments > 0 ? Left!.Seam : bounds.X, rightSegments > 0 ? Right!.Seam : bounds.Right, out _, out _);
         var leftShelf = ShelfSegment(Left, bounds);
         var rightShelf = ShelfSegment(Right, bounds);
         var first = FirstHorizontal(bounds);
@@ -246,7 +257,7 @@ public sealed class CanvasGridSource : IMeshSource
                 continue;
             }
 
-            count += rowSegments;
+            count += HidesRow(y) ? plateauSegments : rowSegments;
             if (leftShelf > 0 && DrawsShelfRow(Left!, y))
             {
                 count++;
@@ -296,7 +307,11 @@ public sealed class CanvasGridSource : IMeshSource
             var shift = x - exact;
             var top = topActive ? (float)_map.ToScreenPoint(canvasX, Top!.Seam).Y : bounds.Y;
             var bottom = bottomActive ? (float)_map.ToScreenPoint(canvasX, Bottom!.Seam).Y : bounds.Bottom;
-            WriteColumn(into, ref write, (x, top), (x, bottom), color);
+            if (!HidesColumn(column))
+            {
+                WriteColumn(into, ref write, (x, top), (x, bottom), color);
+            }
+
             if (topActive)
             {
                 WriteColumnCorner(into, ref write, Top!, canvasX, shift, color);
@@ -345,7 +360,24 @@ public sealed class CanvasGridSource : IMeshSource
                 continue;
             }
 
-            WriteRow(into, ref write, flatLeft, flatRight, y, color);
+            if (!HidesRow(y))
+            {
+                WriteRow(into, ref write, flatLeft, flatRight, y, color);
+            }
+            else
+            {
+                var parts = PlateauParts(bounds, flatLeft, flatRight, out var firstPart, out var secondPart);
+                if (parts > 0)
+                {
+                    WriteRow(into, ref write, firstPart.From, firstPart.To, y, color);
+                }
+
+                if (parts > 1)
+                {
+                    WriteRow(into, ref write, secondPart.From, secondPart.To, y, color);
+                }
+            }
+
             for (var segment = 0; segment < leftSegments; segment++)
             {
                 var x1 = Left!.Seam - (segment * SegmentWidth);
@@ -386,7 +418,21 @@ public sealed class CanvasGridSource : IMeshSource
             }
 
             var x = (float)Snap(ToScreen(column), ViewCenterX);
-            WriteColumn(into, ref write, (x, bounds.Y), (x, bounds.Bottom), color);
+            if (!HidesColumn(column))
+            {
+                WriteColumn(into, ref write, (x, bounds.Y), (x, bounds.Bottom), color);
+                continue;
+            }
+
+            if (Top is { IsIdentity: false } top)
+            {
+                WriteColumn(into, ref write, (x, bounds.Y), (x, top.Seam), color);
+            }
+
+            if (Bottom is { IsIdentity: false } bottom)
+            {
+                WriteColumn(into, ref write, (x, bottom.Seam), (x, bounds.Bottom), color);
+            }
         }
 
         var firstRow = FirstHorizontal(bounds);
@@ -399,9 +445,103 @@ public sealed class CanvasGridSource : IMeshSource
                 continue;
             }
 
-            var y = Snap(ToScreenY(row), ViewCenterY);
-            WriteSegment(into, ref write, bounds.X, (float)y, bounds.Right, (float)y, color);
+            var y = (float)Snap(ToScreenY(row), ViewCenterY);
+            if (!HidesRow(row))
+            {
+                WriteSegment(into, ref write, bounds.X, y, bounds.Right, y, color);
+                continue;
+            }
+
+            if (Left is { IsIdentity: false } left)
+            {
+                WriteSegment(into, ref write, bounds.X, y, left.Seam, y, color);
+            }
+
+            if (Right is { IsIdentity: false } right)
+            {
+                WriteSegment(into, ref write, right.Seam, y, bounds.Right, y, color);
+            }
         }
+    }
+
+    private int StraightSegments(in Box bounds)
+    {
+        var count = VerticalLinesWarped(bounds) + HorizontalLinesWarped(bounds);
+        if (DesktopLines)
+        {
+            return count;
+        }
+
+        var sides = (Left is { IsIdentity: false } ? 1 : 0) + (Right is { IsIdentity: false } ? 1 : 0);
+        var ends = (Top is { IsIdentity: false } ? 1 : 0) + (Bottom is { IsIdentity: false } ? 1 : 0);
+        count += HiddenColumns(bounds) * (ends - 1);
+        var first = FirstHorizontal(bounds);
+        var rows = Candidates(first, LastHorizontal(bounds));
+        for (var i = 0; i < rows; i++)
+        {
+            var row = first + ((long)i * _cellSize);
+            if (DrawsRow(row) && HidesRow(row))
+            {
+                count += sides - 1;
+            }
+        }
+
+        return count;
+    }
+
+    private int HiddenColumns(in Box bounds)
+    {
+        var hidden = 0;
+        var first = FirstVertical(bounds);
+        var columns = Candidates(first, LastVertical(bounds));
+        for (var i = 0; i < columns; i++)
+        {
+            var column = first + ((long)i * _cellSize);
+            if (DrawsColumn(column) && HidesColumn(column))
+            {
+                hidden++;
+            }
+        }
+
+        return hidden;
+    }
+
+    private bool HidesColumn(long canvasX) => !DesktopLines && Inside(Left, canvasX) && Inside(Right, canvasX);
+
+    private bool HidesRow(long canvasY) => !DesktopLines && Inside(Top, canvasY) && Inside(Bottom, canvasY);
+
+    private static bool Inside(CanvasWarp? warp, long canvas) =>
+        warp is not { IsIdentity: false } zone || zone.Direction * (canvas - zone.Seam) < 0;
+
+    private int PlateauParts(in Box bounds, int flatLeft, int flatRight, out (int From, int To) first, out (int From, int To) second)
+    {
+        var plateauLeft = Left is { IsIdentity: false } left ? left.Seam : bounds.X;
+        var plateauRight = Right is { IsIdentity: false } right ? right.Seam : bounds.Right;
+        first = default;
+        second = default;
+        var parts = 0;
+        if (Math.Min(flatRight, plateauLeft) > flatLeft)
+        {
+            first = (flatLeft, Math.Min(flatRight, plateauLeft));
+            parts++;
+        }
+
+        if (Math.Max(flatLeft, plateauRight) < flatRight)
+        {
+            var part = (Math.Max(flatLeft, plateauRight), flatRight);
+            if (parts == 0)
+            {
+                first = part;
+            }
+            else
+            {
+                second = part;
+            }
+
+            parts++;
+        }
+
+        return parts;
     }
 
     private Box WarpBounds(in Box bounds)

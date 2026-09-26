@@ -499,7 +499,7 @@ public sealed class TinyCompCanvasProcessTests
         }
     }
 
-    private const string OverviewConfig = "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n";
+    private const string OverviewConfig = "[overview]\ngrid = \"never\"\nanimation_ms = 100\n";
 
     private static Dictionary<string, string> Fields(string line)
     {
@@ -712,10 +712,68 @@ public sealed class TinyCompCanvasProcessTests
         Assert.Equal(double.Parse(held["scale"], CultureInfo.InvariantCulture), double.Parse(released["scale"], CultureInfo.InvariantCulture), 2);
     }
 
-    private const string StepConfig = "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n[overview]\nwall = \"step\"\n";
+    private const string StepConfig = "[overview]\ngrid = \"never\"\nanimation_ms = 100\nwall = \"step\"\n";
 
     private const string StepFourConfig =
-        "[canvas]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n[overview]\nwall = \"step\"\n";
+        "[overview]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\nwall = \"step\"\n";
+
+    [Fact]
+    public void Overview_opens_with_its_own_sides_and_not_the_canvas_sides()
+    {
+        using var session = CanvasSession.Start(
+            "[canvas]\nsides = [\"top\"]\n[overview]\nsides = [\"left\", \"bottom\"]\nanimation_ms = 100\n", SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        var line = session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000);
+        Assert.NotNull(line);
+        Assert.Equal("left,bottom", Fields(line!)["sides"]);
+    }
+
+    [Theory]
+    [InlineData("step")]
+    [InlineData("slope")]
+    public void A_one_sided_overview_pins_the_far_edge_and_walls_the_empty_axis(string wall)
+    {
+        var config = $"[overview]\nwall = \"{wall}\"\nsides = [\"left\"]\ngrid = \"never\"\nanimation_ms = 100\n";
+        using var session = CanvasSession.Start(config, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        session!.Send("where");
+        var line = session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true", 5000);
+        Assert.NotNull(line);
+        var fields = Fields(line!);
+        Assert.Equal("left", fields["sides"]);
+        Assert.Equal("fill", fields["anchor"]);
+        Assert.Equal("top,bottom", fields["walls"]);
+        Assert.Equal(320, int.Parse(fields["shelf"], CultureInfo.InvariantCulture) + int.Parse(fields["slope"], CultureInfo.InvariantCulture));
+
+        var (_, _, before, _, _) = session.CanvasWindow();
+        var grabX = before.X + (before.Width / 2);
+        var grabY = before.Y + 4;
+        session.Send($"move {grabX} {grabY}");
+        session.Send("button 272 1");
+        for (var y = grabY; y > 8; y -= 20)
+        {
+            session.Send($"move {grabX} {y}");
+        }
+
+        session.Send($"move {grabX} 4");
+        session.Send("button 272 0");
+        Thread.Sleep(400);
+        var dropped = OverviewWindow(session);
+        Assert.Equal("false", dropped["shelved"]);
+        Assert.Equal("flat", dropped["region"]);
+        session.Send("shelve top");
+        Assert.Equal("SHELVE refused: side", session.WaitForLine("SHELVE "));
+
+        session.Rewrite(config + "anchor = \"center\"\n");
+        session.Send("reload");
+        Assert.NotNull(session.WaitForLine("RELOAD "));
+        session.Send("where");
+        var centered = Fields(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true", 5000)!);
+        Assert.Equal("none", centered["walls"]);
+        Assert.Equal(160, int.Parse(centered["shelf"], CultureInfo.InvariantCulture) + int.Parse(centered["slope"], CultureInfo.InvariantCulture));
+    }
 
     [Fact]
     public void Step_overview_zooms_the_desktop_flat_and_shelves_a_window_at_the_shelf_scale()
@@ -745,8 +803,8 @@ public sealed class TinyCompCanvasProcessTests
     }
 
     [Theory]
-    [InlineData("[canvas]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n[overview]\nwall = \"step\"\n")]
-    [InlineData("[canvas]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n")]
+    [InlineData("[overview]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\nwall = \"step\"\n")]
+    [InlineData("[overview]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n")]
     public void A_second_shelve_moves_the_shelved_window_to_another_side(string config)
     {
         using var session = CanvasSession.Start(config, SsdWin());
@@ -780,7 +838,7 @@ public sealed class TinyCompCanvasProcessTests
     }
 
     private static string TexturedStep(string keys) =>
-        "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n[overview]\nwall = \"step\"\n" + keys;
+        "[overview]\ngrid = \"never\"\nanimation_ms = 100\nwall = \"step\"\n" + keys;
 
     private static Dictionary<string, string> OpenTextured(CanvasSession session)
     {
@@ -854,7 +912,8 @@ public sealed class TinyCompCanvasProcessTests
     [Fact]
     public void Texture_grid_false_turns_off_every_grid_line_while_a_texture_is_set()
     {
-        const string grid = "[canvas]\ngrid = \"always\"\nanimation_ms = 100\n[overview]\nwall = \"step\"\nwall_texture = \"stone\"\n";
+        const string grid =
+            "[overview]\ngrid = \"always\"\ndesktop_grid = true\nanimation_ms = 100\nwall = \"step\"\nwall_texture = \"stone\"\n";
         int withGrid;
         using (var shown = CanvasSession.Start(grid, SsdWin()))
         {
@@ -874,6 +933,137 @@ public sealed class TinyCompCanvasProcessTests
         hidden.Send("reload");
         Assert.NotNull(hidden.WaitForLine("RELOAD "));
         Assert.True(BlueGridPixels(hidden.Shot("flat")) > 10000, "with no texture the grid comes back");
+    }
+
+    private const string BareTerrace = "[canvas]\nenable = true\nwindow = \"terrace\"\ngrid = \"always\"\nanimation_ms = 100\n";
+
+    private static int GridPixelsIn(Shot shot, int x0, int y0, int x1, int y1, Box skip)
+    {
+        var count = 0;
+        for (var y = y0; y < y1; y++)
+        {
+            for (var x = x0; x < x1; x++)
+            {
+                if (x >= skip.X - 40 && x < skip.Right + 40 && y >= skip.Y - 40 && y < skip.Bottom + 40)
+                {
+                    continue;
+                }
+
+                var i = ((y * shot.Width) + x) * 4;
+                if (shot.Rgba[i + 2] > 150 && shot.Rgba[i] < 90 && shot.Rgba[i + 1] < 110)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private static void AssertBarePlateau(CanvasSession session, string config, int x0, int y0, int x1, int y1, Action open)
+    {
+        open();
+        var (_, _, window, _, _) = session.CanvasWindow();
+        var bare = session.Shot("bare");
+        var plateau = GridPixelsIn(bare, x0, y0, x1, y1, window);
+        var shelf = GridPixelsIn(bare, 0, 0, 100, bare.Height, window);
+        Assert.True(plateau < 200, $"{plateau} grid pixels are left on the desktop");
+        Assert.True(shelf > 1000, $"the shelf drew {shelf} grid pixels");
+
+        session.Rewrite(config.Replace("grid = \"always\"\n", "grid = \"always\"\ndesktop_grid = true\n", StringComparison.Ordinal));
+        session.Send("reload");
+        Assert.NotNull(session.WaitForLine("RELOAD "));
+        open();
+        var lined = GridPixelsIn(session.Shot("lined"), x0, y0, x1, y1, window);
+        Assert.True(lined > 3000, $"desktop_grid = true drew {lined} grid pixels on the desktop");
+    }
+
+    [Fact]
+    public void A_terrace_leaves_its_desktop_clear_until_desktop_grid_is_set()
+    {
+        using var session = CanvasSession.Start(BareTerrace, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        AssertBarePlateau(session!, BareTerrace, 260, 0, 1020, 720, () => { });
+    }
+
+    [Theory]
+    [InlineData("slope")]
+    [InlineData("step")]
+    public void Overview_leaves_its_zoomed_desktop_clear_until_desktop_grid_is_set(string wall)
+    {
+        var config = $"[overview]\ngrid = \"always\"\nanimation_ms = 100\nwall = \"{wall}\"\n";
+        using var session = CanvasSession.Start(config, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        AssertBarePlateau(session!, config, 200, 110, 1080, 610, () =>
+        {
+            session!.Send("overview open");
+            session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000);
+        });
+    }
+
+    [Fact]
+    public void The_options_line_reports_desktop_grid()
+    {
+        using (var plain = CanvasSession.Start(BareTerrace, SsdWin()))
+        {
+            Assert.SkipWhen(plain is null, "tinycomp or ssdwin is not available beside the tests");
+            Assert.SkipWhen(plain!.Options is null, "a Release tinycomp prints no OPTIONS line");
+            Assert.Contains(" canvas-desktop-grid=off", plain.Options, StringComparison.Ordinal);
+        }
+
+        using var lined = CanvasSession.Start(BareTerrace + "desktop_grid = true\n", SsdWin());
+        Assert.NotNull(lined);
+        Assert.Contains(" canvas-desktop-grid=on", lined!.Options, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_output_table_turns_the_desktop_grid_on_for_that_output_only()
+    {
+        using var session = CanvasSession.Start(
+            BareTerrace + "[output.\"HEADLESS-1\"]\ndesktop_grid = true\n", SsdWin(), compositorArguments: ["--outputs", "2"]);
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        var (_, _, window, _, _) = session!.CanvasWindow();
+        var first = GridPixelsIn(session.Shot("first", 0), 260, 0, 1020, 720, window);
+        var second = GridPixelsIn(session.Shot("second", 1), 260, 0, 1020, 720, default);
+        Assert.True(first > 3000, $"HEADLESS-1 drew {first} grid pixels on its desktop");
+        Assert.True(second < 200, $"HEADLESS-2 drew {second} grid pixels on its desktop");
+    }
+
+    private static (int First, int Last) RedSpan(Shot shot, int y)
+    {
+        var first = -1;
+        var last = -1;
+        for (var x = 0; x < shot.Width; x++)
+        {
+            var i = ((y * shot.Width) + x) * 4;
+            if (shot.Rgba[i] > 150 && shot.Rgba[i + 1] < 80 && shot.Rgba[i + 2] < 80)
+            {
+                first = first < 0 ? x : first;
+                last = x;
+            }
+        }
+
+        return (first, last);
+    }
+
+    [Fact]
+    public void A_wallpaper_fills_the_desktop_between_the_seams_until_it_is_asked_for_the_output()
+    {
+        const string config = "[canvas]\nenable = true\nwindow = \"terrace\"\ngrid = \"never\"\nanimation_ms = 100\n";
+        using var session = CanvasSession.Start(config, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        Assert.SkipWhen(!File.Exists("/usr/bin/swaybg"), "swaybg is not installed");
+        session!.Spawn("/usr/bin/swaybg", "-c", "#c02020");
+        Thread.Sleep(1500);
+        var (first, last) = RedSpan(session.Shot("desktop"), 700);
+        Assert.InRange(first, 228, 232);
+        Assert.InRange(last, 1047, 1051);
+
+        session.Rewrite(config + "wallpaper = \"output\"\n");
+        session.Send("reload");
+        Assert.NotNull(session.WaitForLine("RELOAD "));
+        Thread.Sleep(800);
+        Assert.Equal((0, 1279), RedSpan(session.Shot("output"), 700));
     }
 
     [Fact]
@@ -967,7 +1157,7 @@ public sealed class TinyCompCanvasProcessTests
     public void A_texture_on_a_slope_wall_warns_once_and_draws_the_slope()
     {
         using var session = CanvasSession.Start(
-            "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n[overview]\nwall_texture = \"stone\"\n", SsdWin());
+            "[overview]\ngrid = \"never\"\nanimation_ms = 100\nwall_texture = \"stone\"\n", SsdWin());
         Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
         var overview = OpenTextured(session!);
         Assert.Equal("slope", overview["wall"]);
@@ -978,7 +1168,7 @@ public sealed class TinyCompCanvasProcessTests
     [Fact]
     public void A_step_shelve_animates_from_the_desktop_to_the_shelf_and_back()
     {
-        const string slow = "[canvas]\ngrid = \"never\"\nanimation_ms = 1000\n[overview]\nwall = \"step\"\n";
+        const string slow = "[overview]\ngrid = \"never\"\nanimation_ms = 1000\nwall = \"step\"\n";
         using var session = CanvasSession.Start(slow, SsdWin());
         Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
         session!.Send("overview open");
@@ -1171,6 +1361,7 @@ public sealed class TinyCompCanvasProcessTests
         private readonly List<string> _errorLines = [];
         private readonly List<Process> _extra = [];
         private string _socket = string.Empty;
+        private string? _options;
         private readonly object _gate = new();
         private Process? _client;
 
@@ -1183,7 +1374,8 @@ public sealed class TinyCompCanvasProcessTests
         public static CanvasSession? Start(
             string config = "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\n",
             string? clientPath = "weston-simple-shm",
-            string[]? clientArguments = null)
+            string[]? clientArguments = null,
+            string[]? compositorArguments = null)
         {
             if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath || clientPath is null ||
                 (clientPath == "weston-simple-shm" && !ClientAvailable()))
@@ -1211,6 +1403,11 @@ public sealed class TinyCompCanvasProcessTests
             info.ArgumentList.Add("pixman");
             info.ArgumentList.Add("--config");
             info.ArgumentList.Add(configPath);
+            foreach (var argument in compositorArguments ?? [])
+            {
+                info.ArgumentList.Add(argument);
+            }
+
             info.Environment["XDG_RUNTIME_DIR"] = runtimeDir;
             info.Environment.Remove("WAYLAND_DISPLAY");
             var compositor = Process.Start(info)!;
@@ -1222,6 +1419,11 @@ public sealed class TinyCompCanvasProcessTests
                     lock (session._gate)
                     {
                         session._lines.Add(line);
+                        if (line.StartsWith("OPTIONS ", StringComparison.Ordinal))
+                        {
+                            session._options = line;
+                        }
+
                         Monitor.PulseAll(session._gate);
                     }
                 }
@@ -1429,11 +1631,22 @@ public sealed class TinyCompCanvasProcessTests
                 fields["home"]);
         }
 
-        public Shot Shot(string name)
+        public string? Options
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _options;
+                }
+            }
+        }
+
+        public Shot Shot(string name, int output = 0)
         {
             Thread.Sleep(400);
             var path = Path.Combine(_runtimeDir, $"{name}.png");
-            Send($"shotraw {path}");
+            Send(output == 0 ? $"shotraw {path}" : $"shotraw {path} {output}");
             var line = WaitForLine("SHOTRAW ");
             Assert.True(line is not null && line.StartsWith($"SHOTRAW {path}", StringComparison.Ordinal), line ?? "no SHOTRAW line");
             var (rgba, width, height) = PngCodec.Decode(File.ReadAllBytes(path));

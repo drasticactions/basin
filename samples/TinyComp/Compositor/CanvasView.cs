@@ -46,6 +46,8 @@ internal sealed class CanvasView
 
     public bool Overview { get; set; }
 
+    public (bool Confine, int? Left, int? Top, int? Right, int? Bottom) LayerArea { get; set; }
+
     public CanvasStepMap? Step { get; set; }
 
     public CanvasView()

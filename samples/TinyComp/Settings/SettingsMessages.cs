@@ -180,7 +180,7 @@ internal static partial class SettingsMessages
 
         if (raw.Contains("wall = \"step\" ignores", StringComparison.Ordinal))
         {
-            return ("The step wall ignores some canvas settings.", false);
+            return ("The step wall ignores some overview settings.", false);
         }
 
         if (raw.Contains("overrides corner", StringComparison.Ordinal))

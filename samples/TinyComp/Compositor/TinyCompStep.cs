@@ -20,7 +20,7 @@ internal sealed partial class TinyComp
 
     private static bool Stepped(OutputView view) => view.Canvas.Step is not null;
 
-    private void LayoutStepSides(OutputView view, in Box box, in Box usable)
+    private void LayoutStepSides(OutputView view, in Box box, in Box usable, CanvasSide walls)
     {
         var overview = OverviewOf(view);
         var settings = view.Canvas.Settings;
@@ -28,14 +28,17 @@ internal sealed partial class TinyComp
         var wall = overview.Settings.WallWidthValue;
         var active = CanvasSide.None;
         var border = CanvasSide.None;
+        var walled = CanvasSide.None;
         foreach (var side in CanvasSides.Each)
         {
             var index = SideIndex(side);
-            var (outer, edge, center, size) = SideFrame(side, box, usable);
-            var wanted = settings.SideSet.HasFlag(side) && !HasNeighbour(view.Output, box, side);
+            var (outer, edge, center, size) = SideFrame(side, box, usable, overview);
+            var wanted = OverviewWants(view, box, side);
             var full = wanted
                 ? OverviewLayout.StepFull(outer, edge, center, Direction(side), scale, wall, size)
-                : new OverviewSide(false, 0, 0, 0);
+                : walls.HasFlag(side)
+                    ? OverviewLayout.WallFull(outer, edge, center, Direction(side), scale, 1)
+                    : new OverviewSide(false, 0, 0, 0);
             if (wanted && !full.Active)
             {
                 border |= side;
@@ -43,7 +46,14 @@ internal sealed partial class TinyComp
 
             if (full.Active)
             {
-                active |= side;
+                if (wanted)
+                {
+                    active |= side;
+                }
+                else
+                {
+                    walled |= side;
+                }
             }
 
             overview.FullSides[index] = full;
@@ -54,6 +64,7 @@ internal sealed partial class TinyComp
 
         overview.Sides = active;
         overview.BorderSides = border;
+        overview.WallSides = walled;
     }
 
     private double StepShelfScale(OutputView view, bool? animate)
@@ -87,20 +98,23 @@ internal sealed partial class TinyComp
     {
         var overview = OverviewOf(view);
         var full = overview.StepFull;
-        _ = OverviewLayout.LayoutStep(full, box, usable, overview.FullSides, 1.0, overview.Settings.ScaleValue, shelfScale);
+        _ = OverviewLayout.LayoutStep(
+            full, box, usable, overview.FullSides, 1.0, overview.Settings.ScaleValue, shelfScale,
+            overview.CenterX, overview.CenterY, OverviewLayout.StepSidesOf(overview.Sides));
         var seen = overview.StepSeen;
         if (overview.StepSeenValid && !SameStep(seen, full))
         {
             FollowStepShelves(view, seen, full);
         }
 
-        _ = seen.Layout(full.CenterX, full.CenterY, full.Zoom, full.ShelfScale, full.Outline, full.Inner, full.Outer, full.Sides);
+        _ = seen.Layout(
+            full.CenterX, full.CenterY, full.Zoom, full.ShelfScale, full.Outline, full.Inner, full.Outer, full.Sides, full.Shelves);
         overview.StepSeenValid = true;
     }
 
     private static bool SameStep(CanvasStepMap a, CanvasStepMap b) =>
         a.CenterX == b.CenterX && a.CenterY == b.CenterY && a.Zoom == b.Zoom && a.ShelfScale == b.ShelfScale &&
-        a.Outline == b.Outline && a.Inner == b.Inner && a.Outer == b.Outer && a.Sides == b.Sides;
+        a.Outline == b.Outline && a.Inner == b.Inner && a.Outer == b.Outer && a.Sides == b.Sides && a.Shelves == b.Shelves;
 
     private static (double X, double Y, double HalfWidth, double HalfHeight) StepDrawn(
         CanvasStepMap map, in Box box, CanvasStepSides side, double floor)
@@ -258,8 +272,8 @@ internal sealed partial class TinyComp
         var settings = canvas.Settings;
         var scale = overview.Settings.ScaleValue;
         var usable = UsableBox(view, box);
-        var centerX = box.X + (box.Width / 2.0);
-        var centerY = box.Y + (box.Height / 2.0);
+        var centerX = overview.CenterX;
+        var centerY = overview.CenterY;
         var wasOverview = canvas.Overview;
         var changed = !wasOverview || canvas.Step is null;
         canvas.Overview = true;
@@ -271,7 +285,7 @@ internal sealed partial class TinyComp
 
         foreach (var side in CanvasSides.Each)
         {
-            var (outer, _, _, _) = SideFrame(side, box, usable);
+            var (outer, _, _, _) = SideFrame(side, box, usable, overview);
             var fan = (side & CanvasSide.Horizontal) != 0 ? centerY : centerX;
             changed |= WarpOf(canvas, side).LayoutTerrace(
                 outer, Direction(side), 0, 0, 1.0, CanvasWarp.TerraceExponent, settings.SlopeValue, fan);
@@ -286,7 +300,9 @@ internal sealed partial class TinyComp
         changed |= LayoutCanvasGrid(view, box, wanted: false);
         var shelfScale = StepShelfScale(view, wasOverview && !animating);
         SetStepFull(view, box, usable, shelfScale);
-        changed |= OverviewLayout.LayoutStep(overview.Step, box, usable, overview.FullSides, overview.Value, scale, shelfScale);
+        changed |= OverviewLayout.LayoutStep(
+            overview.Step, box, usable, overview.FullSides, overview.Value, scale, shelfScale,
+            overview.CenterX, overview.CenterY, OverviewLayout.StepSidesOf(overview.Sides));
         canvas.Step = overview.Step;
         var meshChanged = LayoutStepMeshes(view, box);
         SyncLayerZoom(view, overview.Step.Zoom, centerX, centerY);
@@ -334,9 +350,10 @@ internal sealed partial class TinyComp
         var wallTexture = _wallTexture.Buffer;
         var shelfTexture = _shelfTexture.Buffer;
         var gridLines = overview.Settings.TextureGridValue || (shelfTexture is null && wallTexture is null);
+        var desktopLines = gridLines && settings.DesktopGridValue;
         var linesChanged = !ReferenceEquals(source.Map, overview.Step) || source.CellSize != settings.GridCellSize ||
             source.Color != color || !ReferenceEquals(source.Walls, walls) || source.Alpha != alpha || source.Lines != lines ||
-            source.ShelfLines != gridLines || source.WallGridLines != gridLines || source.DesktopLines != gridLines;
+            source.ShelfLines != gridLines || source.WallGridLines != gridLines || source.DesktopLines != desktopLines;
         var wallsChanged = !ReferenceEquals(walls.Map, overview.Step) || walls.WallColor != wall ||
             walls.WallShade != overview.Settings.WallShadeValue || walls.TextureScale != texel ||
             walls.TextureWidth != (wallTexture?.Width ?? 0) || walls.TextureHeight != (wallTexture?.Height ?? 0);
@@ -350,7 +367,7 @@ internal sealed partial class TinyComp
         source.Lines = lines;
         source.ShelfLines = gridLines;
         source.WallGridLines = gridLines;
-        source.DesktopLines = gridLines;
+        source.DesktopLines = desktopLines;
         walls.Map = overview.Step;
         walls.WallColor = wall;
         walls.WallShade = overview.Settings.WallShadeValue;
@@ -696,7 +713,12 @@ internal sealed partial class TinyComp
         var map = OverviewOf(view).Step;
         var (fieldX, fieldY) = map.ToCanvasNearest(x, y, out var plane);
         var crossed = plane != state.StepPlane;
-        state.StepDepth = map.WallDepth(x, y, out _);
+        state.StepDepth = map.WallDepth(x, y, out var wallSide);
+        if ((map.Shelves & wallSide) != wallSide)
+        {
+            state.StepDepth = 0.0;
+        }
+
         state.StepPlane = plane;
         state.StepView = view;
         var movedX = x - state.DragCursorX;

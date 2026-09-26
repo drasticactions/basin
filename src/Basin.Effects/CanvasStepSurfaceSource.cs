@@ -288,7 +288,7 @@ public sealed class CanvasStepSurfaceSource : IMeshSource
     {
         var u = map.Outer;
         var b = map.Inner;
-        var sides = map.Sides;
+        var sides = map.Shelves;
         var left = (sides & CanvasStepSides.Left) != 0;
         var right = (sides & CanvasStepSides.Right) != 0;
         var top = (sides & CanvasStepSides.Top) != 0;
