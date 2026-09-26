@@ -6,6 +6,8 @@ public sealed class AggregateToplevelModel : IToplevelModel
 
     private readonly List<IToplevelSource> _sources = [];
     private readonly ToplevelObservers _observers = new();
+    private readonly ToplevelCommitObservers _commitObservers = new();
+    private readonly List<SourceCommitObserver> _commitForwarders = [];
 
     public void AddObserver(IToplevelObserver observer) => _observers.Add(observer);
 
@@ -22,6 +24,64 @@ public sealed class AggregateToplevelModel : IToplevelModel
         var index = (ulong)_sources.Count + 1;
         _sources.Add(source);
         source.AddObserver(new SourceObserver(this, index));
+        if (_commitObservers.Count > 0)
+        {
+            AttachCommits(source, index);
+        }
+    }
+
+    public bool ReportsCommits(ulong toplevelId) =>
+        TrySplit(toplevelId, out var source, out var localId) && source.ReportsCommits && source.TryGet(localId, out _);
+
+    public void AddCommitObserver(IToplevelCommitObserver observer)
+    {
+        ArgumentNullException.ThrowIfNull(observer);
+        _commitObservers.Add(observer);
+        if (_commitObservers.Count == 1 && _commitForwarders.Count == 0)
+        {
+            for (var i = 0; i < _sources.Count; i++)
+            {
+                AttachCommits(_sources[i], (ulong)i + 1);
+            }
+        }
+    }
+
+    public void RemoveCommitObserver(IToplevelCommitObserver observer)
+    {
+        ArgumentNullException.ThrowIfNull(observer);
+        _commitObservers.Remove(observer);
+        if (_commitObservers.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var forwarder in _commitForwarders)
+        {
+            forwarder.Source.RemoveCommitObserver(forwarder);
+        }
+
+        _commitForwarders.Clear();
+    }
+
+    private void AttachCommits(IToplevelSource source, ulong index)
+    {
+        if (!source.ReportsCommits)
+        {
+            return;
+        }
+
+        var forwarder = new SourceCommitObserver(this, source, index);
+        _commitForwarders.Add(forwarder);
+        source.AddCommitObserver(forwarder);
+    }
+
+    private sealed class SourceCommitObserver(AggregateToplevelModel model, IToplevelSource source, ulong sourceIndex)
+        : IToplevelCommitObserver
+    {
+        public IToplevelSource Source => source;
+
+        public void OnToplevelCommitted(ulong toplevelId, in Box damage) =>
+            model._commitObservers.Committed(Global(sourceIndex, toplevelId), damage);
     }
 
     private sealed class SourceObserver(AggregateToplevelModel model, ulong sourceIndex) : IToplevelObserver
@@ -79,6 +139,13 @@ public sealed class AggregateToplevelModel : IToplevelModel
             ParentId = info.ParentId == 0 ? 0 : Global(index, info.ParentId),
         };
         return true;
+    }
+
+    public ulong GlobalId(IToplevelSource source, ulong localId)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        var index = _sources.IndexOf(source);
+        return index < 0 || localId == 0 ? 0 : Global((ulong)index + 1, localId);
     }
 
     public bool Request(ulong toplevelId, in ToplevelRequest request) =>

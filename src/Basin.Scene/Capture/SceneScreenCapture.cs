@@ -202,9 +202,11 @@ public sealed class SceneScreenCapture : IScreenCapture
 
     private int HideExcluded()
     {
+        var hidden = 0;
+        HideFlagged(_scene.Root, ref hidden);
         if (Toplevels is not { } model || Index is not { } index)
         {
-            return 0;
+            return hidden;
         }
 
         var count = model.Enumerate(_exclusionScratch);
@@ -214,7 +216,6 @@ public sealed class SceneScreenCapture : IScreenCapture
             count = model.Enumerate(_exclusionScratch);
         }
 
-        var hidden = 0;
         for (var i = 0; i < count; i++)
         {
             if ((_exclusionScratch[i].State & ToplevelState.ExcludedFromCapture) == 0 ||
@@ -235,6 +236,29 @@ public sealed class SceneScreenCapture : IScreenCapture
         }
 
         return hidden;
+    }
+
+    private void HideFlagged(SceneNode node, ref int hidden)
+    {
+        if (!node.Enabled)
+        {
+            return;
+        }
+
+        if (node.ExcludedFromCapture)
+        {
+            Hide(node, ref hidden);
+            return;
+        }
+
+        if (node is SceneTree tree)
+        {
+            var children = tree.Children;
+            for (var i = 0; i < children.Count; i++)
+            {
+                HideFlagged(children[i], ref hidden);
+            }
+        }
     }
 
     private void Hide(SceneNode node, ref int hidden)
@@ -294,13 +318,31 @@ public sealed class SceneScreenCapture : IScreenCapture
         {
             var client = source.ClientOnly ? trees.Client ?? content : content;
             Box? popupClip = source.ClientOnly ? box : null;
-            var rendered = _scene.RenderSubtrees(
-                renderer, client, trees.Popups, popupClip, target, box.X + region.X, box.Y + region.Y, scale,
-                Background, TableFor(null));
+            var hiddenNodes = HideExcluded();
+            bool rendered;
+            try
+            {
+                rendered = _scene.RenderSubtrees(
+                    renderer, client, trees.Popups, popupClip, target, box.X + region.X, box.Y + region.Y, scale,
+                    Background, TableFor(null));
+            }
+            finally
+            {
+                RestoreHidden(hiddenNodes);
+            }
+
             return rendered && (!source.OverlayCursor || DrawCursorOverRegion(box, region, scale, target));
         }
 
-        return RenderAt(box.X + region.X, box.Y + region.Y, scale, target);
+        var hidden = HideExcluded();
+        try
+        {
+            return RenderAt(box.X + region.X, box.Y + region.Y, scale, target);
+        }
+        finally
+        {
+            RestoreHidden(hidden);
+        }
     }
 
     private static bool TryClientBox(SceneNode client, out Box box)

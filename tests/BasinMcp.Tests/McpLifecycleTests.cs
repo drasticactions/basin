@@ -21,6 +21,7 @@ public sealed class McpLifecycleTests
         var server = new IpcServer(rig.Host.Loop, rig.Services, new IpcSessionInfo { Compositor = compositor, Quit = () => { } }, harness.SocketPath, listen: true)
         {
             SyntheticInput = rig.Server.SyntheticInput,
+            Approvals = rig.Server.Approvals is null ? null : new IpcApprovalBroker(),
         };
         register?.Invoke(server);
         server.Start();

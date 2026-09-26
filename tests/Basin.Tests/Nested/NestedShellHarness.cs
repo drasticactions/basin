@@ -28,12 +28,13 @@ internal sealed class NestedShellHarness : IDisposable
         int height = 600,
         double scale = 1.0,
         ShellSettings? settings = null,
-        PanelLayout? panel = null)
+        PanelLayout? panel = null,
+        Action<BasinCompositorHost, BasinServices>? configure = null)
     {
         CompositorTestHost.SkipWithoutWaylandClient();
         BasinCounters.Reset();
         settings ??= new ShellSettings();
-        Host = new BasinCompositorHost(new BasinCompositorOptions { AppName = "basin-tests" });
+        Host = new BasinCompositorHost(new BasinCompositorOptions { AppName = "basin-tests", ConfigureServices = configure });
         View = Host.CreateViewOutput(width, height, scale, NestedShell.OutputKey);
         Shell = new NestedShell(
             Host,
@@ -102,7 +103,8 @@ internal sealed class NestedShellHarness : IDisposable
         int height = 90,
         string title = "basin",
         string appId = "org.basin.test",
-        bool serverDecorated = false)
+        bool serverDecorated = false,
+        uint color = 0xFF3366AA)
     {
         var existing = Shell.Windows.Count;
         var surface = Client.Compositor.CreateSurface();
@@ -136,7 +138,7 @@ internal sealed class NestedShellHarness : IDisposable
             PumpUntil(() => configuredMode, "the compositor never answered the decoration mode");
         }
 
-        var buffer = Client.CreateBuffer(width, height, Fill(width, height, 0xFF3366AA));
+        var buffer = Client.CreateBuffer(width, height, Fill(width, height, color));
         mapped.Buffer = buffer;
         surface.Attach(buffer.Proxy, 0, 0);
         surface.Damage(0, 0, width, height);

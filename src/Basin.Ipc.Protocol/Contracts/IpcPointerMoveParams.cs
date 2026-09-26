@@ -39,6 +39,13 @@ public sealed class IpcPointerMoveParams : IIpcParams, IIpcReusable
         }
     }
 
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ulong? Window { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Raise { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'x' is required"
@@ -47,6 +54,8 @@ public sealed class IpcPointerMoveParams : IIpcParams, IIpcReusable
 
     void IIpcReusable.Reset()
     {
+        Window = null;
+        Raise = null;
         _x = default;
         _y = default;
         _present = 0;

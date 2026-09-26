@@ -373,4 +373,26 @@ public sealed class IpcServerTests
         {
         }
     }
+
+    [Fact]
+    public void An_inherited_ipc_path_is_bound_and_not_passed_on()
+    {
+        var directory = Directory.CreateTempSubdirectory("basin-ipc-path-");
+        var path = Path.Combine(directory.FullName, "inherited.sock");
+        var previous = Environment.GetEnvironmentVariable(IpcProtocol.PathVariable);
+        Environment.SetEnvironmentVariable(IpcProtocol.PathVariable, path);
+        try
+        {
+            using var rig = new IpcTestRig(listen: true);
+            rig.Server.Start();
+            Assert.Equal(path, rig.Server.Path);
+            Assert.True(File.Exists(path));
+            Assert.Null(Environment.GetEnvironmentVariable(IpcProtocol.PathVariable));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(IpcProtocol.PathVariable, previous);
+            directory.Delete(recursive: true);
+        }
+    }
 }

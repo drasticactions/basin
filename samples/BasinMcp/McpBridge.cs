@@ -19,10 +19,17 @@ internal sealed class McpBridge : IAsyncDisposable
     private string? _lastAttempt;
     private string? _lastFailure;
 
+    private McpServer? _session;
+
     public McpBridge(McpBridgeOptions options)
     {
         Options = options;
+        Relay = new McpApprovalRelay(this);
     }
+
+    public McpApprovalRelay Relay { get; }
+
+    public bool HasConnected { get; private set; }
 
     public McpBridgeOptions Options { get; }
 
@@ -45,15 +52,31 @@ internal sealed class McpBridge : IAsyncDisposable
         ToolCollection = _signal,
         Handlers = new McpServerHandlers
         {
-            ListToolsHandler = async (_, cancellationToken) => await ListToolsAsync(cancellationToken).ConfigureAwait(false),
+            ListToolsHandler = async (request, cancellationToken) =>
+            {
+                await EnsureRelayAsync(request.Server, cancellationToken).ConfigureAwait(false);
+                return await ListToolsAsync(cancellationToken).ConfigureAwait(false);
+            },
             CallToolHandler = async (request, cancellationToken) =>
-                await CallToolAsync(request.Params?.Name ?? string.Empty, request.Params?.Arguments, cancellationToken).ConfigureAwait(false),
+            {
+                await EnsureRelayAsync(request.Server, cancellationToken).ConfigureAwait(false);
+                Relay.Active = request.Server;
+                try
+                {
+                    return await CallToolAsync(request.Params?.Name ?? string.Empty, request.Params?.Arguments, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    Relay.Active = null;
+                }
+            },
         },
     };
 
     public async Task<int> RunAsync(ITransport transport, CancellationToken cancellationToken)
     {
         await using var server = McpServer.Create(transport, CreateServerOptions());
+        _session = server;
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var watch = McpSocketWatch.RunAsync(this, stop.Token);
         try
@@ -67,6 +90,15 @@ internal sealed class McpBridge : IAsyncDisposable
         }
 
         return 0;
+    }
+
+    public async Task EnsureRelayAsync(McpServer? server, CancellationToken cancellationToken)
+    {
+        server ??= _session;
+        if (server is not null && McpApprovalRelay.Supports(server) && await TryConnectAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await Relay.EnsureAsync(server, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async ValueTask<ListToolsResult> ListToolsAsync(CancellationToken cancellationToken)
@@ -196,6 +228,7 @@ internal sealed class McpBridge : IAsyncDisposable
                 _version = version;
                 _client = client;
                 _lastFailure = null;
+                HasConnected = true;
                 Log.Info($"connected to {version.Compositor} on {client.Path}: {_table.Methods.Count} tools");
             }
             catch (Exception exception) when (IsConnectionFailure(exception) || exception is IpcCallException)
@@ -223,6 +256,7 @@ internal sealed class McpBridge : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await Relay.DisposeAsync().ConfigureAwait(false);
         if (_client is { } client)
         {
             _client = null;

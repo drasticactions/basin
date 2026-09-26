@@ -86,8 +86,21 @@ public sealed partial class NestedShell : IDisposable
                 RecordDecorationPreference(surface, mode == KdeServerDecorationManager.DecorationMode.Server);
         }
 
+        _model = host.Services.Find<IToplevelModel>();
+        _adopted = new NestedToplevelSource(this);
+        if (_model is AggregateToplevelModel aggregate)
+        {
+            aggregate.Add(_adopted);
+        }
+
         if (_toplevels is not null)
         {
+            if (_toplevels.RequestHandler is null)
+            {
+                _xdgHandler = AnswerXdgRequest;
+                _toplevels.RequestHandler = _xdgHandler;
+            }
+
             _toplevels.ActivateRequested += toplevel => Activate(toplevel);
             _toplevels.MinimizeRequested += (toplevel, minimized) =>
             {
@@ -179,6 +192,8 @@ public sealed partial class NestedShell : IDisposable
     public ManagedWindow? Focused => _focused;
 
     public bool ShowingDesktop => _showingDesktop;
+
+    public bool IsDisposed => _disposed;
 
     public event Action? Changed;
 
@@ -456,6 +471,7 @@ public sealed partial class NestedShell : IDisposable
         window.Content.SetMinimized(false);
         _windows.Add(window);
         window.Map(LayerFor(window), Scale, window.Content.ServerDecorated);
+        window.CreatePopupTree(Layers.Menu);
         if (window.Content.Surface is { } surface)
         {
             _host.Screens.EnterScreen(surface, OutputKey);
@@ -495,6 +511,8 @@ public sealed partial class NestedShell : IDisposable
             window.RefreshFrame();
         }
 
+        IndexCapture(window);
+        StackChanged();
         RequestIcon(window);
         NestedLog.Log.Debug($"mapped '{window.Title}' at {window.FrameBox.X},{window.FrameBox.Y} decorated={window.Decorated}");
         WindowMapped?.Invoke(window);
@@ -520,7 +538,9 @@ public sealed partial class NestedShell : IDisposable
 
         _windows.Remove(window);
         _history.Remove(window);
+        UnindexCapture(window);
         window.Unmap();
+        StackChanged();
         NestedLog.Log.Debug($"unmapped '{window.Title}'");
         if (_focused == window)
         {
@@ -620,7 +640,8 @@ public sealed partial class NestedShell : IDisposable
             ? new Point(WorkArea.X + ((WorkArea.Width - width) / 2), WorkArea.Y + ((WorkArea.Height - height) / 2))
             : Placement.Place(request);
         window.MoveFrameTo(origin.X, origin.Y);
-        if (parentFrame is null && Placement.ShouldMaximize(width, height, WorkArea))
+        if (parentFrame is null
+            && (_settings.Placement == PlacementMode.Maximize || Placement.ShouldMaximize(width, height, WorkArea)))
         {
             SetMaximized(window, true);
         }
@@ -673,9 +694,15 @@ public sealed partial class NestedShell : IDisposable
     {
         foreach (var window in _windows)
         {
+            var visible = !window.Minimized && IsOnCurrentWorkspace(window) && !(_showingDesktop && !window.Above);
             if (window.Tree is { } tree)
             {
-                tree.Enabled = !window.Minimized && IsOnCurrentWorkspace(window) && !(_showingDesktop && !window.Above);
+                tree.Enabled = visible;
+            }
+
+            if (window.PopupTree is { } popups)
+            {
+                popups.Enabled = visible;
             }
         }
     }
@@ -737,7 +764,7 @@ public sealed partial class NestedShell : IDisposable
         }
     }
 
-    private ManagedWindow? OwnerOf(IWindowContent content)
+    internal ManagedWindow? OwnerOf(IWindowContent content)
     {
         foreach (var candidate in _windows)
         {
@@ -755,6 +782,7 @@ public sealed partial class NestedShell : IDisposable
         window.Tree?.RaiseToTop();
         window.Content.Raise();
         RaiseTransients(window);
+        StackChanged();
     }
 
     private void RaiseTransients(ManagedWindow owner)
@@ -773,6 +801,7 @@ public sealed partial class NestedShell : IDisposable
     {
         window.Tree?.LowerToBottom();
         window.Content.Lower();
+        StackChanged();
     }
 
     public void Activate(XdgToplevelWindow toplevel)
@@ -999,6 +1028,7 @@ public sealed partial class NestedShell : IDisposable
         window.Tree?.Reparent(LayerFor(window));
         window.Tree?.RaiseToTop();
         window.RefreshFrame();
+        StackChanged();
     }
 
     public void SetSticky(ManagedWindow window, bool sticky)
@@ -1092,13 +1122,18 @@ public sealed partial class NestedShell : IDisposable
 
     public void CloseWindow(ManagedWindow window) => window.Content.Close();
 
-    public ManagedWindow Adopt(IWindowContent content, string? clientIcon = null)
+    public ManagedWindow Adopt(IWindowContent content, string? clientIcon = null, bool publish = true)
     {
         ArgumentNullException.ThrowIfNull(content);
         var window = new ManagedWindow(this, content, ++_nextId, null) { ClientIcon = clientIcon };
         content.Committed += () => OnCommitted(window);
         content.TitleChanged += Publish;
         content.AppIdChanged += Publish;
+        if (publish)
+        {
+            _ = _adopted.Add(window);
+        }
+
         OnMapped(window);
         return window;
     }
@@ -1107,6 +1142,7 @@ public sealed partial class NestedShell : IDisposable
     {
         ArgumentNullException.ThrowIfNull(window);
         OnUnmapped(window);
+        _adopted.Remove(window);
     }
 
     public SceneSurface AddUnmanaged(Surface surface, int x, int y)
@@ -1178,8 +1214,22 @@ public sealed partial class NestedShell : IDisposable
             return;
         }
 
-        _popups.Attach(popup, Layers.Menu, origin: () => PopupContentOrigin(popup), constrainBox: () => Output);
+        _popups.Attach(popup, PopupLayerFor(popup), origin: () => PopupContentOrigin(popup), constrainBox: () => Output);
         popup.Xdg.Mapped += () => _host.Screens.EnterScreen(popup.Surface, OutputKey);
+    }
+
+    private SceneTree PopupLayerFor(XdgPopupWindow popup)
+    {
+        var xdg = popup.Parent;
+        while (xdg?.Role is XdgPopupWindow parentPopup)
+        {
+            xdg = parentPopup.Parent;
+        }
+
+        return xdg?.Role is XdgToplevelWindow toplevel && _byToplevel.TryGetValue(toplevel, out var window)
+            && window.PopupTree is { } tree
+            ? tree
+            : Layers.Menu;
     }
 
     private Point PopupContentOrigin(XdgPopupWindow popup)
@@ -1267,6 +1317,11 @@ public sealed partial class NestedShell : IDisposable
             return;
         }
 
+        if (_adopted.Count > 0)
+        {
+            _adopted.Refresh();
+        }
+
         Changed?.Invoke();
     }
 
@@ -1327,6 +1382,7 @@ public sealed partial class NestedShell : IDisposable
         }
 
         _windows.Clear();
+        DisposeControl();
         _background.Destroy();
         _frames.Dispose();
         UIHost.Dispose();

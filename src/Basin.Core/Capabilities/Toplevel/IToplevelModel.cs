@@ -11,4 +11,14 @@ public interface IToplevelModel
     void RemoveObserver(IToplevelObserver observer);
 
     bool Request(ulong toplevelId, in ToplevelRequest request);
+
+    bool ReportsCommits(ulong toplevelId) => false;
+
+    void AddCommitObserver(IToplevelCommitObserver observer)
+    {
+    }
+
+    void RemoveCommitObserver(IToplevelCommitObserver observer)
+    {
+    }
 }

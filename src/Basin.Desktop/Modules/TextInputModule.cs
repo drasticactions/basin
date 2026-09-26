@@ -11,6 +11,10 @@ public sealed class TextInputModule : DesktopModule<TextInputManager>
 
     public override IReadOnlyList<Type> Capabilities => [typeof(ITextInputMethod)];
 
-    protected override TextInputManager Create(BasinServices services) =>
-        new(services.Display, services.Find<Seat.Seat>(), services.Find<ITextInputMethod>());
+    protected override TextInputManager Create(BasinServices services)
+    {
+        var manager = new TextInputManager(services.Display, services.Find<Seat.Seat>(), services.Find<ITextInputMethod>());
+        services.UseDefault<ITextInputCommit>(manager);
+        return manager;
+    }
 }

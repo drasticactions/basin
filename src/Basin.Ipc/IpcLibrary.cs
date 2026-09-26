@@ -15,6 +15,7 @@ internal static class IpcLibrary
         IpcProcessMethods.Register(server);
         IpcClipboardMethods.Register(server, describe);
         IpcInputMethods.Register(server, describe);
+        IpcApprovalMethods.Register(server);
         IpcEvents.Declare(server, describe);
     }
 }

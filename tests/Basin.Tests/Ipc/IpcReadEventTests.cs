@@ -22,7 +22,7 @@ public sealed class IpcReadEventTests
         Assert.DoesNotContain(IpcMethodNames.WorkspacesList, methods);
         var reply = Parse(peer.Call("""{"method":"windows/list"}"""));
         Assert.Equal(IpcErrorCodes.UnknownMethod, reply.GetProperty("error").GetProperty("code").GetString());
-        Assert.Empty(Result(peer, """{"method":"ipc/events"}""").GetProperty("events").EnumerateArray());
+        Assert.Equal([IpcEventNames.ProcessExited], Result(peer, """{"method":"ipc/events"}""").GetProperty("events").EnumerateArray().Select(e => e.GetString()));
         Assert.True(Parse(peer.Call("""{"method":"ipc/version"}""")).TryGetProperty("result", out _));
     }
 

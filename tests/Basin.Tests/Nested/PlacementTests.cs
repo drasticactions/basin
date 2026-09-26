@@ -197,4 +197,12 @@ public sealed class WindowPlacementTests
     {
         Assert.Equal(expected, Placement.ShouldMaximize(width, height, Screen));
     }
+
+    [Fact]
+    public void Maximize_mode_puts_a_window_at_the_work_area_origin_and_centers_a_dialog_on_its_parent()
+    {
+        var workArea = new Box(0, 24, 1920, 1032);
+        Assert.Equal(new Point(0, 24), Placement.Place(Request(400, 300, [new Box(0, 24, 800, 600)], PlacementMode.Maximize, workArea: workArea)));
+        Assert.Equal(new Point(300, 250), Placement.Place(Request(200, 100, mode: PlacementMode.Maximize, parent: new Box(100, 100, 600, 400), workArea: workArea)));
+    }
 }

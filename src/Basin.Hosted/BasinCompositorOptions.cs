@@ -17,4 +17,6 @@ public sealed record BasinCompositorOptions
     public Capabilities.ITextInputMethod? TextInput { get; init; }
 
     public IReadOnlyList<IProtocolModule>? ExtraModules { get; init; }
+
+    public Action<BasinCompositorHost, BasinServices>? ConfigureServices { get; init; }
 }

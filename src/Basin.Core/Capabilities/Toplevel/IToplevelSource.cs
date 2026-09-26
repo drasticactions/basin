@@ -11,4 +11,14 @@ public interface IToplevelSource
     void AddObserver(IToplevelObserver observer);
 
     void RemoveObserver(IToplevelObserver observer);
+
+    bool ReportsCommits => false;
+
+    void AddCommitObserver(IToplevelCommitObserver observer)
+    {
+    }
+
+    void RemoveCommitObserver(IToplevelCommitObserver observer)
+    {
+    }
 }

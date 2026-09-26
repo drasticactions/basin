@@ -52,6 +52,8 @@ public sealed partial class NestedShell
     private ManagedWindow? _autoRaiseCandidate;
     private long _autoRaiseAt;
 
+    public (double X, double Y) PointerPosition => (_cursorX, _cursorY);
+
     public void HandleInput(in BasinViewInput input)
     {
         if (_disposed)

@@ -39,6 +39,18 @@ public sealed class SceneToplevelStack : IToplevelStack
         return _count;
     }
 
+    public bool TryToplevelAt(double x, double y, out ulong toplevelId)
+    {
+        _affinity.Assert();
+        toplevelId = 0;
+        if (_scene.NodeAt(x, y) is { } hit)
+        {
+            _ = _index.TryOwnerOf(hit.Node, out toplevelId);
+        }
+
+        return true;
+    }
+
     public void RaiseChanged()
     {
         _affinity.Assert();

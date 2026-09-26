@@ -27,6 +27,7 @@ public static class IpcMethodNames
     public const string WindowsSendToOutput = "windows/send-to-output";
     public const string WindowsSendToWorkspace = "windows/send-to-workspace";
     public const string WindowsWait = "windows/wait";
+    public const string WindowsWaitIdle = "windows/wait-idle";
 
     public const string WorkspacesList = "workspaces/list";
     public const string WorkspacesActivate = "workspaces/activate";
@@ -65,12 +66,18 @@ public static class IpcMethodNames
     public const string CaptureRegion = "capture/region";
 
     public const string ProcessSpawn = "process/spawn";
+    public const string ProcessList = "process/list";
+    public const string ProcessKill = "process/kill";
+    public const string ProcessLog = "process/log";
 
     public const string ClipboardRead = "clipboard/read";
+    public const string ClipboardWrite = "clipboard/write";
+
+    public const string ApprovalAnswer = "approval/answer";
 
     public static IReadOnlyList<string> ReservedNamespaces { get; } =
     [
         "ipc", "session", "outputs", "windows", "workspaces", "idle", "lock", "keyboard", "input", "seat",
-        "capture", "process", "clipboard",
+        "capture", "process", "clipboard", "approval",
     ];
 }

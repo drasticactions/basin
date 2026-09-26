@@ -22,6 +22,48 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
     }
 
     private readonly ToplevelObservers _observers = new();
+    private readonly ToplevelCommitObservers _commitObservers = new();
+    private readonly Dictionary<ulong, SurfaceTreeCommitWatch> _commitWatches = [];
+
+    public bool ReportsCommits => true;
+
+    public void AddCommitObserver(IToplevelCommitObserver observer)
+    {
+        ArgumentNullException.ThrowIfNull(observer);
+        _commitObservers.Add(observer);
+        if (_commitObservers.Count == 1)
+        {
+            foreach (var (id, window) in _windows)
+            {
+                WatchCommits(id, window);
+            }
+        }
+    }
+
+    public void RemoveCommitObserver(IToplevelCommitObserver observer)
+    {
+        ArgumentNullException.ThrowIfNull(observer);
+        _commitObservers.Remove(observer);
+        if (_commitObservers.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var watch in _commitWatches.Values)
+        {
+            watch.Dispose();
+        }
+
+        _commitWatches.Clear();
+    }
+
+    private void WatchCommits(ulong id, XdgToplevelWindow window)
+    {
+        if (!_commitWatches.ContainsKey(id))
+        {
+            _commitWatches[id] = new SurfaceTreeCommitWatch(window.Surface, damage => _commitObservers.Committed(id, damage));
+        }
+    }
 
     public void AddObserver(IToplevelObserver observer) => _observers.Add(observer);
 
@@ -40,6 +82,8 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
     public event Action<XdgToplevelWindow, Box>? MoveRequested;
 
     public event Action<XdgToplevelWindow, Box>? ResizeRequested;
+
+    public XdgToplevelRequestHandler? RequestHandler { get; set; }
 
     public XdgToplevelWindow? WindowFor(ulong localId) => _windows.GetValueOrDefault(localId);
 
@@ -191,6 +235,11 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
             return false;
         }
 
+        if (RequestHandler?.Invoke(window, request) is { } answered)
+        {
+            return answered;
+        }
+
         switch (request.Kind)
         {
             case ToplevelRequestKind.Activate when ActivateRequested is { } activate:
@@ -245,7 +294,16 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
         }
     }
 
-    public void Dispose() => _shell.NewToplevel -= Track;
+    public void Dispose()
+    {
+        _shell.NewToplevel -= Track;
+        foreach (var watch in _commitWatches.Values)
+        {
+            watch.Dispose();
+        }
+
+        _commitWatches.Clear();
+    }
 
     private void Track(XdgToplevelWindow window)
     {
@@ -259,8 +317,18 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
         window.AppIdChanged += () => _observers.Changed(id);
         window.ParentChanged += () => _observers.Changed(id);
         window.StateChanged += () => _observers.Changed(id);
+        if (_commitObservers.Count > 0)
+        {
+            WatchCommits(id, window);
+        }
+
         window.Destroyed += () =>
         {
+            if (_commitWatches.Remove(id, out var watch))
+            {
+                watch.Dispose();
+            }
+
             _windows.Remove(id);
             _ids.Remove(window);
             _geometry.Remove(id);

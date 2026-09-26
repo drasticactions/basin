@@ -36,6 +36,16 @@ internal static class Program
             Description = "never publish the methods that match one of these comma-separated globs, for example 'session/quit,outputs/*'",
             HelpName = "GLOBS",
         });
+        var launch = cli.Add(new Option<bool>("--launch")
+        {
+            Description = "start the command after -- with its control socket in a private directory, and stop it when stdin closes",
+        });
+        var command = new Argument<string[]>("command")
+        {
+            Description = "with --launch, the compositor and its arguments",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
+        cli.Command.Arguments.Add(command);
         var maxDimension = cli.Add(new Option<int>("--max-dimension")
         {
             Description = "the longest side of an inline screenshot; 0 sends full size",
@@ -64,21 +74,122 @@ internal static class Program
                 return 1;
             }
 
-            var options = new McpBridgeOptions
+            var words = result.GetValue(command) ?? [];
+            if (!result.GetValue(launch))
             {
-                SocketPath = result.GetValue(socket),
-                Filter = filter,
-                MaxDimension = result.GetValue(maxDimension),
-            };
-            var bridge = new McpBridge(options);
-            try
-            {
-                return bridge.RunAsync(new StdioServerTransport("basin-mcp"), CancellationToken.None).GetAwaiter().GetResult();
+                if (words.Length > 0)
+                {
+                    Console.Error.WriteLine("basin-mcp: a command is only taken with --launch");
+                    return 1;
+                }
+
+                return Serve(new McpBridgeOptions
+                {
+                    SocketPath = result.GetValue(socket),
+                    Filter = filter,
+                    MaxDimension = result.GetValue(maxDimension),
+                });
             }
-            finally
+
+            if (result.GetValue(socket) is not null)
             {
-                bridge.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                Console.Error.WriteLine("basin-mcp: --launch makes its own socket, so --socket does not go with it");
+                return 1;
             }
+
+            return Launch(words, filter, result.GetValue(maxDimension)).GetAwaiter().GetResult();
         });
     }
+
+    private static int Serve(McpBridgeOptions options)
+    {
+        var bridge = new McpBridge(options);
+        try
+        {
+            return bridge.RunAsync(new StdioServerTransport("basin-mcp"), CancellationToken.None).GetAwaiter().GetResult();
+        }
+        finally
+        {
+            bridge.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    private static async Task<int> Launch(string[] command, McpMethodFilter filter, int maxDimension)
+    {
+        using var stop = new CancellationTokenSource();
+        using var terminate = Stop(stop, System.Runtime.InteropServices.PosixSignal.SIGTERM);
+        using var interrupt = Stop(stop, System.Runtime.InteropServices.PosixSignal.SIGINT);
+        using var hangup = Stop(stop, System.Runtime.InteropServices.PosixSignal.SIGHUP);
+        if (McpLauncher.Start(command, out var error) is not { } launcher)
+        {
+            Console.Error.WriteLine($"basin-mcp: {error}");
+            return 1;
+        }
+
+        McpBridge? bridge = null;
+        try
+        {
+            if (!await launcher.WaitForSocketAsync(TimeSpan.FromSeconds(30), stop.Token).ConfigureAwait(false))
+            {
+                if (launcher.HasExited)
+                {
+                    Console.Error.WriteLine($"basin-mcp: {command[0]} exited with status {launcher.ExitCode} before it made its socket");
+                    return launcher.ExitCode == 0 ? 1 : launcher.ExitCode;
+                }
+
+                if (stop.IsCancellationRequested)
+                {
+                    return 0;
+                }
+
+                Console.Error.WriteLine($"basin-mcp: no socket at {launcher.SocketPath} after 30 s; serving anyway");
+            }
+
+            bridge = new McpBridge(new McpBridgeOptions
+            {
+                SocketPath = launcher.SocketPath,
+                Filter = filter,
+                MaxDimension = maxDimension,
+                Reconnect = false,
+            });
+            var serving = bridge.RunAsync(new StdioServerTransport("basin-mcp"), stop.Token);
+            var stopped = Task.Delay(Timeout.Infinite, stop.Token);
+            var first = await Task.WhenAny(serving, launcher.Exited, stopped).ConfigureAwait(false);
+            if (first == launcher.Exited)
+            {
+                await stop.CancelAsync().ConfigureAwait(false);
+                return launcher.ExitCode;
+            }
+
+            if (first == stopped)
+            {
+                return 0;
+            }
+
+            try
+            {
+                return await serving.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                return 0;
+            }
+        }
+        finally
+        {
+            await launcher.DisposeAsync().ConfigureAwait(false);
+            if (bridge is not null)
+            {
+                await bridge.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static System.Runtime.InteropServices.PosixSignalRegistration Stop(
+        CancellationTokenSource stop, System.Runtime.InteropServices.PosixSignal signal) =>
+        System.Runtime.InteropServices.PosixSignalRegistration.Create(signal, context =>
+        {
+            context.Cancel = true;
+            stop.Cancel();
+        });
 }

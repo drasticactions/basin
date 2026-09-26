@@ -16,7 +16,12 @@ internal sealed class McpHarness : IDisposable
     private int _listChanged;
     private bool _disposed;
 
-    private McpHarness(DirectoryInfo directory, string socketPath, IpcTestRig? rig, McpBridgeOptions options)
+    private McpHarness(
+        DirectoryInfo directory,
+        string socketPath,
+        IpcTestRig? rig,
+        McpBridgeOptions options,
+        Func<ElicitRequestParams?, ElicitResult>? elicit = null)
     {
         Directory = directory;
         SocketPath = socketPath;
@@ -26,7 +31,15 @@ internal sealed class McpHarness : IDisposable
         _server = Task.Run(() => Bridge.RunAsync(transport, _stop.Token));
         Client = Run(() => McpClient.CreateAsync(
             new StreamClientTransport(_toServer.Writer.AsStream(), _toClient.Reader.AsStream()),
-            new McpClientOptions { ClientInfo = new Implementation { Name = "basin-mcp-tests", Version = "1" }, ProtocolVersion = ProtocolVersion },
+            new McpClientOptions
+            {
+                ClientInfo = new Implementation { Name = "basin-mcp-tests", Version = "1" },
+                ProtocolVersion = ProtocolVersion,
+                Capabilities = elicit is null ? null : new ClientCapabilities { Elicitation = new ElicitationCapability() },
+                Handlers = elicit is null
+                    ? new McpClientHandlers()
+                    : new McpClientHandlers { ElicitationHandler = (request, _) => ValueTask.FromResult(elicit(request)) },
+            },
             cancellationToken: Token));
         _ = Client.RegisterNotificationHandler(NotificationMethods.ToolListChangedNotification, (_, _) =>
         {
@@ -51,7 +64,8 @@ internal sealed class McpHarness : IDisposable
 
     public int ListChanged => Volatile.Read(ref _listChanged);
 
-    public static McpHarness Create(Func<string, IpcTestRig>? rig, McpBridgeOptions? options = null)
+    public static McpHarness Create(
+        Func<string, IpcTestRig>? rig, McpBridgeOptions? options = null, Func<ElicitRequestParams?, ElicitResult>? elicit = null)
     {
         var directory = System.IO.Directory.CreateTempSubdirectory("basin-mcp-");
         var path = Path.Combine(directory.FullName, "basin-test.sock");
@@ -62,11 +76,15 @@ internal sealed class McpHarness : IDisposable
             created.Server.Start();
         }
 
-        return new McpHarness(directory, path, created, options ?? new McpBridgeOptions { PollInterval = TimeSpan.FromMilliseconds(50) });
+        return new McpHarness(directory, path, created, options ?? new McpBridgeOptions { PollInterval = TimeSpan.FromMilliseconds(50) }, elicit);
     }
 
-    public static McpHarness Full(McpBridgeOptions? options = null, Action<Basin.Ipc.IpcServer>? register = null, TestSelectionStore? selection = null) =>
-        Create(path => IpcFullRig.Create(path, listen: true, register, selection), options);
+    public static McpHarness Full(
+        McpBridgeOptions? options = null,
+        Action<Basin.Ipc.IpcServer>? register = null,
+        TestSelectionStore? selection = null,
+        Func<ElicitRequestParams?, ElicitResult>? elicit = null) =>
+        Create(path => IpcFullRig.Create(path, listen: true, register, selection), options, elicit);
 
     public T Run<T>(Func<Task<T>> call)
     {

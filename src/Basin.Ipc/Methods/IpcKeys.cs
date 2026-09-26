@@ -89,8 +89,10 @@ internal static class IpcKeys
     {
         keys.Clear();
         error = null;
+        var position = -1;
         foreach (var rune in text.EnumerateRunes())
         {
+            position++;
             var keysym = rune.Value switch
             {
                 '\n' or '\r' => 0xff0du,
@@ -102,7 +104,7 @@ internal static class IpcKeys
 
             if (!lookup.TryKeycodeForKeysym(keysym, out var code, out var mask) || (mask & ~(ShiftMask | Level3Mask)) != 0)
             {
-                error = $"the keymap cannot type '{rune}'";
+                error = $"the keymap cannot type '{rune}' at position {position}";
                 return false;
             }
 

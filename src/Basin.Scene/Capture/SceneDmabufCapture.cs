@@ -9,6 +9,8 @@ public sealed class SceneDmabufCapture : IDmabufCapture
 
     public IToplevelModel? Toplevels { get; set; }
 
+    public Scene? Scene { get; set; }
+
     public void Track(IOutput output, SceneOutput sceneOutput)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -26,6 +28,7 @@ public sealed class SceneDmabufCapture : IDmabufCapture
     {
         attributes = default;
         return !AnyExcluded()
+            && Scene?.HasCaptureExcluded() != true
             && _outputs.TryGetValue(output, out var sceneOutput)
             && sceneOutput.LastTarget is { } last
             && last.TryGetDmabuf(out attributes);

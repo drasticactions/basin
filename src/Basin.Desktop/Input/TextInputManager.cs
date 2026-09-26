@@ -5,7 +5,7 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
-public sealed class TextInputManager : IDisposable
+public sealed class TextInputManager : IDisposable, ITextInputCommit
 {
     public const int TextInputVersion = 1;
 
@@ -62,6 +62,21 @@ public sealed class TextInputManager : IDisposable
     }
 
     public bool HasKeyboardGrab => _method?.HasKeyboardGrab ?? false;
+
+    public bool HasActiveTextInput => ActiveTextInput() is not null;
+
+    public bool TryCommitString(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (ActiveTextInput() is not { } active)
+        {
+            return false;
+        }
+
+        active.ApplyCommit(text);
+        active.ApplyDone();
+        return true;
+    }
 
     public void ForwardKey(uint timeMs, uint key, bool pressed)
     {

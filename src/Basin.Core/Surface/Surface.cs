@@ -565,6 +565,48 @@ public sealed class Surface
         guarded.SyncShadow();
     }
 
+    public Box CommittedDamageExtents()
+    {
+        var state = Current;
+        var bounds = new Box(0, 0, state.Width, state.Height);
+        var surface = state.SurfaceDamage.Extents;
+        var buffer = state.BufferDamage.Extents;
+        var hasSurface = surface.X2 > surface.X1 && surface.Y2 > surface.Y1;
+        var hasBuffer = buffer.X2 > buffer.X1 && buffer.Y2 > buffer.Y1;
+        if (!hasSurface && !hasBuffer)
+        {
+            return default;
+        }
+
+        if (state.Transform != OutputTransform.Normal || state.ViewportSourceWidth >= 0 || state.ViewportDestinationWidth >= 0)
+        {
+            return bounds;
+        }
+
+        var scale = Math.Max(1, state.Scale);
+        var x1 = int.MaxValue;
+        var y1 = int.MaxValue;
+        var x2 = int.MinValue;
+        var y2 = int.MinValue;
+        if (hasSurface)
+        {
+            x1 = surface.X1;
+            y1 = surface.Y1;
+            x2 = surface.X2;
+            y2 = surface.Y2;
+        }
+
+        if (hasBuffer)
+        {
+            x1 = Math.Min(x1, buffer.X1 / scale);
+            y1 = Math.Min(y1, buffer.Y1 / scale);
+            x2 = Math.Max(x2, (buffer.X2 + scale - 1) / scale);
+            y2 = Math.Max(y2, (buffer.Y2 + scale - 1) / scale);
+        }
+
+        return new Box(x1, y1, x2 - x1, y2 - y1).Intersect(bounds);
+    }
+
     internal void ApplyCacheOnDesync() => ApplyCachedState();
 
     private int _acquireFenceFd = -1;

@@ -14,6 +14,8 @@ public static class IpcProtocol
 
     public const string SocketVariable = "BASIN_SOCKET";
 
+    public const string PathVariable = "BASIN_IPC_PATH";
+
     public const string SocketPrefix = "basin-";
 
     public const string SocketSuffix = ".sock";

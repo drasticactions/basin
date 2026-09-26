@@ -11,7 +11,11 @@ public static class Placement
     public static Point Place(in PlacementRequest request)
     {
         if (request.ParentFrame is { } parent)
-            return Clamp(OverParent(request, parent), request.WorkArea, request.Width, request.Height);
+            return Clamp(
+                request.Mode == PlacementMode.Maximize ? Centered(parent, request.Width, request.Height) : OverParent(request, parent),
+                request.WorkArea, request.Width, request.Height);
+        if (request.Mode == PlacementMode.Maximize)
+            return new Point(request.WorkArea.X, request.WorkArea.Y);
         if (request.Mode != PlacementMode.Automatic)
             return Clamp(UnderPointer(request), request.Output, request.Width, request.Height);
         if (FirstFit(request) is { } fit)

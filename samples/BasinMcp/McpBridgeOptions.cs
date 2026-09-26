@@ -11,4 +11,6 @@ internal sealed record McpBridgeOptions
     public int MaxDimension { get; init; } = DefaultMaxDimension;
 
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(2);
+
+    public bool Reconnect { get; init; } = true;
 }

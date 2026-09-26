@@ -35,6 +35,19 @@ public sealed class IpcAxisParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Source { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? X { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Y { get; set; }
+
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ulong? Window { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Raise { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'value' is required"
@@ -42,6 +55,10 @@ public sealed class IpcAxisParams : IIpcParams, IIpcReusable
 
     void IIpcReusable.Reset()
     {
+        Window = null;
+        Raise = null;
+        X = null;
+        Y = null;
         _value = default;
         _present = 0;
         Axis = null;

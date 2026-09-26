@@ -9,10 +9,12 @@ internal static class McpSocketWatch
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                if (bridge.Client is not { IsConnected: true })
+                if (bridge.Client is not { IsConnected: true } && (bridge.Options.Reconnect || !bridge.HasConnected))
                 {
                     _ = await bridge.TryConnectAsync(cancellationToken).ConfigureAwait(false);
                 }
+
+                await bridge.EnsureRelayAsync(null, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

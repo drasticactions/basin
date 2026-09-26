@@ -15,9 +15,11 @@ public static class IpcEventNames
     public const string KeyboardKeymapChanged = "keyboard/keymap-changed";
     public const string ShortcutActivated = "shortcut/activated";
     public const string ClipboardChanged = "clipboard/changed";
+    public const string ProcessExited = "process/exited";
+    public const string ApprovalRequested = "approval/requested";
 
     public static IReadOnlyList<string> ReservedNamespaces { get; } =
     [
-        "window", "stack", "output", "workspace", "lock", "idle", "keyboard", "shortcut", "clipboard",
+        "window", "stack", "output", "workspace", "lock", "idle", "keyboard", "shortcut", "clipboard", "process", "approval",
     ];
 }

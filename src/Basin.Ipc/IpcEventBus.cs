@@ -52,6 +52,9 @@ public sealed class IpcEventBus : IDisposable
 
     public bool IsDeclared(string name) => _topics.ContainsKey(name);
 
+    public IIpcEventSubscriber? FirstSubscriber(string name) =>
+        _topics.TryGetValue(name, out var topic) && topic.Subscribers.Count > 0 ? topic.Subscribers[0] : null;
+
     public bool HasSubscribers(string name) => _topics.TryGetValue(name, out var topic) && topic.Subscribers.Count > 0;
 
     public bool Subscribe(string name, IIpcEventSubscriber subscriber)
@@ -186,6 +189,8 @@ public sealed class IpcEventBus : IDisposable
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
+
+    internal void DeclareLibrary(string name) => Add(name, null);
 
     internal void DeclareLibrary(string name, IpcEventSource source)
     {

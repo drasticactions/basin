@@ -110,6 +110,7 @@ server     ceiling  quill-frame-repaint-vk        57600
 server     exact    blur-region-commit            10400
 server-managed exact    blur-region-commit            10400
 server     exact    ipc-subscribed-commit          6400
+server     exact    ipc-wait-idle-commit           3200
 server     exact    ipc-event-flush                2400
 server     exact    title-commit                   6400
 server     exact    ipc-call-outputs-test         84000
@@ -120,13 +121,14 @@ server     exact    ipc-call-windows-stack        34800
 server     exact    ipc-call-input-text           35416
 server     exact    ipc-call-lock-status           2400
 server     exact    ipc-call-version               2400
+server     exact    ipc-call-version-intercepted   2400
 server     exact    ipc-call-session-describe      2800
 server     exact    ipc-call-input-key            11272
 server     exact    ipc-call-outputs-list         13200
 server     exact    ipc-call-windows-move         10640
 server     exact    ipc-call-clipboard-empty      16800
 server     exact    ipc-call-idle-status           2400
-server     exact    ipc-call-methods-detail      1848000
+server     exact    ipc-call-methods-detail      3486400
 server     exact    ipc-call-windows-get-missing   4800
 server     exact    ipc-call-seat-pointer-move     7944
 server     exact    ipc-call-windows-set-state    11040

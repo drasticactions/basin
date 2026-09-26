@@ -45,6 +45,25 @@ internal static class IpcNative
         return true;
     }
 
+    [DllImport("libc", EntryPoint = "write", SetLastError = true)]
+    private static extern unsafe nint WriteRaw(int fd, byte* buffer, nuint count);
+
+    private const int FGetfl = 3;
+
+    public static bool SetNonBlocking(int fd)
+    {
+        var flags = Fcntl(fd, FGetfl, 0);
+        return flags >= 0 && Fcntl(fd, FSetfl, flags | ONonblock) == 0;
+    }
+
+    public static unsafe nint Write(int fd, ReadOnlySpan<byte> buffer)
+    {
+        fixed (byte* data = buffer)
+        {
+            return WriteRaw(fd, data, (nuint)buffer.Length);
+        }
+    }
+
     public static unsafe nint Read(int fd, Span<byte> buffer)
     {
         fixed (byte* data = buffer)

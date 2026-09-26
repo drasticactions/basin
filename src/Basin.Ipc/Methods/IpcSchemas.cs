@@ -36,6 +36,14 @@ internal static class IpcSchemas
     private const string SeatPath =
         " The input goes straight to the focused client, the same as a virtual keyboard or pointer. The compositor's keybindings do not see it. Prefer the input/ method unless the binding must not fire.";
 
+    private const string WindowPoint =
+        " With window, x and y are relative to that window's client area, and the call is refused when another window covers the point.";
+
+    private const string WindowProperties = """
+        "window":{"anyOf":[{"type":"integer","minimum":0},{"type":"string","pattern":"^[0-9]+$"}],"description":"A window id from windows/list. x and y are then relative to its client_geometry. A string of decimal digits is also accepted, because a JSON number above 2^53 loses digits in JavaScript."},
+        "raise":{"type":"boolean","description":"With window, activate the window first when another window covers the point."}
+        """;
+
     private static readonly Dictionary<string, IpcMethodInfo> Table = Build();
 
     public static IpcMethodInfo Of(string name) =>
@@ -102,6 +110,10 @@ internal static class IpcSchemas
             {"type":"object","properties":{"app_id":{"type":"string","description":"The exact app id."},"title":{"type":"string","description":"A substring of the title."},"timeout_ms":{"type":"integer","minimum":1,"maximum":3600000,"description":"The default is 5000."}},"examples":[{"app_id":"none","timeout_ms":1}]}
             """);
 
+        Add(IpcMethodNames.WindowsWaitIdle, ReadOnly, "Wait until a window, or every window, has drawn nothing for quiet_ms. A commit whose damage fits in an ignore_below square does not count, so a blinking cursor or a spinner does not keep a window busy. Answers failed at the timeout.", """
+            {"type":"object","properties":{"id":{"anyOf":[{"type":"integer","minimum":0},{"type":"string","pattern":"^[0-9]+$"}],"description":"The window id from windows/list. The default is every window. A string of decimal digits is also accepted, because a JSON number above 2^53 loses digits in JavaScript."},"quiet_ms":{"type":"integer","minimum":1,"maximum":3600000,"description":"How long the window must draw nothing. The default is 300."},"ignore_below":{"type":"integer","minimum":0,"maximum":65535,"description":"A commit whose damage fits in a square of this many logical pixels does not count. The default is 64."},"timeout_ms":{"type":"integer","minimum":1,"maximum":3600000,"description":"The default is 5000."}},"examples":[{"quiet_ms":1,"timeout_ms":100}]}
+            """);
+
         Add(IpcMethodNames.WorkspacesList, ReadOnly, "List the workspace groups, their outputs, and their workspaces with names, state and member windows.", Empty);
         Add(IpcMethodNames.WorkspacesActivate, Idempotent, "Ask the compositor to show a workspace.", WorkspaceId);
         Add(IpcMethodNames.WorkspacesDeactivate, Idempotent, "Ask the compositor to hide a workspace.", WorkspaceId);
@@ -141,12 +153,27 @@ internal static class IpcSchemas
             {"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"width":{"type":"integer","minimum":1,"maximum":32768},"height":{"type":"integer","minimum":1,"maximum":32768},{{CaptureCommon}}},"required":["x","y","width","height","to"]}
             """);
 
-        Add(IpcMethodNames.ProcessSpawn, None, "Start a program in the session, with no shell. It inherits WAYLAND_DISPLAY, DISPLAY and BASIN_SOCKET, and it outlives the caller. Returns the pid.", """
-            {"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"description":"The program and its arguments. The program is looked up on PATH."},"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Variables to add to the environment."},"cwd":{"type":"string","description":"An absolute working directory."}},"required":["argv"],"examples":[{"argv":["true"]}]}
+        Add(IpcMethodNames.ProcessSpawn, None, "Start a program in the session, with no shell. It inherits WAYLAND_DISPLAY, DISPLAY and BASIN_SOCKET, and it outlives the caller. The compositor tracks it: process/list, process/kill and process/log take the launch id this returns beside the pid.", """
+            {"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"description":"The program and its arguments. The program is looked up on PATH."},"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Variables to add to the environment."},"unset_env":{"type":"array","items":{"type":"string"},"description":"Variables to remove from the environment."},"cwd":{"type":"string","description":"An absolute working directory."},"log":{"type":"string","description":"An absolute file that receives stdout and stderr, appended to. process/log reads it back."}},"required":["argv"],"examples":[{"argv":["true"]}]}
+            """);
+        Add(IpcMethodNames.ProcessList, ReadOnly, "List the programs this compositor started: launch id, pid, argv, whether it runs, and its exit code or signal.", Empty);
+        Add(IpcMethodNames.ProcessKill, Destructive, "Send SIGTERM to a launch's process group, then SIGKILL after grace_ms if anything in the group is still alive.", """
+            {"type":"object","properties":{"launch_id":{"type":"integer","minimum":1,"description":"The launch id from process/spawn or process/list."},"grace_ms":{"type":"integer","minimum":0,"maximum":600000,"description":"The default is 2000."}},"required":["launch_id"]}
+            """);
+        Add(IpcMethodNames.ProcessLog, ReadOnly, "Return the last lines of a launch's log, when process/spawn named one.", """
+            {"type":"object","properties":{"launch_id":{"type":"integer","minimum":1,"description":"The launch id from process/spawn or process/list."},"lines":{"type":"integer","minimum":1,"maximum":10000,"description":"The default is 50."}},"required":["launch_id"]}
             """);
 
         Add(IpcMethodNames.ClipboardRead, ReadOnly, "Read the text on the clipboard or the primary selection. With no selection, types is empty. With no text type offered, text is null and types lists what is offered.", """
             {"type":"object","properties":{"kind":{"type":"string","enum":["clipboard","primary"],"description":"The default is clipboard."},"mime":{"type":"string","description":"A text type to ask for. The default is the first of text/plain;charset=utf-8, UTF8_STRING, text/plain, STRING and TEXT that is offered."},"timeout_ms":{"type":"integer","minimum":1,"maximum":120000,"description":"How long the owner has to write. The default is 2000."},"max_bytes":{"type":"integer","minimum":1,"maximum":16777216,"description":"The default is 1048576."}}}
+            """);
+
+        Add(IpcMethodNames.ClipboardWrite, None, "Put text on the clipboard or the primary selection, offered as text/plain;charset=utf-8, text/plain and UTF8_STRING. It stays there until another owner replaces it.", """
+            {"type":"object","properties":{"text":{"type":"string"},"kind":{"type":"string","enum":["clipboard","primary"],"description":"The default is clipboard."}},"required":["text"]}
+            """);
+
+        Add(IpcMethodNames.ApprovalAnswer, None, "Answer an approval request from approval/requested. Only the first connection subscribed to approval/requested can answer.", """
+            {"type":"object","properties":{"id":{"type":"integer","minimum":1,"description":"The id from the approval/requested event."},"answer":{"type":"string","enum":["allow_once","allow_run","deny"],"description":"allow_run also allows later calls to the same method for the rest of the run."}},"required":["id","answer"]}
             """);
 
         return table;
@@ -163,14 +190,14 @@ internal static class IpcSchemas
         string touch,
         string path)
     {
-        add(move, IpcMethodTraits.None, "Move the pointer to a point in layout coordinates." + path, """
-            {"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}
+        add(move, IpcMethodTraits.None, "Move the pointer to a point in layout coordinates, or in a window's client area with window." + WindowPoint + path, $$"""
+            {"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"},{{WindowProperties}}},"required":["x","y"]}
             """);
-        add(button, IpcMethodTraits.None, "Press or release a pointer button. With no pressed, it clicks: a press and then a release." + path, """
-            {"type":"object","properties":{"button":{"anyOf":[{"type":"string","enum":["left","right","middle","side","extra"]},{"type":"integer","minimum":0}],"description":"A button name or an evdev code."},"pressed":{"type":"boolean"}},"required":["button"]}
+        add(button, IpcMethodTraits.None, "Press or release a pointer button. With no pressed, it clicks: a press and then a release. With x and y, the pointer moves there first." + WindowPoint + path, $$"""
+            {"type":"object","properties":{"button":{"anyOf":[{"type":"string","enum":["left","right","middle","side","extra"]},{"type":"integer","minimum":0}],"description":"A button name or an evdev code."},"pressed":{"type":"boolean"},"x":{"type":"number"},"y":{"type":"number"},{{WindowProperties}}},"required":["button"]}
             """);
-        add(axis, IpcMethodTraits.None, "Scroll. A positive value scrolls down or right." + path, """
-            {"type":"object","properties":{"value":{"type":"number"},"axis":{"type":"string","enum":["vertical","horizontal"]},"source":{"type":"string","enum":["wheel","finger","continuous","wheel-tilt"]}},"required":["value"]}
+        add(axis, IpcMethodTraits.None, "Scroll. A positive value scrolls down or right. With x and y, the pointer moves there first." + WindowPoint + path, $$"""
+            {"type":"object","properties":{"value":{"type":"number"},"axis":{"type":"string","enum":["vertical","horizontal"]},"source":{"type":"string","enum":["wheel","finger","continuous","wheel-tilt"]},"x":{"type":"number"},"y":{"type":"number"},{{WindowProperties}}},"required":["value"]}
             """);
         add(key, IpcMethodTraits.None, "Press or release a key by its evdev code. With no pressed, it taps the key." + path, """
             {"type":"object","properties":{"code":{"type":"integer","minimum":0,"maximum":767,"description":"An evdev keycode, for example 30 for A or 28 for Enter."},"pressed":{"type":"boolean"}},"required":["code"]}
@@ -178,8 +205,8 @@ internal static class IpcSchemas
         add(chord, IpcMethodTraits.None, "Press a chord such as Super+Shift+c in order, then release it in reverse." + path, """
             {"type":"object","properties":{"chord":{"type":"string","description":"Modifiers and one key joined by +, with xkb keysym names, for example Alt+n or Super+Return."}},"required":["chord"],"examples":[{"chord":"Super"}]}
             """);
-        add(text, IpcMethodTraits.None, "Type text through the active keymap, with Shift where it needs it. A character the keymap cannot produce fails, and nothing is typed." + path, """
-            {"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}
+        add(text, IpcMethodTraits.None, "Type text. When the focused client has an enabled text input, the whole text goes to it as one commit, so any character works. Otherwise it types through the active keymap, with Shift where it needs it, and a character the keymap cannot produce fails with nothing typed. Returns the path taken." + path, """
+            {"type":"object","properties":{"text":{"type":"string"},"via":{"type":"string","enum":["auto","keymap","text-input"],"description":"Force one path. The default is auto."}},"required":["text"]}
             """);
         add(touch, IpcMethodTraits.None, "Send one touch event. Send frame after a group of down, motion and up events." + path, """
             {"type":"object","properties":{"kind":{"type":"string","enum":["down","motion","up","frame","cancel"]},"id":{"type":"integer","description":"The touch point id."},"x":{"type":"number","description":"Needed for down and motion."},"y":{"type":"number","description":"Needed for down and motion."}},"required":["kind"],"examples":[{"kind":"frame"}]}

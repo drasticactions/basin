@@ -2,7 +2,13 @@ namespace Basin.Ipc;
 
 public sealed class IpcClientState : IDisposable
 {
+    private static long _nextId;
+
     private readonly Dictionary<object, IDisposable> _owned = [];
+
+    public long Id { get; } = Interlocked.Increment(ref _nextId);
+
+    public int Pid { get; internal set; }
 
     public int Count => _owned.Count;
 

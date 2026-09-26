@@ -91,6 +91,7 @@ public class IpcReply
         Method = method;
         FrontState = null;
         IsDeferred = false;
+        Intercepted = null;
         ErrorCode = null;
         ErrorMessage = null;
         ClearResult();
@@ -130,14 +131,30 @@ public class IpcReply
 
     public IpcPendingReply Defer()
     {
-        if (IsDeferred || this is IpcPendingReply)
+        if (IsDeferred || this is IpcPendingReply { Rerun: false })
         {
             throw new InvalidOperationException("a reply is deferred once");
         }
 
         IsDeferred = true;
-        return new IpcPendingReply(Sink, Id, Method, FrontState);
+        if (this is IpcPendingReply pending)
+        {
+            pending.Rerun = false;
+            return pending;
+        }
+
+        var deferred = new IpcPendingReply(Sink, Id, Method, FrontState)
+        {
+            Intercepted = Intercepted,
+            CallStarted = CallStarted,
+        };
+        Intercepted = null;
+        return deferred;
     }
+
+    internal IpcServer? Intercepted { get; set; }
+
+    internal long CallStarted { get; set; }
 
     public int TakeFds(Span<int> into)
     {

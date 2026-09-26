@@ -55,6 +55,7 @@ public sealed class BasinCompositorHost : IDisposable
             }
         }
 
+        options.ConfigureServices?.Invoke(this, services);
         Services = services.Freeze();
         Shell = Services.Require<XdgShell>();
         Seat = Services.Require<Seat.Seat>();

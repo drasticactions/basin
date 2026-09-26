@@ -72,6 +72,12 @@ public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
         set => _node.Enabled = value;
     }
 
+    public bool ExcludedFromCapture
+    {
+        get => _node.ExcludedFromCapture;
+        set => _node.ExcludedFromCapture = value;
+    }
+
     public bool InputEnabled
     {
         get => _node.InputEnabled;

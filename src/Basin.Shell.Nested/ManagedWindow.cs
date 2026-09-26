@@ -38,6 +38,10 @@ public sealed class ManagedWindow
 
     public SceneNode? ContentNode { get; private set; }
 
+    public SceneTree? PopupTree { get; private set; }
+
+    public ulong ToplevelId { get; internal set; }
+
     public Frame? Frame => _frame;
 
     public int X { get; private set; }
@@ -168,7 +172,11 @@ public sealed class ManagedWindow
         ContentNode = null;
         Tree?.Destroy();
         Tree = null;
+        PopupTree?.Destroy();
+        PopupTree = null;
     }
+
+    internal void CreatePopupTree(SceneTree layer) => PopupTree ??= new SceneTree(layer);
 
     public void CreateFrame()
     {

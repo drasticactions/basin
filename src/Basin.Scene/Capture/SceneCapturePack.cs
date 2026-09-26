@@ -11,7 +11,8 @@ public sealed class SceneCapturePack : ICapabilityPack
         Index = new ToplevelSceneIndex();
         Stack = new SceneToplevelStack(scene, Index);
         Capture = new SceneScreenCapture(scene, layout) { Index = Index };
-        DmabufCapture = new SceneDmabufCapture();
+        DmabufCapture = new SceneDmabufCapture { Scene = scene };
+        Exclusion = new SceneCaptureExclusion(scene);
         Appearance = appearance ?? new DefaultSurfaceAppearance();
         scene.Appearance = Appearance;
     }
@@ -25,6 +26,8 @@ public sealed class SceneCapturePack : ICapabilityPack
     public SceneScreenCapture Capture { get; }
 
     public SceneDmabufCapture DmabufCapture { get; }
+
+    public SceneCaptureExclusion Exclusion { get; }
 
     public ToplevelCaptureIndexObserver Attach(
         Capabilities.IToplevelModel toplevels,
@@ -45,6 +48,7 @@ public sealed class SceneCapturePack : ICapabilityPack
             .Use<IScreenCapture>(Capture)
             .Use<IDmabufCapture>(DmabufCapture)
             .Use(Appearance)
-            .UseDefault<IToplevelStack>(Stack);
+            .UseDefault<IToplevelStack>(Stack)
+            .UseDefault<ICaptureExclusion>(Exclusion);
     }
 }

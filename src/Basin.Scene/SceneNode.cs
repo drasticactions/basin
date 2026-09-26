@@ -34,6 +34,8 @@ public abstract class SceneNode
 
     internal void SetEnabledForCapture(bool value) => _enabled = value;
 
+    public bool ExcludedFromCapture { get; set; }
+
     public int X { get; private set; }
 
     public int Y { get; private set; }

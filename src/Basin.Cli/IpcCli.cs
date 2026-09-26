@@ -29,6 +29,12 @@ public static class IpcCli
             return IpcChoice.Off;
         }
 
+        var given = command.IpcOption is { } flag && result.GetResult(flag) is { Implicit: false };
+        if (!given && Environment.GetEnvironmentVariable(IpcProtocol.PathVariable) is { Length: > 0 } inherited && Path.IsPathRooted(inherited))
+        {
+            return new IpcChoice(true, inherited);
+        }
+
         return new IpcChoice(true, IsOn(value) ? null : Path.GetFullPath(value!));
     }
 

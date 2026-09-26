@@ -18,6 +18,7 @@ internal static class IpcClipboardMethods
             return;
         }
 
+        RegisterWrite(server, store);
         server.Methods.RegisterLibrary(IpcMethodNames.ClipboardRead, (ref IpcParams parameters, IpcReply reply) =>
         {
             if (parameters.Read(IpcJsonContext.Default.IpcClipboardParams) is not { } request)
@@ -89,6 +90,37 @@ internal static class IpcClipboardMethods
             }
 
             new IpcClipboardRead(server, reply.Defer(), readFd, types, chosen, maxBytes).Start((int)timeout);
+        });
+    }
+
+    private static void RegisterWrite(IpcServer server, ISelectionStore store)
+    {
+        server.Methods.RegisterLibrary(IpcMethodNames.ClipboardWrite, (ref IpcParams parameters, IpcReply reply) =>
+        {
+            if (parameters.Read(IpcJsonContext.Default.IpcClipboardWriteParams) is not { } request)
+            {
+                return;
+            }
+
+            SelectionKind? kind = (request.Kind ?? "clipboard") switch
+            {
+                "clipboard" => SelectionKind.Clipboard,
+                "primary" => SelectionKind.Primary,
+                _ => null,
+            };
+            if (kind is null)
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, "'kind' is clipboard or primary");
+                return;
+            }
+
+            if (request.Text.Length > MaxBytesCap)
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, $"'text' is at most {MaxBytesCap} characters");
+                return;
+            }
+
+            IpcWindowMethods.Done(reply, store.SetSelection(kind.Value, IpcClipboardSource.Create(server, request.Text), SelectionSerial.Unchecked));
         });
     }
 

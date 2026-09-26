@@ -33,6 +33,7 @@ internal static class IpcFullRig
             listen);
         _ = rig.Own(selection);
         rig.Server.SyntheticInput = new IpcInputTests.RecordingSynthetic();
+        rig.Server.Approvals = new IpcApprovalBroker();
         register?.Invoke(rig.Server);
         return rig;
     }

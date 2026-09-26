@@ -105,6 +105,15 @@ public sealed partial class BasinIpcClient
         string? appId = null, string? title = null, int timeoutMs = 5000, CancellationToken cancellationToken = default) =>
         CallAsync(IpcMethodNames.WindowsWait, new IpcWaitParams(appId, title, timeoutMs), Json.IpcWaitParams, Json.IpcWindow, cancellationToken);
 
+    public Task<IpcWaitIdleResult> WaitIdleAsync(
+        ulong? id = null, long? quietMs = null, long? ignoreBelow = null, long? timeoutMs = null, CancellationToken cancellationToken = default) =>
+        CallAsync(
+            IpcMethodNames.WindowsWaitIdle,
+            new IpcWaitIdleParams(id, quietMs, ignoreBelow, timeoutMs),
+            Json.IpcWaitIdleParams,
+            Json.IpcWaitIdleResult,
+            cancellationToken);
+
     public async Task<IReadOnlyList<IpcWorkspaceGroup>> ListWorkspacesAsync(CancellationToken cancellationToken = default) =>
         (await CallAsync(IpcMethodNames.WorkspacesList, Json.IpcWorkspaceList, cancellationToken).ConfigureAwait(false)).Groups.Items();
 
@@ -153,6 +162,31 @@ public sealed partial class BasinIpcClient
             Json.IpcEmpty,
             cancellationToken);
 
+    public Task PointerMoveInWindowAsync(
+        ulong window, double x, double y, bool raise = false, bool seat = false, CancellationToken cancellationToken = default) =>
+        CallAsync(
+            seat ? IpcMethodNames.SeatPointerMove : IpcMethodNames.InputPointerMove,
+            new IpcPointerMoveParams(x, y) { Window = window, Raise = raise ? true : null },
+            Json.IpcPointerMoveParams,
+            Json.IpcEmpty,
+            cancellationToken);
+
+    public Task PointerButtonInWindowAsync(
+        ulong window,
+        double x,
+        double y,
+        uint button,
+        bool? pressed = null,
+        bool raise = false,
+        bool seat = false,
+        CancellationToken cancellationToken = default) =>
+        CallAsync(
+            seat ? IpcMethodNames.SeatPointerButton : IpcMethodNames.InputPointerButton,
+            new IpcPointerButtonParams(new IpcButton(button), pressed) { Window = window, X = x, Y = y, Raise = raise ? true : null },
+            Json.IpcPointerButtonParams,
+            Json.IpcEmpty,
+            cancellationToken);
+
     public Task PointerButtonAsync(uint button, bool? pressed = null, bool seat = false, CancellationToken cancellationToken = default) =>
         CallAsync(
             seat ? IpcMethodNames.SeatPointerButton : IpcMethodNames.InputPointerButton,
@@ -187,6 +221,22 @@ public sealed partial class BasinIpcClient
 
     public Task TextAsync(string text, bool seat = false, CancellationToken cancellationToken = default) =>
         CallAsync(seat ? IpcMethodNames.SeatText : IpcMethodNames.InputText, new IpcTextParams(text), Json.IpcTextParams, Json.IpcEmpty, cancellationToken);
+
+    public async Task<string> TextAsync(string text, string via, bool seat = false, CancellationToken cancellationToken = default) =>
+        (await CallAsync(
+            seat ? IpcMethodNames.SeatText : IpcMethodNames.InputText,
+            new IpcTextParams(text) { Via = via },
+            Json.IpcTextParams,
+            Json.IpcTextResult,
+            cancellationToken).ConfigureAwait(false)).Via;
+
+    public Task WriteClipboardAsync(string text, bool primary = false, CancellationToken cancellationToken = default) =>
+        CallAsync(
+            IpcMethodNames.ClipboardWrite,
+            new IpcClipboardWriteParams(text, primary ? "primary" : null),
+            Json.IpcClipboardWriteParams,
+            Json.IpcEmpty,
+            cancellationToken);
 
     public Task TouchAsync(
         string kind, int id = 0, double x = 0, double y = 0, bool seat = false, CancellationToken cancellationToken = default) =>
@@ -251,6 +301,28 @@ public sealed partial class BasinIpcClient
             new IpcClipboardParams(primary ? "primary" : "clipboard", mime, timeoutMs),
             Json.IpcClipboardParams,
             Json.IpcClipboard,
+            cancellationToken);
+
+    public Task<IpcSpawnResult> LaunchAsync(IpcSpawnParams launch, CancellationToken cancellationToken = default) =>
+        CallAsync(IpcMethodNames.ProcessSpawn, launch, Json.IpcSpawnParams, Json.IpcSpawnResult, cancellationToken);
+
+    public async Task<IReadOnlyList<IpcProcess>> ListProcessesAsync(CancellationToken cancellationToken = default) =>
+        (await CallAsync(IpcMethodNames.ProcessList, Json.IpcProcessList, cancellationToken).ConfigureAwait(false)).Processes.Items();
+
+    public Task KillProcessAsync(long launchId, int? graceMs = null, CancellationToken cancellationToken = default) =>
+        CallAsync(
+            IpcMethodNames.ProcessKill,
+            new IpcProcessKillParams(launchId, graceMs),
+            Json.IpcProcessKillParams,
+            Json.IpcEmpty,
+            cancellationToken);
+
+    public Task<IpcProcessLog> ProcessLogAsync(long launchId, int? lines = null, CancellationToken cancellationToken = default) =>
+        CallAsync(
+            IpcMethodNames.ProcessLog,
+            new IpcProcessLogParams(launchId, lines),
+            Json.IpcProcessLogParams,
+            Json.IpcProcessLog,
             cancellationToken);
 
     public async Task<int> SpawnAsync(

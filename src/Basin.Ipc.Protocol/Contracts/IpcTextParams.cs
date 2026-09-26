@@ -27,6 +27,9 @@ public sealed class IpcTextParams : IIpcParams, IIpcReusable
         }
     }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Via { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'text' is required"
@@ -36,5 +39,6 @@ public sealed class IpcTextParams : IIpcParams, IIpcReusable
     {
         _text = string.Empty;
         _present = 0;
+        Via = null;
     }
 }

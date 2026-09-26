@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using static Basin.Ipc.IpcLog;
 
 namespace Basin.Ipc;
 
@@ -15,15 +14,18 @@ internal static unsafe class IpcSpawn
     private const long PidfdOpen = 434;
     private const int WaitNoHang = 1;
 
-    public static int Spawn(
-        IpcServer server, string[] argv, IReadOnlyDictionary<string, string>? env, string? cwd, out string? error)
+    private const int OWrite = 0x1;
+    private const int OCreate = 0x40;
+    private const int OAppend = 0x400;
+
+    public static int Spawn(string[] argv, List<string> environment, string? cwd, string? log, out string? error)
     {
         var attributes = Marshal.AllocHGlobal(AttrBytes);
         var actions = Marshal.AllocHGlobal(ActionBytes);
         var mask = Marshal.AllocHGlobal(SigsetBytes);
         var defaults = Marshal.AllocHGlobal(SigsetBytes);
         var argvBlock = Block(argv);
-        var envBlock = Block(Environment(server, env));
+        var envBlock = Block(environment);
         try
         {
             _ = posix_spawnattr_init(attributes);
@@ -40,6 +42,14 @@ internal static unsafe class IpcSpawn
                 return -1;
             }
 
+            if (log is not null
+                && (posix_spawn_file_actions_addopen(actions, 1, log, OWrite | OCreate | OAppend, Convert.ToUInt32("644", 8)) != 0
+                    || posix_spawn_file_actions_adddup2(actions, 1, 2) != 0))
+            {
+                error = $"cannot send output to '{log}'";
+                return -1;
+            }
+
             var result = posix_spawnp(out var pid, argv[0], actions, attributes, argvBlock, envBlock);
             if (result != 0)
             {
@@ -47,7 +57,6 @@ internal static unsafe class IpcSpawn
                 return -1;
             }
 
-            Reap(server, pid);
             error = null;
             return pid;
         }
@@ -62,66 +71,6 @@ internal static unsafe class IpcSpawn
             Free(argvBlock);
             Free(envBlock);
         }
-    }
-
-    private static void Reap(IpcServer server, int pid)
-    {
-        var pidfd = (int)syscall(PidfdOpen, pid, 0);
-        if (pidfd < 0)
-        {
-            Log.Debug($"pidfd_open({pid}) failed; the child is reaped only when the compositor exits");
-            return;
-        }
-
-        var reaper = new IpcReaper(pid, pidfd);
-        reaper.Source = server.Loop.AddFd(pidfd, FdReadiness.Readable, (_, _) =>
-        {
-            int status;
-            _ = waitpid(pid, &status, WaitNoHang);
-            reaper.Dispose();
-            server.Disown(reaper);
-        });
-        server.Own(reaper);
-    }
-
-    private static List<string> Environment(IpcServer server, IReadOnlyDictionary<string, string>? env)
-    {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
-        {
-            values[(string)entry.Key] = entry.Value as string ?? string.Empty;
-        }
-
-        if (server.Session.WaylandSocket is { Length: > 0 } socket)
-        {
-            values["WAYLAND_DISPLAY"] = socket;
-        }
-
-        if (server.Session.XwaylandDisplay?.Invoke() is { Length: > 0 } display)
-        {
-            values["DISPLAY"] = display;
-        }
-
-        if (server.Path is { } path)
-        {
-            values[IpcProtocol.SocketVariable] = path;
-        }
-
-        if (env is not null)
-        {
-            foreach (var (name, value) in env)
-            {
-                values[name] = value;
-            }
-        }
-
-        var entries = new List<string>(values.Count);
-        foreach (var (name, value) in values)
-        {
-            entries.Add($"{name}={value}");
-        }
-
-        return entries;
     }
 
     private static nint[] Block(IReadOnlyList<string> entries)
@@ -175,6 +124,13 @@ internal static unsafe class IpcSpawn
     private static extern int posix_spawn_file_actions_addchdir_np(nint actions, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
 
     [DllImport("libc")]
+    private static extern int posix_spawn_file_actions_addopen(
+        nint actions, int fd, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags, uint mode);
+
+    [DllImport("libc")]
+    private static extern int posix_spawn_file_actions_adddup2(nint actions, int fd, int target);
+
+    [DllImport("libc")]
     private static extern int sigemptyset(nint set);
 
     [DllImport("libc")]
@@ -185,4 +141,19 @@ internal static unsafe class IpcSpawn
 
     [DllImport("libc", SetLastError = true)]
     private static extern int waitpid(int pid, int* status, int options);
+
+    [DllImport("libc", EntryPoint = "kill", SetLastError = true)]
+    private static extern int KillRaw(int pid, int signal);
+
+    public static int PidfdOpenOf(int pid) => (int)syscall(PidfdOpen, pid, 0);
+
+    public static bool TryReap(int pid, out int status)
+    {
+        var raw = 0;
+        var reaped = waitpid(pid, &raw, WaitNoHang);
+        status = raw;
+        return reaped == pid;
+    }
+
+    public static bool Signal(int pid, int signal) => KillRaw(pid, signal) == 0;
 }

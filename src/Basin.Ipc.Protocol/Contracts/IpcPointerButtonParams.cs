@@ -31,6 +31,19 @@ public sealed class IpcPointerButtonParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Pressed { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? X { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Y { get; set; }
+
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ulong? Window { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Raise { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'button' is required"
@@ -38,6 +51,10 @@ public sealed class IpcPointerButtonParams : IIpcParams, IIpcReusable
 
     void IIpcReusable.Reset()
     {
+        Window = null;
+        Raise = null;
+        X = null;
+        Y = null;
         _button = default;
         _present = 0;
         Pressed = null;

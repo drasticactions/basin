@@ -1,17 +1,23 @@
+using System.Diagnostics;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using static Basin.Ipc.IpcLog;
 
 namespace Basin.Ipc;
 
-public sealed class IpcServer : IDisposable
+public sealed unsafe class IpcServer : IDisposable
 {
     private const int Backlog = 16;
 
     private readonly ICompositorEventLoop _loop;
     private readonly List<IpcConnection> _connections = [];
     private readonly List<IDisposable> _owned = [];
+    private readonly List<IpcHeldCall> _held = [];
+    private readonly List<IpcCallContext> _contexts = [];
     private readonly string? _requestedPath;
+    private IIpcInterceptor? _interceptor;
+    private IpcApprovalBroker? _approvals;
+    private int _depth;
     private IEventSource? _listenSource;
     private int _listenFd = -1;
     private bool _disposed;
@@ -27,14 +33,49 @@ public sealed class IpcServer : IDisposable
         Session = session;
         _requestedPath = socketPath;
         Listens = listen;
+        Processes = new IpcProcessTracker(loop, SessionEnvironment);
         BasinCounters.Track();
     }
+
+    public IpcProcessTracker Processes { get; }
 
     public BasinServices Services { get; }
 
     public bool Listens { get; }
 
     public ISyntheticInput? SyntheticInput { get; set; }
+
+    public IIpcInterceptor? Interceptor
+    {
+        get => _interceptor;
+        set
+        {
+            ThrowIfStartedOrDisposed();
+            _interceptor = value;
+        }
+    }
+
+    public int HeldCount => _held.Count;
+
+    public IpcApprovalBroker? Approvals
+    {
+        get => _approvals;
+        set
+        {
+            ThrowIfStartedOrDisposed();
+            _approvals = value;
+        }
+    }
+
+    public void Omit(params string[] names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        ThrowIfStartedOrDisposed();
+        foreach (var name in names)
+        {
+            Methods.Omit(name);
+        }
+    }
 
     public IpcSessionInfo Session { get; }
 
@@ -119,6 +160,12 @@ public sealed class IpcServer : IDisposable
         ArgumentNullException.ThrowIfNull(reply);
         reply.Begin(id, method);
         reply.FrontState = frontState;
+        if (_interceptor is { } interceptor && Methods.Contains(method))
+        {
+            Intercept(interceptor, method, parameters, reply);
+            return true;
+        }
+
         if (Methods.TryInvoke(method, parameters, reply))
         {
             return true;
@@ -126,6 +173,123 @@ public sealed class IpcServer : IDisposable
 
         reply.Error(IpcErrorCodes.UnknownMethod, $"no method '{method}' on this compositor");
         return false;
+    }
+
+    internal void RunHeld(IpcHeldCall call, IpcPendingReply reply, ReadOnlySpan<byte> parameters)
+    {
+        reply.Intercepted = this;
+        reply.CallStarted = call.Started;
+        reply.Rerun = true;
+        _ = Methods.TryInvoke(call.Method, parameters, reply);
+        if (!reply.IsDeferred)
+        {
+            reply.Rerun = false;
+            _ = reply.Complete();
+        }
+    }
+
+    internal void ForgetHeld(IpcHeldCall call) => _held.Remove(call);
+
+    internal void After(string method, IpcReply reply, long started)
+    {
+        if (_interceptor is not { } interceptor)
+        {
+            return;
+        }
+
+        var context = RentContext();
+        context.BeginAfter(method, reply.State, reply.Sink is IpcLineFront);
+        try
+        {
+            interceptor.After(method, new IpcCallOutcome(reply.ErrorCode, reply.ErrorMessage), Stopwatch.GetElapsedTime(started), context);
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"the interceptor failed after {method}: {exception}");
+        }
+        finally
+        {
+            ReturnContext(context);
+        }
+    }
+
+    private void Intercept(IIpcInterceptor interceptor, string method, ReadOnlySpan<byte> parameters, IpcReply reply)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var context = RentContext();
+        IpcDecision decision;
+        IpcHeldCall? held;
+        try
+        {
+            fixed (byte* bytes = parameters)
+            {
+                context.Begin(reply, method, bytes, parameters.Length, started);
+                try
+                {
+                    decision = interceptor.Before(method, parameters, context);
+                }
+                catch (Exception exception)
+                {
+                    Log.Error($"the interceptor failed before {method}: {exception}");
+                    decision = IpcDecision.Deny("the compositor could not decide on this call");
+                }
+
+                held = context.Held;
+            }
+        }
+        finally
+        {
+            ReturnContext(context);
+        }
+
+        switch (decision.Kind)
+        {
+            case IpcDecisionKind.Allow:
+                reply.Intercepted = this;
+                reply.CallStarted = started;
+                _ = Methods.TryInvoke(method, parameters, reply);
+                if (!reply.IsDeferred)
+                {
+                    reply.Intercepted = null;
+                    After(method, reply, started);
+                }
+
+                return;
+
+            case IpcDecisionKind.Defer when held is not null:
+                var pending = reply.Defer();
+                pending.Intercepted = this;
+                pending.CallStarted = started;
+                _held.Add(held);
+                held.Attach(pending);
+                return;
+
+            case IpcDecisionKind.Defer:
+                reply.Error(IpcErrorCodes.Internal, "the interceptor deferred a call it did not hold");
+                After(method, reply, started);
+                return;
+
+            default:
+                reply.Error(IpcErrorCodes.Refused, decision.Message ?? "the compositor refused the call");
+                After(method, reply, started);
+                return;
+        }
+    }
+
+    private IpcCallContext RentContext()
+    {
+        if (_depth == _contexts.Count)
+        {
+            _contexts.Add(new IpcCallContext(this));
+        }
+
+        return _contexts[_depth++];
+    }
+
+    private void ReturnContext(IpcCallContext context)
+    {
+        context.End();
+        _depth--;
     }
 
     public void Dispose()
@@ -149,9 +313,20 @@ public sealed class IpcServer : IDisposable
             _connections[i].Dispose();
         }
 
+        _approvals?.Detach();
+        foreach (var held in _held.ToArray())
+        {
+            if (!held.IsDone)
+            {
+                held.Deny("the compositor stopped");
+            }
+        }
+
+        _held.Clear();
         LineFront?.Dispose();
         LineFront = null;
         Events.Dispose();
+        Processes.Dispose();
         for (var i = _owned.Count - 1; i >= 0; i--)
         {
             _owned[i].Dispose();
@@ -174,9 +349,46 @@ public sealed class IpcServer : IDisposable
 
     internal void Forget(IpcConnection connection) => _connections.Remove(connection);
 
+    private Dictionary<string, string> SessionEnvironment()
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (Session.WaylandSocket is { Length: > 0 } socket)
+        {
+            values["WAYLAND_DISPLAY"] = socket;
+        }
+
+        if (Session.XwaylandDisplay?.Invoke() is { Length: > 0 } display)
+        {
+            values["DISPLAY"] = display;
+        }
+
+        if (Path is { } path)
+        {
+            values[IpcProtocol.SocketVariable] = path;
+        }
+
+        return values;
+    }
+
     private void Listen()
     {
-        var path = _requestedPath ?? DefaultPath(Session.WaylandSocket);
+        var inherited = _requestedPath is null ? Environment.GetEnvironmentVariable(IpcProtocol.PathVariable) : null;
+        if (inherited is not null)
+        {
+            IpcNative.Export(IpcProtocol.PathVariable, null);
+            if (!System.IO.Path.IsPathRooted(inherited))
+            {
+                Log.Warn($"{IpcProtocol.PathVariable} is not absolute; the default path is used");
+                inherited = null;
+            }
+        }
+
+        var path = _requestedPath ?? (string.IsNullOrEmpty(inherited) ? DefaultPath(Session.WaylandSocket) : inherited);
+        if (path is not null && Environment.GetEnvironmentVariable(IpcProtocol.PathVariable) == path)
+        {
+            IpcNative.Export(IpcProtocol.PathVariable, null);
+        }
+
         if (path is null)
         {
             Log.Warn($"XDG_RUNTIME_DIR is not set; the control socket is off");
@@ -273,12 +485,23 @@ public sealed class IpcServer : IDisposable
                     continue;
                 }
 
-                _connections.Add(new IpcConnection(this, client, _loop));
+                var connection = new IpcConnection(this, client, _loop);
+                connection.State.Pid = pid;
+                _connections.Add(connection);
             }
         }
         catch (Exception exception)
         {
             Log.Error($"accepting a control connection failed: {exception}");
+        }
+    }
+
+    private void ThrowIfStartedOrDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (IsStarted)
+        {
+            throw new InvalidOperationException("set this before the server starts");
         }
     }
 

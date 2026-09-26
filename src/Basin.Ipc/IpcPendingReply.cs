@@ -15,6 +15,8 @@ public sealed class IpcPendingReply : IpcReply
 
     public bool Completed { get; private set; }
 
+    internal bool Rerun { get; set; }
+
     public bool Complete()
     {
         if (IsDone)
@@ -23,15 +25,21 @@ public sealed class IpcPendingReply : IpcReply
         }
 
         IsDone = true;
+        if (!ResultIsBalanced)
+        {
+            Fail(IpcErrorCodes.Internal, "the handler left its result unfinished");
+        }
+
+        if (Intercepted is { } server)
+        {
+            Intercepted = null;
+            server.After(Method, this, CallStarted);
+        }
+
         if (!Sink.IsOpen)
         {
             ReleaseFds();
             return false;
-        }
-
-        if (!ResultIsBalanced)
-        {
-            Fail(IpcErrorCodes.Internal, "the handler left its result unfinished");
         }
 
         Sink.Deliver(this);

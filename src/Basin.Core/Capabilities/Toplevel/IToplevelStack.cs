@@ -7,4 +7,10 @@ public interface IToplevelStack
     void AddObserver(IToplevelStackObserver observer);
 
     void RemoveObserver(IToplevelStackObserver observer);
+
+    bool TryToplevelAt(double x, double y, out ulong toplevelId)
+    {
+        toplevelId = 0;
+        return false;
+    }
 }

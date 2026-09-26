@@ -6,6 +6,8 @@ internal static class IpcWindowMethods
 {
     private const int DefaultWaitMs = 5000;
     private const int MaxWaitMs = 3_600_000;
+    private const int DefaultQuietMs = 300;
+    private const int DefaultIgnoreBelow = 64;
 
     public static void Register(IpcServer server, IpcDescribe describe)
     {
@@ -86,7 +88,7 @@ internal static class IpcWindowMethods
                 }
 
                 var box = new Box(request.X, request.Y, info.Geometry.Width, info.Geometry.Height);
-                Send(reply, model, request.Id, new ToplevelRequest(ToplevelRequestKind.Move, Geometry: box));
+                Send(reply, model, request.Id, new ToplevelRequest(ToplevelRequestKind.Move, Geometry: box), info.State);
             });
 
             methods.RegisterLibrary(IpcMethodNames.WindowsResize, (ref IpcParams parameters, IpcReply reply) =>
@@ -103,7 +105,7 @@ internal static class IpcWindowMethods
                 }
 
                 var box = new Box(info.Geometry.X, info.Geometry.Y, request.Width, request.Height);
-                Send(reply, model, request.Id, new ToplevelRequest(ToplevelRequestKind.Resize, Geometry: box));
+                Send(reply, model, request.Id, new ToplevelRequest(ToplevelRequestKind.Resize, Geometry: box), info.State);
             });
 
             methods.RegisterLibrary(IpcMethodNames.WindowsSendToOutput, (ref IpcParams parameters, IpcReply reply) =>
@@ -166,6 +168,46 @@ internal static class IpcWindowMethods
 
                 new IpcWindowWait(server, describe, model, request.AppId, request.Title, reply.Defer()).Start((int)timeout);
             });
+
+            methods.RegisterLibrary(IpcMethodNames.WindowsWaitIdle, (ref IpcParams parameters, IpcReply reply) =>
+            {
+                if (parameters.Read(IpcJsonContext.Default.IpcWaitIdleParams) is not { } request)
+                {
+                    return;
+                }
+
+                var quiet = request.QuietMs ?? DefaultQuietMs;
+                var ignore = request.IgnoreBelow ?? DefaultIgnoreBelow;
+                var timeout = request.TimeoutMs ?? DefaultWaitMs;
+                if (quiet <= 0 || quiet > MaxWaitMs || timeout <= 0 || timeout > MaxWaitMs)
+                {
+                    reply.Error(IpcErrorCodes.InvalidParams, $"quiet_ms and timeout_ms are between 1 and {MaxWaitMs}");
+                    return;
+                }
+
+                if (ignore < 0 || ignore > 65535)
+                {
+                    reply.Error(IpcErrorCodes.InvalidParams, "ignore_below is between 0 and 65535");
+                    return;
+                }
+
+                var target = request.Id ?? 0;
+                if (target != 0)
+                {
+                    if (!Found(model, target, reply, out _))
+                    {
+                        return;
+                    }
+
+                    if (!model.ReportsCommits(target))
+                    {
+                        reply.Error(IpcErrorCodes.Refused, $"the compositor does not report the commits of window {target}");
+                        return;
+                    }
+                }
+
+                new IpcWindowIdle(server, model, target, (int)quiet, (int)ignore, (int)timeout, reply.Defer()).Start();
+            });
         }
 
         if (describe.Stack is not null)
@@ -197,14 +239,22 @@ internal static class IpcWindowMethods
         IpcWrite.Empty(reply);
     }
 
-    private static void Refused(IpcReply reply, ToplevelRequestKind kind) =>
-        reply.Error(IpcErrorCodes.Refused, $"the compositor declined {kind}");
+    private static void Refused(IpcReply reply, ToplevelRequestKind kind, ulong id = 0, ToplevelState state = ToplevelState.None)
+    {
+        var reason = (state & ToplevelState.Fullscreen) != 0 ? "fullscreen"
+            : (state & ToplevelState.Maximized) != 0 ? "maximized"
+            : null;
+        reply.Error(IpcErrorCodes.Refused, reason is null
+            ? $"the compositor declined {kind}"
+            : $"the compositor declined {kind}: window {id} is {reason}, and only a floating window moves or resizes");
+    }
 
-    private static void Send(IpcReply reply, IToplevelModel model, ulong id, in ToplevelRequest request)
+    private static void Send(
+        IpcReply reply, IToplevelModel model, ulong id, in ToplevelRequest request, ToplevelState state = ToplevelState.None)
     {
         if (!model.Request(id, request))
         {
-            Refused(reply, request.Kind);
+            Refused(reply, request.Kind, id, state);
             return;
         }
 

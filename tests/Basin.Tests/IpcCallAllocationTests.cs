@@ -69,4 +69,39 @@ public sealed class IpcCallAllocationTests
         Assert.True(measured > 0, "the call was not handled inside the measured dispatch");
         Budgets.Check("server", path, measured);
     }
+
+    [Fact]
+    public void A_call_through_an_interceptor_stays_within_budget()
+    {
+        Budgets.Require();
+        using var rig = IpcFullRig.Create(register: server => server.Interceptor = new PassThrough());
+        var peer = rig.Connect();
+        var frame = IpcTestPeer.Frame("""{"method":"ipc/version"}""");
+
+        long measured = 0;
+        for (var pass = 0; pass < 2; pass++)
+        {
+            measured = 0;
+            for (var round = 0; round < Rounds; round++)
+            {
+                peer.SendRaw(frame);
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                rig.Host.Loop.Dispatch(0);
+                measured += GC.GetAllocatedBytesForCurrentThread() - before;
+                Assert.StartsWith("{", peer.Receive(), StringComparison.Ordinal);
+            }
+        }
+
+        Assert.True(measured > 0, "the call was not handled inside the measured dispatch");
+        Budgets.Check("server", "ipc-call-version-intercepted", measured);
+    }
+
+    private sealed class PassThrough : IIpcInterceptor
+    {
+        public IpcDecision Before(string method, ReadOnlySpan<byte> parameters, IpcCallContext context) => IpcDecision.Allow;
+
+        public void After(string method, IpcCallOutcome outcome, TimeSpan elapsed, IpcCallContext context)
+        {
+        }
+    }
 }

@@ -35,7 +35,7 @@ public sealed class IpcMetadataTests
     [Fact]
     public void Traits_follow_the_table()
     {
-        string[] destructive = ["session/quit", "windows/close", "outputs/apply", "outputs/power", "workspaces/remove"];
+        string[] destructive = ["session/quit", "windows/close", "outputs/apply", "outputs/power", "workspaces/remove", "process/kill"];
         string[] idempotent =
         [
             "windows/activate", "windows/set-state", "windows/move", "windows/resize", "windows/send-to-output",
@@ -44,8 +44,8 @@ public sealed class IpcMetadataTests
         string[] readOnly =
         [
             "ipc/version", "ipc/methods", "ipc/events", "session/describe", "outputs/list", "outputs/test", "windows/list",
-            "windows/get", "windows/stack", "windows/wait", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
-            "capture/output", "capture/window", "capture/region", "clipboard/read",
+            "windows/get", "windows/stack", "windows/wait", "windows/wait-idle", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
+            "capture/output", "capture/window", "capture/region", "clipboard/read", "process/list", "process/log",
         ];
         foreach (var name in LibraryNames())
         {

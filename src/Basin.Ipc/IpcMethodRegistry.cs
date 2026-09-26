@@ -9,6 +9,8 @@ public sealed class IpcMethodRegistry
     private readonly Dictionary<string, IpcMethodInfo> _info = new(StringComparer.Ordinal);
     private readonly Dictionary<string, byte[]> _schemaUtf8 = new(StringComparer.Ordinal);
     private readonly List<IpcLineForm> _lines = [];
+    private readonly HashSet<string> _omitted = new(StringComparer.Ordinal);
+    private readonly List<string> _omittedGroups = [];
     private string[]? _sorted;
 
     public bool IsFrozen { get; private set; }
@@ -142,7 +144,51 @@ public sealed class IpcMethodRegistry
         return true;
     }
 
-    internal void RegisterLibrary(string name, IpcHandler handler) => Add(name, handler, null);
+    internal void RegisterLibrary(string name, IpcHandler handler)
+    {
+        if (!IsOmitted(name))
+        {
+            Add(name, handler, null);
+        }
+    }
+
+    public bool IsOmitted(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (_omitted.Contains(name))
+        {
+            return true;
+        }
+
+        var space = IpcProtocol.NamespaceOf(name);
+        foreach (var group in _omittedGroups)
+        {
+            if (space.SequenceEqual(group))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal void Omit(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ThrowIfFrozen();
+        if (name.EndsWith("/*", StringComparison.Ordinal) && IpcProtocol.IsValidName(name[..^1] + "x"))
+        {
+            _omittedGroups.Add(name[..^2]);
+            return;
+        }
+
+        if (!IpcProtocol.IsValidName(name))
+        {
+            throw new ArgumentException($"'{name}' is neither a method name nor group/*", nameof(name));
+        }
+
+        _omitted.Add(name);
+    }
 
     internal void Freeze() => IsFrozen = true;
 

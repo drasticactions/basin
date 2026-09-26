@@ -35,6 +35,25 @@ public sealed class IpcInputTests
     }
 
     [Fact]
+    public void Window_relative_input_uses_the_stack_order_when_the_stack_cannot_hit_test()
+    {
+        using var rig = IpcFullRig.Create();
+        var model = (TestToplevelModel)rig.Services.Require<IToplevelModel>();
+        var under = model.Add("under", "app.under", geometry: new Box(0, 0, 100, 80));
+        var over = model.Add("over", "app.over", geometry: new Box(50, 40, 100, 80));
+        ((TestToplevelStack)rig.Services.Require<IToplevelStack>()).SetOrder(under, over);
+        var input = (RecordingSynthetic)rig.Server.SyntheticInput!;
+        var peer = rig.Connect();
+
+        Assert.Null(ErrorCode(peer.Call($$$"""{"method":"input/pointer-move","params":{"window":{{{under}}},"x":10,"y":10}}""")));
+        Assert.Equal(["move 10 10"], input.Log);
+        Assert.Equal(IpcErrorCodes.Refused, ErrorCode(peer.Call($$$"""{"method":"input/axis","params":{"value":5,"window":{{{under}}},"x":60,"y":50}}""")));
+        Assert.Null(ErrorCode(peer.Call($$$"""{"method":"input/pointer-button","params":{"button":"left","window":{{{over}}},"x":1,"y":1}}""")));
+        Assert.Equal(["move 10 10", "move 51 41", "button 272 True", "button 272 False"], input.Log);
+        Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"input/pointer-button","params":{"button":"left","x":1}}""")));
+    }
+
+    [Fact]
     public void Chord_presses_in_order_and_releases_in_reverse()
     {
         var input = new RecordingSynthetic();
