@@ -1,15 +1,12 @@
-# deskbar-wm reads this file from ~/.config/deskbar-wm/deskbar-wm.toml and
-# rereads it on SIGHUP. Every key below shows its default.
-
 [deskbar]
 orientation = "vertical"  # "vertical" | "horizontal"
 side = "right"            # "left" | "right"
 end = "top"               # "top" | "bottom"
-state = "expando"         # "mini" | "expando" | "full"; there is no horizontal full
-width = 0                 # 0 derives the width from the icon size
+state = "expando"         # "mini" | "expando" | "full"
+width = 0                 # 0 is automatic
 icon-size = 32            # 16 to 96
 show-labels = true
-expand-windows = false    # Haiku's superExpando; vertical bars only
+expand-windows = false    # window lists under each team
 expand-new-teams = false
 sort-teams = false
 always-on-top = false
@@ -28,16 +25,16 @@ show-time-zone = false
 recent-documents = 10
 recent-folders = 10
 recent-applications = 10
-categories = true          # Applications grouped by main category; false lists them flat
+categories = true         # group applications by category
 
 [icons]
-haiku-directory = ""      # a directory of .hvif files; themed icons otherwise
+haiku-directory = ""      # a directory of .hvif files
 
 [look]
 flavor = "haiku"          # "haiku" | "r5"
 tab-color = "#ffcb00"
 font-size = 12
-blur = 0                  # blur behind the Deskbar, tabs and Twitcher; 0 is off
+blur = 0                  # 0 off
 
 [focus]
 mode = "click"            # "click" | "follow-mouse" | "follow-mouse-warping"
@@ -56,17 +53,14 @@ wallpaper = ""
 color = "#336698"
 scale = "fill"            # "fill" | "fit" | "center" | "tile"
 
-# [bindings] maps Mod+Mod+Key chords to an action or a command to spawn.
+# Key bindings, Mod+Mod+Key to an action or a command.
 # Actions: close, zoom, minimize, terminal, previous-workspace, workspace N.
-# Anything else is spawned as a command line.
-#
 # [bindings]
 # "Ctrl+Alt+q" = "close"
 # "Ctrl+Alt+Return" = "foot"
 # "Alt+F1" = "workspace 1"
 
-# [[rule]] assigns matched windows a workspace at creation.
-#
+# Window rules.
 # [[rule]]
 # app-id = "mpv"
 # workspace = 2

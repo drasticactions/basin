@@ -1,11 +1,10 @@
 [compositor]
 renderer      = "vulkan"     # --renderer
 outputs       = 1            # --outputs
-scale         = []           # --scale, one entry per output; empty asks the outputs
-background    = "#171a1f"    # the desktop color behind every window, #rrggbb
+scale         = []           # --scale, one entry per output
+background    = "#171a1f"    # desktop color, #rrggbb
 
-# Per-output settings, by connector name. A key that is absent stays automatic,
-# and the [compositor] scale array above beats a matching section here.
+# Per-output settings, by connector name.
 # [output."DP-1"]
 # scale     = 1.5
 # transform = "normal"        # normal | 90 | 180 | 270 | flipped | flipped-90 | flipped-180 | flipped-270
@@ -14,34 +13,28 @@ background    = "#171a1f"    # the desktop color behind every window, #rrggbb
 [frame]
 style         = "flat"       # beos | flat | metacity | quill | none
 corner_radius = 0            # logical pixels
-font_size     = 14           # title size in logical pixels, every style; SIGHUP redraws every frame
+font_size     = 14           # title size in logical pixels
 
-# A metacity theme, read from ~/.themes, $XDG_DATA_HOME/themes and $XDG_DATA_DIRS/themes.
+# Metacity theme frames.
 # [frame.metacity]
 # theme         = "Menta"                        # a directory under themes/
-# button_layout = "menu:minimize,maximize,close" # marco's grammar, spacer allowed
+# button_layout = "menu:minimize,maximize,close" # marco's button layout
 # palette       = "light"                        # light | dark
-# backdrop_blur = 0                              # blur strength, 1 to 15; 0 turns the frost off
+# backdrop_blur = 0                              # 0 off, 1 to 15
 
-# The Prowl.Quill frames. They run on every GPU renderer. vulkan, skia-vulkan and
-# skia-graphite draw them on the renderer's own VulkanDevice, with no GL. gl and
-# skia-gl share their GlDevice, and impeller gets a GlDevice of its own on the same
-# render node. pixman and skia cannot import the chrome buffer, so those runs log
-# the reason and fall back to the flat frames.
+# Prowl.Quill frames.
 # [frame.quill]
 # palette       = "dark"     # dark | light
-# corner_radius = 8          # logical pixels, 0 for square corners
+# corner_radius = 8          # logical pixels
 # font_size     = 13         # title size in logical pixels
-# backdrop_blur = 0          # blur strength, 1 to 15; 0 turns the frost off. It is not a pixel
-#                            # radius
-# frost_opacity = 0.44       # how much titlebar color sits over the blur, 0 to 1.
-#                            # 0 is clear glass, 1 hides the blur entirely
+# backdrop_blur = 0          # 0 off, 1 to 15
+# frost_opacity = 0.44       # titlebar tint over the blur, 0 to 1
 
 [color]
 source      = "edid"         # edid | srgb | icc
-icc         = ""             # profile path when source = "icc"
-hdr         = false          # drive the outputs in HDR where they support it
-night_light = 0              # kelvin; 0 is off
+icc         = ""             # profile path for source = "icc"
+hdr         = false          # HDR output
+night_light = 0              # kelvin, 0 off
 
 [effects]
 # Window animations.
@@ -49,36 +42,33 @@ wobbly   = false             # wobble windows on interactive move
 open     = "none"            # none | fade | zoom | glide | sheet
 close    = "none"            # none | fade | zoom | fire | fire-gpu | glide | sheet | fall-apart
 minimize = "none"            # none | magic-lamp | squash
-switcher = false             # flip through windows as 3d cards
-stretch  = false             # stretch the last frame while a window resizes
-slide_back = false           # push the other windows back when one is raised
-notifications = false        # slide a layer-shell notification in on a spring
+switcher = false             # 3D card window switcher
+stretch  = false             # stretch during resize
+slide_back = false           # push other windows back on raise
+notifications = false        # slide in notifications
 
 # Window appearance.
-dim_inactive = false         # dim every window but the focused one
-drop_shadow  = false         # a soft shadow under every window
-highlight    = false         # ghost the unselected cards while the switcher is up
+dim_inactive = false         # dim unfocused windows
+drop_shadow  = false         # window shadows
+highlight    = false         # ghost unselected switcher cards
 
-# Screen-wide post stages, in the order they are listed. A single name or an
-# array: post = ["show-paint", "color-blindness"]
+# Screen post stages, a name or an array.
 post = "none"                # none | invert | magnify | zoom | color-blindness | show-paint
 color_blindness = "protanopia"   # protanopia | deuteranopia | tritanopia | monochrome
-color_blindness_intensity = 1.0  # 0 is off, 1 is the full simulation
+color_blindness_intensity = 1.0  # 0 to 1
 zoom_tracking = "proportional"   # proportional | centered | push | disabled | centered-strict
-blend_changes = false        # crossfade the screen when a reload changes it
-screen_transform = false     # crossfade a rotation instead of cutting to it
+blend_changes = false        # crossfade on reload
+screen_transform = false     # crossfade on rotation
 
-# A libraslang/RetroArch slang preset. This is used on all outputs.
-# Needs the vulkan or gl renderer and the librashader library. "none" is off.
+# RetroArch slang shader.
 shader = "none"              # a .slangp path, or none
-shader_continuous = true    # repaint every vblank for an animated preset
+shader_continuous = false    # repaint every vblank
 
-# Preset parameters by name. librashader reports the names and the ranges,
-# Posting a name without a preset shows a warning.
+# Shader parameters by name.
 # [effects.shader_params]
 # CRTgamma = 2.4
 
-# You can also change presets together.
+# Shader chain, each preset with its own parameters.
 # [[effects.shader]]
 # path = "~/shaders/ntsc/ntsc-adaptive.slangp"
 # [[effects.shader]]
@@ -87,111 +77,95 @@ shader_continuous = true    # repaint every vblank for an animated preset
 #   CRTgamma = 2.4
 
 # Input and session feedback.
-shake_cursor = false         # grow the cursor when it is shaken
-mouse_click  = false         # draw a ring where each button lands
-mouse_mark   = false         # draw on the screen with Alt and the middle button
-track_mouse  = false         # turning rings around the cursor while a button is held
-touch_points = false         # draw a ring for every touch contact
-system_bell  = false         # flash the focused window when a client asks for attention
+shake_cursor = false         # grow a shaken cursor
+mouse_click  = false         # ring at each click
+mouse_mark   = false         # draw with Alt and the middle button
+track_mouse  = false         # rings around the cursor while a button is held
+touch_points = false         # ring at each touch
+system_bell  = false         # flash on attention requests
 startup_feedback = "none"    # none | bouncing | blinking | passive
 
-# A canvas wider than the screen. The center maps to the screen 1:1, and the
-# canvas past each outer edge compresses into a zone along a smooth curve,
-# so a window pushed past the seam bends across it and parks as a strip at the
-# edge, still visible and still clickable. Every key is live on SIGHUP, and the
-# same keys under an [output."NAME"] table override them for one output.
+# Canvas with compressed edge zones. [output."NAME"] takes the same keys.
 [canvas]
-enable       = false         # wider canvas with compressed edge zones
-sides        = ["left", "right"]  # any of left, right, top, bottom
-corner       = "round"       # round | square | taper: how zones meet where two edges both have one
-# corner_radius = 1.0        # 0.0 square to 1.0 round; beats round or square, and sets taper's starting radius
-# zone       = 0.12          # fraction of the output width (height for top and bottom) each zone takes on screen, 0.08 in terrace mode
-extension    = 0.5           # how far the canvas extends past each seam, as a fraction of the same dimension
-edge_scale   = 0.2           # draw scale at the far edge; must stay below zone / extension
-slope        = 0.25          # how far the rows fan from the center row at the far edge; 0 keeps them flat, negative fans inward
-mesh_cell    = 16            # canvas pixels per mesh cell inside a zone
+enable       = false         # canvas on or off
+sides        = ["left", "right"]  # left | right | top | bottom
+corner       = "round"       # round | square | taper
+# corner_radius = 1.0        # 0.0 square to 1.0 round
+# zone       = 0.12          # zone width, fraction of the output
+extension    = 0.5           # canvas past each seam, fraction of the output
+edge_scale   = 0.2           # draw scale at the far edge
+slope        = 0.25          # row fan at the far edge
+mesh_cell    = 16            # canvas pixels per mesh cell
 grid         = "always"      # always | drag | never
 grid_cell    = 64            # canvas pixels between grid lines
-grid_color   = "#2a35c0"     # the grid line color
-desktop_grid = false         # terrace mode: true draws the grid on the desktop as well as on the slopes and shelves
-wallpaper    = "desktop"     # desktop | output: background and bottom layer surfaces fill the area inside the seams, or the whole output
+grid_color   = "#2a35c0"     # grid line color
+desktop_grid = false         # terrace: grid on the desktop
+wallpaper    = "desktop"     # desktop | output
 animation_ms = 250           # park, recall and toggle
-window       = "warp"        # warp | scale | terrace: bend a window along the zone, draw it flat and smaller, or rest it flat on a shelf past a slope
-min_scale    = 0.35          # scale mode: the smallest a window draws, as a fraction of its size
-scale_reach  = 1.0           # scale mode: 1.0 follows the zone curve; larger spreads the shrink deeper
-shelf        = 0.10          # terrace mode: the shelf's screen width, as a fraction of the same dimension as zone
-shelf_scale  = 0.4           # terrace mode: the shelf's draw scale, or a table such as { left = 0.4, right = 0.3 }
-shelf_min_scale = 0.2        # terrace mode: the smallest a window too wide for the shelf shrinks to
-shelf_step   = 0.05          # terrace mode: the step of shelf-smaller and shelf-larger
-shelf_shape  = "square"      # terrace mode: square | flat: square shelf cells with curved corners, or straight lines with flat corners
-slope_window = "bend"        # terrace mode: bend | flat: bend a window along the slope, or keep it a flat rectangle that shrinks
-drag         = "cursor"      # scale and terrace modes: cursor | grid: keep the grabbed point under the cursor, or move it along the grid rows
+window       = "warp"        # warp | scale | terrace
+min_scale    = 0.35          # scale: smallest window scale
+scale_reach  = 1.0           # scale: shrink depth
+shelf        = 0.10          # terrace: shelf width, fraction of the output
+shelf_scale  = 0.4           # terrace: shelf scale, or { left = 0.4, right = 0.3 }
+shelf_min_scale = 0.2        # terrace: smallest shelved window scale
+shelf_step   = 0.05          # terrace: shelf-smaller and shelf-larger step
+shelf_shape  = "square"      # terrace: square | flat
+slope_window = "bend"        # terrace: bend | flat
+drag         = "cursor"      # scale and terrace: cursor | grid
 
-# Overview: on demand, the desktop zooms out and a slope and a shelf rise on
-# each side it names. Its sides, shelves and grid are its own and do not read
-# [canvas], so the canvas toggle switches between the two sets. It is off on
-# any output with the canvas enabled. Every key is live on SIGHUP. An
-# [output."NAME".overview] table takes enable, scale, wall, anchor and the side,
-# shelf and grid keys for one output.
+# Overview. [output."NAME".overview] takes the same keys.
 [overview]
-enable        = true         # the actions, the gesture and the hot corner
-scale         = 0.75         # the zoom of the sunk desktop, 0.3 to 0.95
-threshold_in  = 0.667        # how far down the slope a held window goes before it counts as shelved
-threshold_out = 0.333        # how far up the slope a held shelved window climbs before it counts as out
-gesture       = true         # a vertical touchpad and touchscreen swipe: up opens, down closes
-gesture_fingers = 4          # 4 or 5; 3 is the workspace swipe
+enable        = true         # overview on or off
+scale         = 0.75         # desktop zoom, 0.3 to 0.95
+threshold_in  = 0.667        # shelve threshold on the slope
+threshold_out = 0.333        # unshelve threshold on the slope
+gesture       = true         # vertical swipe
+gesture_fingers = 4          # 4 | 5
 hot_corner    = "top-left"   # top-left | top-right | bottom-left | bottom-right | none
-hot_corner_ms = 150          # how long the pointer stays in the corner before it fires
-wall          = "slope"      # slope | step: a slope down to the shelf, or a flat shelf below a drawn wall
-anchor        = "fill"       # fill | center: pin the desktop against sides without a shelf and wall in the rest, or sink it into the center
-wall_width    = 0.04         # step: the wall's screen width, as a fraction of the output width or height
-wall_color    = "#262a3a"    # step: the base color of the walls
-wall_shade    = 0.25         # step: how much lighter the top and left walls are, and darker the others
-wall_texture  = "none"       # step: none | stone | brick | wood | noise | a path to a PNG, JPEG or WebP image
-shelf_texture = "none"       # step: the same, for the shelf floor
+hot_corner_ms = 150          # hot corner delay
+wall          = "slope"      # slope | step
+anchor        = "fill"       # fill | center
+wall_width    = 0.04         # step: wall width, fraction of the output
+wall_color    = "#262a3a"    # step: wall color
+wall_shade    = 0.25         # step: wall shading
+wall_texture  = "none"       # step: none | stone | brick | wood | noise | an image path
+shelf_texture = "none"       # step: none | stone | brick | wood | noise | an image path
 texture_scale = 1.0          # step: canvas pixels per texel, 0.25 to 8
-shelf_color   = "#3a3d44"    # step: the tint of the shelf floor texture
-texture_grid  = true         # step: false turns off every grid line while a texture is set
-sides         = ["left", "right"]  # any of left, right, top, bottom
-corner        = "round"      # slope: round | square | taper: how two sides meet
-# corner_radius = 1.0        # slope: 0.0 square to 1.0 round; beats round or square
-slope         = 0.25         # slope: how far the rows fan from the center row at the far edge
-mesh_cell     = 16           # slope: canvas pixels per mesh cell on a slope
-shelf         = 0.10         # slope: the shelf's screen width, as a fraction of the output width or height
-shelf_scale   = 0.4          # the shelf's draw scale, capped at scale, or a table such as { left = 0.4, right = 0.3 }
-shelf_min_scale = 0.2        # the smallest a window too wide for the shelf shrinks to
-shelf_step    = 0.05         # the step of shelf-smaller and shelf-larger
+shelf_color   = "#3a3d44"    # step: shelf texture tint
+texture_grid  = true         # step: grid lines over a texture
+sides         = ["left", "right"]  # left | right | top | bottom
+corner        = "round"      # slope: round | square | taper
+# corner_radius = 1.0        # slope: 0.0 square to 1.0 round
+slope         = 0.25         # slope: row fan at the far edge
+mesh_cell     = 16           # slope: canvas pixels per mesh cell
+shelf         = 0.10         # slope: shelf width, fraction of the output
+shelf_scale   = 0.4          # shelf scale, or { left = 0.4, right = 0.3 }
+shelf_min_scale = 0.2        # smallest shelved window scale
+shelf_step    = 0.05         # shelf-smaller and shelf-larger step
 shelf_shape   = "square"     # slope: square | flat
-slope_window  = "bend"       # slope: bend | flat: bend a window along the slope, or keep it a flat rectangle
+slope_window  = "bend"       # slope: bend | flat
 drag          = "cursor"     # slope: cursor | grid
 grid          = "always"     # always | drag | never
 grid_cell     = 64           # canvas pixels between grid lines
-grid_color    = "#2a35c0"    # the grid line color
-desktop_grid  = false        # true draws the grid on the zoomed desktop as well as on the slopes and shelves
-animation_ms  = 250          # the open and close
+grid_color    = "#2a35c0"    # grid line color
+desktop_grid  = false        # grid on the zoomed desktop
+animation_ms  = 250          # open and close
 
 [settings]
-palette   = "dark"           # dark | light: the settings panel
+palette   = "dark"           # dark | light
 font_size = 14               # logical pixels
 
-# The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
-# toplevel mapping and export, CTM control, global shortcuts and input capture.
-# Each flag needs a restart to change.
+# hyprland-protocols.
 [hypr]
-enable        = true         # advertise the pack at all
-input_capture = true         # hyprland_input_capture_v1, which needs libeis
-ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage elsewhere
+enable        = true         # the whole pack
+input_capture = true         # hyprland_input_capture_v1
+ctm           = true         # hyprland_ctm_control_v1
 
-# A global shortcut a client registers, over hyprland_global_shortcuts_v1 or the
-# GlobalShortcuts portal, fires on the chord bound here. Rows are
-# "app_id:id" = "Mod+Mod+Key". A portal client that asks for a preferred trigger
-# gets it when it parses and collides with nothing here or in [bindings]; a
-# registration with no row and no accepted preference goes to the bind prompt
-# through the portal and never fires through the hyprland protocol.
+# Global shortcuts, "app_id:id" = "Mod+Mod+Key".
 # [shortcuts]
 # "org.example.app:toggle" = "Super+Shift+P"
 
-# The chord is Mod+Mod+Key, where the key is an xkb keysym name.
+# Key bindings, Mod+Mod+Key with an xkb keysym name.
 [bindings]
 "Alt+Escape"      = "quit"
 "Alt+Tab"         = "cycle"
@@ -203,7 +177,7 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 "Alt+n"           = "workspace-new"
 "Super+comma"     = "settings"
 "Alt+Return"    = { exec = "foot" }
-# The canvas actions, unbound by default:
+# Canvas actions.
 # "Alt+Shift+h"   = "park-left"
 # "Alt+Shift+l"   = "park-right"
 # "Alt+Shift+k"   = "park-up"
@@ -214,7 +188,7 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # "Alt+Shift+equal" = "shelf-larger"
 # "Alt+Shift+0"   = "shelf-reset"
 # "Alt+Shift+t"   = "canvas-mode"
-# The overview actions, unbound by default:
+# Overview actions.
 # "Super+Tab"     = "overview"
 # "Super+Left"    = "shelve-left"
 # "Super+Right"   = "shelve-right"
@@ -222,15 +196,15 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # "Super+Down"    = "shelve-bottom"
 # "Super+u"       = "unshelve"
 
-# Per Window/App rules
+# Window rules.
 # [[rule]]
 # app_id      = "mpv"        # exact match
-# title_regex = ""           # optional
-# frame       = "none"         # beos | flat | metacity | none
+# title_regex = ""           # regex
+# frame       = "none"       # beos | flat | metacity | quill | none
 # effects     = false        # or per effect: wobbly = false, open = "none"
 # workspace   = 2
 # x = 0
 # y = 0
 # width  = 1280
 # height = 720
-# canvas = "left"            # left | right | top | bottom | top-left | top-right | bottom-left | bottom-right: park at map
+# canvas = "left"            # left | right | top | bottom | top-left | top-right | bottom-left | bottom-right

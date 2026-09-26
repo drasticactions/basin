@@ -1,5 +1,5 @@
 theme      = "light"      # light | dark
-background = ""           # an image behind the windows; empty for none
+background = ""           # background image path
 
 # Backdrop blur behind the chrome.
 [blur]
