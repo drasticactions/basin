@@ -12,6 +12,9 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct xdg_wm_base *wm_base;
 static struct zxdg_decoration_manager_v1 *decoration_manager;
+static struct wl_seat *seat;
+static struct wl_pointer *pointer;
+static double pointer_x, pointer_y;
 static struct wl_surface *surface;
 static struct xdg_surface *xdg_surface;
 static struct xdg_toplevel *toplevel;
@@ -85,6 +88,60 @@ static void decoration_configure(void *data, struct zxdg_toplevel_decoration_v1 
 
 static const struct zxdg_toplevel_decoration_v1_listener decoration_listener = { decoration_configure };
 
+static void pointer_enter(void *data, struct wl_pointer *p, uint32_t serial,
+                          struct wl_surface *s, wl_fixed_t x, wl_fixed_t y)
+{
+    (void)data; (void)p; (void)serial; (void)s;
+    pointer_x = wl_fixed_to_double(x);
+    pointer_y = wl_fixed_to_double(y);
+}
+
+static void pointer_leave(void *data, struct wl_pointer *p, uint32_t serial, struct wl_surface *s)
+{
+    (void)data; (void)p; (void)serial; (void)s;
+}
+
+static void pointer_motion(void *data, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y)
+{
+    (void)data; (void)p; (void)t;
+    pointer_x = wl_fixed_to_double(x);
+    pointer_y = wl_fixed_to_double(y);
+}
+
+/* Print where a press landed in surface coordinates, so a test can check the compositor's hit mapping. */
+static void pointer_button(void *data, struct wl_pointer *p, uint32_t serial,
+                           uint32_t t, uint32_t button, uint32_t state)
+{
+    (void)data; (void)p; (void)serial; (void)t;
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        printf("BUTTON %u %.2f %.2f\n", button, pointer_x, pointer_y);
+        fflush(stdout);
+    }
+}
+
+static void pointer_axis(void *data, struct wl_pointer *p, uint32_t t, uint32_t a, wl_fixed_t v)
+{
+    (void)data; (void)p; (void)t; (void)a; (void)v;
+}
+
+static const struct wl_pointer_listener pointer_listener = {
+    .enter = pointer_enter, .leave = pointer_leave, .motion = pointer_motion,
+    .button = pointer_button, .axis = pointer_axis,
+};
+
+static void seat_capabilities(void *data, struct wl_seat *s, uint32_t caps)
+{
+    (void)data;
+    if ((caps & WL_SEAT_CAPABILITY_POINTER) && !pointer) {
+        pointer = wl_seat_get_pointer(s);
+        wl_pointer_add_listener(pointer, &pointer_listener, NULL);
+    }
+}
+
+static void seat_name(void *data, struct wl_seat *s, const char *name) { (void)data; (void)s; (void)name; }
+
+static const struct wl_seat_listener seat_listener = { seat_capabilities, seat_name };
+
 static void wm_ping(void *data, struct xdg_wm_base *base, uint32_t serial)
 {
     (void)data;
@@ -104,6 +161,10 @@ static void global_add(void *data, struct wl_registry *registry, uint32_t name, 
         wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
     else if (strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0)
         decoration_manager = wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1);
+    else if (strcmp(interface, wl_seat_interface.name) == 0 && !seat) {
+        seat = wl_registry_bind(registry, name, &wl_seat_interface, 1);
+        wl_seat_add_listener(seat, &seat_listener, NULL);
+    }
 }
 
 static void global_remove(void *data, struct wl_registry *registry, uint32_t name) { (void)data; (void)registry; (void)name; }

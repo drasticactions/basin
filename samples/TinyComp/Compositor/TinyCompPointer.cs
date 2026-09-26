@@ -564,7 +564,8 @@ internal sealed partial class TinyComp
 
     private void PrepareMenu((Frame Frame, IGrabTarget Owner) hit)
     {
-        hit.Frame.MenuOrigin = new Point((int)Math.Round(ToScreenFor(hit.Owner, hit.Owner.X)), hit.Owner.Y);
+        var (menuX, menuY) = ToScreenPointFor(hit.Owner, hit.Owner.X, hit.Owner.Y);
+        hit.Frame.MenuOrigin = new Point((int)Math.Round(menuX), (int)Math.Round(menuY));
         var output = _layout.OutputAt(_cursorX, _cursorY) ?? Views.FirstOrDefault()?.Output;
         hit.Frame.MenuConstraint = output is null ? default : _layout.BoxOf(output);
     }

@@ -180,6 +180,8 @@ internal sealed class Config
         "canvas-toggle" => KeyAction.CanvasToggle,
         "park-left" => KeyAction.ParkLeft,
         "park-right" => KeyAction.ParkRight,
+        "park-up" => KeyAction.ParkUp,
+        "park-down" => KeyAction.ParkDown,
         "recall" => KeyAction.Recall,
         _ => null,
     };
@@ -609,6 +611,12 @@ internal sealed class Config
             {
                 "left" => CanvasSide.Left,
                 "right" => CanvasSide.Right,
+                "top" => CanvasSide.Top,
+                "bottom" => CanvasSide.Bottom,
+                "top-left" => CanvasSide.Top | CanvasSide.Left,
+                "top-right" => CanvasSide.Top | CanvasSide.Right,
+                "bottom-left" => CanvasSide.Bottom | CanvasSide.Left,
+                "bottom-right" => CanvasSide.Bottom | CanvasSide.Right,
                 _ => null,
             },
         };
@@ -625,7 +633,7 @@ internal sealed class Config
             switch (key)
             {
                 case "enable" or "zone" or "extension" or "edge_scale" or "slope" or "mesh_cell"
-                    or "grid" or "grid_cell" or "grid_color" or "animation_ms":
+                    or "grid" or "grid_cell" or "grid_color" or "animation_ms" or "sides" or "corner" or "corner_radius":
                     (canvasKeys ??= [])[key] = value;
                     break;
                 case "scale" when value is double fractional:

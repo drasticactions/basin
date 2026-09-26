@@ -133,7 +133,7 @@ public sealed class CanvasWarp
 
         if (u >= 1)
         {
-            return _seam + (_direction * _zoneWidth);
+            return _seam + (_direction * (_zoneWidth + (_edgeScale * (u - 1.0) * _extension)));
         }
 
         return _seam + (_direction * Distance(u));
@@ -154,7 +154,7 @@ public sealed class CanvasWarp
 
         if (distance >= _zoneWidth)
         {
-            return FarEdge;
+            return FarEdge + (_direction * (distance - _zoneWidth) / _edgeScale);
         }
 
         var index = (int)Math.Floor(distance);
@@ -224,6 +224,32 @@ public sealed class CanvasWarp
         }
 
         return 1.0 + (_slope * SmoothStep(distance / _zoneWidth));
+    }
+
+    public double DepthAt(double canvas)
+    {
+        if (IsIdentity)
+        {
+            return 0.0;
+        }
+
+        var u = _direction * (canvas - _seam) / _extension;
+        if (u <= 0)
+        {
+            return 0.0;
+        }
+
+        return u >= 1 ? 1.0 : Distance(u) / _zoneWidth;
+    }
+
+    public double DepthAtScreen(double screen)
+    {
+        if (IsIdentity)
+        {
+            return 0.0;
+        }
+
+        return Math.Clamp(_direction * (screen - _seam) / _zoneWidth, 0.0, 1.0);
     }
 
     public double ToScreenY(double canvasX, double canvasY) => _center + ((canvasY - _center) * FanAt(canvasX));

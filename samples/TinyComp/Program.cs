@@ -122,6 +122,9 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("canvas-grid-cell", settings.Canvas.GridCellSize));
         cli.AddReport(_ => BasinCommand.Report("canvas-grid-color", $"#{settings.Canvas.GridRgba:x8}"));
         cli.AddReport(_ => BasinCommand.Report("canvas-animation-ms", settings.Canvas.AnimationMillis));
+        cli.AddReport(_ => BasinCommand.Report("canvas-sides", settings.Canvas.SideNames));
+        cli.AddReport(_ => BasinCommand.Report("canvas-corner", settings.Canvas.CornerName));
+        cli.AddReport(_ => BasinCommand.Report("canvas-corner-radius", settings.Canvas.CornerRadiusValue));
         cli.AddReport(_ => BasinCommand.Report("bindings", settings.Bindings.Count));
         cli.AddReport(_ => BasinCommand.Report("rules", settings.Rules.Count));
 

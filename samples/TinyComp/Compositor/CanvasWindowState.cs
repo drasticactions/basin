@@ -11,7 +11,9 @@ internal sealed class CanvasWindowState
 
     public (int X, int Y)? Home { get; set; }
 
-    public CanvasMotion Motion { get; } = new();
+    public CanvasMotion MotionX { get; } = new();
+
+    public CanvasMotion MotionY { get; } = new();
 
     public int AppliedGeneration { get; set; } = -1;
 

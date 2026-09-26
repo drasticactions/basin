@@ -55,18 +55,40 @@ internal sealed partial class TinyComp
         var enabled = CanvasWanted(view) && !box.IsEmpty;
         canvas.Enabled = enabled;
         var fullscreen = AnyFullscreenOn(view);
+        var usable = UsableBox(view, box);
+        var sides = settings.SideSet;
         var zone = (int)Math.Round(settings.ZoneFraction * box.Width);
         var extension = (int)Math.Round(settings.ExtensionFraction * box.Width);
-        var usable = enabled && !fullscreen && zone > 0 && extension > 0;
-        var leftActive = usable && !HasNeighbour(view.Output, box, left: true);
-        var rightActive = usable && !HasNeighbour(view.Output, box, left: false);
-        var center = box.Y + (box.Height / 2.0);
+        var zoneY = (int)Math.Round(settings.ZoneFraction * box.Height);
+        var extensionY = (int)Math.Round(settings.ExtensionFraction * box.Height);
+        var open = enabled && !fullscreen;
+        var horizontal = open && zone > 0 && extension > 0;
+        var vertical = open && zoneY > 0 && extensionY > 0;
+        var leftActive = horizontal && sides.HasFlag(CanvasSide.Left) && !HasNeighbour(view.Output, box, CanvasSide.Left);
+        var rightActive = horizontal && sides.HasFlag(CanvasSide.Right) && !HasNeighbour(view.Output, box, CanvasSide.Right);
+        var topActive = vertical && sides.HasFlag(CanvasSide.Top) && !HasNeighbour(view.Output, box, CanvasSide.Top);
+        var bottomActive = vertical && sides.HasFlag(CanvasSide.Bottom) && !HasNeighbour(view.Output, box, CanvasSide.Bottom);
+        var centerY = usable.Y + (usable.Height / 2.0);
+        var centerX = usable.X + (usable.Width / 2.0);
         var changed = canvas.Left.Layout(
-            box.X + zone, -1, leftActive ? zone : 0, leftActive ? extension : 0, settings.EdgeScaleValue,
-            settings.SlopeValue, center);
+            usable.X + zone, -1, leftActive ? zone : 0, leftActive ? extension : 0, settings.EdgeScaleValue,
+            settings.SlopeValue, centerY);
         changed |= canvas.Right.Layout(
-            box.Right - zone, 1, rightActive ? zone : 0, rightActive ? extension : 0, settings.EdgeScaleValue,
-            settings.SlopeValue, center);
+            usable.Right - zone, 1, rightActive ? zone : 0, rightActive ? extension : 0, settings.EdgeScaleValue,
+            settings.SlopeValue, centerY);
+        changed |= canvas.Top.Layout(
+            usable.Y + zoneY, -1, topActive ? zoneY : 0, topActive ? extensionY : 0, settings.EdgeScaleValue,
+            settings.SlopeValue, centerX);
+        changed |= canvas.Bottom.Layout(
+            usable.Bottom - zoneY, 1, bottomActive ? zoneY : 0, bottomActive ? extensionY : 0, settings.EdgeScaleValue,
+            settings.SlopeValue, centerX);
+        if (canvas.Map.CornerRadius != settings.CornerRadiusValue || canvas.Map.CornerTaper != settings.CornerTaperValue)
+        {
+            canvas.Map.CornerRadius = settings.CornerRadiusValue;
+            canvas.Map.CornerTaper = settings.CornerTaperValue;
+            changed = true;
+        }
+
         changed |= LayoutCanvasGrid(view, box, enabled && settings.GridMode != CanvasGridMode.Never);
         if (!changed)
         {
@@ -74,17 +96,20 @@ internal sealed partial class TinyComp
         }
 
         canvas.Generation++;
-        var active = !canvas.Left.IsIdentity ? canvas.Left : !canvas.Right.IsIdentity ? canvas.Right : null;
+        var active = !canvas.Left.IsIdentity ? canvas.Left : !canvas.Right.IsIdentity ? canvas.Right
+            : !canvas.Top.IsIdentity ? canvas.Top : !canvas.Bottom.IsIdentity ? canvas.Bottom : null;
         _report.Line(
             $"CANVAS view={ViewIndex(view)} left={canvas.Left.ZoneWidth} right={canvas.Right.ZoneWidth}"
+            + $" top={canvas.Top.ZoneWidth} bottom={canvas.Bottom.ZoneWidth} corner={(canvas.Map.CornerTaper ? "taper" : "radius")}:{canvas.Map.CornerRadius:F2}"
             + $" extension={active?.Extension ?? 0} edge_scale={(active?.EdgeScale ?? settings.EdgeScaleValue):F3}"
             + $" exponent={(active?.Exponent ?? 0):F2} slope={(active?.Slope ?? 0):F2}");
+        KeepParkedInside(view);
         ApplyCanvasToView(view);
         canvas.Grid?.NotifyMeshChanged();
         view.Scheduler?.ScheduleRepaint();
     }
 
-    private bool HasNeighbour(IOutput output, in Box box, bool left)
+    private bool HasNeighbour(IOutput output, in Box box, CanvasSide side)
     {
         foreach (var (other, _) in _layout.Outputs)
         {
@@ -94,12 +119,22 @@ internal sealed partial class TinyComp
             }
 
             var otherBox = _layout.BoxOf(other);
-            if (otherBox.IsEmpty || otherBox.Bottom <= box.Y || otherBox.Y >= box.Bottom)
+            if (otherBox.IsEmpty)
             {
                 continue;
             }
 
-            if (left ? otherBox.Right == box.X : otherBox.X == box.Right)
+            var touches = side switch
+            {
+                CanvasSide.Left => otherBox.Right == box.X,
+                CanvasSide.Right => otherBox.X == box.Right,
+                CanvasSide.Top => otherBox.Bottom == box.Y,
+                _ => otherBox.Y == box.Bottom,
+            };
+            var overlaps = (side & CanvasSide.Horizontal) != 0
+                ? otherBox.Bottom > box.Y && otherBox.Y < box.Bottom
+                : otherBox.Right > box.X && otherBox.X < box.Right;
+            if (touches && overlaps)
             {
                 return true;
             }
@@ -138,10 +173,19 @@ internal sealed partial class TinyComp
         }
 
         var settings = canvas.Settings;
-        var source = canvas.GridSource ??= new CanvasGridSource { Left = canvas.Left, Right = canvas.Right };
+        var source = canvas.GridSource ??= new CanvasGridSource
+        {
+            Left = canvas.Left,
+            Right = canvas.Right,
+            Top = canvas.Top,
+            Bottom = canvas.Bottom,
+        };
         var color = settings.GridRenderColor;
         var alpha = GridAlphaFor(settings);
-        var changed = source.CellSize != settings.GridCellSize || source.Color != color || source.Alpha != alpha;
+        var changed = source.CellSize != settings.GridCellSize || source.Color != color || source.Alpha != alpha ||
+            source.CornerRadius != canvas.Map.CornerRadius || source.CornerTaper != canvas.Map.CornerTaper;
+        source.CornerRadius = canvas.Map.CornerRadius;
+        source.CornerTaper = canvas.Map.CornerTaper;
         source.CellSize = settings.GridCellSize;
         source.Color = color;
         source.Alpha = alpha;
@@ -209,7 +253,7 @@ internal sealed partial class TinyComp
         var windowRight = window.X + Math.Max(width, 1);
         var windowBottom = window.Y + Math.Max(height, 1);
         OutputView? best = null;
-        var bestOverlap = 0;
+        var bestOverlap = 0L;
         for (var i = 0; i < Views.Count; i++)
         {
             var candidate = Views[i];
@@ -219,15 +263,19 @@ internal sealed partial class TinyComp
             }
 
             var box = _layout.BoxOf(candidate.Output);
-            if (window.Y >= box.Bottom || windowBottom <= box.Y)
+            var canvas = candidate.Canvas;
+            var spanLeft = canvas.Left.IsIdentity ? box.X : canvas.Left.FarEdge;
+            var spanRight = canvas.Right.IsIdentity ? box.Right : canvas.Right.FarEdge;
+            var spanTop = canvas.Top.IsIdentity ? box.Y : canvas.Top.FarEdge;
+            var spanBottom = canvas.Bottom.IsIdentity ? box.Bottom : canvas.Bottom.FarEdge;
+            var overlapX = Math.Min(windowRight, spanRight) - Math.Max(window.X, spanLeft);
+            var overlapY = Math.Min(windowBottom, spanBottom) - Math.Max(window.Y, spanTop);
+            if (overlapX <= 0 || overlapY <= 0)
             {
                 continue;
             }
 
-            var canvas = candidate.Canvas;
-            var spanLeft = canvas.Left.IsIdentity ? box.X : canvas.Left.FarEdge;
-            var spanRight = canvas.Right.IsIdentity ? box.Right : canvas.Right.FarEdge;
-            var overlap = Math.Min(windowRight, spanRight) - Math.Max(window.X, spanLeft);
+            var overlap = (long)overlapX * overlapY;
             if (overlap > bestOverlap)
             {
                 bestOverlap = overlap;
@@ -258,6 +306,45 @@ internal sealed partial class TinyComp
         }
 
         return Views.Count > 0 ? Views[0] : null;
+    }
+
+    private void KeepParkedInside(OutputView view)
+    {
+        var canvas = view.Canvas;
+        foreach (var (window, state) in _canvasStates)
+        {
+            if (state.Home is null || state.MotionX.IsRunning || state.MotionY.IsRunning ||
+                window.EffectTree is not { IsDestroyed: false } || ViewOfWindow(window) != view)
+            {
+                continue;
+            }
+
+            var box = CanvasBoxOf(window);
+            var dx = 0;
+            var dy = 0;
+            if (!canvas.Left.IsIdentity && box.X < canvas.Left.FarEdge)
+            {
+                dx = canvas.Left.FarEdge - box.X;
+            }
+            else if (!canvas.Right.IsIdentity && box.Right > canvas.Right.FarEdge)
+            {
+                dx = canvas.Right.FarEdge - box.Right;
+            }
+
+            if (!canvas.Top.IsIdentity && box.Y < canvas.Top.FarEdge)
+            {
+                dy = canvas.Top.FarEdge - box.Y;
+            }
+            else if (!canvas.Bottom.IsIdentity && box.Bottom > canvas.Bottom.FarEdge)
+            {
+                dy = canvas.Bottom.FarEdge - box.Bottom;
+            }
+
+            if (dx != 0 || dy != 0)
+            {
+                window.MoveTo(window.X + dx, window.Y + dy);
+            }
+        }
     }
 
     private void ApplyCanvasToView(OutputView view)
@@ -322,8 +409,7 @@ internal sealed partial class TinyComp
         if (node is null || node.IsDestroyed)
         {
             var probe = state.Transform;
-            probe.Left = canvas.Left;
-            probe.Right = canvas.Right;
+            Bind(probe, canvas);
             probe.SceneX = tree.X;
             probe.SceneY = tree.Y;
             if (canvas.IsIdentity || probe.IsIdentityFor(CanvasBoxOf(window).Translated(-window.X, -window.Y)))
@@ -338,12 +424,10 @@ internal sealed partial class TinyComp
 
         AdoptStrays(tree, node);
         var transform = state.Transform;
-        transform.Left = canvas.Left;
-        transform.Right = canvas.Right;
+        Bind(transform, canvas);
         transform.SceneX = tree.X;
         transform.SceneY = tree.Y;
         transform.CellSize = canvas.Settings.MeshCellSize;
-        transform.MaxFan = FanCeiling(window, view);
         var bounds = node.ContentBounds;
         var deformed = !_canvasSuspended && !canvas.IsIdentity && !bounds.IsEmpty && !transform.IsIdentityFor(bounds);
         if (!deformed)
@@ -374,24 +458,18 @@ internal sealed partial class TinyComp
         state.AppliedSceneY = tree.Y;
     }
 
-    private double FanCeiling(IGrabTarget window, OutputView view)
+    private static void Bind(CanvasWarpTransform transform, CanvasView canvas)
     {
-        var box = _layout.BoxOf(view.Output);
-        var center = view.Canvas.Left.Center;
-        var frame = CanvasBoxOf(window);
-        var ceiling = double.PositiveInfinity;
-        if (frame.Y < center)
-        {
-            ceiling = Math.Min(ceiling, (center - box.Y) / (center - frame.Y));
-        }
-
-        if (frame.Bottom > center)
-        {
-            ceiling = Math.Min(ceiling, (box.Bottom - center) / (frame.Bottom - center));
-        }
-
-        return Math.Max(1.0, ceiling);
+        transform.Left = canvas.Left;
+        transform.Right = canvas.Right;
+        transform.Top = canvas.Top;
+        transform.Bottom = canvas.Bottom;
+        transform.CornerRadius = canvas.Map.CornerRadius;
+        transform.CornerTaper = canvas.Map.CornerTaper;
     }
+
+    private static Box UsableBox(OutputView view, in Box box) =>
+        (view.UsableArea.IsEmpty ? box with { X = 0, Y = 0 } : view.UsableArea).Translated(box.X, box.Y);
 
     private static void AdoptStrays(SceneTree tree, SceneTransform node)
     {
@@ -448,28 +526,14 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
-        var left = (int)Math.Floor(canvas.ToScreen(box.X));
-        var right = (int)Math.Ceiling(canvas.ToScreen(box.Right));
-        double topLeft, topRight, bottomLeft, bottomRight;
         if (_canvasStates.TryGetValue(window, out var state) && ReferenceEquals(state.Transform.Left, canvas.Left))
         {
             var transform = state.Transform;
-            topLeft = transform.ToScreenY(box.X, box.Y);
-            topRight = transform.ToScreenY(box.Right, box.Y);
-            bottomLeft = transform.ToScreenY(box.X, box.Bottom);
-            bottomRight = transform.ToScreenY(box.Right, box.Bottom);
-        }
-        else
-        {
-            topLeft = canvas.ToScreenY(box.X, box.Y);
-            topRight = canvas.ToScreenY(box.Right, box.Y);
-            bottomLeft = canvas.ToScreenY(box.X, box.Bottom);
-            bottomRight = canvas.ToScreenY(box.Right, box.Bottom);
+            return transform.MapBounds(box.Translated(-transform.SceneX, -transform.SceneY))
+                .Translated(transform.SceneX, transform.SceneY);
         }
 
-        var top = (int)Math.Floor(Math.Min(topLeft, topRight));
-        var bottom = (int)Math.Ceiling(Math.Max(bottomLeft, bottomRight));
-        return new Box(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
+        return canvas.Map.MapBounds(box);
     }
 
     internal (double X, double Y) ToCanvasPointAt(double x, double y, IGrabTarget? window = null)
@@ -484,28 +548,22 @@ internal sealed partial class TinyComp
         if (window is not null && _canvasStates.TryGetValue(window, out var state) &&
             ReferenceEquals(state.Transform.Left, canvas.Left))
         {
-            return (canvas.ToCanvas(x), state.Transform.ToCanvasY(x, y));
+            return state.Transform.ToCanvasPoint(x, y);
         }
 
-        return (canvas.ToCanvas(x), canvas.ToCanvasY(x, y));
+        return canvas.ToCanvasPoint(x, y);
     }
 
-    internal double ToCanvasAt(double x, double y)
-    {
-        var view = ViewAt(x, y);
-        return view is { Tag: OutputPolicy } ? view.Canvas.ToCanvas(x) : x;
-    }
-
-    internal double ToScreenFor(IGrabTarget window, double x)
+    internal (double X, double Y) ToScreenPointFor(IGrabTarget window, double x, double y)
     {
         var view = ViewOfWindow(window);
-        return view is { Tag: OutputPolicy } ? view.Canvas.ToScreen(x) : x;
+        return view is { Tag: OutputPolicy } ? view.Canvas.ToScreenPoint(x, y) : (x, y);
     }
 
-    internal double ToCanvasFor(IGrabTarget window, double x)
+    internal (double X, double Y) ToCanvasPointFor(IGrabTarget window, double x, double y)
     {
         var view = ViewOfWindow(window);
-        return view is { Tag: OutputPolicy } ? view.Canvas.ToCanvas(x) : x;
+        return view is { Tag: OutputPolicy } ? view.Canvas.ToCanvasPoint(x, y) : (x, y);
     }
 
     private Box CanvasBoxOf(IGrabTarget window)
@@ -528,6 +586,22 @@ internal sealed partial class TinyComp
 
     private long CanvasAnimationNanos(OutputView view) => (long)view.Canvas.Settings.AnimationMillis * 1_000_000;
 
+    private static string ParkName(CanvasSide side) => side switch
+    {
+        CanvasSide.Left => "left",
+        CanvasSide.Right => "right",
+        CanvasSide.Top => "up",
+        _ => "down",
+    };
+
+    private static string ZoneName(CanvasSide side) => side switch
+    {
+        CanvasSide.Left => "left",
+        CanvasSide.Right => "right",
+        CanvasSide.Top => "top",
+        _ => "bottom",
+    };
+
     internal void Park(IGrabTarget window, CanvasSide side)
     {
         if (window.EffectTree is not { IsDestroyed: false } || ViewOfWindow(window) is not { Tag: OutputPolicy } view)
@@ -536,10 +610,22 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
-        var warp = side == CanvasSide.Left ? canvas.Left : canvas.Right;
+        var warp = side switch
+        {
+            CanvasSide.Left => canvas.Left,
+            CanvasSide.Right => canvas.Right,
+            CanvasSide.Top => canvas.Top,
+            CanvasSide.Bottom => canvas.Bottom,
+            _ => null,
+        };
+        if (warp is null)
+        {
+            return;
+        }
+
         if (warp.IsIdentity)
         {
-            _report.Line($"PARK {NameOf(window)} refused: no {(side == CanvasSide.Left ? "left" : "right")} zone");
+            _report.Line($"PARK {NameOf(window)} refused: no {ZoneName(side)} zone");
             return;
         }
 
@@ -551,11 +637,39 @@ internal sealed partial class TinyComp
 
         state.Home ??= (window.X, window.Y);
         var box = CanvasBoxOf(window);
-        var target = side == CanvasSide.Left
-            ? warp.FarEdge + (window.X - box.X)
-            : warp.FarEdge - box.Width + (window.X - box.X);
-        BeginCanvasMotion(window, state, target, CanvasAnimationNanos(view));
-        _report.Line($"PARK {NameOf(window)} {(side == CanvasSide.Left ? "left" : "right")} to={target}");
+        var vertical = (side & CanvasSide.Vertical) != 0;
+        var across = vertical
+            ? (canvas.Left.ContainsCanvas(box.X) ? canvas.Left : canvas.Right.ContainsCanvas(box.Right) ? canvas.Right : null)
+            : (canvas.Top.ContainsCanvas(box.Y) ? canvas.Top : canvas.Bottom.ContainsCanvas(box.Bottom) ? canvas.Bottom : null);
+        if (across is not null)
+        {
+            var (cornerX, cornerY) = ParkInCorner(window, state, box, vertical ? across : warp, vertical ? warp : across, view);
+            _report.Line($"PARK {NameOf(window)} {ParkName(side)} to={cornerX} y={cornerY} corner");
+            return;
+        }
+
+        var target = side switch
+        {
+            CanvasSide.Left => warp.FarEdge + (window.X - box.X),
+            CanvasSide.Right => warp.FarEdge - box.Width + (window.X - box.X),
+            CanvasSide.Top => warp.FarEdge + (window.Y - box.Y),
+            _ => warp.FarEdge - box.Height + (window.Y - box.Y),
+        };
+        BeginCanvasMotion(window, state, vertical, target, CanvasAnimationNanos(view));
+        _report.Line($"PARK {NameOf(window)} {ParkName(side)} to={target}");
+    }
+
+    private (int X, int Y) ParkInCorner(IGrabTarget window, CanvasWindowState state, in Box box, CanvasWarp side, CanvasWarp end, OutputView view)
+    {
+        var reach = view.Canvas.Map.RimDiagonal;
+        var edgeX = side.Seam + (side.Direction * reach * side.Extension);
+        var edgeY = end.Seam + (end.Direction * reach * end.Extension);
+        var targetX = (int)Math.Round(side.Direction < 0 ? edgeX : edgeX - box.Width) + (window.X - box.X);
+        var targetY = (int)Math.Round(end.Direction < 0 ? edgeY : edgeY - box.Height) + (window.Y - box.Y);
+        var nanos = CanvasAnimationNanos(view);
+        BeginCanvasMotion(window, state, vertical: false, targetX, nanos);
+        BeginCanvasMotion(window, state, vertical: true, targetY, nanos);
+        return (targetX, targetY);
     }
 
     internal void Recall(IGrabTarget window)
@@ -568,37 +682,63 @@ internal sealed partial class TinyComp
         var canvas = view.Canvas;
         _ = _canvasStates.TryGetValue(window, out var state);
         var box = CanvasBoxOf(window);
-        int target;
+        int? targetX = null;
+        int? targetY = null;
         if (state?.Home is { } home)
         {
-            target = home.X;
-        }
-        else if (canvas.Left.ContainsCanvas(box.X))
-        {
-            target = canvas.Left.Seam + (window.X - box.X);
-        }
-        else if (canvas.Right.ContainsCanvas(box.Right))
-        {
-            target = canvas.Right.Seam - box.Width + (window.X - box.X);
+            targetX = home.X;
+            targetY = home.Y;
         }
         else
         {
-            return;
+            if (canvas.Left.ContainsCanvas(box.X))
+            {
+                targetX = canvas.Left.Seam + (window.X - box.X);
+            }
+            else if (canvas.Right.ContainsCanvas(box.Right))
+            {
+                targetX = canvas.Right.Seam - box.Width + (window.X - box.X);
+            }
+
+            if (canvas.Top.ContainsCanvas(box.Y))
+            {
+                targetY = canvas.Top.Seam + (window.Y - box.Y);
+            }
+            else if (canvas.Bottom.ContainsCanvas(box.Bottom))
+            {
+                targetY = canvas.Bottom.Seam - box.Height + (window.Y - box.Y);
+            }
+
+            if (targetX is null && targetY is null)
+            {
+                return;
+            }
         }
 
         state ??= new CanvasWindowState();
         _canvasStates[window] = state;
         state.Home = null;
-        BeginCanvasMotion(window, state, target, CanvasAnimationNanos(view));
-        _report.Line($"RECALL {NameOf(window)} to={target}");
+        var nanos = CanvasAnimationNanos(view);
+        if (targetX is { } x)
+        {
+            BeginCanvasMotion(window, state, vertical: false, x, nanos);
+        }
+
+        if (targetY is { } y)
+        {
+            BeginCanvasMotion(window, state, vertical: true, y, nanos);
+        }
+
+        _report.Line($"RECALL {NameOf(window)} to={targetX ?? window.X} y={targetY ?? window.Y}");
     }
 
-    private void BeginCanvasMotion(IGrabTarget window, CanvasWindowState state, int target, long nanos)
+    private void BeginCanvasMotion(IGrabTarget window, CanvasWindowState state, bool vertical, int target, long nanos)
     {
-        state.Motion.Begin(window.X, target, nanos);
-        if (!state.Motion.IsRunning)
+        var motion = vertical ? state.MotionY : state.MotionX;
+        motion.Begin(vertical ? window.Y : window.X, target, nanos);
+        if (!motion.IsRunning)
         {
-            window.MoveTo(target, window.Y);
+            window.MoveTo(vertical ? window.X : target, vertical ? target : window.Y);
             return;
         }
 
@@ -626,11 +766,24 @@ internal sealed partial class TinyComp
                 continue;
             }
 
-            var running = state.Motion.Step(tick, out var x);
-            var next = (int)Math.Round(x);
-            if (next != window.X)
+            var running = false;
+            var nextX = window.X;
+            var nextY = window.Y;
+            if (state.MotionX.IsRunning)
             {
-                window.MoveTo(next, window.Y);
+                running |= state.MotionX.Step(tick, out var x);
+                nextX = (int)Math.Round(x);
+            }
+
+            if (state.MotionY.IsRunning)
+            {
+                running |= state.MotionY.Step(tick, out var y);
+                nextY = (int)Math.Round(y);
+            }
+
+            if (nextX != window.X || nextY != window.Y)
+            {
+                window.MoveTo(nextX, nextY);
             }
 
             if (!running)
@@ -693,7 +846,9 @@ internal sealed partial class TinyComp
         }
 
         var box = CanvasBoxOf(window);
-        return view.Canvas.Left.ContainsCanvas(box.X) || view.Canvas.Right.ContainsCanvas(box.Right);
+        var canvas = view.Canvas;
+        return canvas.Left.ContainsCanvas(box.X) || canvas.Right.ContainsCanvas(box.Right) ||
+            canvas.Top.ContainsCanvas(box.Y) || canvas.Bottom.ContainsCanvas(box.Bottom);
     }
 
     internal void SuspendCanvas()
@@ -735,11 +890,11 @@ internal sealed partial class TinyComp
 
         var box = _layout.BoxOf(view.Output);
         var canvas = view.Canvas;
-        var left = canvas.Left.IsIdentity ? 0 : canvas.Left.ZoneWidth;
-        var right = canvas.Right.IsIdentity ? 0 : canvas.Right.ZoneWidth;
-        var x = Math.Max(usable.X, left);
-        var end = Math.Min(usable.Right, box.Width - right);
-        return new Box(x, usable.Y, Math.Max(1, end - x), usable.Height);
+        var x = canvas.Left.IsIdentity ? usable.X : Math.Max(usable.X, canvas.Left.Seam - box.X);
+        var end = canvas.Right.IsIdentity ? usable.Right : Math.Min(usable.Right, canvas.Right.Seam - box.X);
+        var y = canvas.Top.IsIdentity ? usable.Y : Math.Max(usable.Y, canvas.Top.Seam - box.Y);
+        var bottom = canvas.Bottom.IsIdentity ? usable.Bottom : Math.Min(usable.Bottom, canvas.Bottom.Seam - box.Y);
+        return new Box(x, y, Math.Max(1, end - x), Math.Max(1, bottom - y));
     }
 
     private void ReportCanvasWhere(IGrabTarget window)
@@ -751,9 +906,10 @@ internal sealed partial class TinyComp
 
         var screen = ScreenBoxOf(window);
         _report.Line(
-            $"CANVASWIN {NameOf(window)} canvas={window.X} screen={screen.X} width={screen.Width}"
+            $"CANVASWIN {NameOf(window)} canvas={window.X},{window.Y} screen={screen.X},{screen.Y}"
+            + $" width={screen.Width} height={screen.Height}"
             + $" deformed={(IsCanvasDeformed(window) ? "yes" : "no")}"
-            + $" home={(_canvasStates.TryGetValue(window, out var state) && state.Home is { } home ? home.X.ToString() : "none")}");
+            + $" home={(_canvasStates.TryGetValue(window, out var state) && state.Home is { } home ? $"{home.X},{home.Y}" : "none")}");
     }
 
     private IGrabTarget? FocusedGrabTarget() => _focused is { Tree: not null } focused
@@ -786,9 +942,19 @@ internal sealed partial class TinyComp
 
     private void PlaceRuleCanvas(IGrabTarget window, Rule? rule)
     {
-        if (rule?.Canvas is { } side)
+        if (rule?.Canvas is not { } sides)
         {
-            Park(window, side);
+            return;
+        }
+
+        if ((sides & CanvasSide.Horizontal) is var horizontal and not CanvasSide.None)
+        {
+            Park(window, horizontal);
+        }
+
+        if ((sides & CanvasSide.Vertical) is var vertical and not CanvasSide.None)
+        {
+            Park(window, vertical);
         }
     }
 }

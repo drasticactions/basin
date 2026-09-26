@@ -11,6 +11,7 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
     private readonly IntPtr _contextRaw;
     private readonly IntPtr _rectPaint;
     private readonly IntPtr _texturePaint;
+    private readonly IntPtr _pathBuilder;
     private readonly Dictionary<IBuffer, TargetEntry> _targets = [];
     private readonly ImpellerGlRenderPass _pass;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -33,6 +34,8 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
         _contextRaw = _context.Handle.DangerousGetHandle();
         _rectPaint = UnsafeNativeMethods.ImpellerPaintNewRaw();
         _texturePaint = UnsafeNativeMethods.ImpellerPaintNewRaw();
+        _pathBuilder = UnsafeNativeMethods.ImpellerPathBuilderNewRaw();
+        BasinCounters.Track();
         BasinCounters.Track(2);
         _pass = new ImpellerGlRenderPass(this);
     }
@@ -60,6 +63,8 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
     internal IntPtr RectPaint => _rectPaint;
 
     internal IntPtr TexturePaint => _texturePaint;
+
+    internal IntPtr PathBuilder => _pathBuilder;
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
@@ -189,6 +194,8 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
         UnsafeNativeMethods.ImpellerPaintRelease(_rectPaint);
         UnsafeNativeMethods.ImpellerPaintRelease(_texturePaint);
         BasinCounters.Untrack(2);
+        UnsafeNativeMethods.ImpellerPathBuilderRelease(_pathBuilder);
+        BasinCounters.Untrack();
 
         _context.Handle.DangerousRelease();
         _context.Dispose();

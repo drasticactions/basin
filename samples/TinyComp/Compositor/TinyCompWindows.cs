@@ -135,11 +135,11 @@ internal sealed partial class TinyComp
         if (width > 0 && height > 0)
         {
             window.ResizeTo(
-                origin.X + flat.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0), width, height, ResizeEdges.None);
+                origin.X + flat.X + (rule.X ?? 0), origin.Y + flat.Y + (rule.Y ?? 0), width, height, ResizeEdges.None);
         }
         else
         {
-            window.MoveTo(origin.X + flat.X + (rule.X ?? 0), origin.Y + (rule.Y ?? 0));
+            window.MoveTo(origin.X + flat.X + (rule.X ?? 0), origin.Y + flat.Y + (rule.Y ?? 0));
         }
 
         return true;
@@ -387,14 +387,14 @@ internal sealed partial class TinyComp
         {
             var (geometryWidth, geometryHeight) = window.GeometrySize;
             var box = new Box(window.X, window.Y, Math.Max(geometryWidth, 1), Math.Max(geometryHeight, 1));
-            var cursorX = ToCanvasFor(window, _cursorX);
+            var (cursorX, cursorY) = ToCanvasPointFor(window, _cursorX, _cursorY);
             if (!minimized)
             {
                 tree.Enabled = true;
-                _ = _effects.OnMinimize(tree, box, default, restoring: true, cursorX, _cursorY);
+                _ = _effects.OnMinimize(tree, box, default, restoring: true, cursorX, cursorY);
             }
             else if (!_effects.OnMinimize(
-                tree, box, default, restoring: false, cursorX, _cursorY,
+                tree, box, default, restoring: false, cursorX, cursorY,
                 () => HideMinimized(window)))
             {
                 tree.Enabled = false;
@@ -436,14 +436,14 @@ internal sealed partial class TinyComp
         xwindow.XWin.SetMinimized(minimized);
 
         var box = new Box(xwindow.X, xwindow.Y, Math.Max(xwindow.XWin.Width, 1), Math.Max(xwindow.XWin.Height, 1));
-        var xCursorX = ToCanvasFor(xwindow, _cursorX);
+        var (xCursorX, xCursorY) = ToCanvasPointFor(xwindow, _cursorX, _cursorY);
         if (!minimized)
         {
             xwindow.Tree.Enabled = true;
-            _ = _effects.OnMinimize(xwindow.Tree, box, default, restoring: true, xCursorX, _cursorY);
+            _ = _effects.OnMinimize(xwindow.Tree, box, default, restoring: true, xCursorX, xCursorY);
         }
         else if (!_effects.OnMinimize(
-            xwindow.Tree, box, default, restoring: false, xCursorX, _cursorY,
+            xwindow.Tree, box, default, restoring: false, xCursorX, xCursorY,
             () => HideMinimized(xwindow)))
         {
             xwindow.Tree.Enabled = false;

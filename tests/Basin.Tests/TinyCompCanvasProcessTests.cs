@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using Basin.Diagnostics;
+using Basin.Effects;
 using Xunit;
 
 namespace Basin.Tests;
@@ -7,6 +10,11 @@ namespace Basin.Tests;
 public sealed class TinyCompCanvasProcessTests
 {
     private const int ZoneWidth = 154;
+
+    private const int ZoneHeight = 86;
+
+    private const string FourSides =
+        "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n";
 
     [Fact]
     public void Park_left_draws_the_client_inside_the_zone()
@@ -66,10 +74,201 @@ public sealed class TinyCompCanvasProcessTests
         Assert.Equal(homeX, session.WindowPosition().X);
     }
 
-    private static int Saturated(Shot shot, int fromX, int width)
+    [Fact]
+    public void Park_up_then_left_reaches_the_corner()
+    {
+        using var session = CanvasSession.Start(FourSides);
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        session!.Send("park up");
+        Assert.Contains(" up to=", session.WaitForLine("PARK "));
+        session.Send("park left");
+        var corner = session.WaitForLine("PARK ");
+        Assert.Contains(" left to=", corner);
+        Assert.EndsWith(" corner", corner);
+        var parked = session.Shot("corner");
+        Assert.True(Saturated(parked, 0, 0, ZoneWidth, ZoneHeight) > 0, "the client draws inside the top-left corner");
+        Assert.Equal(0, Saturated(parked, ZoneWidth, ZoneHeight, parked.Width - (2 * ZoneWidth), parked.Height - (2 * ZoneHeight)));
+        var (canvasX, canvasY, _, _, home) = session.CanvasWindow();
+        Assert.True(canvasX < 0 && canvasY < 0, $"the window's canvas position is {canvasX},{canvasY}");
+        Assert.NotEqual("none", home);
+    }
+
+    [Fact]
+    public void A_square_corner_parks_the_window_at_the_far_corner()
+    {
+        using var session = CanvasSession.Start(FourSides + "corner = \"square\"\n");
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        session!.Send("park up");
+        session.WaitForLine("PARK ");
+        session.Send("park left");
+        var corner = session.WaitForLine("PARK ");
+        Assert.Contains($" left to={ZoneWidth - 640} y={ZoneHeight - 360} corner", corner);
+        var parked = session.Shot("square");
+        Assert.True(Saturated(parked, 0, 0, 12, 12) > 0, "a square corner draws the window into the screen corner");
+    }
+
+    [Fact]
+    public void A_tapered_corner_parks_the_window_at_the_far_corner()
+    {
+        using var session = CanvasSession.Start(FourSides + "corner = \"taper\"\n");
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        session!.Send("park up");
+        session.WaitForLine("PARK ");
+        session.Send("park left");
+        var corner = session.WaitForLine("PARK ");
+        Assert.Contains($" left to={ZoneWidth - 640} y={ZoneHeight - 360} corner", corner);
+        var parked = session.Shot("taper");
+        Assert.True(Saturated(parked, 0, 0, 12, 12) > 0, "a tapered corner draws the window into the screen corner");
+    }
+
+    [Fact]
+    public void Recall_returns_both_axes_home()
+    {
+        using var session = CanvasSession.Start(FourSides);
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        var home = session!.WindowPosition();
+        session.Send("park up");
+        session.WaitForLine("PARK ");
+        session.Send("park left");
+        session.WaitForLine("PARK ");
+        _ = session.Shot("parked");
+        Assert.NotEqual(home, session.WindowPosition());
+        session.Send("recall");
+        Assert.Contains($"to={home.X} y={home.Y}", session.WaitForLine("RECALL "));
+        _ = session.Shot("recalled");
+        Assert.Equal(home, session.WindowPosition());
+    }
+
+    [Fact]
+    public void Park_up_is_refused_without_a_top_zone()
+    {
+        using var session = CanvasSession.Start();
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        var home = session!.WindowPosition();
+        session.Send("park up");
+        Assert.Contains("refused: no top zone", session.WaitForLine("PARK "));
+        Assert.Equal(home, session.WindowPosition());
+    }
+
+    [Fact]
+    public void A_bottom_right_rule_parks_on_both_axes()
+    {
+        using var session = CanvasSession.Start(
+            FourSides + "[[rule]]\napp_id = \"org.freedesktop.weston.simple-shm\"\ncanvas = \"bottom-right\"\n");
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        _ = session!.Shot("ruled");
+        var (x, y) = session.WindowPosition();
+        Assert.True(x + 250 > 1280 - ZoneWidth && y + 250 > 720 - ZoneHeight, $"the window's canvas position is {x},{y}");
+        Assert.True(x > 1280 - ZoneWidth - 250 + 100 && y > 720 - ZoneHeight - 250 + 100, $"the window's canvas position is {x},{y}");
+    }
+
+    [Fact]
+    public void A_click_in_the_corner_reaches_the_client_at_true_surface_coordinates()
+    {
+        using var session = CanvasSession.Start(FourSides, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("park up");
+        session.WaitForLine("PARK ");
+        session.Send("park left");
+        session.WaitForLine("PARK ");
+        _ = session.Shot("corner");
+        var (canvasX, canvasY, screen, _, _) = session.CanvasWindow();
+
+        var map = LayoutMap();
+        var clicks = new[] { (0.5, 0.5), (0.25, 0.75), (0.8, 0.3) };
+        foreach (var (fx, fy) in clicks)
+        {
+            var x = Math.Round(screen.X + (screen.Width * fx), 2);
+            var y = Math.Round(screen.Y + (screen.Height * fy), 2);
+            var (expectedX, expectedY) = map.ToCanvasPoint(x, y);
+            session.Send(string.Create(CultureInfo.InvariantCulture, $"move {x} {y}"));
+            session.Send("button 272 1");
+            session.Send("button 272 0");
+            var line = session.WaitForClientLine("BUTTON ");
+            Assert.NotNull(line);
+            var parts = line!.Split(' ');
+            var localX = double.Parse(parts[2], CultureInfo.InvariantCulture);
+            var localY = double.Parse(parts[3], CultureInfo.InvariantCulture);
+            Assert.True(
+                Math.Abs(localX - (expectedX - canvasX)) < 1.0 && Math.Abs(localY - (expectedY - canvasY)) < 1.0,
+                $"a click at ({x},{y}) reached ({localX},{localY}), the canvas says ({expectedX - canvasX:F2},{expectedY - canvasY:F2})");
+        }
+    }
+
+    [Fact]
+    public void A_side_dock_moves_the_seam_inside_it_and_stays_flat()
+    {
+        using var session = CanvasSession.Start(FourSides);
+        Assert.SkipWhen(session is null || Panel() is null, "tinycomp, weston-simple-shm or panel is not available beside the tests");
+        session!.Spawn(Panel()!, "left", "60");
+        session.Spawn(Panel()!, "top", "30");
+        Thread.Sleep(600);
+        session.Send("park left");
+        Assert.Contains("to=" + (60 + ZoneWidth - 640), session.WaitForLine("PARK "));
+        session.Send("park up");
+        var corner = session.WaitForLine("PARK ");
+        var rimY = (int)Math.Round(30 + ZoneHeight - (360 / Math.Sqrt(2)));
+        Assert.Contains($" y={rimY} corner", corner);
+        var parked = session.Shot("docked");
+        Assert.Equal(0, Saturated(parked, 0, 0, 60, parked.Height));
+        Assert.Equal(0, Saturated(parked, 0, 0, parked.Width, 30));
+        Assert.True(Saturated(parked, 60, 30, ZoneWidth, ZoneHeight) > 0, "the client draws in the corner inside both panels");
+    }
+
+    [Fact]
+    public void A_dock_that_maps_late_keeps_a_parked_window_out_from_under_it()
+    {
+        using var session = CanvasSession.Start(FourSides);
+        Assert.SkipWhen(session is null || Panel() is null, "tinycomp, weston-simple-shm or panel is not available beside the tests");
+        session!.Send("park left");
+        session.WaitForLine("PARK ");
+        var before = session.Shot("before");
+        Assert.True(Saturated(before, 0, 60) > 0, "the parked client reaches the screen edge before the dock");
+        session.Spawn(Panel()!, "left", "60");
+        Assert.NotNull(session.WaitForLine("CANVAS view=0"));
+        var after = session.Shot("after");
+        Assert.Equal(60 + ZoneWidth - 640, session.WindowPosition().X);
+        Assert.Equal(0, Saturated(after, 0, 60));
+        Assert.True(Saturated(after, 60, ZoneWidth) > 0, "the parked client draws beside the dock");
+    }
+
+    private static string? Panel([CallerFilePath] string sourcePath = "") => WlClient("panel", sourcePath);
+
+    private static CanvasWarpTransform LayoutMap()
+    {
+        var left = new CanvasWarp();
+        left.Layout(ZoneWidth, -1, ZoneWidth, 640, 0.2, 0.25, 360);
+        var right = new CanvasWarp(1);
+        right.Layout(1280 - ZoneWidth, 1, ZoneWidth, 640, 0.2, 0.25, 360);
+        var top = new CanvasWarp();
+        top.Layout(ZoneHeight, -1, ZoneHeight, 360, 0.2, 0.25, 640);
+        var bottom = new CanvasWarp(1);
+        bottom.Layout(720 - ZoneHeight, 1, ZoneHeight, 360, 0.2, 0.25, 640);
+        return new CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+        };
+    }
+
+    private static string? SsdWin([CallerFilePath] string sourcePath = "") => WlClient("ssdwin", sourcePath);
+
+    private static string? WlClient(string name, string sourcePath)
+    {
+        var tests = Path.GetDirectoryName(sourcePath);
+        var root = tests is null ? null : Path.GetDirectoryName(Path.GetDirectoryName(tests));
+        var candidate = root is null ? null : Path.Combine(root, "scripts", "wlclients", "bin", name);
+        return candidate is not null && File.Exists(candidate) ? candidate : null;
+    }
+
+    private static int Saturated(Shot shot, int fromX, int width) => Saturated(shot, fromX, 0, width, shot.Height);
+
+    private static int Saturated(Shot shot, int fromX, int fromY, int width, int height)
     {
         var count = 0;
-        for (var y = 0; y < shot.Height; y++)
+        for (var y = fromY; y < fromY + height; y++)
         {
             for (var x = fromX; x < fromX + width; x++)
             {
@@ -96,6 +295,9 @@ public sealed class TinyCompCanvasProcessTests
         private readonly Process _compositor;
         private readonly string _runtimeDir;
         private readonly List<string> _lines = [];
+        private readonly List<string> _clientLines = [];
+        private readonly List<Process> _extra = [];
+        private string _socket = string.Empty;
         private readonly object _gate = new();
         private Process? _client;
 
@@ -105,9 +307,12 @@ public sealed class TinyCompCanvasProcessTests
             _runtimeDir = runtimeDir;
         }
 
-        public static CanvasSession? Start()
+        public static CanvasSession? Start(
+            string config = "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\n",
+            string? clientPath = "weston-simple-shm")
         {
-            if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath || !ClientAvailable())
+            if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath || clientPath is null ||
+                (clientPath == "weston-simple-shm" && !ClientAvailable()))
             {
                 return null;
             }
@@ -117,7 +322,7 @@ public sealed class TinyCompCanvasProcessTests
             Directory.CreateDirectory(runtimeDir);
             File.SetUnixFileMode(runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             var configPath = Path.Combine(runtimeDir, "tinycomp.toml");
-            File.WriteAllText(configPath, "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\n");
+            File.WriteAllText(configPath, config);
 
             var info = new ProcessStartInfo(compositorPath)
             {
@@ -158,16 +363,27 @@ public sealed class TinyCompCanvasProcessTests
                 return null;
             }
 
-            var clientInfo = new ProcessStartInfo("weston-simple-shm")
+            var clientInfo = new ProcessStartInfo(clientPath)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
             clientInfo.Environment["XDG_RUNTIME_DIR"] = runtimeDir;
-            clientInfo.Environment["WAYLAND_DISPLAY"] = socketLine.Split(' ')[1];
+            session._socket = socketLine.Split(' ')[1];
+            clientInfo.Environment["WAYLAND_DISPLAY"] = session._socket;
             var client = Process.Start(clientInfo)!;
-            client.OutputDataReceived += (_, _) => { };
+            client.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is { } line)
+                {
+                    lock (session._gate)
+                    {
+                        session._clientLines.Add(line);
+                        Monitor.PulseAll(session._gate);
+                    }
+                }
+            };
             client.ErrorDataReceived += (_, _) => { };
             client.BeginOutputReadLine();
             client.BeginErrorReadLine();
@@ -183,6 +399,29 @@ public sealed class TinyCompCanvasProcessTests
             return session;
         }
 
+        public void Spawn(string path, params string[] arguments)
+        {
+            var info = new ProcessStartInfo(path)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var argument in arguments)
+            {
+                info.ArgumentList.Add(argument);
+            }
+
+            info.Environment["XDG_RUNTIME_DIR"] = _runtimeDir;
+            info.Environment["WAYLAND_DISPLAY"] = _socket;
+            var process = Process.Start(info)!;
+            process.OutputDataReceived += (_, _) => { };
+            process.ErrorDataReceived += (_, _) => { };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            _extra.Add(process);
+        }
+
         public void Send(string command)
         {
             _compositor.StandardInput.WriteLine(command);
@@ -190,7 +429,11 @@ public sealed class TinyCompCanvasProcessTests
             Thread.Sleep(60);
         }
 
-        public string? WaitForLine(string prefix, int timeoutMillis = 15000)
+        public string? WaitForLine(string prefix, int timeoutMillis = 15000) => WaitIn(_lines, prefix, timeoutMillis);
+
+        public string? WaitForClientLine(string prefix, int timeoutMillis = 15000) => WaitIn(_clientLines, prefix, timeoutMillis);
+
+        private string? WaitIn(List<string> lines, string prefix, int timeoutMillis)
         {
             var deadline = Environment.TickCount64 + timeoutMillis;
             lock (_gate)
@@ -198,12 +441,12 @@ public sealed class TinyCompCanvasProcessTests
                 var from = 0;
                 while (true)
                 {
-                    for (; from < _lines.Count; from++)
+                    for (; from < lines.Count; from++)
                     {
-                        if (_lines[from].StartsWith(prefix, StringComparison.Ordinal))
+                        if (lines[from].StartsWith(prefix, StringComparison.Ordinal))
                         {
-                            var found = _lines[from];
-                            _lines.RemoveRange(0, from + 1);
+                            var found = lines[from];
+                            lines.RemoveRange(0, from + 1);
                             return found;
                         }
                     }
@@ -226,6 +469,35 @@ public sealed class TinyCompCanvasProcessTests
             Assert.NotNull(line);
             var parts = line!.Split(' ');
             return (int.Parse(parts[2]), int.Parse(parts[3]));
+        }
+
+        public (int X, int Y, Box Screen, bool Deformed, string Home) CanvasWindow()
+        {
+            Send("where");
+            var line = WaitForLine("CANVASWIN ");
+            Assert.NotNull(line);
+            var fields = new Dictionary<string, string>();
+            foreach (var part in line!.Split(' '))
+            {
+                var equals = part.IndexOf('=');
+                if (equals > 0)
+                {
+                    fields[part[..equals]] = part[(equals + 1)..];
+                }
+            }
+
+            var canvas = fields["canvas"].Split(',');
+            var screen = fields["screen"].Split(',');
+            return (
+                int.Parse(canvas[0], CultureInfo.InvariantCulture),
+                int.Parse(canvas[1], CultureInfo.InvariantCulture),
+                new Box(
+                    int.Parse(screen[0], CultureInfo.InvariantCulture),
+                    int.Parse(screen[1], CultureInfo.InvariantCulture),
+                    int.Parse(fields["width"], CultureInfo.InvariantCulture),
+                    int.Parse(fields["height"], CultureInfo.InvariantCulture)),
+                fields["deformed"] == "yes",
+                fields["home"]);
         }
 
         public Shot Shot(string name)
@@ -257,6 +529,16 @@ public sealed class TinyCompCanvasProcessTests
             if (_client is { } client && !client.HasExited)
             {
                 client.Kill(entireProcessTree: true);
+            }
+
+            foreach (var extra in _extra)
+            {
+                if (!extra.HasExited)
+                {
+                    extra.Kill(entireProcessTree: true);
+                }
+
+                extra.Dispose();
             }
 
             if (!_compositor.HasExited)

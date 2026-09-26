@@ -21,5 +21,7 @@ internal enum KeyAction
     CanvasToggle,
     ParkLeft,
     ParkRight,
+    ParkUp,
+    ParkDown,
     Recall,
 }

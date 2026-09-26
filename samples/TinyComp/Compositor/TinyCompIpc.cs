@@ -142,12 +142,30 @@ internal sealed partial class TinyComp
             }
         });
 
-        _report.Register(methods, "tinycomp/park", "park {side:left|right}", (ref IpcParams p, IpcReply _) =>
+        _report.Register(methods, "tinycomp/park", "park {side:left|right|up|down}", (ref IpcParams p, IpcReply reply) =>
         {
-            var side = p.GetString("side");
-            if (!p.Failed && FocusedGrabTarget() is { } window)
+            var side = p.GetString("side") switch
             {
-                Park(window, side == "left" ? CanvasSide.Left : CanvasSide.Right);
+                "left" => CanvasSide.Left,
+                "right" => CanvasSide.Right,
+                "up" => CanvasSide.Top,
+                "down" => CanvasSide.Bottom,
+                _ => CanvasSide.None,
+            };
+            if (p.Failed)
+            {
+                return;
+            }
+
+            if (side == CanvasSide.None)
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, "side is left, right, up or down");
+                return;
+            }
+
+            if (FocusedGrabTarget() is { } window)
+            {
+                Park(window, side);
             }
         });
 

@@ -135,7 +135,8 @@ internal sealed partial class TinyComp
             + " rules-apply-to-windows-mapped-after-this"
             + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")
             + (metacityFailure is null ? string.Empty : " metacity=kept")
-            + $" canvas={(loaded.CanvasAnywhere ? "on" : "off")} canvas-edge-scale={loaded.Canvas.EdgeScaleValue:F3}");
+            + $" canvas={(loaded.CanvasAnywhere ? "on" : "off")} canvas-edge-scale={loaded.Canvas.EdgeScaleValue:F3}"
+            + $" canvas-sides={loaded.Canvas.SideNames} canvas-corner={loaded.Canvas.CornerName} canvas-corner-radius={loaded.Canvas.CornerRadiusValue:F2}");
     }
 
     private double? ReloadScaleFor(int index, IOutput output) =>

@@ -38,6 +38,12 @@ internal sealed class CanvasSetting
 
     public int? AnimationMs { get; init; }
 
+    public CanvasSide? Sides { get; init; }
+
+    public double? CornerRadius { get; init; }
+
+    public bool? CornerTaper { get; init; }
+
     public static CanvasSetting Defaults { get; } = new()
     {
         Enable = false,
@@ -50,6 +56,9 @@ internal sealed class CanvasSetting
         GridCell = 64,
         GridColor = DefaultGridColor,
         AnimationMs = 250,
+        Sides = CanvasSide.Horizontal,
+        CornerRadius = 1.0,
+        CornerTaper = false,
     };
 
     public bool Enabled => Enable ?? false;
@@ -71,6 +80,52 @@ internal sealed class CanvasSetting
     public uint GridRgba => GridColor ?? DefaultGridColor;
 
     public int AnimationMillis => AnimationMs ?? 250;
+
+    public CanvasSide SideSet => Sides ?? CanvasSide.Horizontal;
+
+    public double CornerRadiusValue => CornerRadius ?? 1.0;
+
+    public bool CornerTaperValue => CornerTaper ?? false;
+
+    public string CornerName => CornerTaperValue ? "taper" : CornerRadiusValue switch
+    {
+        1.0 => "round",
+        0.0 => "square",
+        _ => "radius",
+    };
+
+    public string SideNames => NamesOf(SideSet);
+
+    public static string NamesOf(CanvasSide sides)
+    {
+        if (sides == CanvasSide.None)
+        {
+            return "none";
+        }
+
+        var names = new List<string>(4);
+        if (sides.HasFlag(CanvasSide.Left))
+        {
+            names.Add("left");
+        }
+
+        if (sides.HasFlag(CanvasSide.Right))
+        {
+            names.Add("right");
+        }
+
+        if (sides.HasFlag(CanvasSide.Top))
+        {
+            names.Add("top");
+        }
+
+        if (sides.HasFlag(CanvasSide.Bottom))
+        {
+            names.Add("bottom");
+        }
+
+        return string.Join(',', names);
+    }
 
     public RenderColor GridRenderColor
     {
@@ -98,6 +153,9 @@ internal sealed class CanvasSetting
         GridCell = GridCell ?? fallback.GridCell,
         GridColor = GridColor ?? fallback.GridColor,
         AnimationMs = AnimationMs ?? fallback.AnimationMs,
+        Sides = Sides ?? fallback.Sides,
+        CornerRadius = CornerRadius ?? fallback.CornerRadius,
+        CornerTaper = CornerTaper ?? fallback.CornerTaper,
     };
 
     public static CanvasSetting Parse(TomlTable table, string section, BasinLogger log)
@@ -112,6 +170,10 @@ internal sealed class CanvasSetting
         int? gridCell = null;
         uint? gridColor = null;
         int? animation = null;
+        CanvasSide? sides = null;
+        double? corner = null;
+        bool? taper = null;
+        double? cornerRadius = null;
         foreach (var (key, value) in table)
         {
             switch (key)
@@ -157,6 +219,31 @@ internal sealed class CanvasSetting
                 case "animation_ms" when value is long millis:
                     animation = (int)Math.Clamp(millis, 0, 10_000);
                     break;
+                case "corner" when value is string shape:
+                    corner = shape switch
+                    {
+                        "round" => 1.0,
+                        "square" => 0.0,
+                        _ => null,
+                    };
+                    taper = shape switch
+                    {
+                        "taper" => true,
+                        "round" or "square" => false,
+                        _ => null,
+                    };
+                    if (taper is null)
+                    {
+                        log.Warn($"[{section}] corner \"{shape}\" is not round|square|taper, ignored");
+                    }
+
+                    break;
+                case "corner_radius" when Fraction(value) is { } radius:
+                    cornerRadius = Math.Clamp(radius, 0.0, 1.0);
+                    break;
+                case "sides" when value is TomlArray list:
+                    sides = ParseSides(list, section, log);
+                    break;
                 default:
                     log.Warn($"[{section}] {key}: unknown key or wrong type, ignored");
                     break;
@@ -175,7 +262,15 @@ internal sealed class CanvasSetting
             GridCell = gridCell,
             GridColor = gridColor,
             AnimationMs = animation,
+            Sides = sides,
+            CornerRadius = cornerRadius ?? corner,
+            CornerTaper = taper,
         };
+        if (corner is { } shaped && cornerRadius is { } exact && shaped != exact)
+        {
+            log.Warn($"[{section}] corner_radius {exact} overrides corner");
+        }
+
         return parsed.Constrained(section, log);
     }
 
@@ -214,7 +309,39 @@ internal sealed class CanvasSetting
             GridCell = GridCell,
             GridColor = GridColor,
             AnimationMs = AnimationMs,
+            Sides = Sides,
+            CornerRadius = CornerRadius,
+            CornerTaper = CornerTaper,
         };
+    }
+
+    private static CanvasSide ParseSides(TomlArray list, string section, BasinLogger log)
+    {
+        var sides = CanvasSide.None;
+        foreach (var item in list)
+        {
+            var side = (item as string) switch
+            {
+                "left" => CanvasSide.Left,
+                "right" => CanvasSide.Right,
+                "top" => CanvasSide.Top,
+                "bottom" => CanvasSide.Bottom,
+                _ => CanvasSide.None,
+            };
+            if (side == CanvasSide.None)
+            {
+                log.Warn($"[{section}] sides: \"{item}\" is not left|right|top|bottom, ignored");
+            }
+
+            sides |= side;
+        }
+
+        if (sides == CanvasSide.None)
+        {
+            log.Warn($"[{section}] sides is empty: the canvas has no zones");
+        }
+
+        return sides;
     }
 
     private static double? Fraction(object value) => value switch

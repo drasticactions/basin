@@ -9,6 +9,12 @@ internal sealed class CanvasView
 
     public CanvasWarp Right { get; } = new(1);
 
+    public CanvasWarp Top { get; } = new();
+
+    public CanvasWarp Bottom { get; } = new(1);
+
+    public CanvasWarpTransform Map { get; }
+
     public SceneMesh? Grid { get; set; }
 
     public CanvasGridSource? GridSource { get; set; }
@@ -19,67 +25,14 @@ internal sealed class CanvasView
 
     public bool Enabled { get; set; }
 
-    public bool IsIdentity => Left.IsIdentity && Right.IsIdentity;
-
-    public double ToScreen(double canvasX)
+    public CanvasView()
     {
-        if (Left.ContainsCanvas(canvasX))
-        {
-            return Left.ToScreen(canvasX);
-        }
-
-        if (Right.ContainsCanvas(canvasX))
-        {
-            return Right.ToScreen(canvasX);
-        }
-
-        return canvasX;
+        Map = new CanvasWarpTransform { Left = Left, Right = Right, Top = Top, Bottom = Bottom };
     }
 
-    public double ToCanvas(double screenX)
-    {
-        if (Left.ContainsScreen(screenX))
-        {
-            return Left.ToCanvas(screenX);
-        }
+    public bool IsIdentity => Left.IsIdentity && Right.IsIdentity && Top.IsIdentity && Bottom.IsIdentity;
 
-        if (Right.ContainsScreen(screenX))
-        {
-            return Right.ToCanvas(screenX);
-        }
+    public (double X, double Y) ToScreenPoint(double canvasX, double canvasY) => Map.ToScreenPoint(canvasX, canvasY);
 
-        return screenX;
-    }
-
-    public double ToScreenY(double canvasX, double canvasY)
-    {
-        if (Left.ContainsCanvas(canvasX))
-        {
-            return Left.ToScreenY(canvasX, canvasY);
-        }
-
-        if (Right.ContainsCanvas(canvasX))
-        {
-            return Right.ToScreenY(canvasX, canvasY);
-        }
-
-        return canvasY;
-    }
-
-    public double ToCanvasY(double screenX, double screenY)
-    {
-        if (Left.ContainsScreen(screenX))
-        {
-            return Left.ToCanvasY(screenX, screenY);
-        }
-
-        if (Right.ContainsScreen(screenX))
-        {
-            return Right.ToCanvasY(screenX, screenY);
-        }
-
-        return screenY;
-    }
-
-    public bool ContainsCanvas(double canvasX) => Left.ContainsCanvas(canvasX) || Right.ContainsCanvas(canvasX);
+    public (double X, double Y) ToCanvasPoint(double screenX, double screenY) => Map.ToCanvasPoint(screenX, screenY);
 }

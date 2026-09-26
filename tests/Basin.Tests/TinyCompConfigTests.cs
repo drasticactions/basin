@@ -209,6 +209,70 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_canvas_sides_list_parses_warns_and_overrides_per_output()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Load(Write("[canvas]\nenable = true\n"), log, out _);
+        Assert.Equal(TinyComp.CanvasSide.Left | TinyComp.CanvasSide.Right, defaults.Canvas.SideSet);
+
+        var config = TinyComp.Config.Load(
+            Write("[canvas]\nenable = true\nsides = [\"top\", \"left\", \"middle\", \"top\"]\n"
+                + "[output.\"DP-2\"]\nsides = [\"bottom\", \"right\"]\n"
+                + "[[rule]]\napp_id = \"foot\"\ncanvas = \"bottom-right\"\n"),
+            log,
+            out var fatal);
+        Assert.Null(fatal);
+        Assert.Equal(TinyComp.CanvasSide.Top | TinyComp.CanvasSide.Left, config.Canvas.SideSet);
+        Assert.Equal("left,top", config.Canvas.SideNames);
+        Assert.Contains(_lines, line => line.Contains("sides: \"middle\"", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.CanvasSide.Bottom | TinyComp.CanvasSide.Right, config.CanvasFor("DP-2", log).SideSet);
+        Assert.Equal(TinyComp.CanvasSide.Top | TinyComp.CanvasSide.Left, config.CanvasFor("DP-1", log).SideSet);
+        Assert.Equal(TinyComp.CanvasSide.Bottom | TinyComp.CanvasSide.Right, config.Rules[0].Canvas);
+
+        var empty = TinyComp.Config.Load(Write("[canvas]\nenable = true\nsides = []\n"), log, out _);
+        Assert.Equal(TinyComp.CanvasSide.None, empty.Canvas.SideSet);
+        Assert.Contains(_lines, line => line.Contains("sides is empty", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.KeyAction.ParkUp, TinyComp.Config.ActionFromName("park-up"));
+        Assert.Equal(TinyComp.KeyAction.ParkDown, TinyComp.Config.ActionFromName("park-down"));
+    }
+
+    [Fact]
+    public void The_canvas_corner_takes_a_shape_or_a_radius()
+    {
+        var log = BasinLog.For("t");
+        Assert.Equal(1.0, TinyComp.Config.Load(Write("[canvas]\nenable = true\n"), log, out _).Canvas.CornerRadiusValue);
+        Assert.Equal(0.0, TinyComp.Config.Load(Write("[canvas]\ncorner = \"square\"\n"), log, out _).Canvas.CornerRadiusValue);
+        Assert.Equal(1.0, TinyComp.Config.Load(Write("[canvas]\ncorner = \"round\"\n"), log, out _).Canvas.CornerRadiusValue);
+        Assert.Equal(0.25, TinyComp.Config.Load(Write("[canvas]\ncorner_radius = 0.25\n"), log, out _).Canvas.CornerRadiusValue);
+        Assert.Equal(1.0, TinyComp.Config.Load(Write("[canvas]\ncorner_radius = 3\n"), log, out _).Canvas.CornerRadiusValue);
+
+        var both = TinyComp.Config.Load(Write("[canvas]\ncorner = \"square\"\ncorner_radius = 0.5\n"), log, out _);
+        Assert.Equal(0.5, both.Canvas.CornerRadiusValue);
+        Assert.Contains(_lines, line => line.Contains("corner_radius 0.5 overrides corner", StringComparison.Ordinal));
+
+        _ = TinyComp.Config.Load(Write("[canvas]\ncorner = \"bevel\"\n"), log, out _);
+        Assert.Contains(_lines, line => line.Contains("corner \"bevel\" is not round|square|taper", StringComparison.Ordinal));
+
+        var tapered = TinyComp.Config.Load(Write("[canvas]\ncorner = \"taper\"\n"), log, out _).Canvas;
+        Assert.True(tapered.CornerTaperValue);
+        Assert.Equal(1.0, tapered.CornerRadiusValue);
+        Assert.Equal("taper", tapered.CornerName);
+        var taperedHalf = TinyComp.Config.Load(Write("[canvas]\ncorner = \"taper\"\ncorner_radius = 0.5\n"), log, out _).Canvas;
+        Assert.True(taperedHalf.CornerTaperValue);
+        Assert.Equal(0.5, taperedHalf.CornerRadiusValue);
+        Assert.DoesNotContain(_lines, line => line.Contains("corner_radius 0.5 overrides corner", StringComparison.Ordinal) && line.Contains("taper", StringComparison.Ordinal));
+        var untapered = TinyComp.Config.Load(
+            Write("[canvas]\ncorner = \"taper\"\n[output.\"DP-2\"]\ncorner = \"round\"\n"), log, out _);
+        Assert.False(untapered.CanvasFor("DP-2", log).CornerTaperValue);
+        Assert.True(untapered.CanvasFor("DP-1", log).CornerTaperValue);
+
+        var perOutput = TinyComp.Config.Load(
+            Write("[canvas]\nenable = true\n[output.\"DP-2\"]\ncorner = \"square\"\n"), log, out _);
+        Assert.Equal(0.0, perOutput.CanvasFor("DP-2", log).CornerRadiusValue);
+        Assert.Equal(1.0, perOutput.CanvasFor("DP-1", log).CornerRadiusValue);
+    }
+
+    [Fact]
     public void An_unknown_key_warns()
     {
         _ = TinyComp.Config.Load(Write("[compositor]\nrenderrer = \"gl\"\n"), BasinLog.For("t"), out _);

@@ -95,17 +95,20 @@ system_bell  = false         # flash the focused window when a client asks for a
 startup_feedback = "none"    # none | bouncing | blinking | passive
 
 # A canvas wider than the screen. The center maps to the screen 1:1, and the
-# canvas past each outer edge compresses into a side zone along a smooth curve,
+# canvas past each outer edge compresses into a zone along a smooth curve,
 # so a window pushed past the seam bends across it and parks as a strip at the
 # edge, still visible and still clickable. Every key is live on SIGHUP, and the
 # same keys under an [output."NAME"] table override them for one output.
 [canvas]
-enable       = false         # wider canvas with compressed side zones
-zone         = 0.12          # fraction of the output width each zone takes on screen
-extension    = 0.5           # how far the canvas extends past each seam, as a fraction of the output width
+enable       = false         # wider canvas with compressed edge zones
+sides        = ["left", "right"]  # any of left, right, top, bottom
+corner       = "round"       # round | square | taper: how zones meet where two edges both have one
+# corner_radius = 1.0        # 0.0 square to 1.0 round; beats round or square, and sets taper's starting radius
+zone         = 0.12          # fraction of the output width (height for top and bottom) each zone takes on screen
+extension    = 0.5           # how far the canvas extends past each seam, as a fraction of the same dimension
 edge_scale   = 0.2           # draw scale at the far edge; must stay below zone / extension
 slope        = 0.25          # how far the rows fan from the center row at the far edge; 0 keeps them flat, negative fans inward
-mesh_cell    = 16            # canvas pixels per mesh column inside a zone
+mesh_cell    = 16            # canvas pixels per mesh cell inside a zone
 grid         = "always"      # always | drag | never
 grid_cell    = 64            # canvas pixels between grid lines
 grid_color   = "#2a35c0"     # the grid line color
@@ -142,6 +145,8 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # The canvas actions, unbound by default:
 # "Alt+Shift+h"   = "park-left"
 # "Alt+Shift+l"   = "park-right"
+# "Alt+Shift+k"   = "park-up"
+# "Alt+Shift+m"   = "park-down"
 # "Alt+Shift+j"   = "recall"
 # "Alt+Shift+c"   = "canvas-toggle"
 
@@ -156,4 +161,4 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # y = 0
 # width  = 1280
 # height = 720
-# canvas = "left"            # left | right: park the window in a canvas zone at map
+# canvas = "left"            # left | right | top | bottom | top-left | top-right | bottom-left | bottom-right: park at map

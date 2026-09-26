@@ -4,14 +4,24 @@ namespace Basin.Effects;
 
 public sealed class CanvasWarpTransform : IInvertibleMeshTransform
 {
+    public const double RimRadius = 0.5;
+
+    private const int CornerIterations = 40;
+
     private static readonly RenderColor White = new(1f, 1f, 1f, 1f);
 
     private int _cellSize = 16;
     private double _maxFan = double.PositiveInfinity;
+    private double _maxColumnFan = double.PositiveInfinity;
+    private double _cornerRadius = 1.0;
 
     public CanvasWarp? Left { get; set; }
 
     public CanvasWarp? Right { get; set; }
+
+    public CanvasWarp? Top { get; set; }
+
+    public CanvasWarp? Bottom { get; set; }
 
     public int SceneX { get; set; }
 
@@ -23,100 +33,145 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         set => _maxFan = Math.Max(1.0, value);
     }
 
+    public double MaxColumnFan
+    {
+        get => _maxColumnFan;
+        set => _maxColumnFan = Math.Max(1.0, value);
+    }
+
+    public double CornerRadius
+    {
+        get => _cornerRadius;
+        set => _cornerRadius = Math.Clamp(value, 0.0, 1.0);
+    }
+
+    public bool CornerTaper { get; set; }
+
+    public double RimDiagonal
+    {
+        get
+        {
+            var radius = RadiusAt(1.0);
+            return (1.0 - radius) + (radius / Math.Sqrt(2.0));
+        }
+    }
+
+    public double CornerReach(double across)
+    {
+        var radius = RadiusAt(1.0);
+        var straight = 1.0 - radius;
+        if (across <= straight)
+        {
+            return 1.0;
+        }
+
+        var offset = across - straight;
+        return straight + Math.Sqrt(Math.Max(0.0, (radius * radius) - (offset * offset)));
+    }
+
+    private double RadiusAt(double level) =>
+        CornerTaper ? _cornerRadius * (1.0 - Math.Clamp(level, 0.0, 1.0)) : _cornerRadius;
+
     public int CellSize
     {
         get => _cellSize;
         set => _cellSize = Math.Max(1, value);
     }
 
-    public double ToScreen(double canvasX)
+    public double ToScreen(double canvasX) => SideAt(canvasX) is { } side ? side.ToScreen(canvasX) : canvasX;
+
+    public double ToCanvas(double screenX) => SideAtScreen(screenX) is { } side ? side.ToCanvas(screenX) : screenX;
+
+    public double FanAt(double canvasX) =>
+        SideAt(canvasX) is { } side ? RowFan(side, side.FanAt(canvasX), side.DepthAt(canvasX)) : 1.0;
+
+    public double FanAtScreen(double screenX) =>
+        SideAtScreen(screenX) is { } side ? RowFan(side, side.FanAtScreen(screenX), side.DepthAtScreen(screenX)) : 1.0;
+
+    public double ToScreenY(double canvasX, double canvasY) =>
+        SideAt(canvasX) is { } side
+            ? side.Center + ((canvasY - side.Center) * RowFan(side, side.FanAt(canvasX), side.DepthAt(canvasX)))
+            : canvasY;
+
+    public double ToCanvasY(double screenX, double screenY) =>
+        SideAtScreen(screenX) is { } side
+            ? side.Center + ((screenY - side.Center) / RowFan(side, side.FanAtScreen(screenX), side.DepthAtScreen(screenX)))
+            : screenY;
+
+    public (double X, double Y) ToScreenPoint(double canvasX, double canvasY)
     {
-        if (Left is { } left && left.ContainsCanvas(canvasX))
+        var side = SideAt(canvasX);
+        var end = EndAt(canvasY);
+        if (end is null)
         {
-            return left.ToScreen(canvasX);
+            return side is null ? (canvasX, canvasY) : (side.ToScreen(canvasX), ToScreenY(canvasX, canvasY));
         }
 
-        if (Right is { } right && right.ContainsCanvas(canvasX))
+        if (side is null)
         {
-            return right.ToScreen(canvasX);
+            var fan = ColumnFan(end, end.FanAt(canvasY), end.DepthAt(canvasY));
+            return (end.Center + ((canvasX - end.Center) * fan), end.ToScreen(canvasY));
         }
 
-        return canvasX;
+        var ux = side.Direction * (canvasX - side.Seam) / side.Extension;
+        var uy = end.Direction * (canvasY - end.Seam) / end.Extension;
+        var level = CornerLevel(ux, uy);
+        var ring = Ring(side, end, level);
+        var radius = RadiusAt(level);
+        var straight = 1.0 - radius;
+        if (uy <= straight * ux)
+        {
+            var along = uy / level;
+            return (ring.EdgeX, ring.EdgeY + (along * (ring.RimY - ring.EdgeY)));
+        }
+
+        if (ux <= straight * uy)
+        {
+            var along = ux / level;
+            return (ring.RimX + (along * (ring.EdgeX - ring.RimX)), ring.RimY);
+        }
+
+        var angle = Math.Atan2(uy - (straight * level), ux - (straight * level));
+        var cos = radius * (1.0 - Math.Cos(angle));
+        var sin = radius * (1.0 - Math.Sin(angle));
+        return (
+            ring.EdgeX + (cos * (ring.RimX - ring.EdgeX)),
+            ring.RimY + (sin * (ring.EdgeY - ring.RimY)));
     }
 
-    public double ToCanvas(double screenX)
+    public (double X, double Y) ToCanvasPoint(double screenX, double screenY)
     {
-        if (Left is { } left && left.ContainsScreen(screenX))
+        var side = SideAtScreen(screenX);
+        var canvasY = screenY;
+        if (side is not null)
         {
-            return left.ToCanvas(screenX);
+            canvasY = ToCanvasY(screenX, screenY);
+            if (EndAt(canvasY) is null)
+            {
+                return (side.ToCanvas(screenX), canvasY);
+            }
         }
 
-        if (Right is { } right && right.ContainsScreen(screenX))
+        var end = EndAtScreen(screenY);
+        var canvasX = screenX;
+        if (end is not null)
         {
-            return right.ToCanvas(screenX);
+            var fan = ColumnFan(end, end.FanAtScreen(screenY), end.DepthAtScreen(screenY));
+            canvasX = end.Center + ((screenX - end.Center) / fan);
+            if (SideAt(canvasX) is null)
+            {
+                return (canvasX, end.ToCanvas(screenY));
+            }
         }
 
-        return screenX;
-    }
-
-    public double FanAt(double canvasX)
-    {
-        if (Left is { } left && left.ContainsCanvas(canvasX))
+        side ??= SideAt(canvasX);
+        end ??= EndAt(canvasY);
+        if (side is null || end is null)
         {
-            return Math.Min(left.FanAt(canvasX), _maxFan);
+            return (side is null ? canvasX : side.ToCanvas(screenX), end is null ? canvasY : end.ToCanvas(screenY));
         }
 
-        if (Right is { } right && right.ContainsCanvas(canvasX))
-        {
-            return Math.Min(right.FanAt(canvasX), _maxFan);
-        }
-
-        return 1.0;
-    }
-
-    public double FanAtScreen(double screenX)
-    {
-        if (Left is { } left && left.ContainsScreen(screenX))
-        {
-            return Math.Min(left.FanAtScreen(screenX), _maxFan);
-        }
-
-        if (Right is { } right && right.ContainsScreen(screenX))
-        {
-            return Math.Min(right.FanAtScreen(screenX), _maxFan);
-        }
-
-        return 1.0;
-    }
-
-    public double ToScreenY(double canvasX, double canvasY)
-    {
-        if (Left is { } left && left.ContainsCanvas(canvasX))
-        {
-            return left.Center + ((canvasY - left.Center) * Math.Min(left.FanAt(canvasX), _maxFan));
-        }
-
-        if (Right is { } right && right.ContainsCanvas(canvasX))
-        {
-            return right.Center + ((canvasY - right.Center) * Math.Min(right.FanAt(canvasX), _maxFan));
-        }
-
-        return canvasY;
-    }
-
-    public double ToCanvasY(double screenX, double screenY)
-    {
-        if (Left is { } left && left.ContainsScreen(screenX))
-        {
-            return left.Center + ((screenY - left.Center) / Math.Min(left.FanAtScreen(screenX), _maxFan));
-        }
-
-        if (Right is { } right && right.ContainsScreen(screenX))
-        {
-            return right.Center + ((screenY - right.Center) / Math.Min(right.FanAtScreen(screenX), _maxFan));
-        }
-
-        return screenY;
+        return CornerToCanvas(side, end, screenX, screenY);
     }
 
     public bool IsIdentityFor(in Box childBounds)
@@ -133,6 +188,18 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return false;
         }
 
+        var y0 = SceneY + childBounds.Y;
+        var y1 = SceneY + childBounds.Bottom;
+        if (Top is { } top && (top.ContainsCanvas(y0) || top.ContainsCanvas(y1)))
+        {
+            return false;
+        }
+
+        if (Bottom is { } bottom && (bottom.ContainsCanvas(y0) || bottom.ContainsCanvas(y1)))
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -143,22 +210,65 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return childBounds;
         }
 
-        var canvasLeft = SceneX + childBounds.X;
-        var canvasRight = SceneX + childBounds.Right;
-        var left = ToScreen(canvasLeft) - SceneX;
-        var right = ToScreen(canvasRight) - SceneX;
-        var x0 = (int)Math.Floor(left);
-        var x1 = (int)Math.Ceiling(right);
-        var canvasTop = SceneY + childBounds.Y;
-        var canvasBottom = SceneY + childBounds.Bottom;
-        var top = Math.Min(ToScreenY(canvasLeft, canvasTop), ToScreenY(canvasRight, canvasTop)) - SceneY;
-        var bottom = Math.Max(ToScreenY(canvasLeft, canvasBottom), ToScreenY(canvasRight, canvasBottom)) - SceneY;
-        var y0 = (int)Math.Floor(top);
-        var y1 = (int)Math.Ceiling(bottom);
-        return new Box(x0, y0, Math.Max(1, x1 - x0), Math.Max(1, y1 - y0));
+        var x0 = SceneX + childBounds.X;
+        var x1 = SceneX + childBounds.Right;
+        var y0 = SceneY + childBounds.Y;
+        var y1 = SceneY + childBounds.Bottom;
+        var (leftSeam, rightSeam) = ColumnSpan();
+        var (topSeam, bottomSeam) = RowSpan(y0, y1);
+        var minX = double.PositiveInfinity;
+        var maxX = double.NegativeInfinity;
+        var minY = double.PositiveInfinity;
+        var maxY = double.NegativeInfinity;
+        var row = y0;
+        while (true)
+        {
+            var column = x0;
+            while (true)
+            {
+                var (x, y) = ToScreenPoint(column, row);
+                minX = Math.Min(minX, x);
+                maxX = Math.Max(maxX, x);
+                minY = Math.Min(minY, y);
+                maxY = Math.Max(maxY, y);
+                if (column >= x1)
+                {
+                    break;
+                }
+
+                column = NextEdge(column, x1, leftSeam, rightSeam);
+            }
+
+            if (row >= y1)
+            {
+                break;
+            }
+
+            row = NextEdge(row, y1, topSeam, bottomSeam);
+        }
+
+        var left = (int)Math.Floor(minX - SceneX);
+        var right = (int)Math.Ceiling(maxX - SceneX);
+        var top = (int)Math.Floor(minY - SceneY);
+        var bottom = (int)Math.Ceiling(maxY - SceneY);
+        return new Box(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
     }
 
-    public int VertexCount(in Box childBounds) => childBounds.IsEmpty ? 0 : Columns(childBounds, default) * 6;
+    public int VertexCount(in Box childBounds)
+    {
+        if (childBounds.IsEmpty)
+        {
+            return 0;
+        }
+
+        var x0 = SceneX + childBounds.X;
+        var x1 = SceneX + childBounds.Right;
+        var y0 = SceneY + childBounds.Y;
+        var y1 = SceneY + childBounds.Bottom;
+        var (leftSeam, rightSeam) = ColumnSpan();
+        var (topSeam, bottomSeam) = RowSpan(y0, y1);
+        return Spans(x0, x1, leftSeam, rightSeam) * Spans(y0, y1, topSeam, bottomSeam) * 6;
+    }
 
     public void WriteVertices(in Box childBounds, Span<MeshVertex> into)
     {
@@ -167,84 +277,341 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             return;
         }
 
-        _ = Columns(childBounds, into);
+        var x0 = SceneX + childBounds.X;
+        var x1 = SceneX + childBounds.Right;
+        var y0 = SceneY + childBounds.Y;
+        var y1 = SceneY + childBounds.Bottom;
+        var (leftSeam, rightSeam) = ColumnSpan();
+        var (topSeam, bottomSeam) = RowSpan(y0, y1);
+        var count = 0;
+        var row = y0;
+        while (row < y1)
+        {
+            var nextRow = NextEdge(row, y1, topSeam, bottomSeam);
+            var column = x0;
+            while (column < x1)
+            {
+                var nextColumn = NextEdge(column, x1, leftSeam, rightSeam);
+                Emit(column, nextColumn, row, nextRow, count, into);
+                count++;
+                column = nextColumn;
+            }
+
+            row = nextRow;
+        }
     }
 
     public bool TryMapToSource(in Box childBounds, double x, double y, out double sourceX, out double sourceY)
     {
-        sourceX = ToCanvas(x + SceneX) - SceneX;
-        sourceY = ToCanvasY(x + SceneX, y + SceneY) - SceneY;
+        var (canvasX, canvasY) = ToCanvasPoint(x + SceneX, y + SceneY);
+        sourceX = canvasX - SceneX;
+        sourceY = canvasY - SceneY;
         return sourceX >= childBounds.X && sourceX < childBounds.Right &&
             sourceY >= childBounds.Y && sourceY < childBounds.Bottom;
     }
 
-    private int Columns(in Box childBounds, Span<MeshVertex> into)
-    {
-        var count = 0;
-        var x0 = SceneX + childBounds.X;
-        var x1 = SceneX + childBounds.Right;
-        var top = childBounds.Y;
-        var bottom = childBounds.Bottom;
+    private CanvasWarp? SideAt(double canvasX) =>
+        Left is { } left && left.ContainsCanvas(canvasX) ? left
+        : Right is { } right && right.ContainsCanvas(canvasX) ? right
+        : null;
 
+    private CanvasWarp? SideAtScreen(double screenX) =>
+        Left is { } left && left.ContainsScreen(screenX) ? left
+        : Right is { } right && right.ContainsScreen(screenX) ? right
+        : null;
+
+    private CanvasWarp? EndAt(double canvasY) =>
+        Top is { } top && top.ContainsCanvas(canvasY) ? top
+        : Bottom is { } bottom && bottom.ContainsCanvas(canvasY) ? bottom
+        : null;
+
+    private CanvasWarp? EndAtScreen(double screenY) =>
+        Top is { } top && top.ContainsScreen(screenY) ? top
+        : Bottom is { } bottom && bottom.ContainsScreen(screenY) ? bottom
+        : null;
+
+    private double RowFan(CanvasWarp side, double fan, double depth)
+    {
+        fan = Math.Min(fan, _maxFan);
+        if (Top is { IsIdentity: false } top && side.Center > top.Seam)
+        {
+            fan = Math.Min(fan, 1.0 + ((1.0 - RimRadius) * top.ZoneWidth * depth / (side.Center - top.Seam)));
+        }
+
+        if (Bottom is { IsIdentity: false } bottom && bottom.Seam > side.Center)
+        {
+            fan = Math.Min(fan, 1.0 + ((1.0 - RimRadius) * bottom.ZoneWidth * depth / (bottom.Seam - side.Center)));
+        }
+
+        return fan;
+    }
+
+    private double ColumnFan(CanvasWarp end, double fan, double depth)
+    {
+        fan = Math.Min(fan, _maxColumnFan);
+        if (Left is { IsIdentity: false } left && end.Center > left.Seam)
+        {
+            fan = Math.Min(fan, 1.0 + ((1.0 - RimRadius) * left.ZoneWidth * depth / (end.Center - left.Seam)));
+        }
+
+        if (Right is { IsIdentity: false } right && right.Seam > end.Center)
+        {
+            fan = Math.Min(fan, 1.0 + ((1.0 - RimRadius) * right.ZoneWidth * depth / (right.Seam - end.Center)));
+        }
+
+        return fan;
+    }
+
+    private (double EdgeX, double EdgeY, double RimX, double RimY) Ring(CanvasWarp side, CanvasWarp end, double depth)
+    {
+        var sideCanvas = side.Seam + (side.Direction * depth * side.Extension);
+        var edgeX = side.ToScreen(sideCanvas);
+        var edgeY = side.Center + ((end.Seam - side.Center) * RowFan(side, side.FanAt(sideCanvas), side.DepthAt(sideCanvas)));
+        var endCanvas = end.Seam + (end.Direction * depth * end.Extension);
+        var rimY = end.ToScreen(endCanvas);
+        var rimX = end.Center + ((side.Seam - end.Center) * ColumnFan(end, end.FanAt(endCanvas), end.DepthAt(endCanvas)));
+        return (edgeX, edgeY, rimX, rimY);
+    }
+
+    private double CornerLevel(double ux, double uy)
+    {
+        if (!CornerTaper)
+        {
+            return FixedLevel(ux, uy, _cornerRadius);
+        }
+
+        var high = Math.Max(ux, uy);
+        if (high >= 1.0 || _cornerRadius <= 0)
+        {
+            return high;
+        }
+
+        var low = Math.Min(ux, uy);
+        var inner = high;
+        var outer = high * Math.Sqrt(2.0);
+        for (var i = 0; i < CornerIterations; i++)
+        {
+            var middle = 0.5 * (inner + outer);
+            if (Beyond(high, low, middle))
+            {
+                inner = middle;
+            }
+            else
+            {
+                outer = middle;
+            }
+        }
+
+        return outer;
+    }
+
+    private bool Beyond(double high, double low, double level)
+    {
+        if (high > level)
+        {
+            return true;
+        }
+
+        var radius = RadiusAt(level);
+        var straight = 1.0 - radius;
+        if (low <= straight * level)
+        {
+            return false;
+        }
+
+        var dx = high - (straight * level);
+        var dy = low - (straight * level);
+        return (dx * dx) + (dy * dy) > radius * level * radius * level;
+    }
+
+    private static double FixedLevel(double ux, double uy, double radius)
+    {
+        var high = Math.Max(ux, uy);
+        var low = Math.Min(ux, uy);
+        var straight = 1.0 - radius;
+        if (low <= straight * high)
+        {
+            return high;
+        }
+
+        if (straight <= 0)
+        {
+            return Math.Sqrt((ux * ux) + (uy * uy));
+        }
+
+        var sum = high + low;
+        var squares = (high * high) + (low * low);
+        var a = (2.0 * straight * straight) - (radius * radius);
+        if (Math.Abs(a) < 1e-12)
+        {
+            return squares / (2.0 * straight * sum);
+        }
+
+        var root = Math.Sqrt(Math.Max(0.0, (straight * straight * sum * sum) - (a * squares)));
+        var first = ((straight * sum) - root) / a;
+        var second = ((straight * sum) + root) / a;
+        return OnFillet(first, high, low, straight) ? first : second;
+    }
+
+    private static bool OnFillet(double level, double high, double low, double straight) =>
+        level > 0 && level >= high - 1e-9 && straight * level <= low + 1e-9;
+
+    private (double X, double Y) CornerToCanvas(CanvasWarp side, CanvasWarp end, double screenX, double screenY)
+    {
+        double depth;
+        if (_cornerRadius <= 0)
+        {
+            var across = side.Direction * (side.ToCanvas(screenX) - side.Seam) / side.Extension;
+            var along = end.Direction * (end.ToCanvas(screenY) - end.Seam) / end.Extension;
+            depth = Math.Max(0.0, Math.Max(across, along));
+        }
+        else
+        {
+            var low = 0.0;
+            var high = 1.0;
+            while (high < 64.0 && Outside(side, end, screenX, screenY, high) > 0)
+            {
+                low = high;
+                high *= 2.0;
+            }
+
+            for (var i = 0; i < CornerIterations; i++)
+            {
+                var middle = 0.5 * (low + high);
+                if (Outside(side, end, screenX, screenY, middle) > 0)
+                {
+                    low = middle;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            depth = high;
+        }
+
+        var ring = Ring(side, end, depth);
+        var (toEdge, toRim) = Local(ring, screenX, screenY);
+        var radius = RadiusAt(depth);
+        var straight = 1.0 - radius;
+        double ux;
+        double uy;
+        if (toRim <= toEdge && toEdge >= radius)
+        {
+            ux = depth;
+            uy = (1.0 - toEdge) * depth;
+        }
+        else if (toRim >= radius)
+        {
+            ux = (1.0 - toRim) * depth;
+            uy = depth;
+        }
+        else
+        {
+            var angle = Math.Atan2(1.0 - (toEdge / radius), 1.0 - (toRim / radius));
+            ux = depth * (straight + (radius * Math.Cos(angle)));
+            uy = depth * (straight + (radius * Math.Sin(angle)));
+        }
+
+        return (side.Seam + (side.Direction * ux * side.Extension), end.Seam + (end.Direction * uy * end.Extension));
+    }
+
+    private static (double ToEdge, double ToRim) Local(in (double EdgeX, double EdgeY, double RimX, double RimY) ring, double screenX, double screenY)
+    {
+        var spanY = ring.EdgeY - ring.RimY;
+        var spanX = ring.RimX - ring.EdgeX;
+        var toEdge = spanY != 0 ? Math.Clamp((screenY - ring.RimY) / spanY, 0.0, 1.0) : 0.0;
+        var toRim = spanX != 0 ? Math.Clamp((screenX - ring.EdgeX) / spanX, 0.0, 1.0) : 0.0;
+        return (toEdge, toRim);
+    }
+
+    private double Outside(CanvasWarp side, CanvasWarp end, double screenX, double screenY, double depth)
+    {
+        var ring = Ring(side, end, depth);
+        var spanY = ring.EdgeY - ring.RimY;
+        var spanX = ring.RimX - ring.EdgeX;
+        if (spanX == 0 || spanY == 0)
+        {
+            return double.PositiveInfinity;
+        }
+
+        var toEdge = (screenY - ring.RimY) / spanY;
+        var toRim = (screenX - ring.EdgeX) / spanX;
+        if (toEdge < 0 || toRim < 0)
+        {
+            return 1.0;
+        }
+
+        var radius = RadiusAt(depth);
+        if (toEdge >= radius || toRim >= radius)
+        {
+            return -1.0;
+        }
+
+        var dx = toRim - radius;
+        var dy = toEdge - radius;
+        return (dx * dx) + (dy * dy) - (radius * radius);
+    }
+
+    private (int Start, int End) ColumnSpan()
+    {
         var leftSeam = Left is { IsIdentity: false } left ? left.Seam : int.MinValue;
         var rightSeam = Right is { IsIdentity: false } right ? right.Seam : int.MaxValue;
-        if (leftSeam > rightSeam)
+        return (leftSeam, Math.Max(leftSeam, rightSeam));
+    }
+
+    private (int Start, int End) RowSpan(int y0, int y1)
+    {
+        var start = Top is { IsIdentity: false } top ? Math.Clamp(top.Seam, y0, y1) : y0;
+        var end = Bottom is { IsIdentity: false } bottom ? Math.Clamp(bottom.Seam, y0, y1) : y1;
+        return (start, Math.Max(start, end));
+    }
+
+    private int NextEdge(int cursor, int end, int flatStart, int flatEnd)
+    {
+        if (cursor < flatStart)
         {
-            rightSeam = leftSeam;
+            return Math.Min(end, Math.Min(flatStart, cursor + _cellSize));
         }
 
-        var cursor = x0;
-        while (cursor < x1 && cursor < leftSeam)
+        if (cursor < flatEnd)
         {
-            var next = Math.Min(x1, Math.Min(leftSeam, cursor + _cellSize));
-            Emit(cursor, next, top, bottom, ref count, into);
-            cursor = next;
+            return Math.Min(end, flatEnd);
         }
 
-        if (cursor < x1 && cursor < rightSeam)
-        {
-            var next = Math.Min(x1, rightSeam);
-            Emit(cursor, next, top, bottom, ref count, into);
-            cursor = next;
-        }
+        return Math.Min(end, cursor + _cellSize);
+    }
 
-        while (cursor < x1)
+    private int Spans(int start, int end, int flatStart, int flatEnd)
+    {
+        var count = 0;
+        var cursor = start;
+        while (cursor < end)
         {
-            var next = Math.Min(x1, cursor + _cellSize);
-            Emit(cursor, next, top, bottom, ref count, into);
-            cursor = next;
+            cursor = NextEdge(cursor, end, flatStart, flatEnd);
+            count++;
         }
 
         return count;
     }
 
-    private void Emit(int canvasLeft, int canvasRight, int top, int bottom, ref int count, Span<MeshVertex> into)
+    private void Emit(int canvasLeft, int canvasRight, int canvasTop, int canvasBottom, int index, Span<MeshVertex> into)
     {
-        if (!into.IsEmpty)
-        {
-            var screenLeft = (float)(ToScreen(canvasLeft) - SceneX);
-            var screenRight = (float)(ToScreen(canvasRight) - SceneX);
-            var sourceLeft = canvasLeft - SceneX;
-            var sourceRight = canvasRight - SceneX;
-            var canvasTop = SceneY + top;
-            var canvasBottom = SceneY + bottom;
-            var topLeft = (float)(ToScreenY(canvasLeft, canvasTop) - SceneY);
-            var topRight = (float)(ToScreenY(canvasRight, canvasTop) - SceneY);
-            var bottomLeft = (float)(ToScreenY(canvasLeft, canvasBottom) - SceneY);
-            var bottomRight = (float)(ToScreenY(canvasRight, canvasBottom) - SceneY);
-            MeshGrid.WriteCell(
-                into.Slice(count * 6, 6),
-                sourceLeft,
-                top,
-                sourceRight,
-                bottom,
-                (screenLeft, topLeft),
-                (screenRight, topRight),
-                (screenRight, bottomRight),
-                (screenLeft, bottomLeft),
-                White);
-        }
-
-        count++;
+        var (topLeftX, topLeftY) = ToScreenPoint(canvasLeft, canvasTop);
+        var (topRightX, topRightY) = ToScreenPoint(canvasRight, canvasTop);
+        var (bottomRightX, bottomRightY) = ToScreenPoint(canvasRight, canvasBottom);
+        var (bottomLeftX, bottomLeftY) = ToScreenPoint(canvasLeft, canvasBottom);
+        MeshGrid.WriteCell(
+            into.Slice(index * 6, 6),
+            canvasLeft - SceneX,
+            canvasTop - SceneY,
+            canvasRight - SceneX,
+            canvasBottom - SceneY,
+            ((float)(topLeftX - SceneX), (float)(topLeftY - SceneY)),
+            ((float)(topRightX - SceneX), (float)(topRightY - SceneY)),
+            ((float)(bottomRightX - SceneX), (float)(bottomRightY - SceneY)),
+            ((float)(bottomLeftX - SceneX), (float)(bottomLeftY - SceneY)),
+            White);
     }
 }

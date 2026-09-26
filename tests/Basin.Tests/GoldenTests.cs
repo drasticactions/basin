@@ -588,6 +588,233 @@ public sealed class GoldenTests
         Golden.AssertMatches(host, GoldenName("canvas-straddling-window-scaled", renderer));
     }
 
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_four_sides(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(24, -1, 24, 80, 0.2, 0.25, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.Layout(136, 1, 24, 80, 0.2, 0.25, 60);
+        var top = new Basin.Effects.CanvasWarp();
+        top.Layout(18, -1, 18, 60, 0.2, 0.25, 80);
+        var bottom = new Basin.Effects.CanvasWarp(1);
+        bottom.Layout(102, 1, 18, 60, 0.2, 0.25, 80);
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                Top = top,
+                Bottom = bottom,
+                CellSize = 16,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+
+        var corner = new Basin.Scene.SceneTree(host.Scene.Root);
+        corner.SetPosition(
+            (int)Math.Round(left.Seam - (left.Extension / Math.Sqrt(2))),
+            (int)Math.Round(top.Seam - (top.Extension / Math.Sqrt(2))));
+        var cornerNode = new Basin.Scene.SceneTransform(corner);
+        _ = new Basin.Scene.SceneRect(cornerNode, 60, 44, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(48, 32, Fill.Gradient(48, 32));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 48, 32);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(cornerNode);
+        content.Tree.SetPosition(6, 6);
+        cornerNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+            SceneX = corner.X,
+            SceneY = corner.Y,
+            CellSize = 8,
+        };
+
+        var up = new Basin.Scene.SceneTree(host.Scene.Root);
+        up.SetPosition(70, top.FarEdge);
+        var upNode = new Basin.Scene.SceneTransform(up);
+        _ = new Basin.Scene.SceneRect(upNode, 50, 40, new RenderColor(0.7f, 0.35f, 0.2f, 1f));
+        _ = new Basin.Scene.SceneRect(upNode, 50, 8, new RenderColor(0.95f, 0.9f, 0.3f, 1f));
+        upNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+            SceneX = up.X,
+            SceneY = up.Y,
+            CellSize = 8,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-four-sides", renderer));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_four_sides_square(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(24, -1, 24, 80, 0.2, 0.25, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.Layout(136, 1, 24, 80, 0.2, 0.25, 60);
+        var top = new Basin.Effects.CanvasWarp();
+        top.Layout(18, -1, 18, 60, 0.2, 0.25, 80);
+        var bottom = new Basin.Effects.CanvasWarp(1);
+        bottom.Layout(102, 1, 18, 60, 0.2, 0.25, 80);
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                Top = top,
+                Bottom = bottom,
+                CellSize = 16,
+                CornerRadius = 0,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+
+        var corner = new Basin.Scene.SceneTree(host.Scene.Root);
+        corner.SetPosition(left.FarEdge, top.FarEdge);
+        var cornerNode = new Basin.Scene.SceneTransform(corner);
+        _ = new Basin.Scene.SceneRect(cornerNode, 60, 44, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(48, 32, Fill.Gradient(48, 32));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 48, 32);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(cornerNode);
+        content.Tree.SetPosition(6, 6);
+        cornerNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+            SceneX = corner.X,
+            SceneY = corner.Y,
+            CellSize = 8,
+            CornerRadius = 0,
+        };
+
+        var up = new Basin.Scene.SceneTree(host.Scene.Root);
+        up.SetPosition(70, top.FarEdge);
+        var upNode = new Basin.Scene.SceneTransform(up);
+        _ = new Basin.Scene.SceneRect(upNode, 50, 40, new RenderColor(0.7f, 0.35f, 0.2f, 1f));
+        _ = new Basin.Scene.SceneRect(upNode, 50, 8, new RenderColor(0.95f, 0.9f, 0.3f, 1f));
+        upNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+            SceneX = up.X,
+            SceneY = up.Y,
+            CellSize = 8,
+            CornerRadius = 0,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-four-sides-square", renderer));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_four_sides_taper(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(24, -1, 24, 80, 0.2, 0.25, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.Layout(136, 1, 24, 80, 0.2, 0.25, 60);
+        var top = new Basin.Effects.CanvasWarp();
+        top.Layout(18, -1, 18, 60, 0.2, 0.25, 80);
+        var bottom = new Basin.Effects.CanvasWarp(1);
+        bottom.Layout(102, 1, 18, 60, 0.2, 0.25, 80);
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                Top = top,
+                Bottom = bottom,
+                CellSize = 16,
+                CornerTaper = true,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+
+        var corner = new Basin.Scene.SceneTree(host.Scene.Root);
+        corner.SetPosition(left.FarEdge, top.FarEdge);
+        var cornerNode = new Basin.Scene.SceneTransform(corner);
+        _ = new Basin.Scene.SceneRect(cornerNode, 60, 44, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(48, 32, Fill.Gradient(48, 32));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 48, 32);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(cornerNode);
+        content.Tree.SetPosition(6, 6);
+        cornerNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+            SceneX = corner.X,
+            SceneY = corner.Y,
+            CellSize = 8,
+            CornerTaper = true,
+        };
+
+        var up = new Basin.Scene.SceneTree(host.Scene.Root);
+        up.SetPosition(70, top.FarEdge);
+        var upNode = new Basin.Scene.SceneTransform(up);
+        _ = new Basin.Scene.SceneRect(upNode, 50, 40, new RenderColor(0.7f, 0.35f, 0.2f, 1f));
+        _ = new Basin.Scene.SceneRect(upNode, 50, 8, new RenderColor(0.95f, 0.9f, 0.3f, 1f));
+        upNode.Deformer = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = left,
+            Right = right,
+            Top = top,
+            Bottom = bottom,
+            SceneX = up.X,
+            SceneY = up.Y,
+            CellSize = 8,
+            CornerTaper = true,
+        };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-four-sides-taper", renderer));
+    }
+
     private sealed class DeferDestroy(BufferBase buffer) : IDisposable
     {
         public void Dispose() => buffer.Destroy();

@@ -112,4 +112,150 @@ public sealed class CanvasGridSourceTests
         Assert.True(Red(10, 32) > Red(10, 20), "a horizontal line is brighter than the ground beside it");
         Assert.Null(host.Scene.NodeAt(32, 10));
     }
+
+    private static CanvasGridSource FourSides(int mask)
+    {
+        CanvasWarp? Warp(int bit, int seam, int direction, int zone, int extension, double center)
+        {
+            if ((mask & bit) == 0)
+            {
+                return null;
+            }
+
+            var warp = new CanvasWarp(direction);
+            warp.Layout(seam, direction, zone, extension, 0.15, 0.3, center);
+            return warp;
+        }
+
+        return new CanvasGridSource
+        {
+            CellSize = 60,
+            Left = Warp(1, 120, -1, 120, 480, 200),
+            Right = Warp(2, 480, 1, 120, 480, 200),
+            Top = Warp(4, 48, -1, 48, 200, 300),
+            Bottom = Warp(8, 352, 1, 48, 200, 300),
+        };
+    }
+
+    public static TheoryData<int> SideMasks()
+    {
+        var data = new TheoryData<int>();
+        for (var mask = 0; mask < 16; mask++)
+        {
+            data.Add(mask);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(SideMasks))]
+    public void The_vertex_count_matches_the_write_for_every_subset(int mask)
+    {
+        var source = FourSides(mask);
+        var bounds = new Box(0, 0, 600, 400);
+        var count = source.VertexCount(bounds);
+        var vertices = new MeshVertex[count + 6];
+        var sentinel = new MeshVertex(-7, -7, -7, -7, default);
+        for (var i = 0; i < vertices.Length; i++)
+        {
+            vertices[i] = sentinel;
+        }
+
+        source.WriteVertices(bounds, vertices.AsSpan(0, count));
+        for (var i = 0; i < count; i++)
+        {
+            Assert.NotEqual(sentinel, vertices[i]);
+        }
+
+        Assert.Equal(sentinel, vertices[count]);
+        Assert.True(count <= (((600 / 60) + (400 / 60) + 4) * (1 + 32)) * 6, $"mask {mask}: {count} vertices");
+    }
+
+    [Fact]
+    public void Top_and_bottom_leave_the_flat_lines_where_they_were()
+    {
+        var bounds = new Box(0, 0, 600, 400);
+        var sides = FourSides(3);
+        var all = FourSides(15);
+        var before = new MeshVertex[sides.VertexCount(bounds)];
+        sides.WriteVertices(bounds, before);
+        var after = new MeshVertex[all.VertexCount(bounds)];
+        all.WriteVertices(bounds, after);
+
+        var flatRows = new HashSet<float>();
+        for (var y = 60; y < 400; y += 60)
+        {
+            if (y > 48 && y < 352)
+            {
+                flatRows.Add(y);
+            }
+        }
+
+        var rowsBefore = RowsAt(before, flatRows);
+        var rowsAfter = RowsAt(after, flatRows);
+        Assert.Equal(flatRows.Count, rowsBefore.Count);
+        Assert.Equal(rowsBefore, rowsAfter);
+        Assert.True(all.HorizontalLines(bounds) > sides.HorizontalLines(bounds), "the vertical zones draw more canvas rows");
+        Assert.Equal(sides.VerticalLines(bounds), all.VerticalLines(bounds));
+    }
+
+    [Fact]
+    public void A_top_zone_bends_the_columns_in_segments()
+    {
+        var source = FourSides(4);
+        var bounds = new Box(0, 0, 600, 400);
+        Assert.Equal(1 + 6, source.ColumnSegments(bounds));
+        var vertices = new MeshVertex[source.VertexCount(bounds)];
+        source.WriteVertices(bounds, vertices);
+        var line = 0;
+        Assert.Equal(0f, vertices[line * 7 * 6].X);
+        var edge = vertices[(line * 7 * 6) + (6 * 6) + 0];
+        Assert.True(edge.X < 0, $"the column at 0 fans outward at the top edge: {edge.X}");
+        var middle = source.VerticalLines(bounds) / 2;
+        var centre = vertices[(middle * 7 * 6) + (6 * 6)];
+        Assert.True(Math.Abs(centre.X - 300) <= 60, $"a column near the pivot barely moves: {centre.X}");
+    }
+
+    private static HashSet<(float X0, float Y0, float X1, float Y1)> RowsAt(MeshVertex[] vertices, HashSet<float> rows)
+    {
+        var found = new HashSet<(float, float, float, float)>();
+        for (var i = 0; i < vertices.Length; i += 6)
+        {
+            var a = vertices[i];
+            var b = vertices[i + 1];
+            if (a.Y == b.Y && rows.Contains(a.Y) && a.X != b.X)
+            {
+                found.Add((a.X, a.Y, b.X, b.Y));
+            }
+        }
+
+        return found;
+    }
+
+    [Theory]
+    [InlineData(0.0, false)]
+    [InlineData(0.5, false)]
+    [InlineData(1.0, false)]
+    [InlineData(1.0, true)]
+    [InlineData(0.5, true)]
+    public void The_vertex_count_matches_the_write_at_every_corner_radius(double radius, bool taper)
+    {
+        var source = FourSides(15);
+        source.CornerRadius = radius;
+        source.CornerTaper = taper;
+        var bounds = new Box(0, 0, 600, 400);
+        var count = source.VertexCount(bounds);
+        var vertices = new MeshVertex[count + 6];
+        var sentinel = new MeshVertex(-7, -7, -7, -7, default);
+        Array.Fill(vertices, sentinel);
+        source.WriteVertices(bounds, vertices.AsSpan(0, count));
+        for (var i = 0; i < count; i++)
+        {
+            Assert.NotEqual(sentinel, vertices[i]);
+            Assert.True(float.IsFinite(vertices[i].X) && float.IsFinite(vertices[i].Y), $"radius {radius}: vertex {i} is not finite");
+        }
+
+        Assert.Equal(sentinel, vertices[count]);
+    }
 }

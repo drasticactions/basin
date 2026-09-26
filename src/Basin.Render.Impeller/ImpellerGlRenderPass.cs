@@ -206,7 +206,6 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
             return;
         }
 
-        var hull = new ImpellerRect { X = minX, Y = minY, Width = maxX - minX, Height = maxY - minY };
         var blend = options.Blend == RenderBlend.Additive
             ? ImpellerBlendMode.kImpellerBlendModePlus
             : ImpellerBlendMode.kImpellerBlendModeSourceOver;
@@ -249,7 +248,7 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
 
         if (options.Clip is null)
         {
-            DrawMeshHull(texture, raw, &srcRect, &hull, paint);
+            DrawTriangles(vertices, raw, &srcRect, paint);
             return;
         }
 
@@ -265,23 +264,112 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
             UnsafeNativeMethods.ImpellerDisplayListBuilderSaveRaw(_builder);
             UnsafeNativeMethods.ImpellerDisplayListBuilderClipRectRaw(
                 _builder, &clipRect, ImpellerClipOperation.kImpellerClipOperationIntersect);
-            DrawMeshHull(texture, raw, &srcRect, &hull, paint);
+            DrawTriangles(vertices, raw, &srcRect, paint);
             UnsafeNativeMethods.ImpellerDisplayListBuilderRestoreRaw(_builder);
         }
     }
 
-    private void DrawMeshHull(ITexture? texture, IntPtr raw, ImpellerRect* srcRect, ImpellerRect* hull, IntPtr paint)
+    private void DrawTriangles(ReadOnlySpan<MeshVertex> vertices, IntPtr texture, ImpellerRect* srcRect, IntPtr paint)
     {
-        if (texture is not null)
+        var path = _renderer.PathBuilder;
+        if (texture == IntPtr.Zero)
         {
+            var hasColor = false;
+            RenderColor last = default;
+            for (var i = 0; i < vertices.Length; i += 3)
+            {
+                if (!AddTriangle(path, vertices[i], vertices[i + 1], vertices[i + 2]))
+                {
+                    continue;
+                }
+
+                var color = Mean(vertices[i].Color, vertices[i + 1].Color, vertices[i + 2].Color);
+                if (!hasColor || color != last)
+                {
+                    SetPaintColor(paint, color);
+                    last = color;
+                    hasColor = true;
+                }
+
+                var fill = UnsafeNativeMethods.ImpellerPathBuilderTakePathNewRaw(path, ImpellerFillType.kImpellerFillTypeNonZero);
+                UnsafeNativeMethods.ImpellerDisplayListBuilderDrawPathRaw(_builder, fill, paint);
+                UnsafeNativeMethods.ImpellerPathRelease(fill);
+            }
+
+            return;
+        }
+
+        for (var i = 0; i < vertices.Length; i += 3)
+        {
+            var a = vertices[i];
+            var b = vertices[i + 1];
+            var c = vertices[i + 2];
+            if (!SourceToTarget(a, b, c, out var matrix) || !AddTriangle(path, a, b, c))
+            {
+                continue;
+            }
+
+            var clip = UnsafeNativeMethods.ImpellerPathBuilderTakePathNewRaw(path, ImpellerFillType.kImpellerFillTypeNonZero);
+            UnsafeNativeMethods.ImpellerDisplayListBuilderSaveRaw(_builder);
+            UnsafeNativeMethods.ImpellerDisplayListBuilderClipPathRaw(_builder, clip, ImpellerClipOperation.kImpellerClipOperationIntersect);
+            ImpellerTransform.Apply(_builder, &matrix);
             UnsafeNativeMethods.ImpellerDisplayListBuilderDrawTextureRectRaw(
-                _builder, raw, srcRect, hull,
+                _builder, texture, srcRect, srcRect,
                 ImpellerTextureSampling.kImpellerTextureSamplingLinear, paint);
+            UnsafeNativeMethods.ImpellerDisplayListBuilderRestoreRaw(_builder);
+            UnsafeNativeMethods.ImpellerPathRelease(clip);
         }
-        else
+    }
+
+    private static RenderColor Mean(in RenderColor a, in RenderColor b, in RenderColor c) =>
+        a == b && b == c
+            ? a
+            : new RenderColor((a.R + b.R + c.R) / 3f, (a.G + b.G + c.G) / 3f, (a.B + b.B + c.B) / 3f, (a.A + b.A + c.A) / 3f);
+
+    private static bool AddTriangle(IntPtr path, in MeshVertex a, in MeshVertex b, in MeshVertex c)
+    {
+        var area = ((b.X - a.X) * (c.Y - a.Y)) - ((b.Y - a.Y) * (c.X - a.X));
+        if (area == 0 || !float.IsFinite(area))
         {
-            UnsafeNativeMethods.ImpellerDisplayListBuilderDrawRectRaw(_builder, hull, paint);
+            return false;
         }
+
+        var first = new ImpellerPoint { X = a.X, Y = a.Y };
+        var second = area > 0 ? new ImpellerPoint { X = b.X, Y = b.Y } : new ImpellerPoint { X = c.X, Y = c.Y };
+        var third = area > 0 ? new ImpellerPoint { X = c.X, Y = c.Y } : new ImpellerPoint { X = b.X, Y = b.Y };
+        UnsafeNativeMethods.ImpellerPathBuilderMoveToRaw(path, &first);
+        UnsafeNativeMethods.ImpellerPathBuilderLineToRaw(path, &second);
+        UnsafeNativeMethods.ImpellerPathBuilderLineToRaw(path, &third);
+        UnsafeNativeMethods.ImpellerPathBuilderCloseRaw(path);
+        return true;
+    }
+
+    private static bool SourceToTarget(in MeshVertex a, in MeshVertex b, in MeshVertex c, out ImpellerMatrix matrix)
+    {
+        double du1 = b.U - a.U, dv1 = b.V - a.V, du2 = c.U - a.U, dv2 = c.V - a.V;
+        var det = (du1 * dv2) - (du2 * dv1);
+        if (det == 0 || !double.IsFinite(det))
+        {
+            matrix = default;
+            return false;
+        }
+
+        double dx1 = b.X - a.X, dy1 = b.Y - a.Y, dx2 = c.X - a.X, dy2 = c.Y - a.Y;
+        var m11 = ((dx1 * dv2) - (dx2 * dv1)) / det;
+        var m12 = ((dx2 * du1) - (dx1 * du2)) / det;
+        var m21 = ((dy1 * dv2) - (dy2 * dv1)) / det;
+        var m22 = ((dy2 * du1) - (dy1 * du2)) / det;
+        var m13 = a.X - (m11 * a.U) - (m12 * a.V);
+        var m23 = a.Y - (m21 * a.U) - (m22 * a.V);
+        matrix = new ImpellerMatrix
+        {
+            Matrix = new System.Numerics.Matrix4x4(
+                (float)m11, (float)m21, 0f, 0f,
+                (float)m12, (float)m22, 0f, 0f,
+                0f, 0f, 1f, 0f,
+                (float)m13, (float)m23, 0f, 1f),
+        };
+        return true;
     }
 
     private int _scopedSubmits;

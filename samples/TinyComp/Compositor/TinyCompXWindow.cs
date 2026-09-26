@@ -365,7 +365,7 @@ internal sealed partial class TinyComp
         private void ApplyMaximizeGeometry(OutputView view)
         {
             var box = _comp._layout.BoxOf(view.Output);
-            var usable = view.UsableArea.IsEmpty ? box with { X = 0, Y = 0 } : view.UsableArea;
+            var usable = _comp.FlatArea(view, view.UsableArea.IsEmpty ? box with { X = 0, Y = 0 } : view.UsableArea);
             var insets = _frame?.Measure(BuildState(), _comp.ScaleAt(X + 1, Y + 1)) ?? default;
             ResizeTo(
                 box.X + usable.X + insets.Left,

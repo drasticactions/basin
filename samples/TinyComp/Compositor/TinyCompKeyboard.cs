@@ -357,6 +357,14 @@ internal sealed partial class TinyComp
                 Park(parkRight, CanvasSide.Right);
                 return true;
 
+            case KeyAction.ParkUp when FocusedGrabTarget() is { } parkUp:
+                Park(parkUp, CanvasSide.Top);
+                return true;
+
+            case KeyAction.ParkDown when FocusedGrabTarget() is { } parkDown:
+                Park(parkDown, CanvasSide.Bottom);
+                return true;
+
             case KeyAction.Recall when FocusedGrabTarget() is { } recall:
                 Recall(recall);
                 return true;

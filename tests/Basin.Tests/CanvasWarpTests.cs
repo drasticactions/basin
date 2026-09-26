@@ -48,7 +48,7 @@ public sealed class CanvasWarpTests
         }
 
         Assert.Equal(0, warp.ToScreen(warp.FarEdge), 6);
-        Assert.Equal(0, warp.ToScreen(warp.FarEdge - 500), 6);
+        Assert.Equal(-100, warp.ToScreen(warp.FarEdge - 500), 6);
         Assert.Equal(0.2, warp.ScaleAt(warp.FarEdge), 6);
         Assert.Equal(0.2, warp.ScaleAt(warp.FarEdge - 1), 6);
     }
@@ -65,7 +65,7 @@ public sealed class CanvasWarpTests
         }
 
         Assert.Equal(1000, warp.ToCanvas(1000), 9);
-        Assert.Equal(warp.FarEdge, warp.ToCanvas(-5), 9);
+        Assert.Equal(warp.FarEdge - 25, warp.ToCanvas(-5), 9);
     }
 
     [Fact]
