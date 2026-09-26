@@ -23,7 +23,7 @@ internal sealed partial class Shell
         _color = color;
         _outputColor = new OutputColorDriver(color, _colorPack.Configuration);
         _lutDriver = new SurfaceLutDriver(_scene, color, _colorPack.Luts);
-        _lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
+        _lutDriver.CountChanged += attached => _report.Line($"COLOR luts={attached}");
         color.OutputDescriptionChanged += (global, description) =>
             _seat.DescribeCursor(global.Output, description);
 

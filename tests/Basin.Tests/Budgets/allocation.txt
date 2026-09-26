@@ -9,6 +9,10 @@
 # the assertions skip and say so, because a table that passes without being
 # checked is worse than no table.
 #
+# Tiered compilation is off in Basin.Tests.csproj. Tier-0 code allocates where
+# tier-1 code does not, and when tier-up lands depends on what ran first, so a
+# row measured with tiering on moved between runs of the whole set.
+#
 # The measured region is server-side dispatch only. A client's requests are built
 # and flushed outside it, or the figure moves when the binding changes rather than
 # when basin does.
@@ -87,8 +91,8 @@ server-managed exact    cursor-motion                     0
 server-managed exact    pointer-gesture                   0
 server-managed exact    touch-delivery                    0
 server-managed exact    relative-pointer                  0
-server     ceiling  nested-frame                  64000
-server-managed ceiling  nested-frame                  64000
+server     exact    nested-frame                   4800
+server-managed exact    nested-frame                   4800
 server     exact    transaction-configure-round   47200
 server     exact    xwayland-event-round              0
 server     exact    post-stage-frame                  0
@@ -105,3 +109,55 @@ server     ceiling  quill-frame-repaint           57600
 server     ceiling  quill-frame-repaint-vk        57600
 server     exact    blur-region-commit            10400
 server-managed exact    blur-region-commit            10400
+server     exact    ipc-subscribed-commit          6400
+server     exact    ipc-event-flush                2400
+server     exact    title-commit                   6400
+server     exact    ipc-call-outputs-test         84000
+server     exact    ipc-call-windows-get         134000
+server     exact    ipc-call-workspaces-list     141200
+server     exact    ipc-call-input-chord          56216
+server     exact    ipc-call-windows-stack        34800
+server     exact    ipc-call-input-text           35416
+server     exact    ipc-call-lock-status           2400
+server     exact    ipc-call-version               2400
+server     exact    ipc-call-session-describe      2800
+server     exact    ipc-call-input-key            11272
+server     exact    ipc-call-outputs-list         13200
+server     exact    ipc-call-windows-move         10640
+server     exact    ipc-call-clipboard-empty      16800
+server     exact    ipc-call-idle-status           2400
+server     exact    ipc-call-methods-detail      1848000
+server     exact    ipc-call-windows-get-missing   4800
+server     exact    ipc-call-seat-pointer-move     7944
+server     exact    ipc-call-windows-set-state    11040
+server     exact    ipc-call-windows-list        253600
+server     exact    ipc-call-events                2400
+server     exact    ipc-call-keyboard-keymap       2800
+server     exact    ipc-call-methods               2400
+server-managed exact    ipc-call-outputs-test         88800
+server-managed exact    ipc-call-windows-get         138800
+server-managed exact    ipc-call-workspaces-list     146000
+server-managed exact    ipc-call-input-chord          61016
+server-managed exact    ipc-call-windows-stack        39600
+server-managed exact    ipc-call-input-text           40216
+server-managed exact    ipc-call-lock-status           7200
+server-managed exact    ipc-call-version               7200
+server-managed exact    ipc-call-session-describe      7600
+server-managed exact    ipc-call-input-key            16072
+server-managed exact    ipc-call-outputs-list         18000
+server-managed exact    ipc-call-windows-move         15440
+server-managed exact    ipc-call-clipboard-empty      21600
+server-managed exact    ipc-call-idle-status           7200
+server-managed exact    ipc-call-methods-detail      1852800
+server-managed exact    ipc-call-windows-get-missing   9600
+server-managed exact    ipc-call-seat-pointer-move    12744
+server-managed exact    ipc-call-windows-set-state    15840
+server-managed exact    ipc-call-windows-list        258400
+server-managed exact    ipc-call-events                7200
+server-managed exact    ipc-call-keyboard-keymap       7600
+server-managed exact    ipc-call-methods               7200
+server-managed exact    ipc-subscribed-commit          6400
+server-managed exact    ipc-event-flush                2400
+server-managed exact    title-commit                   6400
+server-managed ceiling  quill-frame-repaint-vk        57600
+server-managed ceiling  quill-frame-repaint           57600

@@ -2,25 +2,28 @@
 #
 # install-programs.sh [OPTIONS] [NAME...]
 #
-# Publishes the sample compositors and the window managers with NativeAOT,
-# then copies each binary and the native libraries beside it into one
-# directory. The default is ~/.local/bin, and an existing file of the same
-# name is overwritten.
+# Publishes the programs in apps/ and samples/ with NativeAOT, then copies
+# each binary and the native libraries beside it into one directory. The
+# default is ~/.local/bin, and an existing file of the same name is
+# overwritten. The default set is every program except BlurClient, which is a
+# test client for one effect. So it holds the compositors, the window
+# managers, and the tools that drive them: basinctl, basin-mcp and the portal
+# backend.
 #
 # Naming programs installs those instead, by name or by path. A name is the
 # binary's, which is the project's assembly name rather than its directory:
-# retro-wm, not RetroWm. The client samples are not in the default set,
-# and a name still installs either of them.
+# retro-wm, not RetroWm, and basin-mcp, not BasinMcp. A name also installs
+# BlurClient.
 #
 # The version defaults to 0.1.0-local.g<commit>, with .dirty when tracked
 # files differ from the commit, so an installed binary never claims a version
 # CI can also mint.
 #
-# A .desktop file in a publish is installed into the desktop database under
-# $XDG_DATA_HOME instead, because that is where a portal reads it. When the
-# set includes tinycomp, westonia or maui-comp, the two xdg-desktop-portal
-# registration files that route the portal interfaces to basin are written
-# under $XDG_DATA_HOME/xdg-desktop-portal as well; --no-portal-files skips them.
+# A .desktop file in a publish goes into the desktop database under
+# $XDG_DATA_HOME instead, because a portal reads it there. When the set
+# includes tinycomp, westonia or maui-comp, the script also writes the two
+# xdg-desktop-portal registration files that route the portal interfaces to
+# basin, under $XDG_DATA_HOME/xdg-desktop-portal. --no-portal-files skips them.
 #
 # --ssh DEST installs on another machine instead of this one, and nothing is
 # left here. DEST is anything ssh takes, an alias in ~/.ssh/config included,
@@ -60,7 +63,7 @@ while [ $# -gt 0 ]; do
         --no-portal-files) portal_files=0; shift ;;
         -n|--dry-run) dry=1; shift ;;
         -h|--help)
-            sed -n '3,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '3,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         -*)

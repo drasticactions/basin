@@ -38,7 +38,7 @@ internal sealed partial class Shell
             ref view.SwitcherMotion, view.SwitcherFrame,
             docked ? Animation.ShowPanel : Animation.HidePanel,
             offsetScale: -PanelTravel(SwitcherRail.RailWidth));
-        BasinReport.Line($"SWITCHER {(docked ? "on" : "off")} entries={rail.Count}");
+        _report.Line($"SWITCHER {(docked ? "on" : "off")} entries={rail.Count}");
         if (!view.SwitcherMotion.IsRunning)
         {
             SettleSwitcher(view);
@@ -93,7 +93,7 @@ internal sealed partial class Shell
 
         Show(previous);
         Animate(previous, Animation.EnterPage, offsetScale: -view.Scale);
-        BasinReport.Line($"SWITCH {previous.AppId}");
+        _report.Line($"SWITCH {previous.AppId}");
     }
 
     internal void SnapPrevious(ShellView view, double fraction)
@@ -106,11 +106,11 @@ internal sealed partial class Shell
         var at = fraction <= 0.5 ? 0 : view.Host.SlotCount;
         if (!Snap(previous, view, at, Math.Clamp(fraction, 0.2, 0.8)))
         {
-            BasinReport.Line($"ERR no room to snap");
+            _report.Line($"ERR no room to snap");
             return;
         }
 
-        BasinReport.Line($"SNAP {previous.AppId} {at}");
+        _report.Line($"SNAP {previous.AppId} {at}");
     }
 
     internal AppWindow? SwitcherEntryAt(ShellView view, double localX, double localY) =>
@@ -244,7 +244,7 @@ internal sealed partial class Shell
             Tween.Reset(app.Frame);
             CloseApp(app);
             RefreshSwitcher(from);
-            BasinReport.Line($"RAIL close {app.AppId}");
+            _report.Line($"RAIL close {app.AppId}");
             return true;
         }
 
@@ -252,7 +252,7 @@ internal sealed partial class Shell
         {
             Show(app);
             DockSwitcher(from, false);
-            BasinReport.Line($"RAIL show {app.AppId}");
+            _report.Line($"RAIL show {app.AppId}");
         }
         else
         {
@@ -264,7 +264,7 @@ internal sealed partial class Shell
 
             RefreshSwitcher(from);
             DockSwitcher(from, false);
-            BasinReport.Line($"RAIL snap {app.AppId} {at}");
+            _report.Line($"RAIL snap {app.AppId} {at}");
         }
 
         if (!moved)
@@ -310,7 +310,7 @@ internal sealed partial class Shell
 
     internal void FinishEdgeGesture(ShellView view, EdgeSwipeRecognizer edges)
     {
-        BasinReport.Line($"EDGE {edges.Edge} {edges.Outcome} zone={edges.Zone} progress={edges.Progress:F2}");
+        _report.Line($"EDGE {edges.Edge} {edges.Outcome} zone={edges.Zone} progress={edges.Progress:F2}");
         switch (edges.Edge)
         {
             case ScreenEdge.Left:
@@ -403,7 +403,7 @@ internal sealed partial class Shell
         uint time = 0;
         if (_synthetic.Begin(1, startX, startY, width, height, time) != EdgeSwipeAction.Withhold)
         {
-            BasinReport.Line($"ERR the edge band refused the gesture");
+            _report.Line($"ERR the edge band refused the gesture");
             return;
         }
 
@@ -441,7 +441,7 @@ internal sealed partial class Shell
         }
         else
         {
-            BasinReport.Line($"ERR the gesture was never claimed");
+            _report.Line($"ERR the gesture was never claimed");
         }
     }
 

@@ -62,7 +62,7 @@ internal sealed partial class Shell
             visible ? Animation.ShowEdgeUi : Animation.HideEdgeUi,
             offsetScale: -EdgeTravel(AppTitleBar.BarHeight));
         title.Draw();
-        BasinReport.Line($"TITLE {(visible ? "on" : "off")}");
+        _report.Line($"TITLE {(visible ? "on" : "off")}");
         if (!title.Motion.IsRunning)
         {
             SettleTitle(view, title);
@@ -255,7 +255,7 @@ internal sealed partial class Shell
             _titleGrabX = Math.Clamp(edges.X, app.Cell.X, app.Cell.Right - 1);
             _titleGrabY = app.Cell.Y;
             _titleMoved = false;
-            BasinReport.Line($"TITLE lift {app.AppId}");
+            _report.Line($"TITLE lift {app.AppId}");
         }
 
         TitleMove(view, edges.X, edges.Y, EdgeContact);
@@ -324,7 +324,7 @@ internal sealed partial class Shell
 
         var picked = DragScaleOf(app);
         var zone = DropZone(from, localX, localY);
-        BasinReport.Line($"TITLE drop {zone} {app.AppId}");
+        _report.Line($"TITLE drop {zone} {app.AppId}");
         switch (zone)
         {
             case EdgeSwipeZone.Bottom:
@@ -408,7 +408,7 @@ internal sealed partial class Shell
         }
 
         Focus(snapped);
-        BasinReport.Line($"SNAP fill {other.AppId}");
+        _report.Line($"SNAP fill {other.AppId}");
     }
 
         internal void Fill(ShellView view, AppWindow app)

@@ -165,6 +165,8 @@ internal sealed class DamSeat :
 
     internal void Warp(double x, double y) => _injector.Warp(x, y);
 
+    internal SeatInjector Injector => _injector;
+
     public void CenterCursor() => _injector.Center();
 
     private void WireLibinput()

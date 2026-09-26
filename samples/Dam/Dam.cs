@@ -3,6 +3,7 @@ using Basin.Cli;
 using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Host;
+using Basin.Ipc;
 using Basin.Renderers;
 using Basin.Scene;
 using Basin.Shell.Xdg;
@@ -13,6 +14,7 @@ namespace Dam;
 internal sealed partial class Dam : IDisposable
 {
     private readonly DamOptions _options;
+    private IpcServer? _ipc;
     private readonly BasinLogger _log;
 
     private readonly IRenderer _renderer;
@@ -211,6 +213,19 @@ internal sealed partial class Dam : IDisposable
     private int RunLoop()
     {
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
+        _ipc = _options.Ipc.AttachIfListening(_host.Loop, _services, _host.Socket, new IpcSessionInfo
+        {
+            Compositor = "dam",
+            Backend = _options.Backend.ToString().ToLowerInvariant(),
+            Renderer = _options.Renderer,
+            XwaylandDisplay = () => _xServer?.DisplayName,
+            Quit = Stop,
+        });
+        if (_ipc is not null)
+        {
+            _ipc.SyntheticInput = _damSeat.Injector;
+            _ipc.Start();
+        }
 
         if (_options.Application.Length > 0)
         {
@@ -240,6 +255,8 @@ internal sealed partial class Dam : IDisposable
 
     public void Dispose()
     {
+        _ipc?.Dispose();
+        _ipc = null;
         _colorPack?.Luts.Dispose();
         _client?.Dispose();
         _outputs.Dispose();

@@ -26,4 +26,6 @@ internal sealed record MauiCompOptions
     public string? ConfigPath { get; init; }
 
     public MauiCompConfig Config { get; init; } = new();
+
+    public IpcChoice Ipc { get; init; } = IpcChoice.Off;
 }

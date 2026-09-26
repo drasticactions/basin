@@ -150,9 +150,10 @@ internal sealed class TinyWl : IDisposable
         _interrupt = _loop.AddSignal(Signal.Interrupt, _ => _running = false);
     }
 
-    public int Run(string? startupCommand)
+    public int Run(string? startupCommand, IpcChoice ipcChoice)
     {
         BasinReport.Line($"tinywl: running Wayland compositor on WAYLAND_DISPLAY={_socket}");
+        using var ipc = ipcChoice.Serve(_loop, new BasinServices(_loop).Freeze(), _socket, new Basin.Ipc.IpcSessionInfo { Compositor = "tinywl" });
         using var startup = BasinDiagnostics.StartClient(startupCommand, _socket);
         while (_running)
         {

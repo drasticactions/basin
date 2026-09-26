@@ -24,14 +24,14 @@ internal sealed partial class TinyComp
         if (fatal is not null)
         {
             _log.Warn($"reload failed, keeping the running config: {fatal}");
-            BasinReport.Line("RELOAD failed");
+            _report.Line("RELOAD failed");
             return;
         }
 
         if (loaded.Shaders.Count > 0 && !Basin.Rashader.RashaderLibrary.IsAvailable(out var shaderWhy))
         {
             _log.Error($"reload failed, keeping the running config: [effects] shader: {shaderWhy}");
-            BasinReport.Line("RELOAD failed");
+            _report.Line("RELOAD failed");
             return;
         }
 
@@ -130,7 +130,7 @@ internal sealed partial class TinyComp
             view.Scheduler?.ScheduleRepaint();
         }
 
-        BasinReport.Line(
+        _report.Line(
             $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
             + " rules-apply-to-windows-mapped-after-this"
             + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")

@@ -26,10 +26,6 @@ public sealed class SceneSurface
 
     private readonly Pixman.PixmanRegion32 _damageScratch = new();
 
-    private Pixman.PixmanRegion32? _backdropScratch;
-
-    private bool _backdropApplied;
-
     public Surface Surface { get; }
 
     public SceneTree Tree { get; }
@@ -80,8 +76,6 @@ public sealed class SceneSurface
         _childScenes.Clear();
         _damageScratch.Dispose();
         (_owner ?? Tree.RootOwner())?.SurfaceBackdrop?.Forget(_content);
-        _backdropScratch?.Dispose();
-        _backdropScratch = null;
         _owner?.Unregister(this);
         Tree.Destroy();
         Destroyed?.Invoke();
@@ -113,23 +107,7 @@ public sealed class SceneSurface
             return;
         }
 
-        var backdrop = (_owner ?? Tree.RootOwner())?.SurfaceBackdrop;
-        if (backdrop?.Effect is { } effect)
-        {
-            _backdropScratch ??= new Pixman.PixmanRegion32();
-            if (backdrop.RegionOf(Surface, _backdropScratch) && !_backdropScratch.IsEmpty)
-            {
-                _content.SetBackdropEffect(effect, _backdropScratch, _content);
-                _backdropApplied = true;
-                return;
-            }
-        }
-
-        if (_backdropApplied)
-        {
-            _content.SetBackdropEffect(null, null);
-            _backdropApplied = false;
-        }
+        _content.ApplySurfaceBackdrop((_owner ?? Tree.RootOwner())?.SurfaceBackdrop, Surface);
     }
 
     private Box? VisibleBoxFor(Pixman.PixmanRegion32 region)

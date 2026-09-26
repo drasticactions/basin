@@ -26,12 +26,12 @@ internal sealed partial class Shell
         {
             var view = ViewOfOutput(layer.Output) ?? PrimaryView;
             Relayout(view);
-            BasinReport.Line($"LAYER + {layer.Namespace} {layer.Layer}");
+            _report.Line($"LAYER + {layer.Namespace} {layer.Layer}");
         };
         _layerDriver.Removed += layer =>
         {
             _layerRelayout = ViewOfOutput(layer.Output) ?? PrimaryView;
-            BasinReport.Line($"LAYER - {layer.Namespace}");
+            _report.Line($"LAYER - {layer.Namespace}");
         };
         _layerDriver.Arranged += () =>
         {

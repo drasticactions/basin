@@ -391,6 +391,13 @@ public static class CommonOptions
         Description = "report every decision on stderr",
     };
 
+    public static Option<string> Ipc() => new("--ipc")
+    {
+        Description = "bind the control socket, at this path instead of $XDG_RUNTIME_DIR/basin-SOCKET.sock, or false to bind none",
+        HelpName = "true|false|PATH",
+        DefaultValueFactory = _ => "true",
+    };
+
     public static Option<bool> AllocReport() => new("--alloc-report")
     {
         Description = "report what the run allocated, and whether it collected, on stdout at exit",

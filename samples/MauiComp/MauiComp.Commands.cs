@@ -1,81 +1,138 @@
 using Basin.Host;
 using Basin.Cli;
+using Basin.Ipc;
 using Basin.Diagnostics;
 
 namespace MauiComp;
 
 internal sealed partial class MauiComp
 {
-    private void WireStdin()
+    private readonly IpcLineReport _report = new();
+    private IpcServer? _ipc;
+
+    private void WireIpc()
     {
-        _stdinCommands = new StdinCommands(_host.Loop, HandleCommand);
-        _stdinCommands.CommandFailed += (command, error) =>
-            BasinReport.Line(CompositorLines.CommandFailed(command, error));
+        _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
+        {
+            Compositor = "maui-comp",
+            Backend = _options.Backend.ToString().ToLowerInvariant(),
+            Renderer = RendererName,
+            Quit = Stop,
+        });
+        _ipc.SyntheticInput = _seat?.Injector;
+        RegisterCommands(_ipc.Methods);
+        _ipc.Start();
+        _ipc.StartLineFront();
     }
 
-    private void HandleCommand(string line)
+    private void RegisterCommands(IpcMethodRegistry methods)
     {
-        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (_seat?.StdinCommands.Handle(parts) == true)
-        {
-            return;
-        }
+        _report.AddLine(methods, IpcMethodNames.InputPointerMove, "move {x:number} {y:number}");
+        _report.AddLine(methods, IpcMethodNames.InputPointerButton, "button {button:int} {pressed:bool}");
+        _report.AddLine(methods, IpcMethodNames.InputKey, "key {code:int} {pressed:bool}");
+        _report.AddLine(methods, IpcMethodNames.SessionQuit, "quit");
 
-        switch (parts)
+        _report.Register(methods, "mauicomp/shot", "shot {path}", (ref IpcParams p, IpcReply _) =>
         {
-            case ["shot", var path]:
+            var path = p.GetString("path");
+            if (!p.Failed)
+            {
                 _uiDriver.Pump();
                 WriteScreenshot(path);
-                break;
-            case ["shotraw", var path]:
+            }
+        });
+
+        _report.Register(methods, "mauicomp/shotraw", "shotraw {path}", (ref IpcParams p, IpcReply _) =>
+        {
+            var path = p.GetString("path");
+            if (!p.Failed)
+            {
                 WritePresented(path);
-                break;
-            case ["planeshot", var prefix]:
+            }
+        });
+
+        _report.Register(methods, "mauicomp/planeshot", "planeshot {prefix}", (ref IpcParams p, IpcReply _) =>
+        {
+            var prefix = p.GetString("prefix");
+            if (!p.Failed)
+            {
                 WritePlanes(prefix);
-                break;
-            case ["where"]:
-                PrintState();
-                break;
-            case ["launcher"]:
-                DriveLauncher(null);
-                break;
-            case ["launcher", var action]:
+            }
+        });
+
+        _report.Register(methods, "mauicomp/where", "where", PrintState);
+
+        _report.Register(methods, "mauicomp/launcher", "launcher [{action}]", (ref IpcParams p, IpcReply _) =>
+        {
+            string? action = p.TryGetString("action", out var named) ? named : null;
+            if (!p.Failed)
+            {
                 DriveLauncher(action);
-                break;
-            case ["run"]:
-                OpenRun();
-                break;
-            case ["run", "close"]:
-                _runDialog?.Close();
-                break;
-            case ["switcher", var action]:
+            }
+        });
+
+        _report.Register(methods, "mauicomp/run", "run", OpenRun);
+        _report.Register(methods, "mauicomp/run-close", "run close", () => _runDialog?.Close());
+
+        _report.Register(methods, "mauicomp/switcher", "switcher {action}", (ref IpcParams p, IpcReply _) =>
+        {
+            var action = p.GetString("action");
+            if (!p.Failed)
+            {
                 DriveSwitcher(action);
-                break;
-            case ["pumps", var count]:
-                MeasurePumps(int.Parse(count, System.Globalization.CultureInfo.InvariantCulture));
-                break;
-            case ["clock", .. var words] when words.Length > 0:
-                _clockTimer?.Remove();
-                _clockTimer = null;
-                _shell.SetClock(string.Join(' ', words));
-                break;
-            case ["theme", var variant]:
-                _ui.Theme = variant == "dark"
-                    ? Basin.UI.Avalonia.UIThemeVariant.Dark
-                    : Basin.UI.Avalonia.UIThemeVariant.Light;
-                _outputs.ScheduleAll();
-                break;
-            case ["quit"]:
-                Stop();
-                break;
-        }
+            }
+        });
+
+        _report.Register(methods, "mauicomp/pumps", "pumps {count:int}", (ref IpcParams p, IpcReply reply) =>
+        {
+            var count = p.GetInt("count");
+            if (p.Failed)
+            {
+                return;
+            }
+
+            if (count is < 0 or > 1_000_000)
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, "'count' is between 0 and 1000000");
+                return;
+            }
+
+            MeasurePumps((int)count);
+        });
+
+        _report.Register(methods, "mauicomp/clock", "clock {text...}", (ref IpcParams p, IpcReply _) =>
+        {
+            var text = p.GetString("text");
+            if (p.Failed)
+            {
+                return;
+            }
+
+            _clockTimer?.Remove();
+            _clockTimer = null;
+            _shell.SetClock(text);
+        });
+
+        _report.Register(methods, "mauicomp/theme", "theme {variant}", (ref IpcParams p, IpcReply _) =>
+        {
+            var variant = p.GetString("variant");
+            if (p.Failed)
+            {
+                return;
+            }
+
+            _ui.Theme = variant == "dark"
+                ? Basin.UI.Avalonia.UIThemeVariant.Dark
+                : Basin.UI.Avalonia.UIThemeVariant.Light;
+            _outputs.ScheduleAll();
+        });
     }
 
     private void WritePlanes(string prefix)
     {
         if (_outputs.Views.FirstOrDefault() is not { } view)
         {
-            BasinReport.Line($"PLANESHOT {prefix} images=0");
+            _report.Line($"PLANESHOT {prefix} images=0");
             return;
         }
 
@@ -100,7 +157,7 @@ internal sealed partial class MauiComp
     private void WritePresented(string path)
     {
         var buffer = _outputs.Views.FirstOrDefault()?.LastPresentedBuffer;
-        BasinReport.Line(Basin.Scene.SceneScreenshot.WritePresented(buffer, _renderer, path) switch
+        _report.Line(Basin.Scene.SceneScreenshot.WritePresented(buffer, _renderer, path) switch
         {
             Basin.Scene.ScreenshotOutcome.NoFrame => "SHOTRAW none",
             Basin.Scene.ScreenshotOutcome.Unreadable => $"SHOTRAW unreadable {buffer!.Width}x{buffer.Height}",
@@ -122,37 +179,37 @@ internal sealed partial class MauiComp
         }
 
         var after = GC.GetAllocatedBytesForCurrentThread();
-        BasinReport.Line($"PUMPS n={count} bytes={after - before}");
+        _report.Line($"PUMPS n={count} bytes={after - before}");
     }
 
     private void PrintState()
     {
-        BasinReport.Line($"POINTER {_seat?.PointerX ?? 0} {_seat?.PointerY ?? 0}");
+        _report.Line($"POINTER {_seat?.PointerX ?? 0} {_seat?.PointerY ?? 0}");
         foreach (var view in _outputs.Views)
         {
             var box = _layout.BoxOf(view.Output);
-            BasinReport.Line($"AREA {view.Output.Name} output={box} work={ShellOutputs.WorkArea(box)}");
+            _report.Line($"AREA {view.Output.Name} output={box} work={ShellOutputs.WorkArea(box)}");
         }
 
         foreach (var window in _windows)
         {
-            BasinReport.Line($"WINDOW \"{window.Window.Title}\" {window.Geometry} " + $"focused={ReferenceEquals(window, _focused)} maximized={window.Maximized} minimized={window.Minimized} fullscreen={window.Fullscreen} " + $"titlebar={(window.Titlebar is null ? "none" : window.Titlebar.Visible ? "shown" : "hidden")}");
+            _report.Line($"WINDOW \"{window.Window.Title}\" {window.Geometry} " + $"focused={ReferenceEquals(window, _focused)} maximized={window.Maximized} minimized={window.Minimized} fullscreen={window.Fullscreen} " + $"titlebar={(window.Titlebar is null ? "none" : window.Titlebar.Visible ? "shown" : "hidden")}");
         }
 
-        BasinReport.Line($"SWITCHER {(_switcher?.IsOpen == true ? "open" : "closed")}");
-        BasinReport.Line($"ANIMATING {(_animations.IsRunning ? "yes" : "no")}");
-        BasinReport.Line($"STARTMENU {(_startMenu?.IsOpen == true ? "open" : "closed")} " + $"programs={(_startMenu?.IsProgramsOpen == true ? "open" : "closed")}");
-        BasinReport.Line($"RUN {(_runDialog?.IsOpen == true ? "open" : "closed")} text=\"{_runDialog?.Text}\"");
+        _report.Line($"SWITCHER {(_switcher?.IsOpen == true ? "open" : "closed")}");
+        _report.Line($"ANIMATING {(_animations.IsRunning ? "yes" : "no")}");
+        _report.Line($"STARTMENU {(_startMenu?.IsOpen == true ? "open" : "closed")} " + $"programs={(_startMenu?.IsProgramsOpen == true ? "open" : "closed")}");
+        _report.Line($"RUN {(_runDialog?.IsOpen == true ? "open" : "closed")} text=\"{_runDialog?.Text}\"");
         if (_startMenu?.Surface is { } menuSurface)
         {
             var size = menuSurface.Size;
-            BasinReport.Line($"SURFACE startmenu {size.Width}x{size.Height}@{size.Scale} at={menuSurface.PositionX},{menuSurface.PositionY}");
+            _report.Line($"SURFACE startmenu {size.Width}x{size.Height}@{size.Scale} at={menuSurface.PositionX},{menuSurface.PositionY}");
         }
 
         if (_runDialog?.Surface is { } runSurface)
         {
             var size = runSurface.Size;
-            BasinReport.Line($"SURFACE run {size.Width}x{size.Height}@{size.Scale} at={_runDialog.X},{_runDialog.Y}");
+            _report.Line($"SURFACE run {size.Width}x{size.Height}@{size.Scale} at={_runDialog.X},{_runDialog.Y}");
         }
 
         foreach (var elements in _shell.Elements.Values)
@@ -160,7 +217,7 @@ internal sealed partial class MauiComp
             if (elements.PanelSurface.Surface is { } panel)
             {
                 var size = panel.Size;
-                BasinReport.Line($"SURFACE panel {size.Width}x{size.Height}@{size.Scale}");
+                _report.Line($"SURFACE panel {size.Width}x{size.Height}@{size.Scale}");
             }
         }
 
@@ -169,7 +226,7 @@ internal sealed partial class MauiComp
             if (popup.Surface is { } surface)
             {
                 var size = surface.Size;
-                BasinReport.Line($"SURFACE popup {size.Width}x{size.Height}@{size.Scale} at={popup.X},{popup.Y}");
+                _report.Line($"SURFACE popup {size.Width}x{size.Height}@{size.Scale} at={popup.X},{popup.Y}");
             }
         }
 
@@ -191,14 +248,14 @@ internal sealed partial class MauiComp
             }
         }
 
-        BasinReport.Line(
+        _report.Line(
             $"BLUR {(_blur is null ? "unavailable" : $"strength={_blur.Options.Strength}")} taskbar={blurredPanels} "
             + $"startmenu={(_startMenu?.Blurred == true ? "on" : "off")} switcher={(_switcher?.Blurred == true ? "on" : "off")} "
             + $"titlebars={blurredTitlebars}");
-        BasinReport.Line($"POPUPS {_uiDriver.Popups.Count}");
-        BasinReport.Line($"SCOPES {_mauiSurfaces.Live}");
+        _report.Line($"POPUPS {_uiDriver.Popups.Count}");
+        _report.Line($"SCOPES {_mauiSurfaces.Live}");
         var hit = _scene.SurfaceAt(_seat?.PointerX ?? 0, _seat?.PointerY ?? 0);
-        BasinReport.Line($"KEYBOARD client={(Seat.Keyboard.Focus is null ? "none" : "surface")} " + $"ui={(_seat?.Router.KeyboardFocus is null ? "none" : "surface")} " + $"text={(_seat?.Router.WantsTextInput == true ? "yes" : "no")}");
-        BasinReport.Line($"HIT scene={(hit?.Surface is null ? "none" : "surface")} " + $"focus={(Seat.Pointer.Focus is null ? "none" : "surface")} " + $"shell={(_seat?.IsOverShell == true ? "yes" : "no")}");
+        _report.Line($"KEYBOARD client={(Seat.Keyboard.Focus is null ? "none" : "surface")} " + $"ui={(_seat?.Router.KeyboardFocus is null ? "none" : "surface")} " + $"text={(_seat?.Router.WantsTextInput == true ? "yes" : "no")}");
+        _report.Line($"HIT scene={(hit?.Surface is null ? "none" : "surface")} " + $"focus={(Seat.Pointer.Focus is null ? "none" : "surface")} " + $"shell={(_seat?.IsOverShell == true ? "yes" : "no")}");
     }
 }

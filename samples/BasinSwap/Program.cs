@@ -20,6 +20,7 @@ internal static class Program
         var frames = cli.Add(CommonOptions.Frames(120));
         var client = cli.Add(CommonOptions.Client());
         var screenshot = cli.Add(CommonOptions.Screenshot("swap.png"));
+        _ = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
@@ -28,13 +29,14 @@ internal static class Program
                 result.GetValue(frames),
                 result.GetValue(client),
                 result.GetValue(screenshot)!,
+                IpcCli.Read(cli, result),
                 out var rendered);
             cli.ReportFrames(rendered);
             return status;
         });
     }
 
-    private static int Run(long frames, string? clientCommand, string screenshotPath, out long renderedFrames)
+    private static int Run(long frames, string? clientCommand, string screenshotPath, IpcChoice ipcChoice, out long renderedFrames)
     {
         BasinCounters.Reset();
         using var host = Basin.Host.BasinHost.Create(new Basin.Host.HostOptions());
@@ -93,6 +95,13 @@ internal static class Program
         };
 
         BasinReport.Line(Basin.Cli.CompositorLines.Socket(socket));
+        using var ipc = ipcChoice.Serve(loop, services, socket, new Basin.Ipc.IpcSessionInfo
+        {
+            Compositor = "basin-swap",
+            Backend = "headless",
+            Renderer = "pixman",
+            Quit = () => running = false,
+        });
         using var client = Spawn(clientCommand, socket);
         while (running)
         {

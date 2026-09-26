@@ -141,6 +141,8 @@ public sealed class XdgToplevelWindow : IToplevelHandle
 
     public event Action? Destroyed;
 
+    public event Action? StateChanged;
+
     IToplevelHandle? IToplevelHandle.Parent => Parent;
 
     bool IToplevelHandle.WantsFocus => true;
@@ -371,6 +373,7 @@ public sealed class XdgToplevelWindow : IToplevelHandle
         if (changed)
         {
             ScheduleConfigure();
+            StateChanged?.Invoke();
         }
     }
 

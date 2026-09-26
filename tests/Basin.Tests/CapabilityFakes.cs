@@ -109,17 +109,31 @@ internal sealed class TestToplevelModel : IToplevelModel
 
     private readonly ToplevelObservers _observers = new();
 
-    public void AddObserver(IToplevelObserver observer) => _observers.Add(observer);
+    public int ObserverCount { get; private set; }
 
-    public void RemoveObserver(IToplevelObserver observer) => _observers.Remove(observer);
+    public void AddObserver(IToplevelObserver observer)
+    {
+        _observers.Add(observer);
+        ObserverCount++;
+    }
+
+    public void RemoveObserver(IToplevelObserver observer)
+    {
+        _observers.Remove(observer);
+        ObserverCount--;
+    }
+
+    public bool Refuse { get; set; }
 
     public List<(ulong Id, ToplevelRequestKind Kind)> Requests { get; } = [];
 
     public List<(ulong Id, ToplevelRequest Request)> RequestLog { get; } = [];
 
+    public ulong IdBase { get; set; }
+
     public ulong Add(string title, string appId, Surface? surface = null, Box geometry = default)
     {
-        var id = (ulong)_toplevels.Count + 1;
+        var id = IdBase + (ulong)_toplevels.Count + 1;
         _toplevels.Add(new ToplevelInfo(id, title, appId, ToplevelState.None, surface, geometry));
         _observers.Added(id);
         return id;
@@ -237,7 +251,7 @@ internal sealed class TestToplevelModel : IToplevelModel
     {
         Requests.Add((toplevelId, request.Kind));
         RequestLog.Add((toplevelId, request));
-        return true;
+        return !Refuse;
     }
 }
 

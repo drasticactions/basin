@@ -50,7 +50,7 @@ internal sealed partial class TinyComp
         if (workspace.Tiled.Count < 2)
         {
             workspace.Tiled.Clear();
-            BasinReport.Line($"TILE needs two windows");
+            _report.Line($"TILE needs two windows");
             return;
         }
 
@@ -60,14 +60,14 @@ internal sealed partial class TinyComp
         workspace.TileArea = new Box(origin.X + usable.X, origin.Y + usable.Y, usable.Width, usable.Height);
         workspace.SplitFraction = 0.5;
         ApplySplit(workspace);
-        BasinReport.Line($"TILED {workspace.Tiled[0].Toplevel.AppId} | {workspace.Tiled[1].Toplevel.AppId} transactions={_useTransactions}");
+        _report.Line($"TILED {workspace.Tiled[0].Toplevel.AppId} | {workspace.Tiled[1].Toplevel.AppId} transactions={_useTransactions}");
     }
 
     internal void SetSplit(double fraction)
     {
         if (CurrentWorkspace() is not { Tiled.Count: 2 } workspace)
         {
-            BasinReport.Line($"SPLIT needs a tiled pair");
+            _report.Line($"SPLIT needs a tiled pair");
             return;
         }
 

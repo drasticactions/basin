@@ -263,7 +263,7 @@ internal sealed partial class Shell
         }
 
         Focus(app);
-        BasinReport.Line($"APP + {app.AppId} {app.Title}");
+        _report.Line($"APP + {app.AppId} {app.Title}");
     }
 
     private void Unmap(AppWindow app)
@@ -312,7 +312,7 @@ internal sealed partial class Shell
         }
 
         Relayout(view);
-        BasinReport.Line($"APP - {app.AppId}");
+        _report.Line($"APP - {app.AppId}");
     }
 
     private Box CellOfParent(AppWindow app, ShellView view)
@@ -538,7 +538,7 @@ internal sealed partial class Shell
             Focus(next);
         }
 
-        BasinReport.Line(app is null ? "COLLAPSE vacancy" : $"COLLAPSE {app.AppId}");
+        _report.Line(app is null ? "COLLAPSE vacancy" : $"COLLAPSE {app.AppId}");
     }
 
     internal bool Snap(AppWindow app, ShellView view, int at, double fraction = 0.5)
@@ -661,7 +661,7 @@ internal sealed partial class Shell
         view.StartVisible = true;
         Relayout(view);
         Animate(ref view.StartMotion, view.BackgroundFrame, Animation.EnterPage, offsetScale: view.Scale);
-        BasinReport.Line($"START on");
+        _report.Line($"START on");
     }
 
     internal void CloseFocused()
@@ -685,7 +685,7 @@ internal sealed partial class Shell
         view.Host.Forget(app);
         view.Switcher?.Forget(app);
         Relayout(view);
-        BasinReport.Line($"CLOSE {app.AppId}");
+        _report.Line($"CLOSE {app.AppId}");
     }
 
     private readonly List<IClosable> _killScratch = [];

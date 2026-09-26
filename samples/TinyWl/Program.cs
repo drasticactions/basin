@@ -31,6 +31,7 @@ internal static class Program
             Description = "run this command once the compositor is up",
             HelpName = "CMD",
         });
+        _ = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
@@ -39,18 +40,19 @@ internal static class Program
                 BasinLog.For("TinyWl"),
                 result.GetValue(backendOption).Kind == BackendKind.Drm,
                 result.GetValue(rendererOption) is { } name && name != "auto" ? name : null,
-                result.GetValue(startupOption));
+                result.GetValue(startupOption),
+                IpcCli.Read(cli, result));
         });
     }
 
-    private static int Run(BasinLogger log, bool drm, string? renderer, string? startupCommand)
+    private static int Run(BasinLogger log, bool drm, string? renderer, string? startupCommand, IpcChoice ipc)
     {
         BasinCounters.Reset();
         int status;
         try
         {
             using var compositor = new TinyWl(drm, renderer, log);
-            status = compositor.Run(startupCommand);
+            status = compositor.Run(startupCommand, ipc);
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {

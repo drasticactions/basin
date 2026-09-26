@@ -40,6 +40,7 @@ internal static class Program
         var framesOption = cli.Add(CommonOptions.Frames(), report: false);
         var transport = cli.Add(CommonOptions.Transport());
         var channel = cli.Add(CommonOptions.WaypipeListen());
+        _ = IpcCli.AddOption(cli);
 
         var settings = new Config();
         string? fatal = null;
@@ -142,7 +143,8 @@ internal static class Program
                 log,
                 result.GetValue(transport).Kind == TransportKind.Managed,
                 result.GetValue(channel),
-                result.GetValue(configPath)))
+                result.GetValue(configPath),
+                IpcCli.Read(cli, result)))
             {
                 status = comp.Run();
                 rendered = comp.Rendered;

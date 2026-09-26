@@ -59,7 +59,7 @@ internal sealed partial class Shell
 
         UpdateClock(view);
         charms.Draw();
-        BasinReport.Line($"CHARMS {(visible ? "on" : "off")}");
+        _report.Line($"CHARMS {(visible ? "on" : "off")}");
         UpdateDim(view, charms);
         if (!charms.BarMotion.IsRunning && !charms.ClockMotion.IsRunning && !charms.PaneMotion.IsRunning)
         {
@@ -78,7 +78,7 @@ internal sealed partial class Shell
         Animate(
             ref charms.PaneMotion, view.CharmsPaneFrame, Animation.HidePanel,
             offsetScale: PanelTravel(CharmsBar.PaneWidth));
-        BasinReport.Line($"PANE off {charms.OpenPane}");
+        _report.Line($"PANE off {charms.OpenPane}");
         UpdateDim(view, charms);
         if (!charms.PaneMotion.IsRunning)
         {
@@ -190,7 +190,7 @@ internal sealed partial class Shell
             offsetScale: PanelTravel(CharmsBar.PaneWidth));
         charms.Draw();
         _router.SetKeyboardFocus(charms.PaneSurface);
-        BasinReport.Line($"CHARM {charm}");
+        _report.Line($"CHARM {charm}");
         ShowCharms(view, false, keepPane: true);
         return true;
     }

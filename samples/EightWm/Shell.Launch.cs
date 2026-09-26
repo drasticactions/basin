@@ -27,7 +27,7 @@ internal sealed partial class Shell
         CountLaunch(tile);
         if (RunningFor(tile) is { } running)
         {
-            BasinReport.Line($"LAUNCH {tile.Name} running={running.AppId}");
+            _report.Line($"LAUNCH {tile.Name} running={running.AppId}");
             if (!ReferenceEquals(HomeOf(running), view) || !BeginFlip(view, tile, running))
             {
                 Show(running);
@@ -42,7 +42,7 @@ internal sealed partial class Shell
         }
 
         Spawn(tile.Exec);
-        BasinReport.Line($"LAUNCH {tile.Name}");
+        _report.Line($"LAUNCH {tile.Name}");
     }
 
     private void CountLaunch(Tile tile)
@@ -212,7 +212,7 @@ internal sealed partial class Shell
         view.Flip = flip;
         PoseFlip(view, flip, 0);
         Kick();
-        BasinReport.Line($"FLIP begin {tile.Name} from={Describe(from)} to={Describe(to)}");
+        _report.Line($"FLIP begin {tile.Name} from={Describe(from)} to={Describe(to)}");
         return true;
     }
 
@@ -354,7 +354,7 @@ internal sealed partial class Shell
             }
         }
 
-        BasinReport.Line($"FLIP back {flip.Tile.Name} {(flip.BackIsApp ? "app" : "splash")}");
+        _report.Line($"FLIP back {flip.Tile.Name} {(flip.BackIsApp ? "app" : "splash")}");
     }
 
     internal void FinishFlip(ShellView view)
@@ -401,7 +401,7 @@ internal sealed partial class Shell
         }
 
         Kick();
-        BasinReport.Line($"FLIP end {flip.Tile.Name}");
+        _report.Line($"FLIP end {flip.Tile.Name}");
     }
 
     internal static void RestorePage(ShellView view)

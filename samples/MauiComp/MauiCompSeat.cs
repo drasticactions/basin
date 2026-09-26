@@ -20,7 +20,6 @@ internal sealed class MauiCompSeat : IDisposable
     private readonly Basin.Seat.Backends.SeatInjector _injector;
     private readonly PointerRefresh _pointerRefresh;
     private readonly BasinLogger _log;
-    private Basin.Seat.Backends.StdinInputCommands? _stdinCommands;
     private IUISurface? _routeSurface;
     private bool _routeToShell;
     private int _buttonsDown;
@@ -95,8 +94,7 @@ internal sealed class MauiCompSeat : IDisposable
 
     public double PointerY => _y;
 
-    public Basin.Seat.Backends.StdinInputCommands StdinCommands =>
-        _stdinCommands ??= new Basin.Seat.Backends.StdinInputCommands(_injector);
+    public Basin.Seat.Backends.SeatInjector Injector => _injector;
 
     public void CenterPointer() => _injector.Center();
 

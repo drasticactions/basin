@@ -74,7 +74,7 @@ internal sealed partial class TinyComp
 
         if (!restore.State.CanRestorePosition(_layout.Id))
         {
-            BasinReport.Line($"RESTORE {restore.Name}: outputs moved, placing fresh");
+            _report.Line($"RESTORE {restore.Name}: outputs moved, placing fresh");
             return false;
         }
 
@@ -84,7 +84,7 @@ internal sealed partial class TinyComp
             RestoreWorkspace(window, restore.State.Geometry, workspaceName);
         }
 
-        BasinReport.Line($"RESTORE {restore.Name} at {restore.State.Geometry.X},{restore.State.Geometry.Y}");
+        _report.Line($"RESTORE {restore.Name} at {restore.State.Geometry.X},{restore.State.Geometry.Y}");
         return true;
     }
 
@@ -102,7 +102,7 @@ internal sealed partial class TinyComp
         if (window.Workspace != target)
         {
             MoveWindowToWorkspace(window, target);
-            BasinReport.Line($"RESTORE workspace {name}");
+            _report.Line($"RESTORE workspace {name}");
         }
     }
 
@@ -163,12 +163,12 @@ internal sealed partial class TinyComp
         PlaceRuleCanvas(window, window.Rule);
         if (window.Workspace is { } mapped && ViewOf(mapped)?.Active != mapped)
         {
-            BasinReport.Line($"MAPPED {window.Toplevel.AppId} hidden rule={(window.Rule is null ? "none" : "yes")}");
+            _report.Line($"MAPPED {window.Toplevel.AppId} hidden rule={(window.Rule is null ? "none" : "yes")}");
         }
         else
         {
             FocusWindow(window);
-            BasinReport.Line($"MAPPED {window.Toplevel.AppId} rule={(window.Rule is null ? "none" : "yes")}");
+            _report.Line($"MAPPED {window.Toplevel.AppId} rule={(window.Rule is null ? "none" : "yes")}");
         }
 
         _workspaceModel.RaiseMembersChanged();
@@ -176,7 +176,7 @@ internal sealed partial class TinyComp
 
     internal void OnWindowGone(Window window)
     {
-        BasinReport.Line($"UNMAPPED {window.Toplevel.AppId}");
+        _report.Line($"UNMAPPED {window.Toplevel.AppId}");
         _windows.Remove(window);
         ForgetCanvas(window);
         var workspace = window.Workspace;
@@ -284,7 +284,7 @@ internal sealed partial class TinyComp
 
         window.Shaded = shaded;
         window.ApplyShade();
-        BasinReport.Line($"SHADED {window.Toplevel.AppId} {(shaded ? "yes" : "no")}");
+        _report.Line($"SHADED {window.Toplevel.AppId} {(shaded ? "yes" : "no")}");
     }
 
     internal void SetAbove(Window window, bool above)
@@ -299,7 +299,7 @@ internal sealed partial class TinyComp
         window.Tree.RaiseToTop();
         RefreshAboveVisibility();
         window.RefreshFrame();
-        BasinReport.Line($"ABOVE {window.Toplevel.AppId} {(above ? "yes" : "no")}");
+        _report.Line($"ABOVE {window.Toplevel.AppId} {(above ? "yes" : "no")}");
     }
 
     internal void SetSticky(Window window, bool sticky)
@@ -319,7 +319,7 @@ internal sealed partial class TinyComp
         window.Tree.RaiseToTop();
         window.RefreshFrame();
         _workspaceModel.RaiseMembersChanged();
-        BasinReport.Line($"STICKY {window.Toplevel.AppId} {(sticky ? "yes" : "no")}");
+        _report.Line($"STICKY {window.Toplevel.AppId} {(sticky ? "yes" : "no")}");
     }
 
     internal SceneTree LayerFor(Window window) =>
@@ -468,7 +468,7 @@ internal sealed partial class TinyComp
 
         _workspaceModel.RaiseMembersChanged();
         DropSwitcherCard(xwindow);
-        BasinReport.Line($"XMINIMIZED {xwindow.XWin.Class} {(minimized ? "on" : "off")}");
+        _report.Line($"XMINIMIZED {xwindow.XWin.Class} {(minimized ? "on" : "off")}");
     }
 
     private void HideMinimized(XWindow xwindow)
@@ -716,7 +716,7 @@ internal sealed partial class TinyComp
     {
         _lockDriver = new Basin.Desktop.SessionLockSceneDriver(
             _sessionLock, _seat, _layers.Lock, _layout, _layers.SetLocked);
-        _lockDriver.Locked += () => BasinReport.Line($"LOCKED");
+        _lockDriver.Locked += () => _report.Line($"LOCKED");
         _lockDriver.Unlocked += () =>
         {
             if (_focused is { } focused)
@@ -724,9 +724,9 @@ internal sealed partial class TinyComp
                 _seat.Keyboard.NotifyEnter(focused.Toplevel.Surface);
             }
 
-            BasinReport.Line($"UNLOCKED");
+            _report.Line($"UNLOCKED");
         };
-        _lockDriver.Abandoned += () => BasinReport.Line($"LOCK ABANDONED (staying blanked)");
+        _lockDriver.Abandoned += () => _report.Line($"LOCK ABANDONED (staying blanked)");
         _lockDriver.LockSurfaceAdded += (lockSurface, _) =>
         {
             RefreshSurfaceLuts();

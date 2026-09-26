@@ -191,6 +191,8 @@ internal sealed partial class ShellSeat :
 
     internal void WarpTo(double x, double y) => _injector.Warp(x, y);
 
+    internal SeatInjector Injector => _injector;
+
     internal void InjectKey(uint code, bool pressed) => _injector.Key(code, pressed);
 
     internal void ClickAt()

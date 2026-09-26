@@ -27,7 +27,7 @@ internal sealed partial class Westonia
         _lutDriver = new SurfaceLutDriver(_scene, _color, _colorPack.Luts);
         _lutDriver.CountChanged += attached =>
         {
-            BasinReport.Line($"COLOR luts={attached}");
+            _report.Line($"COLOR luts={attached}");
         };
         _color.OutputDescriptionChanged += (global, description) => _cursor.Describe(global.Output, description);
         _lutDriver.WatchToplevels(Shell);

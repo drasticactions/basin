@@ -167,6 +167,38 @@ public sealed class SceneBuffer : SceneNode
         }
     }
 
+    internal void ApplySurfaceBackdrop(ISurfaceBackdrop? backdrop, Surface surface)
+    {
+        var ours = ReferenceEquals(BackdropKey, this) && _backdropEffect is not null;
+        var wasActive = ours && HasActiveBackdrop;
+        if (backdrop?.Effect is { } effect)
+        {
+            _backdropRegion ??= new PixmanRegion32();
+            if (backdrop.RegionOf(surface, _backdropRegion) && !_backdropRegion.IsEmpty)
+            {
+                _backdropEffect = effect;
+                BackdropKey = this;
+                DamageSubtree();
+                return;
+            }
+
+            _backdropRegion.Clear();
+        }
+
+        if (!ours)
+        {
+            return;
+        }
+
+        _backdropEffect = null;
+        BackdropKey = null;
+        _backdropRegion?.Clear();
+        if (wasActive)
+        {
+            DamageSubtree();
+        }
+    }
+
     public bool AcceptsInputAt(double x, double y)
     {
         if (!InputEnabled || _lock.Buffer is not { } buffer)

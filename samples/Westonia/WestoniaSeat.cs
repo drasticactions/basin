@@ -106,10 +106,7 @@ internal sealed class WestoniaSeat : IDisposable, Basin.Seat.ITouchChrome
 
     public void CenterPointer() => _injector.Center();
 
-    public Basin.Seat.Backends.StdinInputCommands StdinCommands =>
-        _stdinCommands ??= new Basin.Seat.Backends.StdinInputCommands(_injector);
-
-    private Basin.Seat.Backends.StdinInputCommands? _stdinCommands;
+    public Basin.Seat.Backends.SeatInjector Injector => _injector;
 
     public void Dispose()
     {

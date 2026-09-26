@@ -17,4 +17,6 @@ public enum ToplevelRequestKind
     SendToOutput,
     SetMinimizedGeometry,
     UnsetMinimizedGeometry,
+    Move,
+    Resize,
 }

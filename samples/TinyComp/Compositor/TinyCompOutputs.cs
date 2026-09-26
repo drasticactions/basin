@@ -60,7 +60,7 @@ internal sealed partial class TinyComp
         _driver.ModesetRefused += card => _log.Error($"modeset refused by {card.Name}");
         _driver.HostScaleFollowed += view =>
         {
-            BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
+            _report.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
             RefreshOutputLayout();
         };
     }
@@ -130,7 +130,7 @@ internal sealed partial class TinyComp
                 if (!_probed && hosted.CurrentMode.Width > 0)
                 {
                     _probed = true;
-                    BasinReport.Line($"PROBE decorated={hosted.Decorated} hostFrame={(hosted.HostFrame is null ? "none" : "yes")} insets={(hosted.HostFrame is null ? "-" : hosted.HostFrame.Insets.ToString())} mode={hosted.CurrentMode.Width}x{hosted.CurrentMode.Height}");
+                    _report.Line($"PROBE decorated={hosted.Decorated} hostFrame={(hosted.HostFrame is null ? "none" : "yes")} insets={(hosted.HostFrame is null ? "-" : hosted.HostFrame.Insets.ToString())} mode={hosted.CurrentMode.Width}x{hosted.CurrentMode.Height}");
                 }
             };
             hosted.HostFrameAvailable += frame =>
@@ -150,10 +150,10 @@ internal sealed partial class TinyComp
         {
             if (_outputsCreated)
             {
-                BasinReport.Line($"OUTPUT + {drmOutput.Name}");
+                _report.Line($"OUTPUT + {drmOutput.Name}");
             }
 
-            BasinReport.Line($"OUTPUT {drmOutput.Name} {drmOutput.Description} {drmOutput.PreferredMode.Width}x{drmOutput.PreferredMode.Height} scanout-modifiers={view.SwapModifiers.Length}{(view.IsSecondary ? " secondary" : "")}");
+            _report.Line($"OUTPUT {drmOutput.Name} {drmOutput.Description} {drmOutput.PreferredMode.Width}x{drmOutput.PreferredMode.Height} scanout-modifiers={view.SwapModifiers.Length}{(view.IsSecondary ? " secondary" : "")}");
 
             view.ColorDescription = DescriptionOf(view.Output);
             view.KmsColorRouted = _colorConfiguration is { } routing && routing.RouteKmsPipeline(view.Output);
@@ -162,7 +162,7 @@ internal sealed partial class TinyComp
             RefreshSurfaceLuts();
             if (_hdr && drmOutput.Edid.SupportsPq)
             {
-                BasinReport.Line($"HDR {drmOutput.Name} PQ peak={drmOutput.Edid.MaxLuminance:F0}cd/m2 bt2020={drmOutput.Edid.SupportsBt2020}");
+                _report.Line($"HDR {drmOutput.Name} PQ peak={drmOutput.Edid.MaxLuminance:F0}cd/m2 bt2020={drmOutput.Edid.SupportsBt2020}");
             }
 
             RefreshGammaBaseline(view);
@@ -175,7 +175,7 @@ internal sealed partial class TinyComp
         _outputColor?.Add(view.Global, view.Output, view.Scene);
         if (view.Output.Scale != 1)
         {
-            BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
+            _report.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
         }
     }
 
@@ -183,7 +183,7 @@ internal sealed partial class TinyComp
     {
         if (view.Output is Basin.Backend.Drm.DrmOutput)
         {
-            BasinReport.Line($"OUTPUT - {view.Output.Name}");
+            _report.Line($"OUTPUT - {view.Output.Name}");
         }
 
         if (view == _swipeView)
@@ -437,7 +437,7 @@ internal sealed partial class TinyComp
             _secondaryBackends.Add(backend);
             var allocator = new Basin.Backend.Drm.DumbAllocator(backend);
             _secondaryAllocators.Add(allocator);
-            BasinReport.Line($"CARD + {device.CardPath} ({device.Driver})");
+            _report.Line($"CARD + {device.CardPath} ({device.Driver})");
             foreach (var output in backend.Outputs)
             {
                 AddSecondaryOutput(output, allocator);
@@ -445,7 +445,7 @@ internal sealed partial class TinyComp
 
             backend.OutputAdded += output =>
             {
-                BasinReport.Line($"OUTPUT + {output.Name}");
+                _report.Line($"OUTPUT + {output.Name}");
                 AddSecondaryOutput(output, allocator);
             };
             backend.OutputRemoved += output =>
@@ -458,7 +458,7 @@ internal sealed partial class TinyComp
         }
         catch (Exception e) when (e is InvalidOperationException or IOException)
         {
-            BasinReport.Line($"CARD {device.CardPath} not adopted: {e.Message}");
+            _report.Line($"CARD {device.CardPath} not adopted: {e.Message}");
         }
     }
 
@@ -511,7 +511,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        BasinReport.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
+        _report.Line($"SCALE {view.Output.Name} {view.Output.Scale}");
         RefreshOutputLayout();
     }
 
@@ -583,7 +583,7 @@ internal sealed partial class TinyComp
         foreach (var entry in entries)
         {
             var box = _layout.BoxOf(entry.Output);
-            BasinReport.Line($"CONFIGURED {entry.Output.Name} enabled={(entry.Enabled ? "yes" : "no")} " + $"{box.Width}x{box.Height}+{box.X}+{box.Y} scale {entry.Output.Scale}");
+            _report.Line($"CONFIGURED {entry.Output.Name} enabled={(entry.Enabled ? "yes" : "no")} " + $"{box.Width}x{box.Height}+{box.X}+{box.Y} scale {entry.Output.Scale}");
         }
     }
 

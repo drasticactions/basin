@@ -59,6 +59,7 @@ internal static class Program
         var rendererOption = cli.Add(CommonOptions.Renderer(
             Basin.Renderers.RendererCatalog.Names, "vulkan"));
         var framesOption = cli.Add(CommonOptions.Frames());
+        _ = IpcCli.AddOption(cli);
         var applicationArgument = new Argument<string[]>("application")
         {
             Description = "the primary client and its arguments",
@@ -79,6 +80,7 @@ internal static class Program
                 EnableXWayland = !result.GetValue(xwaylandOption),
                 Frames = result.GetValue(framesOption),
                 Application = result.GetValue(applicationArgument) ?? [],
+                Ipc = IpcCli.Read(cli, result),
             };
             var status = Dam.Run(options, BasinLog.For("Dam"), out var rendered);
             cli.ReportFrames(rendered);

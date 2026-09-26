@@ -28,7 +28,6 @@ internal sealed partial class TinyComp :
     private readonly Basin.Host.BasinHost _host;
     private readonly WlServerDisplay _display;
     private readonly WaylandEventLoop _loop;
-    private StdinCommands? _stdinCommands;
     internal WaylandEventLoop Loop => _loop;
     private readonly WaylandBackend? _backend;
     private NestedSeam? _seam;
@@ -390,7 +389,7 @@ internal sealed partial class TinyComp :
         return _fireShader;
     }
 
-    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null)
+    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null, Basin.Cli.IpcChoice? ipc = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         var drm = backend == BackendKind.Drm;
@@ -469,11 +468,11 @@ internal sealed partial class TinyComp :
                     try
                     {
                         _blitters.Add(new Basin.Render.Vulkan.VulkanDeviceBlitter(node));
-                        BasinReport.Line($"BLIT {node} ({device.Driver})");
+                        _report.Line($"BLIT {node} ({device.Driver})");
                     }
                     catch (Exception e) when (e is InvalidOperationException or DllNotFoundException)
                     {
-                        BasinReport.Line($"BLIT {node} unavailable: {e.Message}");
+                        _report.Line($"BLIT {node} unavailable: {e.Message}");
                     }
                 }
             }
@@ -728,6 +727,14 @@ internal sealed partial class TinyComp :
             RecordDecorationPreference(toplevel.Surface, !noBorder);
         _xdgToplevels.CaptureExclusionRequested += (toplevel, excluded) =>
             _xdgToplevels.SetExcludedFromCapture(toplevel, excluded);
+        _xdgToplevels.MoveRequested += (toplevel, box) => FindWindow(toplevel)?.MoveTo(box.X, box.Y);
+        _xdgToplevels.ResizeRequested += (toplevel, box) =>
+        {
+            if (FindWindow(toplevel) is { } window)
+            {
+                window.ResizeTo(window.X, window.Y, box.Width, box.Height, ResizeEdges.None);
+            }
+        };
 
         _layerShell = _services.Require<LayerShell>();
         WireLayerShell();
@@ -759,11 +766,11 @@ internal sealed partial class TinyComp :
         _shortcutsInhibit = _services.Require<Basin.Desktop.KeyboardShortcutsInhibitManager>();
         _services.Require<Basin.Desktop.VirtualKeyboardManager>().KeymapSubmitted +=
             (fd, _) => fd.Close();
-        _services.Require<Basin.Desktop.SystemBellManager>().Rang += _ => BasinReport.Line($"BELL");
+        _services.Require<Basin.Desktop.SystemBellManager>().Rang += _ => _report.Line($"BELL");
         var transientSeats = _services.Require<Basin.Desktop.TransientSeatManager>();
         transientSeats.SeatRequested += request =>
             request.Create(seat => new Basin.Desktop.SceneSeatInput(seat, _scene, _layout));
-        transientSeats.SeatCreated += seat => BasinReport.Line($"SEAT {seat.Name}");
+        transientSeats.SeatCreated += seat => _report.Line($"SEAT {seat.Name}");
         _kdeDecorations = _services.Require<Basin.Desktop.KdeServerDecorationManager>();
         if (_blurEffect is not null)
         {
@@ -778,7 +785,7 @@ internal sealed partial class TinyComp :
         _compositor.SurfaceCreated += surface => surface.Destroyed += UpdateEdrDemand;
         _outputColor = new Basin.Desktop.OutputColorDriver(_color, _colorPack.Configuration);
         _lutDriver = new Basin.Desktop.SurfaceLutDriver(_scene, _color, _colorPack.Luts);
-        _lutDriver.CountChanged += attached => BasinReport.Line($"COLOR luts={attached}");
+        _lutDriver.CountChanged += attached => _report.Line($"COLOR luts={attached}");
         foreach (var view in Views)
         {
             _outputColor.Add(view.Global, view.Output, view.Scene);
@@ -809,12 +816,20 @@ internal sealed partial class TinyComp :
                     FindXWindow(xwin)?.SetNoBorderOverride(noBorder);
                 xToplevels.CaptureExclusionRequested += (xwin, excluded) =>
                     xToplevels.SetExcludedFromCapture(xwin, excluded);
+                xToplevels.MoveRequested += (xwin, box) => FindXWindow(xwin)?.MoveTo(box.X, box.Y);
+                xToplevels.ResizeRequested += (xwin, box) =>
+                {
+                    if (FindXWindow(xwin) is { } xwindow)
+                    {
+                        xwindow.ResizeTo(xwindow.X, xwindow.Y, box.Width, box.Height, ResizeEdges.None);
+                    }
+                };
             }
 
-            BasinReport.Line($"XWAYLAND WM {_xwayland.DisplayName}");
+            _report.Line($"XWAYLAND WM {_xwayland.DisplayName}");
         };
         _xwayland.Exited += () => _xwm = null;
-        BasinReport.Line($"XWAYLAND {_xwayland.DisplayName}");
+        _report.Line($"XWAYLAND {_xwayland.DisplayName}");
         _display.SetGlobalFilter((client, _, interfaceName) =>
             !Basin.Desktop.PrivilegedProtocols.Contains(interfaceName) || IsTrusted(client));
         _textInput = _services.Require<Basin.Desktop.TextInputManager>();
@@ -916,7 +931,7 @@ internal sealed partial class TinyComp :
 
         var keymapNames = Basin.Seat.SystemKeymap.Read();
         _seat.Keyboard.SetKeymap(keymapNames);
-        BasinReport.Line($"KEYMAP {keymapNames.Layout ?? "xkb default"}{(keymapNames.Model is { } model ? $" {model}" : string.Empty)}");
+        _report.Line($"KEYMAP {keymapNames.Layout ?? "xkb default"}{(keymapNames.Model is { } model ? $" {model}" : string.Empty)}");
 
         _compositor.SurfaceCreated += surface => surface.Committed += () =>
         {
@@ -943,7 +958,7 @@ internal sealed partial class TinyComp :
         };
         _shell.NewPopup += WirePopup;
         WireSessions();
-        WireStdin();
+        WireIpc(ipc ?? Basin.Cli.IpcChoice.Off, drm ? "drm" : backend == BackendKind.Headless ? "headless" : "nested", rendererName);
         _dragIcon = new Basin.Seat.Backends.DragIconFollower(
             _seat, () => _layers.Overlay, () => (_cursorX, _cursorY))
         {
@@ -971,7 +986,8 @@ internal sealed partial class TinyComp :
 
     public int Run()
     {
-        BasinReport.Line(CompositorLines.Socket(_socket));
+        _report.Line(CompositorLines.Socket(_socket));
+        StartIpc();
         Basin.Cli.CurrentDesktop.Export("basin", _host.Drm is null ? null : _socket);
 
         if (_channelEndpoint is { } endpoint)
@@ -984,7 +1000,7 @@ internal sealed partial class TinyComp :
                 File.Delete(endpoint);
             }
 
-            BasinReport.Line($"CHANNEL {endpoint}");
+            _report.Line($"CHANNEL {endpoint}");
             _channel = Basin.Transport.Waypipe.WaypipeChannel.Listen(address);
             _channel.Ended += failure => _log.Info($"channel ended{(failure is null ? string.Empty : $": {failure.Message}")}");
             var remote = _display.CreateClient(_channel.Transport);
@@ -1009,8 +1025,8 @@ internal sealed partial class TinyComp :
     public void Dispose()
     {
         _pointerRefresh?.Dispose();
-        _stdinCommands?.Stop();
-        _stdinCommands = null;
+        _ipc?.Dispose();
+        _ipc = null;
         _channel?.Dispose();
         _channel = null;
 
@@ -1085,6 +1101,8 @@ internal sealed partial class TinyComp :
         _seam = null;
         _seamTextInput?.Dispose();
         _seamTextInput = null;
+        _scene.Root.Destroy();
+        _services.Dispose();
         _host.Dispose();
         _metacity?.Dispose();
         _frameTheme?.Dispose();

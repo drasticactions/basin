@@ -28,6 +28,8 @@ internal readonly record struct NestedParentOptions
 
     public DrmFormatSet? DmabufFormats { get; init; }
 
+    public bool AnswersFrames { get; init; }
+
     public int Width { get; init; }
 
     public int Height { get; init; }
@@ -240,6 +242,11 @@ internal sealed class NestedParent : IDisposable
             buffers = new ClientBufferRegistry();
             _ = new ShmGlobal(display, buffers: buffers);
             compositor = new CompositorGlobal(display, buffers);
+            if (_options.AnswersFrames)
+            {
+                compositor.SurfaceCreated += surface =>
+                    surface.Committed += () => surface.SendFrameDone((uint)Environment.TickCount);
+            }
             if (_options.Subcompositor)
             {
                 subcompositor = new SubcompositorGlobal(display, compositor);

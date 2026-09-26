@@ -63,7 +63,7 @@ internal sealed partial class Shell
         ClearLiveSettings();
         ApplySettings();
         RelayoutAll();
-        BasinReport.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
+        _report.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
     }
 
     internal void ApplyRules(AppWindow app)
@@ -150,8 +150,8 @@ internal sealed partial class Shell
                 ShowApps(view, visible);
             }
         };
-        model.ZoomChanged += zoomedOut => BasinReport.Line($"ZOOM {(zoomedOut ? "out" : "in")}");
-        model.AppsSortChanged += sort => BasinReport.Line($"APPS sort={sort}");
+        model.ZoomChanged += zoomedOut => _report.Line($"ZOOM {(zoomedOut ? "out" : "in")}");
+        model.AppsSortChanged += sort => _report.Line($"APPS sort={sort}");
 
         var start = new StartView { DataContext = model };
         start.TileList.SelectionChanged += (_, e) => ReportSelection(e);
@@ -365,7 +365,7 @@ internal sealed partial class Shell
 
         SyncChromeFocus(view);
         _outputs.RepaintNow(view.Driver);
-        BasinReport.Line($"APPS {(visible ? "on" : "off")}");
+        _report.Line($"APPS {(visible ? "on" : "off")}");
     }
 
     internal const uint PageSlideMillis = 550;
@@ -550,7 +550,7 @@ internal sealed partial class Shell
         {
             if (view.Splash is { Enabled: true } && now >= view.SplashDeadlineMillis)
             {
-                BasinReport.Line($"SPLASH timeout {view.SplashModel.Title}");
+                _report.Line($"SPLASH timeout {view.SplashModel.Title}");
                 DismissSplash(view, crossFade: false);
                 RestorePage(view);
             }

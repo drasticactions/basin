@@ -849,12 +849,14 @@ public sealed class DispatchAllocationTests
         Budgets.Require();
         CompositorTestHost.SkipWithoutWaylandClient();
 
-        using var host = new NestedBackendTestHost(NestedParentOptions.Undecorating);
+        using var host = new NestedBackendTestHost(NestedParentOptions.Undecorating with { AnswersFrames = true });
         var output = host.CreateOutput();
         var front = new MemoryBuffer(output.CurrentMode.Width, output.CurrentMode.Height, DrmFormat.Xrgb8888);
         var back = new MemoryBuffer(output.CurrentMode.Width, output.CurrentMode.Height, DrmFormat.Xrgb8888);
         using var state = new OutputState();
         using var damage = new Pixman.PixmanRegion32();
+        var framed = false;
+        output.Frame += () => framed = true;
 
         long NestedRounds(int rounds)
         {
@@ -865,11 +867,17 @@ public sealed class DispatchAllocationTests
                 damage.Reset(new Pixman.PixmanBox32(0, round % 4, 100, (round % 4) + 40));
                 state.SetBuffer(round % 2 == 0 ? front : back).SetDamage(damage);
 
+                framed = false;
                 var before = GC.GetAllocatedBytesForCurrentThread();
                 _ = output.Commit(state);
                 allocated += GC.GetAllocatedBytesForCurrentThread() - before;
 
-                host.Pump(1);
+                for (var wait = 0; !framed && wait < 500; wait++)
+                {
+                    host.Pump(1);
+                }
+
+                Assert.True(framed, "the parent never answered the frame callback");
             }
 
             return allocated;

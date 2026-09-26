@@ -49,10 +49,10 @@ internal sealed partial class TinyComp
 
         input.DeviceAdded += device =>
         {
-            BasinReport.Line($"INPUT + {device.Name}");
+            _report.Line($"INPUT + {device.Name}");
             ConfigureTouchpad(device);
         };
-        input.DeviceRemoved += device => BasinReport.Line($"INPUT - {device.Name}");
+        input.DeviceRemoved += device => _report.Line($"INPUT - {device.Name}");
         _touchBinder!.Key += (time, key, pressed) =>
         {
             _idle.NotifyActivity();
@@ -369,7 +369,7 @@ internal sealed partial class TinyComp
     private void LoadCursorTheme()
     {
         _touchBinder!.EnsureCursorLoaded();
-        BasinReport.Line($"CURSOR left_ptr {_cursor.Images?.Size ?? 0}px {_cursor.DrawnBy}");
+        _report.Line($"CURSOR left_ptr {_cursor.Images?.Size ?? 0}px {_cursor.DrawnBy}");
     }
 
     internal void SetHostChromeCursor(string name) => _cursor.ShowNamed(name);

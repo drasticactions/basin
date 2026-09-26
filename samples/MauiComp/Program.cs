@@ -28,6 +28,7 @@ internal static class Program
         var configPath = cli.Add(CommonOptions.Config("maui-comp"));
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
+        _ = IpcCli.AddOption(cli);
 
         var settings = new MauiCompConfig();
         string? fatal = null;
@@ -59,6 +60,7 @@ internal static class Program
 
             var options = new MauiCompOptions
             {
+                Ipc = IpcCli.Read(cli, result),
                 Backend = chosen.Kind,
                 Renderer = result.GetValue(renderer)!,
                 Outputs = result.GetValue(outputs),

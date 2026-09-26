@@ -32,6 +32,7 @@ internal static class Program
         });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
+        _ = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
@@ -40,6 +41,7 @@ internal static class Program
             var configValue = result.GetValue(config);
             var options = new WestoniaOptions
             {
+                Ipc = IpcCli.Read(cli, result),
                 Backend = chosen.Kind,
                 Renderer = result.GetValue(renderer)!,
                 Outputs = result.GetValue(outputs),

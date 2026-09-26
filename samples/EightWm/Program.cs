@@ -70,6 +70,7 @@ internal static class Program
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var client = cli.Add(CommonOptions.Client());
         var frames = cli.Add(CommonOptions.Frames());
+        _ = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
@@ -94,6 +95,7 @@ internal static class Program
 
             var options = new ShellOptions
             {
+                Ipc = IpcCli.Read(cli, result),
                 Backend = chosen.Kind,
                 Renderer = result.GetValue(renderer)!,
                 Outputs = result.GetValue(outputs),

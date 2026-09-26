@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BasinCtl</RootNamespace>
+    <AssemblyName>basinctl</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Ipc.Client/Basin.Ipc.Client.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -26,4 +26,6 @@ internal sealed record WestoniaOptions
     public UIThemeVariant Theme { get; init; } = UIThemeVariant.Light;
 
     public bool NoConfig { get; init; }
+
+    public IpcChoice Ipc { get; init; } = IpcChoice.Off;
 }

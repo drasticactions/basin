@@ -13,6 +13,7 @@ using Wayland;
 using Wayland.Server;
 
 using Basin.Diagnostics;
+using Basin.Ipc;
 
 namespace TinyComp;
 
@@ -79,191 +80,6 @@ internal sealed partial class TinyComp
         _seat.Keyboard.NotifyKey(time, key, pressed);
     }
 
-    private void WireStdin() => _stdinCommands = new StdinCommands(_loop, HandleCommand);
-
-    private void HandleCommand(string line)
-    {
-        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        switch (parts)
-        {
-            case ["move", var x, var y]:
-                MoveCursor(double.Parse(x), double.Parse(y), (uint)Environment.TickCount);
-                break;
-            case ["button", var code, var state]:
-                OnButton((uint)Environment.TickCount, uint.Parse(code), state == "1");
-                break;
-            case ["key", var code, var state]:
-                HandleKey((uint)Environment.TickCount, uint.Parse(code), state == "1");
-                break;
-            case ["shot", var path]:
-                _shotPath = path;
-                _shotView = 0;
-                _driver.RepaintNow(Views[0]);
-                break;
-            case ["shot", var path, var index]:
-                _shotPath = path;
-                _shotView = int.Parse(index);
-                _driver.RepaintNow(Views[_shotView]);
-                break;
-            case ["scale", var viewIndex, var factor]:
-                SetOutputScale(Views[int.Parse(viewIndex)], double.Parse(factor));
-                break;
-            case ["shotraw", var path]:
-                DumpPresented(Views[0], path);
-                break;
-            case ["planeshot", var prefix]:
-                DumpPlanes(Views[0], prefix);
-                break;
-            case ["shotraw", var path, var index]:
-                DumpPresented(Views[int.Parse(index)], path);
-                break;
-            case ["where"]:
-                foreach (var window in _windows)
-                {
-                    BasinReport.Line($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")} screen={ScreenBoxOf(window).X}");
-                    ReportCanvasWhere(window);
-                }
-
-                foreach (var xwindow in _xwindows)
-                {
-                    BasinReport.Line($"XWIN {xwindow.XWin.Class} {xwindow.X} {xwindow.Y} {xwindow.XWin.Width}x{xwindow.XWin.Height} rule={(xwindow.Rule is null ? "none" : "yes")} corners={xwindow.CornerRadius} framed={(xwindow.Frame is null ? "no" : "yes")} minimized={xwindow.Minimized}");
-                }
-
-                break;
-            case ["clip", var index, var cx, var cy, var cw, var ch]:
-                {
-                    var target = _windows[int.Parse(index)];
-                    if (target.Tree is not null)
-                    {
-                        target.Tree.ClipBox = new Box(int.Parse(cx), int.Parse(cy), int.Parse(cw), int.Parse(ch));
-                        BasinReport.Line($"CLIP {index} {target.Tree.ClipBox}");
-                    }
-                }
-
-                break;
-            case ["tile"]:
-                TileWindows();
-                break;
-            case ["canvas", "on"]:
-                SetCanvasEnabled(true);
-                break;
-            case ["canvas", "off"]:
-                SetCanvasEnabled(false);
-                break;
-            case ["park", "left"] when FocusedGrabTarget() is { } parkLeft:
-                Park(parkLeft, CanvasSide.Left);
-                break;
-            case ["park", "right"] when FocusedGrabTarget() is { } parkRight:
-                Park(parkRight, CanvasSide.Right);
-                break;
-            case ["recall"] when FocusedGrabTarget() is { } recall:
-                Recall(recall);
-                break;
-            case ["ws"]:
-                PrintWorkspaces();
-                break;
-            case ["ws", "next"]:
-                SwitchWorkspace(1);
-                break;
-            case ["ws", "prev"]:
-                SwitchWorkspace(-1);
-                break;
-            case ["ws", "create"]:
-                if (ViewAtCursor() is { } createView)
-                {
-                    ActivateWorkspace(createView, CreateWorkspace(createView, null, afterActive: true));
-                }
-
-                break;
-            case ["ws", "create", var wsName]:
-                if (ViewAtCursor() is { } namedView)
-                {
-                    ActivateWorkspace(namedView, CreateWorkspace(namedView, wsName, afterActive: true));
-                }
-
-                break;
-            case ["ws", "move"]:
-                CarryFocusedWindow(1);
-                break;
-            case ["split", var fraction]:
-                SetSplit(double.Parse(fraction));
-                break;
-            case ["dumpscene"]:
-                DumpTree(_scene.Root, 0);
-                break;
-            case ["stats"]:
-                BasinReport.Line($"STATS transactions={_useTransactions} timedout={Transaction.TimedOutCount}");
-                BasinReport.Line($"STATS cursor theme={(_cursor.Images?.HasTheme == true ? _cursor.Images.Size.ToString() : "none")} " + $"showing={_cursor.Showing} " + $"on={(_cursor.CursorOutput?.Name ?? "none")}");
-                foreach (var view in Views)
-                {
-                    var so = view.Scene;
-                    BasinReport.Line(so is null
-                        ? $"STATS {view.Output.Name} full-repaint scale={view.Output.Scale}"
-                        : $"STATS {view.Output.Name} scanout={so.ScanoutCommits} composed={so.ComposedCommits} skipped={so.SkippedCommits} direct={so.IsDirectScanout} offload={so.OffloadedLayers}/{so.OffloadCommits} swcursor={_cursor.IsSoftwareOn(view.Output)} scale={view.Output.Scale}");
-                    if (so is not null)
-                    {
-                        foreach (var reason in Enum.GetValues<Basin.Scene.PlaneDeclineReason>())
-                        {
-                            if (so.DeclinedFor(reason) > 0)
-                            {
-                                BasinReport.Line($"STATS   declined {reason} {so.DeclinedFor(reason)}");
-                            }
-                        }
-                    }
-                }
-
-                break;
-            case ["nightlight", "off"]:
-                ApplyNightLight(null);
-                BasinReport.Line($"NIGHTLIGHT off");
-                break;
-            case ["nightlight", var kelvin]:
-                ApplyNightLight(double.Parse(kelvin));
-                BasinReport.Line($"NIGHTLIGHT {kelvin}K");
-                break;
-            case ["gc"]:
-                var now = GC.GetAllocatedBytesForCurrentThread();
-                BasinReport.Line($"GC {now - _gcMark} bytes since last mark");
-                _gcMark = now;
-                break;
-            case ["reload"]:
-                Reload();
-                break;
-            case ["bell"]:
-                RingBell();
-                break;
-            case ["xminimize", var index, var state]:
-                SetMinimized(_xwindows[int.Parse(index)], state == "1");
-                break;
-            case ["mark", "undo"]:
-                _feedback?.UndoMark();
-                ScheduleEffectRepaint();
-                break;
-            case ["mark", "clear"]:
-                _feedback?.ClearMarks();
-                ScheduleEffectRepaint();
-                break;
-            case ["zoom", "in"]:
-                _post.Zoom?.ZoomIn();
-                _post.Magnifier?.ZoomIn();
-                ScheduleEffectRepaint();
-                break;
-            case ["zoom", "out"]:
-                _post.Zoom?.ZoomOut();
-                _post.Magnifier?.ZoomOut();
-                ScheduleEffectRepaint();
-                break;
-            case ["zoom", "reset"]:
-                _post.Zoom?.Reset();
-                _post.Magnifier?.Reset();
-                ScheduleEffectRepaint();
-                break;
-            case ["quit"]:
-                _runLoop.Stop();
-                break;
-        }
-    }
-
     private string? _shotPath;
     private int _shotView;
     private long _gcMark;
@@ -291,7 +107,7 @@ internal sealed partial class TinyComp
             : default;
         var outcome = SceneScreenshot.WritePresented(
             view.LastPresentedBuffer, view.Scene?.PresentedLayers, blit, _renderer, path, out var planes);
-        BasinReport.Line(outcome switch
+        _report.Line(outcome switch
         {
             ScreenshotOutcome.NoFrame => "SHOTRAW unavailable (nothing presented yet)",
             ScreenshotOutcome.Unreadable => "SHOTRAW unavailable (presented buffer not importable)",
@@ -308,9 +124,15 @@ internal sealed partial class TinyComp
 
         var path = _shotPath;
         _shotPath = null;
-        if (SceneScreenshot.Write(_scene, _renderer, path, view.Width, view.Height, SceneOptions(view.Output)))
+        var written = SceneScreenshot.Write(_scene, _renderer, path, view.Width, view.Height, SceneOptions(view.Output));
+        if (_shotReply is { } pending)
         {
-            BasinReport.Line($"SHOT {path}");
+            _shotReply = null;
+            _ = written ? IpcLineReport.Complete(pending, $"SHOT {path}") : IpcLineReport.Complete(pending);
+        }
+        else if (written)
+        {
+            _report.Line($"SHOT {path}");
         }
     }
 

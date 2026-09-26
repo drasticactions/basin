@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BasinMcp</RootNamespace>
+    <AssemblyName>basin-mcp</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BasinMcp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Ipc.Client/Basin.Ipc.Client.csproj" />
+  </ItemGroup>
+
+</Project>

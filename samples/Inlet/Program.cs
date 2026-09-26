@@ -8,6 +8,7 @@ using Basin.Cli;
 using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Host;
+using Basin.Ipc;
 using Basin.Scene;
 using Basin.Shell.River;
 using Basin.Shell.Xdg;
@@ -55,6 +56,7 @@ internal static class Program
         });
         var framesOption = cli.Add(CommonOptions.Frames());
         var screenshotOption = cli.Add(CommonOptions.Screenshot());
+        _ = IpcCli.AddOption(cli);
         var commandOption = cli.Add(new Option<string?>("--command", "-c")
         {
             Description = "run `sh -c <command>` on startup instead of the init executable.",
@@ -78,6 +80,7 @@ internal static class Program
                 (int)result.GetValue(framesOption),
                 result.GetValue(screenshotOption),
                 result.GetValue(commandOption),
+                IpcCli.Read(cli, result),
                 out var rendered);
             cli.ReportFrames(rendered);
             return status;
@@ -106,13 +109,14 @@ internal static class Program
         int frames,
         string? screenshotPath,
         string? startupCommand,
+        IpcChoice ipcChoice,
         out long renderedFrames)
     {
         BasinCounters.Reset();
 
         var status = RunCompositor(
             log, rendererName, drm, nested, outputCount, width, height, scales, xwayland, frames, screenshotPath,
-            startupCommand, out var totalRendered);
+            startupCommand, ipcChoice, out var totalRendered);
 
         renderedFrames = Math.Max(0, totalRendered);
 
@@ -141,6 +145,7 @@ internal static class Program
         int frames,
         string? screenshotPath,
         string? startupCommand,
+        IpcChoice ipcChoice,
         out long totalRendered)
     {
         totalRendered = -1;
@@ -810,6 +815,19 @@ internal static class Program
         management.WindowManagerUnresponsive += () => BasinReport.Line($"WM UNRESPONSIVE");
 
         BasinReport.Line(Basin.Cli.CompositorLines.Socket(socket));
+        using var ipc = ipcChoice.AttachIfListening(loop, services, socket, new IpcSessionInfo
+        {
+            Compositor = "inlet",
+            Backend = drm ? "drm" : nested ? "nested" : "headless",
+            Renderer = rendererName,
+            XwaylandDisplay = () => xServer?.DisplayName,
+            Quit = runLoop.Stop,
+        });
+        if (ipc is not null)
+        {
+            ipc.SyntheticInput = injector;
+            ipc.Start();
+        }
 
         var startup = init is null ? null : InitProcess.Start(init, socket, xServer?.DisplayName, log);
 

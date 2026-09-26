@@ -4,6 +4,7 @@ using Basin.Host;
 using System.Globalization;
 using Basin;
 using Basin.Cli;
+using Basin.Ipc;
 using Basin.Seat;
 using Xkb;
 using Wayland;
@@ -15,225 +16,316 @@ namespace EightWm;
 
 internal sealed partial class Shell
 {
-    private StdinCommands? _stdin;
+    private readonly IpcLineReport _report = new();
+    private IpcServer? _ipc;
+    private IpcPendingReply? _shotReply;
 
-    private void WireStdin() => _stdin = new StdinCommands(_host.Loop, HandleCommand);
-
-    private void UnwireStdin()
+    private void WireIpc()
     {
-        _stdin?.Stop();
-        _stdin = null;
+        _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
+        {
+            Compositor = "eight-wm",
+            Backend = _options.Backend.ToString().ToLowerInvariant(),
+            Renderer = _options.Renderer,
+            Quit = Stop,
+        });
+        _ipc.SyntheticInput = _seat.Injector;
+        RegisterCommands(_ipc.Methods);
+        _ipc.Start();
+        _ipc.StartLineFront();
+    }
+
+    private void UnwireIpc()
+    {
+        _ipc?.Dispose();
+        _ipc = null;
     }
 
     private ShellView CommandView => Views.Count > 0 ? Views[0] : PrimaryView;
 
-    internal void HandleCommand(string line)
+    internal void HandleCommand(string line) => _ipc?.LineFront?.Execute(line);
+
+    private void RegisterCommands(IpcMethodRegistry methods)
     {
-        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        switch (parts)
+        _report.AddLine(methods, IpcMethodNames.SessionQuit, "quit");
+
+        _report.Register(methods, "eightwm/start", "start", () => ToggleStart(CommandView));
+        _report.Register(methods, "eightwm/close", "close", CloseFocused);
+        _report.Register(methods, "eightwm/switcher", "switcher", PrintSwitcher);
+        _report.Register(methods, "eightwm/mru", "mru", PrintMru);
+        _report.Register(methods, "eightwm/chrome", "chrome", PrintChrome);
+        _report.Register(methods, "eightwm/where", "where", PrintScene);
+        _report.Register(methods, "eightwm/cells", "cells", PrintCells);
+        _report.Register(methods, "eightwm/tiles", "tiles", PrintTiles);
+
+        _report.Register(methods, "eightwm/snap", "snap {which} {side}", (ref IpcParams p, IpcReply _) =>
         {
-            case []:
-                return;
-
-            case ["start"]:
-                ToggleStart(CommandView);
-                break;
-
-            case ["close"]:
-                CloseFocused();
-                break;
-
-            case ["switcher"]:
-                PrintSwitcher();
-                break;
-
-            case ["mru"]:
-                PrintMru();
-                break;
-
-            case ["chrome"]:
-                PrintChrome();
-                break;
-
-            case ["where"]:
-                PrintScene();
-                break;
-
-            case ["cells"]:
-                PrintCells();
-                break;
-
-            case ["snap", var which, var side]:
+            var which = p.GetString("which");
+            var side = p.GetString("side");
+            if (!p.Failed)
+            {
                 SnapCommand(which, side);
-                break;
+            }
+        });
 
-            case ["split", var position]:
-                SplitCommand(Fraction(position));
-                break;
+        _report.Register(methods, "eightwm/split", "split {position:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var position = p.GetDouble("position");
+            if (!p.Failed)
+            {
+                SplitCommand(position);
+            }
+        });
 
-            case ["eject", var which]:
-                EjectCommand(Number(which));
-                break;
+        _report.Register(methods, "eightwm/eject", "eject {index:int}", (ref IpcParams p, IpcReply _) =>
+        {
+            var index = p.GetInt("index");
+            if (!p.Failed)
+            {
+                EjectCommand((int)index);
+            }
+        });
 
-            case ["launch", ..]:
-                Spawn(string.Join(' ', parts[1..]));
-                break;
+        _report.Register(methods, "eightwm/launch", "launch {command...}", (ref IpcParams p, IpcReply _) =>
+        {
+            var command = p.GetString("command");
+            if (!p.Failed)
+            {
+                Spawn(command);
+            }
+        });
 
-            case ["tiles"]:
-                PrintTiles();
-                break;
-
-            case ["tap", var which]:
+        _report.Register(methods, "eightwm/tap", "tap {which}", (ref IpcParams p, IpcReply _) =>
+        {
+            var which = p.GetString("which");
+            if (!p.Failed)
+            {
                 TapCommand(which);
-                break;
+            }
+        });
 
-            case ["edge", var side]:
-                EdgeCommand(side, 1.0, hold: false);
-                break;
+        _report.Register(methods, "eightwm/edge", "edge {side} [{progress:number}]", (ref IpcParams p, IpcReply _) =>
+        {
+            var side = p.GetString("side");
+            var progress = p.TryGetDouble("progress", out var given) ? given : 1.0;
+            if (!p.Failed)
+            {
+                EdgeCommand(side, progress, hold: false);
+            }
+        });
 
-            case ["edge", var side, var progress]:
-                EdgeCommand(side, Fraction(progress), hold: false);
-                break;
+        _report.Register(methods, "eightwm/edge-hold", "edge {side} hold {fraction:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var side = p.GetString("side");
+            var fraction = p.GetDouble("fraction");
+            if (!p.Failed)
+            {
+                EdgeCommand(side, fraction, hold: true);
+            }
+        });
 
-            case ["edge", var side, "hold", var fraction]:
-                EdgeCommand(side, Fraction(fraction), hold: true);
-                break;
+        RegisterToggle(methods, "eightwm/switcher-dock", "switcher", state => DockSwitcher(CommandView, state));
+        RegisterToggle(methods, "eightwm/title", "title", state => ShowTitle(CommandView, state));
+        RegisterToggle(methods, "eightwm/charms", "charms", state => ShowCharms(CommandView, state));
 
-            case ["switcher", var state]:
-                DockSwitcher(CommandView, state == "on");
-                break;
+        _report.Register(methods, "eightwm/titledrag", "titledrag {x:number} {y:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var x = p.GetDouble("x");
+            var y = p.GetDouble("y");
+            if (!p.Failed)
+            {
+                TitleDragCommand(x, y);
+            }
+        });
 
-            case ["title", var state]:
-                ShowTitle(CommandView, state == "on");
-                break;
+        _report.Register(methods, "eightwm/titlegrab", "titlegrab", TitleGrabCommand);
 
-            case ["titledrag", var dx, var dy]:
-                TitleDragCommand(Fraction(dx), Fraction(dy));
-                break;
+        _report.Register(methods, "eightwm/titlemove", "titlemove {x:number} {y:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var x = p.GetDouble("x");
+            var y = p.GetDouble("y");
+            if (!p.Failed)
+            {
+                TitleStepCommand(x, y, drop: false);
+            }
+        });
 
-            case ["titlegrab"]:
-                TitleGrabCommand();
-                break;
+        _report.Register(methods, "eightwm/titledrop", "titledrop {x:number} {y:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var x = p.GetDouble("x");
+            var y = p.GetDouble("y");
+            if (!p.Failed)
+            {
+                TitleStepCommand(x, y, drop: true);
+            }
+        });
 
-            case ["titlemove", var mx, var my]:
-                TitleStepCommand(Fraction(mx), Fraction(my), drop: false);
-                break;
-
-            case ["titledrop", var dx, var dy]:
-                TitleStepCommand(Fraction(dx), Fraction(dy), drop: true);
-                break;
-
-            case ["charms", var state]:
-                ShowCharms(CommandView, state == "on");
-                break;
-
-            case ["charm", var which]:
+        _report.Register(methods, "eightwm/charm", "charm {which}", (ref IpcParams p, IpcReply _) =>
+        {
+            var which = p.GetString("which");
+            if (!p.Failed)
+            {
                 CharmCommand(which);
-                break;
+            }
+        });
 
-            case ["zoom", var which]:
+        _report.Register(methods, "eightwm/zoom", "zoom {which}", (ref IpcParams p, IpcReply _) =>
+        {
+            var which = p.GetString("which");
+            if (!p.Failed)
+            {
                 ToggleZoom(CommandView, which == "out");
-                break;
+            }
+        });
 
-            case ["apps", "sort", var sort]:
+        _report.Register(methods, "eightwm/apps-sort", "apps sort {sort}", (ref IpcParams p, IpcReply _) =>
+        {
+            var sort = p.GetString("sort");
+            if (!p.Failed)
+            {
                 AppsSortCommand(sort);
-                break;
+            }
+        });
 
-            case ["apps", var state]:
-                ShowApps(CommandView, state == "on");
-                break;
+        RegisterToggle(methods, "eightwm/apps", "apps", state => ShowApps(CommandView, state));
 
-            case ["move", var mx, var my]:
-                _seat.WarpTo(Fraction(mx), Fraction(my));
-                break;
+        _report.Register(methods, "eightwm/move", "move {x:number} {y:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var x = p.GetDouble("x");
+            var y = p.GetDouble("y");
+            if (!p.Failed)
+            {
+                _seat.WarpTo(x, y);
+            }
+        });
 
-            case ["click"]:
-                _seat.ClickAt();
-                break;
+        _report.Register(methods, "eightwm/click", "click", () => _seat.ClickAt());
+        _report.Register(methods, "eightwm/cursor", "cursor", () => _report.Line($"CURSOR {_seat.CursorState}"));
 
-            case ["cursor"]:
-                BasinReport.Line($"CURSOR {_seat.CursorState}");
-                break;
+        _report.Register(methods, "eightwm/touch", "touch {x:number} {y:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var x = p.GetDouble("x");
+            var y = p.GetDouble("y");
+            if (!p.Failed)
+            {
+                _seat.TapAt(CommandView.Box.Width * x, CommandView.Box.Height * y);
+            }
+        });
 
-            case ["touch", var tx, var ty]:
-                _seat.TapAt(CommandView.Box.Width * Fraction(tx), CommandView.Box.Height * Fraction(ty));
-                break;
-
-            case ["touchdrag", var tx, var ty, var tdx, var tdy]:
+        _report.Register(methods, "eightwm/touchdrag", "touchdrag {x:number} {y:number} {dx:number} {dy:number}", (ref IpcParams p, IpcReply _) =>
+        {
+            var x = p.GetDouble("x");
+            var y = p.GetDouble("y");
+            var dx = p.GetDouble("dx");
+            var dy = p.GetDouble("dy");
+            if (!p.Failed)
+            {
                 _seat.DragTouch(
-                    CommandView.Box.Width * Fraction(tx), CommandView.Box.Height * Fraction(ty),
-                    CommandView.Box.Width * Fraction(tdx), CommandView.Box.Height * Fraction(tdy), 12);
-                break;
+                    CommandView.Box.Width * x, CommandView.Box.Height * y,
+                    CommandView.Box.Width * dx, CommandView.Box.Height * dy, 12);
+            }
+        });
 
-            case ["mousedown"]:
-                _seat.ButtonAt(pressed: true);
-                break;
+        _report.Register(methods, "eightwm/mousedown", "mousedown", () => _seat.ButtonAt(pressed: true));
+        _report.Register(methods, "eightwm/mouseup", "mouseup", () => _seat.ButtonAt(pressed: false));
 
-            case ["mouseup"]:
-                _seat.ButtonAt(pressed: false);
-                break;
-
-            case ["key", var chord]:
+        _report.Register(methods, "eightwm/key", "key {chord}", (ref IpcParams p, IpcReply _) =>
+        {
+            var chord = p.GetString("chord");
+            if (!p.Failed)
+            {
                 KeyCommand(chord);
-                break;
+            }
+        });
 
-            case ["press", var which]:
-                PressCommand(which, 0.5, 0.5);
-                break;
+        _report.Register(methods, "eightwm/press", "press {which} [{x:number}] [{y:number}]", (ref IpcParams p, IpcReply _) =>
+        {
+            var which = p.GetString("which");
+            var x = p.TryGetDouble("x", out var px) ? px : 0.5;
+            var y = p.TryGetDouble("y", out var py) ? py : 0.5;
+            if (!p.Failed)
+            {
+                PressCommand(which, x, y);
+            }
+        });
 
-            case ["press", var which, var px, var py]:
-                PressCommand(which, Fraction(px), Fraction(py));
-                break;
+        _report.Register(methods, "eightwm/release", "release", ReleaseCommand);
 
-            case ["release"]:
-                ReleaseCommand();
-                break;
-
-            case ["select", var which]:
+        _report.Register(methods, "eightwm/select", "select {which}", (ref IpcParams p, IpcReply _) =>
+        {
+            var which = p.GetString("which");
+            if (!p.Failed)
+            {
                 SelectCommand(which);
-                break;
+            }
+        });
 
-            case ["shotnow", var path]:
+        _report.Register(methods, "eightwm/shotnow", "shotnow {path}", (ref IpcParams p, IpcReply _) =>
+        {
+            var path = p.GetString("path");
+            if (!p.Failed)
+            {
                 _shotPath = path;
                 _shotView = 0;
-                break;
+            }
+        });
 
-            case ["planeshot", var prefix]:
-                PlaneShot.Write(CommandView.Driver, _renderer, prefix, _scene,
-                    CommandView.Charms is { } charms
-                        ? [new PlaneShotChrome("charms", null, charms.BarNode), new PlaneShotChrome("pane", null, charms.PaneNode)]
-                        : null);
-                break;
+        _report.Register(methods, "eightwm/planeshot", "planeshot {prefix}", (ref IpcParams p, IpcReply _) =>
+        {
+            var prefix = p.GetString("prefix");
+            if (p.Failed)
+            {
+                return;
+            }
 
-            case ["shot", var path]:
-                _shotPath = path;
-                _shotView = 0;
-                _outputs.RepaintNow(CommandView.Driver);
-                break;
+            PlaneShot.Write(CommandView.Driver, _renderer, prefix, _scene,
+                CommandView.Charms is { } charms
+                    ? [new PlaneShotChrome("charms", null, charms.BarNode), new PlaneShotChrome("pane", null, charms.PaneNode)]
+                    : null);
+        });
 
-            case ["shot", var path, var index]:
-                _shotPath = path;
-                _shotView = Number(index);
-                _outputs.RepaintNow(Views[_shotView].Driver);
-                break;
+        _report.Register(methods, "eightwm/shot", "shot {path} [{index:int}]", (ref IpcParams p, IpcReply reply) =>
+        {
+            var path = p.GetString("path");
+            var index = p.TryGetInt("index", out var at) ? (int)at : 0;
+            if (p.Failed)
+            {
+                return;
+            }
 
-            case ["reload"]:
-                Reload();
-                break;
+            if (index < 0 || index >= Views.Count)
+            {
+                reply.Error(IpcErrorCodes.NotFound, $"no output {index}");
+                return;
+            }
 
-            case ["settings"]:
-                BasinReport.Line($"SETTINGS hot_corners={(HotCornersOn ? "on" : "off")} " + $"animations={(AnimationsOn ? "on" : "off")} edge_band={EdgeBandNow} " + $"min_width={MinWidthNow} max_cells={Configuration.MaxCells} " + $"start_output={StartOutputNow} rules={Configuration.Rules.Count} " + $"theme={(DarkNow ? "dark" : "light")} accent=#{AccentNow & 0xffffff:x6}");
-                break;
+            if (_shotReply is { } superseded)
+            {
+                _shotReply = null;
+                _ = IpcLineReport.Complete(superseded);
+            }
 
-            case ["quit"]:
-                Stop();
-                break;
+            _shotPath = path;
+            _shotView = index;
+            _shotReply = reply.Defer();
+            _outputs.RepaintNow(Views[index].Driver);
+        });
 
-            default:
-                BasinReport.Line($"ERR unknown command '{line}'");
-                break;
-        }
+        _report.Register(methods, "eightwm/reload", "reload", Reload);
+
+        _report.Register(methods, "eightwm/settings", "settings", () =>
+            _report.Line($"SETTINGS hot_corners={(HotCornersOn ? "on" : "off")} " + $"animations={(AnimationsOn ? "on" : "off")} edge_band={EdgeBandNow} " + $"min_width={MinWidthNow} max_cells={Configuration.MaxCells} " + $"start_output={StartOutputNow} rules={Configuration.Rules.Count} " + $"theme={(DarkNow ? "dark" : "light")} accent=#{AccentNow & 0xffffff:x6}"));
     }
+
+    private void RegisterToggle(IpcMethodRegistry methods, string name, string word, Action<bool> apply) =>
+        _report.Register(methods, name, word + " {state}", (ref IpcParams p, IpcReply _) =>
+        {
+            var state = p.GetString("state");
+            if (!p.Failed)
+            {
+                apply(state == "on");
+            }
+        });
 
     private static int Number(string text) =>
         int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
@@ -247,7 +339,7 @@ internal sealed partial class Shell
         var app = ResolveApp(which, view);
         if (app is null)
         {
-            BasinReport.Line($"ERR no app '{which}'");
+            _report.Line($"ERR no app '{which}'");
             return;
         }
 
@@ -258,7 +350,7 @@ internal sealed partial class Shell
             _ => Number(side),
         };
 
-        BasinReport.Line(Snap(app, view, at) ? $"SNAP {app.AppId} {at}" : $"ERR no room for '{which}'");
+        _report.Line(Snap(app, view, at) ? $"SNAP {app.AppId} {at}" : $"ERR no room for '{which}'");
     }
 
     private void SplitCommand(double fraction)
@@ -267,12 +359,12 @@ internal sealed partial class Shell
         var app = view.Host.Previous();
         if (app is null)
         {
-            BasinReport.Line($"ERR nothing to split with");
+            _report.Line($"ERR nothing to split with");
             return;
         }
 
         var at = view.Host.SlotCount;
-        BasinReport.Line(Snap(app, view, at, fraction <= 0 || fraction >= 1 ? 0.5 : fraction)
+        _report.Line(Snap(app, view, at, fraction <= 0 || fraction >= 1 ? 0.5 : fraction)
                 ? $"SNAP {app.AppId} {at}"
                 : "ERR no room to split");
     }
@@ -282,14 +374,14 @@ internal sealed partial class Shell
         var view = CommandView;
         if (index < 0 || index >= view.Host.Cells.Count)
         {
-            BasinReport.Line($"ERR no cell {index}");
+            _report.Line($"ERR no cell {index}");
             return;
         }
 
         var app = view.Host.Cells[index];
         view.Host.Eject(app);
         Relayout(view);
-        BasinReport.Line($"EJECT {app.AppId}");
+        _report.Line($"EJECT {app.AppId}");
     }
 
     private AppWindow? ResolveApp(string which, ShellView view)
@@ -315,26 +407,26 @@ internal sealed partial class Shell
         for (var i = 0; i < Views.Count; i++)
         {
             var view = Views[i];
-            BasinReport.Line($"CHROME output={i} box={view.Box.Width}x{view.Box.Height} scale={view.Scale} " + $"dim={State(view.Dim.Enabled)} splash={State(view.Splash is { Enabled: true })}");
+            _report.Line($"CHROME output={i} box={view.Box.Width}x{view.Box.Height} scale={view.Scale} " + $"dim={State(view.Dim.Enabled)} splash={State(view.Splash is { Enabled: true })}");
             if (view.Charms is { } charms)
             {
-                BasinReport.Line($"  charms {State(charms.Visible)} retired={charms.IsRetired} " + $"clock={charms.ClockShown} paneshown={charms.PaneShown} hot={charms.Hot} " + $"pane={State(charms.OpenPane != Charm.None)} " + $"bar={Fmt(charms.BarBox)} panebox={Fmt(charms.PaneBox)}");
+                _report.Line($"  charms {State(charms.Visible)} retired={charms.IsRetired} " + $"clock={charms.ClockShown} paneshown={charms.PaneShown} hot={charms.Hot} " + $"pane={State(charms.OpenPane != Charm.None)} " + $"bar={Fmt(charms.BarBox)} panebox={Fmt(charms.PaneBox)}");
             }
 
             if (view.Title is { } title)
             {
-                BasinReport.Line($"  title {State(title.Visible)} box={Fmt(title.Box)} close={Fmt(title.CloseBox)}");
+                _report.Line($"  title {State(title.Visible)} box={Fmt(title.Box)} close={Fmt(title.CloseBox)}");
             }
 
             if (view.Switcher is { } rail)
             {
-                BasinReport.Line($"  rail {State(view.SwitcherDocked)} box={Fmt(rail.Box)}");
+                _report.Line($"  rail {State(view.SwitcherDocked)} box={Fmt(rail.Box)}");
             }
 
             if (view.StartView is { } start)
             {
                 var (width, height, rows) = StartExtent(start);
-                BasinReport.Line($"  start grid={width:F0}x{height:F0} rows={rows}");
+                _report.Line($"  start grid={width:F0}x{height:F0} rows={rows}");
             }
         }
     }
@@ -347,15 +439,15 @@ internal sealed partial class Shell
     {
         var boxes = new List<Basin.SurfaceBox>();
         _scene.CollectSurfaces(boxes);
-        BasinReport.Line($"SCENE surfaces={boxes.Count}");
+        _report.Line($"SCENE surfaces={boxes.Count}");
         foreach (var entry in boxes)
         {
-            BasinReport.Line($"  surface {entry.Box.X},{entry.Box.Y} {entry.Box.Width}x{entry.Box.Height} " + $"buffer={(entry.Surface.Current.Buffer is null ? "none" : "yes")}");
+            _report.Line($"  surface {entry.Box.X},{entry.Box.Y} {entry.Box.Width}x{entry.Box.Height} " + $"buffer={(entry.Surface.Current.Buffer is null ? "none" : "yes")}");
         }
 
         foreach (var app in _apps)
         {
-            BasinReport.Line($"  app {app.AppId} cell={app.Cell.X},{app.Cell.Y},{app.Cell.Width}x{app.Cell.Height} " + $"slot={app.Slot.X},{app.Slot.Y} enabled={app.Slot.Enabled} parked={app.IsParked}");
+            _report.Line($"  app {app.AppId} cell={app.Cell.X},{app.Cell.Y},{app.Cell.Width}x{app.Cell.Height} " + $"slot={app.Slot.X},{app.Slot.Y} enabled={app.Slot.Enabled} parked={app.IsParked}");
         }
     }
 
@@ -371,7 +463,7 @@ internal sealed partial class Shell
                 ? $" vacant={view.Host.VacantSlot}:{view.Host.VacantArea.X},{view.Host.VacantArea.Y}," +
                   $"{view.Host.VacantArea.Width}x{view.Host.VacantArea.Height}"
                 : string.Empty;
-            BasinReport.Line($"CELLS output={i} portrait={(view.IsPortrait ? "yes" : "no")} widths=[{widths}] {boxes}{vacant}");
+            _report.Line($"CELLS output={i} portrait={(view.IsPortrait ? "yes" : "no")} widths=[{widths}] {boxes}{vacant}");
         }
     }
 
@@ -409,7 +501,7 @@ internal sealed partial class Shell
             return tiles[index];
         }
 
-        BasinReport.Line($"ERR no tile {which}");
+        _report.Line($"ERR no tile {which}");
         return null;
     }
 
@@ -418,13 +510,13 @@ internal sealed partial class Shell
         var view = CommandView;
         if (view.StartView is not { } start)
         {
-            BasinReport.Line($"ERR no start screen");
+            _report.Line($"ERR no start screen");
             return;
         }
 
         var (width, _, rows) = StartExtent(start);
         var apps = view.AppsView is { } appsView ? ScrollOf(appsView.List) : 0;
-        BasinReport.Line($"TILES groups={view.StartModel.Groups.Count} rows={rows} width={width:F0} " + $"pan={-ScrollOf(start.TileList):F0} axis=Horizontal apps={-apps:F0}");
+        _report.Line($"TILES groups={view.StartModel.Groups.Count} rows={rows} width={width:F0} " + $"pan={-ScrollOf(start.TileList):F0} axis=Horizontal apps={-apps:F0}");
         var tiles = view.StartModel.Tiles;
         for (var index = 0; index < tiles.Count; index++)
         {
@@ -432,7 +524,7 @@ internal sealed partial class Shell
             var box = TileBox(view, index) is { } placed
                 ? $"{placed.X},{placed.Y},{placed.Width}x{placed.Height}"
                 : "-";
-            BasinReport.Line($"TILE {index} group={tile.Group} name={tile.Name} box={box}");
+            _report.Line($"TILE {index} group={tile.Group} name={tile.Name} box={box}");
         }
     }
 
@@ -448,7 +540,7 @@ internal sealed partial class Shell
         };
         if (sort is not { } chosen)
         {
-            BasinReport.Line($"ERR no sort '{which}'");
+            _report.Line($"ERR no sort '{which}'");
             return;
         }
 
@@ -471,12 +563,12 @@ internal sealed partial class Shell
         ShowTitle(view, true);
         if (view.Title is not { Visible: true } title)
         {
-            BasinReport.Line($"ERR no titlebar");
+            _report.Line($"ERR no titlebar");
             return;
         }
 
         var box = title.Box;
-        BasinReport.Line(TitlePress(view, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0), ShellSeat.PointerTouchId)
+        _report.Line(TitlePress(view, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0), ShellSeat.PointerTouchId)
                 ? "TITLE grab"
                 : "ERR the titlebar refused the press");
     }
@@ -491,7 +583,7 @@ internal sealed partial class Shell
             : TitleMove(view, x, y, ShellSeat.PointerTouchId);
         if (!handled)
         {
-            BasinReport.Line($"ERR no titlebar drag in flight");
+            _report.Line($"ERR no titlebar drag in flight");
         }
     }
 
@@ -501,7 +593,7 @@ internal sealed partial class Shell
         ShowTitle(view, true);
         if (view.Title is not { Visible: true } title)
         {
-            BasinReport.Line($"ERR no titlebar");
+            _report.Line($"ERR no titlebar");
             return;
         }
 
@@ -510,7 +602,7 @@ internal sealed partial class Shell
         var startY = box.Y + (box.Height / 2.0);
         if (!TitlePress(view, startX, startY, ShellSeat.PointerTouchId))
         {
-            BasinReport.Line($"ERR the titlebar refused the press");
+            _report.Line($"ERR the titlebar refused the press");
             return;
         }
 
@@ -539,7 +631,7 @@ internal sealed partial class Shell
         };
         if (edge == Basin.Seat.ScreenEdge.None)
         {
-            BasinReport.Line($"ERR no edge '{side}'");
+            _report.Line($"ERR no edge '{side}'");
             return;
         }
 
@@ -549,7 +641,7 @@ internal sealed partial class Shell
     private void PrintSwitcher()
     {
         var view = CommandView;
-        BasinReport.Line($"SWITCHER docked={(view.SwitcherDocked ? "yes" : "no")} entries={view.Switcher?.Count ?? 0}");
+        _report.Line($"SWITCHER docked={(view.SwitcherDocked ? "yes" : "no")} entries={view.Switcher?.Count ?? 0}");
     }
 
     private void CharmCommand(string which)
@@ -557,14 +649,14 @@ internal sealed partial class Shell
         var view = CommandView;
         if (!Enum.TryParse<Charm>(which, ignoreCase: true, out var charm) || charm == Charm.None)
         {
-            BasinReport.Line($"ERR no charm '{which}'");
+            _report.Line($"ERR no charm '{which}'");
             return;
         }
 
         ShowCharms(view, true);
         if (!ActivateCharm(view, charm))
         {
-            BasinReport.Line($"ERR charm '{which}' did nothing");
+            _report.Line($"ERR charm '{which}' did nothing");
         }
     }
 
@@ -605,7 +697,7 @@ internal sealed partial class Shell
         {
             if (KeycodeOf(modifier) is not { } code)
             {
-                BasinReport.Line($"ERR no key '{modifier}'");
+                _report.Line($"ERR no key '{modifier}'");
                 return;
             }
 
@@ -616,7 +708,7 @@ internal sealed partial class Shell
         {
             if (KeycodeOf(name) is not { } code)
             {
-                BasinReport.Line($"ERR no key '{name}'");
+                _report.Line($"ERR no key '{name}'");
                 return;
             }
 
@@ -633,7 +725,7 @@ internal sealed partial class Shell
             _seat.InjectKey(codes[i], pressed: false);
         }
 
-        BasinReport.Line($"KEY {chord}");
+        _report.Line($"KEY {chord}");
     }
 
     private uint? KeycodeOf(string name)
@@ -668,20 +760,20 @@ internal sealed partial class Shell
 
         if (TileBox(view, index) is not { } box)
         {
-            BasinReport.Line($"ERR tile {which} is not realized");
+            _report.Line($"ERR tile {which} is not realized");
             return;
         }
 
         var x = view.Box.X + box.X + (box.Width * fractionX);
         var y = view.Box.Y + box.Y + (box.Height * fractionY);
         _router.TouchDown((uint)Environment.TickCount, PressTouchId, x, y);
-        BasinReport.Line($"PRESS {tile.Name} at {fractionX},{fractionY}");
+        _report.Line($"PRESS {tile.Name} at {fractionX},{fractionY}");
     }
 
     private void ReleaseCommand()
     {
         _router.TouchCancel();
-        BasinReport.Line($"RELEASE");
+        _report.Line($"RELEASE");
     }
 
     private void SelectCommand(string which)
@@ -710,7 +802,7 @@ internal sealed partial class Shell
             var view = Views[i];
             var cells = string.Join(',', view.Host.Cells.Select(app => app.AppId));
             var mru = string.Join(',', view.Host.Mru.Select(app => app.AppId));
-            BasinReport.Line($"MRU output={i} start={(view.StartVisible ? "on" : "off")} cells=[{cells}] mru=[{mru}]");
+            _report.Line($"MRU output={i} start={(view.StartVisible ? "on" : "off")} cells=[{cells}] mru=[{mru}]");
         }
     }
 }

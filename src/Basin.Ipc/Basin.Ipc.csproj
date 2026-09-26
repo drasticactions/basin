@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Ipc</PackageId>
+    <RootNamespace>Basin.Ipc</RootNamespace>
+    <Description>The Basin control socket server.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../Basin.Ipc.Protocol/Basin.Ipc.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

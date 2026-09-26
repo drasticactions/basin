@@ -24,6 +24,7 @@ internal static class Program
         var gpu = cli.Add(CommonOptions.Gpu());
         var video = cli.Add(CommonOptions.Video());
         var compress = cli.Add(CommonOptions.Compress());
+        _ = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
@@ -54,6 +55,7 @@ internal static class Program
                 result.GetValue(gpu),
                 result.GetValue(video)!,
                 result.GetValue(compress)!,
+                IpcCli.Read(cli, result),
                 out var rendered);
             cli.ReportFrames(rendered);
             return status;
@@ -81,6 +83,7 @@ internal static class Program
         bool gpu,
         string video,
         string compress,
+        IpcChoice ipcChoice,
         out long renderedFrames)
     {
         BasinCounters.Reset();
@@ -165,6 +168,14 @@ internal static class Program
             log.Info($"no local socket on this host (800x600@60, software); a client arrives over a channel");
         }
 
+        using var ipcServices = new BasinServices(loop).Freeze();
+        using var ipc = ipcChoice.Serve(loop, ipcServices, socket, new Basin.Ipc.IpcSessionInfo
+        {
+            Compositor = "basin-headless",
+            Backend = "headless",
+            Renderer = rendererName,
+            Quit = () => running = false,
+        });
         var client = BasinDiagnostics.StartClient(clientCommand, socket);
         if (clientCommand is not null && client is null)
         {
@@ -247,6 +258,8 @@ internal static class Program
 
         interrupt.Remove();
         terminate.Remove();
+        ipc?.Dispose();
+        ipcServices.Dispose();
         output.Destroy();
         target.Destroy();
         scene.Root.Destroy();

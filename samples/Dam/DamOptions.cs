@@ -27,4 +27,6 @@ internal sealed record DamOptions
     public long Frames { get; init; }
 
     public string[] Application { get; init; } = [];
+
+    public IpcChoice Ipc { get; init; } = IpcChoice.Off;
 }

@@ -37,6 +37,10 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
 
     public event Action<XdgToplevelWindow, Surface?, Box>? MinimizedGeometryRequested;
 
+    public event Action<XdgToplevelWindow, Box>? MoveRequested;
+
+    public event Action<XdgToplevelWindow, Box>? ResizeRequested;
+
     public XdgToplevelWindow? WindowFor(ulong localId) => _windows.GetValueOrDefault(localId);
 
     public ulong IdFor(XdgToplevelWindow window)
@@ -189,8 +193,8 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
 
         switch (request.Kind)
         {
-            case ToplevelRequestKind.Activate:
-                ActivateRequested?.Invoke(window);
+            case ToplevelRequestKind.Activate when ActivateRequested is { } activate:
+                activate.Invoke(window);
                 return true;
             case ToplevelRequestKind.Close:
                 window.Close();
@@ -230,6 +234,12 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
                 when CaptureExclusionRequested is { } exclusion:
                 exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
                 return true;
+            case ToplevelRequestKind.Move when MoveRequested is { } move:
+                move.Invoke(window, request.Geometry);
+                return true;
+            case ToplevelRequestKind.Resize when ResizeRequested is { } resize:
+                resize.Invoke(window, request.Geometry);
+                return true;
             default:
                 return false;
         }
@@ -248,6 +258,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
         window.TitleChanged += () => _observers.Changed(id);
         window.AppIdChanged += () => _observers.Changed(id);
         window.ParentChanged += () => _observers.Changed(id);
+        window.StateChanged += () => _observers.Changed(id);
         window.Destroyed += () =>
         {
             _windows.Remove(id);

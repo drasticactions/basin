@@ -36,6 +36,10 @@ public sealed class BasinCommand
 
     public RootCommand Command { get; }
 
+    public bool ReportsOptions { get; set; } = true;
+
+    internal Option<string>? IpcOption { get; set; }
+
     public Option<T> Add<T>(Option<T> option, bool report = true)
     {
         ArgumentNullException.ThrowIfNull(option);
@@ -89,7 +93,11 @@ public sealed class BasinCommand
                 step(result);
             }
 
-            WriteOptions(result);
+            if (ReportsOptions)
+            {
+                WriteOptions(result);
+            }
+
             wanted = result.GetValue(_allocReport);
             return body(result);
         });

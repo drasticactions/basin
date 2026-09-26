@@ -39,7 +39,6 @@ internal sealed partial class MauiComp : IDisposable
     private readonly ShellAnimations _animations;
     private readonly List<Process> _spawned = [];
     private IEventSource? _clockTimer;
-    private StdinCommands? _stdinCommands;
 
     public static int Run(MauiCompOptions options, BasinLogger log, out long rendered)
     {
@@ -268,7 +267,7 @@ internal sealed partial class MauiComp : IDisposable
 
         _clockTimer = _host.Loop.AddTimer(OnClockTick);
         OnClockTick();
-        WireStdin();
+        WireIpc();
 
         _loop.Iterating += _uiDriver.Pump;
         _loop.Frames = _options.Frames;
@@ -277,8 +276,8 @@ internal sealed partial class MauiComp : IDisposable
         hangup.Remove();
 
         _uiDriver.Woken -= _outputs.ScheduleAll;
-        _stdinCommands?.Stop();
-        _stdinCommands = null;
+        _ipc?.Dispose();
+        _ipc = null;
         _clockTimer?.Remove();
         return 0;
     }
@@ -334,6 +333,8 @@ internal sealed partial class MauiComp : IDisposable
 
     public void Dispose()
     {
+        _ipc?.Dispose();
+        _ipc = null;
         _colorPack.Luts.Dispose();
         foreach (var process in _spawned)
         {

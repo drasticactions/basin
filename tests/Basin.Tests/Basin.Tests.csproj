@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DBusHandlerTypeName>Basin.Tests.PortalClient.TestDBusHandler</DBusHandlerTypeName>
+    <TieredCompilation>false</TieredCompilation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,6 +37,8 @@
     <ProjectReference Include="../../samples/BasinPortal/BasinPortal.csproj" />
     <ProjectReference Include="../../samples/Tarn/Tarn/Tarn.csproj" />
     <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../../src/Basin.Ipc/Basin.Ipc.csproj" />
+    <ProjectReference Include="../../src/Basin.Ipc.Client/Basin.Ipc.Client.csproj" />
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
     <ProjectReference Include="../../src/Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
@@ -92,6 +95,10 @@
     <!-- The frame tests draw shaped text. The typeface is embedded, so the
          goldens never depend on the machine's fonts. -->
     <EmbeddedResource Include="../../assets/fonts/NotoSansCJK-Regular.ttc" LogicalName="NotoSansCJK-Regular.ttc" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BasinMcp.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -32,6 +32,10 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
 
     public event Action<XWaylandWindow, Surface?, Box>? MinimizedGeometryRequested;
 
+    public event Action<XWaylandWindow, Box>? MoveRequested;
+
+    public event Action<XWaylandWindow, Box>? ResizeRequested;
+
     public XWaylandWindow? WindowFor(ulong localId) => _windows.GetValueOrDefault(localId);
 
     public ulong IdFor(XWaylandWindow window)
@@ -171,6 +175,12 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             case ToplevelRequestKind.ExcludeFromCapture or ToplevelRequestKind.IncludeInCapture
                 when CaptureExclusionRequested is { } exclusion:
                 exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
+                return true;
+            case ToplevelRequestKind.Move when MoveRequested is { } move:
+                move.Invoke(window, request.Geometry);
+                return true;
+            case ToplevelRequestKind.Resize when ResizeRequested is { } resize:
+                resize.Invoke(window, request.Geometry);
                 return true;
             default:
                 return false;

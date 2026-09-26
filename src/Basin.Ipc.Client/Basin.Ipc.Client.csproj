@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Ipc.Client</PackageId>
+    <RootNamespace>Basin.Ipc</RootNamespace>
+    <Description>A client for the Basin control socket.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Ipc.Protocol/Basin.Ipc.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

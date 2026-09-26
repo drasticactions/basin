@@ -1,69 +1,94 @@
 using Basin.Cli;
+using Basin.Ipc;
 using Basin.Diagnostics;
 
 namespace Westonia;
 
 internal sealed partial class Westonia
 {
-    private void WireStdin()
+    private readonly IpcLineReport _report = new();
+    private IpcServer? _ipc;
+
+    private void WireIpc()
     {
-        _stdinCommands = new StdinCommands(_host.Loop, HandleCommand);
-        _stdinCommands.CommandFailed += (command, error) =>
+        _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
-            BasinReport.Line(CompositorLines.CommandFailed(command, error));
-        };
+            Compositor = "westonia",
+            Backend = _options.Backend.ToString().ToLowerInvariant(),
+            Renderer = _options.Renderer,
+            XwaylandDisplay = () => _xServer?.DisplayName,
+            Quit = Stop,
+        });
+        _ipc.SyntheticInput = _seat?.Injector;
+        RegisterCommands(_ipc.Methods);
+        _ipc.Start();
+        _ipc.StartLineFront();
     }
 
-    private void HandleCommand(string line)
+    private void RegisterCommands(IpcMethodRegistry methods)
     {
-        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (_seat?.StdinCommands.Handle(parts) == true)
-        {
-            return;
-        }
+        _report.AddLine(methods, IpcMethodNames.InputPointerMove, "move {x:number} {y:number}");
+        _report.AddLine(methods, IpcMethodNames.InputPointerButton, "button {button:int} {pressed:bool}");
+        _report.AddLine(methods, IpcMethodNames.InputKey, "key {code:int} {pressed:bool}");
+        _report.AddLine(methods, IpcMethodNames.SessionQuit, "quit");
 
-        switch (parts)
+        _report.Register(methods, "westonia/shot", "shot {path}", (ref IpcParams p, IpcReply _) =>
         {
-            case ["shot", var path]:
+            var path = p.GetString("path");
+            if (!p.Failed)
+            {
                 _uiDriver.Pump();
                 WriteScreenshot(path);
-                break;
-            case ["shotraw", var path]:
+            }
+        });
+
+        _report.Register(methods, "westonia/shotraw", "shotraw {path}", (ref IpcParams p, IpcReply _) =>
+        {
+            var path = p.GetString("path");
+            if (!p.Failed)
+            {
                 WritePresented(path);
-                break;
-            case ["planeshot", var prefix]:
+            }
+        });
+
+        _report.Register(methods, "westonia/planeshot", "planeshot {prefix}", (ref IpcParams p, IpcReply _) =>
+        {
+            var prefix = p.GetString("prefix");
+            if (!p.Failed)
+            {
                 WritePlanes(prefix);
-                break;
-            case ["where"]:
-                PrintState();
-                break;
-            case ["lock"]:
-                _lock?.Lock();
-                break;
-            case ["unlock"]:
-                _lock?.Unlock();
-                break;
-            case ["idle"]:
-                StartScreensaver();
-                _lock?.Lock();
-                break;
-            case ["theme", var variant]:
-                _ui.Theme = variant == "dark"
-                    ? Basin.UI.Avalonia.UIThemeVariant.Dark
-                    : Basin.UI.Avalonia.UIThemeVariant.Light;
-                _outputs.ScheduleAll();
-                break;
-            case ["quit"]:
-                Stop();
-                break;
-        }
+            }
+        });
+
+        _report.Register(methods, "westonia/where", "where", PrintState);
+        _report.Register(methods, "westonia/lock", "lock", () => _lock?.Lock());
+        _report.Register(methods, "westonia/unlock", "unlock", () => _lock?.Unlock());
+        _report.Register(methods, "westonia/idle", "idle", () =>
+        {
+            StartScreensaver();
+            _lock?.Lock();
+        });
+
+        _report.Register(methods, "westonia/theme", "theme {variant}", (ref IpcParams p, IpcReply _) =>
+        {
+            var variant = p.GetString("variant");
+            if (p.Failed)
+            {
+                return;
+            }
+
+            _ui.Theme = variant == "dark"
+                ? Basin.UI.Avalonia.UIThemeVariant.Dark
+                : Basin.UI.Avalonia.UIThemeVariant.Light;
+            _outputs.ScheduleAll();
+        });
     }
 
     private void WritePlanes(string prefix)
     {
         if (_outputs.Views.FirstOrDefault() is not { } view)
         {
-            BasinReport.Line($"PLANESHOT {prefix} images=0");
+            _report.Line($"PLANESHOT {prefix} images=0");
             return;
         }
 
@@ -81,7 +106,7 @@ internal sealed partial class Westonia
     private void WritePresented(string path)
     {
         var buffer = _outputs.Views.FirstOrDefault()?.LastPresentedBuffer;
-        BasinReport.Line(Basin.Scene.SceneScreenshot.WritePresented(buffer, _renderer, path) switch
+        _report.Line(Basin.Scene.SceneScreenshot.WritePresented(buffer, _renderer, path) switch
         {
             Basin.Scene.ScreenshotOutcome.NoFrame => "SHOTRAW none",
             Basin.Scene.ScreenshotOutcome.Unreadable => $"SHOTRAW unreadable {buffer!.Width}x{buffer.Height}",
@@ -91,34 +116,34 @@ internal sealed partial class Westonia
 
     private void PrintState()
     {
-        BasinReport.Line($"POINTER {_seat?.PointerX ?? 0} {_seat?.PointerY ?? 0}");
+        _report.Line($"POINTER {_seat?.PointerX ?? 0} {_seat?.PointerY ?? 0}");
         foreach (var view in _outputs.Views)
         {
             var box = _layout.BoxOf(view.Output);
             var work = _avalonia.WorkArea(box.X, box.Y, box.Width, box.Height);
-            BasinReport.Line($"AREA {view.Output.Name} output={box} work={work}");
+            _report.Line($"AREA {view.Output.Name} output={box} work={work}");
         }
 
         foreach (var window in _shell.Windows)
         {
             var geometry = window.Geometry;
-            BasinReport.Line($"WINDOW \"{window.Window.Title}\" {geometry} ws={window.Workspace + 1} kind={window.Kind} " + $"focused={ReferenceEquals(window, _shell.Focused)} maximized={window.Maximized} " + $"fullscreen={window.Fullscreen} tiled={window.Tiled}");
+            _report.Line($"WINDOW \"{window.Window.Title}\" {geometry} ws={window.Workspace + 1} kind={window.Kind} " + $"focused={ReferenceEquals(window, _shell.Focused)} maximized={window.Maximized} " + $"fullscreen={window.Fullscreen} tiled={window.Tiled}");
         }
 
-        BasinReport.Line($"SWITCHER {(_switcher?.IsOpen == true ? "open" : "closed")}");
-        BasinReport.Line($"LOCK {(_lock?.IsLocked == true ? "locked" : "unlocked")} " + $"client={(_lock?.ClientLocked == true ? "yes" : "no")} " + $"dialog={(_lock?.Dialog is null ? "none" : "shown")}");
-        BasinReport.Line($"SHELLCLIENT backgrounds={_shell.ClientBackgrounds} panels={_shell.ClientPanels} " + $"ready={_shell.DesktopIsReady}");
-        BasinReport.Line($"XWINDOWS {_xwayland?.Count ?? 0}");
-        BasinReport.Line($"ANIMATING {(_animations?.IsRunning == true ? "yes" : "no")}");
+        _report.Line($"SWITCHER {(_switcher?.IsOpen == true ? "open" : "closed")}");
+        _report.Line($"LOCK {(_lock?.IsLocked == true ? "locked" : "unlocked")} " + $"client={(_lock?.ClientLocked == true ? "yes" : "no")} " + $"dialog={(_lock?.Dialog is null ? "none" : "shown")}");
+        _report.Line($"SHELLCLIENT backgrounds={_shell.ClientBackgrounds} panels={_shell.ClientPanels} " + $"ready={_shell.DesktopIsReady}");
+        _report.Line($"XWINDOWS {_xwayland?.Count ?? 0}");
+        _report.Line($"ANIMATING {(_animations?.IsRunning == true ? "yes" : "no")}");
         var hit = _scene.SurfaceAt(_seat?.PointerX ?? 0, _seat?.PointerY ?? 0);
-        BasinReport.Line($"HIT scene={(hit?.Surface is null ? "none" : "surface")} " + $"focus={(Seat.Pointer.Focus is null ? "none" : "surface")} " + $"shell={(_seat?.IsOverShell == true ? "yes" : "no")}");
-        BasinReport.Line($"GRAB kind={_shell.Grab.Kind} window={(_shell.Grab.Window is null ? "none" : "yes")} " + $"buttons={Seat.Pointer.HasImplicitGrab}");
+        _report.Line($"HIT scene={(hit?.Surface is null ? "none" : "surface")} " + $"focus={(Seat.Pointer.Focus is null ? "none" : "surface")} " + $"shell={(_seat?.IsOverShell == true ? "yes" : "no")}");
+        _report.Line($"GRAB kind={_shell.Grab.Kind} window={(_shell.Grab.Window is null ? "none" : "yes")} " + $"buttons={Seat.Pointer.HasImplicitGrab}");
         foreach (var elements in _avalonia.Elements.Values)
         {
             if (elements.PanelSurface.Surface is { } panel)
             {
                 var size = panel.Size;
-                BasinReport.Line($"SURFACE panel {size.Width}x{size.Height}@{size.Scale}");
+                _report.Line($"SURFACE panel {size.Width}x{size.Height}@{size.Scale}");
             }
         }
 
@@ -127,15 +152,15 @@ internal sealed partial class Westonia
             if (window.Frame is { } frame)
             {
                 var box = frame.OuterBox;
-                BasinReport.Line($"SURFACE frame {box.Width}x{box.Height}@{window.Scale} strips=4");
+                _report.Line($"SURFACE frame {box.Width}x{box.Height}@{window.Scale} strips=4");
             }
         }
 
-        BasinReport.Line($"CURSOR {_cursor.Showing} drawn={_cursor.DrawnBy} on={_cursor.CursorOutput?.Name ?? "none"}");
-        BasinReport.Line($"POPUPS {_uiDriver.Popups.Count}");
+        _report.Line($"CURSOR {_cursor.Showing} drawn={_cursor.DrawnBy} on={_cursor.CursorOutput?.Name ?? "none"}");
+        _report.Line($"POPUPS {_uiDriver.Popups.Count}");
         if (_workspaces is { } workspaces)
         {
-            BasinReport.Line($"WORKSPACE {workspaces.Active + 1}/{workspaces.Count} sliding={workspaces.IsSliding} progress={workspaces.SlideProgress:F3}");
+            _report.Line($"WORKSPACE {workspaces.Active + 1}/{workspaces.Count} sliding={workspaces.IsSliding} progress={workspaces.SlideProgress:F3}");
         }
     }
 }

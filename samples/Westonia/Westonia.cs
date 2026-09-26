@@ -50,7 +50,6 @@ internal sealed partial class Westonia : IDisposable
 
     private Basin.XWayland.XWaylandServer? _xServer;
     private IEventSource? _idleTimer;
-    private StdinCommands? _stdinCommands;
     private System.Diagnostics.Process? _screensaver;
     private readonly DeferredWorkspaceModel _deferredWorkspaces = new();
     private readonly List<Process> _spawned = [];
@@ -437,7 +436,7 @@ internal sealed partial class Westonia : IDisposable
 
         _clockTimer = _host.Loop.AddTimer(OnClockTick);
         OnClockTick();
-        WireStdin();
+        WireIpc();
         WireIdle();
 
         if (_ini.Shell.StartupAnimation != ShellAnimation.None)
@@ -463,8 +462,8 @@ internal sealed partial class Westonia : IDisposable
         _loop.Iterating -= _uiDriver.Pump;
 
         _uiDriver.Woken -= _outputs.ScheduleAll;
-        _stdinCommands?.Stop();
-        _stdinCommands = null;
+        _ipc?.Dispose();
+        _ipc = null;
 
         _clockTimer?.Remove();
         return 0;
@@ -545,6 +544,8 @@ internal sealed partial class Westonia : IDisposable
 
     public void Dispose()
     {
+        _ipc?.Dispose();
+        _ipc = null;
         _colorPack?.Luts.Dispose();
         foreach (var process in _spawned)
         {

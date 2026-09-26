@@ -4,6 +4,7 @@ using Basin.Desktop;
 using Basin.Host;
 using Basin.Diagnostics;
 using Basin.Renderers;
+using Basin.Ipc;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 using Wayland.Server;
@@ -149,13 +150,13 @@ internal sealed partial class Shell : IDisposable
                 nested.SetTitle("eight-wm");
             }
 
-            BasinReport.Line($"OUTPUT {driver.Output.Name} {driver.Output.CurrentMode.Width}x{driver.Output.CurrentMode.Height}");
+            _report.Line($"OUTPUT {driver.Output.Name} {driver.Output.CurrentMode.Width}x{driver.Output.CurrentMode.Height}");
         };
         _outputs.Removed += driver =>
         {
             if (driver.Output is Basin.Backend.Drm.DrmOutput card)
             {
-                BasinReport.Line($"OUTPUT - {card.Name}");
+                _report.Line($"OUTPUT - {card.Name}");
             }
 
             var view = ViewOf(driver);
@@ -166,8 +167,8 @@ internal sealed partial class Shell : IDisposable
         _outputs.Emptied += Stop;
         _outputs.ModesetRefused += card =>
             log.Error($"modeset refused by {card.Name} in every mode");
-        _outputs.ModeChanged += driver => BasinReport.Line($"MODE {driver.Output.Name} {driver.Width}x{driver.Height}");
-        _outputs.ScanoutChanged += (driver, choice) => BasinReport.Line(choice switch
+        _outputs.ModeChanged += driver => _report.Line($"MODE {driver.Output.Name} {driver.Width}x{driver.Height}");
+        _outputs.ScanoutChanged += (driver, choice) => _report.Line(choice switch
         {
             ScanoutChoice.DeviceBuffers =>
                 $"SCANOUT {driver.Output.Name} device modifiers={driver.SwapModifiers.Length}",
@@ -276,7 +277,15 @@ internal sealed partial class Shell : IDisposable
 
         _shotPath = null;
         SceneScreenshot.WritePresented(shot, _renderer, path);
-        BasinReport.Line($"SHOT {path}");
+        if (_shotReply is { } pending)
+        {
+            _shotReply = null;
+            _ = IpcLineReport.Complete(pending, $"SHOT {path}");
+        }
+        else
+        {
+            _report.Line($"SHOT {path}");
+        }
     }
 
     internal ShellOptions Options => _options;
@@ -293,11 +302,11 @@ internal sealed partial class Shell : IDisposable
     {
         if (_host.Socket.Length > 0)
         {
-            BasinReport.Line(CompositorLines.Socket(_host.Socket));
+            _report.Line(CompositorLines.Socket(_host.Socket));
         }
 
         var hangup = _host.Loop.AddSignal(Signal.Hangup, _ => Reload());
-        WireStdin();
+        WireIpc();
 
         _seat.CenterCursor();
 
@@ -326,7 +335,7 @@ internal sealed partial class Shell : IDisposable
 
         DisconnectClients();
         hangup.Remove();
-        UnwireStdin();
+        UnwireIpc();
         return 0;
     }
 

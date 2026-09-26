@@ -191,13 +191,13 @@ internal sealed partial class Shell
         {
             view.StartModel.Filter = string.Empty;
             ShowApps(view, false);
-            BasinReport.Line($"FILTER none");
+            _report.Line($"FILTER none");
             return;
         }
 
         ShowApps(view, true);
         view.StartModel.Filter = text;
-        BasinReport.Line($"FILTER {text} matches={view.StartModel.FilteredApps.Count}");
+        _report.Line($"FILTER {text} matches={view.StartModel.FilteredApps.Count}");
     }
 
     internal HotCorner CornerAt(ShellView view, double localX, double localY)
@@ -267,7 +267,7 @@ internal sealed partial class Shell
 
         var from = _corner;
         _corner = HotCorner.None;
-        BasinReport.Line($"CORNER {from} slide");
+        _report.Line($"CORNER {from} slide");
         if (onLeft)
         {
             DockSwitcher(view, true);

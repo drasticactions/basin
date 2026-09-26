@@ -356,7 +356,7 @@ internal sealed partial class TinyComp
         var workspace = NewWorkspace(view, name, index);
         RenumberWorkspaces(view);
         _workspaceModel.RaiseChanged();
-        BasinReport.Line($"WORKSPACE + {view.Output.Name} {workspace.Name}");
+        _report.Line($"WORKSPACE + {view.Output.Name} {workspace.Name}");
         return workspace;
     }
 
@@ -404,7 +404,7 @@ internal sealed partial class TinyComp
         workspace.Tree.Destroy();
         RenumberWorkspaces(view);
         _workspaceModel.RaiseChanged();
-        BasinReport.Line($"WORKSPACE - {view.Output.Name} {workspace.Name}");
+        _report.Line($"WORKSPACE - {view.Output.Name} {workspace.Name}");
     }
 
     private void RenumberWorkspaces(OutputView view)
@@ -479,7 +479,7 @@ internal sealed partial class TinyComp
 
         RefreshAboveVisibility();
         _workspaceModel.RaiseChanged();
-        BasinReport.Line($"WORKSPACE {view.Output.Name} {target.Name}");
+        _report.Line($"WORKSPACE {view.Output.Name} {target.Name}");
         if (refocus)
         {
             FocusWorkspaceWindow(target);
@@ -749,7 +749,7 @@ internal sealed partial class TinyComp
             target = NewWorkspace(view, null, at);
             RenumberWorkspaces(view);
             _workspaceModel.RaiseChanged();
-            BasinReport.Line($"WORKSPACE + {view.Output.Name} {target.Name}");
+            _report.Line($"WORKSPACE + {view.Output.Name} {target.Name}");
         }
         else
         {
@@ -825,7 +825,7 @@ internal sealed partial class TinyComp
                 window.MoveTo(window.X - sourceBox.X + targetBox.X, window.Y - sourceBox.Y + targetBox.Y);
             }
 
-            BasinReport.Line($"WORKSPACE {moved} > {target.Name}");
+            _report.Line($"WORKSPACE {moved} > {target.Name}");
             if (refocus && targetView is { } hidden && hidden.Active != target &&
                 (ReferenceEquals(_focused, window) || ReferenceEquals(_focusedX, window)))
             {
@@ -887,7 +887,7 @@ internal sealed partial class TinyComp
         RenumberWorkspaces(source);
         RenumberWorkspaces(target);
         _workspaceModel.RaiseChanged();
-        BasinReport.Line($"WORKSPACE {workspace.Name} > {target.Output.Name}");
+        _report.Line($"WORKSPACE {workspace.Name} > {target.Output.Name}");
     }
 
     private void DropWorkspacesOf(OutputView view)
@@ -936,7 +936,7 @@ internal sealed partial class TinyComp
         workspace.Urgent = true;
         _workspaceModel.RaiseChanged();
         RingBell();
-        BasinReport.Line($"URGENT {workspace.Name}");
+        _report.Line($"URGENT {workspace.Name}");
     }
 
     private void PrintWorkspaces()
@@ -946,7 +946,7 @@ internal sealed partial class TinyComp
             var view = Views[i];
             var cells = view.Workspaces.Select(ws =>
                 $"[{ws.Name}{(view.Active == ws ? "*" : "")}{(ws.Urgent ? "!" : "")}:{WorkspaceWindowCount(ws)}]");
-            BasinReport.Line($"WS output={i} {string.Join(" ", cells)}");
+            _report.Line($"WS output={i} {string.Join(" ", cells)}");
         }
     }
 }

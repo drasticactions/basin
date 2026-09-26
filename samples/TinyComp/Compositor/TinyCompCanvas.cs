@@ -75,7 +75,7 @@ internal sealed partial class TinyComp
 
         canvas.Generation++;
         var active = !canvas.Left.IsIdentity ? canvas.Left : !canvas.Right.IsIdentity ? canvas.Right : null;
-        BasinReport.Line(
+        _report.Line(
             $"CANVAS view={ViewIndex(view)} left={canvas.Left.ZoneWidth} right={canvas.Right.ZoneWidth}"
             + $" extension={active?.Extension ?? 0} edge_scale={(active?.EdgeScale ?? settings.EdgeScaleValue):F3}"
             + $" exponent={(active?.Exponent ?? 0):F2} slope={(active?.Slope ?? 0):F2}");
@@ -539,7 +539,7 @@ internal sealed partial class TinyComp
         var warp = side == CanvasSide.Left ? canvas.Left : canvas.Right;
         if (warp.IsIdentity)
         {
-            BasinReport.Line($"PARK {NameOf(window)} refused: no {(side == CanvasSide.Left ? "left" : "right")} zone");
+            _report.Line($"PARK {NameOf(window)} refused: no {(side == CanvasSide.Left ? "left" : "right")} zone");
             return;
         }
 
@@ -555,7 +555,7 @@ internal sealed partial class TinyComp
             ? warp.FarEdge + (window.X - box.X)
             : warp.FarEdge - box.Width + (window.X - box.X);
         BeginCanvasMotion(window, state, target, CanvasAnimationNanos(view));
-        BasinReport.Line($"PARK {NameOf(window)} {(side == CanvasSide.Left ? "left" : "right")} to={target}");
+        _report.Line($"PARK {NameOf(window)} {(side == CanvasSide.Left ? "left" : "right")} to={target}");
     }
 
     internal void Recall(IGrabTarget window)
@@ -590,7 +590,7 @@ internal sealed partial class TinyComp
         _canvasStates[window] = state;
         state.Home = null;
         BeginCanvasMotion(window, state, target, CanvasAnimationNanos(view));
-        BasinReport.Line($"RECALL {NameOf(window)} to={target}");
+        _report.Line($"RECALL {NameOf(window)} to={target}");
     }
 
     private void BeginCanvasMotion(IGrabTarget window, CanvasWindowState state, int target, long nanos)
@@ -661,7 +661,7 @@ internal sealed partial class TinyComp
         {
             _canvasClosing = false;
             LayoutCanvasAll();
-            BasinReport.Line("CANVAS on");
+            _report.Line("CANVAS on");
             return;
         }
 
@@ -675,7 +675,7 @@ internal sealed partial class TinyComp
             }
         }
 
-        BasinReport.Line($"CANVAS off recalled={recalled}");
+        _report.Line($"CANVAS off recalled={recalled}");
         if (_canvasMotions.Count > 0)
         {
             _canvasClosing = true;
@@ -750,7 +750,7 @@ internal sealed partial class TinyComp
         }
 
         var screen = ScreenBoxOf(window);
-        BasinReport.Line(
+        _report.Line(
             $"CANVASWIN {NameOf(window)} canvas={window.X} screen={screen.X} width={screen.Width}"
             + $" deformed={(IsCanvasDeformed(window) ? "yes" : "no")}"
             + $" home={(_canvasStates.TryGetValue(window, out var state) && state.Home is { } home ? home.X.ToString() : "none")}");

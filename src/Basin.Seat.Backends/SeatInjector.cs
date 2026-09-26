@@ -1,6 +1,6 @@
 namespace Basin.Seat.Backends;
 
-public sealed class SeatInjector
+public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
 {
     private readonly SeatBinder _binder;
     private readonly Seat _seat;
@@ -26,6 +26,8 @@ public sealed class SeatInjector
     public Action<uint, uint, bool>? DeliverButton { get; set; }
 
     public Action<uint, uint, bool>? DeliverKey { get; set; }
+
+    public Action<uint, uint, double, uint>? DeliverAxis { get; set; }
 
     public void Warp(double x, double y)
     {
@@ -81,6 +83,67 @@ public sealed class SeatInjector
             Moved?.Invoke(timeMs);
         }
 
+        return true;
+    }
+
+    public bool PointerMotionAbsolute(uint timeMs, double x, double y)
+    {
+        _binder.EnsurePointerCapability();
+        var previousX = _pointer.X;
+        var previousY = _pointer.Y;
+        _pointer.Warp(x, y);
+        if (MovedBy is { } movedBy)
+        {
+            movedBy(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
+        }
+        else
+        {
+            Moved?.Invoke(timeMs);
+        }
+
+        return true;
+    }
+
+    public bool PointerButton(uint timeMs, uint button, bool pressed)
+    {
+        if (DeliverButton is not { } deliver)
+        {
+            return false;
+        }
+
+        _binder.EnsurePointerCapability();
+        deliver(timeMs, button, pressed);
+        return true;
+    }
+
+    public bool PointerAxis(uint timeMs, uint axis, double value, uint source)
+    {
+        if (DeliverAxis is not { } deliver)
+        {
+            return false;
+        }
+
+        _binder.EnsurePointerCapability();
+        deliver(timeMs, axis, value, source);
+        return true;
+    }
+
+    public bool Key(uint timeMs, uint keycode, bool pressed)
+    {
+        if (DeliverKey is not { } deliver)
+        {
+            return false;
+        }
+
+        _seat.SetCapability(SeatCapability.Keyboard, true);
+        deliver(timeMs, keycode, pressed);
+        return true;
+    }
+
+    public bool TryPointerPosition(out double x, out double y)
+    {
+        x = _pointer.X;
+        y = _pointer.Y;
         return true;
     }
 }

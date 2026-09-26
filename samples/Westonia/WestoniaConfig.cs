@@ -21,7 +21,7 @@ internal sealed partial class Westonia
 
         Seat.Keyboard.SetKeymap(names);
         Seat.Keyboard.SetRepeatInfo(keyboard.RepeatRate, keyboard.RepeatDelay);
-        BasinReport.Line($"KEYMAP {(named ? "weston.ini" : "system")} layout={names.Layout ?? "default"} " + $"compiled={(Seat.Keyboard.Keymap is null ? "no" : "yes")} " + $"repeat={keyboard.RepeatRate}/{keyboard.RepeatDelay}");
+        _report.Line($"KEYMAP {(named ? "weston.ini" : "system")} layout={names.Layout ?? "default"} " + $"compiled={(Seat.Keyboard.Keymap is null ? "no" : "yes")} " + $"repeat={keyboard.RepeatRate}/{keyboard.RepeatDelay}");
     }
 
     private void ApplyLibinputConfig()
