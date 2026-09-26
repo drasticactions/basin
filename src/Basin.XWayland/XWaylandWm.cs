@@ -32,6 +32,8 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     private readonly XWaylandClipboard? _clipboard;
 
+    private bool _disposed;
+
     public XWaylandWm(int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat = null)
     {
         _loop = loop;
@@ -91,6 +93,12 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _shell.SerialCommitted -= OnSerialCommitted;
         _clipboard?.Dispose();
         _source.Remove();
