@@ -325,9 +325,14 @@ internal sealed class SettingsForm
 
                 break;
             default:
+                if (key.Presets is { } presets)
+                {
+                    PresetButtons(paper, theme, key, slot, presets);
+                }
+
                 SettingsWidgets.TextRow(paper, theme, key.Path, key.Label, slot);
                 if (key.Kind == SettingKind.Path && ((ISettingValue<string>)slot).Value is { Length: > 0 } path &&
-                    path != "none" && !File.Exists(Expand(path)))
+                    path != "none" && key.Presets?.Contains(path) != true && !File.Exists(ExpandFor(key, path)))
                 {
                     SettingsWidgets.Note(paper, theme, key.Path + "-missing", $"{path} does not exist", theme.Warning);
                 }
@@ -340,6 +345,25 @@ internal sealed class SettingsForm
             SettingsWidgets.Note(paper, theme, key.Path + "-note", note);
         }
     }
+
+    private static void PresetButtons(
+        Prowl.PaperUI.Paper paper, SettingsTheme theme, SettingKey key, SettingSlot slot, IReadOnlyList<string> presets)
+    {
+        var current = ((ISettingValue<string>)slot).Value;
+        using (paper.Row(key.Path + "-presets").Width(paper.Stretch()).Height(UnitValue.Auto).PaddingLeft(14).Gap(6).Enter())
+        {
+            foreach (var preset in presets)
+            {
+                var name = preset;
+                SettingsWidgets.Button(
+                    paper, theme, name, name, () => ((ISettingValue<string>)slot).Value = name,
+                    primary: string.Equals(current, name, StringComparison.Ordinal));
+            }
+        }
+    }
+
+    private string ExpandFor(SettingKey key, string path) =>
+        key.Presets is null ? Expand(path) : OverviewSetting.ResolveTexturePath(path, _context.ConfigPath);
 
     private IReadOnlyList<string> ChoicesOf(SettingKey key) => key.ChoicesFrom switch
     {

@@ -23,6 +23,8 @@ internal static class SettingsCatalog
         "color.source", "color.icc", "color.hdr", "hypr.enable", "hypr.input_capture", "hypr.ctm",
     ];
 
+    private static readonly string[] TexturePresets = ["none", "stone", "brick", "wood", "noise"];
+
     private static readonly string[] Animations = ["none", "fade", "zoom", "glide", "sheet"];
 
     private static readonly string[] Closings = ["none", "fade", "zoom", "fire", "fire-gpu", "glide", "sheet", "fall-apart"];
@@ -232,6 +234,11 @@ internal static class SettingsCatalog
             new(Overview, "overview", "wall_width", "Wall width", SettingKind.Real) { Default = "0.04", Min = 0, Max = 0.2, Step = 0.01 },
             new(Overview, "overview", "wall_color", "Wall color", SettingKind.Color) { Default = "\"#262a3a\"" },
             new(Overview, "overview", "wall_shade", "Wall shade", SettingKind.Real) { Default = "0.25", Min = 0, Max = 1, Step = 0.05 },
+            new(Overview, "overview", "wall_texture", "Wall texture", SettingKind.Path) { Default = "\"none\"", Presets = TexturePresets },
+            new(Overview, "overview", "shelf_texture", "Shelf texture", SettingKind.Path) { Default = "\"none\"", Presets = TexturePresets },
+            new(Overview, "overview", "texture_scale", "Texture scale", SettingKind.Real) { Default = "1.0", Min = 0.25, Max = 8, Step = 0.25 },
+            new(Overview, "overview", "shelf_color", "Shelf color", SettingKind.Color) { Default = "\"#3a3d44\"" },
+            new(Overview, "overview", "texture_grid", "Grid on textures", SettingKind.Flag) { Default = "true" },
 
             new(Hypr, "hypr", "enable", "hyprland-protocols", SettingKind.Flag) { Default = "true", Restart = true },
             new(Hypr, "hypr", "input_capture", "Input capture", SettingKind.Flag) { Default = "true", Restart = true },

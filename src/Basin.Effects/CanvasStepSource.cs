@@ -4,9 +4,9 @@ namespace Basin.Effects;
 
 public sealed class CanvasStepSource : IMeshSource
 {
-    private const double DepthShade = 0.35;
-
     private static readonly double[] Quarters = [0.25, 0.5, 0.75];
+
+    private static readonly CanvasStepSurfaceSource Plain = new(CanvasStepSurface.Walls);
 
     private static readonly CanvasStepSides[] Order =
         [CanvasStepSides.Top, CanvasStepSides.Left, CanvasStepSides.Right, CanvasStepSides.Bottom];
@@ -14,7 +14,6 @@ public sealed class CanvasStepSource : IMeshSource
     private int _cellSize = 64;
     private float _alpha = 1f;
     private double _minSpacing;
-    private double _wallShade = 0.25;
 
     public CanvasStepMap? Map { get; set; }
 
@@ -32,13 +31,7 @@ public sealed class CanvasStepSource : IMeshSource
 
     public RenderColor Color { get; set; } = new(0.16f, 0.21f, 0.75f, 1f);
 
-    public RenderColor WallColor { get; set; } = new(0x26 / 255f, 0x2a / 255f, 0x3a / 255f, 1f);
-
-    public double WallShade
-    {
-        get => _wallShade;
-        set => _wallShade = Math.Clamp(value, 0.0, 1.0);
-    }
+    public CanvasStepSurfaceSource? Walls { get; set; }
 
     public float Alpha
     {
@@ -48,16 +41,11 @@ public sealed class CanvasStepSource : IMeshSource
 
     public bool Lines { get; set; } = true;
 
-    public RenderColor WallColorOf(CanvasStepSides side) => side switch
-    {
-        CanvasStepSides.Top => Lighten(WallColor, _wallShade),
-        CanvasStepSides.Left => Lighten(WallColor, _wallShade * 0.5),
-        CanvasStepSides.Right => Darken(WallColor, _wallShade * 0.5),
-        CanvasStepSides.Bottom => Darken(WallColor, _wallShade),
-        _ => WallColor,
-    };
+    public bool ShelfLines { get; set; } = true;
 
-    public RenderColor BaseColorOf(CanvasStepSides side) => Darken(WallColorOf(side), DepthShade);
+    public bool WallGridLines { get; set; } = true;
+
+    public bool DesktopLines { get; set; } = true;
 
     public int VertexCount(in Box bounds) => Walk(bounds, [], write: false);
 
@@ -71,23 +59,23 @@ public sealed class CanvasStepSource : IMeshSource
         }
 
         var count = 0;
-        foreach (var side in Order)
-        {
-            if (map.WallWidth(side) > 0)
-            {
-                Wall(map, side, into, ref count, write);
-            }
-        }
-
         var lines = Lines && _alpha > 0f;
         if (lines)
         {
             var color = new RenderColor(Color.R * _alpha, Color.G * _alpha, Color.B * _alpha, Color.A * _alpha);
-            ShelfGrid(map, bounds, into, ref count, write, color);
-            Grid(map, CanvasStepPlane.Desktop, Clip(map.Outline, bounds), into, ref count, write, color);
+            if (ShelfLines)
+            {
+                ShelfGrid(map, bounds, into, ref count, write, color);
+            }
+
+            if (DesktopLines)
+            {
+                Grid(map, CanvasStepPlane.Desktop, Clip(map.Outline, bounds), into, ref count, write, color);
+            }
+
             foreach (var side in Order)
             {
-                if (map.WallWidth(side) > 0)
+                if (WallGridLines && map.WallWidth(side) > 0)
                 {
                     WallLines(map, side, into, ref count, write, color);
                 }
@@ -105,66 +93,12 @@ public sealed class CanvasStepSource : IMeshSource
         return count;
     }
 
-    private static void Corners(
-        CanvasStepMap map, CanvasStepSides side,
-        out (double X, double Y) inner0, out (double X, double Y) inner1, out (double X, double Y) outer0, out (double X, double Y) outer1)
-    {
-        var d = map.Outline;
-        var b = map.Inner;
-        switch (side)
-        {
-            case CanvasStepSides.Left:
-                inner0 = (d.X, d.Y);
-                inner1 = (d.X, d.Bottom);
-                outer0 = (b.X, b.Y);
-                outer1 = (b.X, b.Bottom);
-                break;
-            case CanvasStepSides.Right:
-                inner0 = (d.Right, d.Y);
-                inner1 = (d.Right, d.Bottom);
-                outer0 = (b.Right, b.Y);
-                outer1 = (b.Right, b.Bottom);
-                break;
-            case CanvasStepSides.Top:
-                inner0 = (d.X, d.Y);
-                inner1 = (d.Right, d.Y);
-                outer0 = (b.X, b.Y);
-                outer1 = (b.Right, b.Y);
-                break;
-            default:
-                inner0 = (d.X, d.Bottom);
-                inner1 = (d.Right, d.Bottom);
-                outer0 = (b.X, b.Bottom);
-                outer1 = (b.Right, b.Bottom);
-                break;
-        }
-    }
-
-    private void Wall(CanvasStepMap map, CanvasStepSides side, Span<MeshVertex> into, ref int count, bool write)
-    {
-        if (write)
-        {
-            Corners(map, side, out var inner0, out var inner1, out var outer0, out var outer1);
-            var lit = WallColorOf(side);
-            var foot = BaseColorOf(side);
-            var slice = into.Slice(count, 6);
-            slice[0] = Vertex(inner0, lit);
-            slice[1] = Vertex(inner1, lit);
-            slice[2] = Vertex(outer1, foot);
-            slice[3] = Vertex(inner0, lit);
-            slice[4] = Vertex(outer1, foot);
-            slice[5] = Vertex(outer0, foot);
-        }
-
-        count += 6;
-    }
-
     private void BaseLine(CanvasStepMap map, CanvasStepSides side, Span<MeshVertex> into, ref int count, bool write)
     {
         if (write)
         {
-            Corners(map, side, out _, out _, out var outer0, out var outer1);
-            var color = Darken(BaseColorOf(side), 0.5);
+            CanvasStepSurfaceSource.Corners(map, side, out _, out _, out var outer0, out var outer1);
+            var color = Darken((Walls ?? Plain).BaseColorOf(side), 0.5);
             var horizontal = side is CanvasStepSides.Top or CanvasStepSides.Bottom;
             var inward = side is CanvasStepSides.Left or CanvasStepSides.Top ? 0.0 : -1.0;
             if (horizontal)
@@ -184,7 +118,7 @@ public sealed class CanvasStepSource : IMeshSource
 
     private void WallLines(CanvasStepMap map, CanvasStepSides side, Span<MeshVertex> into, ref int count, bool write, in RenderColor color)
     {
-        Corners(map, side, out var inner0, out var inner1, out var outer0, out var outer1);
+        CanvasStepSurfaceSource.Corners(map, side, out var inner0, out var inner1, out var outer0, out var outer1);
         foreach (var quarter in Quarters)
         {
             if (write)
@@ -349,16 +283,6 @@ public sealed class CanvasStepSource : IMeshSource
         MeshGrid.WriteCell(
             into, 0, 0, 0, 0,
             ((float)left, (float)top), ((float)right, (float)top), ((float)right, (float)bottom), ((float)left, (float)bottom), color);
-
-    private static MeshVertex Vertex((double X, double Y) point, in RenderColor color) =>
-        new((float)point.X, (float)point.Y, 0, 0, color);
-
-    private static RenderColor Lighten(in RenderColor color, double amount)
-    {
-        var t = (float)amount;
-        return new RenderColor(
-            color.R + ((color.A - color.R) * t), color.G + ((color.A - color.G) * t), color.B + ((color.A - color.B) * t), color.A);
-    }
 
     private static RenderColor Darken(in RenderColor color, double amount)
     {

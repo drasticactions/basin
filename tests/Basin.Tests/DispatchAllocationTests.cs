@@ -1157,14 +1157,35 @@ public sealed class DispatchAllocationTests
         private readonly TinyComp.OverviewSide[] _full = new TinyComp.OverviewSide[4];
         private readonly Box _box = new(0, 0, 160, 120);
 
-        public StepRig(CompositorTestHost host)
+        private readonly MemoryBuffer? _wallTexture;
+        private readonly MemoryBuffer? _floorTexture;
+        private readonly SceneMesh _floorMesh;
+        private readonly SceneMesh _wallMesh;
+
+        public StepRig(CompositorTestHost host, bool textured = false)
         {
             _full[0] = TinyComp.OverviewLayout.StepFull(0, 0, 80, -1, 0.6, 0.06, 160);
             _full[1] = TinyComp.OverviewLayout.StepFull(160, 160, 80, 1, 0.6, 0.06, 160);
             _full[2] = TinyComp.OverviewLayout.StepFull(0, 0, 60, -1, 0.6, 0.06, 120);
             _full[3] = TinyComp.OverviewLayout.StepFull(120, 120, 60, 1, 0.6, 0.06, 120);
             _ = TinyComp.OverviewLayout.LayoutStep(Full, _box, _box, _full, 1.0, 0.6, 0.3);
-            Source = new Basin.Effects.CanvasStepSource { Map = Map, CellSize = 16, MinLineSpacing = 4 };
+            _wallTexture = textured ? Basin.Effects.CanvasTextures.Generate(Basin.Effects.CanvasTexturePreset.Stone) : null;
+            _floorTexture = textured ? Basin.Effects.CanvasTextures.Generate(Basin.Effects.CanvasTexturePreset.Wood) : null;
+            var floor = new Basin.Effects.CanvasStepSurfaceSource(Basin.Effects.CanvasStepSurface.Floor)
+            {
+                Map = Map, TextureWidth = _floorTexture?.Width ?? 0, TextureHeight = _floorTexture?.Height ?? 0, TextureScale = 0.25,
+            };
+            var walls = new Basin.Effects.CanvasStepSurfaceSource(Basin.Effects.CanvasStepSurface.Walls)
+            {
+                Map = Map, TextureWidth = _wallTexture?.Width ?? 0, TextureHeight = _wallTexture?.Height ?? 0, TextureScale = 0.25,
+            };
+            _floorMesh = new SceneMesh(host.Scene.Root) { Bounds = _box, Source = floor };
+            _floorMesh.SetSpriteBuffer(_floorTexture);
+            _wallMesh = new SceneMesh(host.Scene.Root) { Bounds = _box, Source = walls };
+            _wallMesh.SetSpriteBuffer(_wallTexture);
+            _wallTexture?.Destroy();
+            _floorTexture?.Destroy();
+            Source = new Basin.Effects.CanvasStepSource { Map = Map, Walls = walls, CellSize = 16, MinLineSpacing = 4 };
             Mesh = new SceneMesh(host.Scene.Root) { Bounds = _box, Source = Source };
         }
 
@@ -1181,6 +1202,8 @@ public sealed class DispatchAllocationTests
             _ = TinyComp.OverviewLayout.LayoutStep(Map, _box, _box, _full, progress, 0.6, 0.3);
             Source.Alpha = (float)progress;
             Mesh.NotifyMeshChanged();
+            _floorMesh.NotifyMeshChanged();
+            _wallMesh.NotifyMeshChanged();
         }
 
         public static void Place(SceneTree window, SceneTransform node, in Box box, in RenderTransform placement)
@@ -1203,12 +1226,18 @@ public sealed class DispatchAllocationTests
     }
 
     [Fact]
-    public void An_overview_step_toggle_stays_within_budget()
+    public void An_overview_step_toggle_stays_within_budget() => OverviewStepToggle(textured: false, "overview-step-toggle");
+
+    [Fact]
+    public void A_textured_overview_step_toggle_stays_within_budget() =>
+        OverviewStepToggle(textured: true, "overview-step-toggle-textured");
+
+    private static void OverviewStepToggle(bool textured, string row)
     {
         Budgets.Require();
 
         using var host = new CompositorTestHost();
-        var rig = new StepRig(host);
+        var rig = new StepRig(host, textured);
         var windows = new[] { StepRig.Window(host, 40, 30), StepRig.Window(host, 40, 30), StepRig.Window(host, 28, 20) };
         var boxes = new[] { new Box(30, 40, 40, 30), new Box(250, 60, 40, 30), new Box(260, -60, 28, 20) };
 
@@ -1237,16 +1266,22 @@ public sealed class DispatchAllocationTests
         }
 
         _ = ToggleRounds(Rounds);
-        Budgets.Check("server", "overview-step-toggle", ToggleRounds(Rounds));
+        Budgets.Check("server", row, ToggleRounds(Rounds));
     }
 
     [Fact]
-    public void An_overview_step_drag_stays_within_budget()
+    public void An_overview_step_drag_stays_within_budget() => OverviewStepDrag(textured: false, "overview-step-drag");
+
+    [Fact]
+    public void A_textured_overview_step_drag_stays_within_budget() =>
+        OverviewStepDrag(textured: true, "overview-step-drag-textured");
+
+    private static void OverviewStepDrag(bool textured, string row)
     {
         Budgets.Require();
 
         using var host = new CompositorTestHost();
-        var rig = new StepRig(host);
+        var rig = new StepRig(host, textured);
         rig.Lay(1.0);
         var (window, node) = StepRig.Window(host, 40, 30);
 
@@ -1271,7 +1306,7 @@ public sealed class DispatchAllocationTests
         }
 
         _ = DragRounds(Rounds);
-        Budgets.Check("server", "overview-step-drag", DragRounds(Rounds));
+        Budgets.Check("server", row, DragRounds(Rounds));
     }
 
     [Fact]

@@ -293,6 +293,65 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_overview_texture_keys_parse_clamp_and_resolve()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Load(Write(string.Empty), log, out _).Overview;
+        Assert.Equal("none", defaults.WallTextureValue);
+        Assert.Equal("none", defaults.ShelfTextureValue);
+        Assert.False(defaults.Textured);
+        Assert.Equal(1.0, defaults.TextureScaleValue, 9);
+        Assert.Equal(0x3a3d44ffu, defaults.ShelfRgba);
+        Assert.True(defaults.TextureGridValue);
+        Assert.False(TinyComp.Config.Load(Write("[overview]\ntexture_grid = false\n"), log, out _).Overview.TextureGridValue);
+
+        _lines.Clear();
+        var step = TinyComp.Config.Load(Write(
+            "[overview]\nwall = \"step\"\nwall_texture = \"stone\"\nshelf_texture = \"tiles/floor.png\"\n" +
+            "texture_scale = 20\nshelf_color = \"#203040\"\n"), log, out var fatal);
+        Assert.Null(fatal);
+        Assert.Equal("stone", step.Overview.WallTextureValue);
+        Assert.Equal("tiles/floor.png", step.Overview.ShelfTextureValue);
+        Assert.True(step.Overview.Textured);
+        Assert.Equal(8.0, step.Overview.TextureScaleValue, 9);
+        Assert.Equal(0x203040ffu, step.Overview.ShelfRgba);
+        Assert.DoesNotContain(_lines, line => line.Contains("apply only", StringComparison.Ordinal));
+
+        var small = TinyComp.Config.Load(Write("[overview]\ntexture_scale = 0.01\nwall_texture = \"\"\n"), log, out _).Overview;
+        Assert.Equal(0.25, small.TextureScaleValue, 9);
+        Assert.Equal("none", small.WallTextureValue);
+        Assert.True(CanvasTextures.TryParse("brick", out _));
+        Assert.False(TinyComp.OverviewSetting.IsTexture("none"));
+        Assert.True(TinyComp.OverviewSetting.IsTexture("stnoe"));
+
+        var config = Path.Combine(_directory, "tinycomp.toml");
+        Assert.Equal(Path.Combine(_directory, "tiles", "floor.png"), TinyComp.OverviewSetting.ResolveTexturePath("tiles/floor.png", config));
+        Assert.Equal("/srv/wall.png", TinyComp.OverviewSetting.ResolveTexturePath("/srv/wall.png", config));
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.Equal(Path.Combine(home, "wall.png"), TinyComp.OverviewSetting.ResolveTexturePath("~/wall.png", config));
+        Assert.Equal(Path.GetFullPath("wall.png"), TinyComp.OverviewSetting.ResolveTexturePath("wall.png", null));
+    }
+
+    [Fact]
+    public void A_texture_key_with_a_slope_wall_warns_once()
+    {
+        var log = BasinLog.For("t");
+        _lines.Clear();
+        _ = TinyComp.Config.Load(Write("[overview]\nwall_texture = \"stone\"\nshelf_texture = \"wood\"\n"), log, out _);
+        Assert.Single(_lines, line => line.Contains("wall_texture and shelf_texture apply only to wall = \"step\"", StringComparison.Ordinal));
+
+        _lines.Clear();
+        _ = TinyComp.Config.Load(Write(
+            "[overview]\nwall = \"step\"\nwall_texture = \"stone\"\n[output.\"DP-2\"]\noverview_wall = \"slope\"\n"), log, out _);
+        Assert.Single(_lines, line => line.Contains("apply only to wall", StringComparison.Ordinal));
+
+        _lines.Clear();
+        _ = TinyComp.Config.Load(Write("[overview]\nwall = \"step\"\nwall_texture = \"stone\"\n"), log, out _);
+        _ = TinyComp.Config.Load(Write("[overview]\nwall = \"slope\"\n"), log, out _);
+        Assert.DoesNotContain(_lines, line => line.Contains("apply only to wall", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Step_mode_warns_once_about_the_canvas_keys_it_ignores()
     {
         var log = BasinLog.For("t");

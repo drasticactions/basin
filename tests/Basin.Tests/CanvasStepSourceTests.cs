@@ -5,7 +5,7 @@ namespace Basin.Tests;
 
 public sealed class CanvasStepSourceTests
 {
-    private static CanvasStepMap Map(CanvasStepSides sides)
+    internal static CanvasStepMap Map(CanvasStepSides sides)
     {
         var map = new CanvasStepMap();
         Span<TinyComp.OverviewSide> full = stackalloc TinyComp.OverviewSide[4];
@@ -26,16 +26,37 @@ public sealed class CanvasStepSourceTests
     }
 
     [Fact]
-    public void Without_lines_each_active_wall_is_two_triangles_and_a_base_line()
+    public void Without_lines_each_active_wall_is_a_base_line()
     {
         var bounds = new Box(0, 0, 1600, 900);
         var two = new CanvasStepSource { Map = Map(CanvasStepSides.Horizontal), Lines = false };
-        Assert.Equal(2 * 12, two.VertexCount(bounds));
+        Assert.Equal(2 * 6, two.VertexCount(bounds));
         var four = new CanvasStepSource { Map = Map(CanvasStepSides.All), Lines = false };
-        Assert.Equal(4 * 12, four.VertexCount(bounds));
+        Assert.Equal(4 * 6, four.VertexCount(bounds));
         Assert.Equal(0, new CanvasStepSource { Map = new CanvasStepMap() }.VertexCount(bounds));
         var faded = new CanvasStepSource { Map = Map(CanvasStepSides.All), Alpha = 0f };
-        Assert.Equal(4 * 12, faded.VertexCount(bounds));
+        Assert.Equal(4 * 6, faded.VertexCount(bounds));
+    }
+
+    [Fact]
+    public void The_shelf_desktop_and_wall_grids_turn_off_one_at_a_time_and_the_base_lines_stay()
+    {
+        var bounds = new Box(0, 0, 1600, 900);
+        var map = Map(CanvasStepSides.All);
+        int Count(bool shelf, bool wall, bool desktop) => new CanvasStepSource
+        {
+            Map = map, CellSize = 64, ShelfLines = shelf, WallGridLines = wall, DesktopLines = desktop,
+        }.VertexCount(bounds);
+
+        var all = Count(true, true, true);
+        var shelfOnly = all - Count(false, true, true);
+        var wallOnly = all - Count(true, false, true);
+        var desktopOnly = all - Count(true, true, false);
+        Assert.True(shelfOnly > 0 && wallOnly > 0 && desktopOnly > 0);
+        var baseLines = new CanvasStepSource { Map = map, CellSize = 64, Lines = false }.VertexCount(bounds);
+        Assert.Equal(4 * 6, baseLines);
+        Assert.Equal(all - shelfOnly - wallOnly - desktopOnly, baseLines);
+        Assert.Equal(baseLines, Count(false, false, false));
     }
 
     [Fact]
@@ -44,7 +65,7 @@ public sealed class CanvasStepSourceTests
         var bounds = new Box(0, 0, 1600, 900);
         var source = new CanvasStepSource { Map = Map(CanvasStepSides.All), CellSize = 64, MinLineSpacing = 8 };
         var count = source.VertexCount(bounds);
-        Assert.True(count > 4 * 12);
+        Assert.True(count > 4 * 6);
         var vertices = Write(source, bounds);
         Assert.DoesNotContain(vertices, vertex => vertex.X == 0 && vertex.Y == 0 && vertex.Color.A == 0);
     }
@@ -53,7 +74,9 @@ public sealed class CanvasStepSourceTests
     public void Walls_meeting_at_a_corner_share_the_miter()
     {
         var map = Map(CanvasStepSides.All);
-        var vertices = Write(new CanvasStepSource { Map = map, Lines = false }, new Box(0, 0, 1600, 900));
+        var walls = new CanvasStepSurfaceSource(CanvasStepSurface.Walls) { Map = map };
+        var vertices = new MeshVertex[walls.VertexCount(new Box(0, 0, 1600, 900))];
+        walls.WriteVertices(new Box(0, 0, 1600, 900), vertices);
         var top = vertices.AsSpan(0, 6).ToArray();
         var right = vertices.AsSpan(12, 6).ToArray();
         var outerCorner = ((float)map.Inner.Right, (float)map.Inner.Y);
@@ -67,7 +90,7 @@ public sealed class CanvasStepSourceTests
     [Fact]
     public void The_lit_walls_are_lighter_than_the_shaded_ones_and_darker_at_the_base()
     {
-        var source = new CanvasStepSource { Map = Map(CanvasStepSides.All) };
+        var source = new CanvasStepSurfaceSource(CanvasStepSurface.Walls) { Map = Map(CanvasStepSides.All) };
         static float Light(RenderColor color) => color.R + color.G + color.B;
         var top = Light(source.WallColorOf(CanvasStepSides.Top));
         var left = Light(source.WallColorOf(CanvasStepSides.Left));

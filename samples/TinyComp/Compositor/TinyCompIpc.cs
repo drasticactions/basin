@@ -113,6 +113,14 @@ internal sealed partial class TinyComp
             {
                 _report.Line($"XWIN {xwindow.XWin.Class} {xwindow.X} {xwindow.Y} {xwindow.XWin.Width}x{xwindow.XWin.Height} rule={(xwindow.Rule is null ? "none" : "yes")} corners={xwindow.CornerRadius} framed={(xwindow.Frame is null ? "no" : "yes")} minimized={xwindow.Minimized}");
             }
+
+            foreach (var view in Views)
+            {
+                if (view is { Tag: OutputPolicy, Canvas.Overview: true })
+                {
+                    _report.Line(OverviewLine(view));
+                }
+            }
         });
 
         _report.Register(methods, "tinycomp/clip", "clip {index:int} {x:int} {y:int} {width:int} {height:int}", (ref IpcParams p, IpcReply reply) =>

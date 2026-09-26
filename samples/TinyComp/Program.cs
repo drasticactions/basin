@@ -148,6 +148,11 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("overview-hot-corner", settings.Overview.HotCornerName));
         cli.AddReport(_ => BasinCommand.Report("overview-wall", settings.Overview.WallName));
         cli.AddReport(_ => BasinCommand.Report("overview-wall-width", settings.Overview.WallWidthValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-wall-texture", settings.Overview.WallTextureValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-shelf-texture", settings.Overview.ShelfTextureValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-texture-scale", settings.Overview.TextureScaleValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-shelf-color", $"#{settings.Overview.ShelfRgba:x8}"));
+        cli.AddReport(_ => BasinCommand.Report("overview-texture-grid", settings.Overview.TextureGridValue));
         cli.AddReport(_ => BasinCommand.Report("bindings", settings.Bindings.Count));
         cli.AddReport(_ => BasinCommand.Report("rules", settings.Rules.Count));
 

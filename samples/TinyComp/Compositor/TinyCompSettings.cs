@@ -18,6 +18,8 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
+    private List<string> _textureErrors = [];
+
     private void Reload()
     {
         var loaded = Config.Load(_configPath, _log, out var fatal);
@@ -37,12 +39,14 @@ internal sealed partial class TinyComp
 
         var restart = CarryOver(loaded);
         var metacityFailure = ApplyConfig(loaded, crossfade: true);
+        var textureErrors = _textureErrors;
 
         _report.Line(
             $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
             + " rules-apply-to-windows-mapped-after-this"
             + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")
             + (metacityFailure is null ? string.Empty : " metacity=kept")
+            + (textureErrors.Count == 0 ? string.Empty : " " + string.Join(' ', textureErrors))
             + ConfigSummary(loaded));
         ReloadSettingsDraft();
     }
@@ -152,6 +156,7 @@ internal sealed partial class TinyComp
         ApplyScreenShader(next);
         ApplyEffectSettings(next);
         _shortcuts.Configure(next);
+        _textureErrors = LoadStepTextures(next, reload: true);
         _canvasOverride = null;
         _canvasClosing = false;
         ConfigureOverviewTriggers();

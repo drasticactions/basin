@@ -417,6 +417,7 @@ internal sealed partial class TinyComp :
         _colorSource = config.ColorSource;
         _damageTint = config.DamageTint;
         _scales = config.Scales;
+        _ = LoadStepTextures(config, reload: false);
         _host = Basin.Host.BasinHost.Create(
             Basin.Host.HostOptions.ForBackend(drm ? "drm" : backend == BackendKind.Headless ? "headless" : "nested") with
             {
@@ -1128,6 +1129,7 @@ internal sealed partial class TinyComp :
         _services.Dispose();
         _host.Dispose();
         _metacity?.Dispose();
+        DisposeStepTextures();
         _frameTheme?.Dispose();
         _renderer.Dispose();
     }

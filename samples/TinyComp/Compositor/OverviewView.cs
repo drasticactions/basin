@@ -69,7 +69,15 @@ internal sealed class OverviewView
 
     public bool StepSeenValid { get; set; }
 
+    public CanvasStepSurfaceSource WallSource { get; } = new(CanvasStepSurface.Walls);
+
+    public CanvasStepSurfaceSource FloorSource { get; } = new(CanvasStepSurface.Floor);
+
     public CanvasStepSource StepSource { get; } = new() { MinLineSpacing = 8 };
+
+    public SceneMesh? FloorMesh { get; set; }
+
+    public SceneMesh? WallMesh { get; set; }
 
     public SceneMesh? StepMesh { get; set; }
 }

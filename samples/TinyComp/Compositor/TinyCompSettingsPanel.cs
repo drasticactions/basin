@@ -183,6 +183,7 @@ internal sealed partial class TinyComp
 
     private SettingsContext SettingsContextFor(Prowl.Scribe.FontFile font) => new()
     {
+        ConfigPath = SettingsPath,
         Renderers = Basin.Renderers.RendererCatalog.Names,
         MetacityThemes = Basin.Frames.Metacity.MetacityThemes.Available(),
         FromFlags = _config.FromFlags,
@@ -272,6 +273,8 @@ internal sealed partial class TinyComp
         }
     }
 
+    private string? _settingsTextureStatus;
+
     private void ApplySettingsDraft()
     {
         _settingsApplyQueued = false;
@@ -320,6 +323,23 @@ internal sealed partial class TinyComp
         draft.ClearErrors();
         _ = CarryOver(parsed);
         _ = ApplyConfig(parsed, crossfade: false);
+        if (_textureErrors.Count > 0)
+        {
+            var why = string.Join(", ", _textureErrors);
+            draft.SetHint(path, why);
+            draft.Status = why;
+            _settingsTextureStatus = why;
+        }
+        else if (_settingsTextureStatus is { } shown)
+        {
+            if (draft.Status == shown)
+            {
+                draft.Status = string.Empty;
+            }
+
+            _settingsTextureStatus = null;
+        }
+
         _settingsSurface?.Invalidate();
     }
 

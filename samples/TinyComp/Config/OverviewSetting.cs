@@ -37,6 +37,12 @@ internal sealed class OverviewSetting
 
     public const double MaxWallShade = 0.8;
 
+    public const string NoTexture = "none";
+
+    public const double DefaultTextureScale = 1.0;
+
+    public const uint DefaultShelfColor = 0x3a3d44ff;
+
     public bool? Enable { get; init; }
 
     public double? Scale { get; init; }
@@ -61,6 +67,16 @@ internal sealed class OverviewSetting
 
     public double? WallShade { get; init; }
 
+    public string? WallTexture { get; init; }
+
+    public string? ShelfTexture { get; init; }
+
+    public double? TextureScale { get; init; }
+
+    public uint? ShelfColor { get; init; }
+
+    public bool? TextureGrid { get; init; }
+
     public static OverviewSetting Defaults { get; } = new()
     {
         Enable = true,
@@ -75,6 +91,11 @@ internal sealed class OverviewSetting
         WallWidth = DefaultWallWidth,
         WallColor = DefaultWallColor,
         WallShade = DefaultWallShade,
+        WallTexture = NoTexture,
+        ShelfTexture = NoTexture,
+        TextureScale = DefaultTextureScale,
+        ShelfColor = DefaultShelfColor,
+        TextureGrid = true,
     };
 
     public bool Enabled => Enable ?? true;
@@ -107,18 +128,48 @@ internal sealed class OverviewSetting
 
     public double WallShadeValue => WallShade ?? DefaultWallShade;
 
-    public RenderColor WallRenderColor
+    public string WallTextureValue => WallTexture ?? NoTexture;
+
+    public string ShelfTextureValue => ShelfTexture ?? NoTexture;
+
+    public bool Textured => IsTexture(WallTextureValue) || IsTexture(ShelfTextureValue);
+
+    public double TextureScaleValue => TextureScale ?? DefaultTextureScale;
+
+    public uint ShelfRgba => ShelfColor ?? DefaultShelfColor;
+
+    public bool TextureGridValue => TextureGrid ?? true;
+
+    public RenderColor ShelfRenderColor => Premultiplied(ShelfRgba);
+
+    public RenderColor WallRenderColor => Premultiplied(WallRgba);
+
+    public static bool IsTexture(string value) => value is { Length: > 0 } && value != NoTexture;
+
+    public static string ResolveTexturePath(string value, string? configFile)
     {
-        get
+        if (value.StartsWith("~/", StringComparison.Ordinal))
         {
-            var rgba = WallRgba;
-            var a = (rgba & 0xFF) / 255f;
-            return new RenderColor(
-                ((rgba >> 24) & 0xFF) / 255f * a,
-                ((rgba >> 16) & 0xFF) / 255f * a,
-                ((rgba >> 8) & 0xFF) / 255f * a,
-                a);
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), value[2..]);
         }
+
+        if (Path.IsPathRooted(value))
+        {
+            return value;
+        }
+
+        var directory = configFile is null ? null : Path.GetDirectoryName(Path.GetFullPath(configFile));
+        return Path.GetFullPath(directory is null ? value : Path.Combine(directory, value));
+    }
+
+    private static RenderColor Premultiplied(uint rgba)
+    {
+        var a = (rgba & 0xFF) / 255f;
+        return new RenderColor(
+            ((rgba >> 24) & 0xFF) / 255f * a,
+            ((rgba >> 16) & 0xFF) / 255f * a,
+            ((rgba >> 8) & 0xFF) / 255f * a,
+            a);
     }
 
     public static string NameOf(OverviewWall wall) => wall == OverviewWall.Step ? "step" : "slope";
@@ -161,6 +212,11 @@ internal sealed class OverviewSetting
         WallWidth = WallWidth ?? fallback.WallWidth,
         WallColor = WallColor ?? fallback.WallColor,
         WallShade = WallShade ?? fallback.WallShade,
+        WallTexture = WallTexture ?? fallback.WallTexture,
+        ShelfTexture = ShelfTexture ?? fallback.ShelfTexture,
+        TextureScale = TextureScale ?? fallback.TextureScale,
+        ShelfColor = ShelfColor ?? fallback.ShelfColor,
+        TextureGrid = TextureGrid ?? fallback.TextureGrid,
     };
 
     public static OverviewSetting Parse(TomlTable table, string section, BasinLogger log)
@@ -177,6 +233,11 @@ internal sealed class OverviewSetting
         double? wallWidth = null;
         uint? wallColor = null;
         double? wallShade = null;
+        string? wallTexture = null;
+        string? shelfTexture = null;
+        double? textureScale = null;
+        uint? shelfColor = null;
+        bool? textureGrid = null;
         foreach (var (key, value) in table)
         {
             switch (key)
@@ -244,6 +305,21 @@ internal sealed class OverviewSetting
                 case "wall_shade" when Fraction(value) is { } shade:
                     wallShade = Math.Clamp(shade, 0.0, MaxWallShade);
                     break;
+                case "wall_texture" when value is string wallName:
+                    wallTexture = wallName.Length == 0 ? NoTexture : wallName;
+                    break;
+                case "shelf_texture" when value is string shelfName:
+                    shelfTexture = shelfName.Length == 0 ? NoTexture : shelfName;
+                    break;
+                case "texture_scale" when Fraction(value) is { } texel:
+                    textureScale = Math.Clamp(texel, Basin.Effects.CanvasStepSurfaceSource.MinTextureScale, Basin.Effects.CanvasStepSurfaceSource.MaxTextureScale);
+                    break;
+                case "shelf_color" when TomlColor.Rgba(value) is { } shelfRgba:
+                    shelfColor = shelfRgba;
+                    break;
+                case "texture_grid" when value is bool grid:
+                    textureGrid = grid;
+                    break;
                 default:
                     log.Warn($"[{section}] {key}: unknown key or wrong type, ignored");
                     break;
@@ -275,6 +351,11 @@ internal sealed class OverviewSetting
             WallWidth = wallWidth,
             WallColor = wallColor,
             WallShade = wallShade,
+            WallTexture = wallTexture,
+            ShelfTexture = shelfTexture,
+            TextureScale = textureScale,
+            ShelfColor = shelfColor,
+            TextureGrid = textureGrid,
         };
     }
 

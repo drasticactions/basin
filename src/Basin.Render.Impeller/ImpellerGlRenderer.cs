@@ -11,6 +11,7 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
     private readonly IntPtr _contextRaw;
     private readonly IntPtr _rectPaint;
     private readonly IntPtr _texturePaint;
+    private readonly IntPtr _modulatePaint;
     private readonly IntPtr _pathBuilder;
     private readonly Dictionary<IBuffer, TargetEntry> _targets = [];
     private readonly ImpellerGlRenderPass _pass;
@@ -34,9 +35,10 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
         _contextRaw = _context.Handle.DangerousGetHandle();
         _rectPaint = UnsafeNativeMethods.ImpellerPaintNewRaw();
         _texturePaint = UnsafeNativeMethods.ImpellerPaintNewRaw();
+        _modulatePaint = UnsafeNativeMethods.ImpellerPaintNewRaw();
         _pathBuilder = UnsafeNativeMethods.ImpellerPathBuilderNewRaw();
         BasinCounters.Track();
-        BasinCounters.Track(2);
+        BasinCounters.Track(3);
         _pass = new ImpellerGlRenderPass(this);
     }
 
@@ -63,6 +65,8 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
     internal IntPtr RectPaint => _rectPaint;
 
     internal IntPtr TexturePaint => _texturePaint;
+
+    internal IntPtr ModulatePaint => _modulatePaint;
 
     internal IntPtr PathBuilder => _pathBuilder;
 
@@ -193,7 +197,8 @@ public sealed unsafe class ImpellerGlRenderer : IRenderer
         _completionFence = -1;
         UnsafeNativeMethods.ImpellerPaintRelease(_rectPaint);
         UnsafeNativeMethods.ImpellerPaintRelease(_texturePaint);
-        BasinCounters.Untrack(2);
+        UnsafeNativeMethods.ImpellerPaintRelease(_modulatePaint);
+        BasinCounters.Untrack(3);
         UnsafeNativeMethods.ImpellerPathBuilderRelease(_pathBuilder);
         BasinCounters.Untrack();
 

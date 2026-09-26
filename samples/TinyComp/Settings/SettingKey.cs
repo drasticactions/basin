@@ -8,6 +8,8 @@ internal sealed record SettingKey(string Section, string Table, string Key, stri
 
     public IReadOnlyList<string>? Choices { get; init; }
 
+    public IReadOnlyList<string>? Presets { get; init; }
+
     public string? ChoicesFrom { get; init; }
 
     public double Min { get; init; } = double.NegativeInfinity;

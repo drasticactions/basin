@@ -779,6 +779,202 @@ public sealed class TinyCompCanvasProcessTests
         Assert.Equal("ERR no focused window", session.WaitForLine("ERR "));
     }
 
+    private static string TexturedStep(string keys) =>
+        "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n[overview]\nwall = \"step\"\n" + keys;
+
+    private static Dictionary<string, string> OpenTextured(CanvasSession session)
+    {
+        session.Send("overview open");
+        var line = session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000);
+        Assert.NotNull(line);
+        return Fields(line!);
+    }
+
+    private static double WallSpread(Shot shot)
+    {
+        var sum = 0.0;
+        var squares = 0.0;
+        var count = 0;
+        for (var y = 200; y < 520; y++)
+        {
+            for (var x = 1124; x < 1150; x++)
+            {
+                var i = ((y * shot.Width) + x) * 4;
+                var value = shot.Rgba[i] + shot.Rgba[i + 1] + shot.Rgba[i + 2];
+                sum += value;
+                squares += (double)value * value;
+                count++;
+            }
+        }
+
+        var mean = sum / count;
+        return Math.Sqrt(Math.Max(0, (squares / count) - (mean * mean)));
+    }
+
+    [Fact]
+    public void A_preset_wall_texture_is_reported_and_drawn()
+    {
+        double flatSpread;
+        using (var flat = CanvasSession.Start(TexturedStep(string.Empty), SsdWin()))
+        {
+            Assert.SkipWhen(flat is null, "tinycomp or ssdwin is not available beside the tests");
+            var plain = OpenTextured(flat!);
+            Assert.Equal("none", plain["wall-texture"]);
+            Assert.Equal("none", plain["shelf-texture"]);
+            flatSpread = WallSpread(flat!.Shot("flat"));
+        }
+
+        using var session = CanvasSession.Start(TexturedStep("wall_texture = \"stone\"\n"), SsdWin());
+        Assert.NotNull(session);
+        var overview = OpenTextured(session!);
+        Assert.Equal("stone", overview["wall-texture"]);
+        Assert.Equal("none", overview["shelf-texture"]);
+        session!.Send("where");
+        var where = session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true", 5000);
+        Assert.NotNull(where);
+        Assert.Contains(" wall=step wall-texture=stone shelf-texture=none", where, StringComparison.Ordinal);
+        var stoneSpread = WallSpread(session!.Shot("stone"));
+        Assert.True(stoneSpread > flatSpread + 4, $"the wall varies {stoneSpread} textured and {flatSpread} flat");
+    }
+
+    private static int BlueGridPixels(Shot shot)
+    {
+        var count = 0;
+        for (var i = 0; i < shot.Rgba.Length; i += 4)
+        {
+            if (shot.Rgba[i + 2] > 150 && shot.Rgba[i] < 90 && shot.Rgba[i + 1] < 110)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    [Fact]
+    public void Texture_grid_false_turns_off_every_grid_line_while_a_texture_is_set()
+    {
+        const string grid = "[canvas]\ngrid = \"always\"\nanimation_ms = 100\n[overview]\nwall = \"step\"\nwall_texture = \"stone\"\n";
+        int withGrid;
+        using (var shown = CanvasSession.Start(grid, SsdWin()))
+        {
+            Assert.SkipWhen(shown is null, "tinycomp or ssdwin is not available beside the tests");
+            _ = OpenTextured(shown!);
+            withGrid = BlueGridPixels(shown!.Shot("grid"));
+        }
+
+        using var hidden = CanvasSession.Start(grid + "texture_grid = false\n", SsdWin());
+        Assert.NotNull(hidden);
+        _ = OpenTextured(hidden!);
+        var without = BlueGridPixels(hidden!.Shot("nogrid"));
+        Assert.True(withGrid > 10000, $"the grid drew {withGrid} pixels");
+        Assert.True(without < 200, $"{without} grid pixels are left");
+
+        hidden.Rewrite(grid.Replace("wall_texture = \"stone\"\n", string.Empty, StringComparison.Ordinal) + "texture_grid = false\n");
+        hidden.Send("reload");
+        Assert.NotNull(hidden.WaitForLine("RELOAD "));
+        Assert.True(BlueGridPixels(hidden.Shot("flat")) > 10000, "with no texture the grid comes back");
+    }
+
+    [Fact]
+    public void A_file_texture_relative_to_the_config_is_reported_as_file()
+    {
+        using var session = CanvasSession.Start(TexturedStep("shelf_texture = \"floor.png\"\n"), SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        Assert.Equal("none", OpenTextured(session!)["shelf-texture"]);
+        Assert.Contains(session!.ErrorLines(), line => line.Contains("shelf_texture", StringComparison.Ordinal) && line.Contains("NOT FOUND", StringComparison.Ordinal));
+
+        var rgba = new byte[16 * 16 * 4];
+        rgba.AsSpan().Fill(200);
+        File.WriteAllBytes(Path.Combine(session.RuntimeDir, "floor.png"), PngCodec.Encode(rgba, 16, 16));
+        session.Send("reload");
+        Assert.DoesNotContain("error:", session.WaitForLine("RELOAD "), StringComparison.Ordinal);
+        session.Send("overview close");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false", 5000));
+        Assert.Equal("file", OpenTextured(session)["shelf-texture"]);
+    }
+
+    [Fact]
+    public void A_file_texture_loads_and_a_missing_one_draws_flat_with_one_warning()
+    {
+        var runtime = Path.Combine("/tmp", $"basin-texture-{Environment.ProcessId}-{Environment.TickCount64 % 100000}");
+        Directory.CreateDirectory(runtime);
+        try
+        {
+            var rgba = new byte[32 * 32 * 4];
+            for (var i = 0; i < 32 * 32; i++)
+            {
+                rgba[(i * 4) + 0] = (byte)(i * 7);
+                rgba[(i * 4) + 1] = (byte)(i * 3);
+                rgba[(i * 4) + 2] = (byte)(i * 5);
+                rgba[(i * 4) + 3] = 255;
+            }
+
+            var png = Path.Combine(runtime, "floor.png");
+            File.WriteAllBytes(png, PngCodec.Encode(rgba, 32, 32));
+            File.WriteAllText(Path.Combine(runtime, "junk.png"), "not an image");
+            using (var session = CanvasSession.Start(TexturedStep($"shelf_texture = \"{png}\"\nwall_texture = \"{Path.Combine(runtime, "junk.png")}\"\n"), SsdWin()))
+            {
+                Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+                var overview = OpenTextured(session!);
+                Assert.Equal("file", overview["shelf-texture"]);
+                Assert.Equal("none", overview["wall-texture"]);
+                Assert.Single(session!.ErrorLines(), line => line.Contains("wall_texture", StringComparison.Ordinal) && line.Contains("NOT AN IMAGE, drawing flat", StringComparison.Ordinal));
+            }
+
+            using (var missing = CanvasSession.Start(TexturedStep("wall_texture = \"stnoe\"\n"), SsdWin()))
+            {
+                Assert.NotNull(missing);
+                var overview = OpenTextured(missing!);
+                Assert.Equal("none", overview["wall-texture"]);
+                var warning = Assert.Single(missing!.ErrorLines(), line => line.Contains("wall_texture", StringComparison.Ordinal));
+                Assert.Contains("stnoe\": NOT FOUND (presets: stone, brick, wood, noise), drawing flat", warning, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            Directory.Delete(runtime, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_reload_to_a_bad_texture_names_the_error_and_keeps_the_old_one()
+    {
+        using var session = CanvasSession.Start(TexturedStep("wall_texture = \"stone\"\n"), SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        Assert.Equal("stone", OpenTextured(session!)["wall-texture"]);
+        session!.Rewrite(TexturedStep("wall_texture = \"missing/wall.png\"\n"));
+        session.Send("reload");
+        var reload = session.WaitForLine("RELOAD ");
+        Assert.NotNull(reload);
+        Assert.Contains(" wall_texture=error:NOT-FOUND", reload, StringComparison.Ordinal);
+        session.Send("overview close");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false", 5000));
+        Assert.Equal("stone", OpenTextured(session)["wall-texture"]);
+
+        session.Rewrite(TexturedStep("wall_texture = \"brick\"\nshelf_texture = \"noise\"\n"));
+        session.Send("reload");
+        var next = session.WaitForLine("RELOAD ");
+        Assert.DoesNotContain("error:", next, StringComparison.Ordinal);
+        session.Send("overview close");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false", 5000));
+        var overview = OpenTextured(session);
+        Assert.Equal("brick", overview["wall-texture"]);
+        Assert.Equal("noise", overview["shelf-texture"]);
+    }
+
+    [Fact]
+    public void A_texture_on_a_slope_wall_warns_once_and_draws_the_slope()
+    {
+        using var session = CanvasSession.Start(
+            "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n[overview]\nwall_texture = \"stone\"\n", SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        var overview = OpenTextured(session!);
+        Assert.Equal("slope", overview["wall"]);
+        Assert.Equal("none", overview["wall-texture"]);
+        Assert.Single(session!.ErrorLines(), line => line.Contains("apply only to wall = \"step\"", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void A_step_shelve_animates_from_the_desktop_to_the_shelf_and_back()
     {
@@ -972,6 +1168,7 @@ public sealed class TinyCompCanvasProcessTests
         private readonly string _runtimeDir;
         private readonly List<string> _lines = [];
         private readonly List<string> _clientLines = [];
+        private readonly List<string> _errorLines = [];
         private readonly List<Process> _extra = [];
         private string _socket = string.Empty;
         private readonly object _gate = new();
@@ -1029,7 +1226,16 @@ public sealed class TinyCompCanvasProcessTests
                     }
                 }
             };
-            compositor.ErrorDataReceived += (_, _) => { };
+            compositor.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is { } line)
+                {
+                    lock (session._gate)
+                    {
+                        session._errorLines.Add(line);
+                    }
+                }
+            };
             compositor.BeginOutputReadLine();
             compositor.BeginErrorReadLine();
 
@@ -1154,6 +1360,16 @@ public sealed class TinyCompCanvasProcessTests
         }
 
         public void Rewrite(string config) => File.WriteAllText(Path.Combine(_runtimeDir, "tinycomp.toml"), config);
+
+        public string RuntimeDir => _runtimeDir;
+
+        public string[] ErrorLines()
+        {
+            lock (_gate)
+            {
+                return [.. _errorLines];
+            }
+        }
 
         public double CanvasScale()
         {

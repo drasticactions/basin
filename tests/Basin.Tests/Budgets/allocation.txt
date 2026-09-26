@@ -177,3 +177,7 @@ server-managed exact    overview-toggle                   0
 server-managed exact    overview-shelve-drag              0
 server-managed exact    overview-step-toggle              0
 server-managed exact    overview-step-drag                0
+server     exact    overview-step-toggle-textured      0
+server     exact    overview-step-drag-textured       0
+server-managed exact    overview-step-toggle-textured      0
+server-managed exact    overview-step-drag-textured       0

@@ -4,10 +4,18 @@ using Basin.Host;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 
+using Basin.Diagnostics;
+
 namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
+    private readonly StepTexture _wallTexture = new("wall_texture");
+
+    private readonly StepTexture _shelfTexture = new("shelf_texture");
+
+    private readonly BasinLogger _overviewLog = BasinLog.For("overview");
+
     private static CanvasStepSides StepSides(CanvasSide side) => (CanvasStepSides)(int)side;
 
     private static bool Stepped(OutputView view) => view.Canvas.Step is not null;
@@ -280,7 +288,7 @@ internal sealed partial class TinyComp
         SetStepFull(view, box, usable, shelfScale);
         changed |= OverviewLayout.LayoutStep(overview.Step, box, usable, overview.FullSides, overview.Value, scale, shelfScale);
         canvas.Step = overview.Step;
-        var meshChanged = LayoutStepMesh(view, box);
+        var meshChanged = LayoutStepMeshes(view, box);
         SyncLayerZoom(view, overview.Step.Zoom, centerX, centerY);
         if (!changed && !meshChanged)
         {
@@ -301,41 +309,99 @@ internal sealed partial class TinyComp
             }
 
             ApplyCanvasToView(view);
+            overview.FloorMesh?.NotifyMeshChanged();
+            overview.WallMesh?.NotifyMeshChanged();
+            overview.StepMesh?.NotifyMeshChanged();
         }
 
-        overview.StepMesh?.NotifyMeshChanged();
         view.Scheduler?.ScheduleRepaint();
     }
 
-    private bool LayoutStepMesh(OutputView view, in Box box)
+    private bool LayoutStepMeshes(OutputView view, in Box box)
     {
         var overview = OverviewOf(view);
         var canvas = view.Canvas;
         var settings = canvas.Settings;
         var source = overview.StepSource;
+        var walls = overview.WallSource;
+        var floor = overview.FloorSource;
         var color = settings.GridRenderColor;
         var wall = overview.Settings.WallRenderColor;
+        var shelf = overview.Settings.ShelfRenderColor;
+        var texel = overview.Settings.TextureScaleValue;
         var alpha = GridAlphaFor(settings) * (float)overview.Value;
         var lines = settings.GridMode != CanvasGridMode.Never;
-        var changed = !ReferenceEquals(source.Map, overview.Step) || source.CellSize != settings.GridCellSize ||
-            source.Color != color || source.WallColor != wall || source.WallShade != overview.Settings.WallShadeValue ||
-            source.Alpha != alpha || source.Lines != lines;
+        var wallTexture = _wallTexture.Buffer;
+        var shelfTexture = _shelfTexture.Buffer;
+        var gridLines = overview.Settings.TextureGridValue || (shelfTexture is null && wallTexture is null);
+        var linesChanged = !ReferenceEquals(source.Map, overview.Step) || source.CellSize != settings.GridCellSize ||
+            source.Color != color || !ReferenceEquals(source.Walls, walls) || source.Alpha != alpha || source.Lines != lines ||
+            source.ShelfLines != gridLines || source.WallGridLines != gridLines || source.DesktopLines != gridLines;
+        var wallsChanged = !ReferenceEquals(walls.Map, overview.Step) || walls.WallColor != wall ||
+            walls.WallShade != overview.Settings.WallShadeValue || walls.TextureScale != texel ||
+            walls.TextureWidth != (wallTexture?.Width ?? 0) || walls.TextureHeight != (wallTexture?.Height ?? 0);
+        var floorChanged = !ReferenceEquals(floor.Map, overview.Step) || floor.FloorColor != shelf || floor.TextureScale != texel ||
+            floor.TextureWidth != (shelfTexture?.Width ?? 0) || floor.TextureHeight != (shelfTexture?.Height ?? 0);
         source.Map = overview.Step;
         source.CellSize = settings.GridCellSize;
         source.Color = color;
-        source.WallColor = wall;
-        source.WallShade = overview.Settings.WallShadeValue;
+        source.Walls = walls;
         source.Alpha = alpha;
         source.Lines = lines;
+        source.ShelfLines = gridLines;
+        source.WallGridLines = gridLines;
+        source.DesktopLines = gridLines;
+        walls.Map = overview.Step;
+        walls.WallColor = wall;
+        walls.WallShade = overview.Settings.WallShadeValue;
+        walls.TextureScale = texel;
+        walls.TextureWidth = wallTexture?.Width ?? 0;
+        walls.TextureHeight = wallTexture?.Height ?? 0;
+        floor.Map = overview.Step;
+        floor.FloorColor = shelf;
+        floor.TextureScale = texel;
+        floor.TextureWidth = shelfTexture?.Width ?? 0;
+        floor.TextureHeight = shelfTexture?.Height ?? 0;
         if (overview.StepMesh is not { IsDestroyed: false } mesh)
         {
+            overview.FloorMesh?.Destroy();
+            overview.WallMesh?.Destroy();
+            overview.FloorMesh = new SceneMesh(_layers.Background) { Source = floor, Bounds = box };
+            overview.FloorMesh.SetSpriteBuffer(shelfTexture);
+            overview.WallMesh = new SceneMesh(_layers.Background) { Source = walls, Bounds = box };
+            overview.WallMesh.SetSpriteBuffer(wallTexture);
             overview.StepMesh = new SceneMesh(_layers.Background) { Source = source, Bounds = box };
             return true;
         }
 
-        changed |= mesh.Bounds != box;
+        var bounds = mesh.Bounds != box;
         mesh.Bounds = box;
-        return changed;
+        if (overview.FloorMesh is { IsDestroyed: false } floorMesh)
+        {
+            floorMesh.Bounds = box;
+            floorMesh.SetSpriteBuffer(shelfTexture);
+            if (floorChanged || bounds)
+            {
+                floorMesh.NotifyMeshChanged();
+            }
+        }
+
+        if (overview.WallMesh is { IsDestroyed: false } wallMesh)
+        {
+            wallMesh.Bounds = box;
+            wallMesh.SetSpriteBuffer(wallTexture);
+            if (wallsChanged || bounds)
+            {
+                wallMesh.NotifyMeshChanged();
+            }
+        }
+
+        if (linesChanged || bounds)
+        {
+            mesh.NotifyMeshChanged();
+        }
+
+        return linesChanged || wallsChanged || floorChanged || bounds;
     }
 
     private void LeaveStep(OutputView view)
@@ -344,6 +410,163 @@ internal sealed partial class TinyComp
         view.Canvas.Step = null;
         overview.StepMesh?.Destroy();
         overview.StepMesh = null;
+        overview.WallMesh?.Destroy();
+        overview.WallMesh = null;
+        overview.FloorMesh?.Destroy();
+        overview.FloorMesh = null;
+    }
+
+    private string StepTextureNames(OutputView view)
+    {
+        var steps = OverviewOf(view).Settings.Steps;
+        return $" wall-texture={(steps ? _wallTexture.Name : OverviewSetting.NoTexture)} shelf-texture={(steps ? _shelfTexture.Name : OverviewSetting.NoTexture)}";
+    }
+
+    private List<string> LoadStepTextures(Config config, bool reload)
+    {
+        var errors = new List<string>();
+        var wanted = config.Overview.Enabled && config.StepsAnywhere;
+        LoadStepTexture(_wallTexture, wanted ? config.Overview.WallTextureValue : OverviewSetting.NoTexture, reload, errors);
+        LoadStepTexture(_shelfTexture, wanted ? config.Overview.ShelfTextureValue : OverviewSetting.NoTexture, reload, errors);
+        return errors;
+    }
+
+    private void LoadStepTexture(StepTexture texture, string value, bool reload, List<string> errors)
+    {
+        MemoryBuffer? next;
+        string name;
+        string? path = null;
+        var stamp = default(DateTime);
+        if (!OverviewSetting.IsTexture(value))
+        {
+            next = null;
+            name = OverviewSetting.NoTexture;
+        }
+        else if (CanvasTextures.TryParse(value, out var preset))
+        {
+            if (texture.Buffer is not null && texture.Source == value && texture.Path is null)
+            {
+                texture.Failed = null;
+                return;
+            }
+
+            next = CanvasTextures.Generate(preset);
+            name = value;
+        }
+        else
+        {
+            path = ResolveTexturePath(value);
+            var exists = File.Exists(path);
+            stamp = exists ? File.GetLastWriteTimeUtc(path) : default;
+            if (exists && texture.Buffer is not null && texture.Source == value && texture.Path == path && texture.Stamp == stamp)
+            {
+                texture.Failed = null;
+                return;
+            }
+
+            next = exists ? DecodeTexture(path) : null;
+            if (next is null)
+            {
+                var reason = exists ? "NOT AN IMAGE" : "NOT FOUND";
+                var presets = exists ? string.Empty : $" (presets: {string.Join(", ", CanvasTextures.Names.ToArray())})";
+                var failure = $"{path} {reason} {stamp.Ticks}";
+                var repeated = texture.Failed == failure;
+                texture.Failed = failure;
+                if (reload)
+                {
+                    if (!repeated)
+                    {
+                        _overviewLog.Warn($"{texture.Key} \"{path}\": {reason}{presets}, keeping {texture.Name}");
+                    }
+
+                    errors.Add($"{texture.Key}=error:{reason.Replace(' ', '-')}");
+                    return;
+                }
+
+                _overviewLog.Warn($"{texture.Key} \"{path}\": {reason}{presets}, drawing flat");
+                name = OverviewSetting.NoTexture;
+            }
+            else
+            {
+                _overviewLog.Info($"{texture.Key} \"{path}\": {next.Width}x{next.Height}, {(long)next.Stride * next.Height} bytes");
+                name = "file";
+            }
+        }
+
+        if (next is not null || name == OverviewSetting.NoTexture && !OverviewSetting.IsTexture(value))
+        {
+            texture.Failed = null;
+        }
+
+        var previous = texture.Buffer;
+        texture.Buffer = next;
+        texture.Source = value;
+        texture.Path = path;
+        texture.Stamp = stamp;
+        texture.Name = name;
+        if (ReferenceEquals(previous, next))
+        {
+            return;
+        }
+
+        foreach (var view in _driver is null ? [] : Views)
+        {
+            if (view.Tag is OutputPolicy)
+            {
+                var overview = OverviewOf(view);
+                var mesh = ReferenceEquals(texture, _wallTexture) ? overview.WallMesh : overview.FloorMesh;
+                mesh?.SetSpriteBuffer(next);
+            }
+        }
+
+        previous?.Destroy();
+    }
+
+    private string ResolveTexturePath(string value) =>
+        OverviewSetting.ResolveTexturePath(value, _configPath == "false" ? null : _configPath ?? Config.DefaultPath());
+
+    private static MemoryBuffer? DecodeTexture(string path)
+    {
+        using var decoded = SkiaSharp.SKBitmap.Decode(path);
+        if (decoded is null || decoded.Width <= 0 || decoded.Height <= 0)
+        {
+            return null;
+        }
+
+        using var pixmap = decoded.PeekPixels();
+        var buffer = new MemoryBuffer(decoded.Width, decoded.Height, DrmFormat.Argb8888);
+        if (!buffer.BeginDataAccess(BufferDataAccess.Write, out var view))
+        {
+            buffer.Destroy();
+            return null;
+        }
+
+        bool read;
+        try
+        {
+            var info = new SkiaSharp.SKImageInfo(decoded.Width, decoded.Height, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
+            read = pixmap is not null && pixmap.ReadPixels(info, view.Data, view.Stride);
+        }
+        finally
+        {
+            buffer.EndDataAccess();
+        }
+
+        if (!read)
+        {
+            buffer.Destroy();
+            return null;
+        }
+
+        return buffer;
+    }
+
+    private void DisposeStepTextures()
+    {
+        _wallTexture.Buffer?.Destroy();
+        _wallTexture.Buffer = null;
+        _shelfTexture.Buffer?.Destroy();
+        _shelfTexture.Buffer = null;
     }
 
     private void ApplyOverviewStep(IGrabTarget window, SceneTree tree, OutputView view, CanvasWindowState? state)

@@ -819,7 +819,27 @@ public sealed class GoldenTests
     [MemberData(nameof(Renderers))]
     public void Golden_overview_step_half(string renderer) => CanvasOverviewStep(renderer, 0.5, "overview-step-half", fourSides: false);
 
-    private static void CanvasOverviewStep(string renderer, double progress, string name, bool fourSides)
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_step_textured(string renderer) => CanvasOverviewStep(
+        renderer, 1.0, "overview-step-textured", fourSides: false,
+        Basin.Effects.CanvasTexturePreset.Stone, Basin.Effects.CanvasTexturePreset.Wood);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_step_textured_corners(string renderer) => CanvasOverviewStep(
+        renderer, 1.0, "overview-step-textured-corners", fourSides: true,
+        Basin.Effects.CanvasTexturePreset.Brick, Basin.Effects.CanvasTexturePreset.Noise);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_step_textured_half(string renderer) => CanvasOverviewStep(
+        renderer, 0.5, "overview-step-textured-half", fourSides: false,
+        Basin.Effects.CanvasTexturePreset.Stone, Basin.Effects.CanvasTexturePreset.Wood);
+
+    private static void CanvasOverviewStep(
+        string renderer, double progress, string name, bool fourSides,
+        Basin.Effects.CanvasTexturePreset? wallTexture = null, Basin.Effects.CanvasTexturePreset? floorTexture = null)
     {
         SkipWithoutGpu(renderer);
         using var host = new CompositorTestHost(renderer: renderer);
@@ -846,12 +866,35 @@ public sealed class GoldenTests
             Matrix = new RenderTransform(zoom, 0, centerX * (1.0 - zoom), 0, zoom, centerY * (1.0 - zoom), 0, 0, 1),
         };
         _ = new Basin.Scene.SceneRect(wallpaper, output.Width, output.Height, new RenderColor(0.12f, 0.2f, 0.16f, 1f));
+        var wallBuffer = wallTexture is { } wallPreset ? Basin.Effects.CanvasTextures.Generate(wallPreset) : null;
+        var floorBuffer = floorTexture is { } floorPreset ? Basin.Effects.CanvasTextures.Generate(floorPreset) : null;
+        var walls = new Basin.Effects.CanvasStepSurfaceSource(Basin.Effects.CanvasStepSurface.Walls)
+        {
+            Map = map,
+            TextureWidth = wallBuffer?.Width ?? 0,
+            TextureHeight = wallBuffer?.Height ?? 0,
+            TextureScale = 0.25,
+        };
+        var floor = new Basin.Effects.CanvasStepSurfaceSource(Basin.Effects.CanvasStepSurface.Floor)
+        {
+            Map = map,
+            TextureWidth = floorBuffer?.Width ?? 0,
+            TextureHeight = floorBuffer?.Height ?? 0,
+            TextureScale = 0.25,
+        };
+        var floorMesh = new Basin.Scene.SceneMesh(host.Scene.Root) { Bounds = output, Source = floor };
+        floorMesh.SetSpriteBuffer(floorBuffer);
+        var wallMesh = new Basin.Scene.SceneMesh(host.Scene.Root) { Bounds = output, Source = walls };
+        wallMesh.SetSpriteBuffer(wallBuffer);
+        wallBuffer?.Destroy();
+        floorBuffer?.Destroy();
         _ = new Basin.Scene.SceneMesh(host.Scene.Root)
         {
             Bounds = output,
             Source = new Basin.Effects.CanvasStepSource
             {
                 Map = map,
+                Walls = walls,
                 CellSize = 16,
                 MinLineSpacing = 4,
                 Alpha = (float)progress,

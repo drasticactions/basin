@@ -354,7 +354,7 @@ internal sealed partial class TinyComp
             CultureInfo.InvariantCulture,
             $"OVERVIEW output={view.Output.Name} open={(overview.Open ? "true" : "false")} progress={overview.Value:F2}"
             + $" scale={overview.Settings.ScaleValue:F2} sides={CanvasSetting.NamesOf(overview.Sides)}"
-            + $" shelf={overview.ShelfScreen[index]} slope={overview.SlopeScreen[index]} wall={overview.Settings.WallName}");
+            + $" shelf={overview.ShelfScreen[index]} slope={overview.SlopeScreen[index]} wall={overview.Settings.WallName}") + StepTextureNames(view);
         if (overview.BorderSides == CanvasSide.None)
         {
             return line;

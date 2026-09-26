@@ -18,6 +18,8 @@ internal sealed class SettingsContext
 
     public Func<string, IReadOnlyList<string>>? ShaderParameters { get; init; }
 
+    public string? ConfigPath { get; init; }
+
     public Action? Close { get; init; }
 
     public Action? Save { get; init; }

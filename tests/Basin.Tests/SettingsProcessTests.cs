@@ -57,6 +57,34 @@ public sealed class SettingsProcessTests
     }
 
     [Fact]
+    public void A_texture_path_that_does_not_load_shows_in_the_status_and_keeps_the_old_texture()
+    {
+        using var session = SettingsSession.Start();
+        Assert.SkipWhen(session is null, "tinycomp or the gl row is not available beside the tests");
+
+        session!.Send("setting overview.wall \"step\"");
+        Assert.Contains("applied=yes", session.WaitForLine("SETTING "));
+        session.Send("setting overview.wall_texture \"stone\"");
+        Assert.Contains("applied=yes", session.WaitForLine("SETTING "));
+        Assert.Contains(" status=none", session.WaitForLine("SETTINGS "));
+
+        session.Send("setting overview.wall_texture \"stnoe\"");
+        Assert.NotNull(session.WaitForLine("SETTING "));
+        Assert.Contains(" status=wall_texture=error:NOT-FOUND", session.WaitForLine("SETTINGS "));
+        session.Send("overview open");
+        Assert.Contains(" wall-texture=stone ", session.WaitForLine("OVERVIEW output="));
+        session.Send("overview close");
+
+        session.Send("setting overview.wall_texture \"brick\"");
+        Assert.NotNull(session.WaitForLine("SETTING "));
+        Assert.Contains(" status=none", session.WaitForLine("SETTINGS "));
+        session.Send("setting overview.texture_scale 2.0");
+        Assert.Contains("applied=yes", session.WaitForLine("SETTING "));
+        session.Send("overview open");
+        Assert.Contains(" wall-texture=brick ", session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true"));
+    }
+
+    [Fact]
     public void The_background_changes_live_on_every_output()
     {
         using var session = SettingsSession.Start();

@@ -143,6 +143,11 @@ wall          = "slope"      # slope | step: a slope down to the shelf, or a fla
 wall_width    = 0.04         # step: the wall's screen width, as a fraction of the output width or height
 wall_color    = "#262a3a"    # step: the base color of the walls
 wall_shade    = 0.25         # step: how much lighter the top and left walls are, and darker the others
+wall_texture  = "none"       # step: none | stone | brick | wood | noise | a path to a PNG, JPEG or WebP image
+shelf_texture = "none"       # step: the same, for the shelf floor
+texture_scale = 1.0          # step: canvas pixels per texel, 0.25 to 8
+shelf_color   = "#3a3d44"    # step: the tint of the shelf floor texture
+texture_grid  = true         # step: false turns off every grid line while a texture is set
 
 [settings]
 palette   = "dark"           # dark | light: the settings panel

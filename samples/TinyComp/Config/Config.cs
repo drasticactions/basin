@@ -649,9 +649,17 @@ internal sealed class Config
         }
     }
 
+    public bool SlopeAnywhere =>
+        !Overview.Steps || OutputSettings.Values.Any(setting => (setting.Overview?.Wall ?? Overview.WallValue) == OverviewWall.Slope);
+
     private void WarnOverviewAgainstCanvas(BasinLogger log)
     {
         WarnStepIgnoredKeys(log);
+        if (Overview.Enabled && Overview.Textured && SlopeAnywhere)
+        {
+            log.Warn($"[overview] wall_texture and shelf_texture apply only to wall = \"step\"");
+        }
+
         if (Overview.Enabled && CanvasAnywhere)
         {
             log.Warn($"[overview] is on and so is [canvas] enable: overview is off on every output with the canvas enabled");

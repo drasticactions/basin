@@ -11,6 +11,7 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
     private ImpellerGlRenderer.TargetEntry? _entry;
     private IntPtr _builder;
     private int _signalFenceFd = -1;
+    private ImpellerBlendMode _meshBlend;
 
     private readonly List<ImpellerGlDmabufTexture> _sampled = [];
 
@@ -209,6 +210,7 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
         var blend = options.Blend == RenderBlend.Additive
             ? ImpellerBlendMode.kImpellerBlendModePlus
             : ImpellerBlendMode.kImpellerBlendModeSourceOver;
+        _meshBlend = blend;
 
         IntPtr raw = IntPtr.Zero;
         if (texture is not null && !((IImpellerGlTexture)texture).Acquire(out raw))
@@ -313,9 +315,37 @@ internal sealed unsafe class ImpellerGlRenderPass : IRenderPass
             UnsafeNativeMethods.ImpellerDisplayListBuilderSaveRaw(_builder);
             UnsafeNativeMethods.ImpellerDisplayListBuilderClipPathRaw(_builder, clip, ImpellerClipOperation.kImpellerClipOperationIntersect);
             ImpellerTransform.Apply(_builder, &matrix);
+            var color = Mean(a.Color, b.Color, c.Color);
+            var drawPaint = paint;
+            var filter = IntPtr.Zero;
+            if (color.R < 1f || color.G < 1f || color.B < 1f || color.A < 1f)
+            {
+                var alpha = Math.Clamp(color.A, 0f, 1f);
+                var straight = new ImpellerColor
+                {
+                    Red = alpha <= 0f ? 0f : Math.Clamp(color.R / alpha, 0f, 1f),
+                    Green = alpha <= 0f ? 0f : Math.Clamp(color.G / alpha, 0f, 1f),
+                    Blue = alpha <= 0f ? 0f : Math.Clamp(color.B / alpha, 0f, 1f),
+                    Alpha = alpha,
+                    Color_space = ImpellerColorSpace.kImpellerColorSpaceSRGB,
+                };
+                filter = ImpellerColorFilters.CreateBlend(&straight, ImpellerBlendMode.kImpellerBlendModeModulate);
+                if (filter != IntPtr.Zero)
+                {
+                    drawPaint = _renderer.ModulatePaint;
+                    UnsafeNativeMethods.ImpellerPaintSetBlendModeRaw(drawPaint, _meshBlend);
+                    ImpellerColorFilters.SetOnPaint(drawPaint, filter);
+                }
+            }
+
             UnsafeNativeMethods.ImpellerDisplayListBuilderDrawTextureRectRaw(
                 _builder, texture, srcRect, srcRect,
-                ImpellerTextureSampling.kImpellerTextureSamplingLinear, paint);
+                ImpellerTextureSampling.kImpellerTextureSamplingLinear, drawPaint);
+            if (filter != IntPtr.Zero)
+            {
+                ImpellerColorFilters.Release(filter);
+            }
+
             UnsafeNativeMethods.ImpellerDisplayListBuilderRestoreRaw(_builder);
             UnsafeNativeMethods.ImpellerPathRelease(clip);
         }

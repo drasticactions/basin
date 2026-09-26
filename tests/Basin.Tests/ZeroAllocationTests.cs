@@ -705,7 +705,31 @@ public sealed class ZeroAllocationTests
     public void A_step_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
         OverviewStep(renderer, toggle: true);
 
-    private static void OverviewStep(string renderer, bool toggle)
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void An_open_textured_step_overview_allocates_nothing_over_1000_frames(string renderer) =>
+        OverviewStep(renderer, toggle: false, textured: true);
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void A_textured_step_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
+        OverviewStep(renderer, toggle: true, textured: true);
+
+    private static void OverviewStep(string renderer, bool toggle, bool textured = false)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
         using var host = new CompositorTestHost(renderer: renderer);
@@ -718,7 +742,21 @@ public sealed class ZeroAllocationTests
         var map = new Basin.Effects.CanvasStepMap();
         var end = new Basin.Effects.CanvasStepMap();
         _ = TinyComp.OverviewLayout.LayoutStep(end, output, output, full, 1.0, 0.6, 0.3);
-        var source = new Basin.Effects.CanvasStepSource { Map = map, CellSize = 16, MinLineSpacing = 4 };
+        var wallTexture = textured ? Basin.Effects.CanvasTextures.Generate(Basin.Effects.CanvasTexturePreset.Stone) : null;
+        var floorTexture = textured ? Basin.Effects.CanvasTextures.Generate(Basin.Effects.CanvasTexturePreset.Wood) : null;
+        var floor = new Basin.Effects.CanvasStepSurfaceSource(Basin.Effects.CanvasStepSurface.Floor)
+        {
+            Map = map, TextureWidth = floorTexture?.Width ?? 0, TextureHeight = floorTexture?.Height ?? 0, TextureScale = 0.25,
+        };
+        var walls = new Basin.Effects.CanvasStepSurfaceSource(Basin.Effects.CanvasStepSurface.Walls)
+        {
+            Map = map, TextureWidth = wallTexture?.Width ?? 0, TextureHeight = wallTexture?.Height ?? 0, TextureScale = 0.25,
+        };
+        var floorMesh = new Scene.SceneMesh(host.Scene.Root) { Bounds = output, Source = floor };
+        floorMesh.SetSpriteBuffer(floorTexture);
+        var wallMesh = new Scene.SceneMesh(host.Scene.Root) { Bounds = output, Source = walls };
+        wallMesh.SetSpriteBuffer(wallTexture);
+        var source = new Basin.Effects.CanvasStepSource { Map = map, Walls = walls, CellSize = 16, MinLineSpacing = 4 };
         var mesh = new Scene.SceneMesh(host.Scene.Root) { Bounds = output, Source = source };
         var wallpaper = new Scene.SceneTransform(host.Scene.Root);
         _ = new Scene.SceneRect(wallpaper, 160, 120, new RenderColor(0.12f, 0.2f, 0.16f, 1f));
@@ -749,6 +787,8 @@ public sealed class ZeroAllocationTests
             _ = TinyComp.OverviewLayout.LayoutStep(map, output, output, full, progress, 0.6, 0.3);
             source.Alpha = (float)progress;
             mesh.NotifyMeshChanged();
+            floorMesh.NotifyMeshChanged();
+            wallMesh.NotifyMeshChanged();
             var zoom = map.Zoom;
             wallpaper.Matrix = new RenderTransform(zoom, 0, 80 * (1.0 - zoom), 0, zoom, 60 * (1.0 - zoom), 0, 0, 1);
             for (var w = 0; w < 3; w++)
@@ -776,6 +816,10 @@ public sealed class ZeroAllocationTests
 
         NothingAllocated(1000, Frame);
         mesh.Destroy();
+        wallMesh.Destroy();
+        floorMesh.Destroy();
+        wallTexture?.Destroy();
+        floorTexture?.Destroy();
         for (var w = 0; w < 3; w++)
         {
             contents[w].Destroy();
