@@ -199,12 +199,15 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     public int ScanoutEntryThreshold { get; set; } = 2;
 
+    private const double ScaledSlack = 1e-3;
+
     public int OffloadEntryThreshold { get; set; } = 3;
 
     private readonly List<SceneBuffer> _settleNodes = [];
     private readonly List<Box> _settleBoxes = [];
     private readonly List<int> _settleCounts = [];
     private readonly List<int> _settleSeen = [];
+    private readonly List<PlaneRefusal?> _settleRefusals = [];
     private int _settleEpoch;
 
     private bool HasSettled(SceneBuffer node, in Box planeBox)
@@ -236,7 +239,39 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _settleBoxes.Add(planeBox);
         _settleCounts.Add(1);
         _settleSeen.Add(_settleEpoch);
+        _settleRefusals.Add(null);
         return OffloadEntryThreshold <= 1;
+    }
+
+    private bool WasRefused(SceneBuffer node, in PlaneRefusal layer)
+    {
+        for (var i = 0; i < _settleNodes.Count; i++)
+        {
+            if (ReferenceEquals(_settleNodes[i], node))
+            {
+                return _settleRefusals[i] == layer;
+            }
+        }
+
+        return false;
+    }
+
+    private void RememberRefusal(SceneBuffer node, in Box planeBox)
+    {
+        if (node.Buffer is not { } content || !content.TryGetDmabuf(out var attributes))
+        {
+            return;
+        }
+
+        for (var i = 0; i < _settleNodes.Count; i++)
+        {
+            if (ReferenceEquals(_settleNodes[i], node))
+            {
+                _settleRefusals[i] = new PlaneRefusal(
+                    content.Width, content.Height, planeBox.Width, planeBox.Height, attributes.Format, attributes.Modifier);
+                return;
+            }
+        }
     }
 
     private void ForgetUnseenSettles()
@@ -249,6 +284,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
                 _settleBoxes.RemoveAt(i);
                 _settleCounts.RemoveAt(i);
                 _settleSeen.RemoveAt(i);
+                _settleRefusals.RemoveAt(i);
             }
         }
     }
@@ -571,7 +607,16 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _damagedDuringCommit = false;
         try
         {
-            BeforeRepaint?.Invoke(tick);
+            AllocationScope.Pause();
+            try
+            {
+                BeforeRepaint?.Invoke(tick);
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
+
             var warm = _commitsEntered >= CommitScopeWarmup;
             if (!warm)
             {
@@ -814,7 +859,9 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
                 continue;
             }
 
-            var physical = EntryPhysical(entry, bounds);
+            var scaled = default(Box);
+            var exact = entry.Transformed && entry.Transform.IsAxisAlignedScale && TryScaledPhysical(entry, bounds, out scaled);
+            var physical = exact ? scaled : EntryPhysical(entry, bounds);
             if (physical.IsEmpty || physical.X >= mode.Width || physical.Y >= mode.Height || physical.Right <= 0 || physical.Bottom <= 0)
             {
                 continue;
@@ -822,7 +869,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
             var onScreen = physical.Intersect(new Box(0, 0, mode.Width, mode.Height));
             var planeBox = onScreen;
-            var declined = WhyNotAPlane(entry, physical, onScreen, maxLayers, ref planeBox);
+            var declined = WhyNotAPlane(entry, physical, onScreen, maxLayers, exact, ref planeBox);
             if (declined is null)
             {
                 var node = (SceneBuffer)entry.Node;
@@ -842,7 +889,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     }
 
     private PlaneDeclineReason? WhyNotAPlane(
-        in Scene.RenderEntry entry, in Box physical, in Box onScreen, int maxLayers, ref Box planeBox)
+        in Scene.RenderEntry entry, in Box physical, in Box onScreen, int maxLayers, bool exactScale, ref Box planeBox)
     {
         if (entry.Mirrored)
         {
@@ -869,7 +916,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return PlaneDeclineReason.PixelShader;
         }
 
-        if (entry.Transformed || entry.Alpha < 1f)
+        if (entry.Alpha < 1f || (entry.Transformed && !entry.Transform.IsAxisAlignedScale))
         {
             return PlaneDeclineReason.Transformed;
         }
@@ -887,6 +934,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         if (!Output.CanScanout(attributes.Format, attributes.Modifier, overlay: true))
         {
             return PlaneDeclineReason.UnscannableLayout;
+        }
+
+        if (entry.Transformed && !exactScale)
+        {
+            return PlaneDeclineReason.ScaledFraction;
         }
 
         if (!CoversWholeNode(entry, physical))
@@ -913,7 +965,37 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
         var free = _scratch.Extents;
         planeBox = new Box(free.X1, free.Y1, free.X2 - free.X1, free.Y2 - free.Y1);
-        return HasSettled(node, planeBox) ? null : PlaneDeclineReason.Settling;
+        if (!HasSettled(node, planeBox))
+        {
+            return PlaneDeclineReason.Settling;
+        }
+
+        var layer = new PlaneRefusal(content.Width, content.Height, planeBox.Width, planeBox.Height, attributes.Format, attributes.Modifier);
+        return WasRefused(node, layer) ? PlaneDeclineReason.BackendRefused : null;
+    }
+
+    private bool TryScaledPhysical(in Scene.RenderEntry entry, in Box bounds, out Box physical)
+    {
+        var logical = bounds.Translated(entry.X, entry.Y);
+        var matrix = entry.Transform;
+        var scale = _projection.Scale;
+        var left = (((matrix.M11 * logical.X) + matrix.M13) * scale) - _projection.OriginX;
+        var top = (((matrix.M22 * logical.Y) + matrix.M23) * scale) - _projection.OriginY;
+        var right = (((matrix.M11 * logical.Right) + matrix.M13) * scale) - _projection.OriginX;
+        var bottom = (((matrix.M22 * logical.Bottom) + matrix.M23) * scale) - _projection.OriginY;
+        var x0 = Math.Round(left);
+        var y0 = Math.Round(top);
+        var x1 = Math.Round(right);
+        var y1 = Math.Round(bottom);
+        if (Math.Abs(left - x0) > ScaledSlack || Math.Abs(top - y0) > ScaledSlack ||
+            Math.Abs(right - x1) > ScaledSlack || Math.Abs(bottom - y1) > ScaledSlack || x1 <= x0 || y1 <= y0)
+        {
+            physical = default;
+            return false;
+        }
+
+        physical = new Box((int)x0, (int)y0, (int)(x1 - x0), (int)(y1 - y0));
+        return true;
     }
 
     private static FBox CropSource(SceneBuffer node, in Box physical, in Box onScreen)
@@ -983,6 +1065,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             else
             {
                 Decline(_candidateNodes[i], layer.Accepted ? PlaneDeclineReason.Demoted : PlaneDeclineReason.BackendRefused);
+                if (!layer.Accepted)
+                {
+                    RememberRefusal(_candidateNodes[i], box);
+                }
+
                 _scratch.Reset(new PixmanBox32(box.X, box.Y, box.Right, box.Bottom));
                 _compositedAbove.UnionWith(_scratch);
                 if (layer.Accepted)

@@ -14,6 +14,8 @@ public readonly record struct RenderTransform(
 
     public bool IsAffine => M31 == 0 && M32 == 0 && M33 == 1;
 
+    public bool IsAxisAlignedScale => IsAffine && M12 == 0 && M21 == 0 && M11 > 0 && M22 > 0;
+
     public (double X, double Y) Map(double x, double y)
     {
         var w = (M31 * x) + (M32 * y) + M33;

@@ -133,6 +133,11 @@ internal sealed partial class TinyComp
         switch (_mode)
         {
             case DragMode.Move when _grabWindow is { } window:
+                if (DragCanvasScaled(window, x, y))
+                {
+                    return true;
+                }
+
                 var beforeX = window.X;
                 var beforeY = window.Y;
                 var (canvasX, canvasY) = ToCanvasPointAt(x, y, window);
@@ -145,7 +150,11 @@ internal sealed partial class TinyComp
                 return true;
 
             case DragMode.Resize when _grabWindow is { } window:
-                var (resizeX, resizeY) = ToCanvasPointAt(x, y, window);
+                if (!ResizeCanvasScaled(window, x, y, out var resizeX, out var resizeY))
+                {
+                    (resizeX, resizeY) = ToCanvasPointAt(x, y, window);
+                }
+
                 var box = new ResizeDrag(_grabEdges, _grabStart, _grabX, _grabY).BoxFor(resizeX, resizeY, window.X, window.Y);
                 window.ResizeTo(box.X, box.Y, box.Width, box.Height, _grabEdges);
                 return true;
@@ -286,7 +295,8 @@ internal sealed partial class TinyComp
             _scene.SurfaceAt(_cursorX, _cursorY) is { Surface: { } surface } at &&
             surface == _parentLockConstraint.Surface)
         {
-            return (_cursorX - at.X + hint.X, _cursorY - at.Y + hint.Y);
+            var scale = ScaleOfSurface(surface);
+            return (_cursorX + ((hint.X - at.X) * scale), _cursorY + ((hint.Y - at.Y) * scale));
         }
 
         return (_cursorX, _cursorY);
@@ -325,6 +335,11 @@ internal sealed partial class TinyComp
             {
                 ReassignDraggedWorkspace(dropped);
                 ClearCanvasHomeAfterDrop(dropped);
+            }
+
+            if (_grabWindow is { } released)
+            {
+                EndCanvasGrab(released);
             }
 
             _grabWindow?.SetResizing(false);
@@ -608,18 +623,19 @@ internal sealed partial class TinyComp
 
     internal double ScaleForWindow(Window window) => ScaleForBox(ScreenBoxOf(window));
 
-    private bool IsOnDeformedWindow(Surface surface)
-    {
-        if (_canvasStates.Count == 0)
-        {
-            return false;
-        }
+    private bool IsOnDeformedWindow(Surface surface) =>
+        _canvasStates.Count > 0 && CanvasOwnerOf(surface) is { } window && BlocksConstraints(window);
 
+    private double ScaleOfSurface(Surface surface) =>
+        _canvasStates.Count > 0 && CanvasOwnerOf(surface) is { } window ? CanvasScaleOf(window) : 1.0;
+
+    private IGrabTarget? CanvasOwnerOf(Surface surface)
+    {
         foreach (var window in _windows)
         {
             if (window.Owns(surface))
             {
-                return IsCanvasDeformed(window);
+                return window;
             }
         }
 
@@ -627,10 +643,10 @@ internal sealed partial class TinyComp
         {
             if (xwindow.XWin.Surface == surface)
             {
-                return IsCanvasDeformed(xwindow);
+                return xwindow;
             }
         }
 
-        return false;
+        return null;
     }
 }

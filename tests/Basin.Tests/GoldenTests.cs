@@ -590,6 +590,166 @@ public sealed class GoldenTests
 
     [Theory]
     [MemberData(nameof(Renderers))]
+    public void Golden_canvas_scale(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var map = ScaleCanvas(host);
+        var scale = new Basin.Effects.CanvasScale { MinScale = 0.5 };
+        using var theme = new TestFrameTheme();
+        using var uiHost = new Basin.UI.Skia.SkiaUIHost();
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(36, 26, Fill.Gradient(36, 26));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 36, 26);
+        surface.Commit();
+        host.PumpToServer();
+
+        var parked = new Box(0, 44, 36, 26);
+        parked = parked with { X = scale.ParkTarget(map, map.Right!, parked) };
+        var (right, rightFrame) = ScaledWindow(host, map, scale, parked, uiHost, theme, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(right);
+        content.Tree.SetPosition(0, 0);
+
+        var corner = new Box(0, 0, 30, 20);
+        var (cornerX, cornerY) = scale.CornerParkTarget(map, map.Left!, map.Top!, corner);
+        var (_, cornerFrame) = ScaledWindow(host, map, scale, new Box(cornerX, cornerY, 30, 20), uiHost, theme, new RenderColor(0.7f, 0.35f, 0.2f, 1f));
+
+        var menuOwner = new Box(0, 70, 34, 24);
+        menuOwner = menuOwner with { X = scale.ParkTarget(map, map.Left!, menuOwner) };
+        var (_, ownerFrame) = ScaledWindow(host, map, scale, menuOwner, uiHost, theme, new RenderColor(0.3f, 0.6f, 0.35f, 1f));
+        var placement = scale.PlacementFor(map, menuOwner);
+        var (originX, originY) = placement.Map(menuOwner.X, menuOwner.Y);
+        var popup = new Basin.Scene.SceneTransform(host.Scene.Root)
+        {
+            Matrix = Basin.Effects.CanvasScale.About(placement.M11, 0, 0, Math.Round(originX), Math.Round(originY)),
+        };
+        var popupTree = new Basin.Scene.SceneTree(popup);
+        popupTree.SetPosition(12, 14);
+        _ = new Basin.Scene.SceneRect(popupTree, 26, 18, new RenderColor(0.95f, 0.95f, 0.9f, 1f));
+        _ = new Basin.Scene.SceneRect(popupTree, 26, 6, new RenderColor(0.25f, 0.25f, 0.3f, 1f));
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-scale", renderer));
+        rightFrame.Dispose();
+        cornerFrame.Dispose();
+        ownerFrame.Dispose();
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_scale_drag(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var map = ScaleCanvas(host);
+        var scale = new Basin.Effects.CanvasScale { MinScale = 0.5 };
+        using var theme = new TestFrameTheme();
+        using var uiHost = new Basin.UI.Skia.SkiaUIHost();
+        var box = new Box(map.Right!.Seam + 10, 40, 44, 32);
+        var drag = scale.DragPlacementFor(map, box, box.X + 30.5, box.Y + 4.5, 128.25, 44.5);
+        var (_, frame) = ScaledWindow(host, map, scale, box, uiHost, theme, new RenderColor(0.2f, 0.3f, 0.6f, 1f), drag);
+        _ = new Basin.Scene.SceneRect(host.Scene.Root, 3, 3, new RenderColor(1f, 1f, 1f, 1f)) { };
+        host.Scene.Root.Children[^1].SetPosition(127, 43);
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-scale-drag", renderer));
+        frame.Dispose();
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_canvas_scale_over_a_deformer(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var map = ScaleCanvas(host);
+        var scale = new Basin.Effects.CanvasScale { MinScale = 0.5 };
+        var box = new Box(0, 30, 40, 30);
+        box = box with { X = scale.ParkTarget(map, map.Right!, box) };
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(box.X, box.Y);
+        var canvasNode = new Basin.Scene.SceneTransform(window)
+        {
+            Matrix = LocalPlacement(scale.PlacementFor(map, box), box.X, box.Y),
+        };
+        var wobbly = new Basin.Scene.SceneTransform(canvasNode);
+        _ = new Basin.Scene.SceneRect(wobbly, 40, 30, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(32, 22, Fill.Gradient(32, 22));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 32, 22);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(wobbly);
+        content.Tree.SetPosition(4, 4);
+        wobbly.Deformer = new WaveDeformer { Amplitude = 6 };
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName("canvas-scale-deformer", renderer));
+    }
+
+    private static Basin.Effects.CanvasWarpTransform ScaleCanvas(CompositorTestHost host)
+    {
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(24, -1, 24, 80, 0.2, 0.25, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.Layout(136, 1, 24, 80, 0.2, 0.25, 60);
+        var top = new Basin.Effects.CanvasWarp();
+        top.Layout(18, -1, 18, 60, 0.2, 0.25, 80);
+        var bottom = new Basin.Effects.CanvasWarp(1);
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = new Box(0, 0, 160, 120),
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = left,
+                Right = right,
+                Top = top,
+                Bottom = bottom,
+                CellSize = 16,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+        return new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, Top = top, Bottom = bottom };
+    }
+
+    private static (Basin.Scene.SceneTransform Node, Basin.Scene.Frame Frame) ScaledWindow(
+        CompositorTestHost host,
+        Basin.Effects.CanvasWarpTransform map,
+        Basin.Effects.CanvasScale scale,
+        in Box box,
+        Basin.UI.Skia.SkiaUIHost uiHost,
+        TestFrameTheme theme,
+        RenderColor color,
+        RenderTransform? placement = null)
+    {
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(box.X, box.Y);
+        var node = new Basin.Scene.SceneTransform(window)
+        {
+            Matrix = LocalPlacement(placement ?? scale.PlacementFor(map, box), box.X, box.Y),
+        };
+        var shadow = new Basin.Scene.SceneRect(node, box.Width, box.Height, new RenderColor(0f, 0f, 0f, 0.4f));
+        shadow.SetPosition(3, 4);
+        var frame = new Basin.Scene.Frame(uiHost, new TestFrameRenderer(theme), node);
+        _ = new Basin.Scene.SceneRect(node, box.Width, box.Height, color);
+        frame.Configure(new Box(0, 0, box.Width, box.Height), 1.0, new Basin.Capabilities.FrameState { Active = true });
+        frame.Commit();
+        return (node, frame);
+    }
+
+    private static RenderTransform LocalPlacement(in RenderTransform placement, int sceneX, int sceneY) =>
+        RenderTransform.Multiply(
+            RenderTransform.Translation(-sceneX, -sceneY),
+            RenderTransform.Multiply(placement, RenderTransform.Translation(sceneX, sceneY)));
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
     public void Golden_canvas_four_sides(string renderer)
     {
         SkipWithoutGpu(renderer);

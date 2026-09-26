@@ -86,6 +86,7 @@ internal sealed partial class TinyComp
 
     private void OnXRemoved(Basin.XWayland.XWaylandWindow window, SceneSurface scene)
     {
+        DropOverrideRedirect(window);
         foreach (var xwindow in _xwindows.ToArray())
         {
             if (ReferenceEquals(xwindow.XWin, window))

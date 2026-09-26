@@ -7,6 +7,8 @@
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
+#include "fractional-scale-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
@@ -23,6 +25,12 @@ static int width = 256, height = 256;
 static int running = 1;
 static uint32_t colour = 0xFF3C7A9E;
 static uint32_t wanted = ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+static struct wp_fractional_scale_manager_v1 *fractional_manager;
+static struct wp_viewporter *viewporter;
+static struct wp_viewport *viewport;
+/* pixel mode: the buffer stays 256 pixels and the logical size follows the preferred scale, ignoring configure sizes, like a client that sizes its window in pixels. */
+static int pixel_mode;
+static uint32_t pixel_scale = 120;
 
 static struct wl_buffer *make_buffer(int w, int h)
 {
@@ -43,12 +51,31 @@ static struct wl_buffer *make_buffer(int w, int h)
 
 static void draw(void)
 {
-    struct wl_buffer *buf = make_buffer(width, height);
+    int buffer_width = pixel_mode ? 256 : width;
+    int buffer_height = pixel_mode ? 256 : height;
+    struct wl_buffer *buf = make_buffer(buffer_width, buffer_height);
     if (!buf) return;
+    if (pixel_mode && viewport) {
+        width = (int)(256 * 120 / pixel_scale);
+        height = width;
+        wp_viewport_set_destination(viewport, width, height);
+        printf("SIZE %d %d\n", width, height);
+        fflush(stdout);
+    }
     wl_surface_attach(surface, buf, 0, 0);
-    wl_surface_damage_buffer(surface, 0, 0, width, height);
+    wl_surface_damage_buffer(surface, 0, 0, buffer_width, buffer_height);
     wl_surface_commit(surface);
 }
+
+static void preferred_scale(void *data, struct wp_fractional_scale_v1 *f, uint32_t scale)
+{
+    (void)data; (void)f;
+    if (scale == pixel_scale) return;
+    pixel_scale = scale;
+    draw();
+}
+
+static const struct wp_fractional_scale_v1_listener fractional_listener = { preferred_scale };
 
 static void xdg_surface_configure(void *data, struct xdg_surface *s, uint32_t serial)
 {
@@ -62,6 +89,7 @@ static const struct xdg_surface_listener xdg_surface_listener = { xdg_surface_co
 static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w, int32_t h, struct wl_array *states)
 {
     (void)data; (void)t; (void)states;
+    if (pixel_mode) return;
     if (w > 0) width = w;
     if (h > 0) height = h;
 }
@@ -161,6 +189,10 @@ static void global_add(void *data, struct wl_registry *registry, uint32_t name, 
         wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
     else if (strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0)
         decoration_manager = wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1);
+    else if (strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0)
+        fractional_manager = wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1);
+    else if (strcmp(interface, wp_viewporter_interface.name) == 0)
+        viewporter = wl_registry_bind(registry, name, &wp_viewporter_interface, 1);
     else if (strcmp(interface, wl_seat_interface.name) == 0 && !seat) {
         seat = wl_registry_bind(registry, name, &wl_seat_interface, 1);
         wl_seat_add_listener(seat, &seat_listener, NULL);
@@ -177,6 +209,7 @@ int main(int argc, char **argv)
     if (argc > 1 && strcmp(argv[1], "none") == 0) wanted = 0;
     int fullscreen = 0;
     for (int i = 1; i < argc; i++) if (strcmp(argv[i], "fullscreen") == 0) fullscreen = 1;
+    for (int i = 1; i < argc; i++) if (strcmp(argv[i], "pixel") == 0) pixel_mode = 1;
 
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no display\n"); return 1; }
@@ -191,6 +224,11 @@ int main(int argc, char **argv)
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
     toplevel = xdg_surface_get_toplevel(xdg_surface);
     xdg_toplevel_add_listener(toplevel, &toplevel_listener, NULL);
+    if (pixel_mode && fractional_manager && viewporter) {
+        viewport = wp_viewporter_get_viewport(viewporter, surface);
+        struct wp_fractional_scale_v1 *fractional = wp_fractional_scale_manager_v1_get_fractional_scale(fractional_manager, surface);
+        wp_fractional_scale_v1_add_listener(fractional, &fractional_listener, NULL);
+    }
     xdg_toplevel_set_title(toplevel, "ssdwin");
     xdg_toplevel_set_app_id(toplevel, "ssdwin");
     if (decoration_manager && wanted != 0) {

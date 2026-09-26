@@ -22,6 +22,12 @@ internal sealed partial class TinyComp
 
     private const int CanvasZ = TransformStack.ZOrder.Backdrop + 1000;
 
+    private const uint XResourceIdMask = 0x001FFFFF;
+
+    private const double GrabSettlePixels = 96.0;
+
+    private const long DropSettleNanos = 150_000_000;
+
     private readonly Dictionary<IGrabTarget, CanvasWindowState> _canvasStates = [];
     private readonly List<IGrabTarget> _canvasMotions = [];
     private readonly List<IGrabTarget> _canvasMotionsDone = [];
@@ -29,6 +35,8 @@ internal sealed partial class TinyComp
     private bool? _canvasOverride;
     private bool _canvasClosing;
     private bool _canvasGridDragging;
+    private readonly List<OverrideRedirectFrame> _overrideRedirects = [];
+    private bool _canvasScaleDrag;
 
     private bool CanvasWanted(OutputView view) => _canvasOverride ?? view.Canvas.Settings.Enabled;
 
@@ -82,6 +90,16 @@ internal sealed partial class TinyComp
         changed |= canvas.Bottom.Layout(
             usable.Bottom - zoneY, 1, bottomActive ? zoneY : 0, bottomActive ? extensionY : 0, settings.EdgeScaleValue,
             settings.SlopeValue, centerX);
+        var modeChanged = canvas.Mode != settings.WindowMode;
+        if (modeChanged || canvas.Scale.MinScale != Math.Clamp(settings.MinScaleValue, 0.05, 1.0) ||
+            canvas.Scale.Reach != Math.Clamp(settings.ScaleReachValue, 1.0, 16.0))
+        {
+            canvas.Mode = settings.WindowMode;
+            canvas.Scale.MinScale = settings.MinScaleValue;
+            canvas.Scale.Reach = settings.ScaleReachValue;
+            changed = true;
+        }
+
         if (canvas.Map.CornerRadius != settings.CornerRadiusValue || canvas.Map.CornerTaper != settings.CornerTaperValue)
         {
             canvas.Map.CornerRadius = settings.CornerRadiusValue;
@@ -102,8 +120,9 @@ internal sealed partial class TinyComp
             $"CANVAS view={ViewIndex(view)} left={canvas.Left.ZoneWidth} right={canvas.Right.ZoneWidth}"
             + $" top={canvas.Top.ZoneWidth} bottom={canvas.Bottom.ZoneWidth} corner={(canvas.Map.CornerTaper ? "taper" : "radius")}:{canvas.Map.CornerRadius:F2}"
             + $" extension={active?.Extension ?? 0} edge_scale={(active?.EdgeScale ?? settings.EdgeScaleValue):F3}"
-            + $" exponent={(active?.Exponent ?? 0):F2} slope={(active?.Slope ?? 0):F2}");
-        KeepParkedInside(view);
+            + $" exponent={(active?.Exponent ?? 0):F2} slope={(active?.Slope ?? 0):F2}"
+            + $" window={settings.WindowName} min_scale={canvas.Scale.MinScale:F2} reach={canvas.Scale.Reach:F2}");
+        KeepParkedInside(view, modeChanged);
         ApplyCanvasToView(view);
         canvas.Grid?.NotifyMeshChanged();
         view.Scheduler?.ScheduleRepaint();
@@ -308,7 +327,7 @@ internal sealed partial class TinyComp
         return Views.Count > 0 ? Views[0] : null;
     }
 
-    private void KeepParkedInside(OutputView view)
+    private void KeepParkedInside(OutputView view, bool modeChanged)
     {
         var canvas = view.Canvas;
         foreach (var (window, state) in _canvasStates)
@@ -320,6 +339,23 @@ internal sealed partial class TinyComp
             }
 
             var box = CanvasBoxOf(window);
+            if (canvas.Scales || modeChanged)
+            {
+                var (side, end) = ZonesHolding(canvas, box);
+                if (side is null && end is null)
+                {
+                    continue;
+                }
+
+                var (parkX, parkY) = ParkTargets(canvas, window, box, side, end);
+                if (parkX != window.X || parkY != window.Y)
+                {
+                    window.MoveTo(parkX, parkY);
+                }
+
+                continue;
+            }
+
             var dx = 0;
             var dy = 0;
             if (!canvas.Left.IsIdentity && box.X < canvas.Left.FarEdge)
@@ -399,6 +435,12 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (canvas.Scales)
+        {
+            ApplyCanvasScale(window, tree, canvas, state);
+            return;
+        }
+
         if (!hasState)
         {
             state = new CanvasWindowState();
@@ -428,6 +470,19 @@ internal sealed partial class TinyComp
         transform.SceneX = tree.X;
         transform.SceneY = tree.Y;
         transform.CellSize = canvas.Settings.MeshCellSize;
+        node.Matrix = RenderTransform.Identity;
+        state.Placement = RenderTransform.Identity;
+        state.Scale = 1.0;
+        if (_overrideRedirects.Count > 0)
+        {
+            SyncOverrideRedirects(window, RenderTransform.Identity);
+        }
+
+        if (state.OfferedScale < 1.0)
+        {
+            SyncScaleOffer(window, state, canvas);
+        }
+
         var bounds = node.ContentBounds;
         var deformed = !_canvasSuspended && !canvas.IsIdentity && !bounds.IsEmpty && !transform.IsIdentityFor(bounds);
         if (!deformed)
@@ -456,6 +511,403 @@ internal sealed partial class TinyComp
         state.AppliedGeneration = canvas.Generation;
         state.AppliedSceneX = tree.X;
         state.AppliedSceneY = tree.Y;
+    }
+
+    private void ApplyCanvasScale(IGrabTarget window, SceneTree tree, CanvasView canvas, CanvasWindowState? state)
+    {
+        var placement = canvas.IsIdentity && state?.Blend.IsRunning != true
+            ? RenderTransform.Identity
+            : ScalePlacementOf(window, canvas, state);
+        if (state is null)
+        {
+            if (placement.IsIdentity)
+            {
+                return;
+            }
+
+            state = new CanvasWindowState();
+            _canvasStates[window] = state;
+        }
+
+        var node = state.Node;
+        if (node is null || node.IsDestroyed)
+        {
+            if (placement.IsIdentity)
+            {
+                state.Placement = placement;
+                state.Scale = 1.0;
+                state.Deformed = false;
+                return;
+            }
+
+            var stack = _effects.StackFor(tree);
+            node = stack.Get(CanvasTransformName) ?? stack.Add(CanvasZ, CanvasTransformName);
+            state.Node = node;
+        }
+
+        AdoptStrays(tree, node);
+        node.Deformer = null;
+        node.Matrix = placement.IsIdentity
+            ? RenderTransform.Identity
+            : RenderTransform.Multiply(
+                RenderTransform.Translation(-tree.X, -tree.Y),
+                RenderTransform.Multiply(placement, RenderTransform.Translation(tree.X, tree.Y)));
+        state.Placement = placement;
+        state.Scale = placement.M11;
+        state.Deformed = !placement.IsIdentity;
+        state.AppliedGeneration = canvas.Generation;
+        state.AppliedSceneX = tree.X;
+        state.AppliedSceneY = tree.Y;
+        SyncOverrideRedirects(window, placement);
+        SyncScaleOffer(window, state, canvas);
+    }
+
+    private SceneTree AdoptOverrideRedirect(Basin.XWayland.XWaylandWindow xwin)
+    {
+        var frame = new OverrideRedirectFrame(xwin, new SceneTransform(_layers.Overlay)) { Owner = OverrideRedirectOwner(xwin) };
+        _overrideRedirects.Add(frame);
+        if (frame.Owner is { } owner && ViewOfWindow(owner) is { Canvas.Scales: true } &&
+            _canvasStates.TryGetValue(owner, out var state))
+        {
+            frame.Node.Matrix = state.Placement;
+        }
+
+        return new SceneTree(frame.Node);
+    }
+
+    private void DropOverrideRedirect(Basin.XWayland.XWaylandWindow xwin)
+    {
+        for (var i = _overrideRedirects.Count - 1; i >= 0; i--)
+        {
+            var frame = _overrideRedirects[i];
+            if (ReferenceEquals(frame.Window, xwin))
+            {
+                _overrideRedirects.RemoveAt(i);
+                frame.Node.Destroy();
+            }
+            else if (FindXWindow(xwin) is { } gone && ReferenceEquals(frame.Owner, gone))
+            {
+                frame.Owner = null;
+                frame.Node.Matrix = RenderTransform.Identity;
+            }
+        }
+    }
+
+    private void SyncOverrideRedirects(IGrabTarget window, in RenderTransform placement)
+    {
+        for (var i = 0; i < _overrideRedirects.Count; i++)
+        {
+            var frame = _overrideRedirects[i];
+            if (ReferenceEquals(frame.Owner, window))
+            {
+                frame.Node.Matrix = placement;
+            }
+        }
+    }
+
+    private XWindow? OverrideRedirectOwner(Basin.XWayland.XWaylandWindow xwin)
+    {
+        for (var parent = xwin.TransientFor; parent is not null; parent = parent.TransientFor)
+        {
+            if (FindXWindow(parent) is { } transientOwner)
+            {
+                return transientOwner;
+            }
+
+            if (ReferenceEquals(parent.TransientFor, xwin))
+            {
+                break;
+            }
+        }
+
+        var client = XClientBase(xwin.WindowId);
+        XWindow? nearest = null;
+        var nearestDistance = long.MaxValue;
+        foreach (var candidate in _xwindows)
+        {
+            if (XClientBase(candidate.XWin.WindowId) != client || candidate.Minimized)
+            {
+                continue;
+            }
+
+            var box = CanvasBoxOf(candidate);
+            var dx = xwin.X < box.X ? box.X - xwin.X : xwin.X > box.Right ? xwin.X - box.Right : 0;
+            var dy = xwin.Y < box.Y ? box.Y - xwin.Y : xwin.Y > box.Bottom ? xwin.Y - box.Bottom : 0;
+            var distance = ((long)dx * dx) + ((long)dy * dy);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearest = candidate;
+            }
+        }
+
+        if (nearest is not null)
+        {
+            return nearest;
+        }
+
+        return _focusedX is { } focused && XClientBase(focused.XWin.WindowId) == client ? focused : null;
+    }
+
+    private static uint XClientBase(uint windowId) => windowId & ~XResourceIdMask;
+
+    private RenderTransform ScalePlacementOf(IGrabTarget window, CanvasView canvas, CanvasWindowState? state)
+    {
+        if (_canvasSuspended || canvas.IsIdentity)
+        {
+            return state?.Blend.IsRunning == true
+                ? CanvasScale.Blend(state.BlendFrom, RenderTransform.Identity, state.Blend.Current)
+                : RenderTransform.Identity;
+        }
+
+        var target = RestingPlacement(window, canvas);
+        if (state is null)
+        {
+            return target;
+        }
+
+        var box = CanvasBoxOf(window);
+
+        if (state.Resizing)
+        {
+            var start = state.ResizeStart;
+            var fixedX = state.ResizeFixedLeft ? start.Right : start.X;
+            var fixedY = state.ResizeFixedTop ? start.Bottom : start.Y;
+            target = CanvasScale.About(state.ResizeScale, fixedX, fixedY, state.ResizeScreenX, state.ResizeScreenY);
+        }
+        else if (state.Dragging)
+        {
+            var travel = Math.Sqrt(
+                ((state.DragCursorX - state.DragStartX) * (state.DragCursorX - state.DragStartX)) +
+                ((state.DragCursorY - state.DragStartY) * (state.DragCursorY - state.DragStartY)));
+            var settle = Math.Max(0.0, 1.0 - (travel / GrabSettlePixels));
+            var hand = canvas.Scale.HandPlacementFor(
+                canvas.Map, box, window.X + state.DragGrabX, window.Y + state.DragGrabY,
+                state.DragCursorX, state.DragCursorY, state.DragScaleCorrection * settle);
+            if (!(hand.M11 == 1.0 && target.IsIdentity))
+            {
+                target = hand;
+            }
+        }
+
+        return state.Blend.IsRunning ? CanvasScale.Blend(state.BlendFrom, target, state.Blend.Current) : target;
+    }
+
+    private void BeginCanvasGrab(IGrabTarget window, double x, double y)
+    {
+        _canvasScaleDrag = false;
+        if (ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas.Scales: true })
+        {
+            return;
+        }
+
+        if (!_canvasStates.TryGetValue(window, out var state))
+        {
+            state = new CanvasWindowState();
+            _canvasStates[window] = state;
+        }
+
+        var view = ViewOfWindow(window)!;
+        var drawn = state.Placement.IsIdentity ? 1.0 : state.Placement.M11;
+        state.Blend.Cancel();
+        state.Dragging = true;
+        state.DragGrabX = _grabX;
+        state.DragGrabY = _grabY;
+        state.Anchor = (_grabX, _grabY);
+        state.DragCursorX = x;
+        state.DragCursorY = y;
+        state.DragStartX = x;
+        state.DragStartY = y;
+        state.DragScaleCorrection = drawn - view.Canvas.Scale.HandPlacementFor(
+            view.Canvas.Map, CanvasBoxOf(window), window.X + _grabX, window.Y + _grabY, x, y).M11;
+        _canvasScaleDrag = true;
+    }
+
+    private RenderTransform RestingPlacement(IGrabTarget window, CanvasView canvas)
+    {
+        var placement = _canvasStates.TryGetValue(window, out var anchored) && anchored.Anchor is { } anchor
+            ? canvas.Scale.AnchoredPlacementFor(canvas.Map, CanvasBoxOf(window), window.X + anchor.X, window.Y + anchor.Y)
+            : canvas.Scale.PlacementFor(canvas.Map, CanvasBoxOf(window));
+        if (placement.IsIdentity || window.EffectTree is not { } tree || ContentOf(window) is not { } content ||
+            ViewOfWindow(window) is not { } view)
+        {
+            return placement;
+        }
+
+        var width = content.InputSurface?.Current.Width ?? 0;
+        var height = content.InputSurface?.Current.Height ?? 0;
+        var x = (double)tree.X;
+        var y = (double)tree.Y;
+        for (SceneNode? node = content; node is not null && !ReferenceEquals(node, tree); node = node.Parent)
+        {
+            x += node.X;
+            y += node.Y;
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            return placement;
+        }
+
+        var scale = view.Output.Scale;
+        var scaleX = Math.Round(placement.M11 * width * scale) / (width * scale);
+        var scaleY = Math.Round(placement.M22 * height * scale) / (height * scale);
+        var left = Math.Round(((placement.M11 * x) + placement.M13) * scale) / scale;
+        var top = Math.Round(((placement.M22 * y) + placement.M23) * scale) / scale;
+        return new RenderTransform(scaleX, 0, left - (scaleX * x), 0, scaleY, top - (scaleY * y), 0, 0, 1);
+    }
+
+    private SceneBuffer? ContentOf(IGrabTarget window)
+    {
+        var content = window switch
+        {
+            Window { SceneSurface: { IsDestroyed: false } surface } => surface.Content,
+            XWindow { SceneSurface: { IsDestroyed: false } surface } => surface.Content,
+            _ => null,
+        };
+        if (content is null || !_canvasStates.TryGetValue(window, out var state) || state.Node is not { IsDestroyed: false } node)
+        {
+            return content;
+        }
+
+        var best = default(SceneBuffer);
+        var bestArea = 0L;
+        LargestDmabuf(node, ref best, ref bestArea);
+        return best ?? content;
+    }
+
+    private static void LargestDmabuf(SceneTree tree, ref SceneBuffer? best, ref long bestArea)
+    {
+        foreach (var child in tree.Children)
+        {
+            if (!child.Enabled)
+            {
+                continue;
+            }
+
+            if (child is SceneTree subtree)
+            {
+                LargestDmabuf(subtree, ref best, ref bestArea);
+            }
+            else if (child is SceneBuffer { Buffer: { } buffer, InputSurface: { } surface } candidate && buffer.TryGetDmabuf(out _))
+            {
+                var area = (long)surface.Current.Width * surface.Current.Height;
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = candidate;
+                }
+            }
+        }
+    }
+
+    private void BeginCanvasResize(IGrabTarget window, ResizeEdges edges)
+    {
+        if (ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas.Scales: true } ||
+            !_canvasStates.TryGetValue(window, out var state) || state.Placement.IsIdentity)
+        {
+            return;
+        }
+
+        state.Blend.Cancel();
+        var start = CanvasBoxOf(window);
+        var left = (edges & ResizeEdges.Left) != ResizeEdges.None;
+        var top = (edges & ResizeEdges.Top) != ResizeEdges.None;
+        state.ResizeStart = start;
+        state.ResizeFixedLeft = left;
+        state.ResizeFixedTop = top;
+        state.ResizeScale = state.Scale;
+        (state.ResizeScreenX, state.ResizeScreenY) = state.Placement.Map(left ? start.Right : start.X, top ? start.Bottom : start.Y);
+        state.ResizeEdges = edges;
+        state.Resizing = true;
+    }
+
+    private bool ResizeCanvasScaled(IGrabTarget window, double x, double y, out double canvasX, out double canvasY)
+    {
+        canvasX = x;
+        canvasY = y;
+        if (!_canvasStates.TryGetValue(window, out var state) || !state.Resizing ||
+            ViewOfWindow(window) is not { Tag: OutputPolicy, Canvas.Scales: true } view)
+        {
+            return false;
+        }
+
+        var edges = state.ResizeEdges;
+        (state.ResizeScale, canvasX, canvasY) = view.Canvas.Scale.ResizeCursor(
+            view.Canvas.Map,
+            state.ResizeStart,
+            (edges & ResizeEdges.Left) != ResizeEdges.None,
+            (edges & ResizeEdges.Right) != ResizeEdges.None,
+            (edges & ResizeEdges.Top) != ResizeEdges.None,
+            (edges & ResizeEdges.Bottom) != ResizeEdges.None,
+            state.ResizeScreenX,
+            state.ResizeScreenY,
+            x,
+            y);
+        ApplyCanvas(window);
+        return true;
+    }
+
+    private bool DragCanvasScaled(IGrabTarget window, double x, double y)
+    {
+        if (!_canvasScaleDrag || !_canvasStates.TryGetValue(window, out var state) || !state.Dragging)
+        {
+            return false;
+        }
+
+        var (fieldX, fieldY) = ToCanvasPointAt(x, y);
+        var movedX = x - state.DragCursorX;
+        var movedY = y - state.DragCursorY;
+        state.DragCursorX = x;
+        state.DragCursorY = y;
+        var nextX = (int)Math.Round(fieldX - state.DragGrabX);
+        var nextY = (int)Math.Round(fieldY - state.DragGrabY);
+        if (nextX != window.X || nextY != window.Y)
+        {
+            window.MoveTo(nextX, nextY);
+        }
+        else
+        {
+            ApplyCanvas(window);
+        }
+
+        _effects.OnMoved((int)Math.Round(movedX), (int)Math.Round(movedY));
+        return true;
+    }
+
+    private void EndCanvasGrab(IGrabTarget window)
+    {
+        _canvasScaleDrag = false;
+        if (!_canvasStates.TryGetValue(window, out var state) || !(state.Dragging || state.Resizing))
+        {
+            return;
+        }
+
+        if (ViewOfWindow(window) is not { Tag: OutputPolicy } view || window.EffectTree is not { IsDestroyed: false })
+        {
+            state.Dragging = false;
+            state.Resizing = false;
+            return;
+        }
+
+        var dropped = state.Dragging;
+        state.Dragging = false;
+        state.Resizing = false;
+        var from = state.Placement;
+        var rest = view.Canvas.Scales ? RestingPlacement(window, view.Canvas) : from;
+        if (from != rest)
+        {
+            state.BlendFrom = from;
+            state.Blend.Cancel();
+            state.Blend.Begin(0.0, 1.0, dropped ? Math.Min(DropSettleNanos, CanvasAnimationNanos(view)) : CanvasAnimationNanos(view));
+            if (state.Blend.IsRunning && !_canvasMotions.Contains(window))
+            {
+                _canvasMotions.Add(window);
+                ScheduleEffectRepaint();
+            }
+        }
+
+        ApplyCanvas(window);
     }
 
     private static void Bind(CanvasWarpTransform transform, CanvasView canvas)
@@ -504,6 +956,99 @@ internal sealed partial class TinyComp
         _canvasMotions.Remove(window);
     }
 
+    internal double CanvasScaleOf(IGrabTarget window) =>
+        _canvasStates.TryGetValue(window, out var state) && ViewOfWindow(window) is { Canvas.Scales: true } ? state.Scale : 1.0;
+
+    private bool BlocksConstraints(IGrabTarget window)
+    {
+        if (!_canvasStates.TryGetValue(window, out var state))
+        {
+            return false;
+        }
+
+        if (ViewOfWindow(window) is not { Canvas.Scales: true })
+        {
+            return state.Deformed;
+        }
+
+        return IsCanvasMoving(state);
+    }
+
+    private static bool IsCanvasMoving(CanvasWindowState state) =>
+        state.Dragging || state.Resizing || state.MotionX.IsRunning || state.MotionY.IsRunning || state.Blend.IsRunning;
+
+    private void AnnounceSurfaceScale(Surface surface, double scale) =>
+        _fractionalScale.AnnounceScale(surface, scale * CanvasOfferFor(surface));
+
+    private double CanvasOfferFor(Surface surface)
+    {
+        if (_canvasStates.Count == 0)
+        {
+            return 1.0;
+        }
+
+        var root = surface;
+        while (root.SubsurfaceRole?.Parent is { } parent)
+        {
+            root = parent;
+        }
+
+        var xdg = root.RoleObject is XdgPopupWindow popup ? popup.Parent : null;
+        while (xdg?.Role is XdgPopupWindow parentPopup)
+        {
+            xdg = parentPopup.Parent;
+        }
+
+        var toplevel = xdg?.Role as XdgToplevelWindow ?? root.RoleObject as XdgToplevelWindow;
+        return toplevel is not null && FindWindow(toplevel) is { } window && _canvasStates.TryGetValue(window, out var state)
+            ? state.OfferedScale
+            : 1.0;
+    }
+
+    private void SyncScaleOffer(IGrabTarget target, CanvasWindowState state, CanvasView canvas)
+    {
+        if (target is not Window window || window.Tree is null)
+        {
+            return;
+        }
+
+        var size = window.GeometrySize;
+        var xdg = window.Toplevel.Xdg;
+        if (state.OfferedScale < 1.0 && !state.Resizing && !xdg.HasUnackedConfigure && size != state.OfferSize)
+        {
+            state.OfferRefused = true;
+        }
+
+        var wanted = canvas.Scales && !state.OfferRefused && !_canvasSuspended && !IsCanvasMoving(state) &&
+            !state.Placement.IsIdentity && state.Scale < 1.0
+            ? Math.Round(state.Scale * 120) / 120
+            : 1.0;
+        if (wanted == state.OfferedScale)
+        {
+            return;
+        }
+
+        if (state.OfferedScale >= 1.0)
+        {
+            state.OfferSize = size;
+        }
+
+        state.OfferedScale = wanted;
+        if (ViewOfWindow(window) is { } view)
+        {
+            _fractionalScale.AnnounceScale(window.Toplevel.Surface, view.Output.Scale * wanted);
+        }
+
+        var (width, height) = state.OfferSize;
+        if (width > 0 && height > 0 &&
+            !window.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized) &&
+            !window.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen))
+        {
+            window.Toplevel.SetSize(width, height);
+            window.Toplevel.RequestConfigure();
+        }
+    }
+
     internal bool IsCanvasDeformed(IGrabTarget window) =>
         _canvasStates.TryGetValue(window, out var state) && state.Deformed;
 
@@ -526,6 +1071,13 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
+        if (canvas.Scales)
+        {
+            var placement = _canvasStates.TryGetValue(window, out var scaled)
+                ? scaled.Placement
+                : canvas.Scale.PlacementFor(canvas.Map, CanvasBoxOf(window));
+            return canvas.Scale.DrawnBox(placement, box);
+        }
         if (_canvasStates.TryGetValue(window, out var state) && ReferenceEquals(state.Transform.Left, canvas.Left))
         {
             var transform = state.Transform;
@@ -545,6 +1097,17 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
+        if (window is not null && ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Scales: true })
+        {
+            if (_canvasStates.TryGetValue(window, out var scaled) && !scaled.Placement.IsIdentity &&
+                scaled.Placement.TryInvert(out var inverse))
+            {
+                return inverse.Map(x, y);
+            }
+
+            return (x, y);
+        }
+
         if (window is not null && _canvasStates.TryGetValue(window, out var state) &&
             ReferenceEquals(state.Transform.Left, canvas.Left))
         {
@@ -573,6 +1136,7 @@ internal sealed partial class TinyComp
         {
             Window { Frame: not null } w => w.FrameBox,
             XWindow { Frame: not null } x => x.FrameBox,
+            Window w => w.ScaleBox,
             _ => new Box(window.X, window.Y, Math.Max(width, 1), Math.Max(height, 1)),
         };
     }
@@ -636,41 +1200,114 @@ internal sealed partial class TinyComp
         }
 
         state.Home ??= (window.X, window.Y);
+        state.Anchor = null;
         var box = CanvasBoxOf(window);
         var vertical = (side & CanvasSide.Vertical) != 0;
         var across = vertical
             ? (canvas.Left.ContainsCanvas(box.X) ? canvas.Left : canvas.Right.ContainsCanvas(box.Right) ? canvas.Right : null)
             : (canvas.Top.ContainsCanvas(box.Y) ? canvas.Top : canvas.Bottom.ContainsCanvas(box.Bottom) ? canvas.Bottom : null);
+        var nanos = CanvasAnimationNanos(view);
         if (across is not null)
         {
-            var (cornerX, cornerY) = ParkInCorner(window, state, box, vertical ? across : warp, vertical ? warp : across, view);
-            _report.Line($"PARK {NameOf(window)} {ParkName(side)} to={cornerX} y={cornerY} corner");
+            var (cornerX, cornerY) = ParkTargets(canvas, window, box, vertical ? across : warp, vertical ? warp : across);
+            BeginCanvasMotion(window, state, vertical: false, cornerX, nanos);
+            BeginCanvasMotion(window, state, vertical: true, cornerY, nanos);
+            _report.Line($"PARK {NameOf(window)} {ParkName(side)} to={cornerX} y={cornerY}{ParkScale(canvas, window, box, cornerX, cornerY)} corner");
             return;
         }
 
-        var target = side switch
-        {
-            CanvasSide.Left => warp.FarEdge + (window.X - box.X),
-            CanvasSide.Right => warp.FarEdge - box.Width + (window.X - box.X),
-            CanvasSide.Top => warp.FarEdge + (window.Y - box.Y),
-            _ => warp.FarEdge - box.Height + (window.Y - box.Y),
-        };
-        BeginCanvasMotion(window, state, vertical, target, CanvasAnimationNanos(view));
-        _report.Line($"PARK {NameOf(window)} {ParkName(side)} to={target}");
+        var (targetX, targetY) = ParkTargets(canvas, window, box, vertical ? null : warp, vertical ? warp : null);
+        var target = vertical ? targetY : targetX;
+        BeginCanvasMotion(window, state, vertical, target, nanos);
+        _report.Line($"PARK {NameOf(window)} {ParkName(side)} to={target}{ParkScale(canvas, window, box, targetX, targetY)}");
     }
 
-    private (int X, int Y) ParkInCorner(IGrabTarget window, CanvasWindowState state, in Box box, CanvasWarp side, CanvasWarp end, OutputView view)
+    private (int X, int Y) ParkTargets(CanvasView canvas, IGrabTarget window, in Box box, CanvasWarp? side, CanvasWarp? end)
     {
-        var reach = view.Canvas.Map.RimDiagonal;
-        var edgeX = side.Seam + (side.Direction * reach * side.Extension);
-        var edgeY = end.Seam + (end.Direction * reach * end.Extension);
-        var targetX = (int)Math.Round(side.Direction < 0 ? edgeX : edgeX - box.Width) + (window.X - box.X);
-        var targetY = (int)Math.Round(end.Direction < 0 ? edgeY : edgeY - box.Height) + (window.Y - box.Y);
-        var nanos = CanvasAnimationNanos(view);
-        BeginCanvasMotion(window, state, vertical: false, targetX, nanos);
-        BeginCanvasMotion(window, state, vertical: true, targetY, nanos);
-        return (targetX, targetY);
+        var offsetX = window.X - box.X;
+        var offsetY = window.Y - box.Y;
+        if (canvas.Scales && (side is not null || end is not null))
+        {
+            return HandParkTarget(canvas, window, box, side, end);
+        }
+
+        if (side is not null && end is not null)
+        {
+
+            var reach = canvas.Map.RimDiagonal;
+            var edgeX = side.Seam + (side.Direction * reach * side.Extension);
+            var edgeY = end.Seam + (end.Direction * reach * end.Extension);
+            return (
+                (int)Math.Round(side.Direction < 0 ? edgeX : edgeX - box.Width) + offsetX,
+                (int)Math.Round(end.Direction < 0 ? edgeY : edgeY - box.Height) + offsetY);
+        }
+
+        var x = window.X;
+        var y = window.Y;
+        if (side is not null)
+        {
+            x = (canvas.Scales
+                ? canvas.Scale.ParkTarget(canvas.Map, side, box)
+                : side.Direction < 0 ? side.FarEdge : side.FarEdge - box.Width) + offsetX;
+        }
+
+        if (end is not null)
+        {
+            y = (canvas.Scales
+                ? canvas.Scale.ParkTarget(canvas.Map, end, box)
+                : end.Direction < 0 ? end.FarEdge : end.FarEdge - box.Height) + offsetY;
+        }
+
+        return (x, y);
     }
+
+    private (int X, int Y) HandParkTarget(CanvasView canvas, IGrabTarget window, in Box box, CanvasWarp? side, CanvasWarp? end)
+    {
+        var anchorX = box.X + (box.Width / 2.0);
+        var anchorY = box.Y + (box.Height / 2.0);
+        var floor = canvas.Scale.MinScale;
+        var (screenX, screenY) = canvas.Map.ToScreenPoint(anchorX, anchorY);
+        if (side is not null)
+        {
+            screenX = side.Direction > 0
+                ? side.ScreenEdge - (floor * (box.Right - anchorX))
+                : side.ScreenEdge + (floor * (anchorX - box.X));
+        }
+
+        if (end is not null)
+        {
+            screenY = end.Direction > 0
+                ? end.ScreenEdge - (floor * (box.Bottom - anchorY))
+                : end.ScreenEdge + (floor * (anchorY - box.Y));
+        }
+
+        var (canvasX, canvasY) = canvas.Map.ToCanvasPoint(screenX, screenY);
+        if (_canvasStates.TryGetValue(window, out var state))
+        {
+            state.Anchor = (anchorX - window.X, anchorY - window.Y);
+        }
+
+        return (
+            (int)Math.Round(canvasX - (anchorX - window.X)),
+            (int)Math.Round(canvasY - (anchorY - window.Y)));
+    }
+
+    private static string ParkScale(CanvasView canvas, IGrabTarget window, in Box box, int x, int y)
+    {
+        if (!canvas.Scales)
+        {
+            return string.Empty;
+        }
+
+        var moved = box.Translated(x - window.X, y - window.Y);
+        var placement = canvas.Scale.AnchoredPlacementFor(
+            canvas.Map, moved, moved.X + (moved.Width / 2.0), moved.Y + (moved.Height / 2.0));
+        return $" scale={placement.M11:F3}";
+    }
+
+    private static (CanvasWarp? Side, CanvasWarp? End) ZonesHolding(CanvasView canvas, in Box box) =>
+        (canvas.Left.ContainsCanvas(box.X) ? canvas.Left : canvas.Right.ContainsCanvas(box.Right) ? canvas.Right : null,
+         canvas.Top.ContainsCanvas(box.Y) ? canvas.Top : canvas.Bottom.ContainsCanvas(box.Bottom) ? canvas.Bottom : null);
 
     internal void Recall(IGrabTarget window)
     {
@@ -718,6 +1355,7 @@ internal sealed partial class TinyComp
         state ??= new CanvasWindowState();
         _canvasStates[window] = state;
         state.Home = null;
+        state.Anchor = null;
         var nanos = CanvasAnimationNanos(view);
         if (targetX is { } x)
         {
@@ -767,6 +1405,13 @@ internal sealed partial class TinyComp
             }
 
             var running = false;
+            var blended = false;
+            if (state.Blend.IsRunning)
+            {
+                running |= state.Blend.Step(tick, out _);
+                blended = true;
+            }
+
             var nextX = window.X;
             var nextY = window.Y;
             if (state.MotionX.IsRunning)
@@ -785,6 +1430,10 @@ internal sealed partial class TinyComp
             {
                 window.MoveTo(nextX, nextY);
             }
+            else if (blended)
+            {
+                ApplyCanvas(window);
+            }
 
             if (!running)
             {
@@ -795,6 +1444,10 @@ internal sealed partial class TinyComp
         foreach (var window in _canvasMotionsDone)
         {
             _canvasMotions.Remove(window);
+            if (window.EffectTree is { IsDestroyed: false })
+            {
+                ApplyCanvas(window);
+            }
         }
 
         _canvasMotionsDone.Clear();
@@ -859,7 +1512,35 @@ internal sealed partial class TinyComp
         }
 
         _canvasSuspended = true;
+        BlendScaledWindows(_effects.SwitcherFlyNanos);
         ApplyCanvasToAll();
+    }
+
+    private void BlendScaledWindows(long nanos)
+    {
+        foreach (var (window, state) in _canvasStates)
+        {
+            if (window.EffectTree is not { IsDestroyed: false } || ViewOfWindow(window) is not { Canvas.Scales: true } view)
+            {
+                continue;
+            }
+
+            var target = _canvasSuspended ? RenderTransform.Identity : RestingPlacement(window, view.Canvas);
+            if (state.Placement == target)
+            {
+                continue;
+            }
+
+            state.BlendFrom = state.Placement;
+            state.Blend.Cancel();
+            state.Blend.Begin(0.0, 1.0, nanos);
+            if (state.Blend.IsRunning && !_canvasMotions.Contains(window))
+            {
+                _canvasMotions.Add(window);
+            }
+        }
+
+        ScheduleEffectRepaint();
     }
 
     internal void ResumeCanvas()
@@ -870,6 +1551,7 @@ internal sealed partial class TinyComp
         }
 
         _canvasSuspended = false;
+        BlendScaledWindows(_effects.SwitcherFlyNanos);
         ApplyCanvasToAll();
     }
 
@@ -909,6 +1591,7 @@ internal sealed partial class TinyComp
             $"CANVASWIN {NameOf(window)} canvas={window.X},{window.Y} screen={screen.X},{screen.Y}"
             + $" width={screen.Width} height={screen.Height}"
             + $" deformed={(IsCanvasDeformed(window) ? "yes" : "no")}"
+            + $" mode={view.Canvas.Settings.WindowName} scale={(_canvasStates.TryGetValue(window, out var scaled) ? scaled.Scale : 1.0):F3}"
             + $" home={(_canvasStates.TryGetValue(window, out var state) && state.Home is { } home ? $"{home.X},{home.Y}" : "none")}");
     }
 

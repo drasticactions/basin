@@ -125,6 +125,9 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("canvas-sides", settings.Canvas.SideNames));
         cli.AddReport(_ => BasinCommand.Report("canvas-corner", settings.Canvas.CornerName));
         cli.AddReport(_ => BasinCommand.Report("canvas-corner-radius", settings.Canvas.CornerRadiusValue));
+        cli.AddReport(_ => BasinCommand.Report("canvas-window", settings.Canvas.WindowName));
+        cli.AddReport(_ => BasinCommand.Report("canvas-min-scale", settings.Canvas.MinScaleValue));
+        cli.AddReport(_ => BasinCommand.Report("canvas-scale-reach", settings.Canvas.ScaleReachValue));
         cli.AddReport(_ => BasinCommand.Report("bindings", settings.Bindings.Count));
         cli.AddReport(_ => BasinCommand.Report("rules", settings.Rules.Count));
 

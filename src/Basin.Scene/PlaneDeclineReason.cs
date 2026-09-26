@@ -35,4 +35,6 @@ public enum PlaneDeclineReason
     PixelShader,
 
     Mirrored,
+
+    ScaledFraction,
 }

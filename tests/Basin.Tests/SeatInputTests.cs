@@ -132,6 +132,50 @@ public sealed class SeatInputTests
     }
 
     [Fact]
+    public void An_implicit_grab_maps_motion_through_a_scaled_surface_with_a_mapper()
+    {
+        using var host = new CompositorTestHost();
+        var client = host.Client;
+        var window = MappedToplevel.Map(host, client);
+        var frame = new Basin.Scene.SceneTransform(host.Scene.Root)
+        {
+            Matrix = new RenderTransform(0.5, 0, 100, 0, 0.5, 50, 0, 0, 1),
+        };
+        var scene = new Basin.Scene.SceneSurface(frame, window.ServerSurface);
+        foreach (var hosted in host.SurfaceScenes)
+        {
+            if (ReferenceEquals(hosted.Surface, window.ServerSurface))
+            {
+                hosted.Tree.Enabled = false;
+            }
+        }
+
+        Assert.True(host.Scene.TryMapToSurface(window.ServerSurface, 110, 70, out var mappedX, out var mappedY));
+        Assert.Equal(20, mappedX, 9);
+        Assert.Equal(40, mappedY, 9);
+
+        var pointer = client.Seat!.GetPointer();
+        var motions = new List<(double X, double Y)>();
+        pointer.Motion += (_, e) => motions.Add((e.SurfaceX.ToDouble(), e.SurfaceY.ToDouble()));
+        host.PumpToClient();
+
+        host.Seat.Pointer.MapToSurface = host.Scene.TryMapToSurface;
+        host.Seat.Pointer.NotifyMotionAt(1, window.ServerSurface, 20, 40, 110, 70);
+        host.Seat.Pointer.NotifyButton(2, 0x110, WlPointer.ButtonState.Pressed);
+        host.Seat.Pointer.NotifyMotionAt(3, null, 0, 0, 90, 30);
+        host.Seat.Pointer.MapToSurface = null;
+        host.Seat.Pointer.NotifyMotionAt(4, null, 0, 0, 90, 30);
+        host.Seat.Pointer.NotifyButton(5, 0x110, WlPointer.ButtonState.Released);
+        host.PumpUntil(() => motions.Count == 3);
+
+        Assert.Equal((20.0, 40.0), motions[0]);
+        Assert.Equal((-20.0, -40.0), motions[1]);
+        Assert.Equal((0.0, 0.0), motions[2]);
+        scene.Destroy();
+        frame.Destroy();
+    }
+
+    [Fact]
     public void A_lost_release_is_cleared_without_reaching_the_client()
     {
         using var host = new CompositorTestHost();

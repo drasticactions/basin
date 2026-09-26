@@ -805,7 +805,7 @@ internal sealed partial class TinyComp :
         {
             _xwm = wm;
             _xSceneDriver.ManagedParent = ManagedXParent;
-            _xSceneDriver.OverrideRedirectParent = _ => new SceneTree(_layers.Overlay);
+            _xSceneDriver.OverrideRedirectParent = AdoptOverrideRedirect;
             _xSceneDriver.Adopted += OnXAdopted;
             _xSceneDriver.Removed += OnXRemoved;
             _xSceneDriver.ActivationRequested += ActivateXWindow;
@@ -835,7 +835,7 @@ internal sealed partial class TinyComp :
         _textInput = _services.Require<Basin.Desktop.TextInputManager>();
         _lockDriver.TextInput = _textInput;
         _fractionalScale = _services.Require<Basin.Desktop.FractionalScaleManager>();
-        _presenceTracker = new SurfacePresenceTracker(_layout, _fractionalScale.AnnounceScale);
+        _presenceTracker = new SurfacePresenceTracker(_layout, AnnounceSurfaceScale);
         _idle = _services.Require<Basin.Desktop.IdleManager>();
         _idleSource = _services.Require<Basin.Capabilities.IIdleSource>() as Basin.Seat.SeatIdleSource;
         _services.Require<Basin.Desktop.XdgActivationManager>().ActivationRequested += surface =>
@@ -863,6 +863,7 @@ internal sealed partial class TinyComp :
         _cursor.Shapes = _cursorShapes;
         _cursor.ColorProfiles = _services.Find<Basin.Capabilities.IColorProfileService>();
         _color.OutputDescriptionChanged += (global, description) => _cursor.Describe(global.Output, description);
+        _seat.Pointer.MapToSurface = _scene.TryMapToSurface;
         _seat.Pointer.CursorRequested += _cursor.HandleCursorRequest;
 
         if (drm)

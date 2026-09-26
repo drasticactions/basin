@@ -299,6 +299,11 @@ internal sealed partial class TinyComp
                 ClearCanvasHomeAfterDrop(dropped);
             }
 
+            if (_grabWindow is { } released)
+            {
+                EndCanvasGrab(released);
+            }
+
             _grabWindow?.SetResizing(false);
             _mode = DragMode.None;
             _effects.OnGrabEnd();

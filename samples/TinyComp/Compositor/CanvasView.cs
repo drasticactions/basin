@@ -15,6 +15,12 @@ internal sealed class CanvasView
 
     public CanvasWarpTransform Map { get; }
 
+    public CanvasScale Scale { get; } = new();
+
+    public CanvasWindowMode Mode { get; set; }
+
+    public bool Scales => Mode == CanvasWindowMode.Scale;
+
     public SceneMesh? Grid { get; set; }
 
     public CanvasGridSource? GridSource { get; set; }

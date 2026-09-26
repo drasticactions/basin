@@ -109,6 +109,8 @@ internal sealed class EffectsPolicy : IDisposable
 
     public void SwitcherSelect(int index) => _switcher.Select(index);
 
+    public long SwitcherFlyNanos => _switcher.FlyNanos;
+
     public void SwitcherEnd()
     {
         _switcher.End();

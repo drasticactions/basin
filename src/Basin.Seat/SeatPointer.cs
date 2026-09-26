@@ -23,6 +23,8 @@ public sealed class SeatPointer
 
     public Surface? Focus { get; private set; }
 
+    public SurfaceMapper? MapToSurface { get; set; }
+
     public double X { get; private set; }
 
     public double Y { get; private set; }
@@ -83,6 +85,12 @@ public sealed class SeatPointer
     {
         if (!HasGrab && HasImplicitGrab && Focus is { IsDestroyed: false } pinned && !ReferenceEquals(surface, pinned))
         {
+            if (MapToSurface is { } map && map(pinned, layoutX, layoutY, out var pinnedX, out var pinnedY))
+            {
+                NotifyMotion(timeMs, pinnedX, pinnedY);
+                return;
+            }
+
             NotifyMotion(timeMs, layoutX - _focusLayoutOffsetX, layoutY - _focusLayoutOffsetY);
             return;
         }

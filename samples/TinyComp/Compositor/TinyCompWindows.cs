@@ -492,6 +492,7 @@ internal sealed partial class TinyComp
         var (canvasX, canvasY) = ToCanvasPointAt(x, y, window);
         _grabX = canvasX - window.X;
         _grabY = canvasY - window.Y;
+        BeginCanvasGrab(window, x, y);
         SetCanvasGridDragging(true);
         _effects.OnMoveGrab(
             window.EffectTree,
@@ -514,6 +515,7 @@ internal sealed partial class TinyComp
         (_grabX, _grabY) = ToCanvasPointAt(originX, originY, window);
         var (width, height) = window.GeometrySize;
         _grabStart = new Box(window.X, window.Y, width, height);
+        BeginCanvasResize(window, edges);
         var frame = new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1));
         _effects.OnResizeStart(window.EffectTree, frame, frame, frame, 0, 0);
         window.SetResizing(true);
@@ -527,7 +529,8 @@ internal sealed partial class TinyComp
                 popup,
                 _layers.Top,
                 origin: () => PopupContentOrigin(popup),
-                constrainBox: () => _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? Views[0].Output));
+                constrainBox: () => _layout.BoxOf(_layout.OutputAt(_cursorX, _cursorY) ?? Views[0].Output),
+                scale: () => PopupScale(popup));
         }
 
         popup.Xdg.Mapped += () =>
@@ -538,6 +541,19 @@ internal sealed partial class TinyComp
                 ?? Views[0].Output;
             _fractionalScale.AnnounceScale(popup.Surface, output.Scale);
         };
+    }
+
+    private double PopupScale(XdgPopupWindow popup)
+    {
+        var xdg = popup.Parent;
+        while (xdg?.Role is XdgPopupWindow parentPopup)
+        {
+            xdg = parentPopup.Parent;
+        }
+
+        return xdg?.Role is XdgToplevelWindow toplevel && FindWindow(toplevel) is { } window
+            ? CanvasScaleOf(window)
+            : 1.0;
     }
 
     private Point ParentOrigin(XdgPopupWindow popup)
@@ -565,9 +581,20 @@ internal sealed partial class TinyComp
                 var geometry = xdg.EffectiveGeometry;
                 if (xdg.Role is XdgToplevelWindow toplevel && FindWindow(toplevel) is { } window)
                 {
-                    var screen = ScreenBoxOf(window);
-                    x += screen.X;
-                    y += screen.Y;
+                    var content = window.ScaleBox;
+                    if (_canvasStates.TryGetValue(window, out var scaled) && !scaled.Placement.IsIdentity &&
+                        ViewOfWindow(window) is { Canvas.Scales: true })
+                    {
+                        var (drawnX, drawnY) = scaled.Placement.Map(content.X, content.Y);
+                        x += (int)Math.Round(drawnX);
+                        y += (int)Math.Round(drawnY);
+                    }
+                    else
+                    {
+                        var screen = MapToScreen(window, content);
+                        x += screen.X;
+                        y += screen.Y;
+                    }
                 }
                 else
                 {

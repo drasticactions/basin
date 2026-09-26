@@ -633,7 +633,8 @@ internal sealed class Config
             switch (key)
             {
                 case "enable" or "zone" or "extension" or "edge_scale" or "slope" or "mesh_cell"
-                    or "grid" or "grid_cell" or "grid_color" or "animation_ms" or "sides" or "corner" or "corner_radius":
+                    or "grid" or "grid_cell" or "grid_color" or "animation_ms" or "sides" or "corner" or "corner_radius"
+                    or "window" or "min_scale" or "scale_reach":
                     (canvasKeys ??= [])[key] = value;
                     break;
                 case "scale" when value is double fractional:

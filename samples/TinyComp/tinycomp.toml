@@ -113,6 +113,9 @@ grid         = "always"      # always | drag | never
 grid_cell    = 64            # canvas pixels between grid lines
 grid_color   = "#2a35c0"     # the grid line color
 animation_ms = 250           # park, recall and toggle
+window       = "warp"        # warp | scale: bend a window along the zone, or draw it flat and smaller
+min_scale    = 0.35          # scale mode: the smallest a window draws, as a fraction of its size
+scale_reach  = 1.0           # scale mode: 1.0 follows the zone curve; larger spreads the shrink deeper
 
 # The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
 # toplevel mapping and export, CTM control, global shortcuts and input capture.

@@ -7,6 +7,22 @@ public sealed partial class Scene
     public SceneHit? SurfaceAt(double x, double y) =>
         NodeAt(Root, x - Root.X, y - Root.Y, surfacesOnly: true);
 
+    public bool TryMapToSurface(Surface surface, double x, double y, out double surfaceX, out double surfaceY)
+    {
+        for (var i = 0; i < _surfaces.Count; i++)
+        {
+            var scene = _surfaces[i];
+            if (ReferenceEquals(scene.Surface, surface) && !scene.IsDestroyed && scene.Tree.Enabled)
+            {
+                return scene.Content.TryMapSceneToLocal(x, y, out surfaceX, out surfaceY);
+            }
+        }
+
+        surfaceX = 0;
+        surfaceY = 0;
+        return false;
+    }
+
     private static SceneHit? NodeAt(SceneTree tree, double x, double y, bool surfacesOnly = false)
     {
         for (var i = tree.Children.Count - 1; i >= 0; i--)

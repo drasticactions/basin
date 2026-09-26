@@ -13,6 +13,9 @@ public sealed class TinyCompCanvasProcessTests
 
     private const int ZoneHeight = 86;
 
+    private const string ScaleMode =
+        "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\nwindow = \"scale\"\n";
+
     private const string FourSides =
         "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n";
 
@@ -196,6 +199,164 @@ public sealed class TinyCompCanvasProcessTests
     }
 
     [Fact]
+    public void Scale_mode_parks_a_flat_window_at_the_floor_inside_the_output()
+    {
+        using var session = CanvasSession.Start(ScaleMode);
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        session!.Send("park right");
+        var park = session.WaitForLine("PARK ");
+        Assert.Contains(" scale=0.350", park);
+        var parked = session.Shot("scaled");
+        Assert.True(Saturated(parked, parked.Width - ZoneWidth, ZoneWidth) > 0, "the client draws inside the right zone");
+        Assert.Equal(0, Saturated(parked, 0, parked.Width - ZoneWidth));
+        var (_, _, screen, deformed, home) = session.CanvasWindow();
+        Assert.True(deformed);
+        Assert.NotEqual("none", home);
+        Assert.True(screen.Right <= 1280 && screen.Right >= 1278, $"the drawn box is {screen}");
+        Assert.Equal(0.350, session.CanvasScale(), 2);
+
+        session.Send("recall");
+        session.WaitForLine("RECALL ");
+        Thread.Sleep(400);
+        Assert.Equal(1.0, session.CanvasScale(), 3);
+    }
+
+    [Fact]
+    public void A_click_on_a_scaled_window_reaches_the_client_at_true_surface_coordinates()
+    {
+        using var session = CanvasSession.Start(ScaleMode, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("park right");
+        session.WaitForLine("PARK ");
+        _ = session.Shot("scaled");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        var scale = session.CanvasScale();
+        foreach (var (fx, fy) in new[] { (0.5, 0.5), (0.2, 0.8), (0.9, 0.3) })
+        {
+            var x = Math.Round(screen.X + (screen.Width * fx), 2);
+            var y = Math.Round(screen.Y + (screen.Height * fy), 2);
+            session.Send(string.Create(CultureInfo.InvariantCulture, $"move {x} {y}"));
+            session.Send("button 272 1");
+            session.Send("button 272 0");
+            var line = session.WaitForClientLine("BUTTON ");
+            Assert.NotNull(line);
+            var parts = line!.Split(' ');
+            var localX = double.Parse(parts[2], CultureInfo.InvariantCulture);
+            var localY = double.Parse(parts[3], CultureInfo.InvariantCulture);
+            Assert.True(
+                Math.Abs(localX - ((x - screen.X) / scale)) < 4.0 && Math.Abs(localY - ((y - screen.Y) / scale)) < 4.0,
+                $"a click at ({x},{y}) reached ({localX},{localY}) on a window drawn at {screen} and {scale}");
+        }
+    }
+
+    [Fact]
+    public void Resizing_the_inner_edge_of_a_scaled_window_keeps_the_outer_edge_still()
+    {
+        using var session = CanvasSession.Start(ScaleMode, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("park right");
+        session.WaitForLine("PARK ");
+        _ = session.Shot("parked");
+        var (_, _, before, _, _) = session.CanvasWindow();
+        var y = before.Y + (before.Height / 2);
+        session.Send($"move {before.X - 3} {y}");
+        session.Send("button 272 1");
+        foreach (var x in new[] { before.X - 20, before.X - 40, before.X - 63 })
+        {
+            session.Send($"move {x} {y}");
+            Thread.Sleep(300);
+            var (_, _, during, _, _) = session.CanvasWindow();
+            Assert.True(Math.Abs(during.Right - before.Right) <= 1, $"the outer edge moved from {before} to {during}");
+            Assert.True(Math.Abs(during.X - (x + 3)) <= 2, $"the inner edge is at {during.X} for a cursor at {x}");
+        }
+
+        session.Send("button 272 0");
+    }
+
+    [Fact]
+    public void A_client_that_resizes_for_a_smaller_scale_loses_the_offer_and_keeps_its_size()
+    {
+        using var session = CanvasSession.Start(ScaleMode, SsdWin(), ["server", "pixel"]);
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        Assert.Equal("SIZE 256 256", session!.WaitForClientLine("SIZE "));
+        session.Send("park right");
+        session.WaitForLine("PARK ");
+        Assert.NotNull(session.WaitForClientLine("SIZE 731"));
+        Assert.NotNull(session.WaitForClientLine("SIZE 256"));
+        Thread.Sleep(600);
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        Assert.True(screen.Width < 100, $"the window still draws scaled: {screen}");
+        Assert.Equal(0.35, session.CanvasScale(), 1);
+    }
+
+    [Theory]
+    [InlineData(0.1)]
+    [InlineData(0.5)]
+    [InlineData(0.9)]
+    public void A_window_dragged_into_the_well_reaches_its_smallest_size_at_the_screen_edge_wherever_it_was_grabbed(double grab)
+    {
+        using var session = CanvasSession.Start(ScaleMode, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        var (_, _, start, _, _) = session!.CanvasWindow();
+        var grabX = start.X + (int)(grab * start.Width);
+        var y = start.Y + 80;
+        session.Send($"move {grabX} {y}");
+        session.Send("key 56 1");
+        session.Send("button 272 1");
+        var previous = 1.0;
+        var floored = false;
+        for (var x = grabX + 20; x < 1280 + 20; x += 20)
+        {
+            var cursor = Math.Min(x, 1279);
+            session.Send($"move {cursor} {y}");
+            var (_, _, drawn, _, _) = session.CanvasWindow();
+            var scale = session.CanvasScale();
+            Assert.True(Math.Abs(((cursor - drawn.X) / (double)drawn.Width) - grab) < 0.03, $"the grabbed point left the cursor at {cursor}: {drawn}");
+            Assert.True(scale <= previous + 0.005 && previous - scale < 0.2, $"the scale jumped from {previous} to {scale} at {cursor}");
+            if (scale > 0.36)
+            {
+                Assert.True(drawn.Right <= 1281, $"the window left the screen before its smallest size at {cursor}: {drawn}");
+            }
+            else if (!floored)
+            {
+                floored = true;
+                Assert.True(drawn.Right >= 1280 - 24 && drawn.Right <= 1280 + 24, $"the smallest size arrived away from the edge at {cursor}: {drawn}");
+            }
+
+            previous = scale;
+        }
+
+        var (_, _, before, _, _) = session.CanvasWindow();
+        session.Send("button 272 0");
+        session.Send("key 56 0");
+        Thread.Sleep(500);
+        var (_, _, after, _, _) = session.CanvasWindow();
+        Assert.True(floored, "the window reached its smallest size");
+        Assert.Equal(0.35, session.CanvasScale(), 2);
+        Assert.True(Math.Abs(after.X - before.X) <= 2 && Math.Abs(after.Y - before.Y) <= 2, $"the drop moved the window from {before} to {after}");
+    }
+
+    [Fact]
+    public void A_reload_into_scale_mode_moves_a_parked_window_to_the_new_depth()
+    {
+        using var session = CanvasSession.Start();
+        Assert.SkipWhen(session is null, "tinycomp or weston-simple-shm is not available beside the tests");
+        session!.Send("park right");
+        var warp = session.WaitForLine("PARK ");
+        Assert.DoesNotContain("scale=", warp);
+        Thread.Sleep(400);
+        var (warpX, _) = session.WindowPosition();
+        session.Rewrite(ScaleMode);
+        session.Send("reload");
+        var reload = session.WaitForLine("RELOAD ");
+        Assert.Contains("canvas-window=scale", reload);
+        var (scaleX, _) = session.WindowPosition();
+        Assert.True(scaleX < warpX, $"the park depth moved from {warpX} to {scaleX}");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        Assert.True(screen.Right <= 1280, $"the drawn box is {screen}");
+    }
+
+    [Fact]
     public void A_side_dock_moves_the_seam_inside_it_and_stays_flat()
     {
         using var session = CanvasSession.Start(FourSides);
@@ -309,7 +470,8 @@ public sealed class TinyCompCanvasProcessTests
 
         public static CanvasSession? Start(
             string config = "[canvas]\nenable = true\ngrid = \"never\"\nanimation_ms = 100\n",
-            string? clientPath = "weston-simple-shm")
+            string? clientPath = "weston-simple-shm",
+            string[]? clientArguments = null)
         {
             if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath || clientPath is null ||
                 (clientPath == "weston-simple-shm" && !ClientAvailable()))
@@ -369,6 +531,11 @@ public sealed class TinyCompCanvasProcessTests
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+            foreach (var argument in clientArguments ?? [])
+            {
+                clientInfo.ArgumentList.Add(argument);
+            }
+
             clientInfo.Environment["XDG_RUNTIME_DIR"] = runtimeDir;
             session._socket = socketLine.Split(' ')[1];
             clientInfo.Environment["WAYLAND_DISPLAY"] = session._socket;
@@ -469,6 +636,19 @@ public sealed class TinyCompCanvasProcessTests
             Assert.NotNull(line);
             var parts = line!.Split(' ');
             return (int.Parse(parts[2]), int.Parse(parts[3]));
+        }
+
+        public void Rewrite(string config) => File.WriteAllText(Path.Combine(_runtimeDir, "tinycomp.toml"), config);
+
+        public double CanvasScale()
+        {
+            Send("where");
+            var line = WaitForLine("CANVASWIN ");
+            Assert.NotNull(line);
+            var at = line!.IndexOf(" scale=", StringComparison.Ordinal);
+            Assert.True(at > 0, line);
+            var end = line.IndexOf(' ', at + 1);
+            return double.Parse(line[(at + 7)..(end < 0 ? line.Length : end)], CultureInfo.InvariantCulture);
         }
 
         public (int X, int Y, Box Screen, bool Deformed, string Home) CanvasWindow()

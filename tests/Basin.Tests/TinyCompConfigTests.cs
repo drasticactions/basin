@@ -237,6 +237,42 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_canvas_window_mode_reads_scale_keys_warns_and_overrides_per_output()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Load(Write("[canvas]\nenable = true\n"), log, out _).Canvas;
+        Assert.Equal(TinyComp.CanvasWindowMode.Warp, defaults.WindowMode);
+        Assert.Equal(0.35, defaults.MinScaleValue, 9);
+        Assert.Equal(1.0, defaults.ScaleReachValue, 9);
+
+        var config = TinyComp.Config.Load(
+            Write("[canvas]\nwindow = \"scale\"\nmin_scale = 0.5\nscale_reach = 2.5\n"
+                + "[output.\"DP-2\"]\nwindow = \"warp\"\nmin_scale = 0.6\n"),
+            log,
+            out _);
+        Assert.Equal(TinyComp.CanvasWindowMode.Scale, config.Canvas.WindowMode);
+        Assert.Equal("scale", config.Canvas.WindowName);
+        Assert.Equal(0.5, config.Canvas.MinScaleValue, 9);
+        Assert.Equal(2.5, config.Canvas.ScaleReachValue, 9);
+        var second = config.CanvasFor("DP-2", log);
+        Assert.Equal(TinyComp.CanvasWindowMode.Warp, second.WindowMode);
+        Assert.Equal(0.6, second.MinScaleValue, 9);
+        Assert.Equal(2.5, second.ScaleReachValue, 9);
+
+        var unknown = TinyComp.Config.Load(Write("[canvas]\nwindow = \"bend\"\n"), log, out _).Canvas;
+        Assert.Equal(TinyComp.CanvasWindowMode.Warp, unknown.WindowMode);
+        Assert.Contains(_lines, line => line.Contains("window \"bend\" is not warp|scale, keeping warp", StringComparison.Ordinal));
+
+        var dead = TinyComp.Config.Load(Write("[canvas]\nedge_scale = 0.2\nmin_scale = 0.1\n"), log, out _).Canvas;
+        Assert.Equal(0.1, dead.MinScaleValue, 9);
+        Assert.Contains(_lines, line => line.Contains("min_scale 0.1 is below edge_scale 0.200 and has no effect", StringComparison.Ordinal));
+
+        var off = TinyComp.Config.Load(Write("[canvas]\nmin_scale = 1\nscale_reach = 40\n"), log, out _).Canvas;
+        Assert.Equal(1.0, off.MinScaleValue, 9);
+        Assert.Equal(16.0, off.ScaleReachValue, 9);
+    }
+
+    [Fact]
     public void The_canvas_corner_takes_a_shape_or_a_radius()
     {
         var log = BasinLog.For("t");

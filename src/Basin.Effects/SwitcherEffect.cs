@@ -45,6 +45,8 @@ public sealed class SwitcherEffect
 
     public bool IsActive => _count > 0;
 
+    public long FlyNanos => _flyNanos;
+
     public bool IsDismissing => _ending;
 
     public int Selected => _selected;

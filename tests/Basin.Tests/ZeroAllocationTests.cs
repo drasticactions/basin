@@ -316,6 +316,131 @@ public sealed class ZeroAllocationTests
     }
 
     [Theory]
+    [InlineData("pixman", true)]
+    [InlineData("pixman", false)]
+    [InlineData("gl", true)]
+    [InlineData("gl", false)]
+    [InlineData("vulkan", true)]
+    [InlineData("vulkan", false)]
+    [InlineData("skia", true)]
+    [InlineData("skia", false)]
+    [InlineData("skia-gl", true)]
+    [InlineData("skia-gl", false)]
+    [InlineData("skia-vulkan", true)]
+    [InlineData("skia-vulkan", false)]
+    [InlineData("skia-graphite", true)]
+    [InlineData("skia-graphite", false)]
+    [InlineData("impeller", true)]
+    [InlineData("impeller", false)]
+    public void A_resting_scaled_window_on_a_plane_allocates_nothing_over_1000_frames(string renderer, bool accepted)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var output = new PlaneOutput();
+        using (var lit = new OutputState())
+        {
+            Assert.True(output.Commit(lit.SetEnabled(true).SetMode(new OutputMode(160, 120, 60_000))));
+        }
+
+        using var sceneOutput = new Scene.SceneOutput(host.Scene, output) { OffloadEntryThreshold = 1 };
+        using var swapchain = new Swapchain(
+            new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        var options = new Scene.SceneCommitOptions { AllowPlaneOffload = true };
+
+        var background = new Scene.SceneRect(host.Scene.Root, 160, 120, new RenderColor(0.1f, 0.2f, 0.3f, 1f));
+        var frame = new Scene.SceneTransform(host.Scene.Root)
+        {
+            Matrix = new RenderTransform(0.5, 0, 20, 0, 0.5, 30, 0, 0, 1),
+        };
+        _ = new Scene.SceneRect(frame, 60, 60, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var client = DirectScanoutTests.FakeClientBuffer(40, 40);
+        using var clientGuard = new DeferDestroy(client);
+        var node = new Scene.SceneBuffer(frame);
+        node.SetBuffer(client);
+        node.SetPosition(10, 10);
+        output.Accept = (_, _) => accepted;
+
+        void Frame(int i)
+        {
+            background.SetPosition(i % 2, 0);
+            host.Loop.Dispatch(0);
+            _ = sceneOutput.Commit(host.Renderer, swapchain, state, options);
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Frame(i);
+        }
+
+        if (accepted)
+        {
+            Assert.SkipWhen(sceneOutput.OffloadCommits == 0, $"the {renderer} row never offloaded a plane");
+        }
+
+        NothingAllocated(1000, Frame);
+        node.Destroy();
+        frame.Destroy();
+        background.Destroy();
+        output.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void A_scaled_window_moved_every_frame_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var left = new Basin.Effects.CanvasWarp();
+        left.Layout(24, -1, 24, 80, 0.2, 0.25, 60);
+        var right = new Basin.Effects.CanvasWarp(1);
+        right.Layout(136, 1, 24, 80, 0.2, 0.25, 60);
+        var map = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right };
+        var scale = new Basin.Effects.CanvasScale { MinScale = 0.35 };
+
+        var window = new Scene.SceneTree(host.Scene.Root);
+        var node = new Scene.SceneTransform(window);
+        _ = new Scene.SceneRect(node, 76, 60, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(node);
+        content.Tree.SetPosition(6, 6);
+
+        void Slide(int i)
+        {
+            var box = new Box(right.Seam - 40 + (i % 90), 30, 76, 60);
+            window.SetPosition(box.X, box.Y);
+            var placement = i % 3 == 0
+                ? scale.DragPlacementFor(map, box, box.X + 20, box.Y + 5, box.X + 20 - (i % 7), 35)
+                : scale.PlacementFor(map, box);
+            node.Matrix = RenderTransform.Multiply(
+                RenderTransform.Translation(-box.X, -box.Y),
+                RenderTransform.Multiply(placement, RenderTransform.Translation(box.X, box.Y)));
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 120; i++)
+        {
+            Slide(i);
+        }
+
+        NothingAllocated(1000, Slide);
+    }
+
+    [Theory]
     [InlineData("pixman")]
     [InlineData("gl")]
     [InlineData("vulkan")]
