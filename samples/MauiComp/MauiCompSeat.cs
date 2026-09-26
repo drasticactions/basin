@@ -305,24 +305,17 @@ internal sealed class MauiCompSeat : IDisposable
         if (_router.KeyboardFocus is not null)
         {
             _router.Key(time, key, pressed);
-            if (pressed && TextOf(key) is { } text)
+            if (pressed)
             {
-                _router.TextCommit(text);
+                Span<char> text = stackalloc char[16];
+                var length = _seat.Keyboard.TextFor(key, text);
+                if (length > 0)
+                {
+                    _router.TextCommit(text[..length]);
+                }
             }
         }
 
         _seat.Keyboard.NotifyKey(time, key, pressed);
-    }
-
-    private string? TextOf(uint key)
-    {
-        if (_seat.Keyboard.State is not { } state ||
-            state.IsModActive("Control") || state.IsModActive("Mod1") || state.IsModActive("Mod4"))
-        {
-            return null;
-        }
-
-        var codepoint = state.GetKeyUtf32(key + 8);
-        return codepoint is > 0x1f and not 0x7f ? char.ConvertFromUtf32((int)codepoint) : null;
     }
 }

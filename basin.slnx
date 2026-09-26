@@ -82,6 +82,7 @@
     <Project Path="src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
     <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <Project Path="src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+    <Project Path="src/Basin.UI.Paper/Basin.UI.Paper.csproj" />
     <Project Path="src/Basin.UI.Quill/Basin.UI.Quill.csproj" />
     <Project Path="src/Basin.UI.Quill.Gl/Basin.UI.Quill.Gl.csproj" />
     <Project Path="src/Basin.UI.Quill.Vulkan/Basin.UI.Quill.Vulkan.csproj" />

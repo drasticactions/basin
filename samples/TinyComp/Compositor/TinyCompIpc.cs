@@ -25,6 +25,7 @@ internal sealed partial class TinyComp
         _ipc.SyntheticInput = new SyntheticInput(this);
         RegisterCommands(_ipc.Methods);
         RegisterOverviewCommands(_ipc.Methods);
+        RegisterSettingsCommands(_ipc.Methods);
         DeclareOverviewEvents();
     }
 
@@ -462,7 +463,7 @@ internal sealed partial class TinyComp
 
         public bool PointerAxis(uint timeMs, uint axis, double value, uint source)
         {
-            comp._seat.Pointer.NotifyAxis(timeMs, new PointerAxis((WlPointer.Axis)axis, value, Source: (WlPointer.AxisSource)source));
+            comp.HandleAxis(timeMs, new PointerAxis((WlPointer.Axis)axis, value, Source: (WlPointer.AxisSource)source));
             return true;
         }
 

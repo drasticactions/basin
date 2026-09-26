@@ -107,6 +107,8 @@ client-managed exact    wm-chrome-repaint              3200
 client-managed exact    wm-input-round               180800
 server     ceiling  quill-frame-repaint           57600
 server     ceiling  quill-frame-repaint-vk        57600
+server     ceiling  paper-panel-frame             288000
+server     ceiling  paper-panel-frame-vk          288000
 server     exact    blur-region-commit            10400
 server-managed exact    blur-region-commit            10400
 server     exact    ipc-subscribed-commit          6400
@@ -163,6 +165,8 @@ server-managed exact    ipc-event-flush                2400
 server-managed exact    title-commit                   6400
 server-managed ceiling  quill-frame-repaint-vk        57600
 server-managed ceiling  quill-frame-repaint           57600
+server-managed ceiling  paper-panel-frame             288000
+server-managed ceiling  paper-panel-frame-vk          288000
 server     exact    canvas-terrace-drag               0
 server-managed exact    canvas-terrace-drag               0
 server     exact    overview-toggle                   0

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.UI.Paper</PackageId>
+    <RootNamespace>Basin.UI.Paper</RootNamespace>
+    <Description>Prowl.Paper user interfaces on Basin's Quill surfaces, with the input, cursor, clipboard and frame pacing a compositor supplies, and a set of settings widgets.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.UI.Quill/Basin.UI.Quill.csproj" />
+    <PackageReference Include="Prowl.Quill" />
+    <PackageReference Include="Prowl.Paper" />
+  </ItemGroup>
+
+</Project>

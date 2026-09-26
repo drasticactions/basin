@@ -20,6 +20,7 @@ internal sealed class Config
         ("Alt+Shift+Left", "carry-prev"),
         ("Alt+Shift+Right", "carry-next"),
         ("Alt+n", "workspace-new"),
+        ("Super+comma", "settings"),
     ];
 
     public string Renderer { get; set; } = "vulkan";
@@ -39,6 +40,10 @@ internal sealed class Config
     public bool DamageTint { get; set; }
 
     public bool QuillDemo { get; set; }
+
+    public static RenderColor DefaultBackground { get; } = new(0.09f, 0.1f, 0.12f, 1f);
+
+    public RenderColor Background { get; set; } = DefaultBackground;
 
     public FrameStyle FrameStyle { get; set; } = FrameStyle.Flat;
 
@@ -132,6 +137,10 @@ internal sealed class Config
 
     public IReadOnlyList<Binding> Bindings { get; private set; } = [];
 
+    public string SettingsPalette { get; set; } = "dark";
+
+    public double SettingsFontSize { get; set; } = 14;
+
     public bool HyprEnabled { get; set; } = true;
 
     public bool HyprInputCapture { get; set; } = true;
@@ -198,8 +207,18 @@ internal sealed class Config
         "shelve-top" => KeyAction.ShelveTop,
         "shelve-bottom" => KeyAction.ShelveBottom,
         "unshelve" => KeyAction.Unshelve,
+        "settings" => KeyAction.Settings,
         _ => null,
     };
+
+    public static IReadOnlyList<string> ActionNames { get; } =
+    [
+        "quit", "cycle", "switcher", "cycle-focus", "cycle-scale", "workspace-next", "workspace-prev",
+        "carry-next", "carry-prev", "workspace-new", "zoom-in", "zoom-out", "zoom-reset", "mark-undo",
+        "mark-clear", "bell", "canvas-toggle", "park-left", "park-right", "park-up", "park-down", "recall",
+        "shelf-smaller", "shelf-larger", "shelf-reset", "canvas-mode", "overview", "shelve-left",
+        "shelve-right", "shelve-top", "shelve-bottom", "unshelve", "settings",
+    ];
 
     private static readonly string[] SharedKeys =
         ["renderer", "outputs", "scale", "frames", "offload", "full_repaint", "damage_tint"];
@@ -236,6 +255,27 @@ internal sealed class Config
                 log.Warn($"{file} did not parse, keeping defaults: {failure}");
             }
 
+            return config;
+        }
+
+        config.Apply(new TomlReader(table, log));
+        fatal = config.ValidateMetacity();
+        return config;
+    }
+
+    public static Config Parse(string text, BasinLogger log, out string? fatal)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var config = new Config();
+        config.SeedBindings(log);
+        TomlTable table;
+        try
+        {
+            table = Tomlyn.Toml.ToModel(text);
+        }
+        catch (Tomlyn.TomlException error)
+        {
+            fatal = error.Message;
             return config;
         }
 
@@ -349,6 +389,18 @@ internal sealed class Config
             Offload = compositor.Flag("offload", Offload);
             FullRepaint = compositor.Flag("full_repaint", FullRepaint);
             DamageTint = compositor.Flag("damage_tint", DamageTint);
+            if (compositor.Text("background") is { } background)
+            {
+                if (TomlColor.Rgba(background) is { } rgba)
+                {
+                    Background = new RenderColor(
+                        ((rgba >> 24) & 0xff) / 255f, ((rgba >> 16) & 0xff) / 255f, ((rgba >> 8) & 0xff) / 255f, 1f);
+                }
+                else
+                {
+                    log.Warn($"[compositor] background \"{background}\" is not #rrggbb, keeping the default");
+                }
+            }
         }
 
         if (reader.Section("frame") is { } frame)
@@ -392,6 +444,14 @@ internal sealed class Config
 
         if (reader.Section("color") is { } color)
         {
+            foreach (var key in new[] { "source", "icc", "hdr" })
+            {
+                if (color.Table.ContainsKey(key))
+                {
+                    FromFile.Add("color." + key);
+                }
+            }
+
             ColorSource = color.Choice("source", "edid", "edid", "srgb", "icc") switch
             {
                 "srgb" => OutputColorProfileSource.Srgb,
@@ -475,6 +535,20 @@ internal sealed class Config
         if (reader.Free("overview") is { } overview)
         {
             Overview = OverviewSetting.Parse(overview, "overview", log).Over(OverviewSetting.Defaults);
+        }
+
+        if (reader.Section("settings") is { } settings)
+        {
+            SettingsPalette = settings.Choice("palette", "dark", "dark", "light");
+            var panelFont = settings.Number("font_size", SettingsFontSize);
+            if (panelFont >= 6)
+            {
+                SettingsFontSize = panelFont;
+            }
+            else
+            {
+                log.Warn($"[settings] font_size must be at least 6, keeping {SettingsFontSize}");
+            }
         }
 
         if (reader.Section("hypr") is { } hypr)

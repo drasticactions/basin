@@ -13,6 +13,8 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
     private readonly int[] _touchIds = new int[TouchCapacity];
     private IUISurface? _hovered;
     private IUISurface? _focus;
+    private IUISurface? _grab;
+    private int _grabButtons;
 
     public UISurfaceRouter(Scene scene, UISurfaceIndex index)
     {
@@ -26,6 +28,10 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
     public IUISurface? Hovered => _hovered;
 
     public IUISurface? KeyboardFocus => _focus;
+
+    public IUISurface? PointerGrab => _grab;
+
+    public bool ImplicitGrab { get; init; }
 
     public bool WantsTextInput => _focus?.WantsTextInput ?? false;
 
@@ -62,6 +68,18 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
 
     public UIPointerRoute PointerMotion(uint timeMs, double x, double y)
     {
+        if (_grab is { } grabbed)
+        {
+            if (!TryLocal(grabbed, x, y, out var localX, out var localY))
+            {
+                EndGrab();
+                return default;
+            }
+
+            grabbed.NotifyPointerMotion(timeMs, localX, localY);
+            return new UIPointerRoute(grabbed, false, grabbed.CursorAt(localX, localY));
+        }
+
         if (SurfaceAt(x, y) is not { } hit)
         {
             PointerLeave();
@@ -98,10 +116,28 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
 
     public bool PointerButton(uint timeMs, uint button, bool pressed, IUISurface? target = null)
     {
-        var surface = target ?? _hovered;
+        var surface = target ?? _grab ?? _hovered;
         if (surface is null)
         {
             return false;
+        }
+
+        if (target is null && ImplicitGrab)
+        {
+            if (pressed)
+            {
+                if (_grabButtons++ == 0)
+                {
+                    _grab = surface;
+                    _grab.AddObserver(this);
+                }
+            }
+            else if (_grabButtons > 0 && --_grabButtons == 0)
+            {
+                surface.NotifyPointerButton(timeMs, button, pressed);
+                EndGrab();
+                return true;
+            }
         }
 
         surface.NotifyPointerButton(timeMs, button, pressed);
@@ -110,7 +146,7 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
 
     public bool PointerAxis(uint timeMs, double dx, double dy, IUISurface? target = null)
     {
-        var surface = target ?? _hovered;
+        var surface = target ?? _grab ?? _hovered;
         if (surface is null)
         {
             return false;
@@ -276,6 +312,13 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
             }
         }
 
+        if (ReferenceEquals(surface, _grab))
+        {
+            _grab = null;
+            _grabButtons = 0;
+            Release(surface);
+        }
+
         if (ReferenceEquals(surface, _hovered))
         {
             _hovered = null;
@@ -309,9 +352,21 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
         Release(surface);
     }
 
+    private void EndGrab()
+    {
+        if (_grab is not { } grabbed)
+        {
+            return;
+        }
+
+        _grab = null;
+        _grabButtons = 0;
+        Release(grabbed);
+    }
+
     private void Release(IUISurface surface)
     {
-        if (!ReferenceEquals(surface, _hovered) && !ReferenceEquals(surface, _focus))
+        if (!ReferenceEquals(surface, _hovered) && !ReferenceEquals(surface, _focus) && !ReferenceEquals(surface, _grab))
         {
             surface.RemoveObserver(this);
         }

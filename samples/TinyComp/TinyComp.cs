@@ -1070,6 +1070,7 @@ internal sealed partial class TinyComp :
         _hostChrome.Clear();
         _quillDemo?.Dispose();
         _quillDemo = null;
+        DisposeSettings();
         _quillHost?.Dispose();
         _quillHost = null;
         _uiHost?.Dispose();

@@ -12,7 +12,11 @@ public sealed class QuillUISurface : IQuillUISurface
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly PixmanRegion32 _wholeDamage = new();
     private readonly UISurfaceObservers _observers = new();
+    private const int MaxSpares = 2;
+
     private readonly List<IBuffer> _retired = [];
+    private readonly List<IBuffer> _spares = [];
+    private readonly HashSet<IBuffer> _watched = [];
     private readonly Dictionary<IBuffer, GlRenderTarget> _wraps = [];
     private readonly GlDevice _device;
     private readonly IAllocator _allocator;
@@ -21,7 +25,7 @@ public sealed class QuillUISurface : IQuillUISurface
     private readonly FontAtlasSettings _atlas;
     private readonly QuillUIHost? _host;
     private readonly QuillCanvasRenderer _renderer;
-    private readonly Canvas _canvas;
+    private Canvas? _canvas;
 
     private QuillGlContext.Scope _drawScope;
     private IBuffer? _target;
@@ -30,6 +34,7 @@ public sealed class QuillUISurface : IQuillUISurface
     private int _height;
     private double _scale;
     private bool _drawing;
+    private bool _canvasFrame;
     private bool _produced;
     private bool _disposed;
 
@@ -48,7 +53,6 @@ public sealed class QuillUISurface : IQuillUISurface
         _atlas = atlas;
         _host = host;
         _renderer = new QuillCanvasRenderer(device.Gl, program, textures);
-        _canvas = new Canvas(_renderer, atlas);
     }
 
     public Canvas Canvas
@@ -56,9 +60,13 @@ public sealed class QuillUISurface : IQuillUISurface
         get
         {
             _thread.Assert();
-            return _canvas;
+            return _canvas ??= new Canvas(_renderer, _atlas);
         }
     }
+
+    public ICanvasRenderer Renderer => _renderer;
+
+    public FontAtlasSettings Atlas => _atlas;
 
     public UISurfaceSize Size
     {
@@ -96,7 +104,13 @@ public sealed class QuillUISurface : IQuillUISurface
             return false;
         }
 
-        var allocated = _allocator.Allocate(
+        using var current = Enter();
+        if (!sizeUnchanged)
+        {
+            DropSpares();
+        }
+
+        var allocated = (sizeUnchanged ? TakeSpare() : null) ?? _allocator.Allocate(
             physical.Width, physical.Height, DrmFormat.Argb8888, Modifiers, BufferUse.Render | BufferUse.Scanout);
         if (allocated is null)
         {
@@ -105,7 +119,6 @@ public sealed class QuillUISurface : IQuillUISurface
 
         if (_target is not null && !ReferenceEquals(_target, _front))
         {
-            using var current = Enter();
             Retire(_target);
         }
 
@@ -115,7 +128,7 @@ public sealed class QuillUISurface : IQuillUISurface
         return true;
     }
 
-    public Canvas BeginDraw()
+    public void BeginTarget()
     {
         _thread.Assert();
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -150,11 +163,19 @@ public sealed class QuillUISurface : IQuillUISurface
         gl.Clear((uint)ClearBufferMask.ColorBufferBit);
 
         _drawing = true;
-        _canvas.BeginFrame(_width, _height, (float)_scale);
-        return _canvas;
+        _canvasFrame = false;
     }
 
-    public void EndDraw()
+    public Canvas BeginDraw()
+    {
+        BeginTarget();
+        var canvas = Canvas;
+        _canvasFrame = true;
+        canvas.BeginFrame(_width, _height, (float)_scale);
+        return canvas;
+    }
+
+    public void EndTarget()
     {
         _thread.Assert();
         if (!_drawing)
@@ -164,7 +185,6 @@ public sealed class QuillUISurface : IQuillUISurface
 
         try
         {
-            _canvas.Render();
             PublishWriteFence();
         }
         finally
@@ -174,11 +194,34 @@ public sealed class QuillUISurface : IQuillUISurface
         }
 
         _drawing = false;
+        _canvasFrame = false;
         _produced = true;
         if (ReferenceEquals(_target, _front))
         {
             _observers.Damaged(this, _wholeDamage);
         }
+    }
+
+    public void EndDraw()
+    {
+        _thread.Assert();
+        if (!_drawing || !_canvasFrame)
+        {
+            throw new InvalidOperationException("EndDraw without BeginDraw.");
+        }
+
+        try
+        {
+            _canvas!.Render();
+        }
+        catch
+        {
+            _drawScope.Dispose();
+            _drawScope = default;
+            throw;
+        }
+
+        EndTarget();
     }
 
     public bool TryAcquire(out UIFrame frame)
@@ -267,7 +310,14 @@ public sealed class QuillUISurface : IQuillUISurface
         _drawing = false;
         _host?.Forget(this);
         using var current = Enter();
-        _canvas.Dispose();
+        if (_canvas is null)
+        {
+            _renderer.Dispose();
+        }
+        else
+        {
+            _canvas.Dispose();
+        }
         foreach (var (_, native) in _wraps)
         {
             native.Dispose(_device);
@@ -293,6 +343,16 @@ public sealed class QuillUISurface : IQuillUISurface
         }
 
         _retired.Clear();
+        foreach (var spare in _spares)
+        {
+            if (!spare.IsDestroyed)
+            {
+                DestroyBuffer(spare);
+            }
+        }
+
+        _spares.Clear();
+        _watched.Clear();
         _target = null;
         _front = null;
         _wholeDamage.Dispose();
@@ -352,25 +412,89 @@ public sealed class QuillUISurface : IQuillUISurface
 
     private void Retire(IBuffer buffer)
     {
+        if (Reusable(buffer) && buffer.LockCount == 0)
+        {
+            _spares.Add(buffer);
+            return;
+        }
+
+        if (buffer.LockCount == 0)
+        {
+            Discard(buffer);
+            return;
+        }
+
+        _retired.Add(buffer);
+        if (_watched.Add(buffer))
+        {
+            buffer.Released += () => OnReleased(buffer);
+        }
+    }
+
+    private void OnReleased(IBuffer buffer)
+    {
+        if (!_retired.Remove(buffer) || buffer.IsDestroyed)
+        {
+            return;
+        }
+
+        if (!_disposed && Reusable(buffer))
+        {
+            _spares.Add(buffer);
+            return;
+        }
+
+        using var current = Enter();
+        Discard(buffer);
+    }
+
+    private bool Reusable(IBuffer buffer) =>
+        !_disposed && _spares.Count < MaxSpares && _target is { } target && !ReferenceEquals(buffer, target)
+        && buffer.Width == target.Width && buffer.Height == target.Height;
+
+    private IBuffer? TakeSpare()
+    {
+        for (var i = 0; i < _spares.Count; i++)
+        {
+            var spare = _spares[i];
+            if (spare.IsDestroyed)
+            {
+                _spares.RemoveAt(i--);
+                continue;
+            }
+
+            if (spare.LockCount == 0)
+            {
+                _spares.RemoveAt(i);
+                return spare;
+            }
+        }
+
+        return null;
+    }
+
+    private void DropSpares()
+    {
+        foreach (var spare in _spares)
+        {
+            Discard(spare);
+        }
+
+        _spares.Clear();
+    }
+
+    private void Discard(IBuffer buffer)
+    {
+        _watched.Remove(buffer);
         if (_wraps.Remove(buffer, out var native))
         {
             native.Dispose(_device);
         }
 
-        if (buffer.LockCount == 0)
+        if (!buffer.IsDestroyed)
         {
             DestroyBuffer(buffer);
-            return;
         }
-
-        _retired.Add(buffer);
-        buffer.Released += () =>
-        {
-            if (_retired.Remove(buffer) && !buffer.IsDestroyed)
-            {
-                DestroyBuffer(buffer);
-            }
-        };
     }
 
     private static void DestroyBuffer(IBuffer buffer)

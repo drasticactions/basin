@@ -215,6 +215,33 @@ public sealed class QuillHostTests
 
     [Theory]
     [MemberData(nameof(Rows))]
+    public void A_disposed_surface_returns_the_textures_its_canvas_made(string row, string backend)
+    {
+        CompositorTestHost.SkipUnlessRunnable(row);
+        CompositorTestHost.SkipUnlessRunnable(backend);
+        using var host = new CompositorTestHost(renderer: row);
+        using var lease = QuillLease.Require(host, backend);
+        var before = lease.TextureCount;
+
+        var surface = (IQuillUISurface)lease.Host.CreateSurface(new UISurfaceOptions
+        {
+            Target = UITargetKind.Dmabuf,
+            Width = 200,
+            Height = 60,
+            Scale = 1.0,
+        })!;
+        var canvas = surface.BeginDraw();
+        canvas.DrawText(
+            "atlas", 4f, 8f, new Color32(0xFF, 0xFF, 0xFF, 0xFF), 14f, Basin.Frames.Quill.QuillFrameFonts.Bundled());
+        surface.EndDraw();
+        Assert.True(lease.TextureCount > before);
+
+        surface.Dispose();
+        Assert.Equal(before, lease.TextureCount);
+    }
+
+    [Theory]
+    [MemberData(nameof(Rows))]
     public void An_atlas_that_grows_in_the_middle_of_a_draw_still_draws_every_line(string row, string backend)
     {
         CompositorTestHost.SkipUnlessRunnable(row);

@@ -11,6 +11,7 @@ public sealed unsafe class QuillVulkanCanvasRenderer : ICanvasRenderer
     private readonly VulkanDevice _device;
     private readonly QuillVulkanPipeline _pipeline;
     private readonly QuillVulkanTextures _textures;
+    private readonly List<QuillVulkanTexture> _created = [];
     private CommandBuffer _commands;
     private QuillVulkanFrame? _frame;
     private Framebuffer _framebuffer;
@@ -47,7 +48,12 @@ public sealed unsafe class QuillVulkanCanvasRenderer : ICanvasRenderer
         _framebuffer = default;
     }
 
-    public object CreateTexture(uint width, uint height) => _textures.Create((int)width, (int)height);
+    public object CreateTexture(uint width, uint height)
+    {
+        var texture = _textures.Create((int)width, (int)height);
+        _created.Add(texture);
+        return texture;
+    }
 
     public Int2 GetTextureSize(object texture) => texture is QuillTexture quill
         ? new Int2(quill.Width, quill.Height)
@@ -93,6 +99,12 @@ public sealed unsafe class QuillVulkanCanvasRenderer : ICanvasRenderer
 
         _disposed = true;
         Close();
+        foreach (var texture in _created)
+        {
+            _textures.Destroy(texture);
+        }
+
+        _created.Clear();
     }
 
     private void Record(Canvas? canvas, IReadOnlyList<DrawCall> drawCalls)

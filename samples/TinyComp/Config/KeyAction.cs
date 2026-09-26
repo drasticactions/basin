@@ -34,4 +34,5 @@ internal enum KeyAction
     ShelveTop,
     ShelveBottom,
     Unshelve,
+    Settings,
 }

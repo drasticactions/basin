@@ -82,7 +82,7 @@ public sealed class UIDriver : IDisposable
         }
 
         var due = _host.NextDueMillis;
-        _timer.UpdateTimer(due is null ? -1 : (int)Math.Clamp(due.Value, 0, int.MaxValue));
+        _timer.UpdateTimer(due is null ? -1 : (int)Math.Clamp(due.Value, 1, int.MaxValue));
     }
 
     public void Dispose()

@@ -8,6 +8,16 @@ internal sealed class LayoutOnlySurface(int width, int height) : IQuillUISurface
 {
     public UISurfaceSize Size => new(width, height, 1.0);
 
+    public Prowl.Quill.ICanvasRenderer Renderer => throw new InvalidOperationException("layout only");
+
+    public Prowl.Quill.FontAtlasSettings Atlas { get; } = new();
+
+    public void BeginTarget() => throw new InvalidOperationException("layout only");
+
+    public void EndTarget()
+    {
+    }
+
     public Prowl.Quill.Canvas BeginDraw() => throw new InvalidOperationException("layout only");
 
     public void EndDraw()

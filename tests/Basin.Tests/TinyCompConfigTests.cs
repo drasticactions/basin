@@ -39,6 +39,18 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_background_reads_a_hex_color_and_keeps_the_default_for_anything_else()
+    {
+        var config = TinyComp.Config.Parse("[compositor]\nbackground = \"#ff8000\"\n", BasinLog.For("t"), out var fatal);
+        Assert.Null(fatal);
+        Assert.Equal(new Basin.RenderColor(1f, 128 / 255f, 0f, 1f), config.Background);
+
+        var bad = TinyComp.Config.Parse("[compositor]\nbackground = \"orange\"\n", BasinLog.For("t"), out _);
+        Assert.Equal(TinyComp.Config.DefaultBackground, bad.Background);
+        Assert.Equal(TinyComp.Config.DefaultBackground, TinyComp.Config.Parse(string.Empty, BasinLog.For("t"), out _).Background);
+    }
+
+    [Fact]
     public void No_file_leaves_every_default_and_seeds_the_built_in_bindings()
     {
         var config = TinyComp.Config.Load("false", BasinLog.For("t"), out var fatal);
@@ -53,7 +65,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Equal(14, config.FontSize);
         Assert.Null(config.NightLight);
         Assert.Empty(config.Rules);
-        Assert.Equal(8, config.Bindings.Count);
+        Assert.Equal(9, config.Bindings.Count);
         Assert.Contains(config.Bindings, b =>
             b.Action == TinyComp.KeyAction.Quit
             && b.ModifierMask == Modifiers.Alt
@@ -786,7 +798,7 @@ public sealed class TinyCompConfigTests : IDisposable
             Assert.Equal(TinyComp.Config.Template(), File.ReadAllText(seeded));
             Assert.Contains(_lines, line => line.Contains("wrote the default", StringComparison.Ordinal));
             Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
-            Assert.Equal(9, config.Bindings.Count);
+            Assert.Equal(10, config.Bindings.Count);
 
             var written = File.GetLastWriteTimeUtc(seeded);
             _lines.Clear();
@@ -890,7 +902,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Null(fatal);
         Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
         Assert.DoesNotContain(_lines, line => line.Contains("unknown stage", StringComparison.Ordinal));
-        Assert.Equal(9, config.Bindings.Count);
+        Assert.Equal(10, config.Bindings.Count);
         Assert.Empty(config.Rules);
         Assert.Empty(config.Post);
     }

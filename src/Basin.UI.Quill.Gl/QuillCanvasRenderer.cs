@@ -10,6 +10,7 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
     private readonly GL _gl;
     private readonly QuillGlProgram _program;
     private readonly QuillTextures _textures;
+    private readonly List<QuillGlTexture> _created = [];
     private uint _framebuffer;
     private int _width = 1;
     private int _height = 1;
@@ -31,7 +32,12 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         _height = Math.Max(1, height);
     }
 
-    public object CreateTexture(uint width, uint height) => _textures.Create((int)width, (int)height);
+    public object CreateTexture(uint width, uint height)
+    {
+        var texture = _textures.Create((int)width, (int)height);
+        _created.Add(texture);
+        return texture;
+    }
 
     public Int2 GetTextureSize(object texture) => texture is QuillTexture quill
         ? new Int2(quill.Width, quill.Height)
@@ -159,6 +165,12 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         }
 
         _disposed = true;
+        foreach (var texture in _created)
+        {
+            _textures.Destroy(texture);
+        }
+
+        _created.Clear();
     }
 
     private static void SetColor(GL gl, int location, Color32 color) =>

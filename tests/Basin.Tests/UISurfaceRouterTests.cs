@@ -203,6 +203,46 @@ public sealed class UISurfaceRouterTests
         Assert.False(fixture.Router.PointerButton(2, 272, pressed: true));
     }
 
+    [Fact]
+    public void An_implicit_grab_keeps_motion_and_the_release_on_the_pressed_surface()
+    {
+        using var fixture = new RouterFixture(implicitGrab: true);
+        var left = fixture.Add(new Box(0, 0, 100, 100));
+        var right = fixture.Add(new Box(200, 0, 100, 100));
+
+        fixture.Router.PointerMotion(1, 10, 10);
+        Assert.True(fixture.Router.PointerButton(2, 272, pressed: true));
+        Assert.Same(left.Surface, fixture.Router.PointerGrab);
+
+        var route = fixture.Router.PointerMotion(3, 250, 10);
+        Assert.Same(left.Surface, route.Surface);
+        Assert.Equal("motion 250,10", left.Surface.Log[^1]);
+        Assert.Empty(right.Surface.Log);
+
+        Assert.True(fixture.Router.PointerButton(4, 272, pressed: false));
+        Assert.Equal("button 272 up", left.Surface.Log[^1]);
+        Assert.Null(fixture.Router.PointerGrab);
+
+        route = fixture.Router.PointerMotion(5, 250, 10);
+        Assert.Same(right.Surface, route.Surface);
+        Assert.Equal("leave", left.Surface.Log[^1]);
+    }
+
+    [Fact]
+    public void Without_an_implicit_grab_motion_leaves_the_pressed_surface()
+    {
+        using var fixture = new RouterFixture();
+        var left = fixture.Add(new Box(0, 0, 100, 100));
+        var right = fixture.Add(new Box(200, 0, 100, 100));
+
+        fixture.Router.PointerMotion(1, 10, 10);
+        fixture.Router.PointerButton(2, 272, pressed: true);
+        Assert.Null(fixture.Router.PointerGrab);
+
+        Assert.Same(right.Surface, fixture.Router.PointerMotion(3, 250, 10).Surface);
+        Assert.Equal("leave", left.Surface.Log[^1]);
+    }
+
     private sealed class RouterFixture : IDisposable
     {
         private readonly List<Placed> _placed = [];
@@ -213,7 +253,8 @@ public sealed class UISurfaceRouterTests
 
         public UISurfaceRouter Router { get; }
 
-        public RouterFixture() => Router = new UISurfaceRouter(Scene, Index);
+        public RouterFixture(bool implicitGrab = false) =>
+            Router = new UISurfaceRouter(Scene, Index) { ImplicitGrab = implicitGrab };
 
         public Placed Add(in Box box, SceneTree? parent = null)
         {

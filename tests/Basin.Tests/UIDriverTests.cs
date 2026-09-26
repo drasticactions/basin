@@ -90,6 +90,21 @@ public sealed class UIDriverTests : IDisposable
     }
 
     [Fact]
+    public void A_host_due_now_is_pumped_rather_than_disarmed()
+    {
+        using var host = new PopupUIHost { Due = 0 };
+        using var driver = new UIDriver(host, _loop);
+        driver.Start();
+
+        for (var i = 0; i < 5 && host.Pumps == 0; i++)
+        {
+            _loop.Dispatch(20);
+        }
+
+        Assert.True(host.Pumps >= 1, "a timer armed with 0 ms never fires");
+    }
+
+    [Fact]
     public void Disposal_drops_every_popup_and_stops_listening()
     {
         using var host = new PopupUIHost();

@@ -136,6 +136,7 @@ internal sealed partial class TinyComp
 
     private void FocusXWindow(XWindow xwindow)
     {
+        ReleaseUIKeyboard(restore: false);
         if (_focused is not null)
         {
             FocusWindow(null);

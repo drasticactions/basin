@@ -496,7 +496,7 @@ internal sealed partial class TinyComp
         _ = _driver.AddView(output, allocator, secondary: true);
     }
 
-    private static readonly RenderColor Background = new(0.09f, 0.1f, 0.12f, 1f);
+    private RenderColor Background => _config.Background;
 
     private void ReapplyPinnedGeometry()
     {

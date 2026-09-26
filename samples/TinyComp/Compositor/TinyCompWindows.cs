@@ -218,6 +218,10 @@ internal sealed partial class TinyComp
         }
 
         DismissOpenMenu();
+        if (window is not null)
+        {
+            ReleaseUIKeyboard(restore: false);
+        }
 
         _focused?.Toplevel.SetActivated(false);
         _focused?.SetDecorationFocus(false);

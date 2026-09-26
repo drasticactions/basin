@@ -56,6 +56,18 @@ public static class HotkeyParser
         return true;
     }
 
+    public static string Format(uint keysym, Modifiers modifiers)
+    {
+        var builder = new System.Text.StringBuilder();
+        Append(builder, modifiers, Modifiers.Ctrl, "Ctrl");
+        Append(builder, modifiers, Modifiers.Alt, "Alt");
+        Append(builder, modifiers, Modifiers.Shift, "Shift");
+        Append(builder, modifiers, Modifiers.Super, "Super");
+        Append(builder, modifiers, Modifiers.Mod3, "Mod3");
+        Append(builder, modifiers, Modifiers.Mod5, "Mod5");
+        return builder.Append(new Xkb.XkbKeysym(keysym).Name).ToString();
+    }
+
     public static Hotkey? Parse(string chord, object? value, BasinLogger log, Func<string, bool>? isAction = null)
     {
         if (!TryParseChord(chord, log, out var keysym, out var modifiers))
@@ -90,4 +102,12 @@ public static class HotkeyParser
         TomlTable table when table.TryGetValue("exec", out var exec) => Words(exec),
         _ => [],
     };
+
+    private static void Append(System.Text.StringBuilder builder, Modifiers held, Modifiers flag, string name)
+    {
+        if ((held & flag) != 0)
+        {
+            builder.Append(name).Append('+');
+        }
+    }
 }

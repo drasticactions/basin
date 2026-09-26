@@ -36,7 +36,7 @@ internal sealed partial class TinyComp
         pointer.RelativeMotion += (time, dx, dy, dxu, dyu) =>
             _relativePointer.NotifyMotion(time, dx, dy, dxu, dyu);
         pointer.Button += (time, button, pressed) => OnButton(time, button, pressed);
-        pointer.Axis += (time, axis) => _seat.Pointer.NotifyAxis(time, axis);
+        pointer.Axis += HandleAxis;
         pointer.Leave += () => _seat.Pointer.NotifyClearFocus();
         pointer.SwipeBegin += (time, fingers) =>
         {
@@ -141,6 +141,11 @@ internal sealed partial class TinyComp
 
         TrackHotCorner(x, y, time);
 
+        if (RouteUIMotion(time, x, y))
+        {
+            return;
+        }
+
         UpdateHoverCursor(x, y);
         RouteMotion(time, x, y);
     }
@@ -148,6 +153,11 @@ internal sealed partial class TinyComp
     private void RefreshPointer()
     {
         if (_mode != DragMode.None || _touchMoveResize is { Dragging: true } || ActiveLock() is not null)
+        {
+            return;
+        }
+
+        if (RouteUIMotion((uint)Environment.TickCount, _cursorX, _cursorY, refresh: true))
         {
             return;
         }
@@ -358,6 +368,16 @@ internal sealed partial class TinyComp
             }
 
             return;
+        }
+
+        if (_mode == DragMode.None && RouteUIButton(time, button, pressed))
+        {
+            return;
+        }
+
+        if (pressed)
+        {
+            ReleaseUIKeyboard(restore: true);
         }
 
         if (!pressed && _mode == DragMode.None && OverviewEmptyClick(button, pressed))

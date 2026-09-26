@@ -1,3 +1,4 @@
+using System.Text;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Wayland;
@@ -5,7 +6,7 @@ using Xkb;
 
 namespace Basin.Seat;
 
-public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, IKeySink, IDisposable
+public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, Capabilities.IKeyText, IKeySink, IDisposable
 {
     private readonly Seat _seat;
     private readonly List<IKeyboardGrab> _grabs = [];
@@ -20,6 +21,9 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
     private (uint Depressed, uint Latched, uint Locked, uint Group) _modifiers;
     private int _repeatRate = 25;
     private int _repeatDelay = 400;
+    private XkbContext? _composeContext;
+    private XkbComposeState? _compose;
+    private bool _composeLoaded;
 
     internal SeatKeyboard(Seat seat)
     {
@@ -427,6 +431,46 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    public int TextFor(uint key, Span<char> into)
+    {
+        if (State is not { } state ||
+            state.IsModActive(XkbNames.ModCtrl) || state.IsModActive(XkbNames.ModMod1) || state.IsModActive(XkbNames.ModMod4))
+        {
+            return 0;
+        }
+
+        if (Compose() is { } compose && compose.Feed(state.GetKeyOneSym(key + 8)) == XkbComposeFeedResult.Accepted)
+        {
+            switch (compose.Status)
+            {
+                case XkbComposeStatus.Composing:
+                    return 0;
+                case XkbComposeStatus.Cancelled:
+                    compose.Reset();
+                    return 0;
+                case XkbComposeStatus.Composed:
+                    var composed = compose.GetOneSym().Utf32;
+                    if (composed != 0)
+                    {
+                        compose.Reset();
+                        return Encode(composed, into);
+                    }
+
+                    var text = compose.GetUtf8();
+                    compose.Reset();
+                    if (text.Length > into.Length)
+                    {
+                        return 0;
+                    }
+
+                    text.AsSpan().CopyTo(into);
+                    return text.Length;
+            }
+        }
+
+        return Encode(state.GetKeyUtf32(key + 8), into);
+    }
+
     public void Dispose()
     {
         foreach (var device in _devices)
@@ -436,6 +480,47 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
 
         _devices.Clear();
         _keymapSource.Dispose();
+        _compose?.Dispose();
+        _compose = null;
+        _composeContext?.Dispose();
+        _composeContext = null;
+    }
+
+    private XkbComposeState? Compose()
+    {
+        if (_composeLoaded)
+        {
+            return _compose;
+        }
+
+        _composeLoaded = true;
+        var locale = Environment.GetEnvironmentVariable("LC_ALL") is { Length: > 0 } all ? all
+            : Environment.GetEnvironmentVariable("LC_CTYPE") is { Length: > 0 } ctype ? ctype
+            : Environment.GetEnvironmentVariable("LANG") is { Length: > 0 } lang ? lang
+            : "C";
+        try
+        {
+            _composeContext = XkbContext.Create();
+            using var table = _composeContext.CreateComposeTable(locale);
+            _compose = table.CreateState();
+        }
+        catch (XkbException error)
+        {
+            SeatLog.Log.Debug($"keyboard: no compose table for {locale}: {error.Message}");
+            _compose = null;
+        }
+
+        return _compose;
+    }
+
+    private static int Encode(uint codepoint, Span<char> into)
+    {
+        if (codepoint is <= 0x1f or 0x7f || !Rune.TryCreate(codepoint, out var rune))
+        {
+            return 0;
+        }
+
+        return rune.TryEncodeToUtf16(into, out var written) ? written : 0;
     }
 
     internal void InitializeResource(WlKeyboardResource keyboard)

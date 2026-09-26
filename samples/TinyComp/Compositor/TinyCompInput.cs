@@ -74,7 +74,7 @@ internal sealed partial class TinyComp
 
             OnPointerPlaced(time);
         };
-        _touchBinder!.Axis += (time, axis) => _seat.Pointer.NotifyAxis(time, axis);
+        _touchBinder!.Axis += HandleAxis;
         input.Gesture += (_, type, gesture) =>
         {
             _idle.NotifyActivity();

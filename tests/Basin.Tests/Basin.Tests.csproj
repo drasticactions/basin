@@ -45,6 +45,7 @@
     <ProjectReference Include="../../src/Basin.Frames.Quill/Basin.Frames.Quill.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Quill.Gl/Basin.UI.Quill.Gl.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Quill.Vulkan/Basin.UI.Quill.Vulkan.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Paper/Basin.UI.Paper.csproj" />
     <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />

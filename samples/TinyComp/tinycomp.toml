@@ -2,6 +2,7 @@
 renderer      = "vulkan"     # --renderer
 outputs       = 1            # --outputs
 scale         = []           # --scale, one entry per output; empty asks the outputs
+background    = "#171a1f"    # the desktop color behind every window, #rrggbb
 
 # Per-output settings, by connector name. A key that is absent stays automatic,
 # and the [compositor] scale array above beats a matching section here.
@@ -143,6 +144,10 @@ wall_width    = 0.04         # step: the wall's screen width, as a fraction of t
 wall_color    = "#262a3a"    # step: the base color of the walls
 wall_shade    = 0.25         # step: how much lighter the top and left walls are, and darker the others
 
+[settings]
+palette   = "dark"           # dark | light: the settings panel
+font_size = 14               # logical pixels
+
 # The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
 # toplevel mapping and export, CTM control, global shortcuts and input capture.
 # Each flag needs a restart to change.
@@ -170,6 +175,7 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 "Alt+Shift+Left"  = "carry-prev"
 "Alt+Shift+Right" = "carry-next"
 "Alt+n"           = "workspace-new"
+"Super+comma"     = "settings"
 "Alt+Return"    = { exec = "foot" }
 # The canvas actions, unbound by default:
 # "Alt+Shift+h"   = "park-left"

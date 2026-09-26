@@ -43,6 +43,11 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (RouteUIKey(time, key, pressed))
+        {
+            return;
+        }
+
         if (!fromInputMethod && HandleGlobalShortcut(key, pressed))
         {
             return;
@@ -412,6 +417,14 @@ internal sealed partial class TinyComp
 
             case KeyAction.Unshelve:
                 UnshelveByKey();
+                return true;
+
+            case KeyAction.Settings:
+                if (ToggleSettings() is { } unavailable)
+                {
+                    _report.Line($"SETTINGS unavailable {unavailable}");
+                }
+
                 return true;
 
             default:

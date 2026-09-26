@@ -48,6 +48,28 @@ public sealed class ConfigParserTests
     }
 
     [Fact]
+    public void A_formatted_chord_parses_back_to_the_same_keysym_and_modifiers()
+    {
+        var (log, _) = Logger();
+        try
+        {
+            Assert.Equal("Super+comma", HotkeyParser.Format(Keysym.FromName("comma"), Modifiers.Super));
+            Assert.Equal("Alt+Shift+Left", HotkeyParser.Format(Keysym.FromName("Left"), Modifiers.Alt | Modifiers.Shift));
+            Assert.Equal("Return", HotkeyParser.Format(Keysym.FromName("Return"), Modifiers.None));
+
+            var every = Modifiers.Ctrl | Modifiers.Alt | Modifiers.Shift | Modifiers.Super | Modifiers.Mod3 | Modifiers.Mod5;
+            var chord = HotkeyParser.Format(Keysym.FromName("F5"), every);
+            Assert.True(HotkeyParser.TryParseChord(chord, log, out var keysym, out var modifiers));
+            Assert.Equal(Keysym.FromName("F5"), keysym);
+            Assert.Equal(every, modifiers);
+        }
+        finally
+        {
+            Restore();
+        }
+    }
+
+    [Fact]
     public void Chord_with_an_unknown_modifier_is_dropped_with_a_warning()
     {
         var (log, sink) = Logger();

@@ -58,6 +58,7 @@
     <ProjectReference Include="../../src/Basin.UI.Quill.Gl/Basin.UI.Quill.Gl.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Quill.Vulkan/Basin.UI.Quill.Vulkan.csproj" />
     <ProjectReference Include="../../src/Basin.Frames.Quill/Basin.Frames.Quill.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Paper/Basin.UI.Paper.csproj" />
   </ItemGroup>
 
   <ItemGroup>

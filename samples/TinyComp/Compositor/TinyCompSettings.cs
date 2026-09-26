@@ -35,6 +35,27 @@ internal sealed partial class TinyComp
             return;
         }
 
+        var restart = CarryOver(loaded);
+        var metacityFailure = ApplyConfig(loaded, crossfade: true);
+
+        _report.Line(
+            $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
+            + " rules-apply-to-windows-mapped-after-this"
+            + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")
+            + (metacityFailure is null ? string.Empty : " metacity=kept")
+            + ConfigSummary(loaded));
+        ReloadSettingsDraft();
+    }
+
+    private static string ConfigSummary(Config loaded) =>
+        $" canvas={(loaded.CanvasAnywhere ? "on" : "off")} canvas-edge-scale={loaded.Canvas.EdgeScaleValue:F3}"
+        + $" canvas-sides={loaded.Canvas.SideNames} canvas-corner={loaded.Canvas.CornerName} canvas-corner-radius={loaded.Canvas.CornerRadiusValue:F2}"
+        + $" canvas-window={loaded.Canvas.WindowName} canvas-min-scale={loaded.Canvas.MinScaleValue:F2} canvas-scale-reach={loaded.Canvas.ScaleReachValue:F2}"
+        + $" canvas-shelf={loaded.Canvas.ShelfFraction:F2} canvas-shelf-scale={loaded.Canvas.ShelfScaleValues.Names} canvas-shelf-min-scale={loaded.Canvas.ShelfMinScaleValue:F2} canvas-shelf-shape={loaded.Canvas.ShapeName} canvas-slope-window={loaded.Canvas.OnSlopeName} canvas-drag={loaded.Canvas.DragName}"
+        + $" overview={(loaded.Overview.Enabled ? "on" : "off")} overview-scale={loaded.Overview.ScaleValue:F2} overview-hot-corner={loaded.Overview.HotCornerName} overview-wall={loaded.Overview.WallName}";
+
+    private List<string> CarryOver(Config loaded)
+    {
         var restart = new List<string>();
 
         void Restarts(string key, bool changed)
@@ -86,17 +107,32 @@ internal sealed partial class TinyComp
             loaded.Scales = _scales;
         }
 
-        _config = loaded;
+        return restart;
+    }
 
-        _useTransactions = loaded.Transactions;
-        _offload = loaded.Offload;
-        _damageTint = loaded.DamageTint;
+    private string? ApplyConfig(Config next, bool crossfade)
+    {
+        var background = _config.Background != next.Background;
+        _config = next;
+        if (background)
+        {
+            _driver.Background = next.Background;
+            _capture.Background = next.Background;
+            foreach (var view in Views)
+            {
+                view.Scene?.Ring.AddWhole();
+            }
+        }
+
+        _useTransactions = next.Transactions;
+        _offload = next.Offload;
+        _damageTint = next.DamageTint;
         _driver.AllowPlaneOffload = _offload;
         _driver.DebugDamageTint = _damageTint;
         ApplyEffectShaders();
 
-        _scales = loaded.Scales;
-        _driver.Scales = loaded.Scales;
+        _scales = next.Scales;
+        _driver.Scales = next.Scales;
         for (var i = 0; i < Views.Count; i++)
         {
             var view = Views[i];
@@ -107,15 +143,15 @@ internal sealed partial class TinyComp
             }
         }
 
-        ApplyNightLight(loaded.NightLight);
-        var metacityFailure = ApplyFrameFont(loaded) ?? ApplyMetacity(loaded);
-        ApplyQuill(loaded);
-        ApplyFrameStyle(loaded.FrameStyle);
-        ApplyCornerRadius(loaded.CornerRadius);
-        ApplyPostStages(loaded);
-        ApplyScreenShader(loaded);
-        ApplyEffectSettings(loaded);
-        _shortcuts.Configure(loaded);
+        ApplyNightLight(next.NightLight);
+        var metacityFailure = ApplyFrameFont(next) ?? ApplyMetacity(next);
+        ApplyQuill(next);
+        ApplyFrameStyle(next.FrameStyle);
+        ApplyCornerRadius(next.CornerRadius);
+        ApplyPostStages(next);
+        ApplyScreenShader(next);
+        ApplyEffectSettings(next);
+        _shortcuts.Configure(next);
         _canvasOverride = null;
         _canvasClosing = false;
         ConfigureOverviewTriggers();
@@ -124,7 +160,7 @@ internal sealed partial class TinyComp
 
         foreach (var view in Views)
         {
-            if (view.Scene is not null && view.LastPresentedBuffer is { } presented)
+            if (crossfade && view.Scene is not null && view.LastPresentedBuffer is { } presented)
             {
                 _ = _post.BeginCrossfade(presented, EffectTick());
             }
@@ -132,16 +168,7 @@ internal sealed partial class TinyComp
             view.Scheduler?.ScheduleRepaint();
         }
 
-        _report.Line(
-            $"RELOAD bindings={loaded.Bindings.Count} rules={loaded.Rules.Count}"
-            + " rules-apply-to-windows-mapped-after-this"
-            + (restart.Count == 0 ? string.Empty : $" restart-required={string.Join(',', restart)}")
-            + (metacityFailure is null ? string.Empty : " metacity=kept")
-            + $" canvas={(loaded.CanvasAnywhere ? "on" : "off")} canvas-edge-scale={loaded.Canvas.EdgeScaleValue:F3}"
-            + $" canvas-sides={loaded.Canvas.SideNames} canvas-corner={loaded.Canvas.CornerName} canvas-corner-radius={loaded.Canvas.CornerRadiusValue:F2}"
-            + $" canvas-window={loaded.Canvas.WindowName} canvas-min-scale={loaded.Canvas.MinScaleValue:F2} canvas-scale-reach={loaded.Canvas.ScaleReachValue:F2}"
-            + $" canvas-shelf={loaded.Canvas.ShelfFraction:F2} canvas-shelf-scale={loaded.Canvas.ShelfScaleValues.Names} canvas-shelf-min-scale={loaded.Canvas.ShelfMinScaleValue:F2} canvas-shelf-shape={loaded.Canvas.ShapeName} canvas-slope-window={loaded.Canvas.OnSlopeName} canvas-drag={loaded.Canvas.DragName}"
-            + $" overview={(loaded.Overview.Enabled ? "on" : "off")} overview-scale={loaded.Overview.ScaleValue:F2} overview-hot-corner={loaded.Overview.HotCornerName} overview-wall={loaded.Overview.WallName}");
+        return metacityFailure;
     }
 
     private double? ReloadScaleFor(int index, IOutput output) =>
