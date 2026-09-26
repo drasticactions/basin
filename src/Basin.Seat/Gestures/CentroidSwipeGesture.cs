@@ -10,6 +10,8 @@ public sealed class CentroidSwipeGesture : ITouchGestures
 
     public double Slop { get; set; } = 24;
 
+    public SwipeAxis Axis { get; set; } = SwipeAxis.Horizontal;
+
     public ICentroidSwipeHandler? Handler { get; set; }
 
     public bool IsClaimed => _phase == Phase.Claimed;
@@ -27,6 +29,10 @@ public sealed class CentroidSwipeGesture : ITouchGestures
             _phase = Phase.Watching;
             _travel = 0;
         }
+        else if (_phase == Phase.Watching && _contacts.Count > (int)Fingers)
+        {
+            _phase = Phase.Idle;
+        }
 
         return TouchGestureVerdict.Pass;
     }
@@ -43,7 +49,7 @@ public sealed class CentroidSwipeGesture : ITouchGestures
         switch (_phase)
         {
             case Phase.Watching:
-                _travel += dx;
+                _travel += Axis == SwipeAxis.Vertical ? dy : dx;
                 if (Math.Abs(_travel) < Slop)
                 {
                     return TouchGestureVerdict.Pass;

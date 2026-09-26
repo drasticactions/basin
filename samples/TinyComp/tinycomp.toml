@@ -124,6 +124,25 @@ shelf_shape  = "square"      # terrace mode: square | flat: square shelf cells w
 slope_window = "bend"        # terrace mode: bend | flat: bend a window along the slope, or keep it a flat rectangle that shrinks
 drag         = "cursor"      # scale and terrace modes: cursor | grid: keep the grabbed point under the cursor, or move it along the grid rows
 
+# Overview: on demand, the desktop zooms out and a slope and a shelf rise on
+# each [canvas] side. It reads sides, shelf, shelf_scale, slope_window, grid,
+# drag and animation_ms from [canvas], and is off on any output with the canvas
+# enabled. Every key is live on SIGHUP. An [output."NAME"] table takes
+# overview = false, overview_scale and overview_wall.
+[overview]
+enable        = true         # the actions, the gesture and the hot corner
+scale         = 0.75         # the zoom of the sunk desktop, 0.3 to 0.95
+threshold_in  = 0.667        # how far down the slope a held window goes before it counts as shelved
+threshold_out = 0.333        # how far up the slope a held shelved window climbs before it counts as out
+gesture       = true         # a vertical touchpad and touchscreen swipe: up opens, down closes
+gesture_fingers = 4          # 4 or 5; 3 is the workspace swipe
+hot_corner    = "top-left"   # top-left | top-right | bottom-left | bottom-right | none
+hot_corner_ms = 150          # how long the pointer stays in the corner before it fires
+wall          = "slope"      # slope | step: a slope down to the shelf, or a flat shelf below a drawn wall
+wall_width    = 0.04         # step: the wall's screen width, as a fraction of the output width or height
+wall_color    = "#262a3a"    # step: the base color of the walls
+wall_shade    = 0.25         # step: how much lighter the top and left walls are, and darker the others
+
 # The hyprland-protocols pack: hyprland_surface, focus grab, lock notify,
 # toplevel mapping and export, CTM control, global shortcuts and input capture.
 # Each flag needs a restart to change.
@@ -163,6 +182,13 @@ ctm           = true         # hyprland_ctm_control_v1; KMS on drm, a post stage
 # "Alt+Shift+equal" = "shelf-larger"
 # "Alt+Shift+0"   = "shelf-reset"
 # "Alt+Shift+t"   = "canvas-mode"
+# The overview actions, unbound by default:
+# "Super+Tab"     = "overview"
+# "Super+Left"    = "shelve-left"
+# "Super+Right"   = "shelve-right"
+# "Super+Up"      = "shelve-top"
+# "Super+Down"    = "shelve-bottom"
+# "Super+u"       = "unshelve"
 
 # Per Window/App rules
 # [[rule]]

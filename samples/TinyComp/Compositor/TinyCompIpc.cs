@@ -24,6 +24,8 @@ internal sealed partial class TinyComp
         });
         _ipc.SyntheticInput = new SyntheticInput(this);
         RegisterCommands(_ipc.Methods);
+        RegisterOverviewCommands(_ipc.Methods);
+        DeclareOverviewEvents();
     }
 
     private void StartIpc()
@@ -100,6 +102,10 @@ internal sealed partial class TinyComp
             {
                 _report.Line($"WIN {window.Toplevel.AppId} {window.X} {window.Y} mode={_mode} scene={(window.SceneSurface is null ? "none" : "yes")} screen={ScreenBoxOf(window).X}");
                 ReportCanvasWhere(window);
+                if (ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Overview: true } || IsShelved(window))
+                {
+                    _report.Line(OverviewWhere(window));
+                }
             }
 
             foreach (var xwindow in _xwindows)

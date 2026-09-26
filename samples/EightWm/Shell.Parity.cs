@@ -200,30 +200,17 @@ internal sealed partial class Shell
         _report.Line($"FILTER {text} matches={view.StartModel.FilteredApps.Count}");
     }
 
-    internal HotCorner CornerAt(ShellView view, double localX, double localY)
+    internal ScreenCorner CornerAt(ShellView view, double localX, double localY)
     {
         if (!HotCornersOn)
         {
-            return HotCorner.None;
+            return ScreenCorner.None;
         }
 
-        _ = view;
-        const double size = HotCornerSize;
-        var left = localX <= size;
-        var right = localX >= view.Box.Width - size;
-        var top = localY <= size;
-        var bottom = localY >= view.Box.Height - size;
-        return (left, right, top, bottom) switch
-        {
-            (true, _, true, _) => HotCorner.TopLeft,
-            (_, true, true, _) => HotCorner.TopRight,
-            (true, _, _, true) => HotCorner.BottomLeft,
-            (_, true, _, true) => HotCorner.BottomRight,
-            _ => HotCorner.None,
-        };
+        return HotCorner.At(new Basin.Box(0, 0, view.Box.Width, view.Box.Height), localX, localY, HotCornerSize);
     }
 
-    private HotCorner _corner;
+    private ScreenCorner _corner;
     private double _cornerY;
 
     internal void TrackCorner(ShellView view, double localX, double localY)
@@ -233,7 +220,7 @@ internal sealed partial class Shell
             return;
         }
 
-        if (CornerAt(view, localX, localY) is var corner && corner != HotCorner.None)
+        if (CornerAt(view, localX, localY) is var corner && corner != ScreenCorner.None)
         {
             if (corner != _corner)
             {
@@ -244,20 +231,20 @@ internal sealed partial class Shell
             return;
         }
 
-        if (_corner == HotCorner.None)
+        if (_corner == ScreenCorner.None)
         {
             return;
         }
 
-        var onLeft = _corner is HotCorner.TopLeft or HotCorner.BottomLeft;
+        var onLeft = _corner is ScreenCorner.TopLeft or ScreenCorner.BottomLeft;
         const double band = CornerBand;
         if (onLeft ? localX > band : localX < view.Box.Width - band)
         {
-            _corner = HotCorner.None;
+            _corner = ScreenCorner.None;
             return;
         }
 
-        var travel = _corner is HotCorner.TopLeft or HotCorner.TopRight
+        var travel = _corner is ScreenCorner.TopLeft or ScreenCorner.TopRight
             ? localY - _cornerY
             : _cornerY - localY;
         if (travel < CornerSlideDistance)
@@ -266,7 +253,7 @@ internal sealed partial class Shell
         }
 
         var from = _corner;
-        _corner = HotCorner.None;
+        _corner = ScreenCorner.None;
         _report.Line($"CORNER {from} slide");
         if (onLeft)
         {
@@ -282,11 +269,11 @@ internal sealed partial class Shell
     {
         switch (CornerAt(view, localX, localY))
         {
-            case HotCorner.TopLeft:
+            case ScreenCorner.TopLeft:
                 SwitchToPrevious(view);
                 return true;
 
-            case HotCorner.BottomLeft:
+            case ScreenCorner.BottomLeft:
                 ToggleStart(view);
                 return true;
 

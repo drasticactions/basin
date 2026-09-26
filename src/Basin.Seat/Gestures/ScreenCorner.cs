@@ -1,9 +1,6 @@
-using Basin.Seat;
-using Xkb;
+namespace Basin.Seat;
 
-namespace EightWm;
-
-internal enum HotCorner
+public enum ScreenCorner
 {
     None,
 

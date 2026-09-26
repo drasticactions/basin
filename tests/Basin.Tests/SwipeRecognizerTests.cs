@@ -3,11 +3,16 @@ using Xunit;
 
 namespace Basin.Tests;
 
-public class SwipeRecognizerTests
+public abstract class SwipeRecognizerTests
 {
-    private static SwipeRecognizer Started(uint fingers = 3, double width = 1000)
+    protected abstract SwipeAxis Axis { get; }
+
+    private bool Move(SwipeRecognizer recognizer, double along, double across, uint timeMs) =>
+        Axis == SwipeAxis.Vertical ? recognizer.Update(across, along, timeMs) : recognizer.Update(along, across, timeMs);
+
+    private SwipeRecognizer Started(uint fingers = 3, double width = 1000)
     {
-        var recognizer = new SwipeRecognizer(fingers);
+        var recognizer = new SwipeRecognizer(fingers) { Axis = Axis };
         Assert.True(recognizer.Begin(fingers, width, 0));
         return recognizer;
     }
@@ -15,11 +20,11 @@ public class SwipeRecognizerTests
     [Fact]
     public void A_different_finger_count_is_never_claimed()
     {
-        var recognizer = new SwipeRecognizer(3);
+        var recognizer = new SwipeRecognizer(3) { Axis = Axis };
 
         Assert.False(recognizer.Begin(2, 1000, 0));
         Assert.False(recognizer.IsActive);
-        Assert.False(recognizer.Update(-100, 0, 10));
+        Assert.False(Move(recognizer, -100, 0, 10));
         Assert.Equal(SwipeOutcome.None, recognizer.End(false, 20));
         Assert.Equal(0, recognizer.Progress);
     }
@@ -27,7 +32,7 @@ public class SwipeRecognizerTests
     [Fact]
     public void A_width_of_zero_is_never_claimed()
     {
-        var recognizer = new SwipeRecognizer(3);
+        var recognizer = new SwipeRecognizer(3) { Axis = Axis };
 
         Assert.False(recognizer.Begin(3, 0, 0));
         Assert.False(recognizer.IsActive);
@@ -38,7 +43,7 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        Assert.True(recognizer.Update(500, 0, 10));
+        Assert.True(Move(recognizer, 500, 0, 10));
 
         Assert.Equal(0.5, recognizer.Progress, 6);
         Assert.Equal(1, recognizer.Direction);
@@ -49,7 +54,7 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(0, 800, 10);
+        Move(recognizer, 0, 800, 10);
 
         Assert.Equal(0, recognizer.Progress);
         Assert.Equal(0, recognizer.Direction);
@@ -60,10 +65,10 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(2500, 0, 10);
+        Move(recognizer, 2500, 0, 10);
         Assert.Equal(1, recognizer.Progress, 6);
 
-        recognizer.Update(-5000, 0, 20);
+        Move(recognizer, -5000, 0, 20);
         Assert.Equal(-1, recognizer.Progress, 6);
     }
 
@@ -72,10 +77,10 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(1400, 0, 10);
+        Move(recognizer, 1400, 0, 10);
         Assert.Equal(1, recognizer.Progress, 6);
 
-        recognizer.Update(-800, 0, 20);
+        Move(recognizer, -800, 0, 20);
         Assert.Equal(0.6, recognizer.Progress, 6);
     }
 
@@ -85,13 +90,13 @@ public class SwipeRecognizerTests
         var recognizer = Started();
         recognizer.ClampHigh = true;
 
-        recognizer.Update(250, 0, 10);
+        Move(recognizer, 250, 0, 10);
 
         var quarter = recognizer.Progress;
         Assert.True(quarter > 0);
         Assert.True(quarter < 0.25);
 
-        recognizer.Update(250, 0, 20);
+        Move(recognizer, 250, 0, 20);
 
         Assert.True(recognizer.Progress > quarter);
         Assert.True(recognizer.Progress < 0.5);
@@ -103,7 +108,7 @@ public class SwipeRecognizerTests
         var recognizer = Started();
         recognizer.ClampHigh = true;
 
-        recognizer.Update(5000, 0, 10);
+        Move(recognizer, 5000, 0, 10);
 
         Assert.Equal(SwipeOutcome.Cancel, recognizer.End(false, 20));
     }
@@ -114,7 +119,7 @@ public class SwipeRecognizerTests
         var recognizer = Started();
         recognizer.ClampHigh = true;
 
-        recognizer.Update(-600, 0, 10);
+        Move(recognizer, -600, 0, 10);
 
         Assert.Equal(-0.6, recognizer.Progress, 6);
         Assert.Equal(SwipeOutcome.Commit, recognizer.End(false, 20));
@@ -129,7 +134,7 @@ public class SwipeRecognizerTests
 
         for (var step = 1; step <= 3; step++)
         {
-            recognizer.Update(travel / 3, 0, (uint)(step * 300));
+            Move(recognizer, travel / 3, 0, (uint)(step * 300));
         }
 
         Assert.True(recognizer.Velocity < recognizer.FlingPerSecond);
@@ -141,7 +146,7 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(200, 0, 10);
+        Move(recognizer, 200, 0, 10);
 
         Assert.True(recognizer.Velocity >= recognizer.FlingPerSecond);
         Assert.Equal(SwipeOutcome.Commit, recognizer.End(false, 20));
@@ -152,8 +157,8 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(300, 0, 100);
-        recognizer.Update(-200, 0, 110);
+        Move(recognizer, 300, 0, 100);
+        Move(recognizer, -200, 0, 110);
 
         Assert.True(recognizer.Progress > 0);
         Assert.True(recognizer.Velocity < 0);
@@ -165,7 +170,7 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(200, 0, 10);
+        Move(recognizer, 200, 0, 10);
 
         Assert.Equal(SwipeOutcome.Cancel, recognizer.End(false, 400));
     }
@@ -175,7 +180,7 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started(width: 10000);
 
-        recognizer.Update(200, 0, 0);
+        Move(recognizer, 200, 0, 0);
 
         Assert.Equal(0, recognizer.Velocity);
         Assert.Equal(SwipeOutcome.Cancel, recognizer.End(false, 0));
@@ -186,7 +191,7 @@ public class SwipeRecognizerTests
     {
         var recognizer = Started();
 
-        recognizer.Update(900, 0, 10);
+        Move(recognizer, 900, 0, 10);
 
         Assert.Equal(SwipeOutcome.Cancel, recognizer.End(true, 20));
     }
@@ -203,7 +208,7 @@ public class SwipeRecognizerTests
     public void A_second_begin_starts_from_nothing()
     {
         var recognizer = Started();
-        recognizer.Update(900, 0, 10);
+        Move(recognizer, 900, 0, 10);
 
         Assert.True(recognizer.Begin(3, 1000, 20));
 
@@ -215,7 +220,7 @@ public class SwipeRecognizerTests
     public void Abort_leaves_nothing_behind()
     {
         var recognizer = Started();
-        recognizer.Update(900, 0, 10);
+        Move(recognizer, 900, 0, 10);
 
         recognizer.Abort();
 
@@ -230,8 +235,18 @@ public class SwipeRecognizerTests
         var recognizer = Started();
         recognizer.CommitFraction = 0.25;
 
-        recognizer.Update(300, 0, 400);
+        Move(recognizer, 300, 0, 400);
 
         Assert.Equal(SwipeOutcome.Commit, recognizer.End(false, 440));
     }
+}
+
+public sealed class HorizontalSwipeRecognizerTests : SwipeRecognizerTests
+{
+    protected override SwipeAxis Axis => SwipeAxis.Horizontal;
+}
+
+public sealed class VerticalSwipeRecognizerTests : SwipeRecognizerTests
+{
+    protected override SwipeAxis Axis => SwipeAxis.Vertical;
 }

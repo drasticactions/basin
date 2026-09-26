@@ -28,4 +28,10 @@ internal enum KeyAction
     ShelfLarger,
     ShelfReset,
     CanvasMode,
+    Overview,
+    ShelveLeft,
+    ShelveRight,
+    ShelveTop,
+    ShelveBottom,
+    Unshelve,
 }

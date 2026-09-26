@@ -65,6 +65,17 @@ internal sealed partial class TinyComp
         }
 
         canvas.Settings = settings;
+        if (OverviewInUse(view))
+        {
+            LayoutOverview(view, _layout.BoxOf(view.Output), animating);
+            return;
+        }
+
+        if (canvas.Overview)
+        {
+            LeaveOverviewLayout(view);
+        }
+
         var mode = canvas.ModeOverride ?? settings.WindowMode;
         var terrace = mode == CanvasWindowMode.Terrace;
         var box = _layout.BoxOf(view.Output);
@@ -256,11 +267,16 @@ internal sealed partial class TinyComp
             Bottom = canvas.Bottom,
         };
         var color = settings.GridRenderColor;
-        var alpha = GridAlphaFor(settings);
+        var alpha = GridAlphaOf(view);
         var spacing = canvas.Terraces ? TerraceGridSpacing : 0.0;
         var changed = source.CellSize != settings.GridCellSize || source.Color != color || source.Alpha != alpha ||
             source.CornerRadius != canvas.Map.CornerRadius || source.CornerTaper != canvas.Map.CornerTaper ||
-            source.MinLineSpacing != spacing || source.Separable != canvas.Map.Separable;
+            source.MinLineSpacing != spacing || source.Separable != canvas.Map.Separable ||
+            source.ViewScale != canvas.Map.ViewScale || source.ViewCenterX != canvas.Map.ViewCenterX ||
+            source.ViewCenterY != canvas.Map.ViewCenterY;
+        source.ViewScale = canvas.Map.ViewScale;
+        source.ViewCenterX = canvas.Map.ViewCenterX;
+        source.ViewCenterY = canvas.Map.ViewCenterY;
         source.MinLineSpacing = spacing;
         source.Separable = canvas.Map.Separable;
         source.CornerRadius = canvas.Map.CornerRadius;
@@ -278,6 +294,9 @@ internal sealed partial class TinyComp
         canvas.Grid.Bounds = box;
         return changed;
     }
+
+    private float GridAlphaOf(OutputView view) =>
+        view.Canvas.Overview ? GridAlphaFor(view.Canvas.Settings) * (float)OverviewOf(view).Value : GridAlphaFor(view.Canvas.Settings);
 
     private float GridAlphaFor(CanvasSetting settings) => settings.GridMode switch
     {
@@ -302,11 +321,24 @@ internal sealed partial class TinyComp
                 continue;
             }
 
-            var alpha = GridAlphaFor(view.Canvas.Settings);
+            var alpha = GridAlphaOf(view);
             if (source.Alpha != alpha)
             {
                 source.Alpha = alpha;
                 grid.NotifyMeshChanged();
+            }
+        }
+
+        for (var i = 0; i < Views.Count; i++)
+        {
+            if (Views[i] is { Tag: OutputPolicy, Canvas.Step: not null } stepped && OverviewOf(stepped).StepMesh is { } mesh)
+            {
+                var alpha = GridAlphaOf(stepped);
+                if (OverviewOf(stepped).StepSource.Alpha != alpha)
+                {
+                    OverviewOf(stepped).StepSource.Alpha = alpha;
+                    mesh.NotifyMeshChanged();
+                }
             }
         }
     }
@@ -328,6 +360,16 @@ internal sealed partial class TinyComp
 
     private OutputView? ViewOfWindow(IGrabTarget window)
     {
+        if (_canvasStates.Count > 0 && ShelfOwnerOf(window) is { } owner)
+        {
+            return owner;
+        }
+
+        if (_canvasStates.Count > 0 && StepOwnerOf(window) is { } held)
+        {
+            return held;
+        }
+
         var (width, height) = window.GeometrySize;
         var windowRight = window.X + Math.Max(width, 1);
         var windowBottom = window.Y + Math.Max(height, 1);
@@ -385,6 +427,25 @@ internal sealed partial class TinyComp
         }
 
         return Views.Count > 0 ? Views[0] : null;
+    }
+
+    private OutputView? StepOwnerOf(IGrabTarget window)
+    {
+        if (!_canvasStates.TryGetValue(window, out var state) || state.StepView is not { } stepView ||
+            state.StepPlane != Basin.Effects.CanvasStepPlane.Shelf)
+        {
+            return null;
+        }
+
+        for (var i = 0; i < Views.Count; i++)
+        {
+            if (ReferenceEquals(Views[i], stepView))
+            {
+                return stepView;
+            }
+        }
+
+        return null;
     }
 
     private void KeepParkedInside(OutputView view, bool modeChanged)
@@ -492,6 +553,12 @@ internal sealed partial class TinyComp
         var hasState = _canvasStates.TryGetValue(window, out var state);
         if (canvas.IsIdentity && !hasState)
         {
+            return;
+        }
+
+        if (canvas.Step is not null)
+        {
+            ApplyOverviewStep(window, tree, view, state);
             return;
         }
 
@@ -635,7 +702,11 @@ internal sealed partial class TinyComp
         if (frame.Owner is { } owner && ViewOfWindow(owner) is { Canvas: { Scales: true } or { Terraces: true } } &&
             _canvasStates.TryGetValue(owner, out var state))
         {
-            frame.Node.Matrix = state.Placement;
+            frame.Node.Matrix = OverrideMatrix(frame, owner, state.Placement);
+        }
+        else if (frame.Owner is { } plain)
+        {
+            frame.Node.Matrix = OverrideMatrix(frame, plain, RenderTransform.Identity);
         }
 
         return new SceneTree(frame.Node);
@@ -666,9 +737,30 @@ internal sealed partial class TinyComp
             var frame = _overrideRedirects[i];
             if (ReferenceEquals(frame.Owner, window))
             {
-                frame.Node.Matrix = placement;
+                frame.Node.Matrix = OverrideMatrix(frame, window, placement);
             }
         }
+    }
+
+    private RenderTransform OverrideMatrix(OverrideRedirectFrame frame, IGrabTarget owner, in RenderTransform placement)
+    {
+        var (dx, dy) = owner is XWindow shifted ? (shifted.OffsetX, shifted.OffsetY) : (0, 0);
+        if (placement.IsIdentity && _canvasStates.TryGetValue(owner, out var state) &&
+            state.Node is { Deformer: not null } && ReferenceEquals(state.Node.Deformer, state.Transform))
+        {
+            var x = frame.Window.X;
+            var y = frame.Window.Y;
+            var (screenX, screenY) = state.Transform.ToScreenPoint(x + dx, y + dy);
+            return RenderTransform.Translation(Math.Round(screenX) - x, Math.Round(screenY) - y);
+        }
+
+        return dx == 0 && dy == 0 ? placement : RenderTransform.Multiply(placement, RenderTransform.Translation(dx, dy));
+    }
+
+    internal Box XRoot()
+    {
+        var bounds = _layout.Bounds;
+        return new Box(0, 0, Math.Max(1, bounds.Right), Math.Max(1, bounds.Bottom));
     }
 
     private XWindow? OverrideRedirectOwner(Basin.XWayland.XWaylandWindow xwin)
@@ -696,7 +788,7 @@ internal sealed partial class TinyComp
                 continue;
             }
 
-            var box = CanvasBoxOf(candidate);
+            var box = CanvasBoxOf(candidate).Translated(-candidate.OffsetX, -candidate.OffsetY);
             var dx = xwin.X < box.X ? box.X - xwin.X : xwin.X > box.Right ? xwin.X - box.Right : 0;
             var dy = xwin.Y < box.Y ? box.Y - xwin.Y : xwin.Y > box.Bottom ? xwin.Y - box.Bottom : 0;
             var distance = ((long)dx * dx) + ((long)dy * dy);
@@ -762,9 +854,20 @@ internal sealed partial class TinyComp
     private void BeginCanvasGrab(IGrabTarget window, double x, double y)
     {
         _canvasScaleDrag = false;
+        if (ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Step: not null } stepped)
+        {
+            BeginStepGrab(window, stepped, x, y);
+            return;
+        }
+
         if (ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Terraces: true } terraced)
         {
             BeginTerraceGrab(window, terraced, x, y);
+            if (_canvasStates.TryGetValue(window, out var picked))
+            {
+                OverviewPickup(window, terraced, picked);
+            }
+
             return;
         }
 
@@ -898,8 +1001,8 @@ internal sealed partial class TinyComp
         (state.ResizeScreenX, state.ResizeScreenY) = state.Placement.Map(left ? start.Right : start.X, top ? start.Bottom : start.Y);
         state.ResizeEdges = edges;
         state.Resizing = true;
-        state.ResizeHeldScale = resized.Canvas.Terraces && state.Region is not CanvasRegion.Shelf &&
-            !(state.Region == CanvasRegion.Corner && resized.Canvas.Map.Separable);
+        state.ResizeHeldScale = resized.Canvas.Step is not null || (resized.Canvas.Terraces && state.Region is not CanvasRegion.Shelf &&
+            !(state.Region == CanvasRegion.Corner && resized.Canvas.Map.Separable));
         if (resized.Canvas.Terraces)
         {
             state.Anchor = ((left ? start.Right : start.X) - window.X, (top ? start.Bottom : start.Y) - window.Y);
@@ -967,6 +1070,16 @@ internal sealed partial class TinyComp
             return false;
         }
 
+        if (state.StepView is { Tag: OutputPolicy, Canvas.Step: not null } stepView)
+        {
+            var beforeX = state.DragCursorX;
+            var beforeY = state.DragCursorY;
+            _ = DragStep(window, stepView, state, x, y);
+            _effects.OnMoved((int)Math.Round(x - beforeX), (int)Math.Round(y - beforeY));
+            OverviewDragMotion(window, stepView, state, x, y);
+            return true;
+        }
+
         var (fieldX, fieldY) = ToCanvasPointAt(x, y);
         var movedX = x - state.DragCursorX;
         var movedY = y - state.DragCursorY;
@@ -993,6 +1106,11 @@ internal sealed partial class TinyComp
         }
 
         _effects.OnMoved((int)Math.Round(movedX), (int)Math.Round(movedY));
+        if (ViewOfWindow(window) is { Tag: OutputPolicy, Canvas.Overview: true } overviewed)
+        {
+            OverviewDragMotion(window, overviewed, state, x, y);
+        }
+
         return true;
     }
 
@@ -1018,6 +1136,11 @@ internal sealed partial class TinyComp
         if (view.Canvas.Terraces)
         {
             EndTerraceGrab(window, view, state, from, dropped);
+            if (dropped && view.Canvas.Overview)
+            {
+                OverviewDrop(window);
+            }
+
             return;
         }
 
@@ -1049,6 +1172,9 @@ internal sealed partial class TinyComp
         transform.PreStretchX = 1.0;
         transform.PreStretchY = 1.0;
         transform.Separable = canvas.Map.Separable;
+        transform.ViewScale = canvas.Map.ViewScale;
+        transform.ViewCenterX = canvas.Map.ViewCenterX;
+        transform.ViewCenterY = canvas.Map.ViewCenterY;
     }
 
     private static Box UsableBox(OutputView view, in Box box) =>
@@ -1083,6 +1209,7 @@ internal sealed partial class TinyComp
 
     private void ForgetCanvas(IGrabTarget window)
     {
+        ForgetShelf(window);
         _canvasStates.Remove(window);
         _canvasMotions.Remove(window);
     }
@@ -1158,7 +1285,7 @@ internal sealed partial class TinyComp
             state.OfferRefused = true;
         }
 
-        var wanted = (canvas.Scales || canvas.Terraces) && !state.OfferRefused && !_canvasSuspended && !IsCanvasMoving(state) &&
+        var wanted = (canvas.Scales || canvas.Terraces) && !canvas.Overview && !state.OfferRefused && !_canvasSuspended && !IsCanvasMoving(state) &&
             !state.Placement.IsIdentity && state.Scale < 1.0
             ? Math.Round(state.Scale * 120) / 120
             : 1.0;
@@ -1325,6 +1452,12 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (view.Canvas.Overview)
+        {
+            _report.Line($"PARK {NameOf(window)} refused: overview");
+            return;
+        }
+
         var canvas = view.Canvas;
         var warp = side switch
         {
@@ -1478,6 +1611,12 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (view.Canvas.Overview)
+        {
+            _report.Line($"RECALL {NameOf(window)} refused: overview");
+            return;
+        }
+
         var canvas = view.Canvas;
         _ = _canvasStates.TryGetValue(window, out var state);
         var box = CanvasBoxOf(window);
@@ -1610,6 +1749,10 @@ internal sealed partial class TinyComp
             if (window.EffectTree is { IsDestroyed: false })
             {
                 ApplyCanvas(window);
+                if (_canvasStates.TryGetValue(window, out var parked))
+                {
+                    OverviewMotionDone(window, parked);
+                }
             }
         }
 
@@ -1625,6 +1768,11 @@ internal sealed partial class TinyComp
 
     internal void SetCanvasEnabled(bool enabled)
     {
+        if (enabled)
+        {
+            CloseOverviewsNow();
+        }
+
         _canvasOverride = enabled;
         if (enabled)
         {

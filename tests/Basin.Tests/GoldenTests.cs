@@ -710,6 +710,208 @@ public sealed class GoldenTests
         Golden.AssertMatches(host, GoldenName(name, renderer));
     }
 
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_open(string renderer) => CanvasOverview(renderer, 1.0, "overview-open", fourSides: false, scale: 0.75);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_open_corners(string renderer) => CanvasOverview(renderer, 1.0, "overview-open-corners", fourSides: true, scale: 0.6);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_half(string renderer) => CanvasOverview(renderer, 0.5, "overview-half", fourSides: false, scale: 0.75);
+
+    private static void CanvasOverview(string renderer, double progress, string name, bool fourSides, double scale)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        const double shelfScale = 0.4;
+        var output = new Box(0, 0, 160, 120);
+        var centerX = output.X + (output.Width / 2.0);
+        var centerY = output.Y + (output.Height / 2.0);
+        var zoom = 1.0 + ((scale - 1.0) * progress);
+        var warps = new Basin.Effects.CanvasWarp[4];
+        (int Outer, int Direction, double Center, double Fan, int Size)[] frames =
+        [
+            (output.X, -1, centerX, centerY, output.Width),
+            (output.Right, 1, centerX, centerY, output.Width),
+            (output.Y, -1, centerY, centerX, output.Height),
+            (output.Bottom, 1, centerY, centerX, output.Height),
+        ];
+        for (var i = 0; i < 4; i++)
+        {
+            var (outer, direction, center, fan, size) = frames[i];
+            warps[i] = new Basin.Effects.CanvasWarp(direction);
+            var active = i < 2 || fourSides;
+            var full = active
+                ? TinyComp.OverviewLayout.Full(outer, outer, center, direction, scale, 0.1, size)
+                : new TinyComp.OverviewSide(false, 0, 0, 0);
+            var step = TinyComp.OverviewLayout.At(full, progress, outer, outer, center, direction, scale, shelfScale);
+            warps[i].LayoutTerrace(outer, direction, step.Zone, step.Shelf, step.EdgeScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, fan);
+        }
+
+        var wallpaper = new Basin.Scene.SceneTransform(host.Scene.Root)
+        {
+            Matrix = new RenderTransform(zoom, 0, centerX * (1.0 - zoom), 0, zoom, centerY * (1.0 - zoom), 0, 0, 1),
+        };
+        _ = new Basin.Scene.SceneRect(wallpaper, output.Width, output.Height, new RenderColor(0.12f, 0.2f, 0.16f, 1f));
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = output,
+            Source = new Basin.Effects.CanvasGridSource
+            {
+                Left = warps[0],
+                Right = warps[1],
+                Top = warps[2],
+                Bottom = warps[3],
+                CellSize = 16,
+                MinLineSpacing = 8,
+                ViewScale = zoom,
+                ViewCenterX = centerX,
+                ViewCenterY = centerY,
+                Alpha = (float)progress,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+        var map = new Basin.Effects.CanvasWarpTransform
+        {
+            Left = warps[0],
+            Right = warps[1],
+            Top = warps[2],
+            Bottom = warps[3],
+            ViewScale = zoom,
+            ViewCenterX = centerX,
+            ViewCenterY = centerY,
+        };
+        var fit = new Basin.Effects.CanvasScale();
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(36, 24, Fill.Gradient(36, 24));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 36, 24);
+        surface.Commit();
+        host.PumpToServer();
+        var desktop = TerraceWindow(host, map, fit, new Box(20, 20, 36, 24), new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(desktop);
+        content.Tree.SetPosition(0, 0);
+        _ = TerraceWindow(host, map, fit, new Box(70, 64, 50, 30), new RenderColor(0.3f, 0.6f, 0.35f, 1f));
+        _ = TerraceWindow(host, map, fit, new Box(146, 30, 30, 20), new RenderColor(0.7f, 0.35f, 0.2f, 1f));
+
+        var shelved = new Box(0, 70, 40, 26);
+        shelved = shelved with { X = warps[0].IsIdentity ? shelved.X - 60 : fit.TerraceParkTarget(map, warps[0], shelved, 0.2) };
+        _ = TerraceWindow(host, map, fit, shelved, new RenderColor(0.8f, 0.7f, 0.2f, 1f));
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName(name, renderer));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_step_open(string renderer) => CanvasOverviewStep(renderer, 1.0, "overview-step-open", fourSides: false);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_step_corners(string renderer) => CanvasOverviewStep(renderer, 1.0, "overview-step-corners", fourSides: true);
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_overview_step_half(string renderer) => CanvasOverviewStep(renderer, 0.5, "overview-step-half", fourSides: false);
+
+    private static void CanvasOverviewStep(string renderer, double progress, string name, bool fourSides)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        const double scale = 0.6;
+        const double shelfScale = 0.3;
+        const double wallWidth = 0.06;
+        var output = new Box(0, 0, 160, 120);
+        var centerX = output.X + (output.Width / 2.0);
+        var centerY = output.Y + (output.Height / 2.0);
+        var full = new TinyComp.OverviewSide[4];
+        full[0] = TinyComp.OverviewLayout.StepFull(output.X, output.X, centerX, -1, scale, wallWidth, output.Width);
+        full[1] = TinyComp.OverviewLayout.StepFull(output.Right, output.Right, centerX, 1, scale, wallWidth, output.Width);
+        if (fourSides)
+        {
+            full[2] = TinyComp.OverviewLayout.StepFull(output.Y, output.Y, centerY, -1, scale, wallWidth, output.Height);
+            full[3] = TinyComp.OverviewLayout.StepFull(output.Bottom, output.Bottom, centerY, 1, scale, wallWidth, output.Height);
+        }
+
+        var map = new Basin.Effects.CanvasStepMap();
+        _ = TinyComp.OverviewLayout.LayoutStep(map, output, output, full, progress, scale, shelfScale);
+        var zoom = map.Zoom;
+        var wallpaper = new Basin.Scene.SceneTransform(host.Scene.Root)
+        {
+            Matrix = new RenderTransform(zoom, 0, centerX * (1.0 - zoom), 0, zoom, centerY * (1.0 - zoom), 0, 0, 1),
+        };
+        _ = new Basin.Scene.SceneRect(wallpaper, output.Width, output.Height, new RenderColor(0.12f, 0.2f, 0.16f, 1f));
+        _ = new Basin.Scene.SceneMesh(host.Scene.Root)
+        {
+            Bounds = output,
+            Source = new Basin.Effects.CanvasStepSource
+            {
+                Map = map,
+                CellSize = 16,
+                MinLineSpacing = 4,
+                Alpha = (float)progress,
+                Color = new RenderColor(0.16f, 0.21f, 0.75f, 1f),
+            },
+        };
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(36, 24, Fill.Gradient(36, 24));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 36, 24);
+        surface.Commit();
+        host.PumpToServer();
+        var desktop = StepWindow(host, map, Basin.Effects.CanvasStepPlane.Desktop, 1.0, new Box(20, 20, 36, 24), new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+        var content = host.SurfaceScenes[0];
+        content.Tree.Reparent(desktop);
+        content.Tree.SetPosition(0, 0);
+        _ = StepWindow(host, map, Basin.Effects.CanvasStepPlane.Desktop, 1.0, new Box(70, 64, 50, 30), new RenderColor(0.3f, 0.6f, 0.35f, 1f));
+
+        var end = new Basin.Effects.CanvasStepMap();
+        _ = TinyComp.OverviewLayout.LayoutStep(end, output, output, full, 1.0, scale, shelfScale);
+        var side = fourSides ? Basin.Effects.CanvasStepSides.Right | Basin.Effects.CanvasStepSides.Top : Basin.Effects.CanvasStepSides.Right;
+        var strip = end.ShelfStrip(side);
+        var shelved = new Box(0, 0, 40, 26);
+        var fit = end.ShelfFit(shelved.Width, shelved.Height, side, 0.1);
+        var drawnWidth = shelved.Width * shelfScale * fit;
+        var drawnHeight = shelved.Height * shelfScale * fit;
+        var drawnX = strip.Right - (drawnWidth / 2.0);
+        var drawnY = fourSides ? strip.Y + (drawnHeight / 2.0) : centerY;
+        var (canvasX, canvasY) = end.ToCanvas(Basin.Effects.CanvasStepPlane.Shelf, drawnX, drawnY);
+        shelved = shelved with
+        {
+            X = (int)Math.Round(canvasX - (shelved.Width / 2.0)),
+            Y = (int)Math.Round(canvasY - (shelved.Height / 2.0)),
+        };
+        _ = StepWindow(host, map, Basin.Effects.CanvasStepPlane.Shelf, 1.0 + ((fit - 1.0) * progress), shelved, new RenderColor(0.8f, 0.7f, 0.2f, 1f));
+
+        host.RenderFrame();
+        Golden.AssertMatches(host, GoldenName(name, renderer));
+    }
+
+    private static Basin.Scene.SceneTransform StepWindow(
+        CompositorTestHost host,
+        Basin.Effects.CanvasStepMap map,
+        Basin.Effects.CanvasStepPlane plane,
+        double fit,
+        in Box box,
+        RenderColor color)
+    {
+        var window = new Basin.Scene.SceneTree(host.Scene.Root);
+        window.SetPosition(box.X, box.Y);
+        var placement = map.Placement(plane, fit, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0));
+        var node = new Basin.Scene.SceneTransform(window)
+        {
+            Matrix = placement.IsIdentity ? RenderTransform.Identity : LocalPlacement(placement, box.X, box.Y),
+        };
+        _ = new Basin.Scene.SceneRect(node, box.Width, box.Height, color);
+        return node;
+    }
+
     private static Basin.Scene.SceneTransform TerraceWindow(
         CompositorTestHost host,
         Basin.Effects.CanvasWarpTransform map,
@@ -741,6 +943,9 @@ public sealed class GoldenTests
             transform.PreStretchY = even / localY;
         }
 
+        transform.ViewScale = map.ViewScale;
+        transform.ViewCenterX = map.ViewCenterX;
+        transform.ViewCenterY = map.ViewCenterY;
         var window = new Basin.Scene.SceneTree(host.Scene.Root);
         window.SetPosition(box.X, box.Y);
         var node = new Basin.Scene.SceneTransform(window);
@@ -748,6 +953,10 @@ public sealed class GoldenTests
         if (transform.IsPastFeet(local))
         {
             node.Matrix = LocalPlacement(transform.ShelfPlacement(local), box.X, box.Y);
+        }
+        else if (transform.ViewScale != 1.0 && transform.IsFlatFor(local))
+        {
+            node.Matrix = LocalPlacement(transform.ViewPlacement(), box.X, box.Y);
         }
         else
         {

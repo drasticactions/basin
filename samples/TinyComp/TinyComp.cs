@@ -710,6 +710,12 @@ internal sealed partial class TinyComp :
         {
             if (FindWindow(toplevel) is { } window)
             {
+                if (IsShelved(window))
+                {
+                    Unshelve(window, null, null);
+                    return;
+                }
+
                 SetMinimized(window, false);
                 FocusWindow(window);
             }
@@ -1027,6 +1033,8 @@ internal sealed partial class TinyComp :
     {
         _host.DisconnectClients();
         _pointerRefresh?.Dispose();
+        _hotCornerTimer?.Remove();
+        _hotCornerTimer = null;
         _ipc?.Dispose();
         _ipc = null;
         _channel?.Dispose();

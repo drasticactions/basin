@@ -666,12 +666,6 @@ public sealed class OutputDriver : IDisposable
             return;
         }
 
-        if (view.IsSecondary)
-        {
-            SecondaryRepaint(view, mode);
-            return;
-        }
-
         AllocationScope.Pause();
         try
         {
@@ -680,6 +674,12 @@ public sealed class OutputDriver : IDisposable
         finally
         {
             AllocationScope.Resume();
+        }
+
+        if (view.IsSecondary)
+        {
+            SecondaryRepaint(view, mode);
+            return;
         }
 
         EnsureSwapchain(view, mode);

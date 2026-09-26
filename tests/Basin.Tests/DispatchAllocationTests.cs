@@ -1000,6 +1000,280 @@ public sealed class DispatchAllocationTests
         Budgets.Check("server", "canvas-terrace-drag", DragRounds(Rounds));
     }
 
+    private sealed class OverviewRig
+    {
+        public const double Scale = 0.75;
+
+        public const double CenterX = 80;
+
+        public const double CenterY = 60;
+
+        private readonly TinyComp.OverviewSide _leftFull = TinyComp.OverviewLayout.Full(0, 0, CenterX, -1, Scale, 0.1, 160);
+        private readonly TinyComp.OverviewSide _rightFull = TinyComp.OverviewLayout.Full(160, 160, CenterX, 1, Scale, 0.1, 160);
+
+        public Basin.Effects.CanvasWarp Left { get; } = new();
+
+        public Basin.Effects.CanvasWarp Right { get; } = new(1);
+
+        public Basin.Effects.CanvasWarpTransform Map { get; }
+
+        public Basin.Effects.CanvasScale Fit { get; } = new();
+
+        public OverviewRig() =>
+            Map = new Basin.Effects.CanvasWarpTransform { Left = Left, Right = Right, ViewCenterX = CenterX, ViewCenterY = CenterY };
+
+        public double Lay(double progress)
+        {
+            var left = TinyComp.OverviewLayout.At(_leftFull, progress, 0, 0, CenterX, -1, Scale, 0.4);
+            var right = TinyComp.OverviewLayout.At(_rightFull, progress, 160, 160, CenterX, 1, Scale, 0.4);
+            Left.LayoutTerrace(0, -1, left.Zone, left.Shelf, left.EdgeScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, CenterY);
+            Right.LayoutTerrace(160, 1, right.Zone, right.Shelf, right.EdgeScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, CenterY);
+            Map.ViewScale = left.Zoom;
+            return left.Zoom;
+        }
+
+        public void Place(SceneTree window, SceneTransform node, Basin.Effects.CanvasWarpTransform transform, in Box box)
+        {
+            var local = new Box(0, 0, box.Width, box.Height);
+            window.SetPosition(box.X, box.Y);
+            transform.SceneX = box.X;
+            transform.SceneY = box.Y;
+            transform.ViewScale = Map.ViewScale;
+            transform.ViewCenterX = CenterX;
+            transform.ViewCenterY = CenterY;
+            transform.PreAnchorX = box.X + (box.Width / 2.0);
+            transform.PreAnchorY = box.Y + (box.Height / 2.0);
+            transform.PreScale = Fit.SolveFit(Map, box, 0.2, transform.PreAnchorX, transform.PreAnchorY);
+            RenderTransform placement;
+            if (transform.IsFlatFor(local))
+            {
+                placement = transform.ViewPlacement();
+            }
+            else if (transform.IsPastFeet(local))
+            {
+                placement = transform.ShelfPlacement(local);
+            }
+            else
+            {
+                node.Matrix = RenderTransform.Identity;
+                if (ReferenceEquals(node.Deformer, transform))
+                {
+                    node.NotifyDeformed();
+                }
+                else
+                {
+                    node.Deformer = transform;
+                }
+
+                return;
+            }
+
+            node.Deformer = null;
+            node.Matrix = RenderTransform.Multiply(
+                RenderTransform.Translation(-box.X, -box.Y),
+                RenderTransform.Multiply(placement, RenderTransform.Translation(box.X, box.Y)));
+        }
+
+        public (SceneTree Window, SceneTransform Node, Basin.Effects.CanvasWarpTransform Transform) Window(
+            CompositorTestHost host, int width, int height)
+        {
+            var window = new SceneTree(host.Scene.Root);
+            var node = new SceneTransform(window);
+            _ = new SceneRect(node, width, height, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+            _ = new SceneRect(node, width, 6, new RenderColor(0.9f, 0.9f, 0.9f, 1f));
+            return (window, node, new Basin.Effects.CanvasWarpTransform { Left = Left, Right = Right, CellSize = 8 });
+        }
+    }
+
+    [Fact]
+    public void An_overview_toggle_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var rig = new OverviewRig();
+        var windows = new[] { rig.Window(host, 40, 30), rig.Window(host, 40, 30), rig.Window(host, 28, 20) };
+        var boxes = new[] { new Box(30, 40, 40, 30), new Box(135, 20, 40, 30), new Box(0, 0, 28, 20) };
+
+        long ToggleRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                var progress = Math.Abs(((i % 16) / 8.0) - 1.0);
+                rig.Lay(progress);
+                boxes[2] = boxes[2] with { X = rig.Right.IsIdentity ? 200 : rig.Fit.TerraceParkTarget(rig.Map, rig.Right, boxes[2], 0.2), Y = 70 };
+                for (var w = 0; w < windows.Length; w++)
+                {
+                    rig.Place(windows[w].Window, windows[w].Node, windows[w].Transform, boxes[w]);
+                }
+
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = ToggleRounds(Rounds);
+        Budgets.Check("server", "overview-toggle", ToggleRounds(Rounds));
+    }
+
+    [Fact]
+    public void An_overview_shelve_drag_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var rig = new OverviewRig();
+        _ = rig.Lay(1.0);
+        var (window, node, transform) = rig.Window(host, 40, 30);
+
+        long DragRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                var travel = Math.Abs(((i % 32) / 16.0) - 1.0);
+                var cursorX = 90.0 + (travel * 68.0);
+                var (grabX, grabY) = rig.Map.ToCanvasPoint(cursorX, 50.5);
+                var box = new Box((int)Math.Round(grabX - 10), (int)Math.Round(grabY - 5), 40, 30);
+                rig.Place(window, node, transform, box);
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = DragRounds(Rounds);
+        Budgets.Check("server", "overview-shelve-drag", DragRounds(Rounds));
+    }
+
+    private sealed class StepRig
+    {
+        private readonly TinyComp.OverviewSide[] _full = new TinyComp.OverviewSide[4];
+        private readonly Box _box = new(0, 0, 160, 120);
+
+        public StepRig(CompositorTestHost host)
+        {
+            _full[0] = TinyComp.OverviewLayout.StepFull(0, 0, 80, -1, 0.6, 0.06, 160);
+            _full[1] = TinyComp.OverviewLayout.StepFull(160, 160, 80, 1, 0.6, 0.06, 160);
+            _full[2] = TinyComp.OverviewLayout.StepFull(0, 0, 60, -1, 0.6, 0.06, 120);
+            _full[3] = TinyComp.OverviewLayout.StepFull(120, 120, 60, 1, 0.6, 0.06, 120);
+            _ = TinyComp.OverviewLayout.LayoutStep(Full, _box, _box, _full, 1.0, 0.6, 0.3);
+            Source = new Basin.Effects.CanvasStepSource { Map = Map, CellSize = 16, MinLineSpacing = 4 };
+            Mesh = new SceneMesh(host.Scene.Root) { Bounds = _box, Source = Source };
+        }
+
+        public Basin.Effects.CanvasStepMap Map { get; } = new();
+
+        public Basin.Effects.CanvasStepMap Full { get; } = new();
+
+        public Basin.Effects.CanvasStepSource Source { get; }
+
+        public SceneMesh Mesh { get; }
+
+        public void Lay(double progress)
+        {
+            _ = TinyComp.OverviewLayout.LayoutStep(Map, _box, _box, _full, progress, 0.6, 0.3);
+            Source.Alpha = (float)progress;
+            Mesh.NotifyMeshChanged();
+        }
+
+        public static void Place(SceneTree window, SceneTransform node, in Box box, in RenderTransform placement)
+        {
+            window.SetPosition(box.X, box.Y);
+            node.Matrix = placement.IsIdentity
+                ? RenderTransform.Identity
+                : RenderTransform.Multiply(
+                    RenderTransform.Translation(-box.X, -box.Y),
+                    RenderTransform.Multiply(placement, RenderTransform.Translation(box.X, box.Y)));
+        }
+
+        public static (SceneTree Window, SceneTransform Node) Window(CompositorTestHost host, int width, int height)
+        {
+            var window = new SceneTree(host.Scene.Root);
+            var node = new SceneTransform(window);
+            _ = new SceneRect(node, width, height, new RenderColor(0.2f, 0.3f, 0.6f, 1f));
+            return (window, node);
+        }
+    }
+
+    [Fact]
+    public void An_overview_step_toggle_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var rig = new StepRig(host);
+        var windows = new[] { StepRig.Window(host, 40, 30), StepRig.Window(host, 40, 30), StepRig.Window(host, 28, 20) };
+        var boxes = new[] { new Box(30, 40, 40, 30), new Box(250, 60, 40, 30), new Box(260, -60, 28, 20) };
+
+        long ToggleRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                var progress = Math.Abs(((i % 16) / 8.0) - 1.0);
+                rig.Lay(progress);
+                for (var w = 0; w < windows.Length; w++)
+                {
+                    var box = boxes[w];
+                    var plane = w == 0 ? Basin.Effects.CanvasStepPlane.Desktop : Basin.Effects.CanvasStepPlane.Shelf;
+                    var fit = 1.0 + ((rig.Full.ShelfFit(box.Width, box.Height, Basin.Effects.CanvasStepSides.Right, 0.1) - 1.0) * progress);
+                    StepRig.Place(windows[w].Window, windows[w].Node, box,
+                        rig.Map.Placement(plane, w == 0 ? 1.0 : fit, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0)));
+                }
+
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = ToggleRounds(Rounds);
+        Budgets.Check("server", "overview-step-toggle", ToggleRounds(Rounds));
+    }
+
+    [Fact]
+    public void An_overview_step_drag_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var rig = new StepRig(host);
+        rig.Lay(1.0);
+        var (window, node) = StepRig.Window(host, 40, 30);
+
+        long DragRounds(int rounds)
+        {
+            var allocated = 0L;
+            for (var i = 0; i < rounds; i++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                var travel = Math.Abs(((i % 32) / 16.0) - 1.0);
+                var cursorX = 90.0 + (travel * 68.0);
+                var (fieldX, fieldY) = rig.Map.ToCanvasNearest(cursorX, 50.5, out _);
+                var depth = rig.Map.WallDepth(cursorX, 50.5, out _);
+                var box = new Box((int)Math.Round(fieldX - 10), (int)Math.Round(fieldY - 5), 40, 30);
+                StepRig.Place(window, node, box,
+                    Basin.Effects.CanvasScale.About(rig.Map.DragScale(depth), box.X + 10, box.Y + 5, cursorX, 50.5));
+                host.CommitFrame();
+                allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            return allocated;
+        }
+
+        _ = DragRounds(Rounds);
+        Budgets.Check("server", "overview-step-drag", DragRounds(Rounds));
+    }
+
     [Fact]
     public void A_transaction_configure_round_stays_within_budget()
     {

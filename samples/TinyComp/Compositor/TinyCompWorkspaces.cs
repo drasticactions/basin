@@ -790,6 +790,12 @@ internal sealed partial class TinyComp
 
     private void MoveWindowToWorkspace(IGrabTarget window, Workspace target, bool refocus = true, bool translate = true)
     {
+        if (IsShelved(window))
+        {
+            Unshelve(window, null, null, ViewOf(target), target);
+            return;
+        }
+
         Workspace? source = null;
         string? moved = null;
         switch (window)

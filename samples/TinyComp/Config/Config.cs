@@ -156,6 +156,11 @@ internal sealed class Config
             ? over.Over(Canvas).Constrained($"output.\"{outputName}\"", log)
             : Canvas;
 
+    public OverviewSetting Overview { get; set; } = OverviewSetting.Defaults;
+
+    public OverviewSetting OverviewFor(string outputName) =>
+        OutputSettingFor(outputName)?.Overview is { } over ? over.Over(Overview) : Overview;
+
     public bool CanvasAnywhere =>
         Canvas.Enabled || OutputSettings.Values.Any(static setting => setting.Canvas?.Enable == true);
 
@@ -187,6 +192,12 @@ internal sealed class Config
         "shelf-larger" => KeyAction.ShelfLarger,
         "shelf-reset" => KeyAction.ShelfReset,
         "canvas-mode" => KeyAction.CanvasMode,
+        "overview" => KeyAction.Overview,
+        "shelve-left" => KeyAction.ShelveLeft,
+        "shelve-right" => KeyAction.ShelveRight,
+        "shelve-top" => KeyAction.ShelveTop,
+        "shelve-bottom" => KeyAction.ShelveBottom,
+        "unshelve" => KeyAction.Unshelve,
         _ => null,
     };
 
@@ -457,7 +468,13 @@ internal sealed class Config
 
         if (reader.Free("canvas") is { } canvas)
         {
+            NoteCanvasKeys(canvas);
             Canvas = CanvasSetting.Parse(canvas, "canvas", log).Over(CanvasSetting.Defaults);
+        }
+
+        if (reader.Free("overview") is { } overview)
+        {
+            Overview = OverviewSetting.Parse(overview, "overview", log).Over(OverviewSetting.Defaults);
         }
 
         if (reader.Section("hypr") is { } hypr)
@@ -514,6 +531,73 @@ internal sealed class Config
         }
 
         reader.ReportUnknown();
+        WarnOverviewAgainstCanvas(log);
+    }
+
+    private static readonly string[] StepIgnoredKeys =
+        ["shelf", "slope", "slope_window", "shelf_shape", "corner", "corner_radius", "mesh_cell", "drag"];
+
+    private readonly SortedSet<string> _canvasKeys = new(StringComparer.Ordinal);
+
+    private void NoteCanvasKeys(TomlTable table)
+    {
+        foreach (var (key, value) in table)
+        {
+            if (key != "drag" || value is "grid")
+            {
+                _canvasKeys.Add(key);
+            }
+        }
+    }
+
+    public bool StepsAnywhere =>
+        Overview.Steps || OutputSettings.Values.Any(setting => (setting.Overview?.Wall ?? Overview.WallValue) == OverviewWall.Step);
+
+    private void WarnStepIgnoredKeys(BasinLogger log)
+    {
+        foreach (var setting in OutputSettings.Values)
+        {
+            if (setting.CanvasKeys is { } keys)
+            {
+                NoteCanvasKeys(keys);
+            }
+        }
+
+        if (!Overview.Enabled || !StepsAnywhere)
+        {
+            return;
+        }
+
+        var ignored = StepIgnoredKeys.Where(_canvasKeys.Contains).Select(key => key == "drag" ? "drag = \"grid\"" : key).ToArray();
+        if (ignored.Length > 0)
+        {
+            log.Warn($"[overview] wall = \"step\" ignores [canvas] {string.Join(", ", ignored)}");
+        }
+    }
+
+    private void WarnOverviewAgainstCanvas(BasinLogger log)
+    {
+        WarnStepIgnoredKeys(log);
+        if (Overview.Enabled && CanvasAnywhere)
+        {
+            log.Warn($"[overview] is on and so is [canvas] enable: overview is off on every output with the canvas enabled");
+        }
+
+        var scale = Overview.ScaleValue;
+        var scales = Canvas.ShelfScaleValues;
+        var over = CanvasSide.None;
+        foreach (var side in CanvasSides.Each)
+        {
+            if (scales.For(side) > scale)
+            {
+                over |= side;
+            }
+        }
+
+        if (Overview.Enabled && over != CanvasSide.None)
+        {
+            log.Warn($"[canvas] shelf_scale on {CanvasSetting.NamesOf(over)} is above [overview] scale {scale:F2}: overview clamps it to {scale:F2}");
+        }
     }
 
     private static IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> ParseShortcuts(
@@ -632,6 +716,9 @@ internal sealed class Config
         OutputTransform? transform = null;
         (int Width, int Height, int? Refresh)? mode = null;
         TomlTable? canvasKeys = null;
+        bool? overview = null;
+        double? overviewScale = null;
+        OverviewWall? overviewWall = null;
         foreach (var (key, value) in table)
         {
             switch (key)
@@ -642,6 +729,20 @@ internal sealed class Config
                     or "shelf_step" or "shelf_shape" or "slope_window"
                     or "drag":
                     (canvasKeys ??= [])[key] = value;
+                    break;
+                case "overview" when value is bool overviewFlag:
+                    overview = overviewFlag;
+                    break;
+                case "overview_wall" when value is string wallName:
+                    overviewWall = OverviewSetting.WallFromName(wallName);
+                    if (overviewWall is null)
+                    {
+                        log.Warn($"[output.\"{name}\"] overview_wall \"{wallName}\" is not slope|step, ignored");
+                    }
+
+                    break;
+                case "overview_scale" when value is double or long:
+                    overviewScale = Math.Clamp(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture), OverviewSetting.MinScale, OverviewSetting.MaxScale);
                     break;
                 case "scale" when value is double fractional:
                     scale = fractional;
@@ -667,6 +768,10 @@ internal sealed class Config
             Transform = transform,
             Mode = mode,
             Canvas = canvasKeys is null ? null : CanvasSetting.Parse(canvasKeys, $"output.\"{name}\"", log),
+            Overview = overview is null && overviewScale is null && overviewWall is null
+                ? null
+                : new OverviewSetting { Enable = overview, Scale = overviewScale, Wall = overviewWall },
+            CanvasKeys = canvasKeys,
         };
     }
 

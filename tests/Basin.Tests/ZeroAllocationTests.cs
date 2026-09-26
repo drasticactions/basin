@@ -550,6 +550,248 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
     [InlineData("impeller")]
+    public void An_open_overview_with_a_desktop_a_slope_and_a_shelf_window_allocates_nothing_over_1000_frames(string renderer) =>
+        Overview(renderer, toggle: false);
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void An_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
+        Overview(renderer, toggle: true);
+
+    private static void Overview(string renderer, bool toggle)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        const double scale = 0.75;
+        const double centerX = 80;
+        const double centerY = 60;
+        var left = new Basin.Effects.CanvasWarp();
+        var right = new Basin.Effects.CanvasWarp(1);
+        var leftFull = TinyComp.OverviewLayout.Full(0, 0, centerX, -1, scale, 0.1, 160);
+        var rightFull = TinyComp.OverviewLayout.Full(160, 160, centerX, 1, scale, 0.1, 160);
+        var source = new Basin.Effects.CanvasGridSource
+        {
+            Left = left, Right = right, CellSize = 16, MinLineSpacing = 8, ViewCenterX = centerX, ViewCenterY = centerY,
+        };
+        var grid = new Scene.SceneMesh(host.Scene.Root) { Bounds = new Box(0, 0, 160, 120), Source = source };
+        var map = new Basin.Effects.CanvasWarpTransform { Left = left, Right = right, ViewCenterX = centerX, ViewCenterY = centerY };
+        var fit = new Basin.Effects.CanvasScale();
+        var wallpaper = new Scene.SceneTransform(host.Scene.Root);
+        _ = new Scene.SceneRect(wallpaper, 160, 120, new RenderColor(0.12f, 0.2f, 0.16f, 1f));
+
+        var windows = new (Scene.SceneTree Tree, Scene.SceneTransform Node, Basin.Effects.CanvasWarpTransform Transform, Box Local)[3];
+        var pixels = new MemoryBuffer[3];
+        var contents = new Scene.SceneBuffer[3];
+        for (var w = 0; w < 3; w++)
+        {
+            var tree = new Scene.SceneTree(host.Scene.Root);
+            var node = new Scene.SceneTransform(tree);
+            var size = w == 2 ? new Box(0, 0, 28, 20) : new Box(0, 0, 40, 30);
+            pixels[w] = new MemoryBuffer(size.Width, size.Height, DrmFormat.Argb8888);
+            contents[w] = new Scene.SceneBuffer(node);
+            contents[w].SetBuffer(pixels[w]);
+            windows[w] = (tree, node, new Basin.Effects.CanvasWarpTransform
+            {
+                Left = left, Right = right, CellSize = 8, ViewCenterX = centerX, ViewCenterY = centerY,
+            }, size);
+        }
+
+
+        void Frame(int i)
+        {
+            var progress = toggle ? Math.Abs(((i % 60) / 30.0) - 1.0) : 1.0;
+            var leftStep = TinyComp.OverviewLayout.At(leftFull, progress, 0, 0, centerX, -1, scale, 0.4);
+            var rightStep = TinyComp.OverviewLayout.At(rightFull, progress, 160, 160, centerX, 1, scale, 0.4);
+            left.LayoutTerrace(0, -1, leftStep.Zone, leftStep.Shelf, leftStep.EdgeScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, centerY);
+            right.LayoutTerrace(160, 1, rightStep.Zone, rightStep.Shelf, rightStep.EdgeScale, Basin.Effects.CanvasWarp.TerraceExponent, 0.25, centerY);
+            map.ViewScale = leftStep.Zoom;
+            source.ViewScale = leftStep.Zoom;
+            source.Alpha = (float)progress;
+            grid.NotifyMeshChanged();
+            var zoom = leftStep.Zoom;
+            wallpaper.Matrix = new RenderTransform(zoom, 0, centerX * (1.0 - zoom), 0, zoom, centerY * (1.0 - zoom), 0, 0, 1);
+
+            for (var w = 0; w < 3; w++)
+            {
+                var (tree, node, transform, local) = windows[w];
+                var box = w switch
+                {
+                    0 => local with { X = 30, Y = 40 },
+                    1 => local with { X = 130 + (i % 20), Y = 20 },
+                    _ => local with { X = right.IsIdentity ? 200 : fit.TerraceParkTarget(map, right, local, 0.2), Y = 70 },
+                };
+                tree.SetPosition(box.X, box.Y);
+                transform.SceneX = box.X;
+                transform.SceneY = box.Y;
+                transform.ViewScale = zoom;
+                transform.PreAnchorX = box.X + (box.Width / 2.0);
+                transform.PreAnchorY = box.Y + (box.Height / 2.0);
+                transform.PreScale = fit.SolveFit(map, box, 0.2, transform.PreAnchorX, transform.PreAnchorY);
+                RenderTransform placement;
+                if (transform.IsFlatFor(local))
+                {
+                    placement = transform.ViewPlacement();
+                }
+                else if (transform.IsPastFeet(local))
+                {
+                    placement = transform.ShelfPlacement(local);
+                }
+                else
+                {
+                    node.Matrix = RenderTransform.Identity;
+                    if (ReferenceEquals(node.Deformer, transform))
+                    {
+                        node.NotifyDeformed();
+                    }
+                    else
+                    {
+                        node.Deformer = transform;
+                    }
+
+                    continue;
+                }
+
+                node.Deformer = null;
+                node.Matrix = RenderTransform.Multiply(
+                    RenderTransform.Translation(-box.X, -box.Y),
+                    RenderTransform.Multiply(placement, RenderTransform.Translation(box.X, box.Y)));
+            }
+
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 120; i++)
+        {
+            Frame(i);
+        }
+
+        NothingAllocated(1000, Frame);
+        grid.Destroy();
+        for (var w = 0; w < 3; w++)
+        {
+            contents[w].Destroy();
+            pixels[w].Destroy();
+        }
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void An_open_step_overview_with_a_desktop_a_corner_and_a_side_shelf_window_allocates_nothing_over_1000_frames(string renderer) =>
+        OverviewStep(renderer, toggle: false);
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
+    public void A_step_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
+        OverviewStep(renderer, toggle: true);
+
+    private static void OverviewStep(string renderer, bool toggle)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var output = new Box(0, 0, 160, 120);
+        var full = new TinyComp.OverviewSide[4];
+        full[0] = TinyComp.OverviewLayout.StepFull(0, 0, 80, -1, 0.6, 0.06, 160);
+        full[1] = TinyComp.OverviewLayout.StepFull(160, 160, 80, 1, 0.6, 0.06, 160);
+        full[2] = TinyComp.OverviewLayout.StepFull(0, 0, 60, -1, 0.6, 0.06, 120);
+        full[3] = TinyComp.OverviewLayout.StepFull(120, 120, 60, 1, 0.6, 0.06, 120);
+        var map = new Basin.Effects.CanvasStepMap();
+        var end = new Basin.Effects.CanvasStepMap();
+        _ = TinyComp.OverviewLayout.LayoutStep(end, output, output, full, 1.0, 0.6, 0.3);
+        var source = new Basin.Effects.CanvasStepSource { Map = map, CellSize = 16, MinLineSpacing = 4 };
+        var mesh = new Scene.SceneMesh(host.Scene.Root) { Bounds = output, Source = source };
+        var wallpaper = new Scene.SceneTransform(host.Scene.Root);
+        _ = new Scene.SceneRect(wallpaper, 160, 120, new RenderColor(0.12f, 0.2f, 0.16f, 1f));
+
+        var boxes = new[] { new Box(30, 40, 40, 30), new Box(260, -70, 40, 30), new Box(250, 50, 28, 20) };
+        var sides = new[]
+        {
+            Basin.Effects.CanvasStepSides.None,
+            Basin.Effects.CanvasStepSides.Right | Basin.Effects.CanvasStepSides.Top,
+            Basin.Effects.CanvasStepSides.Right,
+        };
+        var windows = new (Scene.SceneTree Tree, Scene.SceneTransform Node)[3];
+        var pixels = new MemoryBuffer[3];
+        var contents = new Scene.SceneBuffer[3];
+        for (var w = 0; w < 3; w++)
+        {
+            var tree = new Scene.SceneTree(host.Scene.Root);
+            var node = new Scene.SceneTransform(tree);
+            pixels[w] = new MemoryBuffer(boxes[w].Width, boxes[w].Height, DrmFormat.Argb8888);
+            contents[w] = new Scene.SceneBuffer(node);
+            contents[w].SetBuffer(pixels[w]);
+            windows[w] = (tree, node);
+        }
+
+        void Frame(int i)
+        {
+            var progress = toggle ? Math.Abs(((i % 60) / 30.0) - 1.0) : 1.0;
+            _ = TinyComp.OverviewLayout.LayoutStep(map, output, output, full, progress, 0.6, 0.3);
+            source.Alpha = (float)progress;
+            mesh.NotifyMeshChanged();
+            var zoom = map.Zoom;
+            wallpaper.Matrix = new RenderTransform(zoom, 0, 80 * (1.0 - zoom), 0, zoom, 60 * (1.0 - zoom), 0, 0, 1);
+            for (var w = 0; w < 3; w++)
+            {
+                var box = w == 0 ? boxes[w] with { X = 30 + (i % 20) } : boxes[w];
+                var plane = w == 0 ? Basin.Effects.CanvasStepPlane.Desktop : Basin.Effects.CanvasStepPlane.Shelf;
+                var fit = w == 0 ? 1.0 : 1.0 + ((end.ShelfFit(box.Width, box.Height, sides[w], 0.1) - 1.0) * progress);
+                var placement = map.Placement(plane, fit, box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0));
+                var (tree, node) = windows[w];
+                tree.SetPosition(box.X, box.Y);
+                node.Matrix = placement.IsIdentity
+                    ? RenderTransform.Identity
+                    : RenderTransform.Multiply(
+                        RenderTransform.Translation(-box.X, -box.Y),
+                        RenderTransform.Multiply(placement, RenderTransform.Translation(box.X, box.Y)));
+            }
+
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 120; i++)
+        {
+            Frame(i);
+        }
+
+        NothingAllocated(1000, Frame);
+        mesh.Destroy();
+        for (var w = 0; w < 3; w++)
+        {
+            contents[w].Destroy();
+            pixels[w].Destroy();
+        }
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    [InlineData("impeller")]
     public void A_window_sliding_through_a_canvas_zone_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

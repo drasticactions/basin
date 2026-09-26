@@ -135,6 +135,13 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("canvas-shelf-shape", settings.Canvas.ShapeName));
         cli.AddReport(_ => BasinCommand.Report("canvas-slope-window", settings.Canvas.OnSlopeName));
         cli.AddReport(_ => BasinCommand.Report("canvas-drag", settings.Canvas.DragName));
+        cli.AddReport(_ => BasinCommand.Report("overview", settings.Overview.Enabled));
+        cli.AddReport(_ => BasinCommand.Report("overview-scale", settings.Overview.ScaleValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-threshold-in", settings.Overview.ThresholdInValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-threshold-out", settings.Overview.ThresholdOutValue));
+        cli.AddReport(_ => BasinCommand.Report("overview-hot-corner", settings.Overview.HotCornerName));
+        cli.AddReport(_ => BasinCommand.Report("overview-wall", settings.Overview.WallName));
+        cli.AddReport(_ => BasinCommand.Report("overview-wall-width", settings.Overview.WallWidthValue));
         cli.AddReport(_ => BasinCommand.Report("bindings", settings.Bindings.Count));
         cli.AddReport(_ => BasinCommand.Report("rules", settings.Rules.Count));
 

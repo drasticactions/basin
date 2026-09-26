@@ -10,6 +10,7 @@ public sealed class CanvasGridSource : IMeshSource
     private int _cellSize = 64;
     private float _alpha = 1f;
     private double _minSpacing;
+    private double _viewScale = 1.0;
 
     public CanvasWarp? Left
     {
@@ -65,6 +66,16 @@ public sealed class CanvasGridSource : IMeshSource
         set => _minSpacing = Math.Max(0.0, value);
     }
 
+    public double ViewScale
+    {
+        get => _viewScale;
+        set => _viewScale = value > 0 && double.IsFinite(value) ? value : 1.0;
+    }
+
+    public double ViewCenterX { get; set; }
+
+    public double ViewCenterY { get; set; }
+
     public RenderColor Color { get; set; } = new(0.16f, 0.21f, 0.75f, 1f);
 
     public float Alpha
@@ -107,7 +118,9 @@ public sealed class CanvasGridSource : IMeshSource
         return screenY;
     }
 
-    public int VerticalLines(in Box bounds)
+    public int VerticalLines(in Box bounds) => VerticalLinesWarped(WarpBounds(bounds));
+
+    private int VerticalLinesWarped(in Box bounds)
     {
         if (bounds.IsEmpty)
         {
@@ -133,7 +146,9 @@ public sealed class CanvasGridSource : IMeshSource
         return count;
     }
 
-    public int HorizontalLines(in Box bounds)
+    public int HorizontalLines(in Box bounds) => HorizontalLinesWarped(WarpBounds(bounds));
+
+    private int HorizontalLinesWarped(in Box bounds)
     {
         if (bounds.IsEmpty)
         {
@@ -159,7 +174,9 @@ public sealed class CanvasGridSource : IMeshSource
         return count;
     }
 
-    public int ColumnSegments(in Box bounds)
+    public int ColumnSegments(in Box bounds) => ColumnSegmentsWarped(WarpBounds(bounds));
+
+    private int ColumnSegmentsWarped(in Box bounds)
     {
         if (bounds.IsEmpty)
         {
@@ -169,7 +186,9 @@ public sealed class CanvasGridSource : IMeshSource
         return 1 + CornerSegments(Top) + CornerSegments(Bottom);
     }
 
-    public int RowSegments(in Box bounds)
+    public int RowSegments(in Box bounds) => RowSegmentsWarped(WarpBounds(bounds));
+
+    private int RowSegmentsWarped(in Box bounds)
     {
         if (bounds.IsEmpty)
         {
@@ -180,7 +199,9 @@ public sealed class CanvasGridSource : IMeshSource
             + ShelfSegment(Left, bounds) + ShelfSegment(Right, bounds);
     }
 
-    public int ZoneRowSegments(in Box bounds)
+    public int ZoneRowSegments(in Box bounds) => ZoneRowSegmentsWarped(WarpBounds(bounds));
+
+    private int ZoneRowSegmentsWarped(in Box bounds)
     {
         if (bounds.IsEmpty)
         {
@@ -190,7 +211,9 @@ public sealed class CanvasGridSource : IMeshSource
         return 1 + CornerSegments(Left) + CornerSegments(Right);
     }
 
-    public int VertexCount(in Box bounds)
+    public int VertexCount(in Box bounds) => VertexCountWarped(WarpBounds(bounds));
+
+    private int VertexCountWarped(in Box bounds)
     {
         if (bounds.IsEmpty)
         {
@@ -199,11 +222,11 @@ public sealed class CanvasGridSource : IMeshSource
 
         if (Separable)
         {
-            return (VerticalLines(bounds) + HorizontalLines(bounds)) * 6;
+            return (VerticalLinesWarped(bounds) + HorizontalLinesWarped(bounds)) * 6;
         }
 
-        var count = VerticalLines(bounds) * ColumnSegments(bounds);
-        var zoneRowSegments = ZoneRowSegments(bounds);
+        var count = VerticalLinesWarped(bounds) * ColumnSegmentsWarped(bounds);
+        var zoneRowSegments = ZoneRowSegmentsWarped(bounds);
         var rowSegments = 1 + ZoneSegments(Left, bounds.X, bounds.Right) + ZoneSegments(Right, bounds.X, bounds.Right);
         var leftShelf = ShelfSegment(Left, bounds);
         var rightShelf = ShelfSegment(Right, bounds);
@@ -238,7 +261,9 @@ public sealed class CanvasGridSource : IMeshSource
         return count * 6;
     }
 
-    public void WriteVertices(in Box bounds, Span<MeshVertex> into)
+    public void WriteVertices(in Box bounds, Span<MeshVertex> into) => WriteVerticesWarped(WarpBounds(bounds), into);
+
+    private void WriteVerticesWarped(in Box bounds, Span<MeshVertex> into)
     {
         if (bounds.IsEmpty)
         {
@@ -267,7 +292,7 @@ public sealed class CanvasGridSource : IMeshSource
 
             var canvasX = (double)column;
             var exact = ToScreen(canvasX);
-            var x = (float)Math.Round(exact);
+            var x = (float)Snap(exact, ViewCenterX);
             var shift = x - exact;
             var top = topActive ? (float)_map.ToScreenPoint(canvasX, Top!.Seam).Y : bounds.Y;
             var bottom = bottomActive ? (float)_map.ToScreenPoint(canvasX, Bottom!.Seam).Y : bounds.Bottom;
@@ -360,7 +385,7 @@ public sealed class CanvasGridSource : IMeshSource
                 continue;
             }
 
-            var x = (float)Math.Round(ToScreen(column));
+            var x = (float)Snap(ToScreen(column), ViewCenterX);
             WriteColumn(into, ref write, (x, bounds.Y), (x, bounds.Bottom), color);
         }
 
@@ -374,10 +399,34 @@ public sealed class CanvasGridSource : IMeshSource
                 continue;
             }
 
-            var y = Math.Round(ToScreenY(row));
+            var y = Snap(ToScreenY(row), ViewCenterY);
             WriteSegment(into, ref write, bounds.X, (float)y, bounds.Right, (float)y, color);
         }
     }
+
+    private Box WarpBounds(in Box bounds)
+    {
+        if (_viewScale == 1.0 || bounds.IsEmpty)
+        {
+            return bounds;
+        }
+
+        var left = (int)Math.Floor(ViewCenterX + ((bounds.X - ViewCenterX) / _viewScale));
+        var top = (int)Math.Floor(ViewCenterY + ((bounds.Y - ViewCenterY) / _viewScale));
+        var right = (int)Math.Ceiling(ViewCenterX + ((bounds.Right - ViewCenterX) / _viewScale));
+        var bottom = (int)Math.Ceiling(ViewCenterY + ((bounds.Bottom - ViewCenterY) / _viewScale));
+        return new Box(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
+    }
+
+    private double Snap(double warp, double center) =>
+        _viewScale == 1.0
+            ? Math.Round(warp)
+            : center + ((Math.Round(center + ((warp - center) * _viewScale)) - center) / _viewScale);
+
+    private (float X, float Y) Zoom(float x, float y) =>
+        _viewScale == 1.0
+            ? (x, y)
+            : ((float)(ViewCenterX + ((x - ViewCenterX) * _viewScale)), (float)(ViewCenterY + ((y - ViewCenterY) * _viewScale)));
 
     private int Candidates(long first, long last) => last < first ? 0 : (int)((last - first) / _cellSize) + 1;
 
@@ -409,7 +458,7 @@ public sealed class CanvasGridSource : IMeshSource
     private bool OnStride(long canvas, double scale)
     {
         var stride = 1L;
-        while (scale * _cellSize * stride < _minSpacing && stride < 1L << 20)
+        while (scale * _viewScale * _cellSize * stride < _minSpacing && stride < 1L << 20)
         {
             stride <<= 1;
         }
@@ -612,6 +661,8 @@ public sealed class CanvasGridSource : IMeshSource
 
     private void WriteColumn(Span<MeshVertex> into, ref int write, (float X, float Y) from, (float X, float Y) to, in RenderColor color)
     {
+        from = Zoom(from.X, from.Y);
+        to = Zoom(to.X, to.Y);
         if (Terraced && Math.Abs(to.X - from.X) > Math.Abs(to.Y - from.Y))
         {
             MeshGrid.WriteCell(
@@ -635,6 +686,8 @@ public sealed class CanvasGridSource : IMeshSource
 
     private void WriteSegment(Span<MeshVertex> into, ref int write, float x0, float y0, float x1, float y1, in RenderColor color)
     {
+        (x0, y0) = Zoom(x0, y0);
+        (x1, y1) = Zoom(x1, y1);
         if (Terraced && Math.Abs(y1 - y0) > Math.Abs(x1 - x0))
         {
             MeshGrid.WriteCell(

@@ -86,9 +86,20 @@ static void xdg_surface_configure(void *data, struct xdg_surface *s, uint32_t se
 
 static const struct xdg_surface_listener xdg_surface_listener = { xdg_surface_configure };
 
+static int suspended = -1;
+
 static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w, int32_t h, struct wl_array *states)
 {
-    (void)data; (void)t; (void)states;
+    (void)data; (void)t;
+    int now = 0;
+    uint32_t *state;
+    wl_array_for_each(state, states)
+        if (*state == XDG_TOPLEVEL_STATE_SUSPENDED) now = 1;
+    if (now != suspended && (suspended >= 0 || now)) {
+        printf("SUSPENDED %d\n", now);
+        fflush(stdout);
+    }
+    suspended = now;
     if (pixel_mode) return;
     if (w > 0) width = w;
     if (h > 0) height = h;
@@ -180,13 +191,13 @@ static const struct xdg_wm_base_listener wm_listener = { wm_ping };
 
 static void global_add(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
 {
-    (void)data; (void)version;
+    (void)data;
     if (strcmp(interface, wl_compositor_interface.name) == 0)
         compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
     else if (strcmp(interface, wl_shm_interface.name) == 0)
         shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
     else if (strcmp(interface, xdg_wm_base_interface.name) == 0)
-        wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+        wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, version < 6 ? version : 6);
     else if (strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0)
         decoration_manager = wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1);
     else if (strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0)

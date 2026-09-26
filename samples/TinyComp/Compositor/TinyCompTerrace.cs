@@ -49,7 +49,7 @@ internal sealed partial class TinyComp
 
         var before = previous.ShelfScaleValues;
         var after = settings.ShelfScaleValues;
-        foreach (var side in (ReadOnlySpan<CanvasSide>)[CanvasSide.Left, CanvasSide.Right, CanvasSide.Top, CanvasSide.Bottom])
+        foreach (var side in CanvasSides.Each)
         {
             if (before.For(side) != after.For(side))
             {
@@ -58,7 +58,7 @@ internal sealed partial class TinyComp
         }
     }
 
-    private double ShelfScaleFor(OutputView view, CanvasSide side, CanvasSetting settings, bool animate)
+    private double ShelfScaleFor(OutputView view, CanvasSide side, CanvasSetting settings, bool animate, bool pin = true)
     {
         var canvas = view.Canvas;
         var index = SideIndex(side);
@@ -69,7 +69,11 @@ internal sealed partial class TinyComp
             var from = motion.IsRunning ? motion.Current : canvas.ShelfTarget[index];
             if (animate && !double.IsNaN(from))
             {
-                PinShelfWindows(view, side);
+                if (pin)
+                {
+                    PinShelfWindows(view, side);
+                }
+
                 motion.Begin(from, target, CanvasAnimationNanos(view));
                 if (motion.IsRunning)
                 {
@@ -132,17 +136,25 @@ internal sealed partial class TinyComp
         var node = state.Node;
         if (region == CanvasRegion.Flat)
         {
+            var rest = transform.ViewScale == 1.0 ? RenderTransform.Identity : transform.ViewPlacement();
+            if (!rest.IsIdentity && !IsTerraceSettling(state))
+            {
+                rest = SnapPlacement(window, rest);
+            }
+
             var flat = state.Blend.IsRunning
-                ? CanvasScale.Blend(state.BlendFrom, RenderTransform.Identity, state.Blend.Current)
-                : RenderTransform.Identity;
+                ? CanvasScale.Blend(state.BlendFrom, rest, state.Blend.Current)
+                : rest;
             if (node is not null && !node.IsDestroyed)
             {
+                AdoptStrays(tree, node);
                 node.Deformer = null;
                 SetCanvasMatrix(node, tree, flat);
             }
             else if (!flat.IsIdentity)
             {
                 node = EnsureCanvasNode(tree, state);
+                AdoptStrays(tree, node);
                 SetCanvasMatrix(node, tree, flat);
             }
 
@@ -271,7 +283,7 @@ internal sealed partial class TinyComp
             return CanvasRegion.Shelf;
         }
 
-        if (transform.IsIdentityFor(local))
+        if (transform.IsFlatFor(local))
         {
             return CanvasRegion.Flat;
         }
@@ -393,7 +405,11 @@ internal sealed partial class TinyComp
 
     private void BlendTerraceWindow(IGrabTarget window, CanvasView canvas, CanvasWindowState state, long nanos)
     {
-        if (_canvasSuspended)
+        if (canvas.Step is not null)
+        {
+            state.BlendFrom = state.Placement;
+        }
+        else if (_canvasSuspended)
         {
             if (state.Placement.IsIdentity)
             {
@@ -474,8 +490,9 @@ internal sealed partial class TinyComp
                 state.ShelfPinned = true;
                 state.PinSide = (holdingSide.Direction < 0 ? CanvasSide.Left : CanvasSide.Right) |
                     (holdingEnd.Direction < 0 ? CanvasSide.Top : CanvasSide.Bottom);
-                (state.PinOuter, state.PinCenter) = state.Transform.ToScreenPoint(
+                var (pinX, pinY) = state.Transform.ToScreenPoint(
                     holdingSide.Direction < 0 ? box.X : box.Right, holdingEnd.Direction < 0 ? box.Y : box.Bottom);
+                (state.PinOuter, state.PinCenter) = canvas.Map.Unzoom(pinX, pinY);
                 continue;
             }
 
@@ -498,10 +515,11 @@ internal sealed partial class TinyComp
                 center = (placement.M11 * (box.X + (box.Width / 2.0))) + placement.M13;
             }
 
+            var (warpOuter, warpCenter) = horizontal ? canvas.Map.Unzoom(outer, center) : canvas.Map.Unzoom(center, outer);
             state.ShelfPinned = true;
             state.PinSide = side;
-            state.PinOuter = outer;
-            state.PinCenter = center;
+            state.PinOuter = horizontal ? warpOuter : warpCenter;
+            state.PinCenter = horizontal ? warpCenter : warpOuter;
         }
     }
 
@@ -556,7 +574,7 @@ internal sealed partial class TinyComp
             var across = warp.ToCanvasY(state.PinOuter - (warp.Direction * 0.5), state.PinCenter);
             if (canvas.Map.Separable)
             {
-                var (inverseX, inverseY) = canvas.Map.ToCanvasPoint(
+                var (inverseX, inverseY) = canvas.Map.FromWarpPoint(
                     horizontal ? state.PinOuter - (warp.Direction * 0.5) : state.PinCenter,
                     horizontal ? state.PinCenter : state.PinOuter - (warp.Direction * 0.5));
                 across = horizontal ? inverseY : inverseX;
@@ -633,6 +651,13 @@ internal sealed partial class TinyComp
     {
         sides = CanvasSide.None;
         view = null;
+        if (OverviewTargetView() is { } stepView && Stepped(stepView))
+        {
+            view = stepView;
+            sides = OverviewOf(stepView).Sides;
+            return;
+        }
+
         if (FocusedGrabTarget() is { } focused && ViewOfWindow(focused) is { Tag: OutputPolicy } focusedView)
         {
             view = focusedView;
@@ -665,20 +690,21 @@ internal sealed partial class TinyComp
         if (ViewAt(_cursorX, _cursorY) is { Tag: OutputPolicy } pointed)
         {
             var canvas = pointed.Canvas;
-            if (canvas.Left.ContainsScreen(_cursorX))
+            var (warpX, warpY) = canvas.Map.Unzoom(_cursorX, _cursorY);
+            if (canvas.Left.ContainsScreen(warpX))
             {
                 sides |= CanvasSide.Left;
             }
-            else if (canvas.Right.ContainsScreen(_cursorX))
+            else if (canvas.Right.ContainsScreen(warpX))
             {
                 sides |= CanvasSide.Right;
             }
 
-            if (canvas.Top.ContainsScreen(_cursorY))
+            if (canvas.Top.ContainsScreen(warpY))
             {
                 sides |= CanvasSide.Top;
             }
-            else if (canvas.Bottom.ContainsScreen(_cursorY))
+            else if (canvas.Bottom.ContainsScreen(warpY))
             {
                 sides |= CanvasSide.Bottom;
             }
@@ -698,7 +724,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        foreach (var side in (ReadOnlySpan<CanvasSide>)[CanvasSide.Left, CanvasSide.Right, CanvasSide.Top, CanvasSide.Bottom])
+        foreach (var side in CanvasSides.Each)
         {
             if (!WarpOf(view.Canvas, side).IsIdentity)
             {
@@ -735,7 +761,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        foreach (var each in (ReadOnlySpan<CanvasSide>)[CanvasSide.Left, CanvasSide.Right, CanvasSide.Top, CanvasSide.Bottom])
+        foreach (var each in CanvasSides.Each)
         {
             if ((sides & each) == CanvasSide.None)
             {
@@ -809,6 +835,12 @@ internal sealed partial class TinyComp
         }
 
         var canvas = view.Canvas;
+        if (canvas.Overview)
+        {
+            _report.Line("CANVASMODE refused: overview");
+            return null;
+        }
+
         var next = mode ?? canvas.Mode switch
         {
             CanvasWindowMode.Warp => CanvasWindowMode.Scale,

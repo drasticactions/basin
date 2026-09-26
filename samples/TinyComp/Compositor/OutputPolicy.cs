@@ -19,4 +19,6 @@ internal sealed class OutputPolicy
     public WorkspaceSet<TinyComp.Workspace> Workspaces { get; } = new();
 
     public CanvasView Canvas { get; } = new();
+
+    public OverviewView Overview { get; } = new();
 }

@@ -16,6 +16,8 @@ public sealed class SwipeRecognizer
 
     public uint Fingers { get; }
 
+    public SwipeAxis Axis { get; set; } = SwipeAxis.Horizontal;
+
     public bool IsActive { get; private set; }
 
     public double Progress
@@ -61,18 +63,18 @@ public sealed class SwipeRecognizer
 
     public bool Update(double dx, double dy, uint timeMs)
     {
-        _ = dy;
         if (!IsActive)
         {
             return false;
         }
 
-        _raw += dx / _width;
+        var along = Axis == SwipeAxis.Vertical ? dy : dx;
+        _raw += along / _width;
 
         var elapsed = timeMs - _lastUpdateMillis;
         if (elapsed > 0)
         {
-            var instant = dx * 1000.0 / elapsed;
+            var instant = along * 1000.0 / elapsed;
             _velocity = _hasVelocity ? _velocity + (VelocitySmoothing * (instant - _velocity)) : instant;
             _hasVelocity = true;
             _lastUpdateMillis = timeMs;

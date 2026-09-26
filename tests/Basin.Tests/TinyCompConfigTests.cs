@@ -209,6 +209,126 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_overview_table_reads_its_defaults_clamps_and_warns()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Load(Write(string.Empty), log, out _).Overview;
+        Assert.True(defaults.Enabled);
+        Assert.Equal(0.75, defaults.ScaleValue, 9);
+        Assert.Equal(0.667, defaults.ThresholdInValue, 9);
+        Assert.Equal(0.333, defaults.ThresholdOutValue, 9);
+        Assert.True(defaults.GestureEnabled);
+        Assert.Equal(4, defaults.FingerCount);
+        Assert.Equal(Basin.Seat.ScreenCorner.TopLeft, defaults.HotCornerValue);
+        Assert.Equal(150, defaults.HotCornerMillis);
+
+        var config = TinyComp.Config.Load(
+            Write("[overview]\nscale = 0.1\nthreshold_in = 0.2\nthreshold_out = 0.6\ngesture_fingers = 3\n"
+                + "hot_corner = \"bottom-right\"\nhot_corner_ms = 300\ngesture = false\n"),
+            log,
+            out var fatal);
+        Assert.Null(fatal);
+        var overview = config.Overview;
+        Assert.Equal(0.3, overview.ScaleValue, 9);
+        Assert.Equal(0.6, overview.ThresholdInValue, 9);
+        Assert.Equal(0.2, overview.ThresholdOutValue, 9);
+        Assert.Contains(_lines, line => line.Contains("swapping", StringComparison.Ordinal));
+        Assert.Equal(4, overview.FingerCount);
+        Assert.Contains(_lines, line => line.Contains("workspace swipe", StringComparison.Ordinal));
+        Assert.False(overview.GestureEnabled);
+        Assert.Equal("bottom-right", overview.HotCornerName);
+        Assert.Equal(300, overview.HotCornerMillis);
+
+        var high = TinyComp.Config.Load(Write("[overview]\nscale = 2\ngesture_fingers = 9\nhot_corner = \"middle\"\n"), log, out _).Overview;
+        Assert.Equal(0.95, high.ScaleValue, 9);
+        Assert.Equal(5, high.FingerCount);
+        Assert.Equal(Basin.Seat.ScreenCorner.TopLeft, high.HotCornerValue);
+        Assert.Contains(_lines, line => line.Contains("hot_corner \"middle\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_overview_wall_keys_parse_clamp_and_warn()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Load(Write(string.Empty), log, out _).Overview;
+        Assert.Equal(TinyComp.OverviewWall.Slope, defaults.WallValue);
+        Assert.Equal(0.04, defaults.WallWidthValue, 9);
+        Assert.Equal(0x262a3affu, defaults.WallRgba);
+        Assert.Equal(0.25, defaults.WallShadeValue, 9);
+
+        var step = TinyComp.Config.Load(
+            Write("[overview]\nwall = \"step\"\nwall_width = 0.5\nwall_color = \"#102030\"\nwall_shade = 2\n"), log, out var fatal);
+        Assert.Null(fatal);
+        Assert.True(step.Overview.Steps);
+        Assert.Equal(0.2, step.Overview.WallWidthValue, 9);
+        Assert.Equal(0x102030ffu, step.Overview.WallRgba);
+        Assert.Equal(0.8, step.Overview.WallShadeValue, 9);
+        var thin = TinyComp.Config.Load(Write("[overview]\nwall_width = 0.0001\nwall_shade = -1\n"), log, out _).Overview;
+        Assert.Equal(0.005, thin.WallWidthValue, 9);
+        Assert.Equal(0.0, thin.WallShadeValue, 9);
+
+        _lines.Clear();
+        var bad = TinyComp.Config.Load(Write("[overview]\nwall = \"cliff\"\n"), log, out _).Overview;
+        Assert.Equal(TinyComp.OverviewWall.Slope, bad.WallValue);
+        Assert.Contains(_lines, line => line.Contains("wall \"cliff\"", StringComparison.Ordinal));
+
+        var outputs = TinyComp.Config.Load(Write("[output.\"DP-2\"]\noverview_wall = \"step\"\n"), log, out _);
+        Assert.True(outputs.OverviewFor("DP-2").Steps);
+        Assert.False(outputs.OverviewFor("DP-1").Steps);
+        var back = TinyComp.Config.Load(Write("[overview]\nwall = \"step\"\n[output.\"DP-2\"]\noverview_wall = \"slope\"\n"), log, out _);
+        Assert.False(back.OverviewFor("DP-2").Steps);
+        Assert.True(back.OverviewFor("DP-1").Steps);
+    }
+
+    [Fact]
+    public void Step_mode_warns_once_about_the_canvas_keys_it_ignores()
+    {
+        var log = BasinLog.For("t");
+        const string canvas = "[canvas]\nshelf = 0.2\nslope_window = \"flat\"\ncorner = \"square\"\ndrag = \"grid\"\ngrid = \"always\"\n";
+        _ = TinyComp.Config.Load(Write(canvas + "[overview]\nwall = \"step\"\n"), log, out _);
+        var warnings = _lines.Where(line => line.Contains("ignores [canvas]", StringComparison.Ordinal)).ToList();
+        Assert.Single(warnings);
+        Assert.Contains("shelf, slope_window, corner, drag = \"grid\"", warnings[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("grid = \"always\"", warnings[0], StringComparison.Ordinal);
+
+        _lines.Clear();
+        _ = TinyComp.Config.Load(Write(canvas), log, out _);
+        Assert.DoesNotContain(_lines, line => line.Contains("ignores [canvas]", StringComparison.Ordinal));
+
+        _lines.Clear();
+        _ = TinyComp.Config.Load(Write("[canvas]\ndrag = \"cursor\"\n[output.\"DP-1\"]\nmesh_cell = 8\noverview_wall = \"step\"\n"), log, out _);
+        Assert.Contains(_lines, line => line.EndsWith("ignores [canvas] mesh_cell", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_overview_warns_against_the_canvas_and_clamps_the_shelf_scale()
+    {
+        var log = BasinLog.For("t");
+        _ = TinyComp.Config.Load(Write("[canvas]\nenable = true\n"), log, out _);
+        Assert.Contains(_lines, line => line.Contains("overview is off", StringComparison.Ordinal));
+
+        _lines.Clear();
+        var config = TinyComp.Config.Load(Write("[canvas]\nshelf_scale = 0.9\n[overview]\nscale = 0.5\n"), log, out _);
+        Assert.Contains(_lines, line => line.Contains("overview clamps it", StringComparison.Ordinal));
+        Assert.DoesNotContain(_lines, line => line.Contains("overview is off", StringComparison.Ordinal));
+        Assert.Equal(TinyComp.ShelfScales.All(0.5), config.Overview.ShelfScalesFor(config.Canvas));
+        Assert.Equal(0.9, config.Canvas.ShelfScaleValues.Left, 9);
+
+        var outputs = TinyComp.Config.Load(
+            Write("[overview]\nscale = 0.7\n[output.\"DP-2\"]\noverview = false\noverview_scale = 0.6\n"), log, out var fatal);
+        Assert.Null(fatal);
+        var second = outputs.OverviewFor("DP-2");
+        Assert.False(second.Enabled);
+        Assert.Equal(0.6, second.ScaleValue, 9);
+        Assert.Same(outputs.Overview, outputs.OverviewFor("DP-1"));
+        Assert.Equal(0.7, outputs.OverviewFor("DP-1").ScaleValue, 9);
+        Assert.Equal(TinyComp.KeyAction.Overview, TinyComp.Config.ActionFromName("overview"));
+        Assert.Equal(TinyComp.KeyAction.ShelveLeft, TinyComp.Config.ActionFromName("shelve-left"));
+        Assert.Equal(TinyComp.KeyAction.ShelveBottom, TinyComp.Config.ActionFromName("shelve-bottom"));
+        Assert.Equal(TinyComp.KeyAction.Unshelve, TinyComp.Config.ActionFromName("unshelve"));
+    }
+
+    [Fact]
     public void The_canvas_sides_list_parses_warns_and_overrides_per_output()
     {
         var log = BasinLog.For("t");

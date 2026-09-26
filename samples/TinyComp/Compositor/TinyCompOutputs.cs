@@ -103,7 +103,20 @@ internal sealed partial class TinyComp
         view.Tag = new OutputPolicy();
         _presenceTracker.AddOutput(view.Output, view.Global);
         InitWorkspaces(view);
+        ConfigureOverviewTriggers();
         LayoutCanvas(view);
+        CenterCursorOnce(view);
+        if (view.Scene is null)
+        {
+            _driver.BeforeRepaint += painted =>
+            {
+                if (ReferenceEquals(painted, view))
+                {
+                    StepEffects(view, EffectTick());
+                }
+            };
+        }
+
         if (view.Scene is { } sceneOutput)
         {
             sceneOutput.BeforeRepaint += tick => StepEffects(view, tick);
@@ -191,6 +204,13 @@ internal sealed partial class TinyComp
             AbortWorkspaceSwipe();
         }
 
+        if (view == _overviewSwipeView)
+        {
+            _ = EndOverviewSwipe(cancelled: true, timeMs: 0);
+        }
+
+        UnshelveFromOutput(view, Views.FirstOrDefault(v => v != view && v.Tag is OutputPolicy));
+
         _presenceTracker.RemoveOutput(view.Output);
         _outputColor?.Remove(view.Global);
         _cursor.RemoveOutput(view.Output);
@@ -198,6 +218,7 @@ internal sealed partial class TinyComp
         view.Canvas.Grid?.Destroy();
         view.Canvas.Grid = null;
         view.Canvas.GridSource = null;
+        LeaveStep(view);
     }
 
     private void OnStampModeset(Basin.Backend.Drm.DrmOutput output, OutputState state)
@@ -272,6 +293,7 @@ internal sealed partial class TinyComp
         running |= _post.Step(tick, view.Width, view.Height);
         running |= StepCanvasMotions(tick);
         running |= StepShelfMotions(tick);
+        running |= StepOverviews(tick);
         if (running)
         {
             for (var i = 0; i < Views.Count; i++)

@@ -443,7 +443,7 @@ public sealed class CanvasScale
         var even = Math.Min(side.EdgeScale, end.EdgeScale);
         var fitX = map.Separable ? fit * even / side.EdgeScale : fit;
         var fitY = map.Separable ? fit * even / end.EdgeScale : fit;
-        var (outerCanvasX, outerCanvasY) = map.ToCanvasPoint(outerX, outerY);
+        var (outerCanvasX, outerCanvasY) = map.FromWarpPoint(outerX, outerY);
         var x = outerCanvasX - (width / 2.0) - (side.Direction * width * fitX / 2.0);
         var y = outerCanvasY - (height / 2.0) - (end.Direction * height * fitY / 2.0);
         return ((int)Math.Round(x), (int)Math.Round(y));
@@ -466,8 +466,8 @@ public sealed class CanvasScale
         var fixedY = top ? start.Bottom : start.Y;
         var resizeX = left || right;
         var resizeY = top || bottom;
-        var high = ShelfScaleFor(map, start, 1.0);
-        var low = Math.Min(Math.Max(shelfMin, 0.01), high);
+        var high = ShelfScaleFor(map, start, 1.0) * map.ViewScale;
+        var low = Math.Min(Math.Max(shelfMin, 0.01) * map.ViewScale, high);
         if (TerraceResidual(map, start, left, resizeX, top, resizeY, fixedX, fixedY, fixedScreenX, fixedScreenY, cursorX, cursorY, shelfMin, high) >= 0)
         {
             low = high;
@@ -521,7 +521,7 @@ public sealed class CanvasScale
             box = box with { Y = top ? fixedY - height : fixedY, Height = height };
         }
 
-        return ShelfScaleFor(map, box, shelfMin) - k;
+        return (ShelfScaleFor(map, box, shelfMin) * map.ViewScale) - k;
     }
 
     private double FitResidual(

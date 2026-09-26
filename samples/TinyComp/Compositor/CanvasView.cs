@@ -44,14 +44,22 @@ internal sealed class CanvasView
 
     public bool Enabled { get; set; }
 
+    public bool Overview { get; set; }
+
+    public CanvasStepMap? Step { get; set; }
+
     public CanvasView()
     {
         Map = new CanvasWarpTransform { Left = Left, Right = Right, Top = Top, Bottom = Bottom };
     }
 
-    public bool IsIdentity => Left.IsIdentity && Right.IsIdentity && Top.IsIdentity && Bottom.IsIdentity;
+    public bool IsIdentity =>
+        Left.IsIdentity && Right.IsIdentity && Top.IsIdentity && Bottom.IsIdentity && Map.ViewScale == 1.0 &&
+        (Step is null || Step.IsIdentity);
 
-    public (double X, double Y) ToScreenPoint(double canvasX, double canvasY) => Map.ToScreenPoint(canvasX, canvasY);
+    public (double X, double Y) ToScreenPoint(double canvasX, double canvasY) =>
+        Step is { } step ? step.ToScreen(canvasX, canvasY) : Map.ToScreenPoint(canvasX, canvasY);
 
-    public (double X, double Y) ToCanvasPoint(double screenX, double screenY) => Map.ToCanvasPoint(screenX, screenY);
+    public (double X, double Y) ToCanvasPoint(double screenX, double screenY) =>
+        Step is { } step ? step.ToCanvasNearest(screenX, screenY, out _) : Map.ToCanvasPoint(screenX, screenY);
 }

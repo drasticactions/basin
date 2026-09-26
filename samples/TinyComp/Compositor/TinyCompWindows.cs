@@ -323,7 +323,8 @@ internal sealed partial class TinyComp
     }
 
     internal SceneTree LayerFor(Window window) =>
-        window.Above ? _layers.Top
+        ShelfOwnerOf(window) is { } owner && OverviewOf(owner).ShelfTree is { } shelf ? shelf
+        : window.Above ? _layers.Top
         : window.Sticky ? _layers.Windows
         : window.Workspace?.Tree ?? _layers.Windows;
 
@@ -377,7 +378,7 @@ internal sealed partial class TinyComp
 
     internal void SetMinimized(Window window, bool minimized)
     {
-        if (window.Minimized == minimized)
+        if (window.Minimized == minimized || IsShelved(window))
         {
             return;
         }
@@ -427,7 +428,7 @@ internal sealed partial class TinyComp
 
     internal void SetMinimized(XWindow xwindow, bool minimized)
     {
-        if (xwindow.Minimized == minimized || !xwindow.Framable)
+        if (xwindow.Minimized == minimized || !xwindow.Framable || IsShelved(xwindow))
         {
             return;
         }
@@ -515,6 +516,7 @@ internal sealed partial class TinyComp
         (_grabX, _grabY) = ToCanvasPointAt(originX, originY, window);
         var (width, height) = window.GeometrySize;
         _grabStart = new Box(window.X, window.Y, width, height);
+        BeginShelfResize(window, edges, originX, originY);
         BeginCanvasResize(window, edges);
         var frame = new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1));
         _effects.OnResizeStart(window.EffectTree, frame, frame, frame, 0, 0);
@@ -743,7 +745,11 @@ internal sealed partial class TinyComp
     {
         _lockDriver = new Basin.Desktop.SessionLockSceneDriver(
             _sessionLock, _seat, _layers.Lock, _layout, _layers.SetLocked);
-        _lockDriver.Locked += () => _report.Line($"LOCKED");
+        _lockDriver.Locked += () =>
+        {
+            CloseOverviewsNow();
+            _report.Line($"LOCKED");
+        };
         _lockDriver.Unlocked += () =>
         {
             if (_focused is { } focused)

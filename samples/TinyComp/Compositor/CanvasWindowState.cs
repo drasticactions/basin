@@ -96,4 +96,30 @@ internal sealed class CanvasWindowState
     public double PinOuter { get; set; }
 
     public double PinCenter { get; set; }
+
+    public bool Shelved { get; set; }
+
+    public CanvasSide ShelfSide { get; set; }
+
+    public Basin.Host.OutputView? Owner { get; set; }
+
+    public int PreShelfX { get; set; }
+
+    public int PreShelfY { get; set; }
+
+    public TinyComp.Workspace? PreShelfWorkspace { get; set; }
+
+    public bool HeldIn { get; set; }
+
+    public CanvasSide HeldSide { get; set; }
+
+    public bool HideWhenParked { get; set; }
+
+    public CanvasStepPlane StepPlane { get; set; }
+
+    public Basin.Host.OutputView? StepView { get; set; }
+
+    public double StepDepth { get; set; } = double.NegativeInfinity;
+
+    public (int X, int Y)? StepPickup { get; set; }
 }

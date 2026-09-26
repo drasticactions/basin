@@ -150,9 +150,13 @@ internal sealed partial class TinyComp
 
         public bool Framable { get; }
 
-        public int X => XWin.X;
+        public int X => XWin.X + OffsetX;
 
-        public int Y => XWin.Y;
+        public int Y => XWin.Y + OffsetY;
+
+        public int OffsetX { get; private set; }
+
+        public int OffsetY { get; private set; }
 
         public (int Width, int Height) GeometrySize => (XWin.Width, XWin.Height);
 
@@ -167,9 +171,17 @@ internal sealed partial class TinyComp
                 new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
                 0,
                 0);
-            XWin.Configure(x, y, width, height);
+            var root = _comp.XRoot();
+            var sideX = Inside(x, width, root.X, root.Right);
+            var sideY = Inside(y, height, root.Y, root.Bottom);
+            OffsetX = x - sideX;
+            OffsetY = y - sideY;
+            XWin.Configure(sideX, sideY, width, height);
             Layout();
         }
+
+        private static int Inside(int origin, int size, int low, int high) =>
+            origin >= low && origin + size <= high ? origin : Math.Clamp(origin, low, Math.Max(low, high - size));
 
         public void SetResizing(bool resizing)
         {
@@ -177,7 +189,7 @@ internal sealed partial class TinyComp
 
         public void Layout()
         {
-            Tree.SetPosition(XWin.X, XWin.Y);
+            Tree.SetPosition(X, Y);
             SceneSurface.Tree.SetPosition(0, 0);
             LayoutShadow();
             if (Framable)
@@ -197,7 +209,7 @@ internal sealed partial class TinyComp
 
         public void ReportGeometry()
         {
-            var client = new Box(XWin.X, XWin.Y, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1));
+            var client = new Box(X, Y, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1));
             var frame = _frame is null ? client : FrameBox;
             _comp._xwaylandModule.Toplevels?.SetGeometry(XWin, frame, client);
         }
@@ -357,7 +369,7 @@ internal sealed partial class TinyComp
 
             var view = _comp.Views.FirstOrDefault(v => _comp._layout.OutputAt(_comp._cursorX, _comp._cursorY) == v.Output)
                 ?? _comp.Views[0];
-            _restore = _restore.Saving(new Box(XWin.X, XWin.Y, XWin.Width, XWin.Height));
+            _restore = _restore.Saving(new Box(X, Y, XWin.Width, XWin.Height));
             _maximized = true;
             ApplyMaximizeGeometry(view);
         }

@@ -45,7 +45,7 @@ public sealed class SceneTransform : SceneTree
             InvalidateCapture();
             if (value is null)
             {
-                DropCapture();
+                ParkCapture();
             }
 
             DamageSubtree();
@@ -85,7 +85,9 @@ public sealed class SceneTransform : SceneTree
         }
 
         DropCaptureTexture();
+        Basin.Diagnostics.AllocationScope.Pause();
         _captureTexture = renderer.ImportTexture(_capture);
+        Basin.Diagnostics.AllocationScope.Resume();
         _captureTextureRenderer = _captureTexture is null ? null : renderer;
         return _captureTexture;
     }
@@ -156,6 +158,41 @@ public sealed class SceneTransform : SceneTree
         _captureTexture?.Dispose();
         _captureTexture = null;
         _captureTextureRenderer = null;
+    }
+
+    private int _captureIdleCommits;
+
+    private void ParkCapture()
+    {
+        if (_capture is null)
+        {
+            return;
+        }
+
+        if (RootOwner() is not { } scene)
+        {
+            DropCapture();
+            return;
+        }
+
+        _captureIdleCommits = 0;
+        scene.ParkIdleCapture(this);
+    }
+
+    internal bool AgeIdleCapture(int limit)
+    {
+        if (IsDestroyed || _deformer is not null || _capture is null)
+        {
+            return true;
+        }
+
+        if (++_captureIdleCommits <= limit)
+        {
+            return false;
+        }
+
+        DropCapture();
+        return true;
     }
 
     private void DropCapture()

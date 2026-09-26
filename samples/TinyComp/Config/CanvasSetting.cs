@@ -484,7 +484,7 @@ internal sealed class CanvasSetting
             var floor = constrained.ShelfMinScaleValue;
             var scales = constrained.ShelfScaleValues;
             var off = CanvasSide.None;
-            foreach (var side in (ReadOnlySpan<CanvasSide>)[CanvasSide.Left, CanvasSide.Right, CanvasSide.Top, CanvasSide.Bottom])
+            foreach (var side in CanvasSides.Each)
             {
                 if (floor >= scales.For(side))
                 {

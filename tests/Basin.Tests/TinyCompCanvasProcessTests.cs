@@ -499,6 +499,436 @@ public sealed class TinyCompCanvasProcessTests
         }
     }
 
+    private const string OverviewConfig = "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n";
+
+    private static Dictionary<string, string> Fields(string line)
+    {
+        var fields = new Dictionary<string, string>();
+        foreach (var part in line.Split(' '))
+        {
+            var equals = part.IndexOf('=');
+            if (equals > 0)
+            {
+                fields[part[..equals]] = part[(equals + 1)..];
+            }
+        }
+
+        return fields;
+    }
+
+    private static Dictionary<string, string> OverviewWindow(CanvasSession session)
+    {
+        session.Send("where");
+        var line = session.WaitForLine("OVERVIEWWIN ");
+        Assert.NotNull(line);
+        return Fields(line!);
+    }
+
+    private static void OpenOverview(CanvasSession session)
+    {
+        session.Send("overview open");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000));
+    }
+
+    [Fact]
+    public void Overview_zooms_the_desktop_and_shelves_a_window_against_the_screen_edge()
+    {
+        using var session = CanvasSession.Start(OverviewConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        var desktop = OverviewWindow(session!);
+        Assert.Equal("flat", desktop["region"]);
+        Assert.Equal("0.75", desktop["k"]);
+        Assert.Equal("false", desktop["shelved"]);
+
+        session!.Send("shelve right");
+        Assert.Contains("side=right output=HEADLESS-1", session.WaitForLine("SHELVE "));
+        _ = session.Shot("shelved");
+        var shelved = OverviewWindow(session);
+        Assert.Equal("shelf", shelved["region"]);
+        Assert.Equal("0.40", shelved["k"]);
+        Assert.Equal("true", shelved["shelved"]);
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        Assert.InRange(screen.Right, 1266, 1281);
+    }
+
+    [Fact]
+    public void Closing_overview_suspends_a_shelved_window_and_opening_resumes_it()
+    {
+        using var session = CanvasSession.Start(OverviewConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        session!.Send("shelve right");
+        _ = session.WaitForLine("SHELVE ");
+        _ = session.Shot("shelved");
+        session.Send("overview close");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false progress=0.00", 5000));
+        Assert.NotNull(session.WaitForClientLine("SUSPENDED 1", 5000));
+        var closed = session.Shot("closed");
+        Assert.Equal(0, Saturated(closed, 0, closed.Width));
+        OpenOverview(session);
+        Assert.NotNull(session.WaitForClientLine("SUSPENDED 0", 5000));
+    }
+
+    [Fact]
+    public void A_drag_back_through_both_thresholds_unshelves_on_the_drop()
+    {
+        using var session = CanvasSession.Start(OverviewConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        session!.Send("shelve right");
+        _ = session.WaitForLine("SHELVE ");
+        _ = session.Shot("shelved");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        var grabY = screen.Y - 5;
+        session.Send($"move {screen.X + 20} {grabY}");
+        session.Send("button 272 1");
+        foreach (var x in new[] { 1170, 1150, 1135, 1128, 1135, 1145, 1128, 1000, 800, 700 })
+        {
+            session.Send($"move {x} {grabY}");
+        }
+
+        session.Send("button 272 0");
+        Assert.Contains("held=out", session.WaitForLine("OVERVIEW held="));
+        Assert.Contains("held=in", session.WaitForLine("OVERVIEW held="));
+        Assert.Contains("held=out", session.WaitForLine("OVERVIEW held="));
+        Assert.NotNull(session.WaitForLine("UNSHELVE "));
+        _ = session.Shot("unshelved");
+        var back = OverviewWindow(session);
+        Assert.Equal("false", back["shelved"]);
+        Assert.Equal("flat", back["region"]);
+    }
+
+    [Fact]
+    public void A_click_on_the_zoomed_desktop_reaches_the_client_and_a_click_on_empty_space_closes()
+    {
+        using var session = CanvasSession.Start(OverviewConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        _ = session!.Shot("open");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        Assert.Equal(0.75, session.CanvasScale(), 3);
+        var x = screen.X + (screen.Width * 0.5);
+        var y = screen.Y + (screen.Height * 0.5);
+        session.Send(string.Create(CultureInfo.InvariantCulture, $"move {x} {y}"));
+        session.Send("button 272 1");
+        session.Send("button 272 0");
+        var line = session.WaitForClientLine("BUTTON ");
+        Assert.NotNull(line);
+        var parts = line!.Split(' ');
+        var localX = double.Parse(parts[2], CultureInfo.InvariantCulture);
+        var localY = double.Parse(parts[3], CultureInfo.InvariantCulture);
+        Assert.True(
+            Math.Abs(localX - ((x - screen.X) / 0.75)) < 4.0 && Math.Abs(localY - ((y - screen.Y) / 0.75)) < 4.0,
+            $"a click at ({x},{y}) reached ({localX},{localY}) on a window drawn at {screen}");
+
+        session.Send("move 900 600");
+        session.Send("button 272 1");
+        session.Send("button 272 0");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false progress=0.00", 5000));
+        Assert.Null(session.WaitForClientLine("BUTTON ", 500));
+    }
+
+    [Fact]
+    public void A_window_mapped_during_overview_zooms_its_frame_with_its_content()
+    {
+        using var session = CanvasSession.Start(OverviewConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        var before = session!.Shot("before");
+        session.Spawn(SsdWin()!, "server");
+        Assert.NotNull(session.WaitForLine("MAPPED "));
+        var after = session.Shot("after");
+        var changed = 0;
+        for (var y = 60; y < 110; y++)
+        {
+            for (var x = 60; x < 200; x++)
+            {
+                var i = ((y * after.Width) + x) * 4;
+                if (after.Rgba[i] != before.Rgba[i] || after.Rgba[i + 1] != before.Rgba[i + 1] || after.Rgba[i + 2] != before.Rgba[i + 2])
+                {
+                    changed++;
+                }
+            }
+        }
+
+        Assert.Equal(0, changed);
+    }
+
+    [Fact]
+    public void A_resize_in_overview_keeps_each_window_in_its_own_region()
+    {
+        using var session = CanvasSession.Start(OverviewConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        _ = session!.Shot("open");
+        var (_, _, desk, _, _) = session.CanvasWindow();
+        var grabY = desk.Y + (desk.Height / 2);
+        session.Send($"move {desk.X - 4} {grabY}");
+        session.Send("button 272 1");
+        for (var x = desk.X - 20; x > 10; x -= 20)
+        {
+            session.Send($"move {x} {grabY}");
+        }
+
+        session.Send("button 272 0");
+        _ = session.Shot("desktop");
+        var (deskX, _) = session.WindowPosition();
+        Assert.InRange(deskX, 0, 69);
+        Assert.Equal("flat", OverviewWindow(session)["region"]);
+
+        session.Send("shelve right");
+        _ = session.WaitForLine("SHELVE ");
+        _ = session.Shot("shelved");
+        var (_, _, shelf, _, _) = session.CanvasWindow();
+        var shelfY = shelf.Y + (shelf.Height / 2);
+        session.Send($"move {shelf.X - 4} {shelfY}");
+        session.Send("button 272 1");
+        for (var x = shelf.X; x < shelf.X + 60; x += 10)
+        {
+            session.Send($"move {x} {shelfY}");
+        }
+
+        session.Send("button 272 0");
+        _ = session.Shot("shrunk");
+        var (_, _, shrunk, _, _) = session.CanvasWindow();
+        session.Send($"move {shrunk.X - 4} {shelfY}");
+        session.Send("button 272 1");
+        for (var x = shrunk.X - 10; x > 1000; x -= 15)
+        {
+            session.Send($"move {x} {shelfY}");
+        }
+
+        var held = session.CanvasFields();
+        session.Send("button 272 0");
+        _ = session.Shot("released");
+        var released = session.CanvasFields();
+        Assert.Equal("shelf", released["region"]);
+        Assert.InRange(int.Parse(released["screen"].Split(',')[0], CultureInfo.InvariantCulture), 1150, 1200);
+        Assert.InRange(
+            int.Parse(released["width"], CultureInfo.InvariantCulture),
+            int.Parse(held["width"], CultureInfo.InvariantCulture) - 2,
+            int.Parse(held["width"], CultureInfo.InvariantCulture) + 2);
+        Assert.Equal(double.Parse(held["scale"], CultureInfo.InvariantCulture), double.Parse(released["scale"], CultureInfo.InvariantCulture), 2);
+    }
+
+    private const string StepConfig = "[canvas]\ngrid = \"never\"\nanimation_ms = 100\n[overview]\nwall = \"step\"\n";
+
+    private const string StepFourConfig =
+        "[canvas]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n[overview]\nwall = \"step\"\n";
+
+    [Fact]
+    public void Step_overview_zooms_the_desktop_flat_and_shelves_a_window_at_the_shelf_scale()
+    {
+        using var session = CanvasSession.Start(StepConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        var line = session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000);
+        Assert.NotNull(line);
+        var overview = Fields(line!);
+        Assert.Equal("step", overview["wall"]);
+        Assert.Equal("51", overview["slope"]);
+        Assert.Equal("109", overview["shelf"]);
+        var desktop = OverviewWindow(session);
+        Assert.Equal("flat", desktop["region"]);
+        Assert.Equal("0.75", desktop["k"]);
+
+        session.Send("shelve right");
+        Assert.Contains("side=right output=HEADLESS-1", session.WaitForLine("SHELVE "));
+        _ = session.Shot("shelved");
+        var shelved = OverviewWindow(session);
+        Assert.Equal("shelf", shelved["region"]);
+        Assert.Equal("0.40", shelved["k"]);
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        Assert.InRange(screen.Right, 1278, 1281);
+        Assert.True(screen.X >= 1171 - 1, $"the shelved window is drawn at {screen}");
+    }
+
+    [Theory]
+    [InlineData("[canvas]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n[overview]\nwall = \"step\"\n")]
+    [InlineData("[canvas]\ngrid = \"never\"\nanimation_ms = 100\nsides = [\"left\", \"right\", \"top\", \"bottom\"]\n")]
+    public void A_second_shelve_moves_the_shelved_window_to_another_side(string config)
+    {
+        using var session = CanvasSession.Start(config, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        OpenOverview(session!);
+        session!.Send("shelve right");
+        Assert.Contains("side=right", session.WaitForLine("SHELVE "));
+        session.Send("shelve left");
+        Assert.Contains("side=left", session.WaitForLine("SHELVE "));
+        _ = session.Shot("left");
+        var left = OverviewWindow(session);
+        Assert.Equal("left", left["side"]);
+        var (_, _, onLeft, _, _) = session.CanvasWindow();
+        Assert.InRange(onLeft.X, -1, 3);
+
+        session.Send("shelve top");
+        Assert.Contains("side=top", session.WaitForLine("SHELVE "));
+        session.Send("shelve top");
+        Assert.Equal("SHELVE refused: same side", session.WaitForLine("SHELVE "));
+        _ = session.Shot("top");
+        Assert.Equal("top", OverviewWindow(session)["side"]);
+        var (_, _, onTop, _, _) = session.CanvasWindow();
+        Assert.InRange(onTop.Y, -1, 12);
+
+        session.Send("move 640 700");
+        session.Send("button 272 1");
+        session.Send("button 272 0");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false", 5000));
+        session.Send("shelve right");
+        Assert.Equal("ERR no focused window", session.WaitForLine("ERR "));
+    }
+
+    [Fact]
+    public void A_step_shelve_animates_from_the_desktop_to_the_shelf_and_back()
+    {
+        const string slow = "[canvas]\ngrid = \"never\"\nanimation_ms = 1000\n[overview]\nwall = \"step\"\n";
+        using var session = CanvasSession.Start(slow, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000));
+        var (_, _, desk, _, _) = session.CanvasWindow();
+        session.Send("shelve right");
+        _ = session.WaitForLine("SHELVE ");
+        Thread.Sleep(150);
+        var (_, _, moving, _, _) = session.CanvasWindow();
+        Thread.Sleep(1200);
+        var (_, _, shelf, _, _) = session.CanvasWindow();
+        Assert.True(moving.X > desk.X + 20 && moving.X < shelf.X - 20, $"mid-shelve at {moving} between {desk} and {shelf}");
+        Assert.True(moving.Width < desk.Width && moving.Width > shelf.Width, $"mid-shelve at {moving} between {desk} and {shelf}");
+
+        session.Send("unshelve");
+        _ = session.WaitForLine("UNSHELVE ");
+        Thread.Sleep(150);
+        var (_, _, back, _, _) = session.CanvasWindow();
+        Assert.True(back.X < shelf.X - 20 && back.X > desk.X + 20, $"mid-unshelve at {back} between {shelf} and {desk}");
+    }
+
+    [Fact]
+    public void A_step_drag_across_the_wall_changes_scale_smoothly_and_unshelves_on_the_drop()
+    {
+        using var session = CanvasSession.Start(StepConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000));
+        session.Send("shelve right");
+        _ = session.WaitForLine("SHELVE ");
+        _ = session.Shot("shelved");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        var grabX = screen.X + 20;
+        var grabY = screen.Y - 5;
+        session.Send($"move {grabX} {grabY}");
+        session.Send("button 272 1");
+        var scales = new List<double>();
+        foreach (var x in new[] { 1190, 1175, 1165, 1155, 1145, 1135, 1125, 1115, 1000, 900 })
+        {
+            session.Send($"move {x} {grabY}");
+            scales.Add(session.CanvasScale());
+        }
+
+        for (var i = 1; i < scales.Count; i++)
+        {
+            Assert.True(scales[i] >= scales[i - 1] - 0.001, $"the scale fell from {scales[i - 1]} to {scales[i]}");
+            Assert.True(scales[i] - scales[i - 1] < 0.12, $"the scale jumped from {scales[i - 1]} to {scales[i]}");
+        }
+
+        Assert.Equal(0.75, scales[^1], 2);
+        session.Send("button 272 0");
+        Assert.NotNull(session.WaitForLine("UNSHELVE "));
+        _ = session.Shot("unshelved");
+        var back = OverviewWindow(session);
+        Assert.Equal("false", back["shelved"]);
+        Assert.Equal("flat", back["region"]);
+        Assert.Equal("0.75", back["k"]);
+    }
+
+    [Fact]
+    public void A_step_drag_into_a_corner_rests_there_as_one_uniform_scale()
+    {
+        using var session = CanvasSession.Start(StepFourConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        var line = session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000);
+        Assert.Contains("sides=left,right,top,bottom", line);
+        _ = session.Shot("open");
+        var (_, _, screen, _, _) = session.CanvasWindow();
+        var grabX = screen.X + 20;
+        var grabY = screen.Y - 5;
+        session.Send($"move {grabX} {grabY}");
+        session.Send("button 272 1");
+        for (var step = 1; step <= 10; step++)
+        {
+            session.Send($"move {grabX + ((1265 - grabX) * step / 10)} {grabY + ((20 - grabY) * step / 10)}");
+        }
+
+        session.Send("button 272 0");
+        Assert.Contains("held=in", session.WaitForLine("OVERVIEW held="));
+        Assert.Contains("side=right-top", session.WaitForLine("SHELVE "));
+        _ = session.Shot("corner");
+        var corner = OverviewWindow(session);
+        Assert.Equal("corner", corner["region"]);
+        var (_, _, drawn, _, _) = session.CanvasWindow();
+        Assert.True(drawn.X >= 1171 - 1 && drawn.Right <= 1281, $"the corner window is drawn at {drawn}");
+        Assert.True(drawn.Y >= -1 && drawn.Bottom <= 62, $"the corner window is drawn at {drawn}");
+    }
+
+    [Fact]
+    public void A_click_on_a_step_wall_closes_overview()
+    {
+        using var session = CanvasSession.Start(StepConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000));
+        _ = session.Shot("open");
+        session.Send("move 1145 600");
+        session.Send("button 272 1");
+        session.Send("button 272 0");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false progress=0.00", 5000));
+        Assert.Null(session.WaitForClientLine("BUTTON ", 500));
+    }
+
+    [Fact]
+    public void A_step_shelf_resize_toward_the_desktop_stops_at_the_base_line()
+    {
+        using var session = CanvasSession.Start(StepConfig, SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=true progress=1.00", 5000));
+        session.Send("shelve right");
+        _ = session.WaitForLine("SHELVE ");
+        _ = session.Shot("shelved");
+        var (_, _, shelf, _, _) = session.CanvasWindow();
+        var shelfY = shelf.Y + (shelf.Height / 2);
+        session.Send($"move {shelf.X - 4} {shelfY}");
+        session.Send("button 272 1");
+        for (var x = shelf.X - 10; x > 1000; x -= 15)
+        {
+            session.Send($"move {x} {shelfY}");
+        }
+
+        var held = session.CanvasFields();
+        session.Send("button 272 0");
+        _ = session.Shot("released");
+        var released = session.CanvasFields();
+        Assert.Equal("shelf", released["region"]);
+        Assert.InRange(int.Parse(released["screen"].Split(',')[0], CultureInfo.InvariantCulture), 1170, 1200);
+        Assert.InRange(
+            int.Parse(released["width"], CultureInfo.InvariantCulture),
+            int.Parse(held["width"], CultureInfo.InvariantCulture) - 2,
+            int.Parse(held["width"], CultureInfo.InvariantCulture) + 2);
+    }
+
+    [Fact]
+    public void Overview_is_refused_on_an_output_with_the_canvas_enabled()
+    {
+        using var session = CanvasSession.Start("[canvas]\nenable = true\ngrid = \"never\"\n", SsdWin());
+        Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
+        session!.Send("overview open");
+        Assert.Equal("OVERVIEW refused: canvas", session.WaitForLine("OVERVIEW "));
+        session.Send("shelve right");
+        Assert.Equal("SHELVE refused: canvas", session.WaitForLine("SHELVE "));
+    }
+
     private static string? SsdWin([CallerFilePath] string sourcePath = "") => WlClient("ssdwin", sourcePath);
 
     private static string? WlClient(string name, string sourcePath)

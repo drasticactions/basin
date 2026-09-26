@@ -82,21 +82,21 @@ internal sealed partial class TinyComp
             switch (type)
             {
                 case Libinput.LibinputEventType.GestureSwipeBegin:
-                    if (!BeginWorkspaceSwipe((uint)gesture.FingerCount, time))
+                    if (!BeginWorkspaceSwipe((uint)gesture.FingerCount, time) && !BeginOverviewSwipe((uint)gesture.FingerCount, time))
                     {
                         _gestures.NotifySwipeBegin(time, (uint)gesture.FingerCount);
                     }
 
                     break;
                 case Libinput.LibinputEventType.GestureSwipeUpdate:
-                    if (!UpdateWorkspaceSwipe(gesture.Dx, gesture.Dy, time))
+                    if (!UpdateWorkspaceSwipe(gesture.Dx, gesture.Dy, time) && !UpdateOverviewSwipe(gesture.Dx, gesture.Dy, time))
                     {
                         _gestures.NotifySwipeUpdate(time, gesture.Dx, gesture.Dy);
                     }
 
                     break;
                 case Libinput.LibinputEventType.GestureSwipeEnd:
-                    if (!EndWorkspaceSwipe(gesture.Cancelled, time))
+                    if (!EndWorkspaceSwipe(gesture.Cancelled, time) && !EndOverviewSwipe(gesture.Cancelled, time))
                     {
                         _gestures.NotifySwipeEnd(time, gesture.Cancelled);
                     }
@@ -165,9 +165,11 @@ internal sealed partial class TinyComp
         _grabOrigin.Touch = _touchMoveResize;
         _touchMoveResize.Handler = this;
         _touchSwipeGesture.Handler = this;
+        _overviewTouchGesture.Handler = new OverviewTouchHandler(this);
+        ConfigureOverviewTriggers();
         _touchDriver.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(_scene);
         _touchDriver.Router.Chrome = this;
-        _touchDriver.Router.Gestures = _touchSwipeGesture;
+        _touchDriver.Router.Gestures = new Basin.Seat.TouchGestureSet(_touchSwipeGesture, _overviewTouchGesture);
         _touchDriver.Router.Activity = this;
         _touchDriver.AttachPointer(this);
         _touchDriver.Routed += (_, _, surface) =>
@@ -192,6 +194,7 @@ internal sealed partial class TinyComp
 
     bool Basin.Seat.ITouchChrome.TryPress(int id, uint timeMs, double x, double y)
     {
+        _shelveChain = null;
         _feedback?.OnTouchDown(id, x, y, EffectTick());
         var topFrame = _scene.NodeAt(x, y) is { Node: { } topNode } ? FindFrame(topNode) : null;
         if (topFrame is null && _scene.SurfaceAt(x, y) is not null)

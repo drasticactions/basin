@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using SkiaSharp;
 
 namespace Basin.Render.Skia;
@@ -17,7 +18,9 @@ public sealed class SkiaImageShader
         }
 
         Drop();
+        AllocationScope.Pause();
         var shader = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, LinearSampling);
+        AllocationScope.Resume();
         if (shader is null)
         {
             return null;

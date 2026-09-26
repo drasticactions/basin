@@ -118,6 +118,8 @@ internal sealed partial class TinyComp
         _shortcuts.Configure(loaded);
         _canvasOverride = null;
         _canvasClosing = false;
+        ConfigureOverviewTriggers();
+        CloseRefusedOverviews();
         LayoutCanvasAll();
 
         foreach (var view in Views)
@@ -138,7 +140,8 @@ internal sealed partial class TinyComp
             + $" canvas={(loaded.CanvasAnywhere ? "on" : "off")} canvas-edge-scale={loaded.Canvas.EdgeScaleValue:F3}"
             + $" canvas-sides={loaded.Canvas.SideNames} canvas-corner={loaded.Canvas.CornerName} canvas-corner-radius={loaded.Canvas.CornerRadiusValue:F2}"
             + $" canvas-window={loaded.Canvas.WindowName} canvas-min-scale={loaded.Canvas.MinScaleValue:F2} canvas-scale-reach={loaded.Canvas.ScaleReachValue:F2}"
-            + $" canvas-shelf={loaded.Canvas.ShelfFraction:F2} canvas-shelf-scale={loaded.Canvas.ShelfScaleValues.Names} canvas-shelf-min-scale={loaded.Canvas.ShelfMinScaleValue:F2} canvas-shelf-shape={loaded.Canvas.ShapeName} canvas-slope-window={loaded.Canvas.OnSlopeName} canvas-drag={loaded.Canvas.DragName}");
+            + $" canvas-shelf={loaded.Canvas.ShelfFraction:F2} canvas-shelf-scale={loaded.Canvas.ShelfScaleValues.Names} canvas-shelf-min-scale={loaded.Canvas.ShelfMinScaleValue:F2} canvas-shelf-shape={loaded.Canvas.ShapeName} canvas-slope-window={loaded.Canvas.OnSlopeName} canvas-drag={loaded.Canvas.DragName}"
+            + $" overview={(loaded.Overview.Enabled ? "on" : "off")} overview-scale={loaded.Overview.ScaleValue:F2} overview-hot-corner={loaded.Overview.HotCornerName} overview-wall={loaded.Overview.WallName}");
     }
 
     private double? ReloadScaleFor(int index, IOutput output) =>

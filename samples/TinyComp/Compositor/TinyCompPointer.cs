@@ -40,21 +40,21 @@ internal sealed partial class TinyComp
         pointer.Leave += () => _seat.Pointer.NotifyClearFocus();
         pointer.SwipeBegin += (time, fingers) =>
         {
-            if (!BeginWorkspaceSwipe(fingers, time))
+            if (!BeginWorkspaceSwipe(fingers, time) && !BeginOverviewSwipe(fingers, time))
             {
                 _gestures.NotifySwipeBegin(time, fingers);
             }
         };
         pointer.SwipeUpdate += (time, dx, dy) =>
         {
-            if (!UpdateWorkspaceSwipe(dx, dy, time))
+            if (!UpdateWorkspaceSwipe(dx, dy, time) && !UpdateOverviewSwipe(dx, dy, time))
             {
                 _gestures.NotifySwipeUpdate(time, dx, dy);
             }
         };
         pointer.SwipeEnd += (time, cancelled) =>
         {
-            if (!EndWorkspaceSwipe(cancelled, time))
+            if (!EndWorkspaceSwipe(cancelled, time) && !EndOverviewSwipe(cancelled, time))
             {
                 _gestures.NotifySwipeEnd(time, cancelled);
             }
@@ -81,8 +81,34 @@ internal sealed partial class TinyComp
     internal void InjectKey(uint time, uint key, bool pressed) =>
         HandleKey(time, key, pressed, fromInputMethod: true);
 
+    private bool _cursorPlaced;
+
+    private void CenterCursorOnce(OutputView view)
+    {
+        if (_cursorPlaced || !_layout.Contains(view.Output))
+        {
+            return;
+        }
+
+        _cursorPlaced = true;
+        _loop.AddIdle(() =>
+        {
+            if (_cursorX != 0 || _cursorY != 0 || !Views.Contains(view) || !_layout.Contains(view.Output))
+            {
+                return;
+            }
+
+            var box = _layout.BoxOf(view.Output);
+            var x = box.X + (box.Width / 2.0);
+            var y = box.Y + (box.Height / 2.0);
+            _pointer?.Warp(x, y);
+            MoveCursor(x, y, (uint)Environment.TickCount);
+        });
+    }
+
     private void MoveCursor(double x, double y, uint time)
     {
+        _cursorPlaced = true;
         var rawDx = x - _lastRawX;
         var rawDy = y - _lastRawY;
         (_lastRawX, _lastRawY) = (x, y);
@@ -112,6 +138,8 @@ internal sealed partial class TinyComp
         {
             return;
         }
+
+        TrackHotCorner(x, y, time);
 
         UpdateHoverCursor(x, y);
         RouteMotion(time, x, y);
@@ -150,12 +178,15 @@ internal sealed partial class TinyComp
                 return true;
 
             case DragMode.Resize when _grabWindow is { } window:
+                x = Math.Clamp(x, _shelfResizeMinX, _shelfResizeMaxX);
+                y = Math.Clamp(y, _shelfResizeMinY, _shelfResizeMaxY);
                 if (!ResizeCanvasScaled(window, x, y, out var resizeX, out var resizeY))
                 {
                     (resizeX, resizeY) = ToCanvasPointAt(x, y, window);
                 }
 
                 var box = new ResizeDrag(_grabEdges, _grabStart, _grabX, _grabY).BoxFor(resizeX, resizeY, window.X, window.Y);
+                box = ClampOverviewResize(window, box, _grabEdges, _grabStart);
                 window.ResizeTo(box.X, box.Y, box.Width, box.Height, _grabEdges);
                 return true;
 
@@ -309,6 +340,11 @@ internal sealed partial class TinyComp
             Trace($"button {button} pressed={pressed} mode={_mode}");
         }
 
+        if (pressed)
+        {
+            _shelveChain = null;
+        }
+
         _feedback?.OnButton(_cursorX, _cursorY, button, pressed, EffectTick());
         if (_feedback is { MarksEnabled: true } marking && button == InputCodes.BtnMiddle && IsAltDown())
         {
@@ -321,6 +357,11 @@ internal sealed partial class TinyComp
                 marking.EndMark();
             }
 
+            return;
+        }
+
+        if (!pressed && _mode == DragMode.None && OverviewEmptyClick(button, pressed))
+        {
             return;
         }
 
@@ -450,6 +491,11 @@ internal sealed partial class TinyComp
                 BeginResize(ringXWindow, ringEdges);
             }
 
+            return;
+        }
+
+        if (pressed && OverviewEmptyClick(button, pressed))
+        {
             return;
         }
 

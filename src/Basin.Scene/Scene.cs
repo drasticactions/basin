@@ -206,6 +206,11 @@ public sealed partial class Scene
 
     private static bool HasFrameWork(SceneNode node)
     {
+        if (!node.Enabled)
+        {
+            return false;
+        }
+
         switch (node)
         {
             case SceneBuffer { InputSurface: { IsDestroyed: false } surface }:
@@ -227,6 +232,11 @@ public sealed partial class Scene
 
     private static void SendFrameDone(SceneNode node, uint timestampMs)
     {
+        if (!node.Enabled)
+        {
+            return;
+        }
+
         switch (node)
         {
             case SceneBuffer { InputSurface: { IsDestroyed: false } surface }:
@@ -454,8 +464,32 @@ public sealed partial class Scene
         ListPool.Push(list);
     }
 
+    private const int IdleCaptureCommits = 120;
+
+    private readonly List<SceneTransform> _idleCaptures = [];
+
+    internal void ParkIdleCapture(SceneTransform node)
+    {
+        if (!_idleCaptures.Contains(node))
+        {
+            _idleCaptures.Add(node);
+        }
+    }
+
+    private void AgeIdleCaptures()
+    {
+        for (var i = _idleCaptures.Count - 1; i >= 0; i--)
+        {
+            if (_idleCaptures[i].AgeIdleCapture(IdleCaptureCommits))
+            {
+                _idleCaptures.RemoveAt(i);
+            }
+        }
+    }
+
     internal void PrepareCaptures(IRenderer renderer, List<RenderEntry> list, double scale)
     {
+        AgeIdleCaptures();
         for (var i = 0; i < list.Count; i++)
         {
             if (list[i].Node is not SceneTransform { Deformer: not null } node)

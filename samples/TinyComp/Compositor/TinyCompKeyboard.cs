@@ -54,6 +54,11 @@ internal sealed partial class TinyComp
             return;
         }
 
+        if (!_sessionLock.IsLocked && OverviewKey(key, pressed))
+        {
+            return;
+        }
+
         if (_effects.SwitcherActive && !_sessionLock.IsLocked)
         {
             if (!pressed && ReleasesSwitcher(key))
@@ -385,6 +390,30 @@ internal sealed partial class TinyComp
                 _ = SetCanvasMode(null);
                 return true;
 
+            case KeyAction.Overview:
+                _ = ToggleOverview(null, null);
+                return true;
+
+            case KeyAction.ShelveLeft:
+                ShelveFocused(CanvasSide.Left);
+                return true;
+
+            case KeyAction.ShelveRight:
+                ShelveFocused(CanvasSide.Right);
+                return true;
+
+            case KeyAction.ShelveTop:
+                ShelveFocused(CanvasSide.Top);
+                return true;
+
+            case KeyAction.ShelveBottom:
+                ShelveFocused(CanvasSide.Bottom);
+                return true;
+
+            case KeyAction.Unshelve:
+                UnshelveByKey();
+                return true;
+
             default:
                 return false;
         }
@@ -424,6 +453,12 @@ internal sealed partial class TinyComp
     {
         if (!_effects.SwitcherActive)
         {
+            if (AnyOverviewActive())
+            {
+                _report.Line("SWITCHER refused: overview");
+                return;
+            }
+
             var workspace = CurrentWorkspace();
             _switcherWindows.Clear();
             foreach (var window in _windows)

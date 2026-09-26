@@ -11,4 +11,8 @@ internal sealed class OutputSetting
     public (int Width, int Height, int? Refresh)? Mode { get; init; }
 
     public CanvasSetting? Canvas { get; init; }
+
+    public OverviewSetting? Overview { get; init; }
+
+    public Tomlyn.Model.TomlTable? CanvasKeys { get; init; }
 }

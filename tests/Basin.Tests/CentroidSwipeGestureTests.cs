@@ -131,6 +131,78 @@ public sealed class CentroidSwipeGestureTests
         Assert.False(gesture.IsClaimed);
     }
 
+    [Fact]
+    public void A_vertical_gesture_measures_its_slop_on_the_vertical_axis()
+    {
+        var handler = new RecordingHandler { Accept = true };
+        var gesture = new CentroidSwipeGesture { Fingers = 4, Slop = 20, Axis = SwipeAxis.Vertical, Handler = handler };
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.Equal(TouchGestureVerdict.Pass, gesture.Down(i, 0, 100 + (i * 10), 500));
+        }
+
+        Assert.Equal(TouchGestureVerdict.Pass, gesture.Motion(0, 1, 200, 500));
+        Assert.False(gesture.IsClaimed);
+        Assert.Equal(TouchGestureVerdict.Pass, gesture.Motion(1, 2, 110, 440));
+        Assert.Equal(TouchGestureVerdict.Claim, gesture.Motion(2, 3, 120, 380));
+        Assert.True(gesture.IsClaimed);
+        Assert.Single(handler.Log);
+    }
+
+    [Fact]
+    public void A_fourth_finger_before_the_slop_stops_a_three_finger_watch()
+    {
+        var handler = new RecordingHandler { Accept = true };
+        var gesture = new CentroidSwipeGesture { Fingers = 3, Slop = 20, Handler = handler };
+        for (var i = 0; i < 3; i++)
+        {
+            _ = gesture.Down(i, 0, 100 + (i * 10), 500);
+        }
+
+        _ = gesture.Motion(0, 1, 110, 500);
+        _ = gesture.Down(3, 2, 130, 500);
+        Assert.Equal(TouchGestureVerdict.Pass, gesture.Motion(1, 3, 200, 500));
+        Assert.False(gesture.IsClaimed);
+        Assert.Empty(handler.Log);
+    }
+
+    [Fact]
+    public void A_gesture_set_hands_each_finger_count_to_its_own_gesture()
+    {
+        var three = new RecordingHandler { Accept = true };
+        var four = new RecordingHandler { Accept = true };
+        var horizontal = new CentroidSwipeGesture { Fingers = 3, Slop = 20, Handler = three };
+        var vertical = new CentroidSwipeGesture { Fingers = 4, Slop = 20, Axis = SwipeAxis.Vertical, Handler = four };
+        var set = new TouchGestureSet(horizontal, vertical);
+        for (var i = 0; i < 4; i++)
+        {
+            _ = set.Down(i, 0, 100 + (i * 10), 500);
+        }
+
+        _ = set.Motion(0, 1, 100, 480);
+        Assert.Equal(TouchGestureVerdict.Claim, set.Motion(1, 2, 110, 400));
+        Assert.Same(vertical, set.Owner);
+        Assert.Empty(three.Log);
+        Assert.Equal(TouchGestureVerdict.Owned, set.Motion(2, 3, 120, 400));
+        Assert.StartsWith("update", four.Log[^1]);
+        for (var i = 0; i < 4; i++)
+        {
+            _ = set.Up(i, 4);
+        }
+
+        Assert.Null(set.Owner);
+        Assert.Equal("end false", four.Log[^1]);
+
+        for (var i = 0; i < 3; i++)
+        {
+            _ = set.Down(10 + i, 5, 100 + (i * 10), 500);
+        }
+
+        Assert.Equal(TouchGestureVerdict.Claim, set.Motion(10, 6, 170, 500));
+        Assert.Same(horizontal, set.Owner);
+        Assert.Single(three.Log);
+    }
+
     private sealed class RecordingHandler : ICentroidSwipeHandler
     {
         public bool Accept { get; set; }
