@@ -28,6 +28,9 @@ public sealed class WaypipeChannel : IDisposable
     private int _ended;
     private bool _closeSent;
     private bool _disposed;
+    private readonly object _openGate = new();
+    private Action? _opened;
+    private bool _open;
 
     private WaypipeChannel(
         Stream stream,
@@ -71,7 +74,58 @@ public sealed class WaypipeChannel : IDisposable
 
     public event Action<Exception?>? Ended;
 
-    public event Action? Opened;
+    public bool IsOpen
+    {
+        get
+        {
+            lock (_openGate)
+            {
+                return _open;
+            }
+        }
+    }
+
+    public event Action? Opened
+    {
+        add
+        {
+            bool already;
+            lock (_openGate)
+            {
+                already = _open;
+                if (!already)
+                {
+                    _opened += value;
+                }
+            }
+
+            if (already)
+            {
+                value?.Invoke();
+            }
+        }
+
+        remove
+        {
+            lock (_openGate)
+            {
+                _opened -= value;
+            }
+        }
+    }
+
+    private void RaiseOpened()
+    {
+        Action? opened;
+        lock (_openGate)
+        {
+            _open = true;
+            opened = _opened;
+            _opened = null;
+        }
+
+        opened?.Invoke();
+    }
 
     internal static WaypipeChannel AttachAccepted(
         Stream stream,
@@ -209,7 +263,7 @@ public sealed class WaypipeChannel : IDisposable
             var header = new byte[WaypipeWire.ConnectionHeaderLength];
             ReadExactly(header);
             AnswerConnectionHeader(header);
-            Opened?.Invoke();
+            RaiseOpened();
 
             var frame = new byte[4];
             var body = new byte[16 * 1024];
@@ -262,7 +316,7 @@ public sealed class WaypipeChannel : IDisposable
             }
 
             AnswerConnectionHeader(header);
-            Opened?.Invoke();
+            RaiseOpened();
             WaypipeLog.Log.Debug($"async pump {_channelId}: connection header answered");
 
             var frame = new byte[4];

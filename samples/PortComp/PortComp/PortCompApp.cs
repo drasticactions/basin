@@ -21,6 +21,10 @@ public sealed class PortCompApp : Application
 
     public static bool AutoConnect { get; set; }
 
+    public static bool StartupListen { get; set; }
+
+    public static string? StartupHyperVVm { get; set; }
+
     public static Basin.Capabilities.IVideoDecoder? VideoDecoder { get; set; }
 
     public static bool CarriesDmabuf { get; set; }

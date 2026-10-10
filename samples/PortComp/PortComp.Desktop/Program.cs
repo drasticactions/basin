@@ -15,6 +15,14 @@ internal static class Program
                 case "--endpoint" when i + 1 < args.Length:
                     PortCompApp.StartupEndpoint = args[++i];
                     break;
+                case "--listen" when i + 1 < args.Length:
+                    PortCompApp.StartupEndpoint = args[++i];
+                    PortCompApp.StartupListen = true;
+                    PortCompApp.AutoConnect = true;
+                    break;
+                case "--hyperv-vm" when i + 1 < args.Length:
+                    PortCompApp.StartupHyperVVm = args[++i];
+                    break;
                 case "--connect":
                     PortCompApp.AutoConnect = true;
                     break;

@@ -20,7 +20,10 @@ public sealed class MainView : UserControl
     private TopLevel? _top;
     private BasinToplevelView? _shellView;
     private PortCompShell? _shell;
+    private readonly ComboBox _mode;
+    private readonly SelectableTextBlock _hint;
     private PortCompSession? _session;
+    private PortCompListenSession? _listening;
     private bool _connecting;
     private bool _shutdown;
 
@@ -35,12 +38,19 @@ public sealed class MainView : UserControl
         _connect = new Button { Content = "Connect", IsEnabled = false };
         _connect.Click += (_, _) => _ = ToggleAsync();
         _status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
+        _hint = new SelectableTextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0), IsVisible = false };
+        _mode = new ComboBox { ItemsSource = new[] { "Dial", "Listen" }, SelectedIndex = 0, IsEnabled = PortCompLink.CanListen, Margin = new Thickness(0, 0, 8, 0) };
+        _mode.SelectionChanged += (_, _) => OnModeChanged();
 
         var bar = new DockPanel { Margin = new Thickness(8, 4), LastChildFill = true };
+        DockPanel.SetDock(_mode, Dock.Left);
         DockPanel.SetDock(_connect, Dock.Right);
         DockPanel.SetDock(_status, Dock.Right);
+        DockPanel.SetDock(_hint, Dock.Right);
+        bar.Children.Add(_mode);
         bar.Children.Add(_connect);
         bar.Children.Add(_status);
+        bar.Children.Add(_hint);
         bar.Children.Add(_endpoint);
 
         var root = new DockPanel();
@@ -107,7 +117,31 @@ public sealed class MainView : UserControl
 
     public string StatusText => _status.Text ?? string.Empty;
 
-    public bool Connected => _session is not null;
+    public bool Connected => _session is not null || _listening is not null;
+
+    public bool Listening
+    {
+        get => _mode.SelectedIndex == 1;
+        set => _mode.SelectedIndex = value ? 1 : 0;
+    }
+
+    public PortCompListenSession? ListenSession => _listening;
+
+    private void OnModeChanged()
+    {
+        if (_session is not null || _listening is not null)
+        {
+            return;
+        }
+
+        var listening = Listening;
+        if (_endpoint.Text is null or "" || _endpoint.Text == PortCompLink.DefaultEndpoint || _endpoint.Text == PortCompLink.DefaultListenEndpoint)
+        {
+            _endpoint.Text = listening ? PortCompLink.DefaultListenEndpoint : PortCompLink.DefaultEndpoint;
+        }
+
+        _connect.Content = listening ? "Listen" : "Connect";
+    }
 
     public Task ToggleAsync() => ToggleCoreAsync();
 
@@ -116,6 +150,8 @@ public sealed class MainView : UserControl
         _shutdown = true;
         _session?.Dispose();
         _session = null;
+        _listening?.Dispose();
+        _listening = null;
         _host = null;
         var shell = _shell;
         _shell = null;
@@ -161,6 +197,11 @@ public sealed class MainView : UserControl
         _shellView.Focus();
         _connect.IsEnabled = true;
         Status("ready");
+        if (PortCompApp.StartupListen)
+        {
+            Listening = true;
+        }
+
         if (PortCompApp.StartupEndpoint is { Length: > 0 } startup)
         {
             Endpoint = startup;
@@ -199,6 +240,23 @@ public sealed class MainView : UserControl
             open.Dispose();
             _connect.Content = "Connect";
             Status("disconnected");
+            return;
+        }
+
+        if (_listening is { } listening)
+        {
+            _listening = null;
+            listening.Dispose();
+            _connect.Content = "Listen";
+            _mode.IsEnabled = PortCompLink.CanListen;
+            _hint.IsVisible = false;
+            Status("stopped listening");
+            return;
+        }
+
+        if (Listening)
+        {
+            await ListenAsync(host);
             return;
         }
 
@@ -244,6 +302,65 @@ public sealed class MainView : UserControl
         catch (Exception error)
         {
             Status($"could not connect: {error.Message}");
+        }
+        finally
+        {
+            _connecting = false;
+            _connect.IsEnabled = true;
+        }
+    }
+
+    private async Task ListenAsync(BasinCompositorHost host)
+    {
+        _connecting = true;
+        _connect.IsEnabled = false;
+        _mode.IsEnabled = false;
+        var endpoint = (_endpoint.Text ?? string.Empty).Trim();
+        Status($"binding {endpoint}");
+        try
+        {
+            var vm = PortCompApp.StartupHyperVVm is { Length: > 0 } word ? HyperVVm.Parse(word) : (HyperVVm?)null;
+            var session = await PortCompListenSession.StartAsync(host, _output.Post, endpoint, vm, PortCompShell.ChannelOptions());
+            session.Changed += () => Dispatcher.UIThread.Post(() =>
+            {
+                if (ReferenceEquals(_listening, session))
+                {
+                    Status($"{endpoint}, {session.Clients} client(s)");
+                }
+            });
+            session.Rebound += id => Dispatcher.UIThread.Post(() =>
+            {
+                if (ReferenceEquals(_listening, session))
+                {
+                    Status($"rebound on WSL VM {id}");
+                }
+            });
+            session.Ended += failure => Dispatcher.UIThread.Post(() =>
+            {
+                if (ReferenceEquals(_listening, session))
+                {
+                    _listening = null;
+                    session.Dispose();
+                    _connect.Content = "Listen";
+                    _mode.IsEnabled = PortCompLink.CanListen;
+                    _hint.IsVisible = false;
+                }
+
+                Status(failure is null ? "the listener stopped" : $"the listener stopped: {failure.Message}");
+            });
+            _listening = session;
+            _connect.Content = "Stop";
+            Status(session.VmLabel is { } label ? $"listening on {endpoint} ({label})" : $"listening on {session.Listener.LocalEndPoint}");
+            if (PortCompLink.GuestCommand(endpoint) is { } command)
+            {
+                _hint.Text = command;
+                _hint.IsVisible = true;
+            }
+        }
+        catch (Exception error)
+        {
+            _mode.IsEnabled = PortCompLink.CanListen;
+            Status(error.Message);
         }
         finally
         {

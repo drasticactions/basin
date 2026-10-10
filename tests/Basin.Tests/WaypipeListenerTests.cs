@@ -96,6 +96,70 @@ public sealed class WaypipeListenerTests
     }
 
     [Fact]
+    public async Task The_factory_binds_a_unix_path_synchronously_and_its_channels_arrive_on_the_loop_thread()
+    {
+        using var display = WlServerDisplay.Create(new ManagedTransport());
+        var loop = new WaylandEventLoop(display);
+        var path = Path.Combine(Path.GetTempPath(), $"basin-wp-{Guid.NewGuid():N}"[..40]);
+        var binding = WaypipeListeners.BindAsync(
+            path,
+            new WaypipeListenerHost(loop, _ => throw new InvalidOperationException("a descriptor listener never posts")),
+            cancellation: TestContext.Current.CancellationToken);
+        Assert.True(binding.IsCompletedSuccessfully);
+        using var listener = await binding;
+        Assert.IsType<WaypipeListener>(listener);
+
+        var threads = new List<int>();
+        listener.ChannelAccepted += channel =>
+        {
+            threads.Add(Environment.CurrentManagedThreadId);
+            channel.Dispose();
+        };
+        using var peer = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        peer.Connect(listener.LocalEndPoint);
+        var deadline = Environment.TickCount64 + 10_000;
+        while (threads.Count == 0)
+        {
+            Assert.True(Environment.TickCount64 < deadline, "no channel arrived");
+            loop.Dispatch(10);
+        }
+
+        Assert.Equal(Environment.CurrentManagedThreadId, Assert.Single(threads));
+    }
+
+    [Fact]
+    public void Inside_WSL2_a_vsock_bind_beside_hv_sock_accepts_from_CID_1()
+    {
+        Assert.SkipUnless(VsockFacts.IsWsl, "this row runs inside a WSL2 distro");
+        Assert.SkipWhen(VsockFacts.LoopbackReason() is not null, VsockFacts.LoopbackReason() ?? string.Empty);
+        Assert.True(Directory.Exists("/sys/module/hv_sock") || Directory.Exists("/sys/module/hv_vsock"), "the WSL2 kernel carries hv_sock");
+        using var rig = new Rig("vsock");
+        var accepted = 0;
+        rig.Listener.ChannelAccepted += channel =>
+        {
+            accepted++;
+            rig.Adoption.Adopt(channel);
+        };
+
+        using var peer = rig.Connect();
+        rig.PumpUntil(() => accepted == 1);
+        peer.SendConnectionHeader();
+        rig.PumpUntil(() => peer.Received(WaypipeMessageType.Version));
+    }
+
+    [Theory]
+    [InlineData(false, "inside WSL2: a client in this VM reaches vsock:9800 over CID 1, which needs 'sudo modprobe vsock_loopback'; Windows reaches it as VmId=<this VM> ServiceId=00002648-facb-11e6-bd58-64006a7986d3")]
+    [InlineData(true, "inside WSL2: a client in this VM reaches vsock:9800 over CID 1; Windows reaches it as VmId=<this VM> ServiceId=00002648-facb-11e6-bd58-64006a7986d3")]
+    public void The_WSL_hint_leaves_out_the_modprobe_clause_once_vsock_loopback_is_loaded(bool loaded, string expected)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the hint is logged by the Linux listener");
+        if (OperatingSystem.IsLinux())
+        {
+            Assert.Equal(expected, WslHint.Text(new VsockEndPoint(9800), loaded));
+        }
+    }
+
+    [Fact]
     public void An_ip_wildcard_is_refused_at_bind()
     {
         using var display = WlServerDisplay.Create(new ManagedTransport());
@@ -289,7 +353,7 @@ public sealed class WaypipeListenerTests
         private void Drain()
         {
             var chunk = new byte[4096];
-            while (socket.Available > 0)
+            while (socket.Poll(0, SelectMode.SelectRead))
             {
                 var got = socket.Receive(chunk);
                 if (got <= 0)

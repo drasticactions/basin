@@ -74,6 +74,7 @@ public sealed unsafe class XWaylandServer : IDisposable
     private const int OWronly = 1;
     private const int OCloexec = 0x80000;
     private const int Esrch = 3;
+    private const int Erofs = 30;
     private const int Sigterm = 15;
     private const int Sigkill = 9;
     private const int WaitNoHang = 1;
@@ -214,6 +215,14 @@ public sealed unsafe class XWaylandServer : IDisposable
 
         unlink($"/tmp/.X11-unix/X{display}");
         var pathFd = BindUnix($"/tmp/.X11-unix/X{display}");
+        if (pathFd < 0 && Marshal.GetLastPInvokeError() == Erofs)
+        {
+            Log.Info($"/tmp/.X11-unix is read-only, so :{display} listens on its abstract socket alone");
+            _listenFds[0] = abstractFd;
+            _listenFds[1] = -1;
+            return true;
+        }
+
         if (pathFd < 0)
         {
             close(abstractFd);
@@ -255,6 +264,11 @@ public sealed unsafe class XWaylandServer : IDisposable
     {
         foreach (var fd in _listenFds)
         {
+            if (fd < 0)
+            {
+                continue;
+            }
+
             var source = _loop.AddFd(fd, FdReadiness.Readable, (_, _) =>
             {
                 if (!_running && !_disposed)
@@ -297,7 +311,11 @@ public sealed unsafe class XWaylandServer : IDisposable
         var actions = Marshal.AllocHGlobal(80);
         _ = posix_spawn_file_actions_init(actions);
         _ = posix_spawn_file_actions_adddup2(actions, _listenFds[0], 10);
-        _ = posix_spawn_file_actions_adddup2(actions, _listenFds[1], 11);
+        if (_listenFds[1] >= 0)
+        {
+            _ = posix_spawn_file_actions_adddup2(actions, _listenFds[1], 11);
+        }
+
         _ = posix_spawn_file_actions_adddup2(actions, displayPipe[1], 12);
         _ = posix_spawn_file_actions_adddup2(actions, wm[1], 13);
         _ = posix_spawn_file_actions_adddup2(actions, wayland[1], 14);
@@ -305,9 +323,14 @@ public sealed unsafe class XWaylandServer : IDisposable
         string[] argv =
         [
             "Xwayland", DisplayName, "-rootless", "-core", "-terminate",
-            "-listenfd", "10", "-listenfd", "11",
+            "-listenfd", "10",
             "-displayfd", "12", "-wm", "13",
         ];
+        if (_listenFds[1] >= 0)
+        {
+            argv = [.. argv[..7], "-listenfd", "11", .. argv[7..]];
+        }
+
         var env = new List<string> { "WAYLAND_SOCKET=14" };
         foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
         {

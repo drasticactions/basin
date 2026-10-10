@@ -203,6 +203,28 @@ public static class CommonOptions
         HelpName = "ADDRESS:PORT|PATH|vsock:PORT",
     };
 
+    public static Option<string> HyperVVm()
+    {
+        var option = new Option<string>("--hyperv-vm")
+        {
+            Description = "the Hyper-V VM a vsock: listener binds on Windows: wsl, children, wildcard, loopback, parent or a GUID. Ignored elsewhere.",
+            HelpName = "VM",
+            DefaultValueFactory = _ => "wsl",
+        };
+
+        option.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>()?.Trim() ?? string.Empty;
+            if (value.ToLowerInvariant() is not ("wsl" or "children" or "wildcard" or "loopback" or "parent") &&
+                !Guid.TryParse(value, out _))
+            {
+                result.AddError("--hyperv-vm takes wsl, children, wildcard, loopback, parent or a GUID");
+            }
+        });
+
+        return option;
+    }
+
     public static Option<string> Compress()
     {
         var option = new Option<string>("--compress")

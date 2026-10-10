@@ -5,7 +5,7 @@ using System.Runtime.Versioning;
 namespace Basin.Transport.Waypipe;
 
 [UnsupportedOSPlatform("browser")]
-public sealed class WaypipeListener : IDisposable
+public sealed class WaypipeListener : IWaypipeListener
 {
     private const int Backlog = 8;
     private const int RetryMillis = 100;
@@ -77,6 +77,12 @@ public sealed class WaypipeListener : IDisposable
     {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(endpoint);
+        if (endpoint is VsockEndPoint && OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException(
+                "a vsock listener on Windows is a Hyper-V socket; bind it with HyperVWaypipeListener.BindAsync or WaypipeListeners.BindAsync");
+        }
+
         if (!PlatformFacts.HasDescriptors)
         {
             throw new PlatformNotSupportedException(
@@ -148,6 +154,7 @@ public sealed class WaypipeListener : IDisposable
         try
         {
             var local = VsockNative.LocalEndPoint(fd, endpoint);
+            WslHint.Log(local);
             return new WaypipeListener(loop, local, null, fd, null, compression, limits, options);
         }
         catch

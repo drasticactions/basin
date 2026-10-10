@@ -21,6 +21,7 @@ internal static class Program
         var transport = cli.Add(CommonOptions.Transport());
         var renderer = cli.Add(CommonOptions.Renderer(Renderers, DefaultRenderer));
         var channel = cli.Add(CommonOptions.WaypipeListen());
+        var hyperVVm = cli.Add(CommonOptions.HyperVVm());
         var gpu = cli.Add(CommonOptions.Gpu());
         var video = cli.Add(CommonOptions.Video());
         var compress = cli.Add(CommonOptions.Compress());
@@ -30,6 +31,11 @@ internal static class Program
         {
             cli.ConfigureLogging(result);
             var log = BasinLog.For("BasinHeadless");
+            if (result.GetResult(hyperVVm) is { Implicit: false })
+            {
+                log.Debug($"--hyperv-vm {result.GetValue(hyperVVm)} is ignored off Windows");
+            }
+
             if (result.GetValue(client) is not null && result.GetValue(channel) is not null)
             {
                 log.Error($"--client spawns a local client and --waypipe-listen waits for a remote one");

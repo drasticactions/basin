@@ -42,6 +42,7 @@ internal static class Program
         var framesOption = cli.Add(CommonOptions.Frames(), report: false);
         var transport = cli.Add(CommonOptions.Transport());
         var channel = cli.Add(CommonOptions.WaypipeListen());
+        var hyperVVm = cli.Add(CommonOptions.HyperVVm());
         _ = IpcCli.AddOption(cli);
 
         var settings = new Config();
@@ -51,6 +52,11 @@ internal static class Program
         {
             cli.ConfigureLogging(result);
             settings = Config.Load(result.GetValue(configPath), BasinLog.For("TinyComp"), out fatal);
+            if (result.GetResult(hyperVVm) is { Implicit: false })
+            {
+                BasinLog.For("TinyComp").Debug($"--hyperv-vm {result.GetValue(hyperVVm)} is ignored off Windows");
+            }
+
             if (fatal is null && settings.Shaders.Count > 0 &&
                 !Basin.Rashader.RashaderLibrary.IsAvailable(out var shaderWhy))
             {

@@ -29,7 +29,8 @@ internal static unsafe partial class VsockNative
             throw errno == EAfNoSupport
                 ? new IOException(
                     $"socket(AF_VSOCK) for {endpoint} failed: no vsock transport is loaded; "
-                    + "load vhost_vsock on a host, vmw_vsock_virtio_transport in a guest, or vsock_loopback on one machine")
+                    + "load vhost_vsock on a host, vmw_vsock_virtio_transport in a guest, hv_sock in a Hyper-V or WSL2 guest "
+                    + "(built into the WSL2 kernel), or vsock_loopback on one machine")
                 : Failure("socket", endpoint, errno);
         }
 

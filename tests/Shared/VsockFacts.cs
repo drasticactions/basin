@@ -16,6 +16,12 @@ internal static class VsockFacts
 
     public static string? LoopbackReason() => Loopback.Value;
 
+    public static bool IsWsl { get; } =
+        OperatingSystem.IsLinux() &&
+        (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WSL_DISTRO_NAME")) ||
+            File.Exists("/proc/sys/fs/binfmt_misc/WSLInterop") ||
+            File.Exists("/proc/sys/fs/binfmt_misc/WSLInterop-late"));
+
     public static string? WaypipeReason() =>
         LoopbackReason() ?? (OnPath("waypipe") is null ? "waypipe is not on PATH" : null);
 

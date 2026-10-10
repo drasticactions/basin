@@ -116,6 +116,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Basin.Tests/Basin.Tests.csproj" />
     <Project Path="tests/Basin.SoftKeyboard.Tests/Basin.SoftKeyboard.Tests.csproj" />
+    <Project Path="tests/Basin.Transport.Waypipe.Windows.Tests/Basin.Transport.Waypipe.Windows.Tests.csproj" />
     <Project Path="tests/BasinChurn/BasinChurn.csproj" />
     <Project Path="tests/BasinMcp.Tests/BasinMcp.Tests.csproj" />
     <Project Path="tests/MauiComp.Tests/MauiComp.Tests.csproj" />

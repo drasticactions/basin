@@ -42,7 +42,9 @@ public static class WaypipeEndpoint
         if (port.Contains(':'))
         {
             throw new ArgumentException(
-                $"'{endpoint}' names a CID; a vsock listener binds every CID and takes only the port, as vsock:PORT",
+                OperatingSystem.IsWindows()
+                    ? $"'{endpoint}' names a CID; a vsock listener takes only the port, as vsock:PORT, and on Windows the VM comes from --hyperv-vm"
+                    : $"'{endpoint}' names a CID; a vsock listener binds every CID and takes only the port, as vsock:PORT",
                 nameof(endpoint));
         }
 
@@ -61,9 +63,9 @@ public static class WaypipeEndpoint
             throw new ArgumentException($"'{endpoint}' has a port out of range; a vsock port is 1 through 4294967294", nameof(endpoint));
         }
 
-        if (!OperatingSystem.IsLinux())
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("vsock channels are available on Linux only");
+            throw new PlatformNotSupportedException("vsock channels are available on Linux, and on Windows as Hyper-V sockets");
         }
 
         return new VsockEndPoint(value);

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Basin.Tests" />
+    <InternalsVisibleTo Include="Basin.Transport.Waypipe.Windows.Tests" />
   </ItemGroup>
 
   <ItemGroup>
