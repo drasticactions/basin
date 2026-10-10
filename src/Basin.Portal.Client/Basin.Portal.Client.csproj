@@ -5,7 +5,7 @@
     <RootNamespace>Basin.Portal.Client</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Client-side implementations of the seams Basin.Portal reads, over standard Wayland protocols: screen capture over ext-image-copy-capture, injection over the virtual devices, the clipboard over ext-data-control, global shortcuts and input capture over the hyprland protocols, a client output layout, seat, keymap and event loop.</Description>
+    <Description>Wayland client implementations of the services that Basin.Portal uses.</Description>
   </PropertyGroup>
 
   <ItemGroup>

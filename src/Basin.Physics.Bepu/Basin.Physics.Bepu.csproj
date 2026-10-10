@@ -5,7 +5,7 @@
     <PackageId>Basin.Physics.Bepu</PackageId>
     <RootNamespace>Basin.Physics</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The bepuphysics2 engine for Basin.Physics, held to a plane.</Description>
+    <Description>The bepuphysics2 engine for Basin.Physics.</Description>
   </PropertyGroup>
 
   <ItemGroup>

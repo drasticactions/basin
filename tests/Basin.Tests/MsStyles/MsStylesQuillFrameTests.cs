@@ -28,7 +28,6 @@ public sealed class MsStylesQuillFrameTests
     [
         ("gl", "gl"),
         ("skia-gl", "gl"),
-        ("impeller", "gl"),
         ("vulkan", "vulkan"),
         ("skia-vulkan", "vulkan"),
         ("skia-graphite", "vulkan"),

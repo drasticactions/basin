@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Backend.Wayland.Skia</PackageId>
     <RootNamespace>Basin.Backend.Wayland.Skia</RootNamespace>
-    <Description>The default chrome for a nested Basin output whose parent will not decorate: a flat Skia titlebar with close, maximize and minimize, move and resize, drawn in memory.</Description>
+    <Description>The default Skia window frame for nested Basin outputs.</Description>
   </PropertyGroup>
 
   <ItemGroup>

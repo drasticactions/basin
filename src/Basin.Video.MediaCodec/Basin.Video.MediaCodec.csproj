@@ -5,7 +5,7 @@
     <PackageId>Basin.Video.MediaCodec</PackageId>
     <RootNamespace>Basin.Video.MediaCodec</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>An IVideoDecoder over the NDK's AMediaCodec for the waypipe video streams a session on Android receives.</Description>
+    <Description>Video decoding for Basin over Android MediaCodec.</Description>
   </PropertyGroup>
 
   <ItemGroup>

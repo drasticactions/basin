@@ -1,6 +1,3 @@
-[submodule "external/NImpeller"]
-	path = external/NImpeller
-	url = https://github.com/drasticactions/NImpeller.git
 [submodule "external/wayland-protocols"]
 	path = external/wayland-protocols
 	url = https://gitlab.freedesktop.org/wayland/wayland-protocols.git

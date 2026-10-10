@@ -11,7 +11,6 @@ public static class RendererCatalog
         "skia-gl",
         "skia-vulkan",
         "skia-graphite",
-        "impeller",
     ];
 
     public const string DefaultRenderNodePath = "/dev/dri/renderD128";
@@ -20,7 +19,7 @@ public static class RendererCatalog
         File.Exists(DefaultRenderNodePath) ? DefaultRenderNodePath : null;
 
     public static bool NeedsGpu(string name) =>
-        name is "gl" or "vulkan" or "skia-gl" or "skia-vulkan" or "skia-graphite" or "impeller";
+        name is "gl" or "vulkan" or "skia-gl" or "skia-vulkan" or "skia-graphite";
 
     public static RenderStack Create(string name, string renderNodePath) => name switch
     {
@@ -31,7 +30,6 @@ public static class RendererCatalog
         "skia-gl" => Basin.Render.Skia.SkiaGlRenderer.CreateStack(renderNodePath),
         "skia-vulkan" => Basin.Render.Skia.SkiaVulkanRenderer.CreateStack(renderNodePath),
         "skia-graphite" => Basin.Render.Skia.SkiaGraphiteRenderer.CreateStack(renderNodePath),
-        "impeller" => Basin.Render.Impeller.ImpellerGlRenderer.CreateStack(renderNodePath),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "not a renderer basin ships"),
     };
 

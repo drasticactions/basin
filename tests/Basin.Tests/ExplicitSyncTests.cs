@@ -70,7 +70,6 @@ public sealed class ExplicitSyncTests : IDisposable
     [InlineData("vulkan")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void Render_pass_fences_behave_exactly_as_declared(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

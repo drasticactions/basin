@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Renderers</PackageId>
     <RootNamespace>Basin.Renderers</RootNamespace>
-    <Description>Bound group of renderers for Basin. Used to provide a unified interface for different rendering backends.</Description>
+    <Description>A catalog of the Basin renderers by name.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +13,6 @@
     <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
     <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
     <ProjectReference Include="../Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
-    <ProjectReference Include="../Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
     <ProjectReference Include="../Basin.Render3D.Gl/Basin.Render3D.Gl.csproj" />
     <ProjectReference Include="../Basin.Render3D.Vulkan/Basin.Render3D.Vulkan.csproj" />
   </ItemGroup>

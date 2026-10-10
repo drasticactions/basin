@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Host</PackageId>
     <RootNamespace>Basin.Host</RootNamespace>
-    <Description>Compositor bootstrap for Basin.</Description>
+    <Description>The startup and shutdown sequence for a Basin compositor.</Description>
   </PropertyGroup>
 
   <ItemGroup>

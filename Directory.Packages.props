@@ -5,16 +5,16 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <SkiaSharpVersion>4.152.0-preview.1.1</SkiaSharpVersion>
-    <HarfBuzzSharpVersion>14.2.1-preview.1.1</HarfBuzzSharpVersion>
+    <SkiaSharpVersion>4.155.0-preview.2.26479.13</SkiaSharpVersion>
+    <HarfBuzzSharpVersion>14.4.0-preview.2.26479.13</HarfBuzzSharpVersion>
   </PropertyGroup>
 
   <PropertyGroup>
-    <AvaloniaVersion>12.1.3</AvaloniaVersion>
+    <AvaloniaVersion>12.1.4</AvaloniaVersion>
     <!-- samples/System7Wm and tests/System7Wm.Tests only, through VersionOverride; must equal external/System7.Avalonia's AvaloniaVersion -->
     <System7AvaloniaVersion>12.2.999-cibuild0100120-alpha</System7AvaloniaVersion>
-    <AvaWinVersion>0.1.3</AvaWinVersion>
-    <AvaEnyoVersion>0.1.0</AvaEnyoVersion>
+    <AvaWinVersion>0.1.4</AvaWinVersion>
+    <AvaEnyoVersion>0.1.1</AvaEnyoVersion>
     <ProwlVersion>3.5.6</ProwlVersion>
   </PropertyGroup>
 

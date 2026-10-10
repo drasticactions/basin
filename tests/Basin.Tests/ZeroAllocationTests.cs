@@ -13,7 +13,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void Frame_loop_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -84,7 +83,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void SceneOutput_frame_loop_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -119,7 +117,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void SceneOutput_direct_scanout_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -153,7 +150,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void SceneOutput_plane_offload_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -211,7 +207,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void Two_outputs_at_different_descriptions_allocate_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -373,8 +368,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-vulkan", false)]
     [InlineData("skia-graphite", true)]
     [InlineData("skia-graphite", false)]
-    [InlineData("impeller", true)]
-    [InlineData("impeller", false)]
     public void A_resting_scaled_window_on_a_plane_allocates_nothing_over_1000_frames(string renderer, bool accepted)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -437,7 +430,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_scaled_window_moved_every_frame_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -491,7 +483,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_terrace_with_a_shelf_window_and_a_slope_window_allocates_nothing_over_1000_frames(string renderer) =>
         Terrace(renderer, desktopLines: true);
 
@@ -503,7 +494,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_terrace_without_desktop_lines_allocates_nothing_over_1000_frames(string renderer) =>
         Terrace(renderer, desktopLines: false);
 
@@ -610,7 +600,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void An_open_overview_with_a_desktop_a_slope_and_a_shelf_window_allocates_nothing_over_1000_frames(string renderer) =>
         Overview(renderer, toggle: false);
 
@@ -622,7 +611,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void An_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
         Overview(renderer, toggle: true);
 
@@ -749,7 +737,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void An_open_step_overview_with_a_desktop_a_corner_and_a_side_shelf_window_allocates_nothing_over_1000_frames(string renderer) =>
         OverviewStep(renderer, toggle: false);
 
@@ -761,7 +748,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_step_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
         OverviewStep(renderer, toggle: true);
 
@@ -773,7 +759,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void An_open_textured_step_overview_allocates_nothing_over_1000_frames(string renderer) =>
         OverviewStep(renderer, toggle: false, textured: true);
 
@@ -785,7 +770,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_textured_step_overview_toggled_every_30_frames_allocates_nothing_over_1000_frames(string renderer) =>
         OverviewStep(renderer, toggle: true, textured: true);
 
@@ -797,7 +781,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_light_moving_over_a_step_overview_allocates_nothing_over_1000_frames(string renderer) =>
         OverviewStep(renderer, toggle: false, textured: true, lights: true);
 
@@ -1009,7 +992,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_light_moving_across_a_warped_zone_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1059,7 +1041,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_ripple_grid_reveal_showing_and_hiding_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1100,7 +1081,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_window_sliding_through_a_canvas_zone_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1166,7 +1146,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_zone_center_moved_every_frame_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1212,7 +1191,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_window_sliding_inside_a_canvas_corner_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1521,7 +1499,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void Decorated_idle_window_allocates_nothing(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1654,7 +1631,6 @@ public sealed class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void A_client_swapping_buffers_costs_nothing_to_render(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

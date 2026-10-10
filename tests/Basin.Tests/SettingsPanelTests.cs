@@ -19,7 +19,6 @@ public sealed class SettingsPanelTests
     {
         { "gl", "gl", "paper-panel-effects-gl" },
         { "skia-gl", "gl", "paper-panel-effects-gl" },
-        { "impeller", "gl", "paper-panel-effects-gl" },
         { "vulkan", "vulkan", "paper-panel-effects-vk" },
         { "skia-vulkan", "vulkan", "paper-panel-effects-vk" },
         { "skia-graphite", "vulkan", "paper-panel-effects-vk" },

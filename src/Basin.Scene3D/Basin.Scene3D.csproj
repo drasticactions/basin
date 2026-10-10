@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Scene3D</PackageId>
     <RootNamespace>Basin.Scene3D</RootNamespace>
-    <Description>A 3D world for Basin: rooms, windows as slabs, lights, portals, a spanned camera and a picker.</Description>
+    <Description>A 3D world for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

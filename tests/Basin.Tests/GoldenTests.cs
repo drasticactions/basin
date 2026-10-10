@@ -4,7 +4,7 @@ namespace Basin.Tests;
 
 public sealed class GoldenTests
 {
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static void SkipWithoutGpu(string renderer) =>
         CompositorTestHost.SkipUnlessRunnable(renderer);

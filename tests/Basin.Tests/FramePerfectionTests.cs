@@ -213,7 +213,7 @@ public class FramePerfectionTests
     }
 
     public static TheoryData<string> Renderers =>
-        new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+        new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static readonly uint[] Colors = [0xffff0000, 0xff00ff00, 0xff0000ff];
 

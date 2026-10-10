@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Avalonia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Hosts a Basin compositor inside an Avalonia application: the custom visual, the tick, and the host window model.</Description>
+    <Description>A Basin compositor host for Avalonia desktop applications.</Description>
   </PropertyGroup>
 
   <ItemGroup>

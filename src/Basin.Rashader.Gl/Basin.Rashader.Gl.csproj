@@ -4,7 +4,7 @@
     <PackageId>Basin.Rashader.Gl</PackageId>
     <RootNamespace>Basin.Rashader.Gl</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>librashader output filter on the Basin GL renderer.</Description>
+    <Description>A librashader output filter for the Basin GLES renderer.</Description>
   </PropertyGroup>
 
   <ItemGroup>

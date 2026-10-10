@@ -4,7 +4,7 @@
     <PackageId>Basin.Render.Gl</PackageId>
     <RootNamespace>Basin.Render.Gl</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>GLES renderer for Basin.</Description>
+    <Description>The GLES renderer for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

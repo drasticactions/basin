@@ -4,7 +4,7 @@
     <PackageId>Basin.Freedesktop</PackageId>
     <RootNamespace>Basin.Freedesktop</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The freedesktop.org specifications Basin reads: XDG base directories, desktop entries resolved from an application id, and application icon lookup.</Description>
+    <Description>Readers for the freedesktop.org specifications.</Description>
   </PropertyGroup>
 
   <ItemGroup>

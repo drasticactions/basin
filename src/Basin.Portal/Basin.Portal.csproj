@@ -4,7 +4,7 @@
     <PackageId>Basin.Portal</PackageId>
     <RootNamespace>Basin.Portal</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The xdg-desktop-portal backend for Basin: the D-Bus side of org.freedesktop.impl.portal.desktop.basin, answering ScreenCast, RemoteDesktop, Screenshot, Clipboard, InputCapture, GlobalShortcuts and Access over capability interfaces a separate process implements as a Wayland client.</Description>
+    <Description>An xdg-desktop-portal backend for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

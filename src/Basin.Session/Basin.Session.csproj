@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Session</PackageId>
     <RootNamespace>Basin.Session</RootNamespace>
-    <Description>Seat/session management for Basin.</Description>
+    <Description>Session and device management for Basin over libseat.</Description>
   </PropertyGroup>
 
   <ItemGroup>

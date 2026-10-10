@@ -4,7 +4,7 @@
     <PackageId>Basin.Screencast.PipeWire</PackageId>
     <RootNamespace>Basin.Screencast.PipeWire</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>IScreencastPublisher over PipeWire for Basin: one Video/Source node per stream, MemFd always and DmaBuf when a renderer exports, driven from the compositor loop.</Description>
+    <Description>Screen casting for Basin over PipeWire.</Description>
   </PropertyGroup>
 
   <ItemGroup>

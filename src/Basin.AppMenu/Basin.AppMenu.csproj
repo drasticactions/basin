@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.AppMenu</PackageId>
     <RootNamespace>Basin.AppMenu</RootNamespace>
-    <Description>Global menus for Basin: org_kde_kwin_appmenu and gtk_shell1, readers for com.canonical.dbusmenu and org.gtk.Menus, and a toolkit-free menu model a compositor draws its menu bar from.</Description>
+    <Description>Global application menus for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

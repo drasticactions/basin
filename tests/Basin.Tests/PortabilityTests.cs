@@ -13,12 +13,10 @@ public sealed class PortabilityTests
         "Basin.Render.Gl",
         "Basin.Render.Vulkan",
         "Basin.Render.Gbm",
-        "Basin.Render.Impeller",
         "Silk.NET.OpenGL",
         "Silk.NET.OpenGLES",
         "Silk.NET.Vulkan",
         "mesa-dotnet",
-        "NImpeller",
     ];
 
     [Fact]

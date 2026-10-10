@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Seat.Backends</PackageId>
     <RootNamespace>Basin.Seat.Backends</RootNamespace>
-    <Description>Seat wiring for Basin's input backends.</Description>
+    <Description>Seat wiring and input device configuration for the Basin input backends.</Description>
   </PropertyGroup>
 
   <ItemGroup>

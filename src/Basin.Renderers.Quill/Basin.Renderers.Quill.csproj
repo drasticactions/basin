@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Renderers.Quill</PackageId>
     <RootNamespace>Basin.Renderers</RootNamespace>
-    <Description>Chooses a Quill chrome host for any Basin renderer: its VulkanDevice, else its GlDevice, else a GlDevice of its own.</Description>
+    <Description>Prowl.Quill chrome host selection for Basin renderers.</Description>
   </PropertyGroup>
 
   <ItemGroup>

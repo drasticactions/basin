@@ -4,7 +4,7 @@
     <PackageId>Basin.Render3D.Vulkan</PackageId>
     <RootNamespace>Basin.Render3D.Vulkan</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The Basin.Scene3D world pass on Vulkan: depth, stencil portals, lights and mipmapped windows.</Description>
+    <Description>The Vulkan renderer for Basin.Scene3D worlds.</Description>
   </PropertyGroup>
 
   <ItemGroup>

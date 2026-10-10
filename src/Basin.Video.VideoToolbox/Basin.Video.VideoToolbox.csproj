@@ -5,7 +5,7 @@
     <PackageId>Basin.Video.VideoToolbox</PackageId>
     <RootNamespace>Basin.Video.VideoToolbox</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>An IVideoDecoder over VideoToolbox for the waypipe video streams a session on Apple hardware receives.</Description>
+    <Description>Video decoding for Basin over Apple VideoToolbox.</Description>
   </PropertyGroup>
 
   <ItemGroup>

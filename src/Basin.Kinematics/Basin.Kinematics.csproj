@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Kinematics</PackageId>
     <RootNamespace>Basin.Kinematics</RootNamespace>
-    <Description>Momentum for Basin: fling, spring handoff, snapping and guided throws.</Description>
+    <Description>Window motion for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

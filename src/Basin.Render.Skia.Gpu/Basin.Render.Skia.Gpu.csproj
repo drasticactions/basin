@@ -5,7 +5,7 @@
     <RootNamespace>Basin.Render.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>SkiaSharp GPU renderers for Basin: Ganesh on GL, Ganesh on Vulkan, and Graphite.</Description>
+    <Description>The Skia GPU renderers for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

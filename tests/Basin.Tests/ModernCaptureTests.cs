@@ -616,7 +616,6 @@ public sealed class CaptureExclusionTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void An_excluded_toplevel_is_absent_from_an_output_capture(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

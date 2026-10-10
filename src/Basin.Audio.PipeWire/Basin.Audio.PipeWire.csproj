@@ -4,7 +4,7 @@
     <PackageId>Basin.Audio.PipeWire</PackageId>
     <RootNamespace>Basin.Audio.PipeWire</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Spatial audio mechanism over PipeWire for Basin: a session on the compositor loop, a watch of application audio streams, a ladder that matches a stream to its window, and one filter-chain voice per window with allocation-free control updates.</Description>
+    <Description>Spatial audio for Basin over PipeWire.</Description>
   </PropertyGroup>
 
   <ItemGroup>

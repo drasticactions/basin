@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Ipc.Protocol</PackageId>
     <RootNamespace>Basin.Ipc</RootNamespace>
-    <Description>The wire format of the Basin control socket.</Description>
+    <Description>The wire format and message types of the Basin control socket.</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

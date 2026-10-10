@@ -5,7 +5,7 @@
     <RootNamespace>Basin.WindowManager.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Skia painting mechanism for window managers built on Basin.WindowManager: the layer-shell manager surface, typeface loading and icon rasterization.</Description>
+    <Description>Skia drawing for window managers on Basin.WindowManager.</Description>
   </PropertyGroup>
 
   <ItemGroup>

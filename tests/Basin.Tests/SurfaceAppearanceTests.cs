@@ -6,7 +6,7 @@ namespace Basin.Tests;
 
 public sealed class SurfaceAppearanceTests
 {
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static string GoldenName(string name, string renderer) =>
         renderer == "pixman" ? name : $"{name}-{renderer}";

@@ -7,7 +7,7 @@ namespace LunaWm.Tests;
 public sealed class GoldenTests
 {
     public static TheoryData<string> Renderers() =>
-        new("pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller");
+        new("pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite");
 
     private static string WlClient(string name)
     {
@@ -172,7 +172,7 @@ public sealed class GoldenTests
     public static TheoryData<string, string> KeyboardScenes()
     {
         var data = new TheoryData<string, string>();
-        foreach (var renderer in new[] { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" })
+        foreach (var renderer in new[] { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" })
         {
             foreach (var scene in new[] { "shiftlock", "symbol", "longpress", "xs", "l" })
             {

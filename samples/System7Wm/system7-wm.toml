@@ -5,7 +5,7 @@
 main = ""
 # Screen depth the chrome draws at: "bw", "4", "16", "256", "thousands" or "millions".
 depth = "256"
-# Show applications at the screen depth too, on every renderer but pixman and impeller: true or false.
+# Show applications at the screen depth too, on every renderer but pixman: true or false.
 apply_to_applications = false
 # Dither applications when the depth has a palette, rather than taking the nearest color: true or false.
 dither = true

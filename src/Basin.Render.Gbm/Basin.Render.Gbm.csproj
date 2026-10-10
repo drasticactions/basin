@@ -4,7 +4,7 @@
     <PackageId>Basin.Render.Gbm</PackageId>
     <RootNamespace>Basin.Render.Gbm</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>GBM renderer for Basin.</Description>
+    <Description>GBM buffer allocation for the Basin GPU renderers.</Description>
   </PropertyGroup>
 
   <ItemGroup>

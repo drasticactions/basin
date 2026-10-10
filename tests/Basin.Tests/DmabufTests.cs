@@ -298,19 +298,17 @@ public sealed class DmabufTests
     [InlineData("vulkan")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void Dmabuf_clients_render_correctly_across_modifiers(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
         Assert.SkipUnless(HasRenderNode, "no render node");
 
         using var host = new CompositorTestHost(renderer: renderer);
-        var fillRenderer = renderer is "gl" or "impeller" ? host.Renderer : new Basin.Render.Gl.GlRenderer(CompositorTestHost.RenderNodePath);
+        var fillRenderer = renderer is "gl" ? host.Renderer : new Basin.Render.Gl.GlRenderer(CompositorTestHost.RenderNodePath);
         using var fillGuard = ReferenceEquals(fillRenderer, host.Renderer) ? null : (Basin.Render.Gl.GlRenderer)fillRenderer;
         using var allocator = (fillRenderer switch
         {
             Basin.Render.Gl.GlRenderer gl => gl.Device,
-            Basin.Render.Impeller.ImpellerGlRenderer impeller => impeller.Device,
             _ => throw new InvalidOperationException("unreachable: the fill renderer is always GL-backed"),
         }).CreateAllocator();
 

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Frames.Quill</PackageId>
     <RootNamespace>Basin.Frames.Quill</RootNamespace>
-    <Description>Prowl.Quill window frames for Basin, drawn on GLES or Vulkan.</Description>
+    <Description>Window frames for Basin, drawn with Prowl.Quill on GLES or Vulkan.</Description>
   </PropertyGroup>
 
   <ItemGroup>

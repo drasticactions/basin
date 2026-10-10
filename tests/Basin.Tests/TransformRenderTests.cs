@@ -72,7 +72,7 @@ public sealed class RenderTransformTests
 
 public sealed class TransformRenderTests
 {
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static MemoryBuffer GradientSource(int width, int height)
     {
@@ -226,7 +226,6 @@ public sealed class TransformRenderTests
     public void Shared_mesh_edge_is_watertight_under_additive(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
-        Xunit.Assert.SkipWhen(renderer == "impeller", "impeller draws the mesh hull, not triangles");
         using var host = new CompositorTestHost(renderer: renderer);
         var target = new MemoryBuffer(64, 64, DrmFormat.Xrgb8888);
         using var targetGuard = new DeferDestroy(target);

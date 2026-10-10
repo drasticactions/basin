@@ -4,7 +4,7 @@
     <PackageId>Basin.Pty</PackageId>
     <RootNamespace>Basin.Pty</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>A pseudo-terminal on the compositor's event loop: the master is a loop fd, the child is spawned as a session leader on the slave and reaped through a pidfd, with no threads.</Description>
+    <Description>A pseudo-terminal on the Basin event loop.</Description>
   </PropertyGroup>
 
   <ItemGroup>

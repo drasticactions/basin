@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.UI.Paper</PackageId>
     <RootNamespace>Basin.UI.Paper</RootNamespace>
-    <Description>Prowl.Paper user interfaces on Basin's Quill surfaces, with the input, cursor, clipboard and frame pacing a compositor supplies, and a set of settings widgets.</Description>
+    <Description>Prowl.Paper user interfaces and settings widgets on Basin Quill surfaces.</Description>
   </PropertyGroup>
 
   <ItemGroup>

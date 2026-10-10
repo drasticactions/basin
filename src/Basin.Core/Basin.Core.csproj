@@ -5,7 +5,7 @@
     <PackageId>Basin.Core</PackageId>
     <RootNamespace>Basin</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Core libraries for Basin.</Description>
+    <Description>The core compositor library of Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

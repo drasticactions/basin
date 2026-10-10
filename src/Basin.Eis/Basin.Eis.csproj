@@ -4,7 +4,7 @@
     <PackageId>Basin.Eis</PackageId>
     <RootNamespace>Basin.Eis</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>libei in both directions for Basin: the EIS sender a capture session emulates into, the EIS receiver a remote desktop injects from, and the barrier engine both input-capture fronts share.</Description>
+    <Description>libei input emulation for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,7 +5,7 @@
     <PackageId>Basin.Video.FFmpeg</PackageId>
     <RootNamespace>Basin.Video.FFmpeg</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Software video decode for Basin transports over the system FFmpeg libraries.</Description>
+    <Description>Video decoding for Basin over the system FFmpeg libraries.</Description>
   </PropertyGroup>
 
   <ItemGroup>

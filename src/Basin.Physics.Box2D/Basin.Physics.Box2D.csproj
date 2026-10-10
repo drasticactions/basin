@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Physics.Box2D</PackageId>
     <RootNamespace>Basin.Physics</RootNamespace>
-    <Description>The Box2D.NET engine for Basin.Physics.</Description>
+    <Description>The Box2D engine for Basin.Physics.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -9,7 +9,7 @@ public sealed class PixelShaderTests
     internal static byte[] SpirV(string name, [CallerFilePath] string sourcePath = "") =>
         File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(sourcePath)!, "Shaders", $"{name}.frag.spv"));
 
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static string GoldenName(string name, string renderer) =>
         renderer == "pixman" ? name : $"{name}-{renderer}";

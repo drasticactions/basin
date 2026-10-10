@@ -5,7 +5,7 @@
     <RootNamespace>Basin.Portal.Prompts.Avalonia</RootNamespace>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <Description>IPortalPrompts drawn with Avalonia over Basin.UI.Avalonia: the source, device, area, shortcut and confirmation dialogs the xdg-desktop-portal backend asks for, as XAML views a compositor places.</Description>
+    <Description>Permission dialogs for the Basin portal backend, drawn with Avalonia.</Description>
   </PropertyGroup>
 
   <ItemGroup>

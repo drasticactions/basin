@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Render.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>SkiaSharp raster renderer for Basin.</Description>
+    <Description>The Skia software renderer for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

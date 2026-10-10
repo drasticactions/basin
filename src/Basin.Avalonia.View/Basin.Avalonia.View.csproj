@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Avalonia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>The Avalonia controls that place a Basin compositor's output and toplevels in any view, with the lease, the text input and the key map they need, and no host window.</Description>
+    <Description>Avalonia controls that show the outputs and windows of a Basin compositor.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -4,7 +4,7 @@
     <PackageId>Basin.UI.Quill.Gl</PackageId>
     <RootNamespace>Basin.UI.Quill</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Prowl.Quill GPU UI adapter for Basin, drawing compositor chrome on GLES.</Description>
+    <Description>Prowl.Quill compositor chrome on GLES for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

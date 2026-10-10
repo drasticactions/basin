@@ -1466,7 +1466,7 @@ public sealed class ColorBlindnessStageTests
         public void Dispose() => buffer.Destroy();
     }
 
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static (byte R, byte G, byte B) Through(CompositorTestHost host, ColorBlindnessStage stage, RenderColor input)
     {
@@ -2312,7 +2312,7 @@ public sealed class InvertStageTests
         public void Dispose() => buffer.Destroy();
     }
 
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static (byte R, byte G, byte B) Through(CompositorTestHost host, InvertStage stage, RenderColor input)
     {

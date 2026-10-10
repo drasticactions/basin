@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Icons.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Rasterizes an SVG or bitmap icon file to a square, fitted and centered, with SkiaSharp.</Description>
+    <Description>A Skia icon rasterizer for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

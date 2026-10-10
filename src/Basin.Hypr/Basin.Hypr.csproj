@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Hypr</PackageId>
     <RootNamespace>Basin.Hypr</RootNamespace>
-    <Description>hyprland-protocols for Basin.</Description>
+    <Description>The Hyprland protocols for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

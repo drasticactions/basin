@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Notifications</PackageId>
     <RootNamespace>Basin.Notifications</RootNamespace>
-    <Description>org.freedesktop.Notifications on the compositor's event loop: the Desktop Notifications 1.2 service, a toolkit-free notification model, expiry on a loop timer and in-process posting, with no UI and no policy.</Description>
+    <Description>A desktop notification server for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

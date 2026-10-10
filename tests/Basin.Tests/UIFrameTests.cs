@@ -11,7 +11,7 @@ namespace Basin.Tests;
 
 public sealed class UIFrameTests
 {
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     [Theory]
     [InlineData(1.0, "frame-appearance")]

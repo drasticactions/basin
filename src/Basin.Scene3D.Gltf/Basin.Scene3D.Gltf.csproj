@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Scene3D.Gltf</PackageId>
     <RootNamespace>Basin.Scene3D.Gltf</RootNamespace>
-    <Description>Reads binary glTF 2.0 into Basin.Scene3D meshes, skeletons and clips: triangles, no extensions.</Description>
+    <Description>A binary glTF 2.0 reader for Basin.Scene3D.</Description>
   </PropertyGroup>
 
   <ItemGroup>

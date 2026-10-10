@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.SoftKeyboard.Fcitx5</PackageId>
     <RootNamespace>Basin.SoftKeyboard.Fcitx5</RootNamespace>
-    <Description>fcitx5 as the soft keyboard's composer: the org.fcitx.Fcitx5.VirtualKeyboard panel fcitx5 reports its preedit and candidates to, and the VirtualKeyboardBackend1 calls that send keys and choose candidates, on the compositor's event loop.</Description>
+    <Description>The fcitx5 input method backend for the Basin on-screen keyboard.</Description>
   </PropertyGroup>
 
   <ItemGroup>

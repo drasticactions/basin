@@ -4,7 +4,7 @@ namespace System7Wm.Tests;
 
 public sealed class VersionSplitTests
 {
-    public static TheoryData<string> Renderers => ["pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller"];
+    public static TheoryData<string> Renderers => ["pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite"];
 
     [Theory]
     [MemberData(nameof(Renderers))]

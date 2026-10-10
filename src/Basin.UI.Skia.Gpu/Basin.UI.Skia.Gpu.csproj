@@ -4,7 +4,7 @@
     <RootNamespace>Basin.UI.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Skia GPU UI adapters for Basin, drawing UI elements on GL, Vulkan and Graphite.</Description>
+    <Description>Skia compositor chrome on the GPU for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

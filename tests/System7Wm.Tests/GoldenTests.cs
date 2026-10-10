@@ -10,7 +10,7 @@ public sealed class GoldenTests
     public static TheoryData<string, string> Rows()
     {
         var rows = new TheoryData<string, string>();
-        foreach (var renderer in new[] { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" })
+        foreach (var renderer in new[] { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" })
         {
             foreach (var scale in new[] { "1", "1.5", "1.7", "2" })
             {
@@ -91,7 +91,7 @@ public sealed class GoldenTests
     public static TheoryData<string, string> TerminalRows()
     {
         var rows = new TheoryData<string, string>();
-        foreach (var renderer in new[] { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" })
+        foreach (var renderer in new[] { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" })
         {
             foreach (var scale in new[] { "1", "2" })
             {

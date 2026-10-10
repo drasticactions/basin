@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Backend.Headless</PackageId>
     <RootNamespace>Basin.Backend.Headless</RootNamespace>
-    <Description>Headless backend for Basin with virtual outputs.</Description>
+    <Description>The headless backend for Basin with virtual outputs and virtual input devices.</Description>
   </PropertyGroup>
 
   <ItemGroup>

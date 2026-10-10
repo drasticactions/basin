@@ -65,7 +65,6 @@
     <Project Path="src/Basin.Rashader.Vulkan/Basin.Rashader.Vulkan.csproj" />
     <Project Path="src/Basin.Render.Gbm/Basin.Render.Gbm.csproj" />
     <Project Path="src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
-    <Project Path="src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
     <Project Path="src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
     <Project Path="src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
     <Project Path="src/Basin.Icons.Skia/Basin.Icons.Skia.csproj" />
@@ -114,7 +113,6 @@
     <Project Path="src/Basin.XWayland/Basin.XWayland.csproj" />
   </Folder>
   <Folder Name="/external/">
-    <Project Path="external/NImpeller/src/NImpeller/NImpeller.csproj" />
     <Project Path="external/System7.Avalonia/src/System7.Avalonia/System7.Avalonia.csproj" />
   </Folder>
   <Folder Name="/tests/">

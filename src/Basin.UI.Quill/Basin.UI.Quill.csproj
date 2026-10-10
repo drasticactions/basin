@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.UI.Quill</PackageId>
     <RootNamespace>Basin.UI.Quill</RootNamespace>
-    <Description>The Prowl.Quill surface contract, fonts and canvas shaders that Basin's GLES and Vulkan Quill backends share.</Description>
+    <Description>The shared Prowl.Quill surface interface, fonts and shaders for the Basin Quill backends.</Description>
   </PropertyGroup>
 
   <ItemGroup>

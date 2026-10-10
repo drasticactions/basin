@@ -5,7 +5,7 @@
     <PackageId>Basin.Seat</PackageId>
     <RootNamespace>Basin.Seat</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Seat mechanism for Basin.</Description>
+    <Description>Keyboard, pointer and touch input for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

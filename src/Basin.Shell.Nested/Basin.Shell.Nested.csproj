@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Shell.Nested</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>The nested shell: one window model for a compositor that lives inside a single host view, with placement, tiling, workspaces, focus policy, keybindings and Metacity frames.</Description>
+    <Description>A window manager for a Basin compositor inside one host view.</Description>
   </PropertyGroup>
 
   <ItemGroup>

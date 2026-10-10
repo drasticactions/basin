@@ -5,7 +5,7 @@
     <PackageId>Basin.Transport.Waypipe</PackageId>
     <RootNamespace>Basin.Transport.Waypipe</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Replays a stock waypipe channel into Basin as one synthetic client.</Description>
+    <Description>A waypipe receiver for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

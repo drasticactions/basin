@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Frames.MsStyles</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Windows visual style (.msstyles) window frames for Basin, painted with SkiaSharp.</Description>
+    <Description>Window frames for Basin that use Windows visual styles, drawn with Skia.</Description>
   </PropertyGroup>
 
   <ItemGroup>

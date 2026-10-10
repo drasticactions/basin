@@ -5,7 +5,7 @@
     <PackageId>Basin.Color</PackageId>
     <RootNamespace>Basin.Color</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Color mechanism for Basin.</Description>
+    <Description>Color management for Basin over Little CMS.</Description>
   </PropertyGroup>
 
   <ItemGroup>

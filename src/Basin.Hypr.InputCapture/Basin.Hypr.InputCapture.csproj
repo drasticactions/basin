@@ -4,7 +4,7 @@
     <PackageId>Basin.Hypr.InputCapture</PackageId>
     <RootNamespace>Basin.Hypr.InputCapture</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>hyprland-input-capture-v1 for Basin, over the Basin.Eis capture engine.</Description>
+    <Description>The Hyprland input capture protocol for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

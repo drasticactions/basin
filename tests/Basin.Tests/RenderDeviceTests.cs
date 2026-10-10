@@ -12,7 +12,6 @@ public sealed class RenderDeviceTests
     [InlineData("vulkan", true)]
     [InlineData("skia-vulkan", true)]
     [InlineData("skia-graphite", true)]
-    [InlineData("impeller", true)]
     public void Renderer_reports_the_device_it_draws_on(string renderer, bool onGpu)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -36,7 +35,6 @@ public sealed class RenderDeviceTests
     [InlineData("vulkan")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
-    [InlineData("impeller")]
     public void Syncobj_manager_builds_from_the_declared_device(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

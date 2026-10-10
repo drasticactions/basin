@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Scene3D.Scene</PackageId>
     <RootNamespace>Basin.Scene3D.Scene</RootNamespace>
-    <Description>Puts a Basin.Scene3D world into a Basin.Scene: the world buffer per output, window layers from scene trees, frame callbacks and pointer mapping through the world.</Description>
+    <Description>A Basin.Scene3D world in a Basin.Scene.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,7 +5,7 @@
     <PackageId>Basin.Backend.Hosted</PackageId>
     <RootNamespace>Basin.Backend.Hosted</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Hosted backend for Basin: an output a foreign render tick drives, into a buffer the host owns.</Description>
+    <Description>The hosted backend for Basin with outputs that a host toolkit drives.</Description>
   </PropertyGroup>
 
   <ItemGroup>

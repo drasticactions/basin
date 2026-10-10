@@ -4,7 +4,7 @@
     <PackageId>Basin.WindowManager</PackageId>
     <RootNamespace>Basin.WindowManager</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Implementation of river-window-management-v1 Wayland protocols, for use with Basin.</Description>
+    <Description>A library for window managers that use the river window management protocol.</Description>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Basin.Tests" />

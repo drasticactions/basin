@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.SystemStatus</PackageId>
     <RootNamespace>Basin.SystemStatus</RootNamespace>
-    <Description>System status readers for Basin shells: the UPower display device, NetworkManager and BlueZ over one shared system-bus connection on the compositor loop.</Description>
+    <Description>Battery, network and Bluetooth status readers for Basin shells.</Description>
   </PropertyGroup>
 
   <ItemGroup>

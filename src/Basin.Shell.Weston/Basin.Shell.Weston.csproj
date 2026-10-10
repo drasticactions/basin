@@ -4,7 +4,7 @@
     <PackageId>Basin.Shell.Weston</PackageId>
     <RootNamespace>Basin.Shell.Weston</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>weston's private desktop-shell protocols for Basin, over an internal shell-role seam.</Description>
+    <Description>The weston desktop shell protocols for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -8,7 +8,7 @@ namespace TinyComp.Tests;
 
 public sealed class QuillFrameTests
 {
-    public static TheoryData<string> Rows => ["gl", "skia-gl", "vulkan", "skia-vulkan", "skia-graphite", "impeller"];
+    public static TheoryData<string> Rows => ["gl", "skia-gl", "vulkan", "skia-vulkan", "skia-graphite"];
 
     [Theory]
     [MemberData(nameof(Rows))]

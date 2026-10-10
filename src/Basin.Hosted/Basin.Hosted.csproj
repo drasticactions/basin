@@ -5,7 +5,7 @@
     <PackageId>Basin.Hosted</PackageId>
     <RootNamespace>Basin.Hosted</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The compositor host a foreign toolkit drives: display, loop, scene, desktop pack, hosted session and the renderer that draws into a borrowed Skia canvas, with no toolkit dependency.</Description>
+    <Description>A Basin compositor that a host toolkit drives.</Description>
   </PropertyGroup>
 
   <ItemGroup>

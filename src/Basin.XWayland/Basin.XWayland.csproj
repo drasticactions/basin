@@ -4,7 +4,7 @@
     <PackageId>Basin.XWayland</PackageId>
     <RootNamespace>Basin.XWayland</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>XWayland integration for Basin.</Description>
+    <Description>XWayland support for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

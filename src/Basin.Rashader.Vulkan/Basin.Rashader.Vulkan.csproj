@@ -4,7 +4,7 @@
     <PackageId>Basin.Rashader.Vulkan</PackageId>
     <RootNamespace>Basin.Rashader.Vulkan</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>librashader output filter on the Basin Vulkan renderer.</Description>
+    <Description>A librashader output filter for the Basin Vulkan renderer.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,7 +5,7 @@
     <PackageId>Basin.Video.WebCodecs</PackageId>
     <RootNamespace>Basin.Video.WebCodecs</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>An IVideoDecoder over the browser's WebCodecs VideoDecoder, asynchronous by the platform's nature.</Description>
+    <Description>Video decoding for Basin over the browser WebCodecs API.</Description>
   </PropertyGroup>
 
   <ItemGroup>

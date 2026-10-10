@@ -14,7 +14,7 @@ public sealed class BackdropBlurTests
 
     public static TheoryData<string, string, int> SkiaRows => new() { { "skia-gl", "gl", 3 }, { "skia-vulkan", "gl", 12 }, { "skia-graphite", "gl", 12 } };
 
-    public static TheoryData<string> NoBlurRows => ["pixman", "skia", "impeller"];
+    public static TheoryData<string> NoBlurRows => ["pixman", "skia"];
 
     [Theory]
     [MemberData(nameof(NoBlurRows))]

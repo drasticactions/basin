@@ -4,7 +4,7 @@
     <PackageId>Basin.Rashader</PackageId>
     <RootNamespace>Basin.Rashader</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>librashader preset loading for Basin.</Description>
+    <Description>A librashader preset loader for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

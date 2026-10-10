@@ -5,7 +5,7 @@
     <PackageId>Basin.Render.Pixman</PackageId>
     <RootNamespace>Basin.Render.Pixman</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Pixman renderer for Basin.</Description>
+    <Description>The Pixman software renderer for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

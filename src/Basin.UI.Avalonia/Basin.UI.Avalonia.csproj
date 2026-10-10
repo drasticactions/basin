@@ -5,7 +5,7 @@
     <RootNamespace>Basin.UI.Avalonia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Avalonia windowing backend for Basin, so a compositor can draw its own chrome with a toolkit.</Description>
+    <Description>An Avalonia windowing backend for Basin compositor chrome.</Description>
     <BasinAvaloniaBackend>true</BasinAvaloniaBackend>
   </PropertyGroup>
 

@@ -19,7 +19,6 @@ public sealed class QuillHostTests
         { "vulkan", "gl" },
         { "skia-vulkan", "gl" },
         { "skia-graphite", "gl" },
-        { "impeller", "gl" },
         { "vulkan", "vulkan" },
         { "skia-vulkan", "vulkan" },
         { "skia-graphite", "vulkan" },

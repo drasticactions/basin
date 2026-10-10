@@ -210,7 +210,7 @@ public sealed class CommitRefusalTests
 
 public sealed class RendererTargetPreservationTests
 {
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     [Theory]
     [MemberData(nameof(Renderers))]
@@ -250,7 +250,6 @@ public sealed class RendererTargetPreservationTests
     [Theory]
     [InlineData("gl")]
     [InlineData("skia-gl")]
-    [InlineData("impeller")]
     [InlineData("vulkan")]
     [InlineData("skia-vulkan")]
     public void Pass_preserves_pixels_outside_its_draws_on_dmabuf_targets(string renderer)
@@ -263,7 +262,7 @@ public sealed class RendererTargetPreservationTests
             "skia-gl" => ((Basin.Render.Skia.SkiaGlRenderer)host.Renderer).Device.CreateAllocator(),
             "vulkan" => ((Basin.Render.Vulkan.VulkanRenderer)host.Renderer).Device.CreateAllocator(),
             "skia-vulkan" => ((Basin.Render.Skia.SkiaVulkanRenderer)host.Renderer).Device.CreateAllocator(),
-            _ => ((Basin.Render.Impeller.ImpellerGlRenderer)host.Renderer).Device.CreateAllocator(),
+            _ => throw new ArgumentOutOfRangeException(nameof(renderer), renderer, null),
         };
         var modifiers = allocator.Formats.ModifiersOf(DrmFormat.Xrgb8888).ToArray();
         var target = allocator.Allocate(64, 64, DrmFormat.Xrgb8888, modifiers, BufferUse.Render);
@@ -320,7 +319,7 @@ public sealed class RendererTargetPreservationTests
 
 public sealed class DamageOracleTests
 {
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "skia", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "skia" };
 
     [Theory]
     [MemberData(nameof(Renderers))]
@@ -504,7 +503,7 @@ public sealed class PartialUploadTests
 {
     public static TheoryData<string> Renderers => new()
     {
-        "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller",
+        "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite",
     };
 
     private const uint Background = 0xff204060;

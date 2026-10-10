@@ -15,7 +15,6 @@ public sealed class PaperSettingsTests
     {
         { "gl", "gl", "paper-form-gl" },
         { "skia-gl", "gl", "paper-form-gl" },
-        { "impeller", "gl", "paper-form-gl" },
         { "vulkan", "vulkan", "paper-form-vk" },
         { "skia-vulkan", "vulkan", "paper-form-vk" },
         { "skia-graphite", "vulkan", "paper-form-vk" },

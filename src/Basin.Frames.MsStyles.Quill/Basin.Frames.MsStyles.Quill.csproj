@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Frames.MsStyles.Quill</PackageId>
     <RootNamespace>Basin.Frames.MsStyles.Quill</RootNamespace>
-    <Description>Windows visual style (.msstyles) window frames for Basin, painted with Prowl.Quill on GLES or Vulkan.</Description>
+    <Description>Window frames for Basin that use Windows visual styles, drawn with Prowl.Quill on GLES or Vulkan.</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

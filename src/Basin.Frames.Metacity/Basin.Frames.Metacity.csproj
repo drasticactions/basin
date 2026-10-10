@@ -6,7 +6,7 @@
     <RootNamespace>Basin.Frames.Metacity</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>Metacity window frame themes for Basin.</Description>
+    <Description>Window frames for Basin that use Metacity themes, drawn with Skia.</Description>
   </PropertyGroup>
 
   <ItemGroup>

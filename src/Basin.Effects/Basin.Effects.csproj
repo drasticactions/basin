@@ -4,7 +4,7 @@
     <PackageId>Basin.Effects</PackageId>
     <RootNamespace>Basin.Effects</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Reference visual effects for Basin, including the GL and Vulkan backdrop blur.</Description>
+    <Description>Visual effects for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

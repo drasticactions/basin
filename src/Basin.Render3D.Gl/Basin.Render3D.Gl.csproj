@@ -4,7 +4,7 @@
     <PackageId>Basin.Render3D.Gl</PackageId>
     <RootNamespace>Basin.Render3D.Gl</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>The Basin.Scene3D world pass on GLES 3: depth, stencil portals, lights and mipmapped windows.</Description>
+    <Description>The GLES renderer for Basin.Scene3D worlds.</Description>
   </PropertyGroup>
 
   <ItemGroup>

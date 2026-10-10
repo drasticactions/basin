@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Shell.Xdg</PackageId>
     <RootNamespace>Basin.Shell.Xdg</RootNamespace>
-    <Description>xdg-shell implementation for Basin.</Description>
+    <Description>The xdg-shell and layer-shell protocols for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

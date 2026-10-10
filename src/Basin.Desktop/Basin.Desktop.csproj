@@ -5,7 +5,7 @@
     <PackageId>Basin.Desktop</PackageId>
     <RootNamespace>Basin.Desktop</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Desktop integration pack for Basin.</Description>
+    <Description>The desktop integration protocols for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

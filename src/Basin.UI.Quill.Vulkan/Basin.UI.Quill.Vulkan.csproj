@@ -4,7 +4,7 @@
     <PackageId>Basin.UI.Quill.Vulkan</PackageId>
     <RootNamespace>Basin.UI.Quill</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Prowl.Quill GPU UI adapter for Basin, drawing compositor chrome on Vulkan.</Description>
+    <Description>Prowl.Quill compositor chrome on Vulkan for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>Basin.Config</PackageId>
     <RootNamespace>Basin.Config</RootNamespace>
-    <Description>TOML configuration reading, chord parsing and window-rule matching shared by Basin compositors and window managers.</Description>
+    <Description>TOML configuration for Basin compositors and window managers.</Description>
   </PropertyGroup>
 
   <ItemGroup>

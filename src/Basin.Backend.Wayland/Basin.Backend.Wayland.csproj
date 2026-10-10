@@ -4,7 +4,7 @@
     <PackageId>Basin.Backend.Wayland</PackageId>
     <RootNamespace>Basin.Backend.Wayland</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Wayland backend for Basin.</Description>
+    <Description>The nested Wayland backend for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

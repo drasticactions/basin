@@ -4,7 +4,7 @@
     <PackageId>Basin.Backend.Drm</PackageId>
     <RootNamespace>Basin.Backend.Drm</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>DRM backend for Basin.</Description>
+    <Description>The DRM and KMS backend for Basin.</Description>
   </PropertyGroup>
 
   <ItemGroup>

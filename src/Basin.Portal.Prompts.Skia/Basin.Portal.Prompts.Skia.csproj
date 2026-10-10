@@ -5,7 +5,7 @@
     <RootNamespace>Basin.Portal.Prompts.Skia</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <Description>IPortalPrompts painted with Skia onto surfaces a host supplies, in a compositor or in a portal process: the source, device, area, shortcut and confirmation dialogs the xdg-desktop-portal backend asks for.</Description>
+    <Description>Permission dialogs for the Basin portal backend, drawn with Skia.</Description>
   </PropertyGroup>
 
   <ItemGroup>

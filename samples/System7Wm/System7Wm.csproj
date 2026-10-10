@@ -38,7 +38,6 @@
     <ProjectReference Include="../../src/Basin.Ipc/Basin.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.Pty/Basin.Pty.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
-    <ProjectReference Include="../../src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
     <ProjectReference Include="../../src/Basin.Icons.Skia/Basin.Icons.Skia.csproj" />

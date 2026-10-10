@@ -4,7 +4,7 @@
     <BasinPlatforms>portable</BasinPlatforms>
     <PackageId>Basin.Physics</PackageId>
     <RootNamespace>Basin.Physics</RootNamespace>
-    <Description>A rigid-body world for Basin windows, with the engine behind a seam.</Description>
+    <Description>Rigid-body physics for Basin windows.</Description>
   </PropertyGroup>
 
   <ItemGroup>

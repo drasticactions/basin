@@ -78,7 +78,6 @@
     <ProjectReference Include="../../src/Basin.Scene3D.Scene/Basin.Scene3D.Scene.csproj" />
     <ProjectReference Include="../../src/Basin.Render3D.Gl/Basin.Render3D.Gl.csproj" />
     <ProjectReference Include="../../src/Basin.Render3D.Vulkan/Basin.Render3D.Vulkan.csproj" />
-    <ProjectReference Include="../../src/Basin.Render.Impeller/Basin.Render.Impeller.csproj" />
     <ProjectReference Include="../../src/Basin.Avalonia/Basin.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.Avalonia.View/Basin.Avalonia.View.csproj" />
     <ProjectReference Include="../../src/Basin.Hosted/Basin.Hosted.csproj" />

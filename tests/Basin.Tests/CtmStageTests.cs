@@ -11,7 +11,7 @@ public sealed class CtmStageTests
         public void Dispose() => buffer.Destroy();
     }
 
-    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite", "impeller" };
+    public static TheoryData<string> Renderers => new() { "pixman", "gl", "vulkan", "skia", "skia-gl", "skia-vulkan", "skia-graphite" };
 
     private static (byte R, byte G, byte B) Through(CompositorTestHost host, CtmStage stage, RenderColor input)
     {
