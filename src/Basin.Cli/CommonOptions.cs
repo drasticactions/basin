@@ -199,8 +199,8 @@ public static class CommonOptions
 
     public static Option<string?> WaypipeListen() => new("--waypipe-listen")
     {
-        Description = "bind this endpoint and replay one waypipe channel into the compositor",
-        HelpName = "ADDRESS:PORT|PATH",
+        Description = "bind this endpoint and replay every waypipe channel that connects into the compositor",
+        HelpName = "ADDRESS:PORT|PATH|vsock:PORT",
     };
 
     public static Option<string> Compress()

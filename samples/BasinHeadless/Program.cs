@@ -138,6 +138,7 @@ internal static class Program
 
         long rendered = 0;
         var running = true;
+        Basin.Transport.Waypipe.WaypipeListener? listener = null;
         output.Frame += () =>
         {
             scene.Render(renderer, target, new RenderColor(0.06f, 0.06f, 0.08f, 1f));
@@ -149,7 +150,10 @@ internal static class Program
                 sceneSurface.SendFrameDone(timestamp);
             }
 
-            rendered++;
+            if (listener is null || listener.Accepted > 0)
+            {
+                rendered++;
+            }
         };
 
         if (socket.Length > 0)
@@ -179,12 +183,11 @@ internal static class Program
             throw new InvalidOperationException($"failed to start '{clientCommand}'");
         }
 
-        Basin.Transport.Waypipe.WaypipeChannel? channel = null;
         if (channelEndpoint is not null)
         {
             var endpoint = Basin.Transport.Waypipe.WaypipeEndpoint.ForListening(channelEndpoint);
-            log.Info($"waiting for a waypipe channel on {endpoint}, replayed over the managed transport");
-            channel = Basin.Transport.Waypipe.WaypipeChannel.Listen(
+            listener = Basin.Transport.Waypipe.WaypipeListener.Bind(
+                loop,
                 endpoint,
                 compress switch
                 {
@@ -198,9 +201,19 @@ internal static class Program
                     AcceptsVideo = videoCodec != "none",
                     VideoDecoder = decoder,
                 });
-            channel.Ended += failure => log.Info($"channel ended{(failure is null ? string.Empty : $": {failure.Message}")}");
-            adoption.Adopt(channel);
-            log.Info($"channel attached; replaying it as one client");
+            listener.ChannelAccepted += accepted =>
+            {
+                var index = listener.Accepted;
+                accepted.Ended += failure => log.Info($"channel {index} ended{(failure is null ? string.Empty : $": {failure.Message}")}");
+                adoption.Adopt(accepted);
+                log.Info($"channel {index} attached; replaying it as one client");
+            };
+            listener.Failed += failure =>
+            {
+                log.Error($"the channel listener failed: {failure.Message}");
+                running = false;
+            };
+            log.Info($"accepting waypipe channels on {listener.LocalEndPoint}, replayed over the managed transport");
         }
 
         var interrupt = loop.AddSignal(Signal.Interrupt, _ => running = false);
@@ -225,9 +238,9 @@ internal static class Program
             log.Info($"screenshot written to {screenshotPath} after {rendered} frames");
         }
 
-        if (channel is not null)
+        if (listener is not null)
         {
-            channel.Dispose();
+            listener.Dispose();
             var drained = Stopwatch.StartNew();
             while (buffers.Count > 0 && drained.ElapsedMilliseconds < 2000)
             {

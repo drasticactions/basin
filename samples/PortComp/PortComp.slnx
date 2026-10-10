@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/heads/">
+    <Project Path="PortComp/PortComp.csproj" />
+    <Project Path="PortComp.Desktop/PortComp.Desktop.csproj" />
+    <Project Path="PortComp.iOS/PortComp.iOS.csproj" />
+    <Project Path="PortComp.Android/PortComp.Android.csproj" />
+    <Project Path="PortComp.Browser/PortComp.Browser.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="../../tests/PortComp.Tests/PortComp.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -73,43 +73,14 @@ public sealed class WaypipeChannel : IDisposable
 
     public event Action? Opened;
 
-    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
-    public static WaypipeChannel Listen(
-        EndPoint endpoint,
-        WaypipeCompression compression = WaypipeCompression.Lz4,
-        WaypipeLimits? limits = null,
-        CancellationToken cancellation = default,
-        WaypipeChannelOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(endpoint);
-        if (!PlatformFacts.HasDescriptors)
-        {
-            throw new PlatformNotSupportedException(
-                "this host binds no listening socket; attach a connected stream with AttachChannel instead");
-        }
-
-        if (endpoint is IPEndPoint ip &&
-            (ip.Address.Equals(IPAddress.Any) || ip.Address.Equals(IPAddress.IPv6Any)))
-        {
-            throw new ArgumentException(
-                "a waypipe channel binds an explicit address; loopback, a unix socket or an ssh-forwarded stream is the posture",
-                nameof(endpoint));
-        }
-
-        var protocol = endpoint is UnixDomainSocketEndPoint ? ProtocolType.Unspecified : ProtocolType.Tcp;
-        using var listener = new Socket(endpoint.AddressFamily, SocketType.Stream, protocol);
-        listener.Bind(endpoint);
-        listener.Listen(1);
-        var accepted = listener.AcceptAsync(cancellation).AsTask().GetAwaiter().GetResult();
-        return Adopt(
-            new NetworkStream(accepted, ownsSocket: false),
-            () => accepted.Shutdown(SocketShutdown.Both),
-            accepted,
-            compression,
-            limits,
-            options,
-            WaypipePump.Thread);
-    }
+    internal static WaypipeChannel AttachAccepted(
+        Stream stream,
+        Action shutdownPeer,
+        WaypipeCompression compression,
+        WaypipeLimits? limits,
+        WaypipeChannelOptions? options,
+        Action<WaypipeChannel> configure) =>
+        Adopt(stream, shutdownPeer, null, compression, limits, options, WaypipePump.Thread, configure);
 
     public static WaypipeChannel AttachChannel(
         Stream stream,

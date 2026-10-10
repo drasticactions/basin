@@ -15,8 +15,6 @@
     <Project Path="samples/InletWm/InletWm.csproj" />
     <Project Path="samples/MauiComp/MauiComp.csproj" />
     <Project Path="samples/RetroWm/RetroWm.csproj" />
-    <Project Path="samples/PortComp/PortComp/PortComp.csproj" />
-    <Project Path="samples/PortComp/PortComp.Desktop/PortComp.Desktop.csproj" />
     <Project Path="samples/TinyComp/TinyComp.csproj" />
     <Project Path="samples/TinyWl/TinyWl.csproj" />
     <Project Path="samples/DungeonWm/DungeonWm.csproj" />

@@ -5,6 +5,8 @@ namespace Basin.Transport.Waypipe;
 
 public static class WaypipeEndpoint
 {
+    private const string VsockPrefix = "vsock:";
+
     public static bool IsWebSocket(string endpoint)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -16,6 +18,11 @@ public static class WaypipeEndpoint
     public static EndPoint ForListening(string endpoint)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(endpoint);
+        if (endpoint.StartsWith(VsockPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return ParseVsock(endpoint);
+        }
+
         if (endpoint.Contains(':', StringComparison.Ordinal))
         {
             return IPEndPoint.Parse(endpoint);
@@ -27,6 +34,39 @@ public static class WaypipeEndpoint
         }
 
         return new UnixDomainSocketEndPoint(endpoint);
+    }
+
+    private static VsockEndPoint ParseVsock(string endpoint)
+    {
+        var port = endpoint.AsSpan(VsockPrefix.Length);
+        if (port.Contains(':'))
+        {
+            throw new ArgumentException(
+                $"'{endpoint}' names a CID; a vsock listener binds every CID and takes only the port, as vsock:PORT",
+                nameof(endpoint));
+        }
+
+        if (port.IsEmpty)
+        {
+            throw new ArgumentException($"'{endpoint}' names no port; a vsock listener is vsock:PORT", nameof(endpoint));
+        }
+
+        if (!uint.TryParse(port, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            throw new ArgumentException($"'{endpoint}' has a port that is not a decimal number", nameof(endpoint));
+        }
+
+        if (value == 0 || value == VsockEndPoint.AnyPort)
+        {
+            throw new ArgumentException($"'{endpoint}' has a port out of range; a vsock port is 1 through 4294967294", nameof(endpoint));
+        }
+
+        if (!OperatingSystem.IsLinux())
+        {
+            throw new PlatformNotSupportedException("vsock channels are available on Linux only");
+        }
+
+        return new VsockEndPoint(value);
     }
 
     public static Task<Stream> OpenAsync(string endpoint, CancellationToken cancellation = default)

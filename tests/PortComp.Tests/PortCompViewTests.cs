@@ -2,12 +2,13 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Basin;
 using Basin.Diagnostics;
 using Basin.Hosted;
 using PortComp;
 using Xunit;
 
-namespace Basin.Tests;
+namespace PortComp.Tests;
 
 public sealed class PortCompViewTests
 {

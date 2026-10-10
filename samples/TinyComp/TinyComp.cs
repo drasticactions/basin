@@ -356,7 +356,7 @@ internal sealed partial class TinyComp :
     private readonly string? _init;
 
     private Basin.Host.InitProcess? _initProcess;
-    private Basin.Transport.Waypipe.WaypipeChannel? _channel;
+    private Basin.Transport.Waypipe.WaypipeListener? _channels;
     private Basin.Transport.Waypipe.WaypipeAdoption? _adoption;
     private Wayland.Server.WlServerDisplay.GlobalFilter? _privilegedFilter;
     private Config _config;
@@ -1035,11 +1035,19 @@ internal sealed partial class TinyComp :
         if (_channelEndpoint is { } endpoint)
         {
             _report.Line($"CHANNEL {endpoint}");
-            _channel = Basin.Transport.Waypipe.WaypipeChannel.Listen(Basin.Transport.Waypipe.WaypipeEndpoint.ForListening(endpoint));
-            _channel.Ended += failure => _log.Info($"channel ended{(failure is null ? string.Empty : $": {failure.Message}")}");
-            _adoption = new Basin.Transport.Waypipe.WaypipeAdoption(_display, _services.Require<ClientBufferRegistry>(), _compositor, _dmabufGlobal is not null, _privilegedFilter);
-            _adoption.Adopt(_channel);
-            _log.Info($"channel attached; replaying it as one client");
+            _channels = Basin.Transport.Waypipe.WaypipeListener.Bind(_loop, Basin.Transport.Waypipe.WaypipeEndpoint.ForListening(endpoint));
+            var adoption = new Basin.Transport.Waypipe.WaypipeAdoption(_display, _services.Require<ClientBufferRegistry>(), _compositor, _dmabufGlobal is not null, _privilegedFilter);
+            _adoption = adoption;
+            var listener = _channels;
+            listener.ChannelAccepted += accepted =>
+            {
+                var index = listener.Accepted;
+                accepted.Ended += failure => _log.Info($"channel {index} ended{(failure is null ? string.Empty : $": {failure.Message}")}");
+                adoption.Adopt(accepted);
+                _log.Info($"channel {index} attached; replaying it as one client");
+            };
+            listener.Failed += failure => _log.Error($"the channel listener failed: {failure.Message}");
+            _log.Info($"accepting waypipe channels on {listener.LocalEndPoint}");
         }
 
         if (_config.QuillDemo)
@@ -1074,8 +1082,8 @@ internal sealed partial class TinyComp :
         _ipc = null;
         _adoption?.Dispose();
         _adoption = null;
-        _channel?.Dispose();
-        _channel = null;
+        _channels?.Dispose();
+        _channels = null;
 
         foreach (var window in _windows.ToArray())
         {
