@@ -181,7 +181,7 @@ public sealed class SceneSurface
         ReconcileChildren(Surface.SubsurfacesAbove, _above);
         if (state.FrameCallbacks.Count > 0 || state.FrameResources.Count > 0)
         {
-            Tree.OwnerIfVisible(out _, out _)?.NotifyFrameRequested();
+            Tree.OwnerIfVisibleOrHeld()?.NotifyFrameRequested();
         }
     }
 

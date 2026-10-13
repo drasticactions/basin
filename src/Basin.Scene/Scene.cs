@@ -194,13 +194,19 @@ public sealed partial class Scene
 
     public void SendFrameDone(uint timestampMs)
     {
-        if (!HasFrameWork(Root))
+        var held = _held.Count > 0 && HeldHaveFrameWork();
+        if (!held && !HasFrameWork(Root))
         {
             return;
         }
 
         AllocationScope.Begin(warmup: 1);
         SendFrameDone(Root, timestampMs);
+        if (held)
+        {
+            SendHeldFrameDone(timestampMs);
+        }
+
         AllocationScope.End();
     }
 
@@ -228,6 +234,60 @@ public sealed partial class Scene
         }
 
         return false;
+    }
+
+    private readonly Dictionary<SceneTree, SceneTree> _held = [];
+
+    internal void Hold(SceneTree live, SceneTree holder) => _held[live] = holder;
+
+    internal void Release(SceneTree live, SceneTree holder)
+    {
+        if (_held.TryGetValue(live, out var current) && ReferenceEquals(current, holder))
+        {
+            _held.Remove(live);
+        }
+    }
+
+    internal SceneTree? HolderOf(SceneTree live) => _held.TryGetValue(live, out var holder) ? holder : null;
+
+    private bool Forwards(SceneTree live, SceneTree holder) =>
+        !live.Enabled && !live.IsDestroyed && !holder.IsDestroyed && ReferenceEquals(holder.OwnerIfVisible(out _, out _), this);
+
+    private bool HeldHaveFrameWork()
+    {
+        foreach (var (live, holder) in _held)
+        {
+            if (!Forwards(live, holder))
+            {
+                continue;
+            }
+
+            foreach (var child in live.Children)
+            {
+                if (HasFrameWork(child))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private void SendHeldFrameDone(uint timestampMs)
+    {
+        foreach (var (live, holder) in _held)
+        {
+            if (!Forwards(live, holder))
+            {
+                continue;
+            }
+
+            foreach (var child in live.Children)
+            {
+                SendFrameDone(child, timestampMs);
+            }
+        }
     }
 
     private static void SendFrameDone(SceneNode node, uint timestampMs)

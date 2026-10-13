@@ -49,5 +49,7 @@ public sealed class OutputView
 
     internal long RenderStartNanos { get; set; }
 
+    internal bool FrameDoneAtFlip { get; set; }
+
     public object? Tag { get; set; }
 }

@@ -104,6 +104,119 @@ public sealed class OutputSchedulerTests
         Assert.True(repaints <= ceiling, $"{repaints} repaints in {clock.ElapsedMilliseconds} ms, more than one per vblank");
     }
 
+    [Fact]
+    public void The_startup_reservation_narrows_to_the_measured_lead_within_seconds()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = FastScheduler(host);
+
+        RunCleanFrames(host, scheduler, 600);
+
+        Assert.Equal(scheduler.RenderLeadNanos, scheduler.EffectiveLeadNanos);
+    }
+
+    [Fact]
+    public void A_miss_from_a_repaint_that_fired_late_keeps_the_lead()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = FastScheduler(host);
+        RunCleanFrames(host, scheduler, 600);
+        var lead = scheduler.EffectiveLeadNanos;
+
+        scheduler.ScheduleRepaint();
+        host.Output.StepFrame();
+        System.Threading.Thread.Sleep(30);
+        host.Loop.Dispatch(0);
+        scheduler.NotifyCommitted();
+        host.Output.StepFrame();
+
+        Assert.Equal(1, scheduler.MissedVblanks);
+        Assert.Equal(lead, scheduler.EffectiveLeadNanos);
+    }
+
+    [Fact]
+    public void A_miss_from_a_repaint_that_fired_on_time_widens_the_lead()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = FastScheduler(host);
+        RunCleanFrames(host, scheduler, 600);
+        var lead = scheduler.EffectiveLeadNanos;
+
+        scheduler.ScheduleRepaint();
+        host.Output.StepFrame();
+        var fired = false;
+        scheduler.Repaint += () => fired = true;
+        SpinUntil(host, () => fired);
+        scheduler.NotifyCommitted();
+        System.Threading.Thread.Sleep(8);
+        host.Output.StepFrame();
+
+        Assert.Equal(1, scheduler.MissedVblanks);
+        Assert.True(scheduler.EffectiveLeadNanos > lead);
+    }
+
+    [Fact]
+    public void A_stall_of_many_cycles_under_a_pending_repaint_keeps_the_lead()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = FastScheduler(host);
+        RunCleanFrames(host, scheduler, 600);
+        var lead = scheduler.EffectiveLeadNanos;
+
+        var fired = false;
+        scheduler.Repaint += () => fired = true;
+        scheduler.ScheduleRepaint();
+        SpinUntil(host, () => fired);
+        scheduler.NotifyCommitted();
+        scheduler.ScheduleRepaint();
+        System.Threading.Thread.Sleep(40);
+        host.Output.StepFrame();
+        fired = false;
+        SpinUntil(host, () => fired);
+        scheduler.NotifyCommitted();
+        host.Output.StepFrame();
+
+        Assert.True(scheduler.MissedVblanks > 0);
+        Assert.Equal(lead, scheduler.EffectiveLeadNanos);
+    }
+
+    private static OutputScheduler FastScheduler(CompositorTestHost host)
+    {
+        using var state = new OutputState();
+        host.Output.Commit(state.SetMode(new OutputMode(160, 120, 240_000)));
+        var scheduler = new OutputScheduler(host.Loop, host.Output);
+        scheduler.Repaint += () => { };
+        scheduler.NotifyRenderTime(500_000);
+        return scheduler;
+    }
+
+    private static void RunCleanFrames(CompositorTestHost host, OutputScheduler scheduler, int frames)
+    {
+        var fired = false;
+        void OnRepaint() => fired = true;
+        scheduler.Repaint += OnRepaint;
+        for (var i = 0; i < frames; i++)
+        {
+            fired = false;
+            scheduler.ScheduleRepaint();
+            SpinUntil(host, () => fired);
+            scheduler.NotifyCommitted();
+            host.Output.StepFrame();
+        }
+
+        scheduler.Repaint -= OnRepaint;
+        Assert.Equal(0, scheduler.MissedVblanks);
+    }
+
+    private static void SpinUntil(CompositorTestHost host, Func<bool> done)
+    {
+        var deadline = Environment.TickCount64 + 2_000;
+        while (!done() && Environment.TickCount64 < deadline)
+        {
+            host.Loop.Dispatch(0);
+        }
+    }
+
     private static void DispatchUntil(CompositorTestHost host, Func<bool> done)
     {
         var deadline = Environment.TickCount64 + 2_000;

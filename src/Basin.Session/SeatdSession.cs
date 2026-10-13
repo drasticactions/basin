@@ -6,14 +6,18 @@ public sealed class SeatdSession : ISession
 {
     private readonly Seat _seat;
     private readonly IEventSource? _source;
+    private readonly CompositorSynchronizationContext? _context;
+    private readonly object _lock = new();
     private bool _active;
+    private bool _disposed;
 
     private SeatdSession(Seat seat, ICompositorEventLoop? loop)
     {
         _seat = seat;
         if (loop is not null)
         {
-            _source = loop.AddFd(_seat.PollFd, FdReadiness.Readable, (_, _) => _seat.Dispatch(0));
+            _context = new CompositorSynchronizationContext(loop);
+            _source = loop.AddFd(_seat.PollFd, FdReadiness.Readable, (_, _) => TryDispatch());
         }
     }
 
@@ -48,14 +52,87 @@ public sealed class SeatdSession : ISession
 
     public event Action? Disabled;
 
-    public ISessionDevice OpenDevice(string path) => new SeatdDevice(_seat.OpenDevice(path));
+    public ISessionDevice OpenDevice(string path)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return new SeatdDevice(this, _seat.OpenDevice(path));
+        }
+    }
 
-    public void SwitchSession(int session) => _seat.SwitchSession(session);
+    public Task<ISessionDevice> OpenDeviceAsync(string path)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return Task.Run(() =>
+        {
+            try
+            {
+                return OpenDevice(path);
+            }
+            finally
+            {
+                _context?.Post(_ => TryDispatch(), null);
+            }
+        });
+    }
+
+    public Task CloseDeviceAsync(ISessionDevice device)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return Task.Run(device.Dispose);
+    }
+
+    public void SwitchSession(int session)
+    {
+        lock (_lock)
+        {
+            _seat.SwitchSession(session);
+        }
+    }
 
     public void Dispose()
     {
-        _source?.Remove();
-        _seat.Dispose();
+        lock (_lock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _source?.Remove();
+            _context?.Dispose();
+            _seat.Dispose();
+        }
+    }
+
+    private void TryDispatch()
+    {
+        if (!Monitor.TryEnter(_lock))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_disposed)
+            {
+                _seat.Dispatch(0);
+            }
+        }
+        finally
+        {
+            Monitor.Exit(_lock);
+        }
+    }
+
+    private void CloseDevice(SeatDevice device)
+    {
+        lock (_lock)
+        {
+            device.Dispose();
+        }
     }
 
     private void OnEnabled()
@@ -77,12 +154,12 @@ public sealed class SeatdSession : ISession
         Disabled?.Invoke();
     }
 
-    private sealed class SeatdDevice(SeatDevice device) : ISessionDevice
+    private sealed class SeatdDevice(SeatdSession session, SeatDevice device) : ISessionDevice
     {
         public int FileDescriptor => device.FileDescriptor;
 
         public string Path => device.Path;
 
-        public void Dispose() => device.Dispose();
+        public void Dispose() => session.CloseDevice(device);
     }
 }

@@ -742,6 +742,7 @@ public sealed class OutputDriver : IDisposable
         var scheduler = new OutputScheduler(_host.Loop, view.Output);
         view.Scheduler = scheduler;
         scheduler.Repaint += () => Repaint(view);
+        view.Output.Frame += () => SendFrameDoneAtFlip(view);
         view.Output.Committed += fields =>
         {
             if ((fields & ~FrameFields) != 0)
@@ -1020,11 +1021,30 @@ public sealed class OutputDriver : IDisposable
             AllocationScope.Resume();
         }
 
-        _scene.SendFrameDone((uint)Environment.TickCount);
+        if (committed)
+        {
+            view.FrameDoneAtFlip = true;
+        }
+        else
+        {
+            _scene.SendFrameDone((uint)Environment.TickCount);
+        }
+
         if (ContinuousRepaint)
         {
             view.Scheduler!.ScheduleRepaint();
         }
+    }
+
+    private void SendFrameDoneAtFlip(OutputView view)
+    {
+        if (!view.FrameDoneAtFlip)
+        {
+            return;
+        }
+
+        view.FrameDoneAtFlip = false;
+        _scene.SendFrameDone((uint)Environment.TickCount);
     }
 
     private void SecondaryRepaint(OutputView view, in OutputMode mode)
@@ -1062,7 +1082,8 @@ public sealed class OutputDriver : IDisposable
 
         _frameState.Clear();
         _frameState.SetBuffer(buffer);
-        if (view.Output.Commit(_frameState))
+        var committed = view.Output.Commit(_frameState);
+        if (committed)
         {
             view.Scheduler!.NotifyCommitted();
             view.LastPresentedBuffer = buffer;
@@ -1071,7 +1092,16 @@ public sealed class OutputDriver : IDisposable
 
         Painted?.Invoke(view);
         Capture?.Capture.NotifyDamaged(view.Output, new Box(0, 0, mode.Width, mode.Height));
-        if (!replicating)
+        if (replicating)
+        {
+            return;
+        }
+
+        if (committed)
+        {
+            view.FrameDoneAtFlip = true;
+        }
+        else
         {
             _scene.SendFrameDone((uint)Environment.TickCount);
         }

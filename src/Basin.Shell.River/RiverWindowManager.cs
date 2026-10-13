@@ -1,4 +1,5 @@
 using Basin.Desktop;
+using Basin.Diagnostics;
 using Basin.Scene;
 using Basin.Shell.River.Protocol;
 using Basin.Shell.Xdg;
@@ -17,6 +18,8 @@ public sealed class RiverWindowManager : IDisposable
     private readonly OutputLayout _layout;
     private readonly SceneTree _windowTree;
     private readonly RiverWindowManagerOptions _options;
+    private static readonly BasinLogger Log = BasinLog.For("river");
+
     private readonly ICompositorEventLoop _loop;
     private readonly WlGlobal _global;
     private readonly SceneTree _shellTree;
@@ -770,11 +773,27 @@ public sealed class RiverWindowManager : IDisposable
                 return;
             }
 
+            if (transaction.TimedOut)
+            {
+                ReportTimedOut();
+            }
+
             _transaction = null;
             _loop.DeferDestroy(transaction);
             StartRender();
         };
         transaction.Seal();
+    }
+
+    private void ReportTimedOut()
+    {
+        foreach (var window in _windows)
+        {
+            if (window.Toplevel is { Xdg.ConfigureState: ConfigureState.TimedOut } toplevel)
+            {
+                Log.Debug($"configure timed out: app_id={toplevel.AppId} title={toplevel.Title} acked={!toplevel.Xdg.HasUnackedConfigure}");
+            }
+        }
     }
 
     private void ApplySeatState()

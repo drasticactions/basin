@@ -12,5 +12,24 @@ public interface ISession : IDisposable
 
     ISessionDevice OpenDevice(string path);
 
+    Task<ISessionDevice> OpenDeviceAsync(string path)
+    {
+        try
+        {
+            return Task.FromResult(OpenDevice(path));
+        }
+        catch (Exception e)
+        {
+            return Task.FromException<ISessionDevice>(e);
+        }
+    }
+
+    Task CloseDeviceAsync(ISessionDevice device)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        device.Dispose();
+        return Task.CompletedTask;
+    }
+
     void SwitchSession(int session);
 }

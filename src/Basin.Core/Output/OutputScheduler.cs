@@ -20,6 +20,8 @@ public sealed class OutputScheduler : IDisposable
     private long _leadBoostNanos = long.MaxValue;
     private int _onTimeStreak;
     private bool _everMissed;
+    private long _armedFireNanos;
+    private long _fireLateNanos;
     private bool _pacedFromLastFrame;
     private long _commits;
     private bool _disposed;
@@ -50,6 +52,8 @@ public sealed class OutputScheduler : IDisposable
     public bool MeasuresRenderTime => _renderSamples > 0;
 
     public long RenderLeadNanos => BaseLeadNanos();
+
+    public long EffectiveLeadNanos => RenderAheadNanos(IntervalNanos());
 
     public void NotifyRenderTime(long nanos)
     {
@@ -82,6 +86,8 @@ public sealed class OutputScheduler : IDisposable
     private const long UnmeasuredLeadNanos = 7_000_000;
 
     private const long MeasuredMarginNanos = 1_500_000;
+
+    private const long LateFireNanos = 2_000_000;
 
     public void ScheduleRepaint()
     {
@@ -218,11 +224,13 @@ public sealed class OutputScheduler : IDisposable
         var delayNanos = predicted - RenderAheadNanos(intervalNanos) - now;
         if (delayNanos < 1_000_000)
         {
+            _armedFireNanos = now;
             QueueIdle();
             return true;
         }
 
         _timerArmed = true;
+        _armedFireNanos = now + delayNanos;
         _timer.UpdateTimer((int)(delayNanos / 1_000_000));
         return true;
     }
@@ -244,6 +252,7 @@ public sealed class OutputScheduler : IDisposable
         }
 
         _timerArmed = true;
+        _armedFireNanos = next - lead;
         _timer.UpdateTimer((int)Math.Max(1, (next - lead - now) / 1_000_000));
         return true;
     }
@@ -280,6 +289,8 @@ public sealed class OutputScheduler : IDisposable
         _repaintQueued = false;
         _lastFireTick = Environment.TickCount64;
         _lastFireNanos = MonotonicClock.Nanos;
+        _fireLateNanos = _armedFireNanos > 0 ? _lastFireNanos - _armedFireNanos : 0;
+        _armedFireNanos = 0;
         var target = PredictedVblankNanos;
         var commits = _commits;
         _firing = true;
@@ -344,16 +355,29 @@ public sealed class OutputScheduler : IDisposable
                 _lastFrameNanos - previousFrame > interval + (interval >> 1);
             if (late || skipped)
             {
-                _leadBoostNanos = Math.Min(Math.Min(_leadBoostNanos, interval) + 3_000_000, interval);
-                _onTimeStreak = 0;
-                _everMissed = true;
                 MissedVblanks++;
-                Log.Debug($"scheduler: missed vblank; lead boost {_leadBoostNanos / 1_000_000} ms");
+                _onTimeStreak = 0;
+                var flipNanos = _lastFrameNanos - _lastFireNanos;
+                var gapNanos = skipped ? _lastFrameNanos - previousFrame : 0;
+                if (_fireLateNanos > LateFireNanos)
+                {
+                    Log.Debug($"scheduler: missed vblank; the repaint fired {_fireLateNanos / 1_000_000} ms late, lead kept");
+                }
+                else if (flipNanos > interval * 3 || gapNanos > interval * 3)
+                {
+                    Log.Debug($"scheduler: missed vblank; the flip came {Math.Max(flipNanos, gapNanos) / 1_000_000} ms late, lead kept");
+                }
+                else
+                {
+                    _leadBoostNanos = Math.Min(Math.Min(_leadBoostNanos, interval) + 3_000_000, interval);
+                    _everMissed = true;
+                    Log.Debug($"scheduler: missed vblank; lead boost {_leadBoostNanos / 1_000_000} ms");
+                }
             }
             else if (_leadBoostNanos > 0 && ++_onTimeStreak >= (_everMissed ? 600 : 120))
             {
                 _onTimeStreak = 0;
-                _leadBoostNanos = Math.Max(0, Math.Min(_leadBoostNanos, interval) - 500_000);
+                _leadBoostNanos = NarrowedBoost(interval);
             }
         }
 
@@ -373,6 +397,18 @@ public sealed class OutputScheduler : IDisposable
         }
 
         RaiseIfIdle();
+    }
+
+    private long NarrowedBoost(long interval)
+    {
+        var boost = Math.Min(_leadBoostNanos, interval);
+        if (_everMissed)
+        {
+            return Math.Max(0, boost - 500_000);
+        }
+
+        var half = boost / 2;
+        return half > 500_000 ? half : 0;
     }
 
     private int _scopedFires;

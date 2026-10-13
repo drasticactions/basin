@@ -40,6 +40,14 @@ public sealed class DirectSession : ISession
         return new DirectDevice(fd, path);
     }
 
+    public Task<ISessionDevice> OpenDeviceAsync(string path) => Task.Run(() => OpenDevice(path));
+
+    public Task CloseDeviceAsync(ISessionDevice device)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return Task.Run(device.Dispose);
+    }
+
     public void SwitchSession(int session) => throw new NotSupportedException("no seat manager to switch sessions");
 
     public void Dispose()

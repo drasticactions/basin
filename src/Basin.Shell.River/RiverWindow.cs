@@ -262,7 +262,7 @@ internal sealed class RiverWindow
                     toplevel.SendConfigure(transaction);
                 }
 
-                Scene.SendFrameDone(0);
+                Scene.SendFrameDone((uint)Environment.TickCount);
             }
         }
         else if (XWindow is { } xwindow)
@@ -274,7 +274,7 @@ internal sealed class RiverWindow
             {
                 CaptureSnapshot();
                 xwindow.Configure(transaction, position.X, position.Y, width, height);
-                Scene.SendFrameDone(0);
+                Scene.SendFrameDone((uint)Environment.TickCount);
             }
         }
 

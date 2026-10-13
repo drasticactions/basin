@@ -9,7 +9,7 @@ namespace Basin.Tests;
 public sealed class AllocationReportTests
 {
     private static readonly string[] Fields =
-        ["bytes=", "thread=", "per-frame=", "gen0=", "gen1=", "gen2=", "gc="];
+        ["bytes=", "thread=", "per-frame=", "gen0=", "gen1=", "gen2=", "pause-ms=", "gc="];
 
     [Fact]
     public void The_report_names_every_field()

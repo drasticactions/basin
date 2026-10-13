@@ -5,6 +5,8 @@ namespace Basin.Scene;
 public sealed class SceneSnapshot : IDisposable
 {
     private readonly List<SceneBuffer> _nodes = [];
+    private SceneTree? _source;
+    private Scene? _scene;
     private bool _destroyed;
 
     private SceneSnapshot(SceneTree tree)
@@ -30,6 +32,9 @@ public sealed class SceneSnapshot : IDisposable
 
         var snapshot = new SceneSnapshot(tree);
         snapshot.CopyTree(source, tree);
+        snapshot._source = source;
+        snapshot._scene = parent.OwnerIfAttached();
+        snapshot._scene?.Hold(source, tree);
         return snapshot;
     }
 
@@ -47,6 +52,11 @@ public sealed class SceneSnapshot : IDisposable
         }
 
         _destroyed = true;
+        if (_source is not null)
+        {
+            _scene?.Release(_source, Tree);
+        }
+
         foreach (var node in _nodes)
         {
             node.SetBuffer(null);

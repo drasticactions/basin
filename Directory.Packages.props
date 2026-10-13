@@ -20,6 +20,7 @@
 
   <PropertyGroup>
     <ZeroGcVersion>1.0.0-zerogc.26405.1</ZeroGcVersion>
+    <SatoriGcVersion>10.0.13-satori.38062657141.1</SatoriGcVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -36,6 +36,15 @@
            Text="BasinAvaloniaBackend is set but no Avalonia reference assembly was found to swap for its implementation assembly." />
   </Target>
 
+  <Import Project="Sdk.props" Sdk="PublishWithSatoriGC" Version="$(SatoriGcVersion)" Condition="'$(BasinSatori)' == 'true'" />
+  <Import Project="Sdk.targets" Sdk="PublishWithSatoriGC" Version="$(SatoriGcVersion)" Condition="'$(BasinSatori)' == 'true'" />
+
+  <ItemGroup Condition="'$(BasinSatori)' == 'true'">
+    <_BasinSatoriPackage Include="PublishWithSatoriGC.Runtime.$(RuntimeIdentifier);PublishWithSatoriGC.AotSdk.$(RuntimeIdentifier);PublishWithSatoriGC.AotTools.$(NETCoreSdkRuntimeIdentifier)" />
+    <PackageVersion Include="@(_BasinSatoriPackage)" Version="$(SatoriGcVersion)" />
+    <PackageReference Update="@(_BasinSatoriPackage)" Version="" />
+  </ItemGroup>
+
   <Target Name="VerifyProtocolXml" BeforeTargets="CoreCompile">
     <Error Condition="'@(AdditionalFiles)' != '' and !Exists('%(AdditionalFiles.Identity)')"
            Text="Protocol XML not found: %(AdditionalFiles.Identity)." />

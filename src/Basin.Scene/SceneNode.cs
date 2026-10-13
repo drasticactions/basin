@@ -320,6 +320,33 @@ public abstract class SceneNode
         }
     }
 
+    internal Scene? OwnerIfVisibleOrHeld()
+    {
+        SceneNode node = this;
+        while (true)
+        {
+            if (node._destroyed)
+            {
+                return null;
+            }
+
+            if (!node._enabled)
+            {
+                return node is SceneTree tree && tree.OwnerIfAttached() is { } scene && scene.HolderOf(tree) is { } holder
+                    ? holder.OwnerIfVisible(out _, out _)
+                    : null;
+            }
+
+            if (node.Parent is { } parent)
+            {
+                node = parent;
+                continue;
+            }
+
+            return (node as SceneTree)?.Owner;
+        }
+    }
+
     internal Scene? OwnerIfAttached()
     {
         SceneNode node = this;

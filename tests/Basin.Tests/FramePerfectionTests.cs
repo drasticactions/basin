@@ -148,6 +148,45 @@ public class FramePerfectionTests
     }
 
     [Fact]
+    public void A_surface_held_behind_its_snapshot_still_gets_frame_callbacks()
+    {
+        using var host = new CompositorTestHost(64, 64);
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(32, 32, Fill.Solid(32, 32, 0xffff0000));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 32, 32);
+        surface.Commit();
+        host.PumpToServer();
+
+        var scene = host.SurfaceScenes[0];
+        var snapshot = SceneSnapshot.Capture(scene, host.Scene.Root);
+        scene.Tree.Enabled = false;
+
+        var requested = 0;
+        host.Scene.FrameRequested += () => requested++;
+        var frameDone = false;
+        var callback = surface.Frame();
+        callback.Done += (_, _) => frameDone = true;
+        surface.Commit();
+        host.PumpToServer();
+        Assert.Equal(1, requested);
+
+        host.Scene.SendFrameDone(1);
+        host.PumpUntil(() => frameDone);
+
+        snapshot.Destroy();
+        frameDone = false;
+        var after = surface.Frame();
+        after.Done += (_, _) => frameDone = true;
+        surface.Commit();
+        host.PumpToServer();
+
+        host.Scene.SendFrameDone(2);
+        host.PumpToClient();
+        Assert.False(frameDone);
+    }
+
+    [Fact]
     public void A_snapshot_keeps_drawing_after_its_source_surface_is_destroyed()
     {
         using var host = new CompositorTestHost(64, 64);
