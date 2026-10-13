@@ -77,6 +77,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         QueryShapeExtension();
 
         WriteResourceManager();
+        SetRootCursor();
         if (options.PublishXSettings)
         {
             XSettings = new XSettingsManager(_conn, loop, _root, screens.data->root_visual, Atom, RequestDrain);
@@ -166,6 +167,7 @@ public sealed unsafe class XWaylandWm : IDisposable
 
         PublishDisplaySettings();
         WriteResourceManager();
+        SetRootCursor();
         Flush();
     }
 
@@ -181,6 +183,7 @@ public sealed unsafe class XWaylandWm : IDisposable
 
         PublishDisplaySettings();
         WriteResourceManager();
+        SetRootCursor();
         Flush();
     }
 
@@ -204,6 +207,24 @@ public sealed unsafe class XWaylandWm : IDisposable
         else
         {
             settings.Remove("Gtk/CursorThemeName");
+        }
+    }
+
+    private (string Theme, int Size) _rootCursor = (string.Empty, 0);
+
+    private void SetRootCursor()
+    {
+        var theme = _options.CursorTheme;
+        var size = (int)Math.Round(_options.CursorSize * _scale);
+        if ((theme, size) == _rootCursor)
+        {
+            return;
+        }
+
+        _rootCursor = (theme, size);
+        if (!XWaylandRootCursor.Set(_conn, _root, theme, size))
+        {
+            Log.Warn($"cursor theme '{theme}' has no left_ptr cursor at {size}px. X11 windows without their own cursor will show the X default cursor.");
         }
     }
 

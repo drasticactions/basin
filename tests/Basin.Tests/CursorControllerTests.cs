@@ -352,4 +352,54 @@ public sealed class CursorControllerTests
         Assert.Equal(1, cursor.Magnification);
         Assert.Equal(24, cursor.Images.Size);
     }
+
+    [Fact]
+    public void A_client_cursor_gets_its_frame_callback_after_the_output_frame()
+    {
+        using var host = new CompositorTestHost();
+        using var backend = new HeadlessBackend(host.Loop);
+        var output = backend.CreateOutput(new OutputMode(160, 120, 60000), manualFrameClock: true);
+        var layout = new OutputLayout();
+        layout.Add(output, 0, 0);
+
+        using var cursor = new CursorController(layout);
+        cursor.AddOutput(output, null);
+        cursor.Load(new ShmAllocator(), 64, 64);
+        Assert.SkipWhen(cursor.Images?.HasTheme != true, "no xcursor theme installed");
+        host.Seat.Pointer.CursorRequested += cursor.HandleCursorRequest;
+
+        var client = host.Client;
+        var window = MappedToplevel.Map(host, client);
+        var pointer = client.Seat!.GetPointer();
+        uint enterSerial = 0;
+        pointer.Enter += (_, e) => enterSerial = e.Serial;
+        host.PumpToClient();
+        host.Seat.Pointer.NotifyEnter(window.ServerSurface, 1, 1);
+        host.PumpUntil(() => enterSerial != 0);
+        cursor.MoveTo(10, 10);
+        cursor.SetHover(window.ServerSurface, overClient: true);
+
+        var cursorSurface = client.Compositor.CreateSurface();
+        var buffer = client.CreateBuffer(16, 16, Fill.Solid(16, 16, 0xFF000000));
+        pointer.SetCursor(enterSerial, cursorSurface, 1, 1);
+        var done = 0;
+        var callback = cursorSurface.Frame();
+        callback.Done += (_, _) => done++;
+        cursorSurface.Attach(buffer.Proxy, 0, 0);
+        cursorSurface.Damage(0, 0, 16, 16);
+        cursorSurface.Commit();
+        host.PumpToServer();
+        host.PumpToClient();
+        Assert.Equal(0, done);
+
+        output.StepFrame();
+        host.PumpUntil(() => done == 1);
+
+        cursor.SetHover(null, overClient: false);
+        var away = cursorSurface.Frame();
+        away.Done += (_, _) => done++;
+        cursorSurface.Commit();
+        host.PumpToServer();
+        host.PumpUntil(() => done == 2);
+    }
 }

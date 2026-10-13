@@ -24,6 +24,7 @@ public sealed class CursorController : IDisposable
     private Surface? _hoverSurface;
     private (int X, int Y) _clientHotspot;
     private bool _overClient;
+    private bool _clientFramePending;
 
     private bool _parentMode;
     private IParentCursor? _parent;
@@ -116,6 +117,7 @@ public sealed class CursorController : IDisposable
         ArgumentNullException.ThrowIfNull(output);
         _outputs.Add((output, scene));
         output.Committed += OnOutputCommitted;
+        output.Frame += OnOutputFrame;
         Refresh();
     }
 
@@ -123,6 +125,7 @@ public sealed class CursorController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(output);
         output.Committed -= OnOutputCommitted;
+        output.Frame -= OnOutputFrame;
         _outputs.RemoveAll(entry => ReferenceEquals(entry.Output, output));
         if (ReferenceEquals(_cursorOn, output))
         {
@@ -283,6 +286,7 @@ public sealed class CursorController : IDisposable
                 previous.Destroyed -= OnClientSurfaceGone;
             }
 
+            _clientFramePending = false;
             _clientSurface = request.Surface;
             if (_clientSurface is { } current)
             {
@@ -378,6 +382,7 @@ public sealed class CursorController : IDisposable
         foreach (var entry in _outputs)
         {
             entry.Output.Committed -= OnOutputCommitted;
+            entry.Output.Frame -= OnOutputFrame;
         }
 
         _outputs.Clear();
@@ -418,10 +423,32 @@ public sealed class CursorController : IDisposable
         return logical > 0 && buffer > 0 ? (double)buffer / logical : 1.0;
     }
 
-    private void OnClientSurfaceCommitted() => TakeClientCursor();
+    private void OnClientSurfaceCommitted()
+    {
+        TakeClientCursor();
+        if (!_parentMode && !_hidden && _overClient && _cursorOn is not null)
+        {
+            _clientFramePending = true;
+            return;
+        }
+
+        _clientSurface?.SendFrameDone((uint)Environment.TickCount);
+    }
+
+    private void OnOutputFrame()
+    {
+        if (!_clientFramePending)
+        {
+            return;
+        }
+
+        _clientFramePending = false;
+        _clientSurface?.SendFrameDone((uint)Environment.TickCount);
+    }
 
     private void OnClientSurfaceGone()
     {
+        _clientFramePending = false;
         _clientSurface = null;
         _clientCursor = null;
         if (_overClient)

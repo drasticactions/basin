@@ -68,7 +68,7 @@ workload   ceiling  tinycomp-drm                 42638486
 zerogc     ceiling  dam-headless                 185406259
 client     exact    wm-layout-round                4000
 native     ceiling  inlet-pixman                 15500000
-server     exact    dmabuf-import                 63488
+server     exact    dmabuf-import                 65536
 server     exact    commit-swapping-buffers        4800
 server-managed exact    river-repaint-round               0
 server-managed exact    desktop-pack-fan-out              0
