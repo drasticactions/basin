@@ -72,7 +72,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         _target = target;
         _outputColor = outputColor;
         _entry = entry;
-        _waitFenceFd = waitFenceFd;
+        _waitFenceFd = waitFenceFd >= 0 ? Libc.Dup(waitFenceFd) : -1;
         _signalFenceFd = signalFenceFd;
         _foreign.Clear();
         _waitCount = 0;
@@ -1024,7 +1024,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
 
         if (_waitFenceFd >= 0)
         {
-            AddWaitFd(Libc.Dup(_waitFenceFd));
+            AddWaitFd(_waitFenceFd);
             _waitFenceFd = -1;
         }
 

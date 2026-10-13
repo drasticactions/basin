@@ -114,6 +114,52 @@ public sealed class ExplicitSyncTests : IDisposable
         target.Destroy();
     }
 
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("skia")]
+    [InlineData("gl")]
+    [InlineData("skia-gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public unsafe void Wait_fence_is_borrowed_only_for_the_begin_call(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        RequireDrm();
+
+        using var host = new CompositorTestHost(renderer: renderer);
+        var waitSource = DrmSyncobjTimeline.Create(_drmFd);
+        waitSource.Signal(1);
+        var waitFd = waitSource.ExportSyncFileAt(1);
+        Assert.True(waitFd >= 0);
+
+        var target = new MemoryBuffer(32, 32, DrmFormat.Xrgb8888);
+        var pass = host.Renderer.BeginBufferPass(target, new RenderPassOptions { WaitFenceFd = waitFd });
+        close(waitFd);
+
+        var ends = stackalloc int[2];
+        Assert.Equal(0, pipe(ends));
+        Assert.Equal(waitFd, dup2(ends[0], waitFd));
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        pass.AddRect(new RenderColor(1f, 0f, 0f, 1f), new Box(0, 0, 32, 32));
+        Assert.True(pass.Submit());
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+
+        close(waitFd);
+        close(ends[0]);
+        close(ends[1]);
+        waitSource.Release();
+        target.Destroy();
+        Assert.True(elapsed < TimeSpan.FromMilliseconds(500), $"Submit waited {elapsed.TotalMilliseconds:F0} ms on the fd number it was lent");
+    }
+
+    [DllImport("libc")]
+    private static extern unsafe int pipe(int* fds);
+
+    [DllImport("libc")]
+    private static extern int dup2(int oldFd, int newFd);
+
     [Fact]
     public void Timeline_signal_wait_query_and_fd_round_trip()
     {
