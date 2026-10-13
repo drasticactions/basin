@@ -53,6 +53,7 @@ internal static class Program
         });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
+        var handoff = cli.Add(CommonOptions.Handoff());
         var ipcOption = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
@@ -68,6 +69,7 @@ internal static class Program
                 var greeterOptions = new LunaGreeterOptions
                 {
                     Backend = chosen.Kind,
+                    Handoff = CommonOptions.ReadHandoff(result, handoff),
                     SocketFd = chosen.SocketFd,
                     Renderer = result.GetValue(renderer)!,
                     RendererGiven = result.GetResult(renderer) is { Implicit: false } || Environment.GetEnvironmentVariable("BASIN_RENDERER") is { Length: > 0 },
@@ -103,6 +105,7 @@ internal static class Program
             {
                 Ipc = IpcCli.Read(cli, result),
                 Backend = chosen.Kind,
+                Handoff = CommonOptions.ReadHandoff(result, handoff),
                 Renderer = rendererName,
                 Outputs = Math.Max(1, result.GetValue(outputs)),
                 Scales = result.GetValue(scales)!,

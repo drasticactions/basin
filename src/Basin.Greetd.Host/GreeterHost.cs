@@ -58,7 +58,15 @@ public sealed partial class GreeterHost : IDisposable
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
 
-        _host = BasinHost.Create(HostOptions.ForBackend(options.Backend) with { SocketFd = options.SocketFd });
+        _host = BasinHost.Create(HostOptions.ForBackend(options.Backend) with
+        {
+            SocketFd = options.SocketFd,
+            Handoff = options.Handoff.Resolve(options.Settings.Handoff.Mode),
+            Greeter = true,
+            Greetd = _greetdPath is not null,
+        });
+        _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
+
         _services = _host.CreateServices().Use(_layout);
         _services.Install(new ProtocolPack([new CompositorModule(), new Basin.Seat.SeatModule(), new ShmModule(), new SubcompositorModule(), new Basin.Shell.Xdg.XdgShellModule()]));
         _services.Freeze();
@@ -93,8 +101,10 @@ public sealed partial class GreeterHost : IDisposable
             NestedName = index => $"{options.Program}-{index + 1}",
             HeadlessMode = options.HeadlessMode,
         };
-        _loop = new CompositorRunLoop(_host, _outputs);
+        _outputs.ConfigureHandoff(options.Settings.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, options.Settings.Handoff.DurationMs, options.Settings.Handoff.HoldLimitMs);
+        _loop = new CompositorRunLoop(_host, _outputs) { OutroBudget = TimeSpan.FromMilliseconds(750) };
         _outputs.Emptied += () => Stop("outputs");
+        _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
         _outputs.Added += view => BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
@@ -261,6 +271,7 @@ public sealed partial class GreeterHost : IDisposable
         {
             _exit = reason;
             _status = status;
+            _loop.Stopping = reason == "start" ? HandoffStop.SessionStart : status != 0 ? HandoffStop.Failure : HandoffStop.Orderly;
         }
 
         _loop.Stop();

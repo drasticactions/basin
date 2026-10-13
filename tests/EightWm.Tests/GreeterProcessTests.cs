@@ -87,7 +87,7 @@ public sealed class GreeterProcessTests
     public async Task Cancel_shows_every_user_and_a_chosen_session_is_remembered()
     {
         using var fixture = new EightGreeterFixture();
-        fixture.Greetd.Respond(Secret, new GreetdSuccess(), Secret, new GreetdSuccess(), new GreetdSuccess());
+        fixture.Greetd.Respond(Secret, new GreetdSuccess(), new GreetdSuccess());
         using var session = fixture.Start();
         await Ready(session);
         await Expect(session, "AUTH secret Password: ");
@@ -114,7 +114,7 @@ public sealed class GreeterProcessTests
         using (var demo = new EightSession("pixman", EightSession.Compositor(), fixture.ConfigPath, fixture.Environment, "--greeter", "--demo", "--state", fixture.StatePath))
         {
             await Expect(demo, "GREETD demo");
-            Assert.NotNull(await demo.WaitForAsync(line => line == "AUTH secret Password:"));
+            Assert.NotNull(await demo.WaitForAsync(line => line == "AUTH secret Password: "));
             await demo.SendAsync("curtain up");
             await demo.SendAsync("type demo");
             await demo.SendAsync("submit");

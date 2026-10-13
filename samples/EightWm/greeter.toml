@@ -63,3 +63,13 @@ orca = ["orca", "--replace"]
 [render]
 # A renderer name, or "" for the fallback chain vulkan, gl, pixman.
 renderer = ""
+
+[handoff]
+# auto leaves the sign-in view lit for the session under greetd.
+# auto | retain | off. --handoff beats it. Read at start only.
+mode = "auto"
+# crossfade | cut: how the inherited frame gives way to the greeter.
+transition = "crossfade"
+duration_ms = 400
+# The longest the inherited frame stays before the transition starts.
+hold_limit_ms = 3000

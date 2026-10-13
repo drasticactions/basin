@@ -6,6 +6,8 @@ internal sealed class GreeterOptions
 {
     public BackendKind Backend { get; init; } = BackendKind.Headless;
 
+    public Basin.HandoffChoice Handoff { get; init; }
+
     public string Renderer { get; init; } = "vulkan";
 
     public bool RendererGiven { get; init; }

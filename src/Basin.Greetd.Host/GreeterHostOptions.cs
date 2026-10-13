@@ -19,6 +19,8 @@ public sealed record GreeterHostOptions
 
     public int SocketFd { get; init; } = -1;
 
+    public HandoffChoice Handoff { get; init; }
+
     public OutputMode HeadlessMode { get; init; } = new(1280, 720, 60_000);
 
     public string? GreetdSocket { get; init; }

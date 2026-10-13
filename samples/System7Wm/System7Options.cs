@@ -6,6 +6,8 @@ internal sealed record System7Options
 {
     public required BackendKind Backend { get; init; }
 
+    public Basin.HandoffChoice Handoff { get; init; }
+
     public required string Renderer { get; init; }
 
     public int Outputs { get; init; } = 1;

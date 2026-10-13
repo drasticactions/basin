@@ -146,6 +146,14 @@ internal sealed partial class EightGreeter
 
                 _syncing = false;
                 break;
+            case GreeterStepKind.LoginOk:
+                _signIn.ShowWelcome();
+                if (_screen is { } welcome)
+                {
+                    welcome.KeyboardPanel.IsOpen = false;
+                }
+
+                break;
             case GreeterStepKind.LayoutApplied:
             case GreeterStepKind.LayoutFailed:
                 _syncing = true;

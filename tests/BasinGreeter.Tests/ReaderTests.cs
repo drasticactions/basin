@@ -109,6 +109,12 @@ public sealed class ReaderTests
         await session.SendAsync("type pw");
         await session.SendAsync("submit");
         await session.ExpectAsync("EXIT start");
-        await WaitFor(log, "stopped");
+        var pid = int.Parse((await WaitFor(log, "started")).Split(' ', '\n')[1], System.Globalization.CultureInfo.InvariantCulture);
+        for (var attempt = 0; attempt < 100 && Directory.Exists($"/proc/{pid}"); attempt++)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(Directory.Exists($"/proc/{pid}"), $"the reader {pid} outlived the login");
     }
 }

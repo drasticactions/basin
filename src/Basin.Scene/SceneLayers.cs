@@ -12,6 +12,7 @@ public sealed class SceneLayers
         Overlay = new SceneTree(root);
         Lock = new SceneTree(root);
         Feedback = new SceneTree(root) { ExcludeFromScanout = true };
+        Handoff = new SceneTree(root) { ExcludeFromScanout = true };
     }
 
     public SceneTree Background { get; }
@@ -27,6 +28,8 @@ public sealed class SceneLayers
     public SceneTree Lock { get; }
 
     public SceneTree Feedback { get; }
+
+    public SceneTree Handoff { get; }
 
     public void SetLocked(bool locked)
     {

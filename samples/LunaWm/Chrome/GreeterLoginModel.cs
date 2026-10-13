@@ -16,18 +16,20 @@ public sealed class GreeterLoginModel : ObservableModel
     private string _errorText = "";
     private bool _needsDismiss;
     private bool _busy;
+    private bool _signingIn;
     private int _shakes;
     private GreeterUserEntry? _selectedUser;
     private bool _keyboardVisible;
     private double _keyboardHeight;
     private double _keyboardKeysHeight;
     private bool _highContrast;
+    private string _sessionName = "";
 
     public GreeterLoginModel()
     {
         Choose = new RelayCommand(parameter =>
         {
-            if (_showUsers && parameter is GreeterUserEntry user)
+            if (!_signingIn && parameter is GreeterUserEntry user && (_showUsers || !ReferenceEquals(user, _selectedUser)))
             {
                 SelectedUser = user;
                 UserChosen?.Invoke(user);
@@ -36,6 +38,7 @@ public sealed class GreeterLoginModel : ObservableModel
         Submit = new RelayCommand(_ => OnSubmit());
         Cancel = new RelayCommand(_ => Cancelled?.Invoke());
         Dismiss = new RelayCommand(_ => Dismissed?.Invoke());
+        PickSession = new RelayCommand(_ => SessionPickRequested?.Invoke());
     }
 
     public ObservableCollection<GreeterUserEntry> Users { get; } = [];
@@ -49,6 +52,8 @@ public sealed class GreeterLoginModel : ObservableModel
     public ICommand Cancel { get; }
 
     public ICommand Dismiss { get; }
+
+    public ICommand PickSession { get; }
 
     public event Action<GreeterUserEntry>? UserChosen;
 
@@ -64,6 +69,25 @@ public sealed class GreeterLoginModel : ObservableModel
 
     public event Action? PromptShown;
 
+    public event Action? SessionPickRequested;
+
+    public string SessionName
+    {
+        get => _sessionName;
+        set
+        {
+            if (Set(ref _sessionName, value))
+            {
+                Raise(nameof(HasSession));
+                Raise(nameof(ShowStripSession));
+            }
+        }
+    }
+
+    public bool HasSession => _sessionName.Length > 0;
+
+    public bool ShowStripSession => _showUsers && HasSession;
+
     public bool ShowUsers
     {
         get => _showUsers;
@@ -72,11 +96,26 @@ public sealed class GreeterLoginModel : ObservableModel
             if (Set(ref _showUsers, value))
             {
                 Raise(nameof(ShowPad));
+                Raise(nameof(ShowStripSession));
             }
         }
     }
 
     public bool ShowPad => !_showUsers;
+
+    public bool SigningIn
+    {
+        get => _signingIn;
+        private set
+        {
+            if (Set(ref _signingIn, value))
+            {
+                Raise(nameof(ContentOpacity));
+            }
+        }
+    }
+
+    public double ContentOpacity => _signingIn ? 0 : 1;
 
     public bool AskName
     {
@@ -248,7 +287,7 @@ public sealed class GreeterLoginModel : ObservableModel
         }
     }
 
-    public Avalonia.Thickness PadMargin => new(0, 0, 0, 40 + (_keyboardVisible ? _keyboardKeysHeight : 0));
+    public Avalonia.Thickness PadMargin => new(0, 0, 0, _keyboardVisible ? 12 + _keyboardKeysHeight : 40);
 
     public bool HighContrast
     {
@@ -278,6 +317,24 @@ public sealed class GreeterLoginModel : ObservableModel
         PromptShown?.Invoke();
     }
 
+    public void ShowSigningIn()
+    {
+        KeyboardVisible = false;
+        Busy = true;
+        SigningIn = true;
+    }
+
+    public bool CanSwitchInPlace => !_showUsers && !_askName && _hasPrompt && _promptSecret && !_busy && !_needsDismiss;
+
+    public void SwitchUser(string user)
+    {
+        CurrentUser = user;
+        Messages.Clear();
+        Raise(nameof(HasMessages));
+        FieldText = "";
+        ErrorText = "";
+    }
+
     public void BeginConversation(string user)
     {
         ShowUsers = false;
@@ -298,7 +355,13 @@ public sealed class GreeterLoginModel : ObservableModel
         PromptShown?.Invoke();
     }
 
-    public void AddMessage(string text) => Messages.Add(text.TrimEnd());
+    public bool HasMessages => Messages.Count > 0;
+
+    public void AddMessage(string text)
+    {
+        Messages.Add(text.TrimEnd());
+        Raise(nameof(HasMessages));
+    }
 
     public void ShowError(string text, bool needsDismiss, bool shake)
     {
@@ -326,6 +389,7 @@ public sealed class GreeterLoginModel : ObservableModel
     private void ClearConversation()
     {
         Messages.Clear();
+        Raise(nameof(HasMessages));
         PromptText = "";
         HasPrompt = false;
         FieldText = "";

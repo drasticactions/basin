@@ -25,6 +25,8 @@ internal sealed class Config
 
     public string Renderer { get; set; } = "vulkan";
 
+    public HandoffSettings Handoff { get; set; } = new();
+
     public int Outputs { get; set; } = 1;
 
     public double[] Scales { get; set; } = [];
@@ -803,6 +805,7 @@ internal sealed class Config
 
         Launch = LaunchRules.Read(reader.FreeArray(LaunchRules.Table), log);
 
+        Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
         WarnOverviewAgainstCanvas(log);
     }

@@ -8,6 +8,21 @@ public sealed class GreeterBackgroundModel : ObservableModel
     private string _date = "";
     private Bitmap? _wallpaper;
     private bool _highContrast;
+    private bool _clockShown = true;
+
+    public bool ClockShown
+    {
+        get => _clockShown;
+        set
+        {
+            if (Set(ref _clockShown, value))
+            {
+                Raise(nameof(ClockOpacity));
+            }
+        }
+    }
+
+    public double ClockOpacity => _clockShown ? 1 : 0;
 
     public string Clock
     {

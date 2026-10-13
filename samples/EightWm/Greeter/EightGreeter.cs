@@ -77,6 +77,7 @@ internal sealed partial class EightGreeter : IDisposable
         {
             Program = StateProgram,
             Backend = options.Backend.ToString().ToLowerInvariant(),
+            Handoff = options.Handoff,
             Renderer = !options.RendererGiven && _config.Renderer.Length > 0 ? _config.Renderer : options.Renderer,
             Outputs = options.Outputs,
             Scales = options.Scales,

@@ -16,6 +16,8 @@ internal sealed record DamOptions
 
     public required string Renderer { get; init; }
 
+    public HandoffMode Handoff { get; init; }
+
     public bool ServerDecorations { get; init; }
 
     public bool LastOutputOnly { get; init; }

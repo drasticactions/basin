@@ -29,7 +29,9 @@ internal sealed partial class LunaGreeter
         _model.Answered += text => _flow.Answer(text);
         _model.Cancelled += _flow.Cancel;
         _model.Dismissed += _flow.Dismiss;
+        _model.SessionPickRequested += () => ToggleMenu("session");
         _flow.Start();
+        ShowSessionName();
     }
 
     private void OnStep(GreeterStep step)
@@ -62,7 +64,14 @@ internal sealed partial class LunaGreeter
                     _model.SelectedUser = chosen;
                 }
 
-                _model.BeginConversation(step.Text ?? "");
+                if (_model.CanSwitchInPlace)
+                {
+                    _model.SwitchUser(step.Text ?? "");
+                }
+                else
+                {
+                    _model.BeginConversation(step.Text ?? "");
+                }
                 break;
             case GreeterStepKind.Message:
                 _model.AddMessage(step.Text ?? "");
@@ -84,13 +93,29 @@ internal sealed partial class LunaGreeter
             case GreeterStepKind.NoSession:
                 _model.ShowError(step.Text ?? "", needsDismiss: true, shake: false);
                 break;
+            case GreeterStepKind.LoginOk:
+                _model.ShowSigningIn();
+                break;
         }
 
-        if (step.Kind is GreeterStepKind.SessionSelected or GreeterStepKind.LayoutApplied && _menu is { Open: true, Kind: "device" })
+        if (step.Kind is GreeterStepKind.SessionSelected)
+        {
+            ShowSessionName();
+        }
+
+        if (step.Kind is GreeterStepKind.SessionSelected or GreeterStepKind.LayoutApplied && _menu is { Open: true, Kind: "device" or "session" })
         {
             FillMenu(rebuild: true);
         }
 
         _outputs?.ScheduleAll();
+    }
+
+    private void ShowSessionName()
+    {
+        var flow = _flow!;
+        _model.SessionName = flow.Sessions.Count > 1 && flow.Sessions.FirstOrDefault(session => session.Id == flow.SelectedSession) is { } chosen
+            ? chosen.Name
+            : "";
     }
 }

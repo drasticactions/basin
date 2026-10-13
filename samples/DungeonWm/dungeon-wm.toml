@@ -204,3 +204,10 @@ low_density = true
 "R" = "rotate"
 # While you hold a window, stand it upright at the nearest quarter turn.
 "Shift+R" = "square"
+
+# What a DRM start inherits and a DRM exit leaves lit. docs/handoff.md has the rules.
+[handoff]
+mode = "auto"            # auto | retain | off. --handoff beats it. Read at start only
+transition = "crossfade" # crossfade | cut: how the inherited frame gives way to this one
+duration_ms = 400        # the crossfade
+hold_limit_ms = 3000     # the longest the inherited frame stays before the transition starts

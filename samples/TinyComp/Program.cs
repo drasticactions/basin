@@ -41,6 +41,7 @@ internal static class Program
         var exitWithCommand = cli.Add(CommonOptions.ExitWithCommand());
         var subreaper = cli.Add(CommonOptions.Subreaper(defaultOn: true));
         var readyFd = cli.Add(CommonOptions.ReadyFd(), report: false);
+        var handoff = cli.Add(CommonOptions.Handoff());
 
         var framesOption = cli.Add(CommonOptions.Frames(), report: false);
         var transport = cli.Add(CommonOptions.Transport());
@@ -204,7 +205,8 @@ internal static class Program
                 result.GetValue(channel),
                 result.GetValue(configPath),
                 IpcCli.Read(cli, result),
-                init))
+                init,
+                CommonOptions.ReadHandoff(result, handoff)))
             {
                 comp.ExitWithCommand = result.GetValue(exitWithCommand);
                 comp.Subreaper = (result.GetResult(subreaper) is { Implicit: false }

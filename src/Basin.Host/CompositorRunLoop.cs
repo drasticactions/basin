@@ -3,7 +3,7 @@ namespace Basin.Host;
 public sealed class CompositorRunLoop
 {
     private readonly BasinHost _host;
-    private readonly OutputDriver? _outputs;
+    private OutputDriver? _outputs;
     private bool _running = true;
 
     public CompositorRunLoop(BasinHost host, OutputDriver? outputs = null)
@@ -26,6 +26,20 @@ public sealed class CompositorRunLoop
     public event Action? Iterated;
 
     public bool IsRunning => _running;
+
+    public OutputDriver? Outputs
+    {
+        get => _outputs;
+        set => _outputs = value;
+    }
+
+    public IHandoffOutro? Outro { get; set; }
+
+    public TimeSpan OutroBudget { get; set; } = TimeSpan.FromSeconds(1);
+
+    public HandoffStop Stopping { get; set; } = HandoffStop.Orderly;
+
+    public bool Retained { get; private set; }
 
     public long Rendered => RenderedFrames?.Invoke() ?? _outputs?.PrimaryRendered ?? 0;
 
@@ -59,6 +73,27 @@ public sealed class CompositorRunLoop
             terminate.Remove();
         }
 
+        Finish();
         return Rendered;
+    }
+
+    private void Finish()
+    {
+        if (_outputs is null || !_host.Handoff.RetainsOn(Stopping))
+        {
+            return;
+        }
+
+        var finished = false;
+        _outputs.RetainAndStop(Outro, OutroBudget, () => finished = true);
+        while (!finished)
+        {
+            Iterating?.Invoke();
+            _host.Loop.Dispatch(5);
+            Iterated?.Invoke();
+            _host.Parent?.Flush();
+        }
+
+        Retained = _host.Drm is not null;
     }
 }

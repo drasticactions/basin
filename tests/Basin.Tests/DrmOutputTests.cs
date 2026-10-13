@@ -7,34 +7,7 @@ namespace Basin.Tests;
 
 public sealed class DrmOutputTests
 {
-    private static readonly string? VkmsNode = FindVkms();
-
-    private static string? FindVkms()
-    {
-        if (!Directory.Exists("/dev/dri"))
-        {
-            return null;
-        }
-
-        foreach (var node in Directory.GetFiles("/dev/dri", "card*").OrderBy(p => p, StringComparer.Ordinal))
-        {
-            try
-            {
-                using var session = new DirectSession();
-                using var device = session.OpenDevice(node);
-                using var drm = DrmDevice.FromFd(device.FileDescriptor, ownsFd: false);
-                if (drm.GetVersion().Name == "vkms")
-                {
-                    return node;
-                }
-            }
-            catch (Exception e) when (e is DrmException or IOException or UnauthorizedAccessException or InvalidOperationException)
-            {
-            }
-        }
-
-        return null;
-    }
+    private static readonly string? VkmsNode = VkmsCard.Find();
 
     private sealed class Rig : IDisposable
     {

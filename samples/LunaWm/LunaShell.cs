@@ -86,6 +86,7 @@ internal sealed partial class LunaShell : IDisposable
         _host = BasinHost.Create(HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
         {
             SocketFd = options.SocketFd,
+            Handoff = options.Handoff.Resolve(config.Handoff.Mode),
         });
         _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
         {
@@ -151,8 +152,11 @@ internal sealed partial class LunaShell : IDisposable
             NestedName = index => $"luna-wm-{index + 1}",
             HeadlessMode = new OutputMode(1024, 768, 60_000),
         };
-        _loop = new CompositorRunLoop(_host, _outputs);
+        _outputs.ConfigureHandoff(config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, config.Handoff.DurationMs, config.Handoff.HoldLimitMs);
+        _loop = new CompositorRunLoop(_host, _outputs) { Outro = new LunaLogoutOutro(line => _report.Line(line)) };
         _outputs.Emptied += Stop;
+        _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
+        _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
         _outputs.Added += OnOutputAdded;
         _outputs.Removed += OnOutputRemoved;
@@ -349,6 +353,7 @@ internal sealed partial class LunaShell : IDisposable
         var previous = _config;
         _config = next;
         ApplyConfig();
+        _outputs.ConfigureHandoff(next.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, next.Handoff.DurationMs, next.Handoff.HoldLimitMs);
         ReloadKeyboard(previous);
         _report.Line(restart.Length > 0 ? $"RELOAD restart-needed {restart}" : "RELOAD ok");
     }

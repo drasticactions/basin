@@ -58,6 +58,8 @@ internal sealed partial class TinyComp
         _driver.ScanoutChanged += OnScanoutChanged;
         _driver.ScaleRefused += (view, scale) => _log.Warn($"scale {scale} refused by {view.Output.Name}");
         _driver.ModesetRefused += card => _log.Error($"modeset refused by {card.Name}");
+        _driver.HandoffInherited += inheritance => _report.Line(HandoffLines.Inherit(inheritance));
+        _host.HandoffRetained += retention => _report.Line(HandoffLines.Retain(retention));
         _driver.CardAdopted += device => _report.Line($"CARD + {device.CardPath} ({device.Driver})");
         _driver.CardRefused += (device, reason) => _report.Line($"CARD {device.CardPath} not adopted: {reason}");
         _driver.SecondaryOutputAdded += output => _report.Line($"OUTPUT + {output.Name}");

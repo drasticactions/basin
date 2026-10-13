@@ -32,6 +32,7 @@ internal static class Program
         });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
+        var handoff = cli.Add(CommonOptions.Handoff());
         _ = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
@@ -43,6 +44,7 @@ internal static class Program
             {
                 Ipc = IpcCli.Read(cli, result),
                 Backend = chosen.Kind,
+                Handoff = CommonOptions.ReadHandoff(result, handoff),
                 Renderer = result.GetValue(renderer)!,
                 Outputs = result.GetValue(outputs),
                 Scales = result.GetValue(scales)!,

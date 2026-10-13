@@ -22,6 +22,10 @@ public sealed class GreeterFlow : IDisposable
     private bool _sessionPicked;
     private (string User, string Display)? _pendingBegin;
     private bool _layoutPicked;
+    private bool _local;
+    private byte[]? _held;
+    private int _heldLength;
+    private bool _startHeld;
     private bool _disposed;
     private string _command = "";
 
@@ -119,6 +123,8 @@ public sealed class GreeterFlow : IDisposable
 
         _sessionPicked = false;
         _layoutPicked = false;
+        _local = false;
+        DropHeld();
         Phase = GreeterPhase.Users;
         ClearConversation();
         CurrentUser = null;
@@ -144,7 +150,11 @@ public sealed class GreeterFlow : IDisposable
         return true;
     }
 
-    public void ChooseOther() => AskName();
+    public void ChooseOther()
+    {
+        EndConversation();
+        AskName();
+    }
 
     public void EnterName(string name)
     {
@@ -157,6 +167,29 @@ public sealed class GreeterFlow : IDisposable
 
     public bool Answer(ReadOnlySpan<char> text)
     {
+        if (_local)
+        {
+            if (CurrentUser is not { } user)
+            {
+                return false;
+            }
+
+            _local = false;
+            DropHeld();
+            _held = ArrayPool<byte>.Shared.Rent(Math.Max(Encoding.UTF8.GetMaxByteCount(text.Length), 1));
+            _heldLength = Encoding.UTF8.GetBytes(text, _held);
+            if (_login.CanStart)
+            {
+                _login.Start(user);
+            }
+            else
+            {
+                _startHeld = true;
+            }
+
+            return true;
+        }
+
         if (_login.State != GreetdLoginState.Prompting)
         {
             return false;
@@ -180,12 +213,7 @@ public sealed class GreeterFlow : IDisposable
 
     public void Cancel()
     {
-        _pendingBegin = null;
-        if (_login.State is not (GreetdLoginState.Idle or GreetdLoginState.Failed))
-        {
-            _login.Cancel();
-        }
-
+        EndConversation();
         Error = null;
         ErrorNeedsDismiss = false;
         ShowUsers();
@@ -252,14 +280,48 @@ public sealed class GreeterFlow : IDisposable
         }
 
         _disposed = true;
+        DropHeld();
         _login.Changed -= OnLoginChanged;
         _client.Closed -= OnClosed;
         _login.Dispose();
         _context.Dispose();
     }
 
+    private void EndConversation()
+    {
+        _pendingBegin = null;
+        _local = false;
+        DropHeld();
+        if (_login.State is not (GreetdLoginState.Idle or GreetdLoginState.Failed))
+        {
+            _login.Cancel();
+        }
+    }
+
+    private void DropHeld()
+    {
+        _startHeld = false;
+        if (_held is { } held)
+        {
+            held.AsSpan().Clear();
+            ArrayPool<byte>.Shared.Return(held);
+            _held = null;
+            _heldLength = 0;
+        }
+    }
+
+    private void AskLocally()
+    {
+        _local = true;
+        PromptText = _options.PasswordPrompt;
+        PromptSecret = true;
+        Step(new GreeterStep(GreeterStepKind.Prompt, PromptText, GreetdAuthMessageType.Secret));
+    }
+
     private void AskName()
     {
+        _local = false;
+        DropHeld();
         Phase = GreeterPhase.AskingName;
         CurrentUser = null;
         CurrentDisplayName = null;
@@ -269,6 +331,8 @@ public sealed class GreeterFlow : IDisposable
 
     private void Begin(string user, string display)
     {
+        _local = false;
+        DropHeld();
         if (!_login.CanStart)
         {
             if (_login.State == GreetdLoginState.Waiting)
@@ -297,7 +361,7 @@ public sealed class GreeterFlow : IDisposable
         CurrentDisplayName = display;
         ClearConversation();
         Step(new GreeterStep(GreeterStepKind.ConversationBegun, display));
-        _login.Start(user);
+        AskLocally();
     }
 
     private void ClearConversation()
@@ -419,6 +483,13 @@ public sealed class GreeterFlow : IDisposable
     private void OnLoginChanged()
     {
         var login = _login;
+        if (_startHeld && login.CanStart && CurrentUser is { } waiting)
+        {
+            _startHeld = false;
+            login.Start(waiting);
+            return;
+        }
+
         if (_pendingBegin is { } pending && login.CanStart)
         {
             _pendingBegin = null;
@@ -433,6 +504,21 @@ public sealed class GreeterFlow : IDisposable
                 Step(new GreeterStep(GreeterStepKind.Message, login.PromptText ?? "", login.PromptType));
                 login.Acknowledge();
                 break;
+            case GreetdLoginState.Prompting when login.PromptType == GreetdAuthMessageType.Secret && _held is { } held:
+                var length = _heldLength;
+                _held = null;
+                _heldLength = 0;
+                try
+                {
+                    login.Answer(held.AsSpan(0, length));
+                }
+                finally
+                {
+                    held.AsSpan().Clear();
+                    ArrayPool<byte>.Shared.Return(held);
+                }
+
+                break;
             case GreetdLoginState.Prompting:
                 PromptText = login.PromptText ?? "";
                 PromptSecret = login.PromptType == GreetdAuthMessageType.Secret;
@@ -446,13 +532,14 @@ public sealed class GreeterFlow : IDisposable
                 OnStarted();
                 break;
             case GreetdLoginState.Failed when login.FailureKind == GreetdErrorType.AuthError:
-                if (login.User is { } user && login.CanStart)
+                DropHeld();
+                if (login.User is not null && login.CanStart)
                 {
                     Phase = GreeterPhase.Conversation;
                     ClearConversation();
                     Error = _options.LoginIncorrect;
                     Step(new GreeterStep(GreeterStepKind.AuthFailed, Error));
-                    login.Start(user);
+                    AskLocally();
                 }
                 else
                 {
@@ -461,6 +548,7 @@ public sealed class GreeterFlow : IDisposable
 
                 break;
             case GreetdLoginState.Failed:
+                DropHeld();
                 Phase = GreeterPhase.Error;
                 Error = login.FailureDescription ?? "";
                 ErrorNeedsDismiss = true;

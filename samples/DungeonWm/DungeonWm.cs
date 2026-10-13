@@ -109,6 +109,7 @@ internal sealed partial class DungeonWm : IDisposable
         _host = BasinHost.Create(HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
         {
             SocketFd = options.SocketFd,
+            Handoff = options.Handoff.Resolve(_settings.Handoff.Mode),
         });
         _processes = new ProcessTracker(_host.Loop, LaunchEnvironment)
         {
@@ -205,8 +206,11 @@ internal sealed partial class DungeonWm : IDisposable
             HeadlessMode = new OutputMode(options.Width, options.Height, 60_000),
             NestedName = index => options.Outputs == 1 ? "dungeon-wm" : $"dungeon-wm-{index + 1}",
         };
-        _loop = new CompositorRunLoop(_host, _outputs);
+        _outputs.ConfigureHandoff(_settings.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _settings.Handoff.DurationMs, _settings.Handoff.HoldLimitMs);
+        _loop = new CompositorRunLoop(_host, _outputs) { Outro = new WindowsFadeOutro(_layers, TimeSpan.FromMilliseconds(300)) };
         _outputs.Emptied += Stop;
+        _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
+        _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name}");
 
         _seat = _services.Require<Basin.Seat.Seat>();

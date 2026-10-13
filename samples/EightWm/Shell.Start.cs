@@ -88,7 +88,9 @@ internal sealed partial class Shell
 
     internal void Reload()
     {
+        var previousHandoff = _config.Handoff.Mode;
         _config = Config.Load(_options.ConfigPath, _log);
+        _outputs.ConfigureHandoff(_config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _config.Handoff.DurationMs, _config.Handoff.HoldLimitMs);
         _xwaylandModule?.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
         BuildTiles();
         foreach (var view in Views)
@@ -109,7 +111,7 @@ internal sealed partial class Shell
         StartIdleLock();
         ReadKeyboardChord();
         _kbSession.Reload(KeyboardOptions());
-        _report.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
+        _report.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}" + (previousHandoff != _config.Handoff.Mode ? " restart-required=handoff.mode" : string.Empty));
     }
 
     internal void ApplyRules(AppWindow app)

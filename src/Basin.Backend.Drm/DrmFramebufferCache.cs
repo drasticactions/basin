@@ -202,6 +202,65 @@ internal sealed unsafe class DrmFramebufferCache(DrmDevice device) : IDisposable
         CloseHandles(entry.ImportedHandles);
     }
 
+    internal bool Owns(uint fbId)
+    {
+        foreach (var entry in _entries.Values)
+        {
+            if (entry.FbId == fbId || entry.OpaqueFbId == fbId)
+            {
+                return true;
+            }
+        }
+
+        foreach (var (_, entry) in _orphans)
+        {
+            if (entry.FbId == fbId || entry.OpaqueFbId == fbId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal bool Forget(uint fbId)
+    {
+        foreach (var entry in _entries.Values)
+        {
+            if (Forget(entry, fbId))
+            {
+                return true;
+            }
+        }
+
+        foreach (var (_, entry) in _orphans)
+        {
+            if (Forget(entry, fbId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool Forget(Entry entry, uint fbId)
+    {
+        if (entry.FbId == fbId)
+        {
+            entry.FbId = 0;
+            return true;
+        }
+
+        if (entry.OpaqueFbId == fbId)
+        {
+            entry.OpaqueFbId = 0;
+            return true;
+        }
+
+        return false;
+    }
+
     internal void ReleaseOrphans()
     {
         if (_orphans.Count == 0)

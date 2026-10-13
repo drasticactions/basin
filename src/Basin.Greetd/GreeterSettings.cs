@@ -43,6 +43,8 @@ public sealed class GreeterSettings
 
     public IReadOnlyList<string> Orca { get; private set; } = ["orca", "--replace"];
 
+    public HandoffSettings Handoff { get; private set; } = new();
+
     public static GreeterSettings Read(TomlReader root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -94,6 +96,7 @@ public sealed class GreeterSettings
             settings.Orca = List(accessibility, "orca") ?? settings.Orca;
         }
 
+        settings.Handoff = HandoffSettings.Read(root.Section("handoff"));
         return settings;
     }
 

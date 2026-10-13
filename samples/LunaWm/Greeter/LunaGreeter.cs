@@ -76,6 +76,7 @@ internal sealed partial class LunaGreeter : IDisposable
         {
             Program = StateProgram,
             Backend = options.Backend.ToString().ToLowerInvariant(),
+            Handoff = options.Handoff,
             Renderer = !options.RendererGiven && _config.Renderer.Length > 0 ? _config.Renderer : options.Renderer,
             Outputs = options.Outputs,
             Scales = options.Scales,
@@ -135,6 +136,16 @@ internal sealed partial class LunaGreeter : IDisposable
         WireLogin();
         WireStatus();
         WireKeyboard();
+        _model.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GreeterLoginModel.KeyboardVisible))
+            {
+                foreach (var (_, background) in _backgrounds.Values)
+                {
+                    background.ClockShown = !_model.KeyboardVisible;
+                }
+            }
+        };
         WireAccessibility();
     }
 
@@ -183,7 +194,7 @@ internal sealed partial class LunaGreeter : IDisposable
 
     private void OnBackgroundAdded(IOutput output, OutputUISurface surface)
     {
-        var model = new GreeterBackgroundModel { Wallpaper = _wallpaper, HighContrast = _highContrast };
+        var model = new GreeterBackgroundModel { Wallpaper = _wallpaper, HighContrast = _highContrast, ClockShown = !_model.KeyboardVisible };
         surface.Realized += realized => ((AvaloniaUISurface)realized).Content = new GreeterBackgroundView { DataContext = model };
         _backgrounds[output] = (surface, model);
         OnClockTick();

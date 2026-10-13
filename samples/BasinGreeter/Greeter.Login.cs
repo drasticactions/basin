@@ -158,6 +158,9 @@ internal sealed partial class Greeter
             case GreeterStepKind.LayoutFailed:
                 _model.Bar.ShowLayout(step.Text);
                 break;
+            case GreeterStepKind.LoginOk:
+                _model.ShowSigningIn();
+                break;
         }
     }
 

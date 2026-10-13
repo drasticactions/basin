@@ -7,6 +7,8 @@ internal sealed class MauiCompConfig
 {
     public string Theme { get; set; } = "light";
 
+    public HandoffSettings Handoff { get; set; } = new();
+
     public string? Background { get; set; }
 
     public int BlurStrength { get; set; } = 5;
@@ -84,6 +86,7 @@ internal sealed class MauiCompConfig
             InputRules = InputConfig.Read(input, reader.Log);
         }
 
+        Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
     }
 }

@@ -18,6 +18,8 @@ internal static class DungeonWmConfig
             }
         }
 
+        Check("handoff.mode", running.Handoff.Mode != loaded.Handoff.Mode);
+
         Check("render.renderer", running.Renderer != loaded.Renderer);
         Check("render.anisotropy", running.Render.Anisotropy != loaded.Render.Anisotropy);
         Check("world.seed", running.Map.Seed != loaded.Map.Seed);
@@ -288,6 +290,7 @@ internal static class DungeonWmConfig
             }
         }
 
+        settings.Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
     }
 

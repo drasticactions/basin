@@ -146,6 +146,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         Log.Info($"{Name}: EDID or mode list changed; rebuilt in place as {Description}");
+        Inherited = null;
         _needsModeset = true;
         RaiseModesChanged();
         RequestRepaint();
@@ -229,6 +230,188 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     public (uint Min, uint Max) MaxBitsPerColorRange { get; }
 
     public event Action<ulong, uint, ulong>? PresentedOnScreen;
+
+    public DrmInheritedState? Inherited { get; private set; }
+
+    public event Action<DrmOutput, HandoffInheritance>? HandoffInherited;
+
+    private ulong? _inheritedMaxBpc;
+
+    public OutputMode StartMode
+    {
+        get
+        {
+            if (_backend.Inherit && Inherited is { } lit)
+            {
+                foreach (var mode in _modes)
+                {
+                    if (mode.Width == lit.OutputMode.Width && mode.Height == lit.OutputMode.Height &&
+                        Math.Abs(mode.RefreshMilliHz - lit.OutputMode.RefreshMilliHz) < 500)
+                    {
+                        return mode;
+                    }
+                }
+            }
+
+            return PreferredMode;
+        }
+    }
+
+    private bool _retained;
+
+    internal bool FlipPending => _flipPending || _cursorFlipPending;
+
+    internal HandoffRetention Retain()
+    {
+        if (!_backend.SessionActive)
+        {
+            return new HandoffRetention(Name, 0, "session-inactive");
+        }
+
+        if (!_hardwareLit || _scanout.Buffer is null)
+        {
+            return new HandoffRetention(Name, 0, "never-presented");
+        }
+
+        var builder = _builder;
+        builder.Reset();
+        var staged = DisableActiveLayers(builder, allowModeset: false);
+        if (_cursorProps is not null)
+        {
+            builder.Add(_cursorProps, "cursor", "FB_ID", 0);
+            builder.Add(_cursorProps, "cursor", "CRTC_ID", 0);
+            staged = true;
+        }
+
+        if (staged && !Commit(builder, DrmAtomicCommitFlags.None, "retain"))
+        {
+            return new HandoffRetention(Name, 0, "commit-refused");
+        }
+
+        uint fbId;
+        try
+        {
+            fbId = _backend.Device.GetPlane(PlaneId).FramebufferId;
+        }
+        catch (DrmException e)
+        {
+            return new HandoffRetention(Name, 0, $"plane-unreadable errno={e.Errno}");
+        }
+
+        if (fbId == 0)
+        {
+            return new HandoffRetention(Name, 0, "plane-empty");
+        }
+
+        var errno = _backend.CloseFramebuffer(_backend.Device.Fd, fbId);
+        if (errno != 0)
+        {
+            return new HandoffRetention(Name, fbId, $"closefb errno={errno}");
+        }
+
+        _backend.Framebuffers.Forget(fbId);
+        _retained = true;
+        return new HandoffRetention(Name, fbId, null);
+    }
+
+    public bool TryImportInherited([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out InheritedFrame? frame, out string reason)
+    {
+        frame = null;
+        if (Inherited is not { FramebufferId: not 0 } inherited)
+        {
+            reason = "nothing-lit";
+            return false;
+        }
+
+        if (!_backend.SessionActive)
+        {
+            reason = "session-inactive";
+            return false;
+        }
+
+        var fd = _backend.Device.Fd;
+        var fb = Libdrm.drmModeGetFB2(fd, inherited.FramebufferId);
+        if (fb is null)
+        {
+            reason = "framebuffer-gone";
+            return false;
+        }
+
+        var attributes = new DmabufAttributes
+        {
+            Width = (int)fb->width,
+            Height = (int)fb->height,
+            Format = (DrmFormat)fb->pixel_format,
+            Modifier = (fb->flags & DrmModeFbModifiers) != 0 ? fb->modifier : DrmFormatSet.ModifierInvalid,
+        };
+        Span<uint> handles = stackalloc uint[4];
+        var planes = 0;
+        for (var plane = 0; plane < 4 && fb->handles[plane] != 0; plane++)
+        {
+            handles[plane] = fb->handles[plane];
+            attributes.Offsets[plane] = fb->offsets[plane];
+            attributes.Strides[plane] = fb->pitches[plane];
+            planes++;
+        }
+
+        Libdrm.drmModeFreeFB2(fb);
+        reason = planes == 0 ? "no-handles" : string.Empty;
+        var exported = 0;
+        for (var plane = 0; plane < planes; plane++)
+        {
+            int primeFd;
+            if (Libdrm.drmPrimeHandleToFD(fd, handles[plane], DrmCloexec | DrmRdwr, &primeFd) != 0 &&
+                Libdrm.drmPrimeHandleToFD(fd, handles[plane], DrmCloexec, &primeFd) != 0)
+            {
+                reason = $"prime-export errno={System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}";
+                break;
+            }
+
+            attributes.Fds[plane] = primeFd;
+            exported++;
+        }
+
+        for (var plane = 0; plane < planes; plane++)
+        {
+            if (handles[..plane].IndexOf(handles[plane]) < 0)
+            {
+                Libdrm.drmCloseBufferHandle(fd, handles[plane]);
+            }
+        }
+
+        if (reason.Length > 0)
+        {
+            for (var plane = 0; plane < exported; plane++)
+            {
+                _ = CloseFd(attributes.Fds[plane]);
+            }
+
+            return false;
+        }
+
+        attributes.PlaneCount = planes;
+        frame = new InheritedFrame(
+            Name,
+            attributes,
+            (int)(inherited.SourceWidth >> 16),
+            (int)(inherited.SourceHeight >> 16));
+        return true;
+    }
+
+    private const uint DrmModeFbModifiers = 2;
+
+    private const uint DrmCloexec = 0x80000;
+
+    private const uint DrmRdwr = 2;
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close")]
+    private static extern int CloseFd(int fd);
+
+    internal void Inherit(DrmInheritedState state)
+    {
+        Inherited = state;
+        _inheritedMaxBpc = state.MaxBitsPerColor;
+    }
 
     public override void RequestFrame()
     {
@@ -502,7 +685,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         {
             _gammaDirty = _degammaDirty = _ctmDirty = _hdrDirty = _contentTypeDirty = true;
             colorDirty = true;
-            var native = FindNativeMode((state.Fields & OutputStateFields.Mode) != 0 ? state.Mode : CurrentMode)
+            var wanted = (state.Fields & OutputStateFields.Mode) != 0 ? state.Mode : CurrentMode;
+            var native = (_backend.Inherit && !_hardwareLit && Inherited is { } lit && ModeEquals(wanted, lit.Mode)
+                    ? lit.Mode
+                    : FindNativeMode(wanted))
                 ?? throw new InvalidOperationException($"{Name}: no native mode matches the requested mode");
             ReplaceModeBlob(native);
             _committedMode = native;
@@ -665,10 +851,37 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         var flags = modeset
             ? DrmAtomicCommitFlags.AllowModeset | DrmAtomicCommitFlags.PageFlipEvent
             : DrmAtomicCommitFlags.Nonblock | DrmAtomicCommitFlags.PageFlipEvent;
-        if (!Commit(builder, flags, modeset ? "modeset" : "flip"))
+        HandoffInheritance? handoff = null;
+        if (modeset && !_hardwareLit && Inherited is { } inheritedState)
         {
-            ReleaseStagedFences();
-            return false;
+            handoff = ChooseInheritedCommit(builder, inheritedState);
+            if (!handoff.Value.Modeset)
+            {
+                flags = DrmAtomicCommitFlags.PageFlipEvent;
+            }
+        }
+
+        if (!Commit(builder, flags, modeset ? handoff is { Modeset: false } ? "inherit" : "modeset" : "flip"))
+        {
+            if (handoff is not { Modeset: false } matched)
+            {
+                ReleaseStagedFences();
+                return false;
+            }
+
+            handoff = matched with { Modeset = true, Reason = HandoffReason.Refused };
+            flags = DrmAtomicCommitFlags.AllowModeset | DrmAtomicCommitFlags.PageFlipEvent;
+            if (!Commit(builder, flags, "modeset"))
+            {
+                ReleaseStagedFences();
+                return false;
+            }
+        }
+
+        if (handoff is { } inheritance)
+        {
+            Inherited = null;
+            HandoffInherited?.Invoke(this, inheritance);
         }
 
         ReleaseStagedFences();
@@ -735,6 +948,40 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         return true;
     }
+
+    private HandoffInheritance ChooseInheritedCommit(DrmAtomicBuilder builder, DrmInheritedState inherited)
+    {
+        var mode = ToOutputMode(_committedMode);
+        if (!_backend.Inherit)
+        {
+            return new HandoffInheritance(Name, mode, true, HandoffReason.Off, 0);
+        }
+
+        if (!SameTimings(_committedMode, inherited.Mode) || inherited.HdrMetadata != _pendingHdr.HasValue)
+        {
+            return new HandoffInheritance(Name, mode, true, HandoffReason.Config, 0);
+        }
+
+        try
+        {
+            _backend.Device.AtomicCommit(builder.Request, DrmAtomicCommitFlags.TestOnly, 0);
+            return new HandoffInheritance(Name, mode, false, HandoffReason.Matched, 0);
+        }
+        catch (DrmException e)
+        {
+            Log.Debug($"{Name}: the lit state needs a modeset (errno {e.Errno}); staged properties:\n{builder}");
+            return new HandoffInheritance(Name, mode, true, HandoffReason.Refused, e.Errno);
+        }
+    }
+
+    private static bool SameTimings(DrmModeInfo a, DrmModeInfo b) =>
+        a.Clock == b.Clock &&
+        a.HorizontalDisplay == b.HorizontalDisplay && a.HorizontalSyncStart == b.HorizontalSyncStart &&
+        a.HorizontalSyncEnd == b.HorizontalSyncEnd && a.HorizontalTotal == b.HorizontalTotal &&
+        a.HorizontalSkew == b.HorizontalSkew &&
+        a.VerticalDisplay == b.VerticalDisplay && a.VerticalSyncStart == b.VerticalSyncStart &&
+        a.VerticalSyncEnd == b.VerticalSyncEnd && a.VerticalTotal == b.VerticalTotal &&
+        a.VerticalScan == b.VerticalScan && a.Flags == b.Flags;
 
     private OutputState? _queuedFrame;
     private BufferLock _queuedFrameLock;
@@ -1097,7 +1344,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         if (_connectorProps.Has("max bpc"))
         {
             var (min, max) = MaxBitsPerColorRange;
-            var maxBpc = Math.Clamp(_pendingMaxBpc == 0 ? 10 : _pendingMaxBpc, min, max);
+            var maxBpc = Math.Clamp(
+                _pendingMaxBpc != 0 ? _pendingMaxBpc
+                : _pendingHdr is null && _backend.Inherit && _inheritedMaxBpc is { } inherited ? (uint)inherited
+                : 10,
+                min,
+                max);
             builder.Add(_connectorProps, "connector", "max bpc", maxBpc);
         }
 
@@ -1513,6 +1765,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         _backend.Framebuffers.ReleaseOrphans();
+        if (_backend.Retiring)
+        {
+            return;
+        }
 
         if (_cursorDirty)
         {
@@ -1923,7 +2179,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     protected override void OnDestroy()
     {
-        if (_backend.SessionActive && _hardwareLit)
+        if (_backend.SessionActive && _hardwareLit && !_retained)
         {
             DisablePipeline();
         }
@@ -2151,7 +2407,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         native.VerticalDisplay == wanted.Height &&
         Math.Abs(ToOutputMode(native).RefreshMilliHz - wanted.RefreshMilliHz) < 500;
 
-    private static OutputMode ToOutputMode(DrmModeInfo mode)
+    internal static OutputMode ToOutputMode(DrmModeInfo mode)
     {
         var refresh = mode.HorizontalTotal > 0 && mode.VerticalTotal > 0
             ? (int)(mode.Clock * 1_000_000L / (mode.HorizontalTotal * mode.VerticalTotal))

@@ -410,3 +410,10 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 # desktop_id = "leafpad.desktop"   # the desktop entry id
 # exec       = "leafpad"           # the base name of the program, after env and NAME=value words
 # x11        = "low-density"       # native | low-density
+
+# What a DRM start inherits and a DRM exit leaves lit. docs/handoff.md has the rules.
+[handoff]
+mode = "auto"            # auto | retain | off. --handoff beats it. Read at start only
+transition = "crossfade" # crossfade | cut: how the inherited frame gives way to this one
+duration_ms = 400        # the crossfade
+hold_limit_ms = 3000     # the longest the inherited frame stays before the transition starts

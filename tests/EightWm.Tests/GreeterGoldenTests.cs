@@ -74,4 +74,24 @@ public sealed class GreeterGoldenTests
         await session.SendAsync("repaint");
         await EightGoldens.Shoot(session, "greeter-ease", renderer);
     }
+
+    [Theory]
+    [MemberData(nameof(EightGoldens.Renderers), MemberType = typeof(EightGoldens))]
+    public async Task The_welcome_screen_matches_its_golden(string renderer)
+    {
+        using var fixture = new EightGreeterFixture();
+        fixture.Greetd.Respond(Secret, new GreetdSuccess(), new GreetdSuccess());
+        fixture.Greetd.HoldStartSession();
+        using var session = await Start(fixture, renderer);
+        await session.SendAsync("curtain up");
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN up command"));
+        await session.SendAsync("type secret");
+        await session.SendAsync("submit");
+        Assert.NotNull(await session.WaitForAsync(line => line == "LOGIN ok"));
+        await Task.Delay(1500, TestContext.Current.CancellationToken);
+        await session.SendAsync("repaint");
+        await EightGoldens.Shoot(session, "greeter-welcome", renderer);
+        fixture.Greetd.ReleaseStartSession();
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("START session=", StringComparison.Ordinal)));
+    }
 }

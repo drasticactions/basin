@@ -2,6 +2,7 @@ using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Session;
 using Drm;
+using Drm.Native;
 using Liftoff;
 using Udev;
 using static Basin.Backend.Drm.DrmLog;
@@ -20,6 +21,7 @@ public sealed class DrmBackend : IDisposable
     private readonly HashSet<uint> _leasePlanes = [];
 
     private ISessionDevice? _device;
+    private bool _scanned;
     private IEventSource? _drmSource;
     private UdevContext? _udev;
     private UdevMonitor? _udevMonitor;
@@ -66,6 +68,16 @@ public sealed class DrmBackend : IDisposable
     public IReadOnlyList<DrmOutput> Outputs => _outputs;
 
     public DrmLeaseDevice Leasing { get; }
+
+    public bool Inherit { get; set; } = true;
+
+    public DrmExitMode ExitMode { get; set; }
+
+    public event Action<HandoffRetention>? HandoffRetained;
+
+    internal bool Retiring { get; private set; }
+
+    internal Func<int, uint, int> CloseFramebuffer { get; set; } = static (fd, fbId) => -Libdrm.drmModeCloseFB(fd, fbId);
 
     public (int Width, int Height) CursorSize { get; private set; } = (64, 64);
 
@@ -196,6 +208,23 @@ public sealed class DrmBackend : IDisposable
             Leasing.RevokeAll();
         }
 
+        var retained = new HashSet<uint>();
+        if (Device is not null && ExitMode == DrmExitMode.Retain)
+        {
+            Retiring = true;
+            DrainFlips(100);
+            foreach (var output in _outputs)
+            {
+                var retention = output.Retain();
+                if (retention.Retained)
+                {
+                    retained.Add(output.CrtcId);
+                }
+
+                HandoffRetained?.Invoke(retention);
+            }
+        }
+
         foreach (var output in _outputs.ToArray())
         {
             output.Destroy();
@@ -210,7 +239,7 @@ public sealed class DrmBackend : IDisposable
         Liftoff = null;
         if (Device is not null)
         {
-            RestoreCrtcState();
+            RestoreCrtcState(retained);
             Framebuffers?.Dispose();
             Device.Dispose();
         }
@@ -263,6 +292,11 @@ public sealed class DrmBackend : IDisposable
             var currentIndex = nonDesktop
                 ? _leaseCrtcs.GetValueOrDefault(connectorId, -1)
                 : _outputs.FirstOrDefault(o => o.Name == connector.Name)?.CrtcIndex ?? -1;
+            if (currentIndex < 0 && !nonDesktop && !_scanned && Inherit)
+            {
+                currentIndex = LitCrtcIndex(connector, crtcIds);
+            }
+
             connected.Add((connector, mask, currentIndex, nonDesktop));
         }
 
@@ -342,11 +376,124 @@ public sealed class DrmBackend : IDisposable
 
             var cursor = FindPlane(crtcIndex, 2 );
             var output = new DrmOutput(this, connector, crtcId, crtcIndex, primary.Value, cursor);
+            if (!_scanned && LitCrtcIndex(connector, crtcIds) == crtcIndex &&
+                ReadInherited(connector, crtcId) is { } inherited)
+            {
+                Log.Debug($"{connector.Name}: inherits {inherited.OutputMode.Width}x{inherited.OutputMode.Height} on CRTC {crtcId} with framebuffer {inherited.FramebufferId}");
+                output.Inherit(inherited);
+            }
+            else if (!_scanned)
+            {
+                Log.Debug($"{connector.Name}: nothing lit to inherit (lit CRTC index {LitCrtcIndex(connector, crtcIds)}, assigned {crtcIndex})");
+            }
+
             _outputs.Add(output);
             OutputAdded?.Invoke(output);
         }
 
         Leasing.SetConnectors(leasable);
+        _scanned = true;
+    }
+
+    private int LitCrtcIndex(DrmConnector connector, IReadOnlyList<uint> crtcIds)
+    {
+        if (connector.CurrentEncoderId == 0)
+        {
+            return -1;
+        }
+
+        try
+        {
+            var crtcId = Device.GetEncoder(connector.CurrentEncoderId).CrtcId;
+            if (crtcId == 0 || Device.GetCrtc(crtcId).Mode is null)
+            {
+                return -1;
+            }
+
+            for (var i = 0; i < crtcIds.Count; i++)
+            {
+                if (crtcIds[i] == crtcId)
+                {
+                    return i;
+                }
+            }
+        }
+        catch (DrmException)
+        {
+        }
+
+        return -1;
+    }
+
+    private DrmInheritedState? ReadInherited(DrmConnector connector, uint crtcId)
+    {
+        try
+        {
+            var crtc = Device.GetCrtc(crtcId);
+            if (crtc.Mode is not { } mode)
+            {
+                return null;
+            }
+
+            var crtcProps = new DrmPropertyMap(Device, crtcId, DrmObjectType.Crtc);
+            if (crtcProps.TryGetValue("ACTIVE", out var active) && active == 0)
+            {
+                return null;
+            }
+
+            ulong sourceWidth = 0, sourceHeight = 0;
+            uint crtcWidth = 0, crtcHeight = 0;
+            foreach (var planeId in Device.GetPlaneIds())
+            {
+                var plane = Device.GetPlane(planeId);
+                if (plane.CrtcId != crtcId || plane.FramebufferId != crtc.BufferId || crtc.BufferId == 0)
+                {
+                    continue;
+                }
+
+                var planeProps = new DrmPropertyMap(Device, planeId, DrmObjectType.Plane);
+                sourceWidth = planeProps.TryGetValue("SRC_W", out var srcW) ? srcW : 0;
+                sourceHeight = planeProps.TryGetValue("SRC_H", out var srcH) ? srcH : 0;
+                crtcWidth = planeProps.TryGetValue("CRTC_W", out var dstW) ? (uint)dstW : 0;
+                crtcHeight = planeProps.TryGetValue("CRTC_H", out var dstH) ? (uint)dstH : 0;
+                break;
+            }
+
+            var props = new DrmPropertyMap(Device, connector.ConnectorId, DrmObjectType.Connector);
+            var hdr = props.TryGetValue("HDR_OUTPUT_METADATA", out var hdrBlob) && hdrBlob != 0;
+            byte eotf = 0;
+            if (hdr)
+            {
+                try
+                {
+                    var data = Device.GetPropertyBlob((uint)hdrBlob).Data.Span;
+                    eotf = data.Length > 4 ? data[4] : (byte)0;
+                }
+                catch (DrmException)
+                {
+                }
+            }
+
+            return new DrmInheritedState(
+                mode,
+                DrmOutput.ToOutputMode(mode),
+                crtc.BufferId,
+                sourceWidth,
+                sourceHeight,
+                crtcWidth,
+                crtcHeight,
+                props.TryGetValue("Colorspace", out var colorspace) ? colorspace : null,
+                hdr,
+                eotf,
+                props.TryGetValue("max bpc", out var maxBpc) ? maxBpc : null,
+                crtcProps.TryGetValue("GAMMA_LUT", out var gamma) && gamma != 0,
+                crtcProps.TryGetValue("DEGAMMA_LUT", out var degamma) && degamma != 0,
+                crtcProps.TryGetValue("CTM", out var ctm) && ctm != 0);
+        }
+        catch (DrmException)
+        {
+            return null;
+        }
     }
 
     private List<LeasableConnector> ScanLeasable(
@@ -645,6 +792,63 @@ public sealed class DrmBackend : IDisposable
         }
     }
 
+    private unsafe bool FramebufferExists(uint fbId)
+    {
+        var fb = Libdrm.drmModeGetFB2(Device.Fd, fbId);
+        if (fb is null)
+        {
+            return false;
+        }
+
+        Span<uint> closed = stackalloc uint[4];
+        var count = 0;
+        for (var plane = 0; plane < 4; plane++)
+        {
+            var handle = fb->handles[plane];
+            if (handle != 0 && !closed[..count].Contains(handle))
+            {
+                closed[count++] = handle;
+                Libdrm.drmCloseBufferHandle(Device.Fd, handle);
+            }
+        }
+
+        Libdrm.drmModeFreeFB2(fb);
+        return true;
+    }
+
+    private unsafe void DrainFlips(int timeoutMs)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (_outputs.Any(o => o.FlipPending))
+        {
+            var remaining = deadline - Environment.TickCount64;
+            if (remaining <= 0)
+            {
+                Log.Debug($"{DevicePath}: a flip was still pending {timeoutMs} ms into the exit");
+                return;
+            }
+
+            var pollFd = new PollFd { Fd = Device.Fd, Events = PollIn };
+            if (poll(&pollFd, 1, (int)remaining) > 0 && (pollFd.Revents & PollIn) != 0)
+            {
+                Device.DispatchEvents(_eventHandlers);
+            }
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct PollFd
+    {
+        public int Fd;
+        public short Events;
+        public short Revents;
+    }
+
+    private const short PollIn = 1;
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern unsafe int poll(PollFd* fds, nuint nfds, int timeoutMs);
+
     private void SaveCrtcState()
     {
         var resources = Device.GetResources();
@@ -676,13 +880,23 @@ public sealed class DrmBackend : IDisposable
         }
     }
 
-    private void RestoreCrtcState()
+    private void RestoreCrtcState(HashSet<uint> retained)
     {
         foreach (var (crtcId, bufferId, mode, x, y, connectorId) in _savedCrtcs)
         {
+            if (retained.Contains(crtcId) || !SessionActive)
+            {
+                continue;
+            }
+
             try
             {
-                if (mode is { } m)
+                if (Framebuffers.Owns(bufferId) || !FramebufferExists(bufferId))
+                {
+                    Log.Debug($"console restore for CRTC {crtcId}: framebuffer {bufferId} is gone or its id is ours now; leaving the CRTC off");
+                    Device.SetCrtc(crtcId, 0, 0, 0, [], null);
+                }
+                else if (mode is { } m)
                 {
                     Device.SetCrtc(crtcId, bufferId, x, y, [connectorId], m);
                 }

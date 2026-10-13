@@ -100,6 +100,7 @@ internal static class Program
         var rendererOption = cli.Add(CommonOptions.Renderer(
             Basin.Renderers.RendererCatalog.Names, "vulkan"));
         var framesOption = cli.Add(CommonOptions.Frames());
+        var handoffOption = cli.Add(CommonOptions.Handoff());
         _ = IpcCli.AddOption(cli);
         var applicationArgument = new Argument<string[]>("application")
         {
@@ -115,6 +116,7 @@ internal static class Program
             {
                 Backend = result.GetValue(backendOption).Kind,
                 Renderer = result.GetValue(rendererOption)!,
+                Handoff = CommonOptions.ReadHandoff(result, handoffOption).Resolve(Basin.HandoffMode.Auto),
                 ServerDecorations = result.GetValue(decorationsOption),
                 LastOutputOnly = result.GetValue(outputModeOption) == "last",
                 AllowVtSwitch = result.GetValue(vtSwitchOption),

@@ -52,6 +52,7 @@ internal sealed partial class TinyComp
         _gridPreset = null;
         _gridPresetName = null;
         var metacityFailure = ApplyConfig(loaded, crossfade: true);
+        _driver.ConfigureHandoff(loaded.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, loaded.Handoff.DurationMs, loaded.Handoff.HoldLimitMs);
         var textureErrors = _textureErrors;
         var inputRejections = _inputRuleReport;
 
@@ -96,6 +97,11 @@ internal sealed partial class TinyComp
         }
 
         Restarts("renderer", loaded.Renderer != _config.Renderer);
+        if (loaded.Handoff.Mode != _config.Handoff.Mode)
+        {
+            restart.Add("handoff.mode");
+        }
+
         Restarts("outputs", loaded.Outputs != _config.Outputs);
         Restarts("frames", loaded.Frames != _config.Frames);
         Restarts("full_repaint", loaded.FullRepaint != _fullRepaint);

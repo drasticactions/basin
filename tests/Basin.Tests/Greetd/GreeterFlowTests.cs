@@ -107,13 +107,15 @@ public sealed class GreeterFlowTests : IDisposable
         Assert.True(rig.Flow.Choose("ada"));
         Assert.Equal(GreeterPhase.Conversation, rig.Flow.Phase);
         Assert.Equal("Ada Lovelace", rig.Flow.CurrentDisplayName);
-        rig.PumpUntilStep(GreeterStepKind.Prompt);
-        Assert.Equal(["Welcome"], rig.Flow.Messages);
+        Assert.Contains(rig.Steps, step => step.Kind == GreeterStepKind.Prompt && step.PromptType == GreetdAuthMessageType.Secret);
         Assert.True(rig.Flow.PromptSecret);
-        Assert.Equal("Password:", rig.Flow.PromptText);
+        Assert.Equal("Password: ", rig.Flow.PromptText);
+        Assert.Empty(rig.Greetd.Requests());
 
         Assert.True(rig.Flow.Answer("hunter2"));
         rig.PumpUntilStep(GreeterStepKind.Started);
+        Assert.Equal(["Welcome"], rig.Flow.Messages);
+        Assert.Equal(new GreetdCreateSession("ada"), rig.Greetd.Requests()[0]);
 
         Assert.Equal(GreeterPhase.Started, rig.Flow.Phase);
         var start = Assert.IsType<GreetdStartSession>(rig.Greetd.Requests()[^1]);
@@ -129,29 +131,37 @@ public sealed class GreeterFlowTests : IDisposable
     }
 
     [Fact]
-    public void An_auth_error_restarts_the_conversation_for_the_same_user()
+    public void An_auth_error_asks_again_without_opening_a_conversation_until_the_next_answer()
     {
         using var rig = new Rig(_root, Settings());
         rig.Greetd.Respond(
             new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"),
             new GreetdError(GreetdErrorType.AuthError, "Authentication failure"),
             new GreetdSuccess(),
-            new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"));
+            new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"),
+            new GreetdSuccess(),
+            new GreetdSuccess());
         rig.Flow.Start();
         rig.Flow.ShowUsers();
         rig.Flow.EnterName("  grace ");
-        rig.PumpUntilStep(GreeterStepKind.Prompt);
-        rig.Flow.Answer("wrong");
+        Assert.True(rig.Flow.Answer("wrong"));
         rig.PumpUntilStep(GreeterStepKind.AuthFailed);
         var failed = rig.Steps.Count;
-        rig.PumpUntilStep(GreeterStepKind.Prompt, failed);
+        rig.PumpUntilStep(GreeterStepKind.Prompt, failed - 1);
 
         Assert.Equal(GreeterPhase.Conversation, rig.Flow.Phase);
         Assert.Equal("Login incorrect", rig.Flow.Error);
         Assert.False(rig.Flow.ErrorNeedsDismiss);
         Assert.Equal("grace", rig.Flow.CurrentUser);
-        var creates = rig.Greetd.Requests().OfType<GreetdCreateSession>().ToList();
-        Assert.Equal([new GreetdCreateSession("grace"), new GreetdCreateSession("grace")], creates);
+        Assert.Equal("Password: ", rig.Flow.PromptText);
+        Assert.Equal([new GreetdCreateSession("grace")], rig.Greetd.Requests().OfType<GreetdCreateSession>());
+        Assert.Equal(new GreetdPostAuthMessageResponse("wrong"), rig.Greetd.Requests()[1]);
+
+        Assert.True(rig.Flow.Answer("right"));
+        rig.PumpUntilStep(GreeterStepKind.Started);
+        var requests = rig.Greetd.Requests();
+        Assert.Equal(2, requests.OfType<GreetdCreateSession>().Count());
+        Assert.Contains(new GreetdPostAuthMessageResponse("right"), requests);
     }
 
     [Fact]
@@ -162,6 +172,7 @@ public sealed class GreeterFlowTests : IDisposable
         rig.Flow.Start();
         rig.Flow.ShowUsers();
         rig.Flow.Choose("ada");
+        rig.Flow.Answer("pw");
         rig.PumpUntilStep(GreeterStepKind.Failed);
 
         Assert.Equal(GreeterPhase.Error, rig.Flow.Phase);
@@ -174,14 +185,34 @@ public sealed class GreeterFlowTests : IDisposable
     }
 
     [Fact]
-    public void Cancel_sends_cancel_session_and_shows_the_users()
+    public void Cancel_before_an_answer_sends_nothing_to_greetd()
     {
         using var rig = new Rig(_root, Settings());
-        rig.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"));
         rig.Flow.Start();
         rig.Flow.ShowUsers();
         rig.Flow.Choose("ada");
-        rig.PumpUntilStep(GreeterStepKind.Prompt);
+        rig.Flow.Cancel();
+        rig.Flow.Choose("grace");
+        rig.Flow.ChooseOther();
+        rig.Flow.EnterName("ada");
+        rig.Flow.Cancel();
+
+        Assert.Equal(GreeterPhase.Users, rig.Flow.Phase);
+        Assert.Empty(rig.Greetd.Requests());
+        Assert.False(rig.Flow.Answer("late"));
+    }
+
+    [Fact]
+    public void Cancel_in_a_conversation_sends_cancel_session_and_shows_the_users()
+    {
+        using var rig = new Rig(_root, Settings());
+        rig.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Visible, "Token:"), new GreetdSuccess());
+        rig.Flow.Start();
+        rig.Flow.ShowUsers();
+        rig.Flow.Choose("ada");
+        rig.Flow.Answer("pw");
+        rig.PumpUntil(() => rig.Flow.PromptText == "Token:");
+        Assert.False(rig.Flow.PromptSecret);
 
         rig.Flow.Cancel();
         rig.PumpUntil(() => rig.Flow.LoginState == GreetdLoginState.Idle);
@@ -192,25 +223,27 @@ public sealed class GreeterFlowTests : IDisposable
     }
 
     [Fact]
-    public void Choosing_another_user_at_a_prompt_cancels_and_begins_theirs()
+    public void Choosing_another_user_at_the_prompt_sends_nothing_and_answers_for_them()
     {
         using var rig = new Rig(_root, Settings());
-        rig.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"));
+        rig.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"), new GreetdSuccess(), new GreetdSuccess());
         rig.Flow.Start();
         rig.Flow.ShowUsers();
         rig.Flow.Choose("ada");
-        rig.PumpUntilStep(GreeterStepKind.Prompt);
         var steps = rig.Steps.Count;
-        rig.Greetd.Respond(new GreetdSuccess(), new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"));
 
         Assert.True(rig.Flow.Choose("grace"));
-        rig.PumpUntilStep(GreeterStepKind.Prompt, steps);
-
+        Assert.Contains(rig.Steps.Skip(steps), step => step.Kind == GreeterStepKind.Prompt);
         Assert.Equal("grace", rig.Flow.CurrentUser);
         Assert.Equal(GreeterPhase.Conversation, rig.Flow.Phase);
+        Assert.Empty(rig.Greetd.Requests());
+
+        rig.Flow.Answer("pw");
+        rig.PumpUntilStep(GreeterStepKind.Started);
         var requests = rig.Greetd.Requests();
-        Assert.IsType<GreetdCancelSession>(requests[^2]);
-        Assert.Equal(new GreetdCreateSession("grace"), requests[^1]);
+        Assert.Equal(new GreetdCreateSession("grace"), requests[0]);
+        Assert.Equal(new GreetdPostAuthMessageResponse("pw"), requests[1]);
+        Assert.DoesNotContain(requests, request => request is GreetdCancelSession);
     }
 
     [Fact]
@@ -273,7 +306,6 @@ public sealed class GreeterFlowTests : IDisposable
         rig.Flow.ShowUsers();
         rig.Flow.Command = "foot --server";
         rig.Flow.Choose("ada");
-        rig.PumpUntilStep(GreeterStepKind.Prompt);
         rig.Flow.Answer("pw");
         rig.PumpUntilStep(GreeterStepKind.Started);
 
@@ -290,7 +322,8 @@ public sealed class GreeterFlowTests : IDisposable
         rig.Flow.Start();
         rig.Flow.ShowUsers();
         rig.Flow.Choose("ada");
-        rig.PumpUntilStep(GreeterStepKind.Prompt);
+        rig.Flow.Answer("pw");
+        rig.PumpUntil(() => rig.Flow.LoginState == GreetdLoginState.Waiting || rig.Greetd.Requests().Count >= 2);
 
         rig.Greetd.Drop();
         rig.PumpUntil(() => rig.ClosedReason is not null);

@@ -162,4 +162,26 @@ public sealed class ViewTests
         Assert.Equal("changed", box.Text);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Signing_in_replaces_the_form_with_the_users_tile_and_a_ring()
+    {
+        var (window, view, model) = Show();
+        model.ShowUsers(null);
+        model.SelectedUser = model.Users[0];
+        model.BeginConversation("Ada Lovelace");
+        model.ShowPrompt("Password:", secret: true);
+        model.ShowSigningIn();
+
+        var panel = Named<StackPanel>(view, "SigningIn");
+        Assert.True(panel.IsEffectivelyVisible);
+        Assert.False(Named<TextBox>(view, "Field").IsEffectivelyVisible);
+        Assert.False(Named<ListBox>(view, "UserList").IsEffectivelyVisible);
+        Assert.False(Named<ComboBox>(view, "SessionBox").IsEffectivelyVisible);
+        Assert.Same(model.Users[0], model.SelectedUser);
+        Assert.Equal("Signing in…", model.SigningInText);
+        Assert.False(model.CanSubmit);
+        Assert.Contains(panel.GetLogicalDescendants().OfType<TextBlock>(), text => text.Text == "Ada Lovelace");
+        window.Close();
+    }
 }

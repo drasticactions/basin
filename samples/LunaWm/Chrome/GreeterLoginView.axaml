@@ -8,9 +8,16 @@
   <UserControl.KeyBindings>
     <KeyBinding Gesture="Escape" Command="{Binding Cancel}" />
   </UserControl.KeyBindings>
-  <Grid Classes.contrast="{Binding HighContrast}">
-  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="{Binding PadMargin}" Spacing="18">
-    <ItemsControl x:Name="UserStrip" AutomationProperties.Name="Users" ItemsSource="{Binding Users}" HorizontalAlignment="Center">
+  <Grid Classes.contrast="{Binding HighContrast}" Classes.compact="{Binding KeyboardVisible}">
+  <StackPanel x:Name="LoginContent" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="{Binding PadMargin}" Spacing="18"
+              Opacity="{Binding ContentOpacity}" IsHitTestVisible="{Binding !SigningIn}">
+    <StackPanel.Transitions>
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+      </Transitions>
+    </StackPanel.Transitions>
+    <ItemsControl x:Name="UserStrip" AutomationProperties.Name="Users" ItemsSource="{Binding Users}" HorizontalAlignment="Center"
+                  basin:AvaloniaTextFields.KeepsKeyboard="True">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
           <StackPanel Orientation="Horizontal" Spacing="18" />
@@ -19,11 +26,12 @@
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="luna:GreeterUserEntry">
           <Button Classes="greeteruser" Classes.selected="{Binding Selected}" AutomationProperties.Name="{Binding DisplayName}"
+                  Focusable="{Binding $parent[ItemsControl].((luna:GreeterLoginModel)DataContext).ShowUsers}"
                   Command="{Binding $parent[ItemsControl].((luna:GreeterLoginModel)DataContext).Choose}" CommandParameter="{Binding}">
             <StackPanel Spacing="8" Width="96">
-              <Panel Width="72" Height="72" HorizontalAlignment="Center">
+              <Panel Classes="greeteravatarframe" HorizontalAlignment="Center">
                 <Border Classes="greeteravatar" IsVisible="{Binding !HasAvatar}">
-                  <TextBlock Text="{Binding Initials}" FontSize="26" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  <TextBlock Classes="greeterinitials" Text="{Binding Initials}" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <Border Classes="greeteravatar" ClipToBounds="True" IsVisible="{Binding HasAvatar}">
                   <Image Source="{Binding Avatar}" Stretch="UniformToFill" />
@@ -36,18 +44,33 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
     <TextBlock Classes="lockhint" Text="Tap your picture to log in" HorizontalAlignment="Center" IsVisible="{Binding ShowUsers}" />
+    <Button x:Name="StripSessionButton" Classes="greetersession" HorizontalAlignment="Center" Command="{Binding PickSession}"
+            IsVisible="{Binding ShowStripSession}" AutomationProperties.Name="{Binding SessionName, StringFormat='Session {0}'}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="{Binding SessionName}" FontSize="16" Foreground="White" Opacity="0.85" VerticalAlignment="Center" />
+        <TextBlock Text="&#x25be;" FontSize="14" Foreground="White" Opacity="0.85" VerticalAlignment="Center" />
+      </StackPanel>
+    </Button>
     <Border x:Name="Pad" Classes="lockpad" IsVisible="{Binding ShowPad}" HorizontalAlignment="Center">
       <Border.RenderTransform>
         <TranslateTransform />
       </Border.RenderTransform>
       <StackPanel Spacing="12" Width="320">
         <TextBlock Text="{Binding CurrentUser}" FontSize="22" Foreground="White" HorizontalAlignment="Center" IsVisible="{Binding ShowCurrentUser}" />
+        <Button x:Name="SessionButton" Classes="greetersession" HorizontalAlignment="Center" Command="{Binding PickSession}"
+                basin:AvaloniaTextFields.KeepsKeyboard="True" Focusable="False"
+                IsVisible="{Binding HasSession}" AutomationProperties.Name="{Binding SessionName, StringFormat='Session {0}'}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{Binding SessionName}" FontSize="16" Foreground="White" Opacity="0.85" VerticalAlignment="Center" />
+            <TextBlock Text="&#x25be;" FontSize="14" Foreground="White" Opacity="0.85" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
         <TextBox x:Name="NameBox" AutomationProperties.Name="Username" PlaceholderText="Username" Text="{Binding NameText}" IsVisible="{Binding AskName}">
           <TextBox.KeyBindings>
             <KeyBinding Gesture="Enter" Command="{Binding Submit}" />
           </TextBox.KeyBindings>
         </TextBox>
-        <ItemsControl ItemsSource="{Binding Messages}">
+        <ItemsControl ItemsSource="{Binding Messages}" IsVisible="{Binding HasMessages}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="x:String">
               <TextBlock Text="{Binding}" Classes="lockmessage" TextWrapping="Wrap" />

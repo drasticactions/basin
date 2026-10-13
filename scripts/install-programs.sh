@@ -345,6 +345,10 @@ RULES
 # into config.toml. The greeter uses the greeter user's systemd bus for the
 # screen reader. On a system without a user bus, use
 # command = "dbus-run-session basin-greeter" instead.
+# The greeter leaves its last frame lit for the session, and the session
+# starts from it without a modeset. fbcon takes the screen back in the gap,
+# without a modeset but with the console showing, unless fbcon is kept off the
+# greeter's VT: add fbcon=vc:2-63 to the kernel command line for vt = 1.
 [terminal]
 vt = 1
 
@@ -365,6 +369,10 @@ GREETD
 # An example /etc/greetd/config.toml for luna-wm's login screen. Copy what you
 # need into config.toml. The greeter reads /etc/luna-wm/greeter.toml and
 # remembers each user in /var/lib/luna-wm-greeter/state.toml.
+# The greeter leaves its last frame lit for the session, and the session
+# starts from it without a modeset. fbcon takes the screen back in the gap,
+# without a modeset but with the console showing, unless fbcon is kept off the
+# greeter's VT: add fbcon=vc:2-63 to the kernel command line for vt = 1.
 [terminal]
 vt = 1
 
@@ -385,6 +393,10 @@ GREETD
 # An example /etc/greetd/config.toml for eight-wm's login screen. Copy what you
 # need into config.toml. The greeter reads /etc/eight-wm/greeter.toml and
 # remembers each user in /var/lib/eight-wm-greeter/state.toml.
+# The greeter leaves its last frame lit for the session, and the session
+# starts from it without a modeset. fbcon takes the screen back in the gap,
+# without a modeset but with the console showing, unless fbcon is kept off the
+# greeter's VT: add fbcon=vc:2-63 to the kernel command line for vt = 1.
 [terminal]
 vt = 1
 

@@ -103,6 +103,7 @@ internal sealed partial class Westonia : IDisposable
             Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
             {
                 SocketFd = options.SocketFd,
+                Handoff = options.Handoff.Resolve(Basin.HandoffMode.Auto),
             });
         _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
         {
@@ -166,6 +167,8 @@ internal sealed partial class Westonia : IDisposable
         };
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
+        _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
+        _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModesetRefused += card =>
             log.Error($"modeset refused by {card.Name} in every mode");
         _outputs.Added += view => BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");

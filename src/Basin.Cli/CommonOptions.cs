@@ -15,6 +15,8 @@ public static class CommonOptions
 
     private const string TransportVariable = "BASIN_TRANSPORT";
 
+    private static readonly string[] HandoffNames = ["auto", "retain", "off"];
+
     private static readonly Dictionary<string, TransportKind> TransportNames = new(StringComparer.Ordinal)
     {
         ["libwayland"] = TransportKind.LibWayland,
@@ -119,6 +121,29 @@ public static class CommonOptions
                 return default;
             },
         };
+    }
+
+    public static Option<HandoffMode?> Handoff() => new("--handoff")
+    {
+        Description = $"what a DRM start inherits and a DRM exit leaves lit: {string.Join(" | ", HandoffNames)} (beats [handoff] mode; {HandoffChoice.Variable} sets the default)",
+        HelpName = "MODE",
+        CustomParser = result =>
+        {
+            var token = result.Tokens[0].Value;
+            if (HandoffChoice.Parse(token) is { } mode)
+            {
+                return mode;
+            }
+
+            result.AddError($"unknown handoff mode '{token}' (expected {string.Join(", ", HandoffNames)})");
+            return null;
+        },
+    };
+
+    public static HandoffChoice ReadHandoff(ParseResult result, Option<HandoffMode?> option)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return HandoffChoice.Take(result.GetValue(option));
     }
 
     public static Option<TransportChoice> Transport()

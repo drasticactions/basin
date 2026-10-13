@@ -1,4 +1,5 @@
 using Basin.Diagnostics;
+using Basin.Host;
 
 namespace Basin.Greetd.Host;
 
@@ -43,7 +44,10 @@ public sealed partial class GreeterHost
             BasinReport.Line("GREETD connected");
         }
 
-        _flow = new GreeterFlow(_host.Loop, _client, _options.Settings, _options.Memory, _seatState.Keyboard, _options.FlowOptions);
+        var flowOptions = _host.Handoff.StampsSession
+            ? _options.FlowOptions with { Environment = [.. _options.FlowOptions.Environment, $"{HandoffChoice.Variable}=retain"] }
+            : _options.FlowOptions;
+        _flow = new GreeterFlow(_host.Loop, _client, _options.Settings, _options.Memory, _seatState.Keyboard, flowOptions);
         _flow.Stepped += OnStep;
         _flow.Closed += reason =>
         {
@@ -99,7 +103,7 @@ public sealed partial class GreeterHost
                 BasinReport.Line($"START session={step.Text}");
                 Stepped?.Invoke(step);
                 _reader?.Stop();
-                Stop("start");
+                StopWhenSettled();
                 return;
             case GreeterStepKind.LayoutApplied:
                 Stepped?.Invoke(step);
@@ -112,5 +116,35 @@ public sealed partial class GreeterHost
         }
 
         Stepped?.Invoke(step);
+    }
+
+    private void StopWhenSettled()
+    {
+        if (!_host.Handoff.RetainsOn(HandoffStop.SessionStart) || _settle is not { } settle)
+        {
+            Stop("start");
+            return;
+        }
+
+        IEventSource? limit = null;
+        Action? settled = null;
+        void Finish()
+        {
+            if (settled is null)
+            {
+                return;
+            }
+
+            settle.Settled -= settled;
+            settled = null;
+            limit?.Remove();
+            Stop("start");
+        }
+
+        settled = Finish;
+        settle.Settled += settled;
+        limit = _host.Loop.AddTimer(Finish);
+        limit.UpdateTimer(400);
+        _outputs.ScheduleAll();
     }
 }

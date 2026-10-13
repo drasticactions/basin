@@ -8,60 +8,62 @@
     <enyo:AppMenuPresenter x:Name="Panel" HorizontalAlignment="Left" VerticalAlignment="Top"
                            Margin="{Binding PanelMargin}" Width="{Binding PanelWidth}"
                            PointerPressed="OnPanel">
-      <ItemsControl ItemsSource="{Binding Rows}">
-        <ItemsControl.DataTemplates>
-          <DataTemplate DataType="luna:HeaderRow">
-            <DockPanel Margin="0,10,0,8">
-              <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Opacity="0.75" FontSize="16" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Label}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-            </DockPanel>
-          </DataTemplate>
-          <DataTemplate DataType="luna:DividerRow">
-            <Border Height="2" Background="{DynamicResource EnyoAppMenuDividerBrush}" Margin="0,2" />
-          </DataTemplate>
-          <DataTemplate DataType="luna:NoteRow">
-            <TextBlock Text="{Binding Label}" Opacity="0.6" FontSize="15" Margin="0,6" TextWrapping="Wrap" />
-          </DataTemplate>
-          <DataTemplate DataType="luna:ToggleRow">
-            <Border Classes="menurow" Padding="0,8" Background="Transparent" Tag="{Binding}" PointerReleased="OnToggle">
-              <DockPanel>
-                <Border DockPanel.Dock="Right" Classes="pill" Classes.on="{Binding On}">
-                  <TextBlock Text="{Binding State}" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-                <TextBlock Text="{Binding Label}" FontSize="18" VerticalAlignment="Center" />
+      <ScrollViewer x:Name="Scroller" Theme="{DynamicResource EnyoMenuScrollViewer}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding Rows}">
+          <ItemsControl.DataTemplates>
+            <DataTemplate DataType="luna:HeaderRow">
+              <DockPanel Margin="0,10,0,8">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Opacity="0.75" FontSize="16" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Label}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
               </DockPanel>
-            </Border>
-          </DataTemplate>
-          <DataTemplate DataType="luna:SliderRow">
-            <StackPanel Margin="0,6,0,8" Spacing="4">
-              <TextBlock Text="{Binding Label}" FontSize="16" Opacity="0.8" />
-              <Slider Minimum="0" Maximum="1" Value="{Binding Value}" />
-            </StackPanel>
-          </DataTemplate>
-          <DataTemplate DataType="luna:PassphraseRow">
-            <StackPanel Margin="0,6,0,8" Spacing="8">
-              <TextBlock Text="{Binding Label}" FontSize="16" Opacity="0.8" />
-              <TextBox Classes="passphrase" Text="{Binding Text}" PasswordChar="&#x25cf;" PlaceholderText="Passphrase"
-                       Tag="{Binding}" KeyDown="OnPassphraseKey" AttachedToVisualTree="OnPassphraseShown" />
-              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button Content="Cancel" Tag="{Binding}" Click="OnPassphraseCancel" />
-                <Button Content="Join" Tag="{Binding}" Click="OnPassphraseJoin" />
+            </DataTemplate>
+            <DataTemplate DataType="luna:DividerRow">
+              <Border Height="2" Background="{DynamicResource EnyoAppMenuDividerBrush}" Margin="0,2" />
+            </DataTemplate>
+            <DataTemplate DataType="luna:NoteRow">
+              <TextBlock Text="{Binding Label}" Opacity="0.6" FontSize="15" Margin="0,6" TextWrapping="Wrap" />
+            </DataTemplate>
+            <DataTemplate DataType="luna:ToggleRow">
+              <Border Classes="menurow" Padding="0,8" Background="Transparent" Tag="{Binding}" PointerReleased="OnToggle">
+                <DockPanel>
+                  <Border DockPanel.Dock="Right" Classes="pill" Classes.on="{Binding On}">
+                    <TextBlock Text="{Binding State}" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Text="{Binding Label}" FontSize="18" VerticalAlignment="Center" />
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+            <DataTemplate DataType="luna:SliderRow">
+              <StackPanel Margin="0,6,0,8" Spacing="4">
+                <TextBlock Text="{Binding Label}" FontSize="16" Opacity="0.8" />
+                <Slider Minimum="0" Maximum="1" Value="{Binding Value}" />
               </StackPanel>
-            </StackPanel>
-          </DataTemplate>
-          <DataTemplate DataType="luna:ActionRow">
-            <Border Classes="menurow" Padding="0,9" Background="Transparent" Tag="{Binding}" PointerReleased="OnAction"
-                    IsEnabled="{Binding Enabled}" Margin="{Binding Indent}">
-              <DockPanel>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Opacity="0.6" FontSize="15" VerticalAlignment="Center" Margin="12,0,0,0" />
-                <TextBlock DockPanel.Dock="Left" Text="&#x2713;" FontSize="16" Width="20" VerticalAlignment="Center"
-                           Opacity="{Binding Checked, Converter={x:Static luna:LunaConverters.CheckOpacity}}" />
-                <TextBlock Text="{Binding Label}" FontSize="18" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-              </DockPanel>
-            </Border>
-          </DataTemplate>
-        </ItemsControl.DataTemplates>
-      </ItemsControl>
+            </DataTemplate>
+            <DataTemplate DataType="luna:PassphraseRow">
+              <StackPanel Margin="0,6,0,8" Spacing="8">
+                <TextBlock Text="{Binding Label}" FontSize="16" Opacity="0.8" />
+                <TextBox Classes="passphrase" Text="{Binding Text}" PasswordChar="&#x25cf;" PlaceholderText="Passphrase"
+                         Tag="{Binding}" KeyDown="OnPassphraseKey" AttachedToVisualTree="OnPassphraseShown" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                  <Button Content="Cancel" Tag="{Binding}" Click="OnPassphraseCancel" />
+                  <Button Content="Join" Tag="{Binding}" Click="OnPassphraseJoin" />
+                </StackPanel>
+              </StackPanel>
+            </DataTemplate>
+            <DataTemplate DataType="luna:ActionRow">
+              <Border Classes="menurow" Padding="0,9" Background="Transparent" Tag="{Binding}" PointerReleased="OnAction"
+                      IsEnabled="{Binding Enabled}" Margin="{Binding Indent}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Opacity="0.6" FontSize="15" VerticalAlignment="Center" Margin="12,0,0,0" />
+                  <TextBlock DockPanel.Dock="Left" Text="&#x2713;" FontSize="16" Width="20" VerticalAlignment="Center"
+                             Opacity="{Binding Checked, Converter={x:Static luna:LunaConverters.CheckOpacity}}" />
+                  <TextBlock Text="{Binding Label}" FontSize="18" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.DataTemplates>
+        </ItemsControl>
+      </ScrollViewer>
     </enyo:AppMenuPresenter>
   </Panel>
 </UserControl>

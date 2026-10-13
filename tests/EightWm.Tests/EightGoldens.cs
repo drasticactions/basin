@@ -48,6 +48,9 @@ internal static class EightGoldens
         }
     }
 
+    public static void MatchFile(string path, string scene, string renderer) =>
+        AssertMatches(path, $"{scene}-{renderer}", renderer == "pixman" ? 0 : 2);
+
     private static void AssertMatches(string actualPath, string name, int tolerance, [CallerFilePath] string sourcePath = "")
     {
         var goldenPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, "Goldens", $"{name}.png");

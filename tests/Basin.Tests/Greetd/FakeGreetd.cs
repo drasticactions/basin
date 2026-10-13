@@ -13,6 +13,7 @@ internal sealed class FakeGreetd : IDisposable
     private readonly Queue<GreetdResponse?> _responses = new();
     private readonly List<GreetdRequest> _requests = [];
     private readonly List<byte[]> _payloads = [];
+    private readonly ManualResetEventSlim _startGate = new(true);
     private Socket? _peer;
     private volatile bool _stopping;
 
@@ -39,6 +40,10 @@ internal sealed class FakeGreetd : IDisposable
             }
         }
     }
+
+    public void HoldStartSession() => _startGate.Reset();
+
+    public void ReleaseStartSession() => _startGate.Set();
 
     public List<GreetdRequest> Requests()
     {
@@ -67,6 +72,7 @@ internal sealed class FakeGreetd : IDisposable
     public void Dispose()
     {
         _stopping = true;
+        _startGate.Set();
         lock (_lock)
         {
             _peer?.Dispose();
@@ -125,6 +131,11 @@ internal sealed class FakeGreetd : IDisposable
                 response = _responses.Count > 0
                     ? _responses.Dequeue()
                     : request is GreetdCancelSession ? new GreetdSuccess() : new GreetdError(GreetdErrorType.Error, "unscripted");
+            }
+
+            if (request is GreetdStartSession)
+            {
+                _startGate.Wait(TimeSpan.FromSeconds(30));
             }
 
             if (response is null)

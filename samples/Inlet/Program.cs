@@ -56,6 +56,7 @@ internal static class Program
         });
         var framesOption = cli.Add(CommonOptions.Frames());
         var screenshotOption = cli.Add(CommonOptions.Screenshot());
+        var handoffOption = cli.Add(CommonOptions.Handoff());
         _ = IpcCli.AddOption(cli);
         var commandOption = cli.Add(CommonOptions.Command("run `sh -c <command>` on startup instead of the init executable."));
 
@@ -77,6 +78,7 @@ internal static class Program
                 result.GetValue(screenshotOption),
                 result.GetValue(commandOption),
                 IpcCli.Read(cli, result),
+                CommonOptions.ReadHandoff(result, handoffOption).Resolve(HandoffMode.Auto),
                 out var rendered);
             cli.ReportFrames(rendered);
             return status;
@@ -106,13 +108,14 @@ internal static class Program
         string? screenshotPath,
         string? startupCommand,
         IpcChoice ipcChoice,
+        HandoffMode handoff,
         out long renderedFrames)
     {
         BasinCounters.Reset();
 
         var status = RunCompositor(
             log, rendererName, drm, nested, outputCount, width, height, scales, xwayland, frames, screenshotPath,
-            startupCommand, ipcChoice, out var totalRendered);
+            startupCommand, ipcChoice, handoff, out var totalRendered);
 
         renderedFrames = Math.Max(0, totalRendered);
 
@@ -142,6 +145,7 @@ internal static class Program
         string? screenshotPath,
         string? startupCommand,
         IpcChoice ipcChoice,
+        HandoffMode handoff,
         out long totalRendered)
     {
         totalRendered = -1;
@@ -158,7 +162,7 @@ internal static class Program
         var deviceAllocator = stack.DeviceAllocator;
 
         using var host = Basin.Host.BasinHost.Create(
-            Basin.Host.HostOptions.ForBackend(drm ? "drm" : nested ? "nested" : "headless"));
+            Basin.Host.HostOptions.ForBackend(drm ? "drm" : nested ? "nested" : "headless") with { Handoff = handoff });
         var display = host.Display;
         var socket = host.Socket;
         var loop = host.Loop;
@@ -182,6 +186,7 @@ internal static class Program
             HeadlessMode = new OutputMode(width, height, 60_000),
             NestedName = index => outputCount == 1 ? "river" : $"river-{index + 1}",
         };
+        driver.HandoffLayer = sceneLayers.Handoff;
         var views = driver.Views;
         var outputsCreated = false;
 
@@ -197,6 +202,8 @@ internal static class Program
         }
 
         driver.ModesetRefused += card => log.Error($"modeset refused by {card.Name}");
+        driver.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
+        host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         driver.ScaleRefused += (view, scale) =>
             log.Error($"scale {scale} refused by {view.Output.Name}");
         driver.ScanoutChanged += (view, choice) =>
@@ -810,7 +817,10 @@ internal static class Program
             return true;
         };
 
-        var runLoop = new Basin.Host.CompositorRunLoop(host, driver);
+        var runLoop = new Basin.Host.CompositorRunLoop(host, driver)
+        {
+            Outro = new Basin.Host.WindowsFadeOutro(sceneLayers, TimeSpan.FromMilliseconds(300)),
+        };
         driver.Emptied += runLoop.Stop;
         if (parent is not null)
         {

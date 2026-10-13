@@ -163,7 +163,21 @@ public sealed class OutputDriver : IDisposable
 
     public IReadOnlyList<OutputView> Views => _views;
 
-    public long PrimaryRendered => _views.Count > 0 ? _views[0].Rendered : 0;
+    public long PrimaryRendered
+    {
+        get
+        {
+            foreach (var view in _views)
+            {
+                if (!view.IsSecondary)
+                {
+                    return view.Rendered;
+                }
+            }
+
+            return 0;
+        }
+    }
 
     public event Action<OutputView>? Added;
 
@@ -192,6 +206,318 @@ public sealed class OutputDriver : IDisposable
     public event Action<OutputView, double>? ScaleRefused;
 
     public event Action<DrmOutput>? ModesetRefused;
+
+    public event Action<HandoffInheritance>? HandoffInherited;
+
+    public event Action<OutputView, string>? HandoffSkipped;
+
+    public event Action<OutputView>? HandoffStarted;
+
+    public event Action<OutputView>? HandoffEnded;
+
+    public IHandoffTransition? Handoff { get; set; } = new CrossfadeTransition(TimeSpan.FromMilliseconds(400));
+
+    public HandoffHold HandoffHold { get; set; }
+
+    public TimeSpan HandoffHoldLimit { get; set; } = TimeSpan.FromSeconds(3);
+
+    public SceneTree? HandoffLayer { get; set; }
+
+    public Func<long> HandoffClock { get; set; } = static () => MonotonicClock.Nanos;
+
+    private bool _handoffReleased;
+    private IEventSource? _handoffLimit;
+
+    private RetainRun? _retain;
+
+    public bool Retaining => _retain is { Finished: false };
+
+    public void RetainAndStop(IHandoffOutro? outro, TimeSpan budget, Action done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        if (_retain is not null)
+        {
+            return;
+        }
+
+        var run = new RetainRun(outro, done);
+        _retain = run;
+        run.Deadline = _host.Loop.AddTimer(() => FinishRetain(run, timedOut: true));
+        run.Deadline.UpdateTimer((int)Math.Clamp(budget.TotalMilliseconds, 1, int.MaxValue));
+        foreach (var view in _views)
+        {
+            if (view.IsSecondary)
+            {
+                continue;
+            }
+
+            outro?.Begin(view);
+            var watched = view;
+            Action handler = () => OnRetainFlip(run, watched);
+            view.Output.Frame += handler;
+            run.FrameHandlers.Add((view.Output, handler));
+        }
+
+        if (outro is null)
+        {
+            run.OutroDone = true;
+        }
+
+        if (PrimaryViews() == 0)
+        {
+            FinishRetain(run, timedOut: false);
+            return;
+        }
+
+        ScheduleAll();
+    }
+
+    private int PrimaryViews()
+    {
+        var count = 0;
+        foreach (var view in _views)
+        {
+            if (!view.IsSecondary)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private void StepRetain(OutputView view)
+    {
+        if (_retain is not { Finished: false } run || view.IsSecondary)
+        {
+            return;
+        }
+
+        if (!run.OutroDone && run.Outro is { } outro)
+        {
+            var now = HandoffClock();
+            if (run.OutroStarted < 0)
+            {
+                if (!outro.Ready)
+                {
+                    view.Scheduler?.ScheduleRepaint();
+                    return;
+                }
+
+                run.OutroStarted = now;
+            }
+
+            var duration = (long)outro.Duration.TotalNanoseconds;
+            var progress = duration <= 0 ? 1.0 : Math.Min(1.0, (double)(now - run.OutroStarted) / duration);
+            outro.Step(view, progress);
+            if (progress < 1.0)
+            {
+                view.Scheduler?.ScheduleRepaint();
+                return;
+            }
+
+            run.OutroDone = true;
+            foreach (var other in _views)
+            {
+                if (!other.IsSecondary)
+                {
+                    outro.End(other);
+                }
+            }
+        }
+
+        if (run.Flattening.Add(view))
+        {
+            view.Flatten = true;
+            if (view.Output is IHardwareCursor cursor)
+            {
+                _ = cursor.SetCursor(null, 0, 0);
+            }
+        }
+    }
+
+    private void OnRetainFlip(RetainRun run, OutputView view)
+    {
+        if (run.Finished || !run.AwaitingFlip.Remove(view))
+        {
+            return;
+        }
+
+        run.Presented.Add(view);
+        if (run.Presented.Count >= PrimaryViews())
+        {
+            FinishRetain(run, timedOut: false);
+        }
+    }
+
+    private void FinishRetain(RetainRun run, bool timedOut)
+    {
+        if (run.Finished)
+        {
+            return;
+        }
+
+        run.Finished = true;
+        run.Deadline?.Remove();
+        run.Deadline = null;
+        foreach (var (output, handler) in run.FrameHandlers)
+        {
+            output.Frame -= handler;
+        }
+
+        run.FrameHandlers.Clear();
+        if (timedOut)
+        {
+            HostLog.Log.Info($"the exit sequence ran out of time with {run.Presented.Count} of {PrimaryViews()} outputs flattened; retaining what is lit");
+        }
+
+        if (_host.Drm is { } drm)
+        {
+            drm.ExitMode = DrmExitMode.Retain;
+        }
+
+        run.Done();
+    }
+
+    public void ConfigureHandoff(bool crossfade, int durationMs, int holdLimitMs)
+    {
+        Handoff = crossfade ? new CrossfadeTransition(TimeSpan.FromMilliseconds(Math.Max(0, durationMs))) : null;
+        HandoffHoldLimit = TimeSpan.FromMilliseconds(Math.Max(0, holdLimitMs));
+    }
+
+    public void ReleaseHandoff()
+    {
+        _handoffReleased = true;
+        KickHandoffs();
+    }
+
+    public bool StartHandoff(OutputView view, IBuffer frame, int sourceWidth, int sourceHeight, IDisposable? owner = null) =>
+        StartHandoff(view, frame, sourceWidth, sourceHeight, null, owner);
+
+    private bool StartHandoff(OutputView view, IBuffer frame, int sourceWidth, int sourceHeight, BufferBase? copy, IDisposable? owner)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(frame);
+        if (Handoff is not { } transition || view.Handoff is not null || view.Box.Width <= 0 || view.Box.Height <= 0)
+        {
+            copy?.Destroy();
+            owner?.Dispose();
+            return false;
+        }
+
+        SceneTree? ownedLayer = null;
+        var layer = HandoffLayer ?? (ownedLayer = new SceneTree(_scene.Root) { ExcludeFromScanout = true });
+        var data = new HandoffFrame(
+            view.Output.Name,
+            view.Box.Width,
+            view.Box.Height,
+            sourceWidth > 0 ? sourceWidth : frame.Width,
+            sourceHeight > 0 ? sourceHeight : frame.Height);
+        view.Handoff = new HandoffRun(
+            data,
+            transition,
+            layer,
+            ownedLayer,
+            view.Box,
+            frame,
+            data.FrameWidth,
+            data.FrameHeight,
+            copy,
+            owner,
+            HandoffClock());
+        _handoffLimit ??= _host.Loop.AddTimer(KickHandoffs);
+        _handoffLimit.UpdateTimer((int)Math.Clamp(HandoffHoldLimit.TotalMilliseconds, 1, int.MaxValue));
+        HostLog.Log.Info($"{view.Output.Name}: handoff from a {data.FrameWidth}x{data.FrameHeight} {frame.GetType().Name} over {transition.Duration.TotalMilliseconds:F0} ms");
+        HandoffStarted?.Invoke(view);
+        view.Scheduler?.ScheduleRepaint();
+        return true;
+    }
+
+    private void KickHandoffs()
+    {
+        foreach (var view in _views)
+        {
+            if (view.Handoff is not null)
+            {
+                view.Scheduler?.ScheduleRepaint();
+            }
+        }
+    }
+
+    private void StepHandoff(OutputView view)
+    {
+        if (view.Handoff is not { } run)
+        {
+            return;
+        }
+
+        var now = HandoffClock();
+        if (run.Started < 0)
+        {
+            var released = HandoffHold == HandoffHold.Ready ? _host.Ready : _handoffReleased;
+            if (!released && now - run.Created < (long)HandoffHoldLimit.TotalNanoseconds)
+            {
+                return;
+            }
+
+            run.Started = now;
+        }
+
+        var duration = (long)run.Transition.Duration.TotalNanoseconds;
+        var progress = duration <= 0 ? 1.0 : Math.Min(1.0, (double)(now - run.Started) / duration);
+        if (progress < 1.0)
+        {
+            run.Transition.Step(run.Frame, progress);
+            run.Apply();
+            view.Scheduler?.ScheduleRepaint();
+            return;
+        }
+
+        AllocationScope.Pause();
+        try
+        {
+            EndHandoff(view);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
+
+    private void EndHandoff(OutputView view)
+    {
+        if (view.Handoff is not { } run)
+        {
+            return;
+        }
+
+        run.End();
+        view.Handoff = null;
+        run.Dispose();
+        HandoffEnded?.Invoke(view);
+        view.Scheduler?.ScheduleRepaint();
+    }
+
+    private void BeginInherited(OutputView view, InheritedFrame inherited)
+    {
+        if (_renderer.DmabufTextureFormats.Contains(inherited.Format, inherited.Modifier))
+        {
+            _ = StartHandoff(view, inherited.Dmabuf, inherited.SourceWidth, inherited.SourceHeight, null, inherited);
+            return;
+        }
+
+        if (inherited.CpuReadable && inherited.CopyToMemory() is { } copy)
+        {
+            inherited.Dispose();
+            _ = StartHandoff(view, copy, copy.Width, copy.Height, copy, null);
+            return;
+        }
+
+        var reason = inherited.CpuReadable ? "copy-failed" : $"format {inherited.Format} modifier 0x{inherited.Modifier:x}";
+        HostLog.Log.Info($"{view.Output.Name}: no handoff transition ({reason}); the first frame is a cut");
+        HandoffSkipped?.Invoke(view, reason);
+        inherited.Dispose();
+    }
 
     public event Action<DrmDeviceInfo>? CardAdopted;
 
@@ -538,6 +864,18 @@ public sealed class OutputDriver : IDisposable
 
     public void Dispose()
     {
+        if (_retain is { Finished: false } retain)
+        {
+            retain.Finished = true;
+            retain.Deadline?.Remove();
+            foreach (var (output, handler) in retain.FrameHandlers)
+            {
+                output.Frame -= handler;
+            }
+        }
+
+        _handoffLimit?.Remove();
+        _handoffLimit = null;
         foreach (var view in _views)
         {
             Teardown(view, retire: false);
@@ -568,7 +906,8 @@ public sealed class OutputDriver : IDisposable
         ArgumentNullException.ThrowIfNull(card);
 
         using var state = new OutputState();
-        state.SetEnabled(true).SetMode(card.PreferredMode);
+        var start = card.StartMode;
+        state.SetEnabled(true).SetMode(start);
         stamp?.Invoke(card, state);
         if (card.TestCommit(state))
         {
@@ -577,7 +916,7 @@ public sealed class OutputDriver : IDisposable
 
         foreach (var mode in card.Modes)
         {
-            if (mode == card.PreferredMode)
+            if (mode == start)
             {
                 continue;
             }
@@ -596,13 +935,32 @@ public sealed class OutputDriver : IDisposable
 
     private void OnNewDrmOutput(DrmOutput card)
     {
+        card.HandoffInherited += (_, inheritance) => HandoffInherited?.Invoke(inheritance);
+        InheritedFrame? inherited = null;
+        var refusal = string.Empty;
+        var wanted = Handoff is not null && _host.Handoff.Inherits && card.Inherited is not null;
+        if (wanted && !card.TryImportInherited(out inherited, out refusal))
+        {
+            inherited = null;
+        }
+
         if (!EnableWithMode(card, StampModeset))
         {
+            inherited?.Dispose();
             ModesetRefused?.Invoke(card);
             return;
         }
 
-        AddView(card);
+        var view = AddView(card);
+        if (inherited is not null)
+        {
+            BeginInherited(view, inherited);
+        }
+        else if (wanted)
+        {
+            HostLog.Log.Info($"{view.Output.Name}: no handoff transition ({refusal}); the first frame is a cut");
+            HandoffSkipped?.Invoke(view, refusal);
+        }
     }
 
     private void AttachHostChrome(OutputView view, WaylandOutput nested, WaylandHostFrame frame)
@@ -623,6 +981,12 @@ public sealed class OutputDriver : IDisposable
 
     private void Teardown(OutputView view, bool retire)
     {
+        if (view.Handoff is { } handoff)
+        {
+            view.Handoff = null;
+            handoff.Dispose();
+        }
+
         if (_hostChrome.Remove(view, out var chrome))
         {
             chrome.Dispose();
@@ -909,6 +1273,17 @@ public sealed class OutputDriver : IDisposable
             return;
         }
 
+        StepHandoff(view);
+        AllocationScope.Pause();
+        try
+        {
+            StepRetain(view);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+
         AllocationScope.Pause();
         _preparing = view;
         try
@@ -929,7 +1304,7 @@ public sealed class OutputDriver : IDisposable
 
         EnsureSwapchain(view, mode);
 
-        if (ContinuousRepaint)
+        if (ContinuousRepaint || view.Flatten)
         {
             view.Scene!.Ring.AddWhole();
         }
@@ -963,8 +1338,8 @@ public sealed class OutputDriver : IDisposable
             {
                 Background = Background,
                 DebugDamageTint = DebugDamageTint,
-                AllowDirectScanout = AllowDirectScanout,
-                AllowPlaneOffload = AllowPlaneOffload,
+                AllowDirectScanout = AllowDirectScanout && !view.Flatten,
+                AllowPlaneOffload = AllowPlaneOffload && !view.Flatten,
                 TargetPresentNanos = Math.Max(view.Scheduler!.PredictedVblankNanos, MonotonicClock.Nanos),
             });
         if (committed)
@@ -972,12 +1347,27 @@ public sealed class OutputDriver : IDisposable
             view.Scheduler!.NotifyCommitted();
             view.LastPresentedBuffer = _frameState.Buffer;
             view.Rendered++;
+            if (view.Flatten && _retain is { Finished: false } retain)
+            {
+                view.Flatten = false;
+                AllocationScope.Pause();
+                try
+                {
+                    retain.AwaitingFlip.Add(view);
+                }
+                finally
+                {
+                    AllocationScope.Resume();
+                }
+            }
+
             if (_initialCreated && !_host.Ready && AllRendered())
             {
                 AllocationScope.Pause();
                 try
                 {
                     _host.NotifyReady();
+                    KickHandoffs();
                 }
                 finally
                 {
@@ -1072,15 +1462,15 @@ public sealed class OutputDriver : IDisposable
         }
         else
         {
-            _scene.Root.SetPosition(-view.Box.X, -view.Box.Y);
             var rendered = _scene.Render(_renderer, buffer, new SceneRenderOptions
             {
                 Background = Background,
                 Projection = OutputProjection.For(view.Output),
                 Luts = view.Scene,
                 ColorDescription = view.Scene?.ColorDescription,
+                OriginX = view.Box.X,
+                OriginY = view.Box.Y,
             });
-            _scene.Root.SetPosition(0, 0);
             if (!rendered)
             {
                 return;

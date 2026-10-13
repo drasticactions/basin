@@ -9,6 +9,9 @@ namespace Basin.UI.Avalonia;
 
 public sealed class AvaloniaTextFields : IUITextFields
 {
+    public static readonly AttachedProperty<bool> KeepsKeyboardProperty =
+        AvaloniaProperty.RegisterAttached<AvaloniaTextFields, Visual, bool>("KeepsKeyboard");
+
     private BasinTextInputMethod? _owner;
     private TextInputMethodClient? _client;
     private TextInputOptions _options = TextInputOptions.Default;
@@ -18,6 +21,18 @@ public sealed class AvaloniaTextFields : IUITextFields
     public event Action? FocusChanged;
 
     public event Action<UITouchTarget>? Touched;
+
+    public static bool GetKeepsKeyboard(Visual visual)
+    {
+        ArgumentNullException.ThrowIfNull(visual);
+        return visual.GetValue(KeepsKeyboardProperty);
+    }
+
+    public static void SetKeepsKeyboard(Visual visual, bool value)
+    {
+        ArgumentNullException.ThrowIfNull(visual);
+        visual.SetValue(KeepsKeyboardProperty, value);
+    }
 
     internal void SetClient(BasinTextInputMethod owner, TextInputMethodClient? client)
     {
@@ -58,7 +73,7 @@ public sealed class AvaloniaTextFields : IUITextFields
     {
         for (var visual = hit; visual is not null; visual = visual.GetVisualParent())
         {
-            if (visual is IInputPaneView)
+            if (visual is IInputPaneView || visual.GetValue(KeepsKeyboardProperty))
             {
                 return UITouchTarget.InputPane;
             }

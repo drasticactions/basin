@@ -86,7 +86,10 @@ internal sealed partial class Dam : IDisposable
         _deviceAllocator = stack.DeviceAllocator;
 
         _host = Basin.Host.BasinHost.Create(
-            Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()));
+            Basin.Host.HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
+            {
+                Handoff = options.Handoff,
+            });
 
         _colorPack = new Basin.Desktop.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
@@ -158,6 +161,8 @@ internal sealed partial class Dam : IDisposable
                 BasinReport.Line($"OUTPUT - {card.Name}");
             }
         };
+        _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
+        _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModeChanged += view => BasinReport.Line($"MODE {view.Output.Name} {view.Width}x{view.Height}");
         _outputs.ScanoutChanged += (view, choice) =>
             BasinReport.Line(CompositorLines.Scanout(view.Output.Name, choice, view.SwapModifiers.Length));

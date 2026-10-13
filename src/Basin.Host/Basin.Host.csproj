@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
     <ProjectReference Include="../Basin.Session/Basin.Session.csproj" />

@@ -1645,4 +1645,31 @@ public sealed class GoldenTests
     {
         public void Dispose() => buffer.Destroy();
     }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void Golden_handoff_crossfade_midpoint(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var background = new Scene.SceneRect(host.Scene.Root, 160, 120, new RenderColor(0.15f, 0.45f, 0.25f, 1f));
+        var window = new Scene.SceneRect(host.Scene.Root, 80, 60, new RenderColor(1f, 0.85f, 0.2f, 1f));
+        window.SetPosition(40, 30);
+        var frame = HandoffSource.Stripes(host, 160, 140);
+        var transition = new Basin.Host.CrossfadeTransition(TimeSpan.FromMilliseconds(400), static t => t);
+        var run = HandoffSource.Run(host, frame, 160, 120, transition);
+        try
+        {
+            transition.Step(run.Frame, 0.5);
+            run.Apply();
+            host.RenderFrame();
+            Golden.AssertMatches(host, GoldenName("handoff-crossfade", renderer));
+        }
+        finally
+        {
+            run.Dispose();
+            window.Destroy();
+            background.Destroy();
+        }
+    }
 }

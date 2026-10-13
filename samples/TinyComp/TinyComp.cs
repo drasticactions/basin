@@ -448,7 +448,7 @@ internal sealed partial class TinyComp :
         return _fireShader;
     }
 
-    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null, Basin.Cli.IpcChoice? ipc = null, string? init = null)
+    public TinyComp(Config config, BackendKind backend = BackendKind.Nested, int socketFd = -1, BasinLogger log = default, bool managedTransport = false, string? channelEndpoint = null, string? configPath = null, Basin.Cli.IpcChoice? ipc = null, string? init = null, HandoffChoice handoff = default)
     {
         ArgumentNullException.ThrowIfNull(config);
         var drm = backend == BackendKind.Drm;
@@ -481,6 +481,7 @@ internal sealed partial class TinyComp :
                     ? Basin.Host.HostTransport.Managed
                     : Basin.Host.HostTransport.LibWayland,
                 SocketFd = socketFd,
+                Handoff = handoff.Resolve(config.Handoff.Mode),
             });
         _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xwayland?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
         {
@@ -599,6 +600,10 @@ internal sealed partial class TinyComp :
             AllowTearing = config.AllowTearing,
             NestedName = _ => null,
         };
+        _driver.ConfigureHandoff(config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, config.Handoff.DurationMs, config.Handoff.HoldLimitMs);
+        _runLoop.Outputs = _driver;
+        _driver.HandoffLayer = _layers.Handoff;
+        _runLoop.Outro = new Basin.Host.WindowsFadeOutro(_layers, TimeSpan.FromMilliseconds(300));
         WireOutputDriver();
 
         _popupPlacer = new Basin.Desktop.PopupPlacer(_layout);

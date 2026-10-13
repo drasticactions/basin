@@ -19,6 +19,8 @@ internal sealed class LunaConfig
 
     public string Wallpaper { get; private set; } = "";
 
+    public HandoffSettings Handoff { get; private set; } = new();
+
     public bool XWayland { get; private set; } = true;
 
     public Basin.XWayland.XWaylandScale XWaylandScale { get; private set; }
@@ -276,6 +278,7 @@ internal sealed class LunaConfig
             InputRules = InputConfig.Read(input, reader.Log);
         }
 
+        Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
     }
 
@@ -296,6 +299,11 @@ internal sealed class LunaConfig
 
     public IEnumerable<string> RestartKeysChanged(LunaConfig next)
     {
+        if (next.Handoff.Mode != Handoff.Mode)
+        {
+            yield return "handoff.mode";
+        }
+
         if (next.Renderer != Renderer)
         {
             yield return "shell.renderer";

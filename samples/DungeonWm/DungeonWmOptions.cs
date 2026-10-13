@@ -6,6 +6,8 @@ internal sealed record DungeonWmOptions
 {
     public required BackendKind Backend { get; init; }
 
+    public Basin.HandoffChoice Handoff { get; init; }
+
     public required string Renderer { get; init; }
 
     public required DungeonWmSettings Settings { get; init; }

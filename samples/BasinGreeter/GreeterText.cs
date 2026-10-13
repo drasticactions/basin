@@ -11,6 +11,7 @@ internal static class GreeterText
     public const string Command = "Command";
     public const string Dismiss = "OK";
     public const string Waiting = "Please wait…";
+    public const string SigningIn = "Signing in…";
     public const string DemoInfo = "Demo mode";
     public const string DemoPassword = "Password:";
     public const string Suspend = "Suspend";

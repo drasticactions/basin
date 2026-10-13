@@ -12,7 +12,12 @@
     </Panel.Background>
     <Image Source="{Binding Wallpaper}" IsVisible="{Binding HasWallpaper}" Stretch="UniformToFill" />
     <Border Background="Black" IsVisible="{Binding HighContrast}" />
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,70,0,0">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,70,0,0" Opacity="{Binding ClockOpacity}">
+      <StackPanel.Transitions>
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+        </Transitions>
+      </StackPanel.Transitions>
       <TextBlock Classes="lockclock" Text="{Binding Clock}" />
       <TextBlock Classes="lockdate" Text="{Binding Date}" />
     </StackPanel>

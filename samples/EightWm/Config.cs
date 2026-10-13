@@ -11,6 +11,8 @@ internal sealed class Config
 
     public uint Background { get; private set; } = 0xff1f4e79;
 
+    public HandoffSettings Handoff { get; private set; } = new();
+
     public bool ScanDesktopFiles { get; private set; } = true;
 
     public bool AppsView { get; private set; } = true;
@@ -173,6 +175,7 @@ internal sealed class Config
             }
         }
 
+        config.Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
         return config;
     }

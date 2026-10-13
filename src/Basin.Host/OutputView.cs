@@ -51,5 +51,11 @@ public sealed class OutputView
 
     internal bool FrameDoneAtFlip { get; set; }
 
+    internal HandoffRun? Handoff { get; set; }
+
+    internal bool Flatten { get; set; }
+
+    public bool HandoffActive => Handoff is not null;
+
     public object? Tag { get; set; }
 }

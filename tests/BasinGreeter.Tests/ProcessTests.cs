@@ -40,8 +40,8 @@ public sealed class ProcessTests
         Assert.Equal(new GreetdCreateSession("ada"), requests[0]);
         Assert.Equal(new GreetdPostAuthMessageResponse("hunter2"), requests[1]);
         var start = Assert.IsType<GreetdStartSession>(requests[2]);
-        Assert.Equal(["/usr/bin/env", "XDG_SESSION_TYPE=wayland", "XDG_CURRENT_DESKTOP=sway:wlroots", "XDG_SESSION_DESKTOP=sway", "sway"], start.Cmd);
-        Assert.Equal(["XDG_SESSION_TYPE=wayland", "XDG_CURRENT_DESKTOP=sway:wlroots", "XDG_SESSION_DESKTOP=sway"], start.Env);
+        Assert.Equal(["/usr/bin/env", "XDG_SESSION_TYPE=wayland", "XDG_CURRENT_DESKTOP=sway:wlroots", "XDG_SESSION_DESKTOP=sway", "BASIN_HANDOFF=retain", "sway"], start.Cmd);
+        Assert.Equal(["XDG_SESSION_TYPE=wayland", "XDG_CURRENT_DESKTOP=sway:wlroots", "XDG_SESSION_DESKTOP=sway", "BASIN_HANDOFF=retain"], start.Env);
         var frames = session.Lines().Single(line => line.StartsWith("FRAMES ", StringComparison.Ordinal)).Split(' ');
         if (frames[3] != "untracked")
         {
@@ -85,12 +85,12 @@ public sealed class ProcessTests
         using var session = fixture.Start();
         await Ready(session);
         await session.SendAsync("other grace");
+        await session.ExpectAsync("AUTH secret Password: ");
+        await session.SendAsync("type pw");
+        await session.SendAsync("submit");
         await session.ExpectAsync("AUTH info Use your authenticator");
         await session.ExpectAsync("AUTH visible Verification code: ");
         await session.SendAsync("type 123456");
-        await session.SendAsync("submit");
-        await session.ExpectAsync("AUTH secret Password: ");
-        await session.SendAsync("type pw");
         await session.SendAsync("submit");
         await session.ExpectAsync("START session=sway");
         var requests = fixture.Greetd.Requests();
@@ -101,14 +101,32 @@ public sealed class ProcessTests
     }
 
     [Fact]
-    public async Task Cancel_sends_cancel_session_and_returns_to_the_list()
+    public async Task Cancel_before_an_answer_returns_to_the_list_without_reaching_greetd()
     {
         using var fixture = new Fixture();
-        fixture.Greetd.Respond(Secret, new GreetdSuccess());
         using var session = fixture.Start();
         await Ready(session);
         await session.SendAsync("select ada");
         await session.ExpectAsync("AUTH secret Password: ");
+        await session.SendAsync("cancel");
+        var mark = session.Mark();
+        await session.ExpectAsync(line => line.StartsWith("VIEW users ", StringComparison.Ordinal), "the user list", poke: "where", since: mark);
+        await session.ExpectAsync(line => line == "LOGIN idle", "an idle login", poke: "where", since: mark);
+        Assert.Empty(fixture.Greetd.Requests());
+    }
+
+    [Fact]
+    public async Task Cancel_in_a_conversation_sends_cancel_session_and_returns_to_the_list()
+    {
+        using var fixture = new Fixture();
+        fixture.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Visible, "Verification code: "), new GreetdSuccess());
+        using var session = fixture.Start();
+        await Ready(session);
+        await session.SendAsync("select ada");
+        await session.ExpectAsync("AUTH secret Password: ");
+        await session.SendAsync("type pw");
+        await session.SendAsync("submit");
+        await session.ExpectAsync("AUTH visible Verification code: ");
         await session.SendAsync("cancel");
         var mark = session.Mark();
         await session.ExpectAsync(line => line.StartsWith("VIEW users ", StringComparison.Ordinal), "the user list", poke: "where", since: mark);
@@ -130,7 +148,7 @@ public sealed class ProcessTests
         await session.SendAsync("submit");
         await session.ExpectAsync("START session=i3");
         var start = Assert.IsType<GreetdStartSession>(fixture.Greetd.Requests()[2]);
-        Assert.Equal(["startx", "/usr/bin/env", "/usr/bin/env", "XDG_SESSION_TYPE=x11", "XDG_CURRENT_DESKTOP=i3", "XDG_SESSION_DESKTOP=i3", "i3"], start.Cmd);
+        Assert.Equal(["startx", "/usr/bin/env", "/usr/bin/env", "XDG_SESSION_TYPE=x11", "XDG_CURRENT_DESKTOP=i3", "XDG_SESSION_DESKTOP=i3", "BASIN_HANDOFF=retain", "i3"], start.Cmd);
     }
 
     [Fact]
@@ -209,10 +227,10 @@ public sealed class ProcessTests
         using var demo = new GreeterSession(GreeterSession.Headless("pixman", fixture.ConfigPath, "--demo"), fixture.Environment);
         await demo.ExpectAsync("GREETD demo");
         await demo.SendAsync("other anyone");
-        await demo.ExpectAsync("AUTH info Demo mode");
-        await demo.ExpectAsync("AUTH secret Password:");
+        await demo.ExpectAsync("AUTH secret Password: ");
         await demo.SendAsync("type demo");
         await demo.SendAsync("submit");
+        await demo.ExpectAsync("AUTH info Demo mode");
         await demo.ExpectAsync("START session=sway");
         Assert.True(demo.WaitForExit(5000));
         Assert.Equal(0, demo.Process.ExitCode);

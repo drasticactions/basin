@@ -440,4 +440,27 @@ public sealed class SignInViewTests
         model.Connect.Execute(null);
         Assert.Equal([("Home", "correct horse")], entered);
     }
+
+    [AvaloniaFact]
+    public void Welcome_covers_the_sign_in_view_on_the_accent_with_the_users_name()
+    {
+        var model = TwoUsers();
+        model.ShowUsers(null);
+        model.BeginConversation(model.Users[0]);
+        model.OptionsOpen = true;
+        var view = new SignInView { DataContext = model };
+        var window = Host(view);
+        var welcome = view.FindControl<Grid>("Welcome")!;
+        Assert.False(welcome.IsVisible);
+
+        model.ShowWelcome();
+        Pump();
+        Assert.True(welcome.IsEffectivelyVisible);
+        Assert.False(model.OptionsOpen);
+        Assert.True(model.Busy);
+        Assert.Equal(model.CurrentName, view.FindControl<TextBlock>("WelcomeName")!.Text);
+        Assert.Equal(5, view.FindControl<Canvas>("WelcomeDots")!.Children.Count);
+        Assert.Equal(Accent, Assert.IsAssignableFrom<ISolidColorBrush>(welcome.Background).Color);
+        window.Close();
+    }
 }

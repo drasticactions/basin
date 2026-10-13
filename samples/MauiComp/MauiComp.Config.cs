@@ -38,8 +38,14 @@ internal sealed partial class MauiComp
             loaded.Background = _config.Background;
         }
 
+        if (loaded.Handoff.Mode != _config.Handoff.Mode)
+        {
+            restart.Add("handoff.mode");
+        }
+
         _config = loaded;
         ApplyConfig();
+        _outputs.ConfigureHandoff(loaded.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, loaded.Handoff.DurationMs, loaded.Handoff.HoldLimitMs);
         _outputs.ScheduleAll();
         BasinReport.Line(
             $"RELOAD theme={loaded.Theme} input-rules={loaded.InputRules.Count}"

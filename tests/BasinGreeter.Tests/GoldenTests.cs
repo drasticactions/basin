@@ -60,7 +60,6 @@ public sealed class GoldenTests
     public async Task A_secret_prompt_matches_its_golden(string renderer)
     {
         using var fixture = new Fixture();
-        fixture.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Info, "Touch the security key, or type the password"), new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password: "));
         using var session = await Start(fixture, renderer);
         await session.SendAsync("select ada");
         await session.ExpectAsync("AUTH secret Password: ");
@@ -76,6 +75,9 @@ public sealed class GoldenTests
         fixture.Greetd.Respond(new GreetdError(GreetdErrorType.Error, "pam_acct_mgmt: the account has expired"), new GreetdSuccess());
         using var session = await Start(fixture, renderer);
         await session.SendAsync("select charles");
+        await session.ExpectAsync("AUTH secret Password: ");
+        await session.SendAsync("type pw");
+        await session.SendAsync("submit");
         await session.ExpectAsync("LOGIN failed error pam_acct_mgmt: the account has expired");
         await Shoot(session, "error", renderer);
     }
@@ -119,6 +121,24 @@ public sealed class GoldenTests
         await session.ExpectAsync("AUTH secret Password: ");
         await session.SendAsync("type secret");
         await Shoot(session, "contrast", renderer);
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public async Task Signing_in_matches_its_golden(string renderer)
+    {
+        using var fixture = new Fixture();
+        fixture.Greetd.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password: "), new GreetdSuccess(), new GreetdSuccess());
+        fixture.Greetd.HoldStartSession();
+        using var session = await Start(fixture, renderer);
+        await session.SendAsync("select ada");
+        await session.ExpectAsync("AUTH secret Password: ");
+        await session.SendAsync("type hunter2");
+        await session.SendAsync("submit");
+        await session.ExpectAsync("LOGIN ok");
+        await Shoot(session, "signing-in", renderer);
+        fixture.Greetd.ReleaseStartSession();
+        await session.ExpectAsync("START session=sway");
     }
 
     internal static async Task Shoot(GreeterSession session, string scene, string renderer)

@@ -73,6 +73,7 @@ internal sealed partial class Greeter : IDisposable
         {
             Program = "basin-greeter",
             Backend = options.Backend.ToString().ToLowerInvariant(),
+            Handoff = options.Handoff,
             Renderer = !options.RendererGiven && _config.Renderer.Length > 0 ? _config.Renderer : options.Renderer,
             Outputs = options.Outputs,
             Scales = options.Scales,

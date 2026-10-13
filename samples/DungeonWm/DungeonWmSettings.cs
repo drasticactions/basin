@@ -13,6 +13,8 @@ internal sealed class DungeonWmSettings
 
     public string Renderer { get; set; } = "vulkan";
 
+    public Basin.Config.HandoffSettings Handoff { get; set; } = new();
+
     public bool XWaylandLowDensity { get; set; } = true;
 
     public Basin.Config.LaunchRules Launch { get; set; } = Basin.Config.LaunchRules.Empty;

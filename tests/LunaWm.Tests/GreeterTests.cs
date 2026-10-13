@@ -74,6 +74,8 @@ public sealed class GreeterTests
         using var session = fixture.Start();
         await Ready(session);
         await session.SendAsync("other grace");
+        Assert.NotNull(await session.WaitForAsync(line => line == "AUTH secret Password: "));
+        await session.SendAsync("answer pw");
         Assert.NotNull(await session.WaitForAsync(line => line == "AUTH visible Code:"));
         var mark = session.Mark();
         Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("VIEW conversation user=grace prompt=\"Code:\"", StringComparison.Ordinal) && line.EndsWith("secret=no", StringComparison.Ordinal), poke: "where", since: mark));
@@ -100,7 +102,7 @@ public sealed class GreeterTests
             Assert.NotNull(await demo.WaitForAsync(line => line == "GREETD demo"));
             Assert.NotNull(await demo.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
             await demo.SendAsync("select ada");
-            Assert.NotNull(await demo.WaitForAsync(line => line == "AUTH secret Password:"));
+            Assert.NotNull(await demo.WaitForAsync(line => line == "AUTH secret Password: "));
             await demo.SendAsync("answer demo");
             Assert.NotNull(await demo.WaitForAsync(line => line.StartsWith("START session=", StringComparison.Ordinal)));
         }

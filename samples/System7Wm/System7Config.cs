@@ -12,6 +12,8 @@ internal sealed class System7Config
 
     public string MainOutput { get; private set; } = "";
 
+    public HandoffSettings Handoff { get; private set; } = new();
+
     public void SetMainOutput(string name) => MainOutput = name;
 
     public System7ColorDepth Depth { get; set; } = System7ColorDepth.Indexed8;
@@ -249,6 +251,7 @@ internal sealed class System7Config
         }
 
         config.Rules.AddRange(WindowRule.MostSpecificFirst(rules));
+        config.Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
         return config;
     }
@@ -270,6 +273,11 @@ internal sealed class System7Config
 
     public IEnumerable<string> RestartKeysChanged(System7Config next)
     {
+        if (next.Handoff.Mode != Handoff.Mode)
+        {
+            yield return "handoff.mode";
+        }
+
         if (next.Command != Command)
         {
             yield return "keyboard.command";

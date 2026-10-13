@@ -20,6 +20,7 @@ public sealed class LoginModel : Observable
     private UserEntry? _selectedUser;
     private bool _allowCommand;
     private string _commandText = "";
+    private bool _signingIn;
 
     public LoginModel()
     {
@@ -112,6 +113,22 @@ public sealed class LoginModel : Observable
     }
 
     public bool ShowConversation => !_showList;
+
+    public bool SigningIn
+    {
+        get => _signingIn;
+        private set
+        {
+            if (Set(ref _signingIn, value))
+            {
+                Raise(nameof(ShowForm));
+            }
+        }
+    }
+
+    public bool ShowForm => !_signingIn;
+
+    public string SigningInText => GreeterText.SigningIn;
 
     public bool AskUsername
     {
@@ -251,6 +268,18 @@ public sealed class LoginModel : Observable
         ClearConversation();
         FocusRequested?.Invoke();
         PromptShown?.Invoke();
+    }
+
+    public void ShowSigningIn()
+    {
+        if (_selectedUser is null || _selectedUser.IsOther || _selectedUser.DisplayName != _currentUser)
+        {
+            SelectedUser = Users.FirstOrDefault(user => !user.IsOther && user.DisplayName == _currentUser) ?? _selectedUser;
+        }
+
+        ClearConversation();
+        Busy = true;
+        SigningIn = true;
     }
 
     public void BeginConversation(string user)

@@ -18,6 +18,12 @@ public sealed record HostOptions
 
     public int SocketFd { get; init; } = -1;
 
+    public HandoffMode Handoff { get; init; } = HandoffMode.Auto;
+
+    public bool Greeter { get; init; }
+
+    public bool Greetd { get; init; }
+
     public static HostOptions ForBackend(string name)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);

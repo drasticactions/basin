@@ -29,6 +29,7 @@ internal sealed partial class DungeonWm
         var soundsBefore = _settings.Sounds;
         CarryOver(loaded);
         ApplyLive(sizeChanged);
+        _outputs.ConfigureHandoff(_settings.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _settings.Handoff.DurationMs, _settings.Handoff.HoldLimitMs);
         if (audioBefore != _settings.Audio)
         {
             ApplyAudio(audioBefore);

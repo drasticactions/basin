@@ -87,6 +87,7 @@ internal sealed partial class MauiComp : IDisposable
             HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
             {
                 SocketFd = options.SocketFd,
+                Handoff = options.Handoff.Resolve(_config.Handoff.Mode),
             });
         _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, null, _ipc?.Path));
 
@@ -124,8 +125,11 @@ internal sealed partial class MauiComp : IDisposable
             NestedName = index => $"maui-comp-{index + 1}",
             HeadlessMode = new OutputMode(1280, 720, 60_000),
         };
+        _outputs.ConfigureHandoff(_config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _config.Handoff.DurationMs, _config.Handoff.HoldLimitMs);
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
+        _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
+        _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
         _outputs.Added += view =>
             BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");

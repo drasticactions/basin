@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Basin;
 using Basin.Diagnostics;
+using Basin.Greetd;
 using Basin.Session;
 
 namespace LunaWm;
@@ -71,7 +72,7 @@ internal sealed partial class LunaGreeter
 
     internal void OpenMenu(string kind)
     {
-        if (kind is not ("battery" or "wifi" or "bluetooth" or "sound" or "device"))
+        if (kind is not ("battery" or "wifi" or "bluetooth" or "sound" or "device" or "session"))
         {
             _report.Line($"MENU unknown {kind}");
             return;
@@ -128,7 +129,9 @@ internal sealed partial class LunaGreeter
         if (_menu is { } menu)
         {
             menu.Model.PanelWidth = LunaShell.MenuWidth;
-            menu.Model.PanelLeft = Math.Max(0, box.Width - LunaShell.MenuWidth);
+            menu.Model.PanelLeft = menu.Kind == "session"
+                ? Math.Max(0, (box.Width - LunaShell.MenuWidth) / 2.0)
+                : Math.Max(0, box.Width - LunaShell.MenuWidth);
             menu.Place(new Box(box.X, box.Y + LunaView.StatusBarHeight, box.Width, Math.Max(1, box.Height - LunaView.StatusBarHeight)), output.Scale);
         }
     }
@@ -154,28 +157,18 @@ internal sealed partial class LunaGreeter
             return;
         }
 
+        if (menu.Kind == "session")
+        {
+            FillSessions(rows);
+            return;
+        }
+
         status.Fill(menu.Kind, rows, output, AddPowerRows);
     }
 
     private void FillDevice(ObservableCollection<MenuRow> rows)
     {
         rows.Add(new HeaderRow { Label = "Device", Detail = Environment.MachineName });
-        if (_flow is { } flow && flow.Sessions.Count > 0)
-        {
-            rows.Add(new DividerRow());
-            rows.Add(new HeaderRow { Label = "Session" });
-            foreach (var session in flow.Sessions)
-            {
-                var id = session.Id;
-                rows.Add(new ActionRow
-                {
-                    Key = $"session:{id}",
-                    Label = session.Name,
-                    Checked = flow.SelectedSession == id,
-                    Invoked = () => flow.SelectSession(id, byUser: true),
-                });
-            }
-        }
 
         if (_flow is { } layouts && _config.Settings.Layouts.Count > 1)
         {
@@ -234,6 +227,28 @@ internal sealed partial class LunaGreeter
         AddPowerRows(rows);
     }
 
+    private void FillSessions(ObservableCollection<MenuRow> rows)
+    {
+        rows.Add(new HeaderRow { Label = "Session" });
+        if (_flow is not { } flow)
+        {
+            return;
+        }
+
+        foreach (var session in flow.Sessions)
+        {
+            var id = session.Id;
+            rows.Add(new ActionRow
+            {
+                Key = $"session:{id}",
+                Label = session.Name,
+                Detail = session.Type == GreetdSessionType.X11 ? "X11" : "",
+                Checked = flow.SelectedSession == id,
+                Invoked = () => flow.SelectSession(id, byUser: true),
+            });
+        }
+    }
+
     private void AddPowerRows(ObservableCollection<MenuRow> rows)
     {
         if (!_config.Settings.Power)
@@ -266,6 +281,9 @@ internal sealed partial class LunaGreeter
                 _armed = null;
                 CloseMenu();
                 RunPower(power.Key == "restart" ? LogindAction.Reboot : LogindAction.PowerOff);
+                return;
+            case ActionRow when menu.Kind == "session":
+                CloseMenu();
                 return;
             case ActionRow or ToggleRow when menu.Kind == "device":
                 FillMenu(rebuild: true);

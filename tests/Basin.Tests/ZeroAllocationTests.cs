@@ -1863,6 +1863,45 @@ public sealed class ZeroAllocationTests
         }
     }
 
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public void A_handoff_crossfade_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var window = new Scene.SceneRect(host.Scene.Root, 80, 60, new RenderColor(1f, 0.85f, 0.2f, 1f));
+        var frame = HandoffSource.Stripes(host, 160, 120);
+        var transition = new Basin.Host.CrossfadeTransition(TimeSpan.FromMilliseconds(400));
+        var run = HandoffSource.Run(host, frame, 160, 120, transition);
+        try
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                transition.Step(run.Frame, 0.01 + (i / 2000.0));
+                run.Apply();
+                host.CommitFrame();
+            }
+
+            NothingAllocated(1000, i =>
+            {
+                transition.Step(run.Frame, 0.02 + (i / 1100.0));
+                run.Apply();
+                host.CommitFrame();
+            });
+        }
+        finally
+        {
+            run.Dispose();
+            window.Destroy();
+        }
+    }
+
     private static void Frame(CompositorTestHost host)
     {
         host.Output.StepFrame();

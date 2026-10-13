@@ -218,6 +218,7 @@
     <Setter Property="Background" Value="#22FFFFFF" />
   </Style>
   <Style Selector="Button.greeteruser">
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="6" />
@@ -230,6 +231,26 @@
       </ControlTemplate>
     </Setter>
   </Style>
+  <Style Selector="Button.greetersession">
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="12,4" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Button.greetersession:pointerover">
+    <Setter Property="Background" Value="#26FFFFFF" />
+  </Style>
+  <Style Selector="Button.greetersession:focus-visible">
+    <Setter Property="Background" Value="#33FFFFFF" />
+  </Style>
   <Style Selector="Button.greeteruser.selected">
     <Setter Property="Background" Value="#40FFFFFF" />
   </Style>
@@ -241,11 +262,37 @@
     <Setter Property="BorderBrush" Value="#90FFFFFF" />
     <Setter Property="BorderThickness" Value="2" />
   </Style>
+  <Style Selector="Button.greeteruser:focus-visible Border.greeteravatar">
+    <Setter Property="BorderBrush" Value="White" />
+    <Setter Property="BorderThickness" Value="3" />
+  </Style>
+  <Style Selector="Panel.greeteravatarframe">
+    <Setter Property="Width" Value="72" />
+    <Setter Property="Height" Value="72" />
+  </Style>
+  <Style Selector="TextBlock.greeterinitials">
+    <Setter Property="FontSize" Value="26" />
+  </Style>
+  <Style Selector="Grid.compact Panel.greeteravatarframe">
+    <Setter Property="Width" Value="48" />
+    <Setter Property="Height" Value="48" />
+  </Style>
+  <Style Selector="Grid.compact Border.greeteravatar">
+    <Setter Property="Width" Value="48" />
+    <Setter Property="Height" Value="48" />
+    <Setter Property="CornerRadius" Value="24" />
+  </Style>
+  <Style Selector="Grid.compact TextBlock.greeterinitials">
+    <Setter Property="FontSize" Value="18" />
+  </Style>
   <Style Selector="TextBlock.greetername">
     <Setter Property="FontSize" Value="15" />
     <Setter Property="Foreground" Value="White" />
     <Setter Property="HorizontalAlignment" Value="Center" />
     <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+  <Style Selector="Grid.compact TextBlock.greetername">
+    <Setter Property="FontSize" Value="13" />
   </Style>
   <Style Selector="TextBlock.greetererror">
     <Setter Property="FontSize" Value="16" />
@@ -260,6 +307,10 @@
   <Style Selector="Grid.contrast Border.greeteravatar">
     <Setter Property="Background" Value="Black" />
     <Setter Property="BorderBrush" Value="Yellow" />
+  </Style>
+  <Style Selector="Grid.contrast Button.greeteruser:focus-visible Border.greeteravatar">
+    <Setter Property="BorderBrush" Value="White" />
+    <Setter Property="BorderThickness" Value="4" />
   </Style>
   <Style Selector="Grid.contrast Button.greeteruser.selected">
     <Setter Property="Background" Value="#FF00007F" />

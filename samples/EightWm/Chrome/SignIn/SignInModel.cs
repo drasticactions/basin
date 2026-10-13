@@ -26,6 +26,7 @@ public sealed class SignInModel : ObservableModel
     private bool _keyboard;
     private double _textScale = 1.0;
     private bool _secret = true;
+    private bool _signingIn;
 
     public SignInModel()
     {
@@ -232,6 +233,21 @@ public sealed class SignInModel : ObservableModel
     {
         get => _busy;
         set => Set(ref _busy, value);
+    }
+
+    public bool SigningIn
+    {
+        get => _signingIn;
+        private set => Set(ref _signingIn, value);
+    }
+
+    public void ShowWelcome()
+    {
+        OptionsOpen = false;
+        EaseOpen = false;
+        PowerOpen = false;
+        Busy = true;
+        SigningIn = true;
     }
 
     public bool RevealAllowed

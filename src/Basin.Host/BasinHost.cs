@@ -84,6 +84,10 @@ public sealed class BasinHost : IDisposable
 
     public DrmBackend? Drm { get; }
 
+    public HandoffPolicy Handoff { get; private init; } = new(HandoffMode.Auto);
+
+    public event Action<HandoffRetention>? HandoffRetained;
+
     public WaylandBackend? Parent { get; }
 
     public HeadlessBackend? Headless { get; }
@@ -121,7 +125,10 @@ public sealed class BasinHost : IDisposable
             case HostBackend.Drm:
                 session = SeatdSession.Open(loop);
                 drm = new DrmBackend(
-                    loop, session, options.DrmDevice ?? Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE"));
+                    loop, session, options.DrmDevice ?? Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE"))
+                {
+                    Inherit = options.Handoff != HandoffMode.Off,
+                };
                 drm.Start();
                 break;
 
@@ -135,7 +142,16 @@ public sealed class BasinHost : IDisposable
                 break;
         }
 
-        return new BasinHost(display, socket, loop, session, drm, parent, headless);
+        var host = new BasinHost(display, socket, loop, session, drm, parent, headless)
+        {
+            Handoff = new HandoffPolicy(options.Handoff, options.Greeter, options.Greetd),
+        };
+        if (drm is not null)
+        {
+            drm.HandoffRetained += retention => host.HandoffRetained?.Invoke(retention);
+        }
+
+        return host;
     }
 
     public BasinServices CreateServices(IFrameClock? frames = null)
@@ -154,7 +170,7 @@ public sealed class BasinHost : IDisposable
         modeset.SetEnabled(true);
         if (output is DrmOutput card)
         {
-            modeset.SetMode(card.PreferredMode);
+            modeset.SetMode(card.StartMode);
         }
 
         return output.Commit(modeset);

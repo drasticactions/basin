@@ -122,7 +122,25 @@
               Background="{DynamicResource GreeterBox}"
               BorderBrush="{DynamicResource GreeterBoxBorder}" BorderThickness="1"
               CornerRadius="8" Padding="24" Width="400" IsVisible="{Binding !Bar.Confirming}">
-        <StackPanel Spacing="12">
+        <Panel>
+        <StackPanel x:Name="SigningIn" Spacing="14" IsVisible="{Binding SigningIn}" HorizontalAlignment="Center"
+                    AutomationProperties.Name="{Binding SigningInText}">
+          <Panel Width="64" Height="64" HorizontalAlignment="Center">
+            <Border CornerRadius="32" Background="{DynamicResource GreeterAvatar}" IsVisible="{Binding !SelectedUser.HasAvatar, FallbackValue=True}">
+              <TextBlock Text="{Binding SelectedUser.Initials, FallbackValue=''}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="24" FontWeight="SemiBold" />
+            </Border>
+            <Border CornerRadius="32" ClipToBounds="True" IsVisible="{Binding SelectedUser.HasAvatar, FallbackValue=False}">
+              <Image Source="{Binding SelectedUser.Avatar, FallbackValue={x:Null}}" Stretch="UniformToFill" />
+            </Border>
+          </Panel>
+          <TextBlock Text="{Binding CurrentUser}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
+          <Panel Width="36" Height="36" HorizontalAlignment="Center">
+            <Ellipse Stroke="{DynamicResource GreeterMuted}" StrokeThickness="4" Opacity="0.35" />
+            <Arc Stroke="{DynamicResource AccentButtonBackground}" StrokeThickness="4" StartAngle="-90" SweepAngle="100" StrokeLineCap="Round" />
+          </Panel>
+          <TextBlock Text="{Binding SigningInText}" Foreground="{DynamicResource GreeterMuted}" HorizontalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Spacing="12" IsVisible="{Binding ShowForm}">
           <StackPanel Spacing="8" IsVisible="{Binding ShowList}">
             <ListBox x:Name="UserList" AutomationProperties.Name="Users" ItemsSource="{Binding Users}" SelectedItem="{Binding SelectedUser}"
                      MaxHeight="360" Background="Transparent">
@@ -189,6 +207,7 @@
             <Button Content="Log In" Command="{Binding Submit}" Classes="accent" IsEnabled="{Binding CanSubmit}" />
           </StackPanel>
         </StackPanel>
+        </Panel>
       </Border>
     </Panel>
   </DockPanel>

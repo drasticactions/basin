@@ -29,19 +29,36 @@ public sealed class GreeterChromeTests
     }
 
     [Fact]
-    public async Task A_session_and_layout_chosen_in_the_device_menu_reach_greetd_and_are_remembered()
+    public async Task A_session_chosen_from_the_pad_and_a_layout_from_the_device_menu_reach_greetd_and_are_remembered()
     {
         using var fixture = new GreeterFixture("[keyboard]\nlayouts = [\"us\", \"de\"]\n");
         fixture.Greetd.Respond(Secret, new GreetdSuccess(), new GreetdSuccess());
         using var session = fixture.Start();
         await Ready(session);
+        await session.SendAsync("menu session");
+        await Expect(session, "MENU session on");
+        var mark = session.Mark();
+        await session.SendAsync("menu-choose session:tinycomp");
+        Assert.NotNull(await session.WaitForAsync(line => line == "MENU session off", since: mark));
+
+        await session.SettleAsync();
+        mark = session.Mark();
+        var located = await session.WaitForAsync(line => line.StartsWith("LOCATE Session TinyComp ", StringComparison.Ordinal) && !line.EndsWith(" none", StringComparison.Ordinal), poke: "locate Session TinyComp", since: mark);
+        Assert.NotNull(located);
+        var at = located.Split(' ');
+        await session.SendAsync($"touch {at[^2]} {at[^1]}");
+        Assert.NotNull(await session.WaitForAsync(line => line == "MENU session on", since: mark));
+        Assert.NotNull(await session.WaitForAsync(line => line == "  row action session:tinycomp TinyComp checked", poke: "where", since: mark));
+        await session.SendAsync("menu session close");
+
         await session.SendAsync("menu device");
         await Expect(session, "MENU device on");
-        await session.SendAsync("menu-choose session:tinycomp");
+        mark = session.Mark();
+        await session.SendAsync("where");
+        await Expect(session, "  row header Accessibility | ");
+        Assert.DoesNotContain(session.Lines().Skip(mark), line => line.StartsWith("  row action session:", StringComparison.Ordinal));
         await session.SendAsync("menu-choose layout:de");
         await Expect(session, "LAYOUT de");
-        var mark = session.Mark();
-        Assert.NotNull(await session.WaitForAsync(line => line == "  row action session:tinycomp TinyComp checked", poke: "where", since: mark));
         await session.SendAsync("menu device close");
         await session.SendAsync("select ada");
         await Expect(session, "AUTH secret Password: ");
@@ -55,6 +72,84 @@ public sealed class GreeterChromeTests
         var memory = File.ReadAllText(fixture.StatePath);
         Assert.Contains("session = \"tinycomp\"", memory, StringComparison.Ordinal);
         Assert.Contains("layout = \"de\"", memory, StringComparison.Ordinal);
+    }
+
+    private static async Task TapAvatar(LunaSession session, string name)
+    {
+        await session.SettleAsync();
+        var mark = session.Mark();
+        var located = await session.WaitForAsync(line => line.StartsWith($"LOCATE {name} ", StringComparison.Ordinal) && !line.EndsWith(" none", StringComparison.Ordinal), poke: $"locate {name}", since: mark);
+        Assert.NotNull(located);
+        var at = located!.Split(' ');
+        await session.SendAsync($"touch {at[^2]} {at[^1]}");
+    }
+
+    [Fact]
+    public async Task A_tap_on_another_avatar_while_the_pad_is_up_switches_to_that_user_without_reaching_greetd()
+    {
+        using var fixture = new GreeterFixture();
+        fixture.Greetd.Respond(Secret, new GreetdSuccess(), new GreetdSuccess());
+        using var session = fixture.Start();
+        await Ready(session);
+        await session.SendAsync("select ada");
+        await Expect(session, "AUTH secret Password: ");
+        var mark = session.Mark();
+        await TapAvatar(session, "Charles Babbage");
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("VIEW conversation user=Charles Babbage prompt=\"Password:\"", StringComparison.Ordinal), poke: "where", since: mark));
+        await session.SendAsync("type pw");
+        await session.SendAsync("submit");
+        await Expect(session, "START session=sway");
+
+        var requests = fixture.Greetd.Requests();
+        Assert.Equal(new GreetdCreateSession("charles"), requests[0]);
+        Assert.DoesNotContain(requests, request => request is GreetdCreateSession { Username: "ada" } or GreetdCancelSession);
+    }
+
+    [Fact]
+    public async Task A_tap_on_another_avatar_keeps_the_keyboard_up_and_switches_on_the_first_tap()
+    {
+        using var fixture = new GreeterFixture();
+        fixture.Greetd.Respond(Secret, new GreetdSuccess(), new GreetdSuccess());
+        using var session = fixture.Start();
+        await Ready(session);
+        await session.SendAsync("select ada");
+        await Expect(session, "AUTH secret Password: ");
+        var mark = session.Mark();
+        var located = await session.WaitForAsync(line => line.StartsWith("LOCATE Password: ", StringComparison.Ordinal) && !line.EndsWith(" none", StringComparison.Ordinal), poke: "locate Password:", since: mark);
+        Assert.NotNull(located);
+        var parts = located!.Split(' ');
+        await session.SendAsync($"touch {parts[2]} {parts[3]}");
+        await Expect(session, "KEYBOARD on");
+
+        mark = session.Mark();
+        await TapAvatar(session, "Charles Babbage");
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("VIEW conversation user=Charles Babbage prompt=\"Password:\"", StringComparison.Ordinal), poke: "where", since: mark));
+        await TapAvatar(session, "Ada Lovelace");
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("VIEW conversation user=Ada Lovelace prompt=\"Password:\"", StringComparison.Ordinal), poke: "where", since: mark));
+        await session.SettleAsync();
+        Assert.DoesNotContain(session.Lines().Skip(mark), line => line == "KEYBOARD off");
+        Assert.Empty(fixture.Greetd.Requests());
+
+        await session.SendAsync("keyboard-type Hunter2!");
+        await Expect(session, "KBTYPE ok");
+        await session.SendAsync("keyboard-tap enter");
+        await Expect(session, "START session=sway");
+        Assert.Equal(new GreetdCreateSession("ada"), fixture.Greetd.Requests()[0]);
+        Assert.Equal(new GreetdPostAuthMessageResponse("Hunter2!"), fixture.Greetd.Requests()[1]);
+    }
+
+    [Fact]
+    public async Task A_tap_on_other_while_the_pad_is_up_asks_for_a_name_without_reaching_greetd()
+    {
+        using var fixture = new GreeterFixture();
+        using var session = fixture.Start();
+        await Ready(session);
+        await session.SendAsync("select ada");
+        await Expect(session, "AUTH secret Password: ");
+        var mark = session.Mark();
+        await TapAvatar(session, "Other");
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("VIEW username ", StringComparison.Ordinal), poke: "where", since: mark));
+        Assert.Empty(fixture.Greetd.Requests());
     }
 
     [Fact]
@@ -96,7 +191,7 @@ public sealed class GreeterChromeTests
         await Expect(session, "KEYBOARD on");
 
         mark = session.Mark();
-        await session.SendAsync("touch 0.5 0.06");
+        await session.SendAsync("touch 0.05 0.3");
         await Expect(session, "KEYBOARD off", mark);
         mark = session.Mark();
         await session.SendAsync("touch 0.5 0.06");

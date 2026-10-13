@@ -40,6 +40,7 @@ internal static class Program
         });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
+        var handoff = cli.Add(CommonOptions.Handoff());
 
         return cli.Run(args, result =>
         {
@@ -52,6 +53,7 @@ internal static class Program
             var options = new GreeterOptions
             {
                 Backend = chosen.Kind,
+                Handoff = CommonOptions.ReadHandoff(result, handoff),
                 SocketFd = chosen.SocketFd,
                 Renderer = result.GetValue(renderer)!,
                 RendererGiven = result.GetResult(renderer) is { Implicit: false },
