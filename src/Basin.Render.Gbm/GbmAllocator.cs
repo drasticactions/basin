@@ -30,6 +30,11 @@ public sealed class GbmAllocator : IAllocator
             usage |= GbmBufferFlags.Cursor | GbmBufferFlags.Linear;
         }
 
+        if (format == DrmFormat.Nv12 && modifiers.Length == 1 && modifiers[0] == DrmFormatSet.ModifierLinear)
+        {
+            return AllocateLinearNv12(width, height, usage);
+        }
+
         GbmBuffer bo;
         try
         {
@@ -60,6 +65,45 @@ public sealed class GbmAllocator : IAllocator
                 attributes.Strides[plane] = bo.GetStrideForPlane(plane);
             }
 
+            return new DmabufBuffer(attributes, _ledger);
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern int dup(int fd);
+
+    private DmabufBuffer? AllocateLinearNv12(int width, int height, GbmBufferFlags usage)
+    {
+        var lumaHeight = (height + 1) & ~1;
+        GbmBuffer bo;
+        try
+        {
+            bo = _gbm.CreateBuffer(
+                (uint)((width + 1) & ~1), (uint)(lumaHeight + (lumaHeight / 2)), (uint)DrmFormat.R8,
+                [DrmFormatSet.ModifierLinear], usage & ~GbmBufferFlags.Scanout);
+        }
+        catch (GbmException)
+        {
+            return null;
+        }
+
+        using (bo)
+        {
+            var stride = bo.GetStrideForPlane(0);
+            var attributes = new DmabufAttributes
+            {
+                Width = width,
+                Height = height,
+                Format = DrmFormat.Nv12,
+                Modifier = DrmFormatSet.ModifierLinear,
+                PlaneCount = 2,
+            };
+            attributes.Fds[0] = bo.ExportDmaBufForPlane(0);
+            attributes.Fds[1] = dup(attributes.Fds[0]);
+            attributes.Offsets[0] = bo.GetOffsetForPlane(0);
+            attributes.Offsets[1] = attributes.Offsets[0] + (stride * (uint)lumaHeight);
+            attributes.Strides[0] = stride;
+            attributes.Strides[1] = stride;
             return new DmabufBuffer(attributes, _ledger);
         }
     }

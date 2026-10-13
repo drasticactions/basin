@@ -6,7 +6,7 @@ using Xkb;
 
 namespace Basin.Seat;
 
-public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, Capabilities.IKeyText, IKeySink, IDisposable
+public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, Capabilities.IKeyText, Capabilities.IKeymapOverride, IKeySink, IDisposable
 {
     private readonly Seat _seat;
     private readonly List<IKeyboardGrab> _grabs = [];
@@ -303,7 +303,68 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
 
     private const int NotifyScopeWarmup = 10;
 
-    public void NotifyKey(uint timeMs, uint key, WlKeyboard.KeyState state)
+    public bool TryNotifyKey(uint timeMs, uint key, bool pressed)
+    {
+        if (pressed)
+        {
+            ForgetConsumed(key);
+        }
+        else if (ForgetConsumed(key))
+        {
+            TrackKey(key, WlKeyboard.KeyState.Released);
+            UpdateKeyState(key, WlKeyboard.KeyState.Released);
+            return false;
+        }
+
+        DeliverKey(timeMs, key, pressed ? WlKeyboard.KeyState.Pressed : WlKeyboard.KeyState.Released);
+        return true;
+    }
+
+    public bool WasConsumed(uint key)
+    {
+        for (var i = 0; i < _consumedCount; i++)
+        {
+            if (_consumedKeys[i] == key)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private readonly uint[] _consumedKeys = new uint[16];
+
+    private int _consumedCount;
+
+    private void RememberConsumed(uint key)
+    {
+        if (WasConsumed(key) || _consumedCount == _consumedKeys.Length)
+        {
+            return;
+        }
+
+        _consumedKeys[_consumedCount++] = key;
+    }
+
+    private bool ForgetConsumed(uint key)
+    {
+        for (var i = 0; i < _consumedCount; i++)
+        {
+            if (_consumedKeys[i] == key)
+            {
+                _consumedKeys[i] = _consumedKeys[--_consumedCount];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void NotifyKey(uint timeMs, uint key, WlKeyboard.KeyState state) =>
+        _ = TryNotifyKey(timeMs, key, state == WlKeyboard.KeyState.Pressed);
+
+    private void DeliverKey(uint timeMs, uint key, WlKeyboard.KeyState state)
     {
         if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
         {
@@ -332,6 +393,21 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
 
     public void NotifyKeyConsumed(uint key, WlKeyboard.KeyState state)
     {
+        if (state == WlKeyboard.KeyState.Pressed)
+        {
+            RememberConsumed(key);
+            TrackKey(key, state);
+            UpdateKeyState(key, state);
+            return;
+        }
+
+        if (!ForgetConsumed(key) && _pressedKeys.Contains(key))
+        {
+            SeatLog.Log.Debug($"key {key}: the press reached the client, so its consumed release is delivered too");
+            DeliverKey((uint)Environment.TickCount64, key, state);
+            return;
+        }
+
         TrackKey(key, state);
         UpdateKeyState(key, state);
     }
@@ -394,6 +470,35 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
 
         return false;
+    }
+
+    public Func<string, bool>? CommitText { get; set; }
+
+    public bool TryCommitText(ReadOnlySpan<char> text) => CommitText is { } commit && commit(text.ToString());
+
+    public IDisposable? OverrideKeysyms(ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
+    {
+        if (Keymap is not { } current || keys.Length == 0)
+        {
+            return null;
+        }
+
+        var saved = current.AsString(XkbKeymapFormat.TextV1);
+        if (string.IsNullOrEmpty(saved) ||
+            KeymapEdit.WithKeysyms(saved, keys) is not { } edited)
+        {
+            return null;
+        }
+
+        var savedModifiers = _modifiers;
+        var before = _default.File;
+        SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(edited));
+        if (ReferenceEquals(before, _default.File))
+        {
+            return null;
+        }
+
+        return new KeymapOverrideScope(this, saved, savedModifiers);
     }
 
     public IDisposable? OverrideKeymapForKeysym(uint keycode, uint keysym)
@@ -785,7 +890,24 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
-    private uint[] CollectPressed() => _pressedKeys.ToArray();
+    private uint[] CollectPressed()
+    {
+        if (_consumedCount == 0)
+        {
+            return _pressedKeys.ToArray();
+        }
+
+        var delivered = new List<uint>(_pressedKeys.Count);
+        foreach (var key in _pressedKeys)
+        {
+            if (!WasConsumed(key))
+            {
+                delivered.Add(key);
+            }
+        }
+
+        return [.. delivered];
+    }
 
     private void ForEachKeyboard(Action<WlKeyboardResource, SeatKeyboard> action)
     {

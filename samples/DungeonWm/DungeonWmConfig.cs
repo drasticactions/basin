@@ -156,6 +156,26 @@ internal static class DungeonWmConfig
             windows.ReportUnknown();
         }
 
+        if (reader.Section("takeover") is { } takeover)
+        {
+            settings.TakeoverScaler = takeover.Choice("scaler", "off", "off", "fit", "integer", "fill", "stretch") switch
+            {
+                "fit" => Basin.Scene.SceneFitMode.Fit,
+                "integer" => Basin.Scene.SceneFitMode.Integer,
+                "fill" => Basin.Scene.SceneFitMode.Fill,
+                "stretch" => Basin.Scene.SceneFitMode.Stretch,
+                _ => null,
+            };
+            settings.TakeoverFilter = takeover.Choice("filter", "linear", "linear", "nearest", "pixel") switch
+            {
+                "nearest" => Basin.TextureFilter.Nearest,
+                "pixel" => Basin.TextureFilter.Pixel,
+                _ => null,
+            };
+            settings.TakeoverFrameLimit = Math.Clamp(takeover.Number("frame_limit", settings.TakeoverFrameLimit), 0, 1000);
+            takeover.ReportUnknown();
+        }
+
         if (reader.Section("frames") is { } frames)
         {
             var current = settings.Frames;

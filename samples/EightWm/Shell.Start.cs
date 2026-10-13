@@ -69,6 +69,9 @@ internal sealed partial class Shell
                 Basin.Config.LetterboxQuirk.Fit => Basin.Scene.SceneFitPolicy.Fit,
                 Basin.Config.LetterboxQuirk.Center => Basin.Scene.SceneFitPolicy.Center,
                 Basin.Config.LetterboxQuirk.Off => Basin.Scene.SceneFitPolicy.Off,
+                Basin.Config.LetterboxQuirk.Integer => Basin.Scene.SceneFitPolicy.Integer,
+                Basin.Config.LetterboxQuirk.Fill => Basin.Scene.SceneFitPolicy.Fill,
+                Basin.Config.LetterboxQuirk.Stretch => Basin.Scene.SceneFitPolicy.Stretch,
                 _ => Basin.Scene.SceneFitPolicy.Auto,
             };
             x11.Readiness = quirks.Readiness == Basin.Config.ReadinessQuirk.Immediate

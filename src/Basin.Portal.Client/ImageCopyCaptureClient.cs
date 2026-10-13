@@ -69,8 +69,11 @@ public sealed class ImageCopyCaptureClient : IScreenCapture, IDisposable
         }
     }
 
+    public bool CanCaptureYuv { get; private set; }
+
     internal void OnConstraints(DrmFormatSet constraints)
     {
+        CanCaptureYuv |= constraints.Contains(DrmFormat.Nv12, DrmFormatSet.ModifierLinear);
         if (_dmabufTried || Dmabuf is null || constraints.Count == 0)
         {
             return;

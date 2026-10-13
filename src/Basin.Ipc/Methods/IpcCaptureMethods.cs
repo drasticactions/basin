@@ -42,7 +42,7 @@ internal static class IpcCaptureMethods
                 }
             }
 
-            Capture(reply, capture, CaptureSource.Output(output, request.Cursor == true), request.To, request.Scale, request.MaxDimension);
+            Capture(reply, capture, CaptureSource.Output(output, request.Cursor == true), request.To, request.Scale, request.MaxDimension, request.Format);
         });
 
         methods.RegisterLibrary(IpcMethodNames.CaptureWindow, (ref IpcParams parameters, IpcReply reply) =>
@@ -64,7 +64,8 @@ internal static class IpcCaptureMethods
                 CaptureSource.Toplevel(request.Id, request.ClientOnly == true, request.Cursor == true),
                 request.To,
                 request.Scale,
-                request.MaxDimension);
+                request.MaxDimension,
+                request.Format);
         });
 
         methods.RegisterLibrary(IpcMethodNames.CaptureRegion, (ref IpcParams parameters, IpcReply reply) =>
@@ -81,13 +82,25 @@ internal static class IpcCaptureMethods
             }
 
             var box = new Box(request.X, request.Y, request.Width, request.Height);
-            Capture(reply, capture, CaptureSource.Region(box, overlayCursor: request.Cursor == true), request.To, request.Scale, request.MaxDimension);
+            Capture(reply, capture, CaptureSource.Region(box, overlayCursor: request.Cursor == true), request.To, request.Scale, request.MaxDimension, request.Format);
         });
     }
 
     private static void Capture(
-        IpcReply reply, IScreenCapture capture, in CaptureSource source, IpcCaptureTo to, double? requestedScale, long? maxDimension)
+        IpcReply reply, IScreenCapture capture, in CaptureSource source, IpcCaptureTo to, double? requestedScale, long? maxDimension, string? imageFormat)
     {
+        var wide = imageFormat switch
+        {
+            null or "png" => false,
+            "png16" => true,
+            _ => (bool?)null,
+        };
+        if (wide is not { } sixteen)
+        {
+            reply.Error(IpcErrorCodes.InvalidParams, $"'format' is png or png16, not '{imageFormat}'");
+            return;
+        }
+
         if (to.Kind == IpcCaptureKind.Path && !Path.IsPathRooted(to.Path))
         {
             reply.Error(IpcErrorCodes.InvalidParams, "'path' is absolute; the compositor's working directory is not yours");
@@ -125,7 +138,13 @@ internal static class IpcCaptureMethods
             return;
         }
 
-        var buffer = new MemoryBuffer(format.Width, format.Height, format.Format);
+        if (sixteen && !capture.CanCaptureHalfFloat)
+        {
+            reply.Error(IpcErrorCodes.Unavailable, $"png16 needs a 16-bit render target, and {capture.RendererName ?? "this compositor's renderer"} cannot render one");
+            return;
+        }
+
+        var buffer = new MemoryBuffer(format.Width, format.Height, sixteen ? DrmFormat.Abgr16161616f : format.Format);
         try
         {
             if (!capture.Capture(source, new Box(0, 0, format.Width, format.Height), buffer))
@@ -135,16 +154,24 @@ internal static class IpcCaptureMethods
             }
 
             var size = OutputSize(buffer.Width, buffer.Height, scale, maxDimension ?? 0);
+            PngColorChunks? chunks = null;
+            if (sixteen)
+            {
+                chunks = capture.TryColorOf(source, out var color)
+                    ? PngColorChunks.From(color.Description, color.Hdr)
+                    : PngColorChunks.Srgb;
+            }
+
             switch (to.Kind)
             {
                 case IpcCaptureKind.Fd:
                     WriteFd(reply, buffer);
                     break;
                 case IpcCaptureKind.Path:
-                    WritePath(reply, buffer, to.Path!, size);
+                    WritePath(reply, buffer, to.Path!, size, sixteen, chunks);
                     break;
                 default:
-                    WriteInline(reply, buffer, size);
+                    WriteInline(reply, buffer, size, sixteen, chunks);
                     break;
             }
         }
@@ -183,12 +210,25 @@ internal static class IpcCaptureMethods
             IpcJsonContext.Default.IpcCaptureResult);
     }
 
-    private static void WritePath(IpcReply reply, MemoryBuffer buffer, string path, (int Width, int Height) size)
+    private static (byte[] Png, int Width, int Height) Encode(MemoryBuffer buffer, (int Width, int Height) size, bool sixteen, PngColorChunks? chunks)
     {
+        if (sixteen && BufferCapture.TryReadRgb16(buffer, out var rgb))
+        {
+            var (samples, wideWidth, wideHeight) = Scaled16(rgb, buffer.Width, buffer.Height, size);
+            return (PngCodec.Encode16(samples, wideWidth, wideHeight, chunks), wideWidth, wideHeight);
+        }
+
         var (rgba, width, height) = Scaled(BufferCapture.ReadRgba(buffer), buffer.Width, buffer.Height, size);
+        return (PngCodec.Encode(rgba, width, height), width, height);
+    }
+
+    private static void WritePath(
+        IpcReply reply, MemoryBuffer buffer, string path, (int Width, int Height) size, bool sixteen, PngColorChunks? chunks)
+    {
+        var (png, width, height) = Encode(buffer, size, sixteen, chunks);
         try
         {
-            File.WriteAllBytes(path, PngCodec.Encode(rgba, width, height));
+            File.WriteAllBytes(path, png);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -199,10 +239,10 @@ internal static class IpcCaptureMethods
         reply.Write(new IpcCaptureResult(width, height, Path: path), IpcJsonContext.Default.IpcCaptureResult);
     }
 
-    private static void WriteInline(IpcReply reply, MemoryBuffer buffer, (int Width, int Height) size)
+    private static void WriteInline(
+        IpcReply reply, MemoryBuffer buffer, (int Width, int Height) size, bool sixteen, PngColorChunks? chunks)
     {
-        var (rgba, width, height) = Scaled(BufferCapture.ReadRgba(buffer), buffer.Width, buffer.Height, size);
-        var png = PngCodec.Encode(rgba, width, height);
+        var (png, width, height) = Encode(buffer, size, sixteen, chunks);
         if (((png.Length + 2) / 3 * 4) + InlineHeadroom > IpcProtocol.MaxMessageBytes)
         {
             reply.Error(IpcErrorCodes.TooLarge, $"a {png.Length}-byte PNG does not fit in a frame; ask for a path or an fd");
@@ -233,6 +273,46 @@ internal static class IpcCaptureMethods
         }
 
         return (Math.Max(1, (int)Math.Round(width * scale)), Math.Max(1, (int)Math.Round(height * scale)));
+    }
+
+    private static (ushort[] Rgb, int Width, int Height) Scaled16(ushort[] rgb, int width, int height, (int Width, int Height) size)
+    {
+        if (size.Width >= width && size.Height >= height)
+        {
+            return (rgb, width, height);
+        }
+
+        var (outWidth, outHeight) = size;
+        var result = new ushort[outWidth * outHeight * 3];
+        for (var y = 0; y < outHeight; y++)
+        {
+            var y0 = y * height / outHeight;
+            var y1 = Math.Max(y0 + 1, (y + 1) * height / outHeight);
+            for (var x = 0; x < outWidth; x++)
+            {
+                var x0 = x * width / outWidth;
+                var x1 = Math.Max(x0 + 1, (x + 1) * width / outWidth);
+                long r = 0, g = 0, b = 0;
+                for (var sy = y0; sy < y1; sy++)
+                {
+                    for (var sx = x0; sx < x1; sx++)
+                    {
+                        var i = ((sy * width) + sx) * 3;
+                        r += rgb[i];
+                        g += rgb[i + 1];
+                        b += rgb[i + 2];
+                    }
+                }
+
+                var count = (y1 - y0) * (x1 - x0);
+                var o = ((y * outWidth) + x) * 3;
+                result[o] = (ushort)(r / count);
+                result[o + 1] = (ushort)(g / count);
+                result[o + 2] = (ushort)(b / count);
+            }
+        }
+
+        return (result, outWidth, outHeight);
     }
 
     private static (byte[] Rgba, int Width, int Height) Scaled(byte[] rgba, int width, int height, (int Width, int Height) size)

@@ -176,7 +176,7 @@ public sealed class SeatInputTests
     }
 
     [Fact]
-    public void A_lost_release_is_cleared_without_reaching_the_client()
+    public void A_lost_button_release_is_cleared_and_a_consumed_key_release_still_pairs_its_press()
     {
         using var host = new CompositorTestHost();
         host.Seat.Keyboard.SetKeymap();
@@ -207,7 +207,7 @@ public sealed class SeatInputTests
 
         Assert.Empty(host.Seat.Keyboard.PressedKeys);
         Assert.False(host.Seat.Pointer.HasImplicitGrab);
-        Assert.Equal([(28u, 1u)], keys);
+        Assert.Equal([(28u, 1u), (28u, 0u)], keys);
         Assert.Equal([(0x110u, 1u)], buttons);
 
         host.Seat.Keyboard.NotifyClearFocus();

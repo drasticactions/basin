@@ -56,6 +56,51 @@ internal sealed partial class TinyComp
         }
     }
 
+    private bool _hdrShown;
+
+    private Basin.Desktop.HdrDemand? _hdrDemand;
+
+    private void OnHdrDemandChanged(bool shown)
+    {
+        _hdrShown = shown;
+        if (_colorConfiguration is not { } configuration)
+        {
+            return;
+        }
+
+        foreach (var view in Views)
+        {
+            configuration.SetHdrDemand(view.Output, shown);
+        }
+    }
+
+    private void ApplyColorLooks()
+    {
+        foreach (var view in Views)
+        {
+            if (view.Output is Basin.Backend.Drm.DrmOutput drmOutput)
+            {
+                ApplyColorLooks(drmOutput, _hdr && (_panels.Match(drmOutput)?.Hdr ?? drmOutput.Edid.SupportsPq));
+            }
+        }
+    }
+
+    private void ApplyColorLooks(IOutput output, bool hdr)
+    {
+        if (_colorConfiguration is not { } configuration)
+        {
+            return;
+        }
+
+        configuration.SetHdrOnDemand(output, hdr && _config.HdrDemand);
+        configuration.SetInverseToneMapping(
+            output, hdr && _config.InverseToneMapping ? new Basin.Capabilities.InverseToneMapping(_config.ItmSdrNits, _config.ItmTargetNits) : null);
+        if (configuration.LookOf(output) != _config.Look && !configuration.SetLook(output, _config.Look, out var error))
+        {
+            _report.Line($"LOOK {output.Name} failed {error}");
+        }
+    }
+
     private double? _nightLightKelvin;
 
     private void ApplyNightLight(double? kelvin)

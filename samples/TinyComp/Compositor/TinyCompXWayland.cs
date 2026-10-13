@@ -53,6 +53,8 @@ internal sealed partial class TinyComp
             window.MinimizeRequested += minimized => SetMinimized(xwindow, minimized);
             PlaceXByRule(xwindow);
             window.FullscreenRequested += fullscreen => xwindow.SetFullscreen(fullscreen);
+            window.MoveRequested += _ => BeginMove(xwindow);
+            window.ResizeRequested += (edges, _) => BeginResize(xwindow, (ResizeEdges)(int)edges);
             window.MaximizeRequested += maximized =>
             {
                 if (maximized != xwindow.Maximized)
@@ -155,6 +157,14 @@ internal sealed partial class TinyComp
 
     private void FocusXWindow(XWindow xwindow)
     {
+        if (!xwindow.XWin.WantsFocus)
+        {
+            xwindow.XWin.Raise();
+            xwindow.Tree.RaiseToTop();
+            _stack.RaiseChanged();
+            return;
+        }
+
         ReleaseUIKeyboard(restore: false);
         if (_focused is not null)
         {

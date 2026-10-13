@@ -31,7 +31,28 @@ public sealed class SceneBuffer : SceneNode
 
     public ISceneInputFilter? InputFilter { get; set; }
 
-    public int AcquireFenceFd { get; set; } = -1;
+    public int AcquireFenceFd
+    {
+        get => FenceFromSurface ? FenceSurface?.AcquireFenceFd ?? -1 : _acquireFenceFd;
+        set
+        {
+            FenceFromSurface = false;
+            _acquireFenceFd = value;
+        }
+    }
+
+    public Surface? FenceSurface { get; private set; }
+
+    public bool FenceFromSurface { get; private set; }
+
+    public void FollowFenceOf(Surface? surface)
+    {
+        FenceSurface = surface;
+        FenceFromSurface = surface is not null;
+        _acquireFenceFd = -1;
+    }
+
+    private int _acquireFenceFd = -1;
 
     public FBox SourceBox
     {

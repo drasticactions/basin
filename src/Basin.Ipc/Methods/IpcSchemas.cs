@@ -27,7 +27,8 @@ internal static class IpcSchemas
         "cursor":{"type":"boolean","description":"Draw the cursor into the image."},
         "to":{"x-basin-fd":true,"description":"Where the image goes: {\"path\": \"/absolute/file.png\"}, \"inline\" for base64 PNG in the reply, or \"fd\" for raw pixels over a descriptor.","anyOf":[{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]},{"type":"string","enum":["inline","fd"]}],"examples":["inline"]},
         "scale":{"type":"number","exclusiveMinimum":0,"maximum":1,"description":"Scale the image down by this factor. Not with max_dimension."},
-        "max_dimension":{"type":"integer","minimum":1,"description":"Scale the image down until its longer side is at most this many pixels. It never scales up. Not with scale."}
+        "max_dimension":{"type":"integer","minimum":1,"description":"Scale the image down until its longer side is at most this many pixels. It never scales up. Not with scale."},
+        "format":{"type":"string","enum":["png","png16"],"description":"png, the default, is 8-bit sRGB, and an HDR output is tone-mapped to SDR. png16 is 16-bit RGB in the output's own encoding, PQ on an HDR output, tagged with cICP and, when the output has HDR metadata, mDCV and cLLI. With fd, png16 sends raw abgr16161616f pixels."}
         """;
 
     private const string InputPath =
@@ -89,12 +90,20 @@ internal static class IpcSchemas
             {"type":"object","properties":{"output":{"type":"string","description":"The output name from outputs/list."},"on":{"type":"boolean"}},"required":["output","on"]}
             """);
 
+        Add(IpcMethodNames.OutputsLook, Idempotent, "Apply a .cube 3D LUT to everything an output shows, in each source's encoded values before color conversion. Leave path out or empty to remove the look.", """
+            {"type":"object","properties":{"output":{"type":"string","description":"The output name from outputs/list."},"path":{"type":"string","description":"An absolute path to a .cube file with LUT_3D_SIZE from 2 to 128."}},"required":["output"],"examples":[{"output":"DP-1","path":"/home/me/looks/warm.cube"}]}
+            """);
+
         Add(IpcMethodNames.WindowsList, ReadOnly, "List the toplevel windows with their ids, app ids, titles, geometry, state, output and workspace. An X11 window also has x11_display and x11_density (native or low).", Empty);
         Add(IpcMethodNames.WindowsGet, ReadOnly, "Describe one window.", Id);
         Add(IpcMethodNames.WindowsStack, ReadOnly, "Return the window ids in stacking order, bottom to top.", Empty);
         Add(IpcMethodNames.WindowsActivate, Idempotent, "Ask the compositor to focus and raise a window. A compositor whose policy does not allow it answers refused.", Id);
         Add(IpcMethodNames.WindowsSetX11Density, Destructive, "Move an X11 application to the native or the low-density X server. It writes a [[launch]] rule into the compositor's configuration. When the compositor started the process, it closes the process's windows politely, waits up to 5 s for the process to exit and starts it again with the same argv, directory and environment. outcome is relaunched, applies-next-start (the rule is written and the process is left alone), still-running (the process did not exit, nothing was killed) or unchanged (it is on that server already).", """
             {"type":"object","properties":{"id":{"anyOf":[{"type":"integer","minimum":0},{"type":"string","pattern":"^[0-9]+$"}],"description":"The window id of an X11 window from windows/list. A string of decimal digits is also accepted, because a JSON number above 2^53 loses digits in JavaScript."},"density":{"enum":["native","low"],"description":"native, or low for the X server at scale 1 and 96 DPI that the compositor stretches."}},"required":["id","density"],"examples":[{"density":"low"}]}
+            """);
+        Add(IpcMethodNames.WindowsStats, ReadOnly, "Frame statistics for a window over the last second: commits and presents per second, the mean and 99th percentile present interval and commit-to-present latency in milliseconds, the output that presents it and its refresh. The first call starts collecting, so it can answer zeros.", Id);
+        Add(IpcMethodNames.WindowsFrameLimit, Idempotent, "Limit how often a window is told to draw: frame callbacks, fifo and commit-timing release at this rate. 0 removes the limit. windows/get reports frame_limit.", """
+            {"type":"object","properties":{"id":{"anyOf":[{"type":"integer","minimum":0},{"type":"string","pattern":"^[0-9]+$"}],"description":"The window id from windows/list. A string of decimal digits is also accepted, because a JSON number above 2^53 loses digits in JavaScript."},"fps":{"type":"integer","minimum":0,"maximum":1000,"description":"Frames per second, or 0 for no limit."}},"required":["id","fps"],"examples":[{"fps":30}]}
             """);
         Add(IpcMethodNames.WindowsClose, Destructive, "Ask a window to close. The client can show a prompt or ignore the request.", Id);
         Add(IpcMethodNames.WindowsSetState, Idempotent, "Set or clear a window's maximized, minimized, fullscreen or borderless state. Name at least one.", """

@@ -20,9 +20,10 @@ public static class IpcEventNames
     public const string DeviceAdded = "devices/added";
     public const string DeviceRemoved = "devices/removed";
     public const string DeviceChanged = "devices/changed";
+    public const string FrameStats = "frame/stats";
 
     public static IReadOnlyList<string> ReservedNamespaces { get; } =
     [
-        "window", "stack", "output", "workspace", "lock", "idle", "keyboard", "shortcut", "clipboard", "process", "approval", "devices",
+        "window", "stack", "output", "workspace", "lock", "idle", "keyboard", "shortcut", "clipboard", "process", "approval", "devices", "frame",
     ];
 }

@@ -127,14 +127,39 @@ internal sealed class PrimaryClient : IDisposable
         return true;
     }
 
+    private static bool Resolves(string program)
+    {
+        if (program.Contains('/', StringComparison.Ordinal))
+        {
+            return File.Exists(program);
+        }
+
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (File.Exists(Path.Combine(directory, program)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static unsafe PrimaryClient? Spawn(
         string[] application,
         string socket,
         string? display,
         ICompositorEventLoop loop,
         Action onHangup,
-        BasinLogger log)
+        BasinLogger log,
+        bool subreaper = false)
     {
+        if (subreaper && !Resolves(application[0]))
+        {
+            log.Error($"failed to spawn '{(application[0])}': {(Marshal.GetPInvokeErrorMessage(2))}");
+            return null;
+        }
+
         var fds = stackalloc int[2];
         if (pipe(fds) != 0)
         {
@@ -173,10 +198,13 @@ internal sealed class PrimaryClient : IDisposable
             posix_spawnattr_setflags(attributes, SpawnSetSigMask | SpawnSetSigDefault);
             posix_spawn_file_actions_addclose(actions, readFd);
 
-            argv = Block(application);
+            string[] words = subreaper && OperatingSystem.IsLinux()
+                ? [.. Basin.ProcessSubreaper.ReaperArgv(application)]
+                : application;
+            argv = Block(words);
             envp = Block(EnvironmentBlock(socket, display));
 
-            var error = posix_spawnp(out var pid, application[0], actions, attributes, argv, envp);
+            var error = posix_spawnp(out var pid, words[0], actions, attributes, argv, envp);
             if (error != 0)
             {
                 log.Error($"failed to spawn '{(application[0])}': {(Marshal.GetPInvokeErrorMessage(error))}");

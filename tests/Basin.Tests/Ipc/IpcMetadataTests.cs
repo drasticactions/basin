@@ -39,12 +39,12 @@ public sealed class IpcMetadataTests
         string[] idempotent =
         [
             "windows/activate", "windows/set-state", "windows/move", "windows/resize", "windows/send-to-output",
-            "windows/send-to-workspace", "workspaces/activate", "workspaces/deactivate", "idle/uninhibit", "devices/set", "devices/reset",
+            "windows/send-to-workspace", "windows/frame-limit", "outputs/look", "workspaces/activate", "workspaces/deactivate", "idle/uninhibit", "devices/set", "devices/reset",
         ];
         string[] readOnly =
         [
             "ipc/version", "ipc/methods", "ipc/events", "session/describe", "session/settle", "outputs/list", "outputs/test", "windows/list",
-            "windows/get", "windows/stack", "windows/wait", "windows/wait-idle", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
+            "windows/get", "windows/stats", "windows/stack", "windows/wait", "windows/wait-idle", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
             "capture/output", "capture/window", "capture/region", "clipboard/read", "process/list", "process/log",
             "devices/list", "devices/get",
         ];

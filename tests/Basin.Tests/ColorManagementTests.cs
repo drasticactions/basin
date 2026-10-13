@@ -202,6 +202,50 @@ public sealed class ColorManagementTests
     }
 
     [Fact]
+    public void Windows_scrgb_is_offered_with_ext_linear_and_describes_the_extended_range()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = HdrManager(host);
+
+        var proxy = Bind(host, 2);
+        var features = new List<uint>();
+        var done = false;
+        proxy.SupportedFeature += (_, e) => features.Add((uint)e.Feature);
+        proxy.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+        Assert.Contains((uint)WpColorManagerV1.Feature.WindowsScrgb, features);
+
+        var description = proxy.CreateWindowsScrgb();
+        ulong identity = 0;
+        var failed = false;
+        description.Ready2 += (_, e) => identity = ((ulong)e.IdentityHi << 32) | e.IdentityLo;
+        description.Failed += (_, _) => failed = true;
+        host.PumpUntil(() => identity != 0 || failed);
+        Assert.False(failed);
+
+        var scrgb = ImageDescription.WindowsScrgb();
+        Assert.Equal(ColorTransferFunction.ExtLinear, scrgb.TransferNamed);
+        Assert.Equal(ColorPrimaries.Srgb, scrgb.PrimariesNamed);
+        Assert.Equal(125, scrgb.SignalCeiling);
+        Assert.Equal((0u, 80u, 203u), scrgb.Luminances);
+    }
+
+    [Fact]
+    public void Windows_scrgb_is_not_offered_without_a_resolver_that_converts()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new ColorManager(host.Display, host.Compositor) { Resolver = new LutResolver(ColorTransformCapability.None) };
+
+        var proxy = Bind(host, 2);
+        var features = new List<uint>();
+        var done = false;
+        proxy.SupportedFeature += (_, e) => features.Add((uint)e.Feature);
+        proxy.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+        Assert.DoesNotContain((uint)WpColorManagerV1.Feature.WindowsScrgb, features);
+    }
+
+    [Fact]
     public void A_reference_resolves_to_what_minted_it_and_stops_when_destroyed()
     {
         using var host = new CompositorTestHost();

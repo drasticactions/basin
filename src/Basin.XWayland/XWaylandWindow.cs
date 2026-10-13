@@ -19,7 +19,7 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public XWaylandWm WindowManager => _wm;
 
-    public bool OverrideRedirect { get; }
+    public bool OverrideRedirect { get; internal set; }
 
     public int X { get; internal set; }
 
@@ -57,7 +57,41 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public bool WantsDecorations { get; internal set; } = true;
 
-    public bool WantsFocus { get; internal set; } = true;
+    public bool WantsFocus =>
+        TypeWantsFocus && !IsUseless && (HwndStyle is not { } style || (style & WsDisabled) == 0) &&
+        !(SkipTaskbar && SkipPager && !FullscreenState) && (AcceptsInput || TakesFocus);
+
+    internal bool TypeWantsFocus { get; set; } = true;
+
+    public bool AcceptsInput { get; internal set; } = true;
+
+    public bool TakesFocus => SupportsTakeFocus;
+
+    public bool SkipTaskbar { get; internal set; }
+
+    public bool SkipPager { get; internal set; }
+
+    public uint? HwndStyle { get; internal set; }
+
+    public uint? HwndStyleEx { get; internal set; }
+
+    public bool IsUseless => IsMappedInX && X11Bounds.Width <= 1 && X11Bounds.Height <= 1;
+
+    public bool IsOffscreenStub { get; internal set; }
+
+    public bool ProgramPosition { get; internal set; }
+
+    public bool UserPosition { get; internal set; }
+
+    public uint? Gravity { get; internal set; }
+
+    public bool IsFixedPopup => ProgramPosition && Gravity == StaticGravity;
+
+    internal uint? FocusChild { get; set; }
+
+    private const uint WsDisabled = 0x08000000;
+
+    private const uint StaticGravity = 10;
 
     private bool _wantsMaximized;
 
@@ -158,6 +192,12 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public event Action<bool>? MaximizeRequested;
 
     public event Action<bool>? FullscreenRequested;
+
+    public event Action<bool>? MoveRequested;
+
+    public event Action<X11ResizeEdges, bool>? ResizeRequested;
+
+    public event Action? MoveResizeCancelled;
 
     public XWaylandReadiness Readiness { get; set; } = XWaylandReadiness.OnMatchingCommit;
 
@@ -306,6 +346,12 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     internal void RaiseFullscreenRequested(bool fullscreen) => FullscreenRequested?.Invoke(fullscreen);
 
     internal void RaiseSizeHintsChanged() => SizeHintsChanged?.Invoke();
+
+    internal void RaiseMoveRequested(bool keyboard) => MoveRequested?.Invoke(keyboard);
+
+    internal void RaiseResizeRequested(X11ResizeEdges edges, bool keyboard) => ResizeRequested?.Invoke(edges, keyboard);
+
+    internal void RaiseMoveResizeCancelled() => MoveResizeCancelled?.Invoke();
 
     internal void RaiseMapped() => Mapped?.Invoke();
 

@@ -1,8 +1,9 @@
+using Basin.Diagnostics;
 using Basin.Capabilities;
 
 namespace Basin.Scene;
 
-public sealed class SceneScreenCapture : IScreenCapture
+public sealed class SceneScreenCapture : IScreenCapture, IDisposable
 {
     private readonly Scene _scene;
     private readonly OutputLayout _layout;
@@ -133,9 +134,57 @@ public sealed class SceneScreenCapture : IScreenCapture
         }
     }
 
+    public IAllocator? Allocator { get; set; }
+
+    public YuvCoefficients YuvCoefficients { get; set; } = YuvCoefficients.Bt709;
+
+    public YuvRange YuvRange { get; set; } = YuvRange.Limited;
+
+    public bool CanCaptureYuv => Renderer is { CanConvertYuv: true };
+
+    public bool CanCaptureHalfFloat => Renderer is { RendersHalfFloat: true };
+
+    public string? RendererName => Renderer?.GetType().Name;
+
+    public bool TryColorOf(in CaptureSource source, out CaptureColor color)
+    {
+        color = default;
+        SceneOutput? table;
+        switch (source.Kind)
+        {
+            case CaptureSourceKind.Output when source.OutputTarget is { } output:
+                table = TableFor(output);
+                break;
+            case CaptureSourceKind.Region:
+                table = TableFor(null);
+                break;
+            case CaptureSourceKind.Toplevel:
+                color = new CaptureColor(ImageDescription.SdrDefault, null);
+                return true;
+            default:
+                return false;
+        }
+
+        color = new CaptureColor(
+            table?.ColorDescription ?? ImageDescription.SdrDefault,
+            table?.ContentHdrMetadata ?? table?.OutputHdrMetadata);
+        return true;
+    }
+
+    private static bool IsHighDynamicRange(ImageDescription? description) =>
+        description?.TransferNamed is ColorTransferFunction.St2084Pq or ColorTransferFunction.Hlg;
+
+    private IBuffer? _intermediate;
+    private ITexture? _intermediateTexture;
+
     public bool Capture(in CaptureSource source, in Box region, IBuffer target)
     {
         ArgumentNullException.ThrowIfNull(target);
+        if (target.Format == DrmFormat.Nv12)
+        {
+            return CaptureYuv(source, region, target);
+        }
+
         return source.Kind switch
         {
             CaptureSourceKind.Output => CaptureOutput(source.OutputTarget!, region, target, source.OverlayCursor),
@@ -144,6 +193,92 @@ public sealed class SceneScreenCapture : IScreenCapture
             CaptureSourceKind.Region => CaptureRegion(source, region, target),
             _ => false,
         };
+    }
+
+    private bool CaptureYuv(in CaptureSource source, in Box region, IBuffer target)
+    {
+        if (Renderer is not { CanConvertYuv: true } renderer || source.Kind == CaptureSourceKind.Cursor ||
+            !TryDescribe(source, out var format))
+        {
+            return false;
+        }
+
+        var width = region.IsEmpty ? format.Width : region.Width;
+        var height = region.IsEmpty ? format.Height : region.Height;
+        if (_intermediate is not { } intermediate || intermediate.Width != width || intermediate.Height != height)
+        {
+            AllocationScope.Pause();
+            try
+            {
+                DropIntermediate();
+                intermediate = AllocateIntermediate(renderer, width, height);
+                _intermediate = intermediate;
+                if (!Capture(source, region, intermediate))
+                {
+                    return false;
+                }
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
+        }
+        else if (!Capture(source, region, intermediate))
+        {
+            return false;
+        }
+
+        if (_intermediateTexture is null)
+        {
+            AllocationScope.Pause();
+            try
+            {
+                _intermediateTexture = renderer.ImportTexture(intermediate);
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
+        }
+
+        if (_intermediateTexture is not { } texture)
+        {
+            return false;
+        }
+
+        if (texture is IRefreshableTexture refreshable)
+        {
+            refreshable.MarkDirty();
+        }
+
+        return renderer.ConvertToYuv(texture, default, target, YuvCoefficients, YuvRange);
+    }
+
+    private IBuffer AllocateIntermediate(IRenderer renderer, int width, int height)
+    {
+        if (Allocator is { } allocator)
+        {
+            var modifiers = allocator.Formats.ModifiersOf(DrmFormat.Xrgb8888)
+                .Where(modifier => renderer.DmabufTextureFormats.Contains(DrmFormat.Xrgb8888, modifier))
+                .ToArray();
+            if (modifiers.Length > 0 &&
+                allocator.Allocate(width, height, DrmFormat.Xrgb8888, modifiers, BufferUse.Render) is { } buffer)
+            {
+                return buffer;
+            }
+        }
+
+        return new MemoryBuffer(width, height, DrmFormat.Xrgb8888);
+    }
+
+    public void Dispose() => DropIntermediate();
+
+    private void DropIntermediate()
+    {
+        _intermediateTexture?.Dispose();
+        _intermediateTexture = null;
+        (_intermediate as BufferBase)?.Destroy();
+        _intermediate = null;
     }
 
     public bool TryCursorState(IOutput output, out CaptureCursorState cursor)
@@ -487,14 +622,17 @@ public sealed class SceneScreenCapture : IScreenCapture
             return false;
         }
 
+        var table = TableFor(output);
+        var sdr = target.Format is DrmFormat.Argb8888 or DrmFormat.Xrgb8888 or DrmFormat.Abgr8888 or DrmFormat.Xbgr8888 or DrmFormat.Rgb565 &&
+            IsHighDynamicRange(table?.ColorDescription);
         return _scene.Render(renderer, target, new SceneRenderOptions
         {
             Background = Background,
             Projection = projection,
             OriginX = originX,
             OriginY = originY,
-            Luts = TableFor(output),
-            ColorDescription = TableFor(output)?.ColorDescription,
+            Luts = sdr ? null : table,
+            ColorDescription = sdr ? ImageDescription.SdrDefault : table?.ColorDescription,
         });
     }
 

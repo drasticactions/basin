@@ -15,9 +15,10 @@ internal sealed class IpcTestRig : IDisposable
     {
     }
 
-    public IpcTestRig(Action<BasinServices, CompositorTestHost> register, IpcSessionInfo? session = null, string? path = null, bool listen = false)
+    public IpcTestRig(
+        Action<BasinServices, CompositorTestHost> register, IpcSessionInfo? session = null, string? path = null, bool listen = false, string renderer = "pixman")
     {
-        Host = new CompositorTestHost();
+        Host = new CompositorTestHost(renderer: renderer);
         Services = new BasinServices(Host.Loop);
         register(Services, Host);
         Services.Freeze();

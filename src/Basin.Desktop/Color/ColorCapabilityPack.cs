@@ -35,6 +35,7 @@ public sealed class ColorCapabilityPack : ICapabilityPack
         ArgumentNullException.ThrowIfNull(services);
         services.Use<IOutputConfiguration>(Configuration);
         services.UseDefault<IColorTransformResolver>(Luts);
+        services.UseDefault<IOutputLooks>(Configuration);
     }
 
     [MemberNotNullWhen(true, nameof(Manager), nameof(Outputs), nameof(Surfaces))]

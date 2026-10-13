@@ -39,6 +39,15 @@ internal sealed partial class TinyComp
             return;
         }
 
+        _panels = Basin.Color.PanelTable.Load(_log);
+        foreach (var view in Views)
+        {
+            if (view.Output is Basin.Backend.Drm.DrmOutput panelOutput)
+            {
+                _colorConfiguration?.SetPanel(panelOutput, _panels.Match(panelOutput));
+            }
+        }
+
         var restart = CarryOver(loaded);
         _gridPreset = null;
         _gridPresetName = null;
@@ -136,6 +145,9 @@ internal sealed partial class TinyComp
 
     private string? ApplyConfig(Config next, bool crossfade)
     {
+        _config.CursorHideAfterMs = next.CursorHideAfterMs;
+        _config.CursorParkPointer = next.CursorParkPointer;
+        ApplyCursorIdle();
         var background = _config.Background != next.Background;
         _config = next;
         if (!next.HideCursorOnTouch)
@@ -165,6 +177,8 @@ internal sealed partial class TinyComp
         _offload = next.Offload;
         _damageTint = next.DamageTint;
         _driver.AllowPlaneOffload = _offload;
+        _driver.VrrPacing = next.VrrPacing;
+        _driver.AllowTearing = next.AllowTearing;
         _driver.DebugDamageTint = _damageTint;
         ApplyEffectShaders();
 
@@ -181,6 +195,7 @@ internal sealed partial class TinyComp
         }
 
         ApplyNightLight(next.NightLight);
+        ApplyColorLooks();
         var chromeBefore = (_frameStyle, _frameTheme, _metacity, _msstyles, _quillTheme);
         var metacityFailure = ApplyFrameFont(next) ?? ApplyMetacity(next);
         _msstylesKept = ApplyMsStyles(next) is not null;
@@ -195,7 +210,7 @@ internal sealed partial class TinyComp
         ApplyPostStages(next);
         ApplyScreenShader(next);
         ApplyEffectSettings(next);
-        _shortcuts.Configure(next);
+        ConfigureShortcuts(next);
         _textureErrors = LoadStepTextures(next, reload: true);
         _canvasOverride = null;
         _canvasClosing = false;

@@ -25,6 +25,12 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
 
     public bool TwoPassTarget;
 
+    public bool Wide;
+    public Image WideImage;
+    public DeviceMemory WideMemory;
+    public ImageView WideView;
+    public Framebuffer WideFramebuffer;
+
     public bool CanSampleBackdrop;
 
     public ImageView SrgbView;
@@ -46,6 +52,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
             if (!renderer.Dev.FormatTable.TryGet(attributes.Format, out var formatProps) ||
                 formatProps.Entry.Vk != Format.B8G8R8A8Unorm)
             {
+                BasinCounters.Untrack();
                 throw new InvalidOperationException($"{attributes.Format} is not renderable here; targets are B8G8R8A8 until per-format render setups exist");
             }
 
@@ -71,6 +78,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
             entry.IsCpuReadback = true;
             if (!buffer.BeginDataAccess(BufferDataAccess.Read, out var data))
             {
+                BasinCounters.Untrack();
                 throw new InvalidOperationException("target buffer is not CPU-readable");
             }
 
@@ -84,14 +92,17 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
                 buffer.EndDataAccess();
             }
 
-            if (!renderer.Dev.FormatTable.TryGet(cpuFormat, out var cpuProps) ||
+            entry.Wide = cpuFormat is DrmFormat.Abgr16161616f or DrmFormat.Xbgr16161616f;
+            var renderedFormat = entry.Wide ? DrmFormat.Argb8888 : cpuFormat;
+            if (!renderer.Dev.FormatTable.TryGet(renderedFormat, out var cpuProps) ||
                 cpuProps.Entry.Vk != Format.B8G8R8A8Unorm)
             {
+                BasinCounters.Untrack();
                 throw new InvalidOperationException($"{cpuFormat} is not renderable here; targets are B8G8R8A8 until per-format render setups exist");
             }
 
             formatEntry = cpuProps.Entry;
-            entry.TwoPassTarget = !formatEntry.HasSrgb;
+            entry.TwoPassTarget = entry.Wide || !formatEntry.HasSrgb;
             var viewFormats = stackalloc Format[2] { formatEntry.Vk, formatEntry.VkSrgb };
             var formatList = new ImageFormatListCreateInfo
             {
@@ -129,7 +140,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
             var readbackInfo = new BufferCreateInfo
             {
                 SType = StructureType.BufferCreateInfo,
-                Size = (ulong)(buffer.Width * buffer.Height * 4),
+                Size = (ulong)(buffer.Width * buffer.Height * (entry.Wide ? 8 : 4)),
                 Usage = BufferUsageFlags.TransferDstBit,
             };
             VulkanDevice.Check(vk.CreateBuffer(renderer.Dev.Device, in readbackInfo, null, out entry.Readback), "vkCreateBuffer(readback)");
@@ -238,6 +249,10 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
 
             var blendImage = entry.BlendImage;
             renderer.Dev.SubmitImmediate(commands => renderer.Dev.TransitionToGeneral(commands, blendImage));
+            if (entry.Wide)
+            {
+                CreateWide(renderer, entry, buffer.Width, buffer.Height);
+            }
         }
 
         if (entry.IsCpuReadback)
@@ -247,6 +262,58 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
         }
 
         return entry;
+    }
+
+    private static void CreateWide(VulkanRenderer renderer, RenderTarget entry, int width, int height)
+    {
+        var vk = renderer.Dev.Api;
+        var device = renderer.Dev.Device;
+        var imageInfo = new ImageCreateInfo
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Format = Format.R16G16B16A16Sfloat,
+            Extent = new Extent3D((uint)width, (uint)height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Samples = SampleCountFlags.Count1Bit,
+            Tiling = ImageTiling.Optimal,
+            Usage = ImageUsageFlags.ColorAttachmentBit | ImageUsageFlags.TransferSrcBit,
+            InitialLayout = ImageLayout.Undefined,
+        };
+        VulkanDevice.Check(vk.CreateImage(device, in imageInfo, null, out entry.WideImage), "vkCreateImage(wide)");
+        vk.GetImageMemoryRequirements(device, entry.WideImage, out var requirements);
+        var allocateInfo = new MemoryAllocateInfo
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = requirements.Size,
+            MemoryTypeIndex = renderer.Dev.MemoryTypeFor(requirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit),
+        };
+        VulkanDevice.Check(vk.AllocateMemory(device, in allocateInfo, null, out entry.WideMemory), "vkAllocateMemory(wide)");
+        VulkanDevice.Check(vk.BindImageMemory(device, entry.WideImage, entry.WideMemory, 0), "vkBindImageMemory(wide)");
+        var viewInfo = new ImageViewCreateInfo
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = entry.WideImage,
+            ViewType = ImageViewType.Type2D,
+            Format = Format.R16G16B16A16Sfloat,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+        };
+        VulkanDevice.Check(vk.CreateImageView(device, in viewInfo, null, out entry.WideView), "vkCreateImageView(wide)");
+        var attachments = stackalloc ImageView[2] { entry.BlendView, entry.WideView };
+        var framebufferInfo = new FramebufferCreateInfo
+        {
+            SType = StructureType.FramebufferCreateInfo,
+            RenderPass = renderer.WideOutputPass,
+            AttachmentCount = 2,
+            PAttachments = attachments,
+            Width = (uint)width,
+            Height = (uint)height,
+            Layers = 1,
+        };
+        VulkanDevice.Check(vk.CreateFramebuffer(device, in framebufferInfo, null, out entry.WideFramebuffer), "vkCreateFramebuffer(wide)");
+        var wideImage = entry.WideImage;
+        renderer.Dev.SubmitImmediate(commands => renderer.Dev.TransitionToGeneral(commands, wideImage));
     }
 
     public void Dispose(VulkanRenderer renderer)
@@ -262,6 +329,13 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
     {
         var vk = renderer.Dev.Api;
         vk.DestroyFramebuffer(renderer.Dev.Device, Framebuffer, null);
+        if (WideImage.Handle != 0)
+        {
+            vk.DestroyFramebuffer(renderer.Dev.Device, WideFramebuffer, null);
+            vk.DestroyImageView(renderer.Dev.Device, WideView, null);
+            vk.DestroyImage(renderer.Dev.Device, WideImage, null);
+            vk.FreeMemory(renderer.Dev.Device, WideMemory, null);
+        }
         if (SrgbView.Handle != 0)
         {
             renderer.Dev.NotifyImageViewDestroying(SrgbView);

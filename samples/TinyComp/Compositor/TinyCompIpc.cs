@@ -49,17 +49,26 @@ internal sealed partial class TinyComp
     private void RegisterCommands(IpcMethodRegistry methods)
     {
         _report.AddInputLines(methods);
+        _report.AddWindowLines(methods);
         _report.AddSessionLines(methods);
 
         _report.Register(methods, "tinycomp/shot", "shot {path} [{index:int}]", (ref IpcParams p, IpcReply reply) =>
         {
             var path = p.GetString("path");
             var index = p.TryGetInt("index", out var at) ? (int)at : 0;
+            var hdr = p.TryGetString("format", out var format) && format == "hdr";
             if (p.Failed || !View(index, reply, out var view))
             {
                 return;
             }
 
+            if (hdr && !_renderer.RendersHalfFloat)
+            {
+                reply.Error(IpcErrorCodes.Unavailable, $"an hdr shot needs a 16-bit render target, and {_renderer.GetType().Name} cannot render one");
+                return;
+            }
+
+            _shotHdr = hdr;
             if (_shotReply is { } superseded)
             {
                 _shotReply = null;
@@ -71,6 +80,8 @@ internal sealed partial class TinyComp
             _shotReply = reply.Defer();
             _driver.RepaintNow(view);
         });
+
+        _report.AddLine(methods, "tinycomp/shot", "shot {path} {format:hdr|sdr} [{index:int}]");
 
         _report.Register(methods, "tinycomp/scale", "scale {view:int} {factor:number}", (ref IpcParams p, IpcReply reply) =>
         {
@@ -396,6 +407,45 @@ internal sealed partial class TinyComp
         _report.Register(methods, "tinycomp/dumpscene", "dumpscene", () => DumpTree(_scene.Root, 0));
 
         _report.Register(methods, "tinycomp/stats", "stats", ReportStats);
+        _report.AddOutputLines(methods);
+
+        _report.Register(methods, "tinycomp/hdr-demand", "hdr-demand {state:on|off}", (ref IpcParams p, IpcReply reply) =>
+        {
+            var on = p.GetString("state") == "on";
+            if (p.Failed)
+            {
+                return;
+            }
+
+            _config.HdrDemand = on;
+            ApplyColorLooks();
+            UpdateEdrDemand();
+        });
+
+        _report.Register(methods, "tinycomp/filter", "filter {id:int} {name:linear|nearest|pixel|rule}", (ref IpcParams p, IpcReply reply) =>
+        {
+            var id = p.GetInt("id");
+            var name = p.GetString("name");
+            if (p.Failed)
+            {
+                return;
+            }
+
+            if (FindWindowByToplevelId((ulong)id) is not { } window)
+            {
+                reply.Error(IpcErrorCodes.NotFound, $"no window {id}");
+                return;
+            }
+
+            TextureFilter? filter = name switch
+            {
+                "linear" => TextureFilter.Linear,
+                "nearest" => TextureFilter.Nearest,
+                "pixel" => TextureFilter.Pixel,
+                _ => null,
+            };
+            SetScaleFilter(window, name == "rule" ? null : filter, name == "rule");
+        });
 
         _report.Register(methods, "tinycomp/nightlight", "nightlight {kelvin}", (ref IpcParams p, IpcReply reply) =>
         {

@@ -18,6 +18,7 @@ public sealed class FifoManager : IDisposable, IFrameSink
     private readonly HashSet<Surface> _surfaces = [];
     private readonly Dictionary<Surface, WpFifoV1Resource> _owners = [];
     private readonly List<IOutput> _hooked = [];
+    private readonly Dictionary<IOutput, Action> _frameHandlers = [];
     private readonly List<Surface> _sweep = [];
     private bool _consumerLatches;
     private bool _guardArmed;
@@ -45,7 +46,20 @@ public sealed class FifoManager : IDisposable, IFrameSink
         _clock?.Add(this);
     }
 
-    public void BeginFrame(IOutput output, long predictedVblankNanos) => Latch(predictedVblankNanos);
+    public void BeginFrame(IOutput output, long predictedVblankNanos)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (!_compositor.PresentedSets.AnyRecorded)
+        {
+            Latch(predictedVblankNanos > 0 ? predictedVblankNanos + PresentTiming.Tolerance(output) : 0);
+            return;
+        }
+
+        _consumerLatches = true;
+        _retirements++;
+        Sweep(output, predictedVblankNanos > 0 ? predictedVblankNanos : MonotonicClock.Nanos, latch: true,
+            predictedVblankNanos > 0 ? PresentTiming.GridOf(output) : -1);
+    }
 
     public void EndFrame(IOutput output, long presentedNanos)
     {
@@ -85,7 +99,14 @@ public sealed class FifoManager : IDisposable, IFrameSink
 
         var time = presentationTimeNanos > 0 ? presentationTimeNanos : MonotonicClock.Nanos;
         _sweep.Clear();
-        _sweep.AddRange(_surfaces);
+        foreach (var surface in _surfaces)
+        {
+            if (!surface.PacingHeld)
+            {
+                _sweep.Add(surface);
+            }
+        }
+
         foreach (var surface in _sweep)
         {
             surface.ReleaseParkedCommits(time, refreshCycleCompleted: false);
@@ -103,32 +124,38 @@ public sealed class FifoManager : IDisposable, IFrameSink
     {
         _clock?.Remove(this);
         _layout.Changed -= Rehook;
-        foreach (var output in _hooked)
-        {
-            output.Frame -= OnFrame;
-        }
-
-        _hooked.Clear();
+        Unhook();
         _guard.Remove();
         _global.Dispose();
     }
 
-    private void Rehook()
+    private void Unhook()
     {
         foreach (var output in _hooked)
         {
-            output.Frame -= OnFrame;
+            if (_frameHandlers.Remove(output, out var handler))
+            {
+                output.Frame -= handler;
+            }
         }
 
         _hooked.Clear();
+    }
+
+    private void Rehook()
+    {
+        Unhook();
         foreach (var (output, _) in _layout.Outputs)
         {
-            output.Frame += OnFrame;
+            var target = output;
+            Action handler = () => OnFrame(target);
+            output.Frame += handler;
+            _frameHandlers[output] = handler;
             _hooked.Add(output);
         }
     }
 
-    private void OnFrame()
+    private void OnFrame(IOutput output)
     {
         if (_consumerLatches)
         {
@@ -136,7 +163,68 @@ public sealed class FifoManager : IDisposable, IFrameSink
         }
 
         _retirements++;
-        Sweep(refreshCycleCompleted: true);
+        if (!_compositor.PresentedSets.AnyRecorded)
+        {
+            Sweep(refreshCycleCompleted: true);
+            return;
+        }
+
+        Sweep(output, MonotonicClock.Nanos, latch: false);
+    }
+
+    private void Sweep(IOutput output, long time, bool latch, long grid = -1)
+    {
+        if (_surfaces.Count == 0)
+        {
+            return;
+        }
+
+        _sweep.Clear();
+        foreach (var surface in _surfaces)
+        {
+            if (ReferenceEquals(surface.MainOutput, output) && !surface.PacingHeld)
+            {
+                _sweep.Add(surface);
+            }
+        }
+
+        foreach (var surface in _sweep)
+        {
+            if (surface.ReleaseParkedCommits(time, refreshCycleCompleted: !latch, grid))
+            {
+                surface.NotePacingUse();
+            }
+        }
+
+        if (latch)
+        {
+            foreach (var surface in _sweep)
+            {
+                surface.ClearFifoBarrier();
+            }
+        }
+
+        _sweep.Clear();
+    }
+
+    private void SweepUnowned()
+    {
+        var now = MonotonicClock.Nanos;
+        _sweep.Clear();
+        foreach (var surface in _surfaces)
+        {
+            if (surface.MainOutput is null)
+            {
+                _sweep.Add(surface);
+            }
+        }
+
+        foreach (var surface in _sweep)
+        {
+            surface.ReleaseParkedCommits(now, refreshCycleCompleted: true);
+        }
+
+        _sweep.Clear();
     }
 
     private void OnGuard()
@@ -151,6 +239,14 @@ public sealed class FifoManager : IDisposable, IFrameSink
         {
             _retirements++;
             Sweep(refreshCycleCompleted: true);
+            if (!AnythingParked())
+            {
+                return;
+            }
+        }
+        else if (_compositor.PresentedSets.AnyRecorded)
+        {
+            SweepUnowned();
             if (!AnythingParked())
             {
                 return;

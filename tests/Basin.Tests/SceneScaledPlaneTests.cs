@@ -80,6 +80,24 @@ public sealed class SceneScaledPlaneTests
     }
 
     [Fact]
+    public void A_refused_layer_is_offered_again_once_the_output_changes_its_planes()
+    {
+        using var rig = new Rig();
+        rig.Output.Accept = (_, _) => false;
+        rig.Frame.Matrix = new RenderTransform(0.5, 0, 20, 0, 0.5, 30, 0, 0, 1);
+        rig.Commit(1);
+        rig.Offered.Clear();
+        rig.Commit(3);
+        Assert.Empty(rig.Offered);
+
+        rig.Output.Accept = (_, _) => true;
+        rig.Output.Epoch++;
+        rig.Commit(3);
+        Assert.NotEmpty(rig.Offered);
+        Assert.True(rig.Scene.OffloadCommits > 0);
+    }
+
+    [Fact]
     public void A_layer_refused_in_one_place_is_offered_again_where_it_comes_to_rest()
     {
         using var rig = new Rig(threshold: 3);
@@ -158,6 +176,10 @@ public sealed class SceneScaledPlaneTests
     private sealed class PlaneOutput() : OutputBase("plane-scale-test")
     {
         public Func<OutputLayer, int, bool>? Accept { get; set; }
+
+        public long Epoch { get; set; }
+
+        public override long PlaneEpoch => Epoch;
 
         public List<OutputLayer>? Seen { get; set; }
 

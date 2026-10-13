@@ -59,6 +59,12 @@ internal sealed class DungeonWmSettings
 
     public int CloseMilliseconds { get; set; } = 600;
 
+    public Basin.Scene.SceneFitMode? TakeoverScaler { get; set; }
+
+    public Basin.TextureFilter? TakeoverFilter { get; set; }
+
+    public int TakeoverFrameLimit { get; set; }
+
     public FrameSettings Frames { get; set; } = new();
 
     public float Gravity { get; set; } = 9.81f;

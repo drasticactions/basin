@@ -7,7 +7,9 @@ public sealed class PixmanRenderer : IRenderer
     private readonly Dictionary<IBuffer, TargetEntry> _targets = [];
     private readonly PixmanRenderPass _pass = new();
 
-    public ITexture? ImportTexture(IBuffer buffer) => new PixmanTexture(buffer);
+    public ITexture? ImportTexture(IBuffer buffer) => Supports(buffer.Format) ? new PixmanTexture(buffer) : null;
+
+    public IReadOnlyList<DrmFormat> ShmTextureFormats => ShmFormatLists.Integer;
 
     public static RenderStack CreateStack() => new(new PixmanRenderer(), null);
 
@@ -66,6 +68,8 @@ public sealed class PixmanRenderer : IRenderer
         _pass.DisposeScratch();
     }
 
+    internal static bool Supports(DrmFormat format) => ShmFormatLists.Integer.Contains(format);
+
     internal static PixmanFormat ToPixmanFormat(DrmFormat format) => format switch
     {
         DrmFormat.Argb8888 => PixmanFormat.A8R8G8B8,
@@ -76,6 +80,7 @@ public sealed class PixmanRenderer : IRenderer
         DrmFormat.Xrgb2101010 => PixmanFormat.X2R10G10B10,
         DrmFormat.Abgr2101010 => PixmanFormat.A2B10G10R10,
         DrmFormat.Xbgr2101010 => PixmanFormat.X2B10G10R10,
+        DrmFormat.Rgb565 => PixmanFormat.R5G6B5,
         _ => throw new NotSupportedException($"Format 0x{(uint)format:X8} is not supported by the software renderer."),
     };
 

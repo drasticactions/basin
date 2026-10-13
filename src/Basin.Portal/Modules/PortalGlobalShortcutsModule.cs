@@ -63,7 +63,9 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
             {
                 var description = Vardict.String(properties, "description");
                 var preferred = _options.AcceptPreferredTriggers ? Vardict.String(properties, "preferred_trigger") : "";
-                var info = new GlobalShortcutInfo(session.AppId, id, description, "", preferred);
+                var flags = (Vardict.Bool(properties, "basin.no-block") ? GlobalShortcutFlags.NoBlock : GlobalShortcutFlags.None)
+                    | (Vardict.Bool(properties, "basin.one-shot") ? GlobalShortcutFlags.OneShot : GlobalShortcutFlags.None);
+                var info = new GlobalShortcutInfo(session.AppId, id, description, "", preferred, flags);
                 if (!_registry.TryRegister(in info))
                 {
                     _registry.Unregister(session.AppId, id);

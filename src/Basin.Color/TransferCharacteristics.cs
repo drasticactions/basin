@@ -11,17 +11,27 @@ public readonly struct TransferCharacteristics
 
     public double Gamma => _gamma;
 
+    public double SignalCeiling { get; }
+
+    public double ShaderParameter => _kind == TransferKind.Linear ? SignalCeiling : _gamma;
+
     public double ReferenceLuminance { get; }
 
     public double MaxLuminance { get; }
 
-    private TransferCharacteristics(TransferKind kind, double gamma, double reference, double max)
+    private TransferCharacteristics(TransferKind kind, double gamma, double reference, double max, double ceiling = 1)
     {
         _kind = kind;
         _gamma = gamma;
         ReferenceLuminance = reference;
         MaxLuminance = max;
+        SignalCeiling = ceiling;
     }
+
+    public double PeakLuminance => MaxLuminance * SignalCeiling;
+
+    public bool IsStandardRange =>
+        _kind is TransferKind.Compound24 or TransferKind.Gamma || (_kind == TransferKind.Linear && SignalCeiling <= 1);
 
     public static TransferCharacteristics From(ImageDescription description)
     {
@@ -57,7 +67,8 @@ public readonly struct TransferCharacteristics
 
             case ColorTransferFunction.ExtLinear:
                 reference = reference > 0 ? reference : SdrReferenceLuminance;
-                return new TransferCharacteristics(TransferKind.Linear, 1, reference, max > 0 ? max : reference);
+                return new TransferCharacteristics(
+                    TransferKind.Linear, 1, reference, max > 0 ? max : reference, Math.Max(1, description.SignalCeiling));
 
             case ColorTransferFunction.Gamma22:
                 reference = reference > 0 ? reference : SdrReferenceLuminance;
@@ -76,7 +87,7 @@ public readonly struct TransferCharacteristics
 
     public double Decode(double signal)
     {
-        signal = Math.Clamp(signal, 0, 1);
+        signal = Math.Clamp(signal, 0, _kind == TransferKind.Linear ? SignalCeiling : 1);
         return _kind switch
         {
             TransferKind.Compound24 => Compound24Eotf(signal) * MaxLuminance,
@@ -95,7 +106,7 @@ public readonly struct TransferCharacteristics
         {
             TransferKind.Compound24 => Compound24InverseEotf(Math.Min(1, luminance / MaxLuminance)),
             TransferKind.Gamma => Math.Pow(Math.Min(1, luminance / MaxLuminance), 1.0 / _gamma),
-            TransferKind.Linear => Math.Min(1, luminance / MaxLuminance),
+            TransferKind.Linear => Math.Min(SignalCeiling, luminance / MaxLuminance),
             TransferKind.Pq => PqInverseEotf(luminance),
             TransferKind.Hlg => HlgOetf(Math.Pow(Math.Min(1, luminance / MaxLuminance), 1 / 1.2)),
             _ => Math.Min(1, luminance / MaxLuminance),

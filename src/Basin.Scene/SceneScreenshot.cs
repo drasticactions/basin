@@ -28,7 +28,50 @@ public static class SceneScreenshot
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentException.ThrowIfNullOrEmpty(path);
 
+        var sdr = options.ColorDescription?.TransferNamed is Capabilities.ColorTransferFunction.St2084Pq or Capabilities.ColorTransferFunction.Hlg
+            ? options with { ColorDescription = Capabilities.ImageDescription.SdrDefault, Luts = null }
+            : options;
         var target = new MemoryBuffer(width, height, DrmFormat.Xrgb8888);
+        try
+        {
+            if (!scene.Render(renderer, target, sdr))
+            {
+                return false;
+            }
+
+            if (cursor.Buffer is { } sprite)
+            {
+                DrawCursor(renderer, target, sprite, cursor.Destination);
+            }
+
+            BufferCapture.WritePng(target, path);
+            return true;
+        }
+        finally
+        {
+            target.Destroy();
+        }
+    }
+
+    public static bool Write16(
+        Scene scene,
+        IRenderer renderer,
+        string path,
+        int width,
+        int height,
+        in SceneRenderOptions options,
+        HdrStaticMetadata? hdr = null,
+        in CursorBlit cursor = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(renderer);
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        if (!renderer.RendersHalfFloat)
+        {
+            return false;
+        }
+
+        var target = new MemoryBuffer(width, height, DrmFormat.Abgr16161616f);
         try
         {
             if (!scene.Render(renderer, target, options))
@@ -41,7 +84,12 @@ public static class SceneScreenshot
                 DrawCursor(renderer, target, sprite, cursor.Destination);
             }
 
-            BufferCapture.WritePng(target, path);
+            if (!BufferCapture.TryReadRgb16(target, out var rgb))
+            {
+                return false;
+            }
+
+            File.WriteAllBytes(path, PngCodec.Encode16(rgb, width, height, PngColorChunks.From(options.ColorDescription, hdr)));
             return true;
         }
         finally

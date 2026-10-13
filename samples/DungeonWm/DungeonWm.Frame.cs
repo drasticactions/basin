@@ -66,6 +66,10 @@ internal sealed partial class DungeonWm
         if (_worldOutputs.TryGetValue(view, out var output) && _takeover is null)
         {
             WorldFrameCallbacks.SendVisible(output.Visible, time);
+            if (view.Scene?.Presented is { } presented)
+            {
+                WorldFrameCallbacks.AddPresented(presented, output.Visible);
+            }
         }
 
         if (_frameCallbacks.FloorDue(MonotonicClock.Nanos))

@@ -6,7 +6,7 @@ using Basin.Ipc;
 
 namespace BasinCtl;
 
-internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool detail, int? maxDimension, string? x11Density)
+internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool detail, int? maxDimension, string? x11Density, bool hdr = false)
 {
     private const int Success = 0;
     private const int ErrorReply = 1;
@@ -93,6 +93,19 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
                 return Success;
             case "density" when rest.Length == 2:
                 return await GenericAsync(client, IpcMethodNames.WindowsSetX11Density, [$"id={rest[0]}", $"density={rest[1]}"]).ConfigureAwait(false);
+            case "stats" when rest.Length == 1 && !raw:
+                var stats = await client.StatsAsync(Id(rest[0])).ConfigureAwait(false);
+                Console.WriteLine(
+                    $"commits {stats.CommitsPerSecond}/s  presents {stats.PresentsPerSecond}/s  " +
+                    $"interval {stats.PresentIntervalMeanMs:F2} ms (p99 {stats.PresentIntervalP99Ms:F2})  " +
+                    $"latency {stats.LatencyMeanMs:F2} ms (p99 {stats.LatencyP99Ms:F2})  " +
+                    $"on {stats.Output ?? "-"} at {stats.RefreshMhz / 1000.0:F2} Hz");
+                return Success;
+            case "stats" when rest.Length == 1:
+                return await GenericAsync(client, IpcMethodNames.WindowsStats, [$"id={rest[0]}"]).ConfigureAwait(false);
+            case "frame-limit" when rest.Length == 2:
+                await client.SetFrameLimitAsync(Id(rest[0]), Int(rest[1])).ConfigureAwait(false);
+                return Success;
             case "close" when rest.Length == 1:
                 await client.CloseAsync(Id(rest[0])).ConfigureAwait(false);
                 return Success;
@@ -181,9 +194,16 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
 
     private async Task<int> ShotAsync(BasinIpcClient client, string output, string file)
     {
+        if (hdr && viaFd)
+        {
+            Console.Error.WriteLine("basinctl: --hdr writes the PNG in the compositor, so it does not take --fd");
+            return 1;
+        }
+
         if (!viaFd)
         {
-            var shot = await client.CaptureOutputAsync(output, IpcCaptureTarget.ToPath(file), maxDimension: maxDimension).ConfigureAwait(false);
+            var shot = await client.CaptureOutputAsync(
+                output, IpcCaptureTarget.ToPath(Path.GetFullPath(file)), maxDimension: maxDimension, format: hdr ? "png16" : null).ConfigureAwait(false);
             Console.WriteLine($"{shot.Path} {shot.Width}x{shot.Height}");
             return Success;
         }

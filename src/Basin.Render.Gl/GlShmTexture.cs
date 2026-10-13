@@ -7,6 +7,39 @@ public sealed unsafe class GlShmTexture : ITexture, IRefreshableTexture
 {
     private const uint GlBgraExt = 0x80E1;
 
+    private const uint GlRgba = 0x1908;
+
+    private const uint GlRgb = 0x1907;
+
+    private const uint GlRgba8 = 0x8058;
+
+    private const uint GlRgb10A2 = 0x8059;
+
+    private const uint GlRgb565 = 0x8D62;
+
+    private const uint GlRgba16f = 0x881A;
+
+    private const uint GlUnsignedByte = 0x1401;
+
+    private const uint GlHalfFloat = 0x140B;
+
+    private const uint GlUnsigned2101010Rev = 0x8368;
+
+    private const uint GlUnsignedShort565 = 0x8363;
+
+    public static bool Uploads(DrmFormat format) => Layout(format).BytesPerPixel != 0;
+
+    private static (uint Internal, uint Format, uint Type, int BytesPerPixel, bool SwapRedBlue) Layout(DrmFormat format) => format switch
+    {
+        DrmFormat.Argb8888 or DrmFormat.Xrgb8888 => (GlBgraExt, GlBgraExt, GlUnsignedByte, 4, false),
+        DrmFormat.Abgr8888 or DrmFormat.Xbgr8888 => (GlRgba8, GlRgba, GlUnsignedByte, 4, false),
+        DrmFormat.Abgr2101010 or DrmFormat.Xbgr2101010 => (GlRgb10A2, GlRgba, GlUnsigned2101010Rev, 4, false),
+        DrmFormat.Argb2101010 or DrmFormat.Xrgb2101010 => (GlRgb10A2, GlRgba, GlUnsigned2101010Rev, 4, true),
+        DrmFormat.Abgr16161616f or DrmFormat.Xbgr16161616f => (GlRgba16f, GlRgba, GlHalfFloat, 8, false),
+        DrmFormat.Rgb565 => (GlRgb565, GlRgb, GlUnsignedShort565, 2, false),
+        _ => default,
+    };
+
     private readonly GlDevice _device;
     private readonly IBuffer _buffer;
     private uint _textureId;
@@ -82,21 +115,36 @@ public sealed unsafe class GlShmTexture : ITexture, IRefreshableTexture
                 _textureId = gl.GenTexture();
             }
 
+            var layout = Layout(view.Format);
+            if (layout.BytesPerPixel == 0)
+            {
+                layout = Layout(DrmFormat.Argb8888);
+            }
+
             gl.BindTexture(TextureTarget.Texture2D, _textureId);
-            gl.PixelStore(PixelStoreParameter.UnpackRowLength, view.Stride / 4);
+            if (whole)
+            {
+                var red = layout.SwapRedBlue ? (int)GLEnum.Blue : (int)GLEnum.Red;
+                var blue = layout.SwapRedBlue ? (int)GLEnum.Red : (int)GLEnum.Blue;
+                gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureSwizzleR, red);
+                gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureSwizzleB, blue);
+            }
+
+            gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
+            gl.PixelStore(PixelStoreParameter.UnpackRowLength, view.Stride / layout.BytesPerPixel);
             if (whole)
             {
                 gl.TexImage2D(
                     TextureTarget.Texture2D,
                     0,
-                    (int)GlBgraExt,
+                    (int)layout.Internal,
                     (uint)Width,
                     (uint)Height,
                     0,
-                    (PixelFormat)GlBgraExt,
-                    PixelType.UnsignedByte,
+                    (PixelFormat)layout.Format,
+                    (PixelType)layout.Type,
                     (void*)view.Data);
-                UploadedBytes += (ulong)Width * (ulong)Height * 4;
+                UploadedBytes += (ulong)Width * (ulong)Height * (ulong)layout.BytesPerPixel;
             }
             else
             {
@@ -110,14 +158,15 @@ public sealed unsafe class GlShmTexture : ITexture, IRefreshableTexture
                         box.Y,
                         (uint)box.Width,
                         (uint)box.Height,
-                        (PixelFormat)GlBgraExt,
-                        PixelType.UnsignedByte,
-                        (void*)(view.Data + ((nint)box.Y * view.Stride) + (nint)(box.X * 4)));
-                    UploadedBytes += (ulong)box.Width * (ulong)box.Height * 4;
+                        (PixelFormat)layout.Format,
+                        (PixelType)layout.Type,
+                        (void*)(view.Data + ((nint)box.Y * view.Stride) + (nint)(box.X * layout.BytesPerPixel)));
+                    UploadedBytes += (ulong)box.Width * (ulong)box.Height * (ulong)layout.BytesPerPixel;
                 }
             }
 
             gl.PixelStore(PixelStoreParameter.UnpackRowLength, 0);
+            gl.PixelStore(PixelStoreParameter.UnpackAlignment, 4);
             _uploaded = true;
             _dirty.Clear();
             textureId = _textureId;

@@ -102,7 +102,7 @@ internal static class SkiaDraw
             }
 
             var matrix = ToMatrix(options.Transform);
-            var sampling = options.Filter == TextureFilter.Nearest ? NearestSampling : LinearSampling;
+            var sampling = options.Filter != TextureFilter.Linear ? NearestSampling : LinearSampling;
             if (options.Clip is null)
             {
                 if (transformed)
@@ -187,7 +187,7 @@ internal static class SkiaDraw
             throw new ArgumentException("shader does not sample a texture");
         }
 
-        var sampling = options.Filter == TextureFilter.Nearest ? NearestSampling : LinearSampling;
+        var sampling = options.Filter != TextureFilter.Linear ? NearestSampling : LinearSampling;
         var child = SkiaShaderNative.ImageShader(image.Handle, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, &sampling, null);
         if (child == 0)
         {

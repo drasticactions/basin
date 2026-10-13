@@ -53,7 +53,64 @@ public sealed unsafe class GlRenderer : IRenderer
 
     public string DevicePath => _device.DevicePath;
 
-    public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
+    public DrmFormatSet DmabufTextureFormats => _textureFormats ??= TextureFormats();
+
+    private DrmFormatSet? _textureFormats;
+
+    private GlNvProgram? _nv;
+
+    private DrmFormatSet TextureFormats()
+    {
+        if (!_device.ImportsLinearYuvPlanes)
+        {
+            return _device.SampleableFormats;
+        }
+
+        var formats = new DrmFormatSet();
+        foreach (var format in _device.SampleableFormats.Formats)
+        {
+            foreach (var modifier in _device.SampleableFormats.ModifiersOf(format))
+            {
+                formats.Add(format, modifier);
+            }
+        }
+
+        formats.Add(DrmFormat.Nv12, DrmFormatSet.ModifierLinear);
+        return formats;
+    }
+
+    public IReadOnlyList<DrmFormat> ShmTextureFormats => ShmFormatLists.All;
+
+    private GlYuvConverter? _yuv;
+
+    public bool CanConvertYuv => true;
+
+    public bool RendersHalfFloat => true;
+
+    public bool ConvertToYuv(ITexture source, in FBox sourceBox, IBuffer target, YuvCoefficients coefficients, YuvRange range)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        if (!GlTextures.TryOpen(source, out var view) || view.External)
+        {
+            return false;
+        }
+
+        if (_yuv is null)
+        {
+            Basin.Diagnostics.AllocationScope.Pause();
+            try
+            {
+                _yuv = new GlYuvConverter(_device);
+            }
+            finally
+            {
+                Basin.Diagnostics.AllocationScope.Resume();
+            }
+        }
+
+        return _yuv.Convert(PassVao, view, sourceBox, target, coefficients, range);
+    }
 
     public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
 
@@ -101,6 +158,8 @@ public sealed unsafe class GlRenderer : IRenderer
 
     public RenderFencePrecision FencePrecision => RenderFencePrecision.Context;
 
+    public bool SupportsFilter(TextureFilter filter) => true;
+
     private int _completionFence = -1;
 
     internal void ReplaceCompletionFence(int fd)
@@ -120,12 +179,19 @@ public sealed unsafe class GlRenderer : IRenderer
     {
         if (buffer.TryGetDmabuf(out var attributes))
         {
+            if (attributes.Format == DrmFormat.Nv12)
+            {
+                return DmabufTextureFormats.Contains(DrmFormat.Nv12, attributes.Modifier)
+                    ? GlYuvTexture.TryImport(_device, _nv ??= new GlNvProgram(_device.Gl, PassVao), attributes)
+                    : null;
+            }
+
             return DmabufTextureFormats.Contains(attributes.Format)
                 ? GlDmabufTexture.TryImport(_device, attributes)
                 : null;
         }
 
-        return new GlShmTexture(_device, buffer);
+        return GlShmTexture.Uploads(buffer.Format) ? new GlShmTexture(_device, buffer) : null;
     }
 
     public IColorLut? ImportLut(ColorLut3D lut)
@@ -146,7 +212,7 @@ public sealed unsafe class GlRenderer : IRenderer
                 PixelFormat.Rgb, PixelType.Float, data);
         }
 
-        return new GlColorLut(this, texture);
+        return new GlColorLut(this, texture, lut.ShaperNits);
     }
 
     internal void ReleaseLut(uint texture) => _device.Gl.DeleteTexture(texture);
@@ -201,6 +267,10 @@ public sealed unsafe class GlRenderer : IRenderer
 
     public void Dispose()
     {
+        _yuv?.Dispose();
+        _yuv = null;
+        _nv?.Dispose(_device.Gl);
+        _nv = null;
         foreach (var entry in _targets.Values)
         {
             entry.Dispose(_device);

@@ -426,6 +426,25 @@ public static class CommonOptions
         DefaultValueFactory = _ => "true",
     };
 
+    public static Option<bool> ExitWithCommand() => new("--exit-with-command")
+    {
+        Description = "exit when the -c command's process exits, with its status (implies --subreaper)",
+    };
+
+    public static Option<bool> Subreaper(bool defaultOn = false) => new("--subreaper")
+    {
+        Description = "run the -c command under a reaper that adopts every orphan and ends the whole tree at exit",
+        HelpName = "true|false",
+        Arity = ArgumentArity.ZeroOrOne,
+        DefaultValueFactory = _ => defaultOn,
+    };
+
+    public static Option<int?> ReadyFd() => new("--ready-fd")
+    {
+        Description = "write READY=1 to this file descriptor and close it once the socket listens and every output has presented",
+        HelpName = "FD",
+    };
+
     public static Option<bool> AllocReport() => new("--alloc-report")
     {
         Description = "report what the run allocated, and whether it collected, on stdout at exit",

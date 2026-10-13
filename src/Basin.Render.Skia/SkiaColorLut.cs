@@ -7,9 +7,15 @@ internal sealed class SkiaColorLut : IColorLut
     private const string Sksl = """
         uniform shader atlas;
         uniform float n;
+        uniform float shaper;
+        float3 pq_inverse(float3 nits) {
+            float3 y = pow(clamp(nits / 10000.0, 0.0, 1.0), float3(2610.0 / 16384.0));
+            return pow((3424.0 / 4096.0 + 2413.0 / 4096.0 * 32.0 * y) / (1.0 + 2392.0 / 4096.0 * 32.0 * y), float3(2523.0 / 4096.0 * 128.0));
+        }
         half4 main(half4 c) {
             half a = c.a;
-            half3 s = a > 0.0 ? clamp(c.rgb / a, 0.0, 1.0) : half3(0.0);
+            float3 straight = a > 0.0 ? float3(c.rgb / a) : float3(0.0);
+            half3 s = shaper > 0.0 ? half3(pq_inverse(max(straight, float3(0.0)) * shaper)) : half3(clamp(straight, 0.0, 1.0));
             float3 v = float3(s) * (n - 1.0);
             float b0 = floor(v.z);
             float b1 = min(b0 + 1.0, n - 1.0);
@@ -78,7 +84,7 @@ internal sealed class SkiaColorLut : IColorLut
             ?? throw new InvalidOperationException($"LUT effect failed to compile: {errors}");
         SkiaCensus.Track(effect);
 
-        var uniforms = new SKRuntimeEffectUniforms(effect) { { "n", (float)n } };
+        var uniforms = new SKRuntimeEffectUniforms(effect) { { "n", (float)n }, { "shaper", lut.ShaperNits } };
         var children = new SKRuntimeEffectChildren(effect) { { "atlas", atlasShader } };
         var filter = effect.ToColorFilter(uniforms, children)
             ?? throw new InvalidOperationException("LUT effect rejected its uniforms or children.");

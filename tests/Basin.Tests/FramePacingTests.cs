@@ -509,6 +509,44 @@ public sealed class CommitTimingTests
     }
 
     [Fact]
+    public void A_target_on_a_refresh_multiple_releases_on_that_refresh_when_the_grid_re_anchors_early()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new CommitTimingManager(host.Display, host.Compositor, host.Loop);
+
+        var client = host.Client;
+        var surface = client.Compositor.CreateSurface();
+        Surface? server = null;
+        host.Compositor.SurfaceCreated += s => server ??= s;
+        var timer = BindTiming(host, client).GetTimer(surface);
+
+        var refresh = (long)host.Output.CurrentMode.RefreshIntervalNanoseconds;
+        var oldFlip = MonotonicClock.Nanos + 10_000_000_000;
+        var target = oldFlip + (2 * refresh);
+        FifoTests.Paint(client, surface, 16);
+        SetTimestamp(timer, target);
+        surface.Commit();
+        host.PumpToServer();
+        Assert.True(server!.HasParkedCommits);
+
+        var newFlip = oldFlip + refresh - 400;
+        manager.BeginFrame(host.Output, newFlip);
+        Assert.True(server.HasParkedCommits);
+
+        manager.BeginFrame(host.Output, newFlip + refresh);
+        Assert.Equal(16, server.Current.Width);
+        Assert.False(server.HasParkedCommits);
+    }
+
+    [Fact]
+    public void The_tolerance_is_fifty_microseconds_or_a_hundredth_of_the_interval()
+    {
+        Assert.Equal(50_000, PresentTiming.Tolerance(16_666_666));
+        Assert.Equal(41_666, PresentTiming.Tolerance(4_166_666));
+        Assert.Equal(50_000, PresentTiming.Tolerance(0));
+    }
+
+    [Fact]
     public void A_past_timestamp_applies_immediately()
     {
         using var host = new CompositorTestHost();

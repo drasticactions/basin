@@ -15,9 +15,13 @@ public sealed class TearingControlManager : IDisposable
     private readonly Dictionary<Surface, uint> _hints = [];
     private readonly HashSet<Surface> _claimed = [];
 
-    public TearingControlManager(WlServerDisplay display, CompositorGlobal compositor)
+    private readonly Basin.Capabilities.Defaults.SurfaceHints? _store;
+
+    public TearingControlManager(
+        WlServerDisplay display, CompositorGlobal compositor, Basin.Capabilities.Defaults.SurfaceHints? hints = null)
     {
         _compositor = compositor;
+        _store = hints;
         _global = display.CreateGlobal(WpTearingControlManagerV1.Interface, Version, OnBind);
     }
 
@@ -27,6 +31,27 @@ public sealed class TearingControlManager : IDisposable
 
     public bool PrefersTearing(Surface? surface) =>
         surface is not null && _hints.GetValueOrDefault(surface) == 1;
+
+    private void Apply(Surface surface, uint hint)
+    {
+        if (_hints.TryGetValue(surface, out var current) && current == hint)
+        {
+            return;
+        }
+
+        _hints[surface] = hint;
+        _store?.SetTearing(surface, hint == 1);
+        HintChanged?.Invoke(surface, hint == 1);
+    }
+
+    private sealed class PendingHint(uint hint) : IDisposable
+    {
+        public uint Hint { get; } = hint;
+
+        public void Dispose()
+        {
+        }
+    }
 
     private void OnBind(WlClient client, uint version, uint id)
     {
@@ -46,14 +71,34 @@ public sealed class TearingControlManager : IDisposable
                 return;
             }
 
-            resource.SetPresentationHint += (_, he) =>
+            uint? pending = null;
+            resource.SetPresentationHint += (_, he) => pending = (uint)he.Hint;
+            Action onCommitRequested = () =>
             {
-                _hints[surface] = (uint)he.Hint;
-                HintChanged?.Invoke(surface, (uint)he.Hint == 1);
+                if (pending is { } hint)
+                {
+                    pending = null;
+                    surface.Pending.SetExtension(new PendingHint(hint));
+                }
             };
+            Action onCommitted = () =>
+            {
+                if (surface.Current.TakeExtension<PendingHint>() is { } carried)
+                {
+                    using (carried)
+                    {
+                        Apply(surface, carried.Hint);
+                    }
+                }
+            };
+            surface.CommitRequested += onCommitRequested;
+            surface.Committed += onCommitted;
             resource.Destroyed += (_, _) =>
             {
+                surface.CommitRequested -= onCommitRequested;
+                surface.Committed -= onCommitted;
                 _claimed.Remove(surface);
+                _store?.SetTearing(surface, false);
                 if (_hints.Remove(surface))
                 {
                     HintChanged?.Invoke(surface, false);
@@ -63,6 +108,7 @@ public sealed class TearingControlManager : IDisposable
             {
                 _claimed.Remove(surface);
                 _hints.Remove(surface);
+                _store?.SetTearing(surface, false);
             };
         };
     }

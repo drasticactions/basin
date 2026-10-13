@@ -298,7 +298,6 @@ internal sealed partial class TinyComp :
     private readonly ProcessTracker _processes;
     private readonly List<XWindow> _xwindows = [];
     private readonly Basin.XWayland.XWaylandSceneDriver _xSceneDriver = new();
-    private Basin.Desktop.TearingControlManager _tearing = null!;
     private Basin.Desktop.ContentTypeManager _contentType = null!;
     private IOutputConfiguration? _outputConfiguration;
     private Basin.Color.ColorOutputConfiguration? _colorConfiguration;
@@ -338,6 +337,7 @@ internal sealed partial class TinyComp :
     private readonly bool _fullRepaint;
     private bool _offload;
     private readonly bool _hdr;
+    private Basin.Color.PanelTable _panels = Basin.Color.PanelTable.Empty;
     private readonly Basin.Capabilities.OutputColorProfileSource _colorSource;
     private readonly string? _iccProfile;
     private bool _damageTint;
@@ -365,6 +365,18 @@ internal sealed partial class TinyComp :
     private readonly string? _channelEndpoint;
 
     private readonly string? _init;
+
+    public bool ExitWithCommand { get; set; }
+
+    public bool Subreaper { get; set; }
+
+    public int? ReadyFd
+    {
+        get => _host.ReadyFd;
+        set => _host.ReadyFd = value;
+    }
+
+    private int _exitStatus;
 
     private Basin.Host.InitProcess? _initProcess;
     private Basin.Transport.Waypipe.WaypipeListener? _channels;
@@ -443,8 +455,8 @@ internal sealed partial class TinyComp :
         _config = config;
         _configPath = configPath;
         _init = init;
-        _shortcuts = new TinyCompShortcuts(log);
-        _shortcuts.Configure(config);
+        _shortcuts = new Basin.Hypr.PreferredTriggerShortcuts();
+        ConfigureShortcuts(config);
         var outputCount = config.Outputs;
         var rendererName = config.Renderer;
         _log = log;
@@ -457,6 +469,7 @@ internal sealed partial class TinyComp :
         _offload = config.Offload;
         _nightLightKelvin = config.NightLight;
         _hdr = config.Hdr;
+        _panels = Basin.Color.PanelTable.Load(_log);
         _colorSource = config.ColorSource;
         _damageTint = config.DamageTint;
         _scales = config.Scales;
@@ -582,6 +595,8 @@ internal sealed partial class TinyComp :
             FullRepaint = _fullRepaint,
             DebugDamageTint = _damageTint,
             AllowPlaneOffload = _offload,
+            VrrPacing = config.VrrPacing,
+            AllowTearing = config.AllowTearing,
             NestedName = _ => null,
         };
         WireOutputDriver();
@@ -591,6 +606,7 @@ internal sealed partial class TinyComp :
 
         var servicePack = new Basin.Desktop.DesktopServicePack(_scene, _layout, _renderer, _drm);
         var capturePack = servicePack.Capture;
+        capturePack.Capture.Allocator = _allocator;
         _capture = capturePack.Capture;
         _dmabufCapture = capturePack.DmabufCapture;
         _captureIndex = capturePack.Index;
@@ -609,6 +625,14 @@ internal sealed partial class TinyComp :
             {
                 RefreshOutputColor(edrView);
                 edrView.Scheduler?.ScheduleRepaint();
+            }
+        };
+        _colorConfiguration.DescriptionChanged += output =>
+        {
+            if (Views.FirstOrDefault(v => v.Output == output) is { } colorView)
+            {
+                RefreshOutputColor(colorView);
+                colorView.Scheduler?.ScheduleRepaint();
             }
         };
         _services = _host.CreateServices()
@@ -843,6 +867,7 @@ internal sealed partial class TinyComp :
         }
 
         _color = _colorPack.Manager;
+        _colorPack.Surfaces!.DeclinesInverseToneMapping = surface => FindWindow(surface)?.Quirks.InverseToneMapping == false;
         _compositor.SurfaceCreated += surface => surface.Destroyed += UpdateEdrDemand;
         _colorPack.Surfaces.CountChanged += attached => _report.Line(CompositorLines.Luts(attached));
         foreach (var view in Views)
@@ -852,8 +877,13 @@ internal sealed partial class TinyComp :
         }
 
         _color.SurfaceDescriptionChanged += (_, _) => UpdateEdrDemand();
+        if (_hdr)
+        {
+            _hdrDemand = Basin.Desktop.HdrDemand.Watch(_toplevels, _color, _loop);
+            _hdrDemand.Changed += OnHdrDemandChanged;
+            _hdrShown = _hdrDemand.Demand;
+        }
 
-        _tearing = _services.Require<Basin.Desktop.TearingControlManager>();
         _contentType = _services.Require<Basin.Desktop.ContentTypeManager>();
         _fifo = _services.Require<Basin.Desktop.FifoManager>();
         _frameClock = _services.Require<Basin.Capabilities.IFrameClock>();
@@ -928,6 +958,7 @@ internal sealed partial class TinyComp :
             RaiseHostWindow(window);
         };
         _cursor = new Basin.Desktop.CursorController(_layout) { Capture = _capture };
+        ApplyCursorIdle();
         _cursorShapes = _services.Require<Basin.Desktop.CursorShapeManager>();
         _cursorShapes.CursorRequested += _cursor.ShowImage;
         _cursor.Shapes = _cursorShapes;
@@ -970,6 +1001,7 @@ internal sealed partial class TinyComp :
 
             _backend.ParentGone += () => _runLoop.Stop();
             _backend.PointerAdded += WirePointer;
+            _seat.Pointer.CursorRequested += OnClientCursor;
             _backend.KeyboardAdded += WireKeyboard;
             SetupTouch();
             _touchBinder!.BindParentTouch(_backend);
@@ -1091,19 +1123,33 @@ internal sealed partial class TinyComp :
         {
             _initProcess = Basin.Host.InitProcess.Start(
                 init, _socket, _xwayland?.DisplayName, _log, _xwaylandModule?.ChildEnvironment(),
-                _config.Launch.ForCommand(null, init) is { } density ? _xwaylandModule?.Route(density) : null);
+                _config.Launch.ForCommand(null, init) is { } density ? _xwaylandModule?.Route(density) : null,
+                Subreaper);
+            if (_initProcess is { } started && started.WatchExit(_loop))
+            {
+                started.Exited += status =>
+                {
+                    _report.Line($"COMMAND exited status={status}");
+                    if (ExitWithCommand)
+                    {
+                        _exitStatus = status;
+                        _runLoop.Stop();
+                    }
+                };
+            }
         }
 
         var hangup = _loop.AddSignal(Signal.Hangup, _ => Reload());
         _runLoop.Frames = _frames;
         _runLoop.Run();
         hangup.Remove();
-        return 0;
+        return _exitStatus;
     }
 
     public void Dispose()
     {
         _host.DisconnectClients();
+        _capture.Dispose();
         _initProcess?.Stop(_log);
         _initProcess = null;
         _pointerRefresh?.Dispose();
@@ -1146,6 +1192,10 @@ internal sealed partial class TinyComp :
         _colorPack.Luts.Dispose();
         _driver.Dispose();
 
+        _hdrDemand?.Dispose();
+        _hdrDemand = null;
+        _cursorIdle?.Dispose();
+        _cursorIdle = null;
         _cursor.Dispose();
 
         foreach (var display in _xwaylandModule.Displays)

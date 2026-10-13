@@ -686,19 +686,13 @@ public sealed class PlaneOffloadTests
 
         try
         {
-            if (renderer is "gl")
-            {
-                using var imported = host.Renderer.ImportTexture(client);
-                Assert.SkipWhen(imported is not null, "the renderer imports the memfd stand-in, so the oracle can draw the client");
-            }
-
             output.Accept = (_, _) => true;
             Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
             var layer = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<OutputLayer>>(output.LastCommittedLayers));
             Assert.Equal(new Box(10, 10, 40, 40), layer.DstBox);
 
             host.Scene.Render(host.Renderer, oracle, RenderColor.Black);
-            AssertSameEverywhere(oracle, state.Buffer!);
+            AssertSameEverywhere(oracle, state.Buffer!, layer.DstBox);
         }
         finally
         {
@@ -711,7 +705,7 @@ public sealed class PlaneOffloadTests
         }
     }
 
-    private static unsafe void AssertSameEverywhere(IBuffer oracle, IBuffer primary)
+    private static unsafe void AssertSameEverywhere(IBuffer oracle, IBuffer primary, Box onPlane = default)
     {
         Assert.True(oracle.BeginDataAccess(BufferDataAccess.Read, out var o));
         Assert.True(primary.BeginDataAccess(BufferDataAccess.Read, out var p));
@@ -721,6 +715,11 @@ public sealed class PlaneOffloadTests
             {
                 for (var x = 0; x < oracle.Width; x++)
                 {
+                    if (onPlane.Contains(new Point(x, y)))
+                    {
+                        continue;
+                    }
+
                     var expected = *(uint*)(o.Data + (y * o.Stride) + (x * 4)) & 0xFFFFFFu;
                     var actual = *(uint*)(p.Data + (y * p.Stride) + (x * 4)) & 0xFFFFFFu;
                     if (expected != actual)

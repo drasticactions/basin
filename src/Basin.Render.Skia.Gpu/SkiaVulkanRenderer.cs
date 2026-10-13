@@ -144,7 +144,7 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => _device.SampleableRgbFormats;
 
-    public DrmFormatSet DmabufRenderFormats => _device.RenderableFormats;
+    public DrmFormatSet DmabufRenderFormats => _device.BgraRenderableFormats;
 
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 

@@ -176,6 +176,37 @@ public sealed class CaptureDmabufTests
         host.PumpToServer();
     }
 
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    public void Nv12_is_offered_only_where_the_capture_converts_and_the_dmabuf_global_wraps_it(bool converts, bool wraps, bool offered)
+    {
+        using var host = new CompositorTestHost();
+        using var sources = new ImageCaptureSourceManager(host.Display);
+        var constraints = TestCaptureDmabufConstraints.Typical();
+        constraints.WrapsNv12 = wraps;
+        using var manager = new ImageCopyCaptureManager(
+            host.Display, host.Buffers, new TestScreenCapture(host) { CanCaptureYuv = converts }, constraints);
+
+        var (captureManager, outputSources) = BindImageCopyCapture(host);
+        var source = outputSources.CreateSource(host.Client.Outputs[0]);
+        var session = captureManager.CreateSession(source, 0);
+        var formats = new List<(uint Format, ulong Modifier)>();
+        var done = false;
+        session.DmabufFormat += (_, e) => formats.Add((e.Format, BitConverter.ToUInt64(e.Modifiers)));
+        session.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+
+        Assert.Equal(offered, formats.Contains(((uint)DrmFormat.Nv12, DrmFormatSet.ModifierLinear)));
+
+        session.Dispose();
+        source.Dispose();
+        captureManager.Dispose();
+        outputSources.Dispose();
+        host.PumpToServer();
+    }
+
     [Fact]
     public void A_layout_the_frame_never_offered_fails_instead_of_reaching_the_renderer()
     {

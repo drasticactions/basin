@@ -114,6 +114,12 @@ public sealed class WaylandBackend : IDisposable
         remove => _touchAdded -= value;
     }
 
+    public event Action<WaylandPointerDevice>? PointerRemoved;
+
+    public event Action<WaylandKeyboardDevice>? KeyboardRemoved;
+
+    public event Action<WaylandTouchDevice>? TouchRemoved;
+
     public event Action? ParentGone;
 
     public bool SupportsPointerLock => ParentPointerConstraints is not null && Pointer is not null;
@@ -123,6 +129,16 @@ public sealed class WaylandBackend : IDisposable
     internal bool ParentPresentationClockMatches { get; private set; }
 
     public DrmFormatSet ParentDmabufFormats { get; private set; } = DrmFormatSet.Empty;
+
+    public WpColorManagerV1? ParentColorManager { get; private set; }
+
+    public HashSet<WpColorManagerV1.Feature> ParentColorFeatures { get; } = [];
+
+    public HashSet<WpColorManagerV1.TransferFunction> ParentColorTransfers { get; } = [];
+
+    public HashSet<WpColorManagerV1.Primaries> ParentColorPrimaries { get; } = [];
+
+    public XdgToplevelIconManagerV1? ParentToplevelIcon { get; private set; }
 
     public void Start()
     {
@@ -147,6 +163,8 @@ public sealed class WaylandBackend : IDisposable
         WpPresentation? presentation = null;
         ZwpIdleInhibitManagerV1? idleInhibit = null;
         XdgActivationV1? activation = null;
+        WpColorManagerV1? colorManager = null;
+        XdgToplevelIconManagerV1? toplevelIcon = null;
         var registry = _parent.GetRegistry();
         registry.Global += (_, e) =>
         {
@@ -206,6 +224,15 @@ public sealed class WaylandBackend : IDisposable
                 case "xdg_activation_v1":
                     activation = registry.Bind<XdgActivationV1>(e.Name, 1);
                     break;
+                case "wp_color_manager_v1":
+                    colorManager = registry.Bind<WpColorManagerV1>(e.Name, Math.Min(e.Version, 2));
+                    colorManager.SupportedFeature += (_, ev) => ParentColorFeatures.Add(ev.Feature);
+                    colorManager.SupportedTfNamed += (_, ev) => ParentColorTransfers.Add(ev.Tf);
+                    colorManager.SupportedPrimariesNamed += (_, ev) => ParentColorPrimaries.Add(ev.Primaries);
+                    break;
+                case "xdg_toplevel_icon_manager_v1":
+                    toplevelIcon = registry.Bind<XdgToplevelIconManagerV1>(e.Name, 1);
+                    break;
                 case "zwp_idle_inhibit_manager_v1":
                     idleInhibit = registry.Bind<ZwpIdleInhibitManagerV1>(e.Name, 1);
                     break;
@@ -236,6 +263,8 @@ public sealed class WaylandBackend : IDisposable
         ParentPresentation = presentation;
         ParentIdleInhibit = idleInhibit;
         ParentActivation = activation;
+        ParentColorManager = colorManager;
+        ParentToplevelIcon = toplevelIcon;
         if (seat is not null)
         {
             ParentDataDevice = dataDeviceManager?.GetDataDevice(seat);
@@ -468,6 +497,28 @@ public sealed class WaylandBackend : IDisposable
 
     private void OnSeatCapabilities(WlSeat seat, WlSeat.Capability capabilities)
     {
+        var time = (uint)Environment.TickCount64;
+        if (!capabilities.HasFlag(WlSeat.Capability.Pointer) && Pointer is { } pointer)
+        {
+            Pointer = null;
+            pointer.Remove(time);
+            PointerRemoved?.Invoke(pointer);
+        }
+
+        if (!capabilities.HasFlag(WlSeat.Capability.Keyboard) && Keyboard is { } keyboard)
+        {
+            Keyboard = null;
+            keyboard.Remove(time);
+            KeyboardRemoved?.Invoke(keyboard);
+        }
+
+        if (!capabilities.HasFlag(WlSeat.Capability.Touch) && Touch is { } touch)
+        {
+            Touch = null;
+            touch.Remove();
+            TouchRemoved?.Invoke(touch);
+        }
+
         if (capabilities.HasFlag(WlSeat.Capability.Pointer) && Pointer is null)
         {
             Pointer = new WaylandPointerDevice(this, seat.GetPointer());
@@ -486,6 +537,30 @@ public sealed class WaylandBackend : IDisposable
         {
             Touch = new WaylandTouchDevice(this, seat.GetTouch());
             _touchAdded?.Invoke(Touch);
+        }
+    }
+
+    internal static void ReleaseInputProxy(WlProxy proxy)
+    {
+        if (proxy.IsDestroyed)
+        {
+            return;
+        }
+
+        switch (proxy)
+        {
+            case WlKeyboard keyboard when keyboard.Version >= 3:
+                keyboard.Release();
+                break;
+            case WlPointer pointer when pointer.Version >= 3:
+                pointer.Release();
+                break;
+            case WlTouch touch when touch.Version >= 3:
+                touch.Release();
+                break;
+            default:
+                proxy.Dispose();
+                break;
         }
     }
 

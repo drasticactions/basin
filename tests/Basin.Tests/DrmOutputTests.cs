@@ -325,4 +325,50 @@ public sealed class DrmOutputTests
             frames[1].Destroy();
         }
     }
+
+    [Fact]
+    public void A_rescan_of_an_unchanged_connector_keeps_the_output_and_raises_no_mode_change()
+    {
+        SkipWithoutVkms();
+        using var rig = new Rig();
+        var frame = rig.Frame();
+        try
+        {
+            rig.Enable(frame);
+            rig.PumpUntilFlips(1);
+            var changes = 0;
+            rig.Output.ModesChanged += () => changes++;
+            rig.Backend.RescanConnectors();
+            Assert.Same(rig.Output, rig.Backend.Outputs.First(o => o.Name == rig.Output.Name));
+            Assert.Equal(0, changes);
+        }
+        finally
+        {
+            frame.Destroy();
+        }
+    }
+
+    [Fact]
+    public void A_tearing_frame_flips_with_vsync_where_the_device_has_no_atomic_async_flips()
+    {
+        SkipWithoutVkms();
+        using var rig = new Rig();
+        Assert.SkipWhen(rig.Backend.SupportsAtomicAsync, "this vkms reports atomic async page flips");
+        var frames = new[] { rig.Frame(), rig.Frame() };
+        try
+        {
+            rig.Enable(frames[0]);
+            rig.PumpUntilFlips(1);
+            using var state = new OutputState();
+            Assert.True(rig.Output.Commit(state.SetBuffer(frames[1]).SetTearing(true)));
+            rig.PumpUntilFlips(2);
+            Assert.False(rig.Output.LastFlipWasAsync);
+            Assert.True(rig.Output.IsScanningOut(frames[1]));
+        }
+        finally
+        {
+            frames[0].Destroy();
+            frames[1].Destroy();
+        }
+    }
 }

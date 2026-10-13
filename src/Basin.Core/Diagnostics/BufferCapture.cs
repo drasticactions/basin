@@ -9,6 +9,41 @@ public static class BufferCapture
             ? rgba
             : throw new InvalidOperationException("Buffer has no CPU mapping.");
 
+    public static unsafe bool TryReadRgb16(IBuffer buffer, [NotNullWhen(true)] out ushort[]? rgb)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        rgb = null;
+        if (buffer.Format is not (DrmFormat.Abgr16161616f or DrmFormat.Xbgr16161616f) ||
+            !buffer.BeginDataAccess(BufferDataAccess.Read, out var view))
+        {
+            return false;
+        }
+
+        try
+        {
+            var result = new ushort[buffer.Width * buffer.Height * 3];
+            for (var y = 0; y < buffer.Height; y++)
+            {
+                var row = (Half*)(view.Data + (y * view.Stride));
+                for (var x = 0; x < buffer.Width; x++)
+                {
+                    for (var c = 0; c < 3; c++)
+                    {
+                        var value = Math.Clamp((float)row[(x * 4) + c], 0f, 1f);
+                        result[(((y * buffer.Width) + x) * 3) + c] = (ushort)MathF.Round(value * 65535f);
+                    }
+                }
+            }
+
+            rgb = result;
+            return true;
+        }
+        finally
+        {
+            buffer.EndDataAccess();
+        }
+    }
+
     public static bool TryReadRgba(IBuffer buffer, [NotNullWhen(true)] out byte[]? rgba)
     {
         ArgumentNullException.ThrowIfNull(buffer);

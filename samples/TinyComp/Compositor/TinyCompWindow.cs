@@ -39,6 +39,11 @@ internal sealed partial class TinyComp
                 _fit = new SceneFit(Tree) { Filter = Quirks.ScaleFilter };
                 _fit.Root.Filter = Quirks.ScaleFilter;
                 SceneSurface = new SceneSurface(_fit.Content, toplevel.Surface);
+                if (Quirks.FrameLimit is { } limit)
+                {
+                    comp._services.Find<Basin.Capabilities.IFrameLimits>()?.SetLimit(toplevel.Surface, limit);
+                }
+
                 comp.RefreshSurfaceLuts();
                 comp.ApplyCorners(SceneSurface, CornerRadius);
                 comp.OnWindowMapped(this);
@@ -146,6 +151,9 @@ internal sealed partial class TinyComp
             Basin.Config.LetterboxQuirk.Fit => SceneFitPolicy.Fit,
             Basin.Config.LetterboxQuirk.Center => SceneFitPolicy.Center,
             Basin.Config.LetterboxQuirk.Off => SceneFitPolicy.Off,
+            Basin.Config.LetterboxQuirk.Integer => SceneFitPolicy.Integer,
+            Basin.Config.LetterboxQuirk.Fill => SceneFitPolicy.Fill,
+            Basin.Config.LetterboxQuirk.Stretch => SceneFitPolicy.Stretch,
             _ => SceneFitPolicy.Auto,
         };
 
@@ -525,7 +533,13 @@ internal sealed partial class TinyComp
         {
             _iconName = name;
             RefreshFrame();
+            if (_comp._focused == this)
+            {
+                _comp.UpdateHostIcon();
+            }
         }
+
+        public string? IconName => _iconName ?? (Toplevel.AppId is { Length: > 0 } appId ? appId : null);
 
         public Box FrameBox
         {

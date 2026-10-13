@@ -51,6 +51,7 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         _gl = GL.GetApi(new EglProcContext());
         ImageTargetTexture = (delegate* unmanaged[Cdecl]<uint, void*, void>)EglProc.Load("glEGLImageTargetTexture2DOES");
         SampleableFormats = QuerySampleableFormats();
+        ImportsLinearYuvPlanes = ImportsLinear(DrmFormat.R8) && ImportsLinear(DrmFormat.Gr88);
     }
 
     public string DevicePath { get; }
@@ -58,6 +59,8 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
     public int DrmFd => _deviceFd;
 
     public DrmFormatSet SampleableFormats { get; }
+
+    public bool ImportsLinearYuvPlanes { get; }
 
     public GL Gl => _gl;
 
@@ -140,6 +143,35 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         _egl.Dispose();
         _gbm.Dispose();
         close(_deviceFd);
+    }
+
+    private bool ImportsLinear(DrmFormat format)
+    {
+        var queryModifiers = (delegate* unmanaged[Cdecl]<void*, int, int, ulong*, uint*, int*, uint>)EglProc.Load("eglQueryDmaBufModifiersEXT");
+        var fourcc = (int)(uint)format;
+        var count = 0;
+        if (queryModifiers((void*)_egl.Handle, fourcc, 0, null, null, &count) == 0 || count == 0)
+        {
+            return false;
+        }
+
+        var modifiers = new ulong[count];
+        var external = new uint[count];
+        fixed (ulong* modifiersPtr = modifiers)
+        fixed (uint* externalPtr = external)
+        {
+            queryModifiers((void*)_egl.Handle, fourcc, count, modifiersPtr, externalPtr, &count);
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            if (modifiers[i] == DrmFormatSet.ModifierLinear && external[i] == 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private DrmFormatSet QuerySampleableFormats()

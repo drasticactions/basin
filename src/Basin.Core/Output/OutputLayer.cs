@@ -15,4 +15,10 @@ public sealed class OutputLayer
     public int InFenceFd { get; set; } = -1;
 
     public bool Accepted { get; set; }
+
+    public YuvCoefficients YuvCoefficients { get; set; }
+
+    public YuvRange YuvRange { get; set; }
+
+    public bool YuvEncodingRefused { get; set; }
 }

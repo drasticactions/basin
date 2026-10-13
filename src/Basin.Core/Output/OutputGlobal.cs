@@ -24,6 +24,7 @@ public sealed class OutputGlobal : IDisposable
         _advertised = Snapshot();
         _global = display.CreateGlobal(WlOutput.Interface, Version, OnBind);
         _output.Committed += OnOutputCommitted;
+        _output.ModesChanged += OnModesChanged;
     }
 
     public IOutput Output => _output;
@@ -111,6 +112,7 @@ public sealed class OutputGlobal : IDisposable
         _disposed = true;
         _overrides.Clear();
         _output.Committed -= OnOutputCommitted;
+        _output.ModesChanged -= OnModesChanged;
         _ = ByOutput.TryRemove(new KeyValuePair<IOutput, OutputGlobal>(_output, this));
 
         _global.Dispose();
@@ -166,6 +168,15 @@ public sealed class OutputGlobal : IDisposable
     {
         var (physicalWidth, physicalHeight) = _output.PhysicalSize;
         return (physicalWidth, physicalHeight, _output.CurrentMode, OutputScaling.CeilScale(_output.Scale), _output.Transform, _output.Description);
+    }
+
+    private void OnModesChanged()
+    {
+        _advertised = Snapshot();
+        foreach (var resource in _resources)
+        {
+            SendState(resource, sendName: false, sendDescription: true);
+        }
     }
 
     private void OnOutputCommitted(OutputStateFields fields)

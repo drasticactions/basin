@@ -28,6 +28,24 @@ public sealed record ImageDescription
 
     public byte[]? IccData { get; init; }
 
+    public double SignalCeiling { get; init; } = 1;
+
+    public InverseToneMapping? InverseToneMapping { get; init; }
+
+    public bool DeclinesInverseToneMapping { get; init; }
+
+    public ColorLut3D? Look { get; init; }
+
+    public bool NeedsBakedTable => InverseToneMapping is not null || Look is not null;
+
+    public static ImageDescription WindowsScrgb() => new()
+    {
+        PrimariesNamed = ColorPrimaries.Srgb,
+        TransferNamed = ColorTransferFunction.ExtLinear,
+        Luminances = (0, 80, 203),
+        SignalCeiling = 125,
+    };
+
     public static ImageDescription SdrDefault { get; } = new()
     {
         PrimariesNamed = ColorPrimaries.Srgb,
@@ -59,6 +77,10 @@ public sealed record ImageDescription
                 && x.MasteringLuminance == y.MasteringLuminance
                 && x.MaxCll == y.MaxCll
                 && x.MaxFall == y.MaxFall
+                && x.SignalCeiling == y.SignalCeiling
+                && x.InverseToneMapping == y.InverseToneMapping
+                && x.DeclinesInverseToneMapping == y.DeclinesInverseToneMapping
+                && ReferenceEquals(x.Look, y.Look)
                 && IccEquals(x.IccData, y.IccData);
         }
 
@@ -74,6 +96,10 @@ public sealed record ImageDescription
             hash.Add(description.MasteringLuminance);
             hash.Add(description.MaxCll);
             hash.Add(description.MaxFall);
+            hash.Add(description.SignalCeiling);
+            hash.Add(description.InverseToneMapping);
+            hash.Add(description.DeclinesInverseToneMapping);
+            hash.Add(description.Look);
             if (description.IccData is { } icc)
             {
                 hash.Add(icc.Length);

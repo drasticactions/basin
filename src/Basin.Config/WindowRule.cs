@@ -26,6 +26,10 @@ public class WindowRule
 
     public string[]? WindowTypes { get; init; }
 
+    public bool? WantsFocus { get; init; }
+
+    public bool? SkipTaskbar { get; init; }
+
     public WindowQuirks Quirks { get; init; } = WindowQuirks.None;
 
     public bool HasAppCriteria => AppIds is not null || AppIdRegex is not null || AppIdPrefixes is not null;
@@ -34,7 +38,8 @@ public class WindowRule
 
     public int FactCriteriaCount =>
         (SteamGames is not null ? 1 : 0) + (Processes is not null ? 1 : 0) + (X11Classes is not null ? 1 : 0)
-        + (X11Instances is not null ? 1 : 0) + (WindowTypes is not null ? 1 : 0);
+        + (X11Instances is not null ? 1 : 0) + (WindowTypes is not null ? 1 : 0)
+        + (WantsFocus is not null ? 1 : 0) + (SkipTaskbar is not null ? 1 : 0);
 
     public int Specificity => (HasAppCriteria ? 2 : 0) + (HasTitleCriteria ? 1 : 0) + (4 * FactCriteriaCount);
 
@@ -76,6 +81,16 @@ public class WindowRule
         }
 
         if (X11Instances is not null && !AnyEqual(X11Instances, facts.X11Instance))
+        {
+            return false;
+        }
+
+        if (WantsFocus is { } wantsFocus && facts.WantsFocus != wantsFocus)
+        {
+            return false;
+        }
+
+        if (SkipTaskbar is { } skipTaskbar && facts.SkipTaskbar != skipTaskbar)
         {
             return false;
         }

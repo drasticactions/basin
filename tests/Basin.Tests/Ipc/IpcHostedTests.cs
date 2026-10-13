@@ -233,8 +233,7 @@ public sealed class IpcHostedTests
 
         Assert.Equal(IpcErrorCodes.Refused, ErrorCode(peer.Call("""{"method":"input/text","params":{"text":"x","via":"text-input"}}""")));
         var keymap = Parse(peer.Call("""{"method":"input/text","params":{"text":"aé"}}"""));
-        Assert.Equal(IpcErrorCodes.InvalidParams, keymap.GetProperty("error").GetProperty("code").GetString());
-        Assert.Contains("position 1", keymap.GetProperty("error").GetProperty("message").GetString());
+        Assert.Equal("keymap", keymap.GetProperty("result").GetProperty("via").GetString());
         Assert.Equal("keymap", Parse(peer.Call("""{"method":"input/text","params":{"text":"ab"}}""")).GetProperty("result").GetProperty("via").GetString());
 
         textInput.Enable();

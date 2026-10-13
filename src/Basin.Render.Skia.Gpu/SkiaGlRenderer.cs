@@ -193,6 +193,11 @@ public sealed class SkiaGlRenderer : IRenderer
 
     private TargetEntry ImportTarget(IBuffer target)
     {
+        if (!target.TryGetDmabuf(out _) && target.Format.BytesPerPixel() != 4)
+        {
+            throw new NotSupportedException($"{target.Format} is not a CPU render target format for the Skia GL renderer.");
+        }
+
         var native = GlRenderTarget.Create(_device, target);
         var format = native.IsCpuReadback ? GlRgba8 : GlBgra8;
         var colorType = native.IsCpuReadback ? SKColorType.Rgba8888 : SKColorType.Bgra8888;

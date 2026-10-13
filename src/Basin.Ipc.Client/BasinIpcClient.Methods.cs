@@ -58,6 +58,9 @@ public sealed partial class BasinIpcClient
     public Task ApplyOutputsAsync(IReadOnlyList<IpcOutputChange> changes, CancellationToken cancellationToken = default) =>
         CallAsync(IpcMethodNames.OutputsApply, new IpcOutputsParams(changes), Json.IpcOutputsParams, Json.IpcEmpty, cancellationToken);
 
+    public Task SetOutputLookAsync(string output, string? path, CancellationToken cancellationToken = default) =>
+        CallAsync(IpcMethodNames.OutputsLook, new IpcLookParams(output, path), Json.IpcLookParams, Json.IpcEmpty, cancellationToken);
+
     public Task SetOutputPowerAsync(string output, bool on, CancellationToken cancellationToken = default) =>
         CallAsync(IpcMethodNames.OutputsPower, new IpcPowerParams(output, on), Json.IpcPowerParams, Json.IpcEmpty, cancellationToken);
 
@@ -95,6 +98,12 @@ public sealed partial class BasinIpcClient
             Json.IpcSetStateParams,
             Json.IpcEmpty,
             cancellationToken);
+
+    public Task<IpcFrameStats> StatsAsync(ulong id, CancellationToken cancellationToken = default) =>
+        CallAsync(IpcMethodNames.WindowsStats, new IpcIdParams(id), Json.IpcIdParams, Json.IpcFrameStats, cancellationToken);
+
+    public Task SetFrameLimitAsync(ulong id, int fps, CancellationToken cancellationToken = default) =>
+        CallAsync(IpcMethodNames.WindowsFrameLimit, new IpcFrameLimitParams(id, fps), Json.IpcFrameLimitParams, Json.IpcEmpty, cancellationToken);
 
     public Task MoveAsync(ulong id, int x, int y, CancellationToken cancellationToken = default) =>
         CallAsync(IpcMethodNames.WindowsMove, new IpcMoveParams(id, x, y), Json.IpcMoveParams, Json.IpcEmpty, cancellationToken);
@@ -265,12 +274,13 @@ public sealed partial class BasinIpcClient
         bool cursor = false,
         double scale = 1,
         int? maxDimension = null,
+        string? format = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         return CaptureAsync(
             IpcMethodNames.CaptureOutput,
-            new IpcCaptureOutputParams(target.Wire, output, cursor, maxDimension is null ? scale : null, maxDimension),
+            new IpcCaptureOutputParams(target.Wire, output, cursor, maxDimension is null ? scale : null, maxDimension, format),
             Json.IpcCaptureOutputParams,
             cancellationToken);
     }
@@ -281,12 +291,13 @@ public sealed partial class BasinIpcClient
         bool clientOnly = false,
         double scale = 1,
         int? maxDimension = null,
+        string? format = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         return CaptureAsync(
             IpcMethodNames.CaptureWindow,
-            new IpcCaptureWindowParams(id, target.Wire, clientOnly, null, maxDimension is null ? scale : null, maxDimension),
+            new IpcCaptureWindowParams(id, target.Wire, clientOnly, null, maxDimension is null ? scale : null, maxDimension, format),
             Json.IpcCaptureWindowParams,
             cancellationToken);
     }
@@ -296,12 +307,13 @@ public sealed partial class BasinIpcClient
         IpcCaptureTarget target,
         double scale = 1,
         int? maxDimension = null,
+        string? format = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         return CaptureAsync(
             IpcMethodNames.CaptureRegion,
-            new IpcCaptureRegionParams(region.X, region.Y, region.Width, region.Height, target.Wire, null, maxDimension is null ? scale : null, maxDimension),
+            new IpcCaptureRegionParams(region.X, region.Y, region.Width, region.Height, target.Wire, null, maxDimension is null ? scale : null, maxDimension, format),
             Json.IpcCaptureRegionParams,
             cancellationToken);
     }

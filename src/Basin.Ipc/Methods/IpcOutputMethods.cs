@@ -62,6 +62,35 @@ internal static class IpcOutputMethods
                 IpcWindowMethods.Done(reply, power.SetOn(output, request.On));
             });
         }
+
+        methods.RegisterLibrary(IpcMethodNames.OutputsLook, (ref IpcParams parameters, IpcReply reply) =>
+        {
+            if (parameters.Read(IpcJsonContext.Default.IpcLookParams) is not { } request)
+            {
+                return;
+            }
+
+            if (describe.OutputNamed(request.Output) is not { } output)
+            {
+                reply.Error(IpcErrorCodes.NotFound, $"no output '{request.Output}'");
+                return;
+            }
+
+            if (describe.Looks is not { } looks)
+            {
+                reply.Error(IpcErrorCodes.Unavailable, "this compositor applies no looks");
+                return;
+            }
+
+            var path = string.IsNullOrEmpty(request.Path) ? null : request.Path;
+            if (!looks.SetLook(output, path, out var error))
+            {
+                reply.Error(IpcErrorCodes.Failed, error ?? "the look did not load");
+                return;
+            }
+
+            IpcWrite.Empty(reply);
+        });
     }
 
     private static List<OutputConfigurationEntry>? ReadEntries(ref IpcParams parameters, IpcReply reply, IpcDescribe describe)

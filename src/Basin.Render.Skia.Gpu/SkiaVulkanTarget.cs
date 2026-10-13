@@ -32,6 +32,12 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
         var target = new SkiaVulkanTarget(device);
         uint tiling;
 
+        if (buffer.TryGetDmabuf(out var dmabufAttributes) &&
+            dmabufAttributes.Format is not (DrmFormat.Argb8888 or DrmFormat.Xrgb8888))
+        {
+            throw new NotSupportedException($"{dmabufAttributes.Format} is not a render target format for the Skia Vulkan renderer.");
+        }
+
         if (buffer.TryGetDmabuf(out var attributes) &&
             VulkanDeviceImage.TryImport(
                 device, attributes,
@@ -43,6 +49,11 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
         else if (buffer.BeginDataAccess(BufferDataAccess.Read, out _))
         {
             buffer.EndDataAccess();
+            if (buffer.Format.BytesPerPixel() != 4)
+            {
+                throw new NotSupportedException($"{buffer.Format} is not a CPU render target format for the Skia Vulkan renderer.");
+            }
+
             target.IsCpuReadback = true;
             tiling = SkiaVulkanRenderer.VkImageTilingOptimal;
             var imageInfo = new ImageCreateInfo

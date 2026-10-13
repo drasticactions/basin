@@ -42,6 +42,12 @@ public sealed class PresentationHintTests
         control.SetPresentationHint(Basin.Desktop.Protocol.WpTearingControlV1.PresentationHint.Async);
         var typed = contentProxy!.GetSurfaceContentType(window.Surface);
         typed.SetContentType(Basin.Desktop.Protocol.WpContentTypeV1.Type.Game);
+        host.PumpToServer();
+        Assert.Empty(hints);
+        Assert.Empty(types);
+        Assert.False(tearing.PrefersTearing(window.ServerSurface));
+
+        window.Surface.Commit();
         host.PumpUntil(() => hints.Count == 1 && types.Count == 1);
 
         Assert.True(tearing.PrefersTearing(window.ServerSurface));

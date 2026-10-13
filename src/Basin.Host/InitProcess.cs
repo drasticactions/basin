@@ -21,10 +21,67 @@ public sealed class InitProcess
     private const int SigsetBytes = 128;
 
     private readonly int _pgid;
+    private IEventSource? _exitWatch;
+    private int _pidfd = -1;
 
-    private InitProcess(int pgid) => _pgid = pgid;
+    private InitProcess(int pgid, bool reaped)
+    {
+        _pgid = pgid;
+        Reaped = reaped;
+    }
 
     public int ProcessGroup => _pgid;
+
+    public bool Reaped { get; }
+
+    public int? ExitStatus { get; private set; }
+
+    public event Action<int>? Exited;
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int pidfd_open(int pid, uint flags);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int waitid(int idType, int id, byte[] info, int options);
+
+    [DllImport("libc")]
+    private static extern int close(int fd);
+
+    public bool WatchExit(ICompositorEventLoop loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (_exitWatch is not null)
+        {
+            return true;
+        }
+
+        _pidfd = pidfd_open(_pgid, 0);
+        if (_pidfd < 0)
+        {
+            return false;
+        }
+
+        _exitWatch = loop.AddFd(_pidfd, FdReadiness.Readable, (_, _) => OnExit());
+        return true;
+    }
+
+    private void OnExit()
+    {
+        var info = new byte[128];
+        if (waitid(3, _pidfd, info, 4 | 1) != 0 || BitConverter.ToInt32(info, 16) == 0)
+        {
+            return;
+        }
+
+        var code = BitConverter.ToInt32(info, 8);
+        var status = BitConverter.ToInt32(info, 24);
+        ExitStatus = code == 1 ? status : 128 + status;
+        _exitWatch?.Remove();
+        _exitWatch = null;
+        close(_pidfd);
+        _pidfd = -1;
+        Exited?.Invoke(ExitStatus.Value);
+    }
 
     private const int FileExists = 0;
 
@@ -125,6 +182,16 @@ public sealed class InitProcess
 
     public static InitProcess? Start(
         string command, string socket, string? display, BasinLogger log, IReadOnlyDictionary<string, string>? environment, X11Route? x11)
+        => Start(command, socket, display, log, environment, x11, subreaper: false);
+
+    public static InitProcess? Start(
+        string command,
+        string socket,
+        string? display,
+        BasinLogger log,
+        IReadOnlyDictionary<string, string>? environment,
+        X11Route? x11,
+        bool subreaper)
     {
         if (x11 is not null)
         {
@@ -175,18 +242,22 @@ public sealed class InitProcess
                 attributes,
                 (short)(SpawnSetSid | SpawnSetSigMask | SpawnSetSigDefault));
 
-            argv = Block(["/bin/sh", "-c", command]);
+            List<string> words = subreaper && OperatingSystem.IsLinux()
+                ? [.. ProcessSubreaper.ReaperArgv(["/bin/sh", "-c", command])]
+                : ["/bin/sh", "-c", command];
+            var program = words[0];
+            argv = Block(words);
             envp = Block(EnvironmentBlock(socket, display, environment));
 
             lowered = FileDescriptorLimit.LowerForSpawn();
-            var error = posix_spawn(out var pid, "/bin/sh", IntPtr.Zero, attributes, argv, envp);
+            var error = posix_spawn(out var pid, program, IntPtr.Zero, attributes, argv, envp);
             if (error != 0)
             {
                 log.Error($"failed to run the init executable: {(Marshal.GetPInvokeErrorMessage(error))}");
                 return null;
             }
 
-            return new InitProcess(pid);
+            return new InitProcess(pid, subreaper);
         }
         finally
         {

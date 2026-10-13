@@ -64,6 +64,20 @@ public static class Colorimetry
         return Multiply(inverse, Multiply(scale, bradford));
     }
 
+    public static bool LeavesGamut(double[] matrix)
+    {
+        ArgumentNullException.ThrowIfNull(matrix);
+        foreach (var value in matrix)
+        {
+            if (value < -1e-6)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static double[] Multiply(double[] a, double[] b)
     {
         var result = new double[9];

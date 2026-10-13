@@ -221,6 +221,26 @@ public sealed class WaylandPointerDevice : IParentCursor, IDisposable
         }
     }
 
+    internal void Remove(uint timeMs)
+    {
+        ReleaseHeldButtons(timeMs);
+        var frame = _frame;
+        var inside = _current is not null;
+        _current = null;
+        _frame = null;
+        if (frame is not null)
+        {
+            frame.OnPointerLeave();
+        }
+        else if (inside)
+        {
+            Leave?.Invoke();
+        }
+
+        Dispose();
+        WaylandBackend.ReleaseInputProxy(_pointer);
+    }
+
     internal void AttachRelativePointer(ZwpRelativePointerManagerV1 manager)
     {
         if (_relative is not null)

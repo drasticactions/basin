@@ -2,19 +2,17 @@ using Basin.Diagnostics;
 
 namespace Basin;
 
-internal sealed class ImplicitFence : IDisposable
+internal sealed class ImplicitFence : ISurfaceCommitFence
 {
     private const int Enotty = 25;
 
     private static bool s_reported;
 
-    private readonly Surface _surface;
     private int _fd;
     private IEventSource? _source;
 
-    private ImplicitFence(Surface surface, ICompositorEventLoop loop, int fd)
+    private ImplicitFence(ICompositorEventLoop loop, int fd)
     {
-        _surface = surface;
         _fd = fd;
         _source = loop.AddFd(fd, FdReadiness.Readable, (_, _) => Signal());
         CoreLog.Log.Debug($"a dma-buf commit waits for its implicit fence");
@@ -22,7 +20,11 @@ internal sealed class ImplicitFence : IDisposable
 
     internal static Func<int, (int Fd, int Errno)>? Export { get; set; }
 
-    public static ImplicitFence? For(Surface surface, ICompositorEventLoop loop, IBuffer buffer)
+    public bool Signaled { get; private set; }
+
+    public event Action<ISurfaceCommitFence>? SignaledChanged;
+
+    public static ImplicitFence? For(ICompositorEventLoop loop, IBuffer buffer)
     {
         if (!buffer.TryGetDmabuf(out var attributes))
         {
@@ -75,20 +77,24 @@ internal sealed class ImplicitFence : IDisposable
             }
         }
 
-        return merged < 0 ? null : new ImplicitFence(surface, loop, merged);
+        return merged < 0 ? null : new ImplicitFence(loop, merged);
     }
 
     public void Dispose()
     {
         _source?.Remove();
         _source = null;
-        RenderFences.CloseFence(_fd);
-        _fd = -1;
+        if (_fd >= 0)
+        {
+            RenderFences.CloseFence(_fd);
+            _fd = -1;
+        }
     }
 
     private void Signal()
     {
         Dispose();
-        _surface.OnImplicitFenceSignaled(this);
+        Signaled = true;
+        SignaledChanged?.Invoke(this);
     }
 }

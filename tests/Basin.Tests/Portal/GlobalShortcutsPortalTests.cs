@@ -111,6 +111,32 @@ public sealed class GlobalShortcutsPortalTests
     }
 
     [Fact]
+    public void The_basin_vendor_keys_set_no_block_and_one_shot()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost();
+        var registry = new TestShortcutRegistry();
+        var prompts = new AutoAnswerPrompts { ShortcutTrigger = "LOGO+F9" };
+        using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
+        using var services = Services(host, bus, registry, prompts);
+        PortalBusTests.Await(host, bus.Started);
+        using var frontend = PortalBusTests.Await(host, PortalTestClient.ConnectAsync(daemon.Address, PortalBusTests.BusName, asFrontend: true));
+        var session = new ObjectPath(PortalBus.RootPath + "/session/1_1/gs9");
+        var (response, _) = PortalBusTests.Await(host, frontend.CallSessionImplAsync(Impl, "CreateSession", session, "org.example.Game", []));
+        Assert.Equal(0u, response);
+
+        var passthrough = Shortcut("shot", "Screenshot", "CTRL+ALT+s");
+        passthrough.Item2["basin.no-block"] = VariantValue.Bool(true);
+        var once = Shortcut("once", "Once", "CTRL+ALT+o");
+        once.Item2["basin.one-shot"] = VariantValue.Bool(true);
+        (response, _) = PortalBusTests.Await(host, BindAsync(frontend, session, passthrough, once, Shortcut("plain", "Plain", "CTRL+ALT+p")));
+        Assert.Equal(0u, response);
+        Assert.Equal(GlobalShortcutFlags.NoBlock, registry["org.example.Game", "shot"].Flags);
+        Assert.Equal(GlobalShortcutFlags.OneShot, registry["org.example.Game", "once"].Flags);
+        Assert.Equal(GlobalShortcutFlags.None, registry["org.example.Game", "plain"].Flags);
+    }
+
+    [Fact]
     public void A_trigger_fires_activated_and_deactivated_on_the_owning_session_only()
     {
         using var daemon = PrivateBus.Start();

@@ -4,4 +4,7 @@ public enum SceneFitMode
 {
     Fit,
     Center,
+    Integer,
+    Fill,
+    Stretch,
 }

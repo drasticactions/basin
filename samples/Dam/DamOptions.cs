@@ -29,4 +29,20 @@ internal sealed record DamOptions
     public string[] Application { get; init; } = [];
 
     public IpcChoice Ipc { get; init; } = IpcChoice.Off;
+
+    public SceneFitMode? Scaler { get; init; }
+
+    public TextureFilter? Filter { get; init; }
+
+    public int FrameLimit { get; init; }
+
+    public bool GameContent { get; init; }
+
+    public string? Panels { get; init; }
+
+    public bool InverseToneMapping { get; init; }
+
+    public VrrPacingPolicy VrrPacing { get; init; } = VrrPacingPolicy.Fullscreen;
+
+    public bool Subreaper { get; init; } = true;
 }

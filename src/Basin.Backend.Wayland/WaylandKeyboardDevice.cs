@@ -17,8 +17,11 @@ public sealed class WaylandKeyboardDevice
 
     private readonly List<uint> _held = [];
 
+    private readonly WlKeyboard _keyboard;
+
     internal WaylandKeyboardDevice(WaylandBackend backend, WlKeyboard keyboard)
     {
+        _keyboard = keyboard;
         keyboard.Keymap += (_, e) =>
         {
             var bytes = ReadKeymap(e.Fd, e.Size);
@@ -37,27 +40,11 @@ public sealed class WaylandKeyboardDevice
                 Enter?.Invoke(output);
             }
 
-            var time = (uint)Environment.TickCount64;
-            for (var i = 0; i + 4 <= e.Keys.Length; i += 4)
-            {
-                var key = BitConverter.ToUInt32(e.Keys, i);
-                if (!_held.Contains(key))
-                {
-                    _held.Add(key);
-                    Key?.Invoke(time, key, true);
-                }
-            }
+            ReleaseHeld((uint)Environment.TickCount64);
         };
         keyboard.Leave += (_, _) =>
         {
-            var time = (uint)Environment.TickCount64;
-            for (var i = _held.Count - 1; i >= 0; i--)
-            {
-                var key = _held[i];
-                _held.RemoveAt(i);
-                Key?.Invoke(time, key, false);
-            }
-
+            ReleaseHeld((uint)Environment.TickCount64);
             Leave?.Invoke();
         };
         keyboard.Key += (_, e) =>
@@ -71,9 +58,9 @@ public sealed class WaylandKeyboardDevice
                     _held.Add(e.Key);
                 }
             }
-            else
+            else if (!_held.Remove(e.Key))
             {
-                _held.Remove(e.Key);
+                return;
             }
 
             Key?.Invoke(e.Time, e.Key, pressed);
@@ -93,6 +80,23 @@ public sealed class WaylandKeyboardDevice
     public event Action<uint, uint, bool>? Key;
 
     public event Action<uint, uint, uint, uint>? Modifiers;
+
+    internal void ReleaseHeld(uint timeMs)
+    {
+        for (var i = _held.Count - 1; i >= 0; i--)
+        {
+            var key = _held[i];
+            _held.RemoveAt(i);
+            Key?.Invoke(timeMs, key, false);
+        }
+    }
+
+    internal void Remove(uint timeMs)
+    {
+        ReleaseHeld(timeMs);
+        Leave?.Invoke();
+        WaylandBackend.ReleaseInputProxy(_keyboard);
+    }
 
     private static unsafe byte[]? ReadKeymap(int fd, uint size)
     {

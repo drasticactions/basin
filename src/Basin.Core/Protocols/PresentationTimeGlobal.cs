@@ -66,6 +66,11 @@ public sealed class PresentationTimeGlobal : IDisposable
             return;
         }
 
+        if (surface.PacingIntervalNanos > refreshNanoseconds)
+        {
+            refreshNanoseconds = surface.PacingIntervalNanos;
+        }
+
         var shown = feedback.TakeShown();
         if (WireClock is { } wire && wire.Contains(surface.Resource.Client))
         {
@@ -102,8 +107,10 @@ public sealed class PresentationTimeGlobal : IDisposable
         ulong sequence,
         PresentedFlags flags)
     {
+        var grid = output is null ? 0 : PresentTiming.GridOf(output);
         foreach (var surface in _surfaces.Keys)
         {
+            surface.NotePresented((long)timeNanoseconds, grid);
             Presented(surface, output, timeNanoseconds, refreshNanoseconds, sequence, flags);
         }
     }
@@ -113,6 +120,100 @@ public sealed class PresentationTimeGlobal : IDisposable
         var timeNanoseconds = NowNanoseconds;
         PresentAllCore(
             output, timeNanoseconds, output.CurrentMode.RefreshIntervalNanoseconds, 0, PresentedFlags.Vsync);
+    }
+
+    internal PresentedSet? SetFor(IOutput output) => _compositor.PresentedSets.Find(output);
+
+    internal void SampleOutputCore(IOutput output)
+    {
+        if (SetFor(output) is not { } set)
+        {
+            foreach (var (surface, unowned) in _surfaces)
+            {
+                if (surface.MainOutput is null)
+                {
+                    unowned.Latch();
+                }
+            }
+
+            return;
+        }
+
+        for (var i = 0; i < set.Count; i++)
+        {
+            var surface = set[i];
+            if (set.IsMain(surface) && _surfaces.TryGetValue(surface, out var feedback))
+            {
+                feedback.Latch();
+            }
+        }
+    }
+
+    internal void PresentOutputCore(
+        IOutput output,
+        ulong timeNanoseconds,
+        uint refreshNanoseconds,
+        ulong sequence,
+        PresentedFlags flags)
+    {
+        if (SetFor(output) is not { } set)
+        {
+            if (!_compositor.PresentedSets.AnyRecorded)
+            {
+                PresentAllCore(output, timeNanoseconds, refreshNanoseconds, sequence, flags);
+                return;
+            }
+
+            foreach (var surface in _surfaces.Keys)
+            {
+                if (surface.MainOutput is null)
+                {
+                    Presented(surface, output, timeNanoseconds, refreshNanoseconds, sequence, flags);
+                }
+            }
+
+            return;
+        }
+
+        var grid = PresentTiming.GridOf(output);
+        for (var i = 0; i < set.Count; i++)
+        {
+            var surface = set[i];
+            if (set.IsMain(surface))
+            {
+                surface.NotePresented((long)timeNanoseconds, grid);
+                Presented(surface, output, timeNanoseconds, refreshNanoseconds, sequence, flags);
+            }
+        }
+    }
+
+    internal void PresentOutputNowCore(IOutput output) =>
+        PresentOutputCore(
+            output, NowNanoseconds, output.CurrentMode.RefreshIntervalNanoseconds, 0, PresentedFlags.Vsync);
+
+    internal void DiscardOutputCore(IOutput output)
+    {
+        if (SetFor(output) is not { } set)
+        {
+            foreach (var (surface, unowned) in _surfaces)
+            {
+                if (surface.MainOutput is null)
+                {
+                    unowned.DiscardAll();
+                }
+            }
+
+            return;
+        }
+
+        for (var i = 0; i < set.Count; i++)
+        {
+            var surface = set[i];
+            if (set.IsMain(surface))
+            {
+                Discarded(surface);
+            }
+        }
     }
 
     public void DiscardAll()
@@ -188,6 +289,10 @@ public sealed class PresentationTimeGlobal : IDisposable
             {
                 feedback.Enqueue(carried);
             }
+            else
+            {
+                feedback.DiscardCommitted();
+            }
         };
         surface.Destroyed += () =>
         {
@@ -222,6 +327,11 @@ public sealed class PresentationTimeGlobal : IDisposable
             var seconds = timeNanoseconds / 1_000_000_000;
             var nanoseconds = (uint)(timeNanoseconds % 1_000_000_000);
             var outputs = output is null ? null : OutputGlobal.For(output)?.Resources;
+            var variable = output is { AdaptiveSync: true };
+            if (output is { LastFlipWasAsync: true })
+            {
+                flags &= ~PresentedFlags.Vsync;
+            }
 
             while (_resources.Count > 0)
             {
@@ -248,7 +358,7 @@ public sealed class PresentationTimeGlobal : IDisposable
                     (uint)(seconds >> 32),
                     (uint)seconds,
                     nanoseconds,
-                    refreshNanoseconds,
+                    variable && resource.Version < 2 ? 0u : refreshNanoseconds,
                     (uint)(sequence >> 32),
                     (uint)sequence,
                     (WpPresentationFeedback.Kind)flags);
@@ -292,7 +402,16 @@ public sealed class PresentationTimeGlobal : IDisposable
 
         public void Recycle(PendingFeedback carrier) => _free.Push(carrier);
 
-        public void Enqueue(PendingFeedback carrier) => _committed.Add(carrier);
+        public void Enqueue(PendingFeedback carrier)
+        {
+            foreach (var replaced in _committed)
+            {
+                replaced.Dispose();
+            }
+
+            _committed.Clear();
+            _committed.Add(carrier);
+        }
 
         public void Latch()
         {
@@ -321,6 +440,21 @@ public sealed class PresentationTimeGlobal : IDisposable
             var shown = _shown;
             _shown = null;
             return shown;
+        }
+
+        public void DiscardCommitted()
+        {
+            if (_committed.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var carrier in _committed)
+            {
+                carrier.Dispose();
+            }
+
+            _committed.Clear();
         }
 
         public void DiscardAll()

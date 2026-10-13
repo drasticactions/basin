@@ -36,6 +36,50 @@ public sealed class BasinHost : IDisposable
 
     public WaylandEventLoop Loop { get; }
 
+    public PresentedSets PresentedSets { get; } = new();
+
+    public BasinServices? Services { get; private set; }
+
+    public int? ReadyFd { get; set; }
+
+    public bool Ready { get; private set; }
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern nint write(int fd, byte[] buffer, nuint count);
+
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern int close(int fd);
+
+    public void NotifyReady()
+    {
+        if (Ready)
+        {
+            return;
+        }
+
+        Ready = true;
+        var message = "READY=1\n"u8.ToArray();
+        if (ReadyFd is { } fd && fd >= 0)
+        {
+            _ = write(fd, message, (nuint)message.Length);
+            _ = close(fd);
+        }
+
+        if (Environment.GetEnvironmentVariable("NOTIFY_SOCKET") is { Length: > 0 } path)
+        {
+            try
+            {
+                using var socket = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Unspecified);
+                var endpoint = new System.Net.Sockets.UnixDomainSocketEndPoint(path[0] == '@' ? "\0" + path[1..] : path);
+                socket.SendTo(message.AsSpan(0, message.Length - 1), endpoint);
+            }
+            catch (System.Net.Sockets.SocketException)
+            {
+            }
+        }
+    }
+
     public ISession? Session { get; }
 
     public DrmBackend? Drm { get; }
@@ -98,6 +142,8 @@ public sealed class BasinHost : IDisposable
     {
         var services = new BasinServices(Display, Loop);
         services.UseDefault(frames ?? new FrameClock());
+        services.UseDefault(PresentedSets);
+        Services = services;
         return services;
     }
 

@@ -4,9 +4,10 @@
  * confinement to the square 64,64 128x128. It binds zwp_relative_pointer_manager_v1
  * too, and prints LOCKED, UNLOCKED, CONFINED, UNCONFINED, ENTER X Y, LEAVE,
  * MOTION X Y and RELATIVE DX DY as they arrive. SECONDS ends the run (0 runs until
- * the window is closed).
+ * the window is closed). "hidden" sets a null cursor on every enter, the way a game
+ * hides its pointer.
  *
- *   pointerlock [lock|confine] [SECONDS]
+ *   pointerlock [lock|confine] [hidden] [SECONDS]
  */
 #define _GNU_SOURCE
 #include <stdarg.h>
@@ -30,6 +31,7 @@ static struct zwp_pointer_constraints_v1 *constraints;
 static struct zwp_relative_pointer_manager_v1 *relative_manager;
 static struct wl_surface *surface;
 static int confine;
+static int hidden;
 static int running = 1;
 static int constrained;
 
@@ -101,6 +103,8 @@ static void pointer_enter(void *d, struct wl_pointer *p, uint32_t serial, struct
 {
     (void)d; (void)p; (void)serial; (void)s;
     say("ENTER %.2f %.2f", wl_fixed_to_double(x), wl_fixed_to_double(y));
+    if (hidden)
+        wl_pointer_set_cursor(p, serial, NULL, 0, 0);
 }
 static void pointer_leave(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s) { (void)d; (void)p; (void)serial; (void)s; say("LEAVE"); }
 static void pointer_motion(void *d, struct wl_pointer *p, uint32_t time, wl_fixed_t x, wl_fixed_t y)
@@ -176,6 +180,7 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "confine")) confine = 1;
         else if (!strcmp(argv[i], "lock")) confine = 0;
+        else if (!strcmp(argv[i], "hidden")) hidden = 1;
         else seconds = atol(argv[i]);
     }
 

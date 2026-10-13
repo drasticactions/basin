@@ -4,6 +4,11 @@ outputs       = 1            # --outputs
 scale         = []           # --scale, one entry per output
 background    = "#171a1f"    # desktop color, #rrggbb
 
+# Output pacing for every output.
+[output]
+vrr_pacing    = "fullscreen" # fullscreen | always | never: when a VRR output repaints on arrival
+allow_tearing = true         # honor a fullscreen window's tearing hint
+
 # Per-output settings, by connector name.
 # [output."DP-1"]
 # scale     = 1.5
@@ -46,6 +51,11 @@ source      = "edid"         # edid | srgb | icc
 icc         = ""             # profile path for source = "icc"
 hdr         = false          # HDR output
 night_light = 0              # kelvin, 0 off
+inverse_tone_mapping = false # expand SDR windows on an HDR output (BT.2446a)
+itm_sdr_nits    = 100        # the SDR level that expansion starts from
+itm_target_nits = 1000       # the HDR level that expansion reaches
+look        = "none"         # a .cube LUT applied to the output, or none
+hdr_demand  = false          # drive HDR only while an HDR window shows
 
 [effects]
 # Window animations.
@@ -252,6 +262,13 @@ scale       = "auto"         # the X11 scale: "auto" follows the largest output 
 dpi_buckets = []             # snap the published DPI to the nearest of these, e.g. [72, 96, 160, 240]
 low_density = true           # a second Xwayland at scale 1 and 96 DPI for [[launch]] rules with x11 = "low-density"
 
+[process]
+subreaper = true             # adopt orphans of -c and end the tree at exit; --subreaper beats it
+
+[cursor]
+hide_after_ms = 0            # hide the cursor after this long with no pointer input, 0 is off
+park_pointer  = false        # while hidden, the window under the cursor gets a pointer leave
+
 [touch]
 hide_cursor    = true        # hide the cursor while the touchscreen is used, show it on mouse input
 titlebar_twist = true        # two fingers, one on the titlebar, turn the window
@@ -359,6 +376,8 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 # x11_class   = "Steam"      # the class half of WM_CLASS, X11 only
 # x11_instance = "steamwebhelper"  # the instance half of WM_CLASS, X11 only
 # window_type = "dialog"     # or a list: normal, dialog, utility, splash, ...
+# wants_focus = false        # X11: a window that declines focus (input hint, WS_DISABLED, 1x1, no-activate)
+# skip_taskbar = true        # X11: _NET_WM_STATE_SKIP_TASKBAR
 # frame       = "none"       # beos | flat | metacity | msstyles | quill | none
 # effects     = false        # or per effect: wobbly = false, open = "none"
 # workspace   = 2
@@ -373,12 +392,13 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 # mass       = 2.0           # density
 # gravity    = 0.5           # gravity scale
 # bounce     = 0.8           # restitution
-# letterbox  = "fit"         # fit | center | off: a fullscreen, maximized or tiled window that keeps another size
-# scale_filter = "nearest"   # linear | nearest: how a scaled window is sampled
+# letterbox  = "fit"         # fit | center | integer | fill | stretch | off: a fullscreen, maximized or tiled window that keeps another size
+# scale_filter = "nearest"   # linear | nearest | pixel: how a scaled window is sampled; pixel is vulkan and gl only, nearest elsewhere
 # readiness  = "immediate"   # matching | immediate: X11 only, whether a configure waits for a matching commit
 # force_unmaximize = true    # X11 only: ignore a maximize request at map
 # allow_client_move = true   # X11 only: honor the position in a ConfigureRequest after map
 # emulated_modes = false     # X11 only: ignore a game's RandR mode emulation
+# frame_limit = 60           # tell the window to draw at most this many times a second
 # friction   = 0.1
 
 # Launch rules choose the X server an X11 application starts on. A rule matches

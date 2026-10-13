@@ -10,5 +10,5 @@ public sealed class ContentTypeModule : DesktopModule<ContentTypeManager>
     public override int Version => ContentTypeManager.Version;
 
     protected override ContentTypeManager Create(BasinServices services) =>
-        new(services.Display, services.Require<CompositorGlobal>());
+        new(services.Display, services.Require<CompositorGlobal>(), services.Find<ISurfaceHints>() as SurfaceHints);
 }

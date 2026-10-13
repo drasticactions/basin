@@ -73,7 +73,7 @@ public sealed class PipeWireScreencastPublisherTests
         private readonly PipeWireCore _core;
         private readonly PipeWireStream _stream;
 
-        public Consumer(uint nodeId, int width, int height, ulong[]? dmabufModifiers = null)
+        public Consumer(uint nodeId, int width, int height, ulong[]? dmabufModifiers = null, bool nv12 = false)
         {
             PipeWireLibrary.Init();
             _loop = PipeWireLoop.Create();
@@ -96,6 +96,12 @@ public sealed class PipeWireScreencastPublisherTests
                 var data = buffer[0];
                 DataType = data.DataType;
                 LastFd = data.Fd;
+                DataCount = buffer.DataCount;
+                if (buffer.DataCount >= 2)
+                {
+                    var chroma = buffer[1];
+                    Planes = ((int)data.Fd, data.Offset, data.Stride, (int)chroma.Fd, chroma.Offset, chroma.Stride);
+                }
                 if (data.HasMemory && data.Size >= 4)
                 {
                     var memory = data.Memory;
@@ -148,7 +154,16 @@ public sealed class PipeWireScreencastPublisherTests
             };
             var flags = pw_stream_flags.PW_STREAM_FLAG_AUTOCONNECT;
             byte[][] formats;
-            if (dmabufModifiers is { Length: > 0 })
+            if (nv12)
+            {
+                formats =
+                [
+                    SpaVideoFormats.BuildDmaBuf(
+                        [spa_video_format.SPA_VIDEO_FORMAT_NV12], [DrmFormatSet.ModifierLinear],
+                        ((uint)width, (uint)height), (1, 1), (8192, 8192), dontFixate: false),
+                ];
+            }
+            else if (dmabufModifiers is { Length: > 0 })
             {
                 formats = SpaVideoFormats.BuildDmaBufAndFallback(
                     [spa_video_format.SPA_VIDEO_FORMAT_BGRx, spa_video_format.SPA_VIDEO_FORMAT_BGRA],
@@ -174,6 +189,10 @@ public sealed class PipeWireScreencastPublisherTests
         }
 
         public int Frames { get; private set; }
+
+        public int DataCount { get; private set; }
+
+        public (int LumaFd, uint LumaOffset, int LumaStride, int ChromaFd, uint ChromaOffset, int ChromaStride) Planes { get; private set; }
 
         public List<pw_stream_state> States { get; } = [];
 
@@ -268,6 +287,109 @@ public sealed class PipeWireScreencastPublisherTests
         publisher.Close(7);
         Assert.Equal(0, publisher.StreamCount);
         Assert.False(publisher.TryGetNegotiated(7, out _, out _));
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern nint mmap(nint address, nuint length, int protection, int flags, int fd, long offset);
+
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern int munmap(nint address, nuint length);
+
+    [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    public unsafe void A_consumer_that_asks_for_nv12_gets_bt709_limited_planes(string renderer)
+    {
+        SkipWithoutSessionManager();
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(64, 48, renderer);
+        Assert.SkipWhen(host.DeviceAllocator is null, "no device allocator");
+        _ = new SceneRect(host.Scene.Root, 64, 48, new RenderColor(1f, 0f, 0f, 1f));
+        using var capture = new SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Allocator = host.DeviceAllocator,
+            Background = RenderColor.Black,
+        };
+        Assert.True(capture.CanCaptureYuv);
+        using var publisher = PipeWireScreencastPublisher.TryCreate(host.Loop, capture, host.Layout, host.DeviceAllocator, "basin-test");
+        Assert.NotNull(publisher);
+        var request = new ScreencastRequest { StreamId = 9, Source = CaptureSource.Output(host.Output) };
+        Assert.True(publisher.TryPublish(request, out var info), info.FailureReason);
+
+        using var consumer = new Consumer(info.NodeId, 64, 48, nv12: true);
+        PumpUntil(host, consumer, () => consumer.Streaming);
+        PumpUntil(host, consumer, () => consumer.Frames >= 1);
+        Assert.Equal(spa_data_type.SPA_DATA_DmaBuf, consumer.DataType);
+        Assert.Equal(2, consumer.DataCount);
+
+        var planes = consumer.Planes;
+        var length = (nuint)(planes.ChromaOffset + (planes.ChromaStride * 24));
+        var map = mmap(0, length, 1, 1, planes.LumaFd, 0);
+        Assert.NotEqual(-1, (long)map);
+        try
+        {
+            var expected = YuvConversion.Reference(255, 0, 0, YuvCoefficients.Bt709, YuvRange.Limited);
+            var luma = ((byte*)map)[planes.LumaOffset + (uint)(10 * planes.LumaStride) + 10];
+            var chroma = (byte*)map + planes.ChromaOffset + (5 * planes.ChromaStride) + 10;
+            Assert.InRange(luma, expected.Y - 1, expected.Y + 1);
+            Assert.InRange(chroma[0], expected.Cb - 1, expected.Cb + 1);
+            Assert.InRange(chroma[1], expected.Cr - 1, expected.Cr + 1);
+        }
+        finally
+        {
+            _ = munmap(map, length);
+        }
+
+        publisher.Close(9);
+    }
+
+    [Fact]
+    public void A_frame_whose_capture_failed_is_retried_without_new_damage()
+    {
+        SkipWithoutSessionManager();
+        using var host = new CompositorTestHost(64, 48);
+        _ = new SceneRect(host.Scene.Root, 64, 48, new RenderColor(0f, 0f, 1f, 1f));
+        var capture = new FailingCapture(new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer, Background = RenderColor.Black }, 2);
+        using var publisher = PipeWireScreencastPublisher.TryCreate(host.Loop, capture, host.Layout, clientName: "basin-test");
+        Assert.NotNull(publisher);
+        var request = new ScreencastRequest { StreamId = 11, Source = CaptureSource.Output(host.Output) };
+        Assert.True(publisher.TryPublish(request, out var info), info.FailureReason);
+
+        using var consumer = new Consumer(info.NodeId, 64, 48);
+        PumpUntil(host, consumer, () => consumer.Streaming);
+        PumpUntil(host, consumer, () => consumer.FirstPixel != 0);
+        Assert.Equal(0, capture.Remaining);
+        Assert.Equal(0x000000FFu, consumer.FirstPixel & 0x00FFFFFFu);
+        publisher.Close(11);
+    }
+
+    private sealed class FailingCapture(IScreenCapture inner, int failures) : IScreenCapture
+    {
+        public int Remaining { get; private set; } = failures;
+
+        public bool Supports(in CaptureSource source) => inner.Supports(source);
+
+        public bool TryDescribe(in CaptureSource source, out CaptureFormat format) => inner.TryDescribe(source, out format);
+
+        public bool Capture(in CaptureSource source, in Box region, IBuffer target)
+        {
+            if (Remaining > 0)
+            {
+                Remaining--;
+                return false;
+            }
+
+            return inner.Capture(source, region, target);
+        }
+
+        public bool TryCursorState(IOutput output, out CaptureCursorState cursor) => inner.TryCursorState(output, out cursor);
+
+        public void SetCursor(IBuffer? image, in CaptureCursorState state) => inner.SetCursor(image, state);
+
+        public void AddDamageObserver(ICaptureDamageObserver observer) => inner.AddDamageObserver(observer);
+
+        public void RemoveDamageObserver(ICaptureDamageObserver observer) => inner.RemoveDamageObserver(observer);
     }
 
     [Fact]

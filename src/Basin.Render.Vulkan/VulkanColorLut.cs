@@ -13,9 +13,12 @@ internal sealed unsafe class VulkanColorLut : IColorLut
 
     internal DescriptorSet Set => _allocation.Set;
 
+    internal float ShaperNits { get; }
+
     internal VulkanColorLut(VulkanRenderer renderer, ColorLut3D lut)
     {
         _renderer = renderer;
+        ShaperNits = lut.ShaperNits;
         var vk = renderer.Dev.Api;
         var size = (uint)lut.Size;
 

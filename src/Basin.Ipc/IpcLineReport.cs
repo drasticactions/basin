@@ -85,6 +85,15 @@ public sealed class IpcLineReport
         AddLine(methods, IpcMethodNames.InputKey, "key {code:int} {pressed:bool}");
     }
 
+    public void AddWindowLines(IpcMethodRegistry methods)
+    {
+        AddLine(methods, IpcMethodNames.WindowsFrameLimit, "frame-limit {id} {fps:int}");
+        AddLine(methods, IpcMethodNames.WindowsStats, "stats {id}");
+    }
+
+    public void AddOutputLines(IpcMethodRegistry methods) =>
+        AddLine(methods, IpcMethodNames.OutputsLook, "look {output} [{path}]");
+
     public void AddSessionLines(IpcMethodRegistry methods)
     {
         AddLine(methods, IpcMethodNames.SessionQuit, "quit");

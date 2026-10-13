@@ -22,7 +22,8 @@ public sealed class ColorLutCache : IColorTransformResolver, IDisposable
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(output);
-        if (_renderer.ColorTransform != ColorTransformCapability.Lut3D)
+        if (_renderer.ColorTransform == ColorTransformCapability.None ||
+            (_renderer.ColorTransform == ColorTransformCapability.Decomposed && !output.NeedsBakedTable))
         {
             return null;
         }

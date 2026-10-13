@@ -19,7 +19,9 @@ public sealed class Surface
     private bool _barrierArmed;
     private bool _pendingHold;
     private bool _pendingExplicit;
-    private List<ImplicitFence>? _fences;
+    private List<ISurfaceCommitFence>? _fences;
+    private ISurfaceCommitFence? _pendingFence;
+    private Action<ISurfaceCommitFence>? _onFenceSignaled;
     private bool _holdCleared;
     private bool _destroyed;
     private double _clientScale = 1.0;
@@ -170,8 +172,42 @@ public sealed class Surface
         SubsurfaceRole = null;
     }
 
+    public bool PacingHeld { get; set; }
+
+    public long PacingUses { get; private set; }
+
+    public uint PacingIntervalNanos { get; set; }
+
+    public long PresentAnchorNanos { get; private set; }
+
+    public long PresentAnchorGrid { get; private set; }
+
+    public void NotePresented(long timeNanos, long gridNanos)
+    {
+        PresentAnchorNanos = timeNanos;
+        PresentAnchorGrid = gridNanos;
+    }
+
+    public long LastPacingUseNanos { get; private set; }
+
+    public void NotePacingUse()
+    {
+        PacingUses++;
+        LastPacingUseNanos = MonotonicClock.Nanos;
+    }
+
     public void SendFrameDone(uint timestampMs)
     {
+        if (PacingHeld)
+        {
+            return;
+        }
+
+        if (Current.FrameResources.Count > 0)
+        {
+            NotePacingUse();
+        }
+
         foreach (var resource in Current.FrameResources)
         {
             if (!resource.IsDestroyed)
@@ -188,6 +224,7 @@ public sealed class Surface
             return;
         }
 
+        NotePacingUse();
         foreach (var callback in Current.FrameCallbacks)
         {
             callback.Done(timestampMs);
@@ -415,8 +452,31 @@ public sealed class Surface
 
     public int ParkedForFences => _fences?.Count ?? 0;
 
-    internal void OnImplicitFenceSignaled(ImplicitFence fence)
+    public IOutput? MainOutput => PresentedMain is { Retired: false } main ? main.Output : null;
+
+    internal PresentedSet? PresentedMain { get; set; }
+
+    internal long PresentedMainStamp { get; set; }
+
+    internal PresentedSet? PresentedStampSet { get; set; }
+
+    internal long PresentedStamp { get; set; }
+
+    public void ParkFence(ISurfaceCommitFence fence)
     {
+        ArgumentNullException.ThrowIfNull(fence);
+        if (_pendingFence is not null)
+        {
+            throw new InvalidOperationException("a commit parks on one fence; this commit already has one");
+        }
+
+        _pendingFence = fence;
+    }
+
+    private void OnFenceSignaled(ISurfaceCommitFence fence)
+    {
+        fence.SignaledChanged -= _onFenceSignaled;
+        fence.Dispose();
         _fences?.Remove(fence);
         if (_destroyed || _queue is not { } queue || !queue.ClearFence(fence))
         {
@@ -482,16 +542,25 @@ public sealed class Surface
             reason |= CommitParkReason.CommitTiming;
         }
 
-        ImplicitFence? fence = null;
-        if (!explicitAcquire && _owner.Loop is { } loop
+        var fence = _pendingFence;
+        _pendingFence = null;
+        if (fence is null && !explicitAcquire && _owner.Loop is { } loop
             && (Pending.Committed & SurfaceStateFields.Buffer) != 0 && Pending.Buffer is { } committed)
         {
-            fence = ImplicitFence.For(this, loop, committed);
-            if (fence is not null)
-            {
-                reason |= CommitParkReason.Fence;
-                (_fences ??= []).Add(fence);
-            }
+            fence = ImplicitFence.For(loop, committed);
+        }
+
+        if (fence is { Signaled: true })
+        {
+            fence.Dispose();
+            fence = null;
+        }
+
+        if (fence is not null)
+        {
+            reason |= CommitParkReason.Fence;
+            (_fences ??= []).Add(fence);
+            fence.SignaledChanged += _onFenceSignaled ??= OnFenceSignaled;
         }
 
         if ((reason & DeferredReasons) != 0 || HasParkedCommits)
@@ -512,7 +581,10 @@ public sealed class Surface
         ApplyCachedAndPending();
     }
 
-    public bool ReleaseParkedCommits(long nowNanos, bool refreshCycleCompleted)
+    public bool ReleaseParkedCommits(long nowNanos, bool refreshCycleCompleted) =>
+        ReleaseParkedCommits(nowNanos, refreshCycleCompleted, gridNanos: -1);
+
+    public bool ReleaseParkedCommits(long nowNanos, bool refreshCycleCompleted, long gridNanos)
     {
         _thread.Assert();
 
@@ -533,7 +605,7 @@ public sealed class Surface
 
         var released = false;
 
-        while (queue.TryReleaseReady(nowNanos, !_barrierArmed, _holdCleared, out var state, out var armsBarrier))
+        while (queue.TryReleaseReady(nowNanos, !_barrierArmed, _holdCleared, PresentAnchorNanos, PresentAnchorGrid, gridNanos, out var state, out var armsBarrier))
         {
             released = true;
             ApplyParked(state);
@@ -769,11 +841,15 @@ public sealed class Surface
         {
             foreach (var pendingFence in fences)
             {
+                pendingFence.SignaledChanged -= _onFenceSignaled;
                 pendingFence.Dispose();
             }
 
             fences.Clear();
         }
+
+        _pendingFence?.Dispose();
+        _pendingFence = null;
 
         _queue?.Dispose();
         _queue = null;

@@ -7,6 +7,14 @@ public sealed unsafe class GlRenderTarget
 {
     private byte[]? _readbackScratch;
 
+    private float[]? _wideScratch;
+
+    private bool _wide;
+
+    private bool _swap;
+
+    internal static bool IsWide(DrmFormat format) => format is DrmFormat.Abgr16161616f or DrmFormat.Xbgr16161616f;
+
     private GlRenderTarget()
     {
     }
@@ -38,7 +46,7 @@ public sealed unsafe class GlRenderTarget
         {
             _backdropCopyTexture = gl.GenTexture();
             gl.BindTexture(TextureTarget.Texture2D, _backdropCopyTexture);
-            gl.TexStorage2D(TextureTarget.Texture2D, 1, SizedInternalFormat.Rgba8, (uint)width, (uint)height);
+            gl.TexStorage2D(TextureTarget.Texture2D, 1, _wide ? SizedInternalFormat.Rgba16f : SizedInternalFormat.Rgba8, (uint)width, (uint)height);
             _backdropCopyFbo = gl.GenFramebuffer();
             gl.BindFramebuffer(FramebufferTarget.Framebuffer, _backdropCopyFbo);
             gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, _backdropCopyTexture, 0);
@@ -70,9 +78,57 @@ public sealed unsafe class GlRenderTarget
             device.BindImageToTexture2D(target._image);
             gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, target._textureOrRenderbuffer, 0);
         }
-        else
+        else if (IsWide(buffer.Format))
         {
             target.IsCpuReadback = true;
+            target._wide = true;
+            target._wideScratch = new float[buffer.Width * buffer.Height * 4];
+            target._textureOrRenderbuffer = gl.GenTexture();
+            gl.BindTexture(TextureTarget.Texture2D, target._textureOrRenderbuffer);
+            gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+            gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+            if (buffer.BeginDataAccess(BufferDataAccess.Read, out var seed))
+            {
+                try
+                {
+                    var rows = new byte[buffer.Width * buffer.Height * 8];
+                    for (var y = 0; y < buffer.Height; y++)
+                    {
+                        new ReadOnlySpan<byte>((byte*)(seed.Data + y * seed.Stride), buffer.Width * 8)
+                            .CopyTo(rows.AsSpan(y * buffer.Width * 8));
+                    }
+
+                    fixed (byte* rowsPtr = rows)
+                    {
+                        gl.TexImage2D(
+                            TextureTarget.Texture2D, 0, InternalFormat.Rgba16f,
+                            (uint)buffer.Width, (uint)buffer.Height, 0,
+                            PixelFormat.Rgba, PixelType.HalfFloat, rowsPtr);
+                    }
+                }
+                finally
+                {
+                    buffer.EndDataAccess();
+                }
+            }
+            else
+            {
+                gl.TexStorage2D(TextureTarget.Texture2D, 1, SizedInternalFormat.Rgba16f, (uint)buffer.Width, (uint)buffer.Height);
+            }
+
+            gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, target._textureOrRenderbuffer, 0);
+        }
+        else
+        {
+            if (buffer.Format is not (DrmFormat.Argb8888 or DrmFormat.Xrgb8888 or DrmFormat.Abgr8888 or DrmFormat.Xbgr8888))
+            {
+                gl.DeleteFramebuffer(target.Framebuffer);
+                throw new NotSupportedException($"{buffer.Format} is not a CPU render target format for the GL renderer.");
+            }
+
+            target.IsCpuReadback = true;
+            target._swap = buffer.Format is DrmFormat.Argb8888 or DrmFormat.Xrgb8888;
+            var swap = target._swap;
             target._readbackScratch = new byte[buffer.Width * buffer.Height * 4];
             target._textureOrRenderbuffer = gl.GenTexture();
             gl.BindTexture(TextureTarget.Texture2D, target._textureOrRenderbuffer);
@@ -89,9 +145,9 @@ public sealed unsafe class GlRenderTarget
                         var destination = y * buffer.Width * 4;
                         for (var x = 0; x < buffer.Width; x++)
                         {
-                            scratch[destination + x * 4 + 0] = row[x * 4 + 2];
+                            scratch[destination + x * 4 + 0] = row[x * 4 + (swap ? 2 : 0)];
                             scratch[destination + x * 4 + 1] = row[x * 4 + 1];
-                            scratch[destination + x * 4 + 2] = row[x * 4 + 0];
+                            scratch[destination + x * 4 + 2] = row[x * 4 + (swap ? 0 : 2)];
                             scratch[destination + x * 4 + 3] = row[x * 4 + 3];
                         }
                     }
@@ -132,6 +188,27 @@ public sealed unsafe class GlRenderTarget
         {
             var gl = device.Gl;
             gl.BindFramebuffer(FramebufferTarget.Framebuffer, Framebuffer);
+            if (_wide)
+            {
+                var wide = _wideScratch!;
+                fixed (float* widePtr = wide)
+                {
+                    gl.ReadPixels(0, 0, (uint)target.Width, (uint)target.Height, PixelFormat.Rgba, PixelType.Float, widePtr);
+                }
+
+                for (var y = 0; y < target.Height; y++)
+                {
+                    var row = (Half*)(view.Data + y * view.Stride);
+                    var src = y * target.Width * 4;
+                    for (var i = 0; i < target.Width * 4; i++)
+                    {
+                        row[i] = (Half)wide[src + i];
+                    }
+                }
+
+                return;
+            }
+
             var scratch = _readbackScratch!;
             fixed (byte* scratchPtr = scratch)
             {
@@ -144,9 +221,9 @@ public sealed unsafe class GlRenderTarget
                 var src = y * target.Width * 4;
                 for (var x = 0; x < target.Width; x++)
                 {
-                    row[x * 4 + 0] = scratch[src + x * 4 + 2];
+                    row[x * 4 + 0] = scratch[src + x * 4 + (_swap ? 2 : 0)];
                     row[x * 4 + 1] = scratch[src + x * 4 + 1];
-                    row[x * 4 + 2] = scratch[src + x * 4 + 0];
+                    row[x * 4 + 2] = scratch[src + x * 4 + (_swap ? 0 : 2)];
                     row[x * 4 + 3] = scratch[src + x * 4 + 3];
                 }
             }

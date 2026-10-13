@@ -57,6 +57,7 @@ public static class DesktopPack
             new TearingControlModule(),
             new FifoModule(),
             new CommitTimingModule(),
+            new GamescopeLimiterModule(),
             new PointerWarpModule(),
             new SessionManagementModule(appName),
             new ContentTypeModule(),

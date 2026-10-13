@@ -41,6 +41,10 @@ internal sealed class Config
 
     public bool HideCursorOnTouch { get; set; } = true;
 
+    public int CursorHideAfterMs { get; set; }
+
+    public bool CursorParkPointer { get; set; }
+
     public bool TitlebarTwist { get; set; } = true;
 
     public int WindowTwistFingers { get; set; } = 3;
@@ -104,6 +108,22 @@ internal sealed class Config
     public bool Hdr { get; set; }
 
     public double? NightLight { get; set; }
+
+    public bool InverseToneMapping { get; set; }
+
+    public double ItmSdrNits { get; set; } = 100;
+
+    public double ItmTargetNits { get; set; } = 1000;
+
+    public string? Look { get; set; }
+
+    public bool HdrDemand { get; set; }
+
+    public Basin.Host.VrrPacingPolicy VrrPacing { get; set; } = Basin.Host.VrrPacingPolicy.Fullscreen;
+
+    public bool AllowTearing { get; set; } = true;
+
+    public bool? ProcessSubreaper { get; set; }
 
     public bool Wobbly { get; set; }
 
@@ -543,6 +563,17 @@ internal sealed class Config
             Hdr = color.Flag("hdr", Hdr);
             var kelvin = color.Number("night_light", 0.0);
             NightLight = kelvin > 0 ? kelvin : null;
+            InverseToneMapping = color.Flag("inverse_tone_mapping", InverseToneMapping);
+            ItmSdrNits = color.Number("itm_sdr_nits", ItmSdrNits);
+            ItmTargetNits = color.Number("itm_target_nits", ItmTargetNits);
+            if (ItmSdrNits <= 0 || ItmTargetNits <= ItmSdrNits)
+            {
+                log.Warn($"[color] itm_sdr_nits {ItmSdrNits} and itm_target_nits {ItmTargetNits} need 0 < sdr < target, using 100 and 1000");
+                (ItmSdrNits, ItmTargetNits) = (100, 1000);
+            }
+
+            Look = color.Text("look") is { Length: > 0 } look && look != "none" ? look : null;
+            HdrDemand = color.Flag("hdr_demand", HdrDemand);
             if (ColorSource == OutputColorProfileSource.Icc && IccProfile is null)
             {
                 log.Warn($"[color] source = \"icc\" names no profile in [color] icc, describing the outputs from their EDID");
@@ -654,6 +685,12 @@ internal sealed class Config
             XWaylandLowDensity = xwayland.Flag("low_density", XWaylandLowDensity);
         }
 
+        if (reader.Section("cursor") is { } cursor)
+        {
+            CursorHideAfterMs = Math.Max(0, cursor.Number("hide_after_ms", CursorHideAfterMs));
+            CursorParkPointer = cursor.Flag("park_pointer", CursorParkPointer);
+        }
+
         if (reader.Section("touch") is { } touch)
         {
             HideCursorOnTouch = touch.Flag("hide_cursor", HideCursorOnTouch);
@@ -712,12 +749,31 @@ internal sealed class Config
             Shortcuts = ParseShortcuts(shortcuts, "shortcuts", log);
         }
 
+        if (reader.Section("process") is { } process && process.Table.ContainsKey("subreaper"))
+        {
+            ProcessSubreaper = process.Flag("subreaper", true);
+        }
+
         if (reader.Free("output") is { } outputs)
         {
             var parsed = new Dictionary<string, OutputSetting>(StringComparer.Ordinal);
             foreach (var (name, value) in outputs)
             {
-                if (value is TomlTable table)
+                if (name == "vrr_pacing" && value is string pacing)
+                {
+                    VrrPacing = pacing switch
+                    {
+                        "always" => Basin.Host.VrrPacingPolicy.Always,
+                        "never" => Basin.Host.VrrPacingPolicy.Never,
+                        "fullscreen" => Basin.Host.VrrPacingPolicy.Fullscreen,
+                        _ => Warned(log, $"[output] vrr_pacing \"{pacing}\" is not fullscreen, always or never", VrrPacing),
+                    };
+                }
+                else if (name == "allow_tearing" && value is bool tearing)
+                {
+                    AllowTearing = tearing;
+                }
+                else if (value is TomlTable table)
                 {
                     parsed[name] = ParseOutputSetting(name, table, log);
                 }
@@ -749,6 +805,12 @@ internal sealed class Config
 
         reader.ReportUnknown();
         WarnOverviewAgainstCanvas(log);
+    }
+
+    private static T Warned<T>(BasinLogger log, string message, T kept)
+    {
+        log.Warn($"{message}");
+        return kept;
     }
 
     private static readonly string[] StepIgnoredKeys =
@@ -893,8 +955,10 @@ internal sealed class Config
         var x11Classes = WindowRule.Strings(table, "x11_class");
         var x11Instances = WindowRule.Strings(table, "x11_instance");
         var windowTypes = WindowRule.Strings(table, "window_type");
+        bool? wantsFocus = table.TryGetValue("wants_focus", out var wantsFocusValue) && wantsFocusValue is bool wants ? wants : null;
+        bool? skipTaskbar = table.TryGetValue("skip_taskbar", out var skipTaskbarValue) && skipTaskbarValue is bool skips ? skips : null;
         if (appIds is null && titleRegex is null && steamGames is null && processes is null
-            && x11Classes is null && x11Instances is null && windowTypes is null)
+            && x11Classes is null && x11Instances is null && windowTypes is null && wantsFocus is null && skipTaskbar is null)
         {
             log.Warn($"a [[rule]] naming no match key is dropped");
             return null;
@@ -921,6 +985,8 @@ internal sealed class Config
             X11Classes = x11Classes,
             X11Instances = x11Instances,
             WindowTypes = windowTypes,
+            WantsFocus = wantsFocus,
+            SkipTaskbar = skipTaskbar,
             FrameStyle = Text("frame") switch
             {
                 "beos" => global::TinyComp.FrameStyle.Beos,

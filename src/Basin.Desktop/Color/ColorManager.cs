@@ -268,6 +268,8 @@ public sealed class ColorManager : IDisposable
         return _outputs.Count > 0 ? _outputs.Values.First() : ImageDescription.SdrDefault;
     }
 
+    private bool OffersScrgb => SupportedTransferFunctions.Contains(ColorTransferFunction.ExtLinear);
+
     private void OnBind(WlClient client, uint version, uint id)
     {
         var manager = new WpColorManagerV1Resource(client, version, id);
@@ -287,6 +289,11 @@ public sealed class ColorManager : IDisposable
         manager.SendSupportedFeature(WpColorManagerV1.Feature.SetTfPower);
         manager.SendSupportedFeature(WpColorManagerV1.Feature.SetLuminances);
         manager.SendSupportedFeature(WpColorManagerV1.Feature.SetMasteringDisplayPrimaries);
+        if (OffersScrgb)
+        {
+            manager.SendSupportedFeature(WpColorManagerV1.Feature.WindowsScrgb);
+        }
+
         foreach (var tf in SupportedTransferFunctions)
         {
             if (tf == ColorTransferFunction.CompoundPower24 && manager.Version < 2)
@@ -326,7 +333,15 @@ public sealed class ColorManager : IDisposable
             }
         };
         manager.CreateWindowsScrgb += (_, e) =>
-            manager.PostError(ManagerErrorUnsupportedFeature, "windows_scrgb is not offered");
+        {
+            if (!OffersScrgb)
+            {
+                manager.PostError(ManagerErrorUnsupportedFeature, "windows_scrgb is not offered");
+                return;
+            }
+
+            DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, e.ImageDescription), ImageDescription.WindowsScrgb(), allowInformation: false);
+        };
         manager.CreateWindowsBt2100 += (_, e) =>
             manager.PostError(ManagerErrorUnsupportedFeature, "windows_bt2100 is not offered");
 

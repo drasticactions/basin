@@ -10,5 +10,5 @@ public sealed class TearingControlModule : DesktopModule<TearingControlManager>
     public override int Version => TearingControlManager.Version;
 
     protected override TearingControlManager Create(BasinServices services) =>
-        new(services.Display, services.Require<CompositorGlobal>());
+        new(services.Display, services.Require<CompositorGlobal>(), services.Find<ISurfaceHints>() as SurfaceHints);
 }

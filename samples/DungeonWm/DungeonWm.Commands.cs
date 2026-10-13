@@ -70,6 +70,7 @@ internal sealed partial class DungeonWm
     private void RegisterCommands(IpcMethodRegistry methods)
     {
         _report.AddInputLines(methods);
+        _report.AddWindowLines(methods);
         _report.AddSessionLines(methods);
 
         _report.Register(methods, "dungeonwm/shot", "shot {path}",

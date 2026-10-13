@@ -79,6 +79,16 @@ open_ms = 600
 # Milliseconds a closed window takes to fade once it lands. 0 removes it at once.
 close_ms = 600
 
+[takeover]
+# A window that keeps another size than the output during a takeover: off places it
+# at the output's corner, fit scales it to fit, integer by whole steps, fill to cover
+# and crop, stretch to the output's shape.
+scaler = "off"
+# How a scaled window is sampled: linear, nearest, or pixel for sharp pixel edges.
+filter = "linear"
+# Frames a second the window draws at most during a takeover. 0 is no limit.
+frame_limit = 0
+
 [frames]
 # Hang every window in a picture frame with a plaque under it.
 enabled = true

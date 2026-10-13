@@ -38,6 +38,46 @@ public sealed class SeatBinder
         _layout = layout;
         _pointer = pointer;
         _cursor = cursor;
+        seat.Pointer.CursorRequested += request =>
+        {
+            _clientCursorHidden = request.Surface is null;
+            UpdateConfineLock();
+        };
+    }
+
+    private bool _clientCursorHidden;
+    private bool _confineLock;
+
+    public Func<Surface, bool>? ConfineLockAllowed { get; set; }
+
+    public bool ConfineLocked => _confineLock;
+
+    private bool WantsConfineLock(PointerConstraint? constraint) =>
+        constraint is { Kind: ConstraintKind.Confine, IsActive: true } && _clientCursorHidden &&
+        (ConfineLockAllowed?.Invoke(constraint.Surface) ?? true);
+
+    private void UpdateConfineLock()
+    {
+        if (ParentLock is not { } parentLock || _constraints is not { } owner)
+        {
+            return;
+        }
+
+        var wanted = WantsConfineLock(owner.Active);
+        if (wanted == _confineLock)
+        {
+            return;
+        }
+
+        if (wanted && _layout.OutputAt(_pointer.X, _pointer.Y) is WaylandOutput output)
+        {
+            _confineLock = parentLock.Request(owner, output);
+        }
+        else if (!wanted)
+        {
+            _confineLock = false;
+            parentLock.Release(owner, _pointer.X, _pointer.Y);
+        }
     }
 
     public DrmBackend? Drm { get; set; }
@@ -305,6 +345,9 @@ public sealed class SeatBinder
         parent.KeyboardAdded += BindParentKeyboard;
         parent.PointerAdded += BindParentPointer;
         parent.TouchAdded += BindParentTouch;
+        parent.KeyboardRemoved += _ => _seat.SetCapability(SeatCapability.Keyboard, _keyboards > 0);
+        parent.PointerRemoved += _ => _seat.SetCapability(SeatCapability.Pointer, _pointers > 0);
+        parent.TouchRemoved += _ => _seat.SetCapability(SeatCapability.Touch, _touchDevices > 0);
     }
 
     internal bool InjectTouchDown(uint timeMs, int id, double x, double y)
@@ -572,6 +615,16 @@ public sealed class SeatBinder
         {
             var timeMs = (uint)(microseconds / 1000);
             SendRelative(timeMs, dx, dy, unacceleratedDx, unacceleratedDy);
+            if (_confineLock && ParentLock?.IsLocked == true && _constraints is { Active.Kind: ConstraintKind.Confine } confining)
+            {
+                var targetX = _pointer.X + dx;
+                var targetY = _pointer.Y + dy;
+                confining.Constrain(_pointer.X, _pointer.Y, ref targetX, ref targetY);
+                _pointer.Warp(targetX, targetY);
+                Motion?.Invoke(timeMs, dx, dy, unacceleratedDx, unacceleratedDy);
+                return;
+            }
+
             if (Relative() && _constraints is not { IsLocked: true })
             {
                 Motion?.Invoke(timeMs, dx, dy, unacceleratedDx, unacceleratedDy);
@@ -674,12 +727,16 @@ public sealed class SeatBinder
             return;
         }
 
-        if (next is { Kind: ConstraintKind.Lock } && _layout.OutputAt(_pointer.X, _pointer.Y) is WaylandOutput output)
+        var confine = WantsConfineLock(next);
+        if ((next is { Kind: ConstraintKind.Lock } || confine) &&
+            _layout.OutputAt(_pointer.X, _pointer.Y) is WaylandOutput output)
         {
-            parentLock.Request(owner, output);
+            var granted = parentLock.Request(owner, output);
+            _confineLock = confine && granted;
         }
         else
         {
+            _confineLock = false;
             parentLock.Release(owner, releaseX, releaseY);
         }
     }

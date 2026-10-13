@@ -27,6 +27,14 @@ internal sealed class DamViews
 
     public IReadOnlyList<DamView> Views => _views;
 
+    public SceneFitMode? Scaler { get; init; }
+
+    public TextureFilter? Filter { get; init; }
+
+    public int FrameLimit { get; init; }
+
+    public Basin.Capabilities.IFrameLimits? Limits { get; init; }
+
     public DamView? FocusedView
     {
         get
@@ -178,6 +186,17 @@ internal sealed class DamViews
         var x = filled ? layout.X : (layout.Width - width) / 2;
         var y = filled ? layout.Y : (layout.Height - height) / 2;
         view.Placed = (width, height);
+        if (view.Fit is { } fit)
+        {
+            var scales = view.IsPrimary && (width, height) != (layout.Width, layout.Height);
+            fit.Update(
+                scales ? new Box(layout.X, layout.Y, layout.Width, layout.Height) : new Box(x, y, width, height),
+                (width, height),
+                scales ? Scaler : null);
+            view.Scene.Tree.SetPosition(0, 0);
+            return;
+        }
+
         view.Scene.Tree.SetPosition(x, y);
     }
 
@@ -203,9 +222,10 @@ internal sealed class DamViews
 
     private void OnNewToplevel(XdgToplevelWindow window)
     {
-        var scene = new SceneSurface(_scene.Root, window.Surface);
+        var fit = Scaler is null ? null : new SceneFit(_scene.Root) { Filter = Filter };
+        var scene = new SceneSurface(fit?.Content ?? _scene.Root, window.Surface);
         scene.Tree.Enabled = false;
-        var view = new DamView(window, scene);
+        var view = new DamView(window, scene) { Fit = fit };
         var initialized = false;
 
         window.WmCapabilities = XdgWmCapabilities.Fullscreen;
@@ -244,6 +264,16 @@ internal sealed class DamViews
         window.Xdg.Mapped += () =>
         {
             scene.Tree.Enabled = true;
+            if (fit is not null)
+            {
+                fit.Root.Enabled = true;
+            }
+
+            if (view.IsPrimary && FrameLimit > 0)
+            {
+                Limits?.SetLimit(window.Surface, FrameLimit);
+            }
+
             Position(view);
             _views.Insert(0, view);
             _owners[window.Surface] = view;
@@ -264,11 +294,17 @@ internal sealed class DamViews
         window.Xdg.Unmapped += () =>
         {
             scene.Tree.Enabled = false;
+            if (fit is not null)
+            {
+                fit.Root.Enabled = false;
+            }
+
             _views.Remove(view);
             _owners.Remove(window.Surface);
         };
         window.Destroyed += () =>
         {
+            fit?.Destroy();
             _views.Remove(view);
             _owners.Remove(window.Surface);
             if (_views.Count > 0)

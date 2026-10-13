@@ -16,6 +16,17 @@ public sealed class WorldFrameCallbacks
         }
     }
 
+    public static void AddPresented(PresentedSet set, WorldVisibleSet visible)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(visible);
+        var surfaces = visible.Surfaces;
+        for (var i = 0; i < surfaces.Count; i++)
+        {
+            set.Add(surfaces[i]);
+        }
+    }
+
     public bool FloorDue(long nowNanos)
     {
         if (nowNanos - _lastFloor <= FloorNanos)

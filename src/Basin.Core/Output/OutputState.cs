@@ -27,6 +27,10 @@ public sealed class OutputState : IDisposable
 
     public bool Tearing { get; private set; }
 
+    public OutputContentType ContentType { get; private set; }
+
+    public Capabilities.ImageDescription? ContentDescription { get; private set; }
+
     public HdrStaticMetadata? Hdr { get; private set; }
 
     public IReadOnlyList<OutputLayer>? Layers { get; private set; }
@@ -196,6 +200,20 @@ public sealed class OutputState : IDisposable
         return this;
     }
 
+    public OutputState SetContentDescription(Capabilities.ImageDescription? description)
+    {
+        ContentDescription = description;
+        Fields |= OutputStateFields.ContentDescription;
+        return this;
+    }
+
+    public OutputState SetContentType(OutputContentType type)
+    {
+        ContentType = type;
+        Fields |= OutputStateFields.ContentType;
+        return this;
+    }
+
     public OutputState SetTearing(bool tearing)
     {
         Tearing = tearing;
@@ -225,6 +243,8 @@ public sealed class OutputState : IDisposable
         InFenceFd = -1;
         OutFenceRequested = false;
         Tearing = false;
+        ContentType = OutputContentType.None;
+        ContentDescription = null;
         Hdr = null;
         Layers = null;
         GammaLut = null;

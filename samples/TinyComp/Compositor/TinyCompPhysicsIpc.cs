@@ -172,6 +172,21 @@ internal sealed partial class TinyComp
         }
     }
 
+    private static void SetScaleFilter(IGrabTarget target, Basin.TextureFilter? filter, bool fromRule)
+    {
+        switch (target)
+        {
+            case Window window when window.Fit is { } fit:
+                var wayland = fromRule ? window.Quirks.ScaleFilter : filter;
+                fit.Filter = wayland;
+                fit.Root.Filter = wayland;
+                break;
+            case XWindow xwindow:
+                xwindow.Outer.Filter = fromRule ? xwindow.Quirks.ScaleFilter : filter;
+                break;
+        }
+    }
+
     private IGrabTarget? TiltTarget(bool hasId, long id, IpcReply reply)
     {
         var window = hasId ? FindWindowByToplevelId((ulong)id) : FocusedGrabTarget();

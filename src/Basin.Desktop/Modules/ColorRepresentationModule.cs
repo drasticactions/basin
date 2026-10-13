@@ -10,5 +10,5 @@ public sealed class ColorRepresentationModule : DesktopModule<ColorRepresentatio
     public override int Version => ColorRepresentationManager.Version;
 
     protected override ColorRepresentationManager Create(BasinServices services) =>
-        new(services.Display, services.Require<CompositorGlobal>());
+        new(services.Display, services.Require<CompositorGlobal>(), services.Find<ISurfaceHints>() as SurfaceHints);
 }

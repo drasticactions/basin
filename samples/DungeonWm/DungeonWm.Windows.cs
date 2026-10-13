@@ -170,6 +170,12 @@ internal sealed partial class DungeonWm
         window.World.SurfaceHeight = height;
         if (window.State == DungeonWmWindowState.Takeover)
         {
+            if (_takeoverFit is { } fit && ReferenceEquals(window, _takeover))
+            {
+                window.Scene.Tree.SetPosition(-geometry.X, -geometry.Y);
+                fit.Update(fit.Target, (width, height), _settings.TakeoverScaler);
+            }
+
             return;
         }
 
@@ -395,6 +401,10 @@ internal sealed partial class DungeonWm
     private ulong ToplevelIdOf(Surface surface) =>
         _toplevels.TryFind(surface, out var info) ? info.Id : 0;
 
+    private SceneFit? _takeoverFit;
+
+    private SceneTree? _takeoverHome;
+
     private void EnterTakeover(DungeonWmWindow window)
     {
         if (_outputs.Views.Count == 0 || ReferenceEquals(_takeover, window))
@@ -438,8 +448,26 @@ internal sealed partial class DungeonWm
         }
 
         var geometry = window.Geometry;
-        window.Scene.Tree.SetPosition(box.X - geometry.X, box.Y - geometry.Y);
-        window.Scene.Tree.RaiseToTop();
+        if (_settings.TakeoverScaler is not null && window.Scene.Tree.Parent is { } home)
+        {
+            _takeoverHome = home;
+            _takeoverFit = new SceneFit(home) { Filter = _settings.TakeoverFilter };
+            window.Scene.Tree.Reparent(_takeoverFit.Content);
+            window.Scene.Tree.SetPosition(-geometry.X, -geometry.Y);
+            _takeoverFit.Update(box, (Math.Max(1, geometry.Width), Math.Max(1, geometry.Height)), _settings.TakeoverScaler);
+            _takeoverFit.Root.RaiseToTop();
+        }
+        else
+        {
+            window.Scene.Tree.SetPosition(box.X - geometry.X, box.Y - geometry.Y);
+            window.Scene.Tree.RaiseToTop();
+        }
+
+        if (_settings.TakeoverFrameLimit > 0 && window.Scene.Surface is { } limited)
+        {
+            _services.Find<Basin.Capabilities.IFrameLimits>()?.SetLimit(limited, _settings.TakeoverFrameLimit);
+        }
+
         window.SetFullscreen(true, box);
         ApplyLayerState();
         Focus(window);
@@ -459,6 +487,23 @@ internal sealed partial class DungeonWm
         foreach (var other in _windows)
         {
             other.Scene.Tree.Enabled = true;
+        }
+
+        if (_takeoverFit is { } fit)
+        {
+            if (_takeoverHome is { IsDestroyed: false } home && !window.Scene.Tree.IsDestroyed)
+            {
+                window.Scene.Tree.Reparent(home);
+            }
+
+            fit.Destroy();
+            _takeoverFit = null;
+            _takeoverHome = null;
+        }
+
+        if (_settings.TakeoverFrameLimit > 0 && window.Scene.Surface is { } limited)
+        {
+            _services.Find<Basin.Capabilities.IFrameLimits>()?.SetLimit(limited, 0);
         }
 
         if (window.Toplevel is not null)

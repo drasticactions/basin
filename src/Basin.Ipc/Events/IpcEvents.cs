@@ -36,6 +36,11 @@ internal static class IpcEvents
             bus.DeclareLibrary(IpcEventNames.WorkspaceChanged, new IpcWorkspaceEvents(server, describe, workspaces));
         }
 
+        if (describe.Toplevels is not null && describe.Find<IFrameStats>() is { } frameStats)
+        {
+            bus.DeclareLibrary(IpcEventNames.FrameStats, new IpcFrameStatsEvents(server, describe, frameStats));
+        }
+
         if (describe.Find<IInputDeviceConfiguration>() is { } devices)
         {
             var source = new IpcDeviceEvents(server, devices);

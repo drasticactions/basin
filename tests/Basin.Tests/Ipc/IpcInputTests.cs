@@ -91,6 +91,71 @@ public sealed class IpcInputTests
     }
 
     [Fact]
+    public void Text_the_keymap_lacks_goes_on_spare_keys_under_a_keymap_override()
+    {
+        var input = new RecordingSynthetic();
+        var keymapOverride = new RecordingOverride(input.Log);
+        using var rig = new IpcTestRig(services =>
+        {
+            services.Use<IKeymapLookup>(new TableLookup());
+            services.Use<IKeymapOverride>(keymapOverride);
+        });
+        rig.Server.SyntheticInput = input;
+        var peer = rig.Connect();
+
+        Assert.Null(ErrorCode(peer.Call("""{"method":"input/text","params":{"text":"aé€a"}}""")));
+        Assert.Equal(
+        [
+            "override 183=0xe9 184=0x10020ac",
+            "key 30 True", "key 30 False", "key 183 True", "key 183 False", "key 184 True", "key 184 False",
+            "key 30 True", "key 30 False", "restore",
+        ], input.Log);
+
+        input.Log.Clear();
+        Assert.Null(ErrorCode(peer.Call("""{"method":"input/text","params":{"text":"aC"}}""")));
+        Assert.DoesNotContain(input.Log, line => line.StartsWith("override", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void More_missing_characters_than_spare_keys_go_in_batches()
+    {
+        var input = new RecordingSynthetic();
+        using var rig = new IpcTestRig(services =>
+        {
+            services.Use<IKeymapLookup>(new TableLookup());
+            services.Use<IKeymapOverride>(new RecordingOverride(input.Log));
+        });
+        rig.Server.SyntheticInput = input;
+        var peer = rig.Connect();
+
+        var text = string.Concat(Enumerable.Range(0, 14).Select(i => (char)(0x3041 + i)));
+        Assert.Null(ErrorCode(peer.Call($$$"""{"method":"input/text","params":{"text":"{{{text}}}"}}""")));
+        Assert.Equal(2, input.Log.Count(line => line.StartsWith("override", StringComparison.Ordinal)));
+        Assert.Equal(2, input.Log.Count(line => line == "restore"));
+        Assert.Equal(14, input.Log.Count(line => line.EndsWith("True", StringComparison.Ordinal)));
+    }
+
+    private sealed class RecordingOverride(List<string> log) : IKeymapOverride
+    {
+        public IDisposable? OverrideKeysyms(ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
+        {
+            var parts = new List<string>();
+            foreach (var (keycode, keysym) in keys)
+            {
+                parts.Add($"{keycode}=0x{keysym:x}");
+            }
+
+            log.Add("override " + string.Join(' ', parts));
+            return new Restore(log);
+        }
+
+        private sealed class Restore(List<string> log) : IDisposable
+        {
+            public void Dispose() => log.Add("restore");
+        }
+    }
+
+    [Fact]
     public void Seat_group_goes_to_the_sink_with_one_keyboard_per_connection()
     {
         var sink = new RecordingInputSink();

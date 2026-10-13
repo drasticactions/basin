@@ -43,5 +43,11 @@ public sealed class OutputView
 
     public IBuffer? LastPresentedBuffer { get; internal set; }
 
+    public Surface? ScanoutCandidate { get; internal set; }
+
+    internal int RenderFence { get; set; } = -1;
+
+    internal long RenderStartNanos { get; set; }
+
     public object? Tag { get; set; }
 }

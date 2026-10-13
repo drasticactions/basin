@@ -65,6 +65,82 @@ public sealed unsafe class VulkanRenderer : IRenderer
     internal readonly MeshGroup OnePassMesh;
     internal readonly MeshGroup TwoPassMesh;
     internal readonly Pipeline OutputPipeline;
+
+    private RenderPass _wideOutputPass;
+    private Pipeline _wideOutputPipeline;
+
+    internal RenderPass WideOutputPass
+    {
+        get
+        {
+            EnsureWideOutput();
+            return _wideOutputPass;
+        }
+    }
+
+    internal Pipeline WideOutputPipeline
+    {
+        get
+        {
+            EnsureWideOutput();
+            return _wideOutputPipeline;
+        }
+    }
+
+    private void EnsureWideOutput()
+    {
+        if (_wideOutputPass.Handle != 0)
+        {
+            return;
+        }
+
+        var attachments = stackalloc AttachmentDescription[2];
+        for (var i = 0; i < 2; i++)
+        {
+            attachments[i] = new AttachmentDescription
+            {
+                Format = Format.R16G16B16A16Sfloat,
+                Samples = SampleCountFlags.Count1Bit,
+                LoadOp = AttachmentLoadOp.Load,
+                StoreOp = AttachmentStoreOp.Store,
+                StencilLoadOp = AttachmentLoadOp.DontCare,
+                StencilStoreOp = AttachmentStoreOp.DontCare,
+                InitialLayout = ImageLayout.General,
+                FinalLayout = ImageLayout.General,
+            };
+        }
+
+        var blendRead = new AttachmentReference(0, ImageLayout.General);
+        var colorWrite = new AttachmentReference(1, ImageLayout.General);
+        var subpass = new SubpassDescription
+        {
+            PipelineBindPoint = PipelineBindPoint.Graphics,
+            InputAttachmentCount = 1,
+            PInputAttachments = &blendRead,
+            ColorAttachmentCount = 1,
+            PColorAttachments = &colorWrite,
+        };
+        var info = new RenderPassCreateInfo
+        {
+            SType = StructureType.RenderPassCreateInfo,
+            AttachmentCount = 2,
+            PAttachments = attachments,
+            SubpassCount = 1,
+            PSubpasses = &subpass,
+        };
+        VulkanDevice.Check(Dev.Api.CreateRenderPass(Dev.Device, in info, null, out _wideOutputPass), "vkCreateRenderPass(wide output)");
+        var vertex = CreateShaderModule("quad.vert.spv");
+        var outputFragment = CreateShaderModule("output.frag.spv");
+        try
+        {
+            _wideOutputPipeline = CreatePipeline(vertex, outputFragment, OutputPipeLayout, _wideOutputPass, subpass: 0, blend: false, textureTransform: null);
+        }
+        finally
+        {
+            Dev.Api.DestroyShaderModule(Dev.Device, vertex, null);
+            Dev.Api.DestroyShaderModule(Dev.Device, outputFragment, null);
+        }
+    }
     internal readonly PipelineLayout Layout;
     internal readonly PipelineLayout LutLayout;
     internal readonly PipelineLayout ColorLayout;
@@ -80,6 +156,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
     internal readonly VulkanDescriptorPools InputDescriptors;
     internal readonly Sampler LinearSampler;
     private readonly VulkanRenderPass _pass;
+    private DrmFormat[]? _shmFormats;
     private readonly Dictionary<IBuffer, (RenderTarget Target, Action Handler)> _targets = [];
 
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -266,7 +343,37 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     public DrmFormatSet DmabufTextureFormats => Dev.SampleableFormats;
 
-    public DrmFormatSet DmabufRenderFormats => Dev.RenderableFormats;
+    public IReadOnlyList<DrmFormat> ShmTextureFormats => _shmFormats ??= [.. Dev.ShmFormats.Formats];
+
+    private VulkanYuvConverter? _yuv;
+
+    public bool CanConvertYuv => true;
+
+    public bool RendersHalfFloat => true;
+
+    public bool ConvertToYuv(ITexture source, in FBox sourceBox, IBuffer target, YuvCoefficients coefficients, YuvRange range)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        if (_yuv is null)
+        {
+            AllocationScope.Pause();
+            var shader = CreateShaderModule("yuv.comp.spv");
+            try
+            {
+                _yuv = new VulkanYuvConverter(this, shader);
+            }
+            finally
+            {
+                Dev.Api.DestroyShaderModule(Dev.Device, shader, null);
+                AllocationScope.Resume();
+            }
+        }
+
+        return _yuv.Convert(source, sourceBox, target, coefficients, range);
+    }
+
+    public DrmFormatSet DmabufRenderFormats => Dev.BgraRenderableFormats;
 
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
@@ -328,6 +435,8 @@ public sealed unsafe class VulkanRenderer : IRenderer
     public bool WaitsOnGpu => Dev.WaitsOnGpu;
 
     public RenderFencePrecision FencePrecision => RenderFencePrecision.Context;
+
+    public bool SupportsFilter(TextureFilter filter) => true;
 
     private int _completionFence = -1;
 
@@ -400,6 +509,8 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     public void Dispose()
     {
+        _yuv?.Dispose();
+        _yuv = null;
         _thread.Assert();
         var vk = Dev.Api;
         var device = Dev.Device;
@@ -444,6 +555,11 @@ public sealed unsafe class VulkanRenderer : IRenderer
         DestroyMeshGroup(OnePassMesh);
         DestroyMeshGroup(TwoPassMesh);
         vk.DestroyPipeline(device, OutputPipeline, null);
+        if (_wideOutputPass.Handle != 0)
+        {
+            vk.DestroyPipeline(device, _wideOutputPipeline, null);
+            vk.DestroyRenderPass(device, _wideOutputPass, null);
+        }
         vk.DestroyRenderPass(device, OnePass, null);
         vk.DestroyRenderPass(device, TwoPass, null);
         vk.DestroyPipelineLayout(device, Layout, null);

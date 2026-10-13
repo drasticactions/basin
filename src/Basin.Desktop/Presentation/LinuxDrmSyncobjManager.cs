@@ -52,6 +52,10 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
     public long LateAcquires { get; private set; }
 
+    public long ParkedAcquires { get; private set; }
+
+    public long UnparkedAcquires { get; private set; }
+
     public long UnexportableAcquires { get; private set; }
 
     public long DeferredReleases { get; private set; }
@@ -298,6 +302,24 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
             _owner.ExplicitCommits++;
             _surface.MarkExplicitAcquire();
             _surface.Pending.SetExtension(new PendingSync(acquire.Timeline, acquire.Point, release.Timeline, release.Point));
+            ParkOnAcquire(acquire.Timeline, acquire.Point);
+        }
+
+        private void ParkOnAcquire(DrmSyncobjTimeline timeline, ulong point)
+        {
+            if (timeline.IsSignaled(point))
+            {
+                return;
+            }
+
+            if (_owner._compositor.Loop is { } loop && SyncobjCommitFence.TryCreate(loop, timeline, point) is { } fence)
+            {
+                _owner.ParkedAcquires++;
+                _surface.ParkFence(fence);
+                return;
+            }
+
+            _owner.UnparkedAcquires++;
         }
 
         private void OnCommitted()

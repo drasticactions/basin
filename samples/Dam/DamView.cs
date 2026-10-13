@@ -30,6 +30,8 @@ internal sealed class DamView
 
     public SceneSurface Scene { get; }
 
+    public SceneFit? Fit { get; init; }
+
     public Surface Surface => Handle.Surface!;
 
     public string Title => Handle.Title;

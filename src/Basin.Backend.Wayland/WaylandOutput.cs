@@ -166,6 +166,74 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
     public string Title { get; private set; } = string.Empty;
 
+    public string? IconName { get; private set; }
+
+    public unsafe bool SetIcon(string? name, ReadOnlySpan<uint> argb = default, int size = 0)
+    {
+        if (_backend.ParentToplevelIcon is not { } manager)
+        {
+            return false;
+        }
+
+        if (name is null && size <= 0)
+        {
+            manager.SetIcon(_toplevel, null);
+            IconName = null;
+            _backend.Flush();
+            return true;
+        }
+
+        if (size > 0 && argb.Length < size * size)
+        {
+            return false;
+        }
+
+        var icon = manager.CreateIcon();
+        if (name is not null)
+        {
+            icon.SetName(name);
+        }
+
+        WlShmPool? pool = null;
+        WlBuffer? buffer = null;
+        var fd = -1;
+        void* map = null;
+        var bytes = size * size * 4;
+        if (size > 0)
+        {
+            fd = memfd_create("basin-wl-icon", 1);
+            if (fd >= 0 && ftruncate(fd, bytes) == 0)
+            {
+                map = mmap(null, (nuint)bytes, ProtReadWrite, MapShared, fd, 0);
+                if ((nint)map != -1)
+                {
+                    argb[..(size * size)].CopyTo(new Span<uint>(map, size * size));
+                    pool = _backend.ParentShm.CreatePool(fd, bytes);
+                    buffer = pool.CreateBuffer(0, size, size, size * 4, WlShm.Format.Argb8888);
+                    icon.AddBuffer(buffer, 1);
+                }
+            }
+        }
+
+        manager.SetIcon(_toplevel, icon);
+        icon.Dispose();
+        buffer?.Dispose();
+        pool?.Dispose();
+        if (map is not null && (nint)map != -1)
+        {
+            munmap(map, (nuint)bytes);
+        }
+
+        if (fd >= 0)
+        {
+            close(fd);
+        }
+
+        IconName = name;
+        _backend.Flush();
+        return true;
+    }
+
     public void RequestClose() => CloseRequested?.Invoke();
 
     public event Action? CloseRequested;
@@ -512,6 +580,15 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
     public override bool SupportsInFence => _backend.ParentSyncobj is not null && _backend.RenderDevice is not null;
 
+    public override bool CanScanout(DrmFormat format, ulong modifier, bool overlay) =>
+        !overlay && _backend.ParentDmabuf is not null && _backend.ParentDmabufFormats.Contains(format, modifier);
+
+    public DrmFormatSet ScanoutFormats => _backend.ParentDmabufFormats;
+
+    public Basin.Capabilities.ImageDescription? PassthroughDescription => _color?.Applied;
+
+    private ParentSurfaceColor? _color;
+
     protected override bool TestCommitCore(OutputState state)
     {
         if ((state.Fields & OutputStateFields.Mode) != 0 &&
@@ -550,6 +627,12 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         if ((state.Fields & OutputStateFields.Buffer) == 0 || !_configured)
         {
             return true;
+        }
+
+        if (_backend.ParentColorManager is not null)
+        {
+            _color ??= new ParentSurfaceColor(_backend, _surface);
+            _ = _color.Stage((state.Fields & OutputStateFields.ContentDescription) != 0 ? state.ContentDescription : null);
         }
 
         WlBuffer? proxy = null;
@@ -968,6 +1051,8 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _spentFeedbacks.Clear();
         _hostFrame?.Dispose();
         _hostFrame = null;
+        _color?.Dispose();
+        _color = null;
         _fractionalScale?.Dispose();
         _viewport?.Dispose();
         _decoration?.Dispose();

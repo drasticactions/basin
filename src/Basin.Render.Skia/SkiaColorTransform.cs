@@ -81,7 +81,7 @@ internal sealed class SkiaColorTransform : IDisposable
         }
         half4 main(half4 c) {
             float a = float(c.a);
-            float3 straight = a > 0.0 ? clamp(float3(c.rgb) / a, 0.0, 1.0) : float3(0.0);
+            float3 straight = a > 0.0 ? clamp(float3(c.rgb) / a, 0.0, int(source.x) == 2 ? source.y : 1.0) : float3(0.0);
             float3 nits = decode(source, straight) * source.w;
             nits = max(float3(dot(m0, nits), dot(m1, nits), dot(m2, nits)), float3(0.0));
             if (tone.x > 0.5) {
@@ -124,7 +124,7 @@ internal sealed class SkiaColorTransform : IDisposable
                 "source",
                 new[]
                 {
-                    (float)(int)parameters.Source.Kind, (float)parameters.Source.Gamma,
+                    (float)(int)parameters.Source.Kind, (float)parameters.Source.ShaderParameter,
                     (float)parameters.Source.MaxLuminance, (float)parameters.Anchor,
                 }
             },

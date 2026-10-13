@@ -12,11 +12,63 @@ public sealed class IpcCaptureSpawnTests
 {
     private static JsonElement Parse(string frame) => JsonDocument.Parse(frame).RootElement.Clone();
 
-    private static IpcTestRig SceneRig() => new((services, host) =>
+    private static IpcTestRig SceneRig(string renderer = "pixman") => new(
+        (services, host) =>
+        {
+            services.Use(host.Layout);
+            services.Use<IScreenCapture>(new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer });
+        },
+        renderer: renderer);
+
+    [Fact]
+    public void Png16_is_refused_by_name_where_the_renderer_has_no_16_bit_target()
     {
-        services.Use(host.Layout);
-        services.Use<IScreenCapture>(new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer });
-    });
+        using var rig = SceneRig();
+        Paint(rig);
+        var peer = rig.Connect();
+        var refused = Parse(peer.Call("""{"method":"capture/output","params":{"to":"inline","format":"png16"}}""")).GetProperty("error");
+        Assert.Equal(IpcErrorCodes.Unavailable, refused.GetProperty("code").GetString());
+        Assert.Contains("PixmanRenderer", refused.GetProperty("message").GetString());
+
+        var unknown = Parse(peer.Call("""{"method":"capture/output","params":{"to":"inline","format":"jpeg"}}""")).GetProperty("error");
+        Assert.Equal(IpcErrorCodes.InvalidParams, unknown.GetProperty("code").GetString());
+    }
+
+    [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    public void Png16_writes_a_tagged_16_bit_file_of_the_scene(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var rig = SceneRig(renderer);
+        Paint(rig);
+        var peer = rig.Connect();
+        var file = Path.Combine(Path.GetTempPath(), $"basin-ipc16-{Environment.ProcessId}.png");
+        try
+        {
+            var written = Parse(peer.Call($$$$"""{"method":"capture/output","params":{"to":{"path":"{{{{file}}}}"},"format":"png16"}}"""));
+            Assert.Equal(file, written.GetProperty("result").GetProperty("path").GetString());
+            var png = File.ReadAllBytes(file);
+            Assert.True(PngCodec.TryReadChunk(png, "cICP", out var cicp));
+            Assert.Equal([1, 13, 0, 1], cicp);
+            var (rgb, width, height) = PngCodec.Decode16(png);
+            Assert.Equal((160, 120), (width, height));
+            var painted = 0;
+            for (var i = 0; i < rgb.Length; i += 3)
+            {
+                if (Math.Abs(rgb[i] - (0x33 * 257)) < 300 && Math.Abs(rgb[i + 1] - (0x66 * 257)) < 300 && Math.Abs(rgb[i + 2] - (0xAA * 257)) < 300)
+                {
+                    painted++;
+                }
+            }
+
+            Assert.True(painted > 1000, $"{painted} pixels carry the window's color");
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
 
     private static void Paint(IpcTestRig rig)
     {

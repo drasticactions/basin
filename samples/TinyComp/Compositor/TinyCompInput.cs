@@ -230,10 +230,20 @@ internal sealed partial class TinyComp
 
     private void RevealCursorForPointer()
     {
+        _cursorIdle?.NotifyActivity();
         if (_cursor.IsHidden)
         {
             _cursor.Reveal();
         }
+    }
+
+    private Basin.Desktop.CursorIdle? _cursorIdle;
+
+    private void ApplyCursorIdle()
+    {
+        _cursorIdle ??= new Basin.Desktop.CursorIdle(_loop, _cursor, _seat.Pointer);
+        _cursorIdle.ParkPointer = _config.CursorParkPointer;
+        _cursorIdle.TimeoutMs = _config.CursorHideAfterMs;
     }
 
     void Basin.Seat.ITouchPointerTarget.Warp(uint timeMs, double x, double y) => MoveCursor(x, y, timeMs);

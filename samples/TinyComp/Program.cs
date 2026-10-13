@@ -38,6 +38,9 @@ internal static class Program
         }, report: false);
 
         var commandOption = cli.Add(CommonOptions.Command("run `sh -c <command>` on startup instead of the init executable"));
+        var exitWithCommand = cli.Add(CommonOptions.ExitWithCommand());
+        var subreaper = cli.Add(CommonOptions.Subreaper(defaultOn: true));
+        var readyFd = cli.Add(CommonOptions.ReadyFd(), report: false);
 
         var framesOption = cli.Add(CommonOptions.Frames(), report: false);
         var transport = cli.Add(CommonOptions.Transport());
@@ -203,6 +206,11 @@ internal static class Program
                 IpcCli.Read(cli, result),
                 init))
             {
+                comp.ExitWithCommand = result.GetValue(exitWithCommand);
+                comp.Subreaper = (result.GetResult(subreaper) is { Implicit: false }
+                    ? result.GetValue(subreaper)
+                    : settings.ProcessSubreaper ?? true) || comp.ExitWithCommand;
+                comp.ReadyFd = result.GetValue(readyFd);
                 status = comp.Run();
                 rendered = comp.Rendered;
             }

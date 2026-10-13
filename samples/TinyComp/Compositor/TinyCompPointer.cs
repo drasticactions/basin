@@ -35,7 +35,13 @@ internal sealed partial class TinyComp
             MoveCursor(layoutX, layoutY, time);
         };
         pointer.RelativeMotion += (time, dx, dy, dxu, dyu) =>
+        {
             _relativePointer.NotifyMotion(time, dx, dy, dxu, dyu);
+            if (_parentConfineLocked && _parentPointerLock?.IsLocked == true)
+            {
+                MoveCursor(_cursorX + dx, _cursorY + dy, (uint)(time / 1000));
+            }
+        };
         pointer.Button += (time, button, pressed) =>
         {
             RevealCursorForPointer();
@@ -295,6 +301,27 @@ internal sealed partial class TinyComp
 
     private Basin.Seat.Backends.ParentPointerLock? _parentPointerLock;
     private Basin.Desktop.PointerConstraint? _parentLockConstraint;
+    private bool _clientCursorHidden;
+    private bool _parentConfineLocked;
+
+    private void OnClientCursor(Basin.Seat.CursorRequest request)
+    {
+        var hidden = request.Surface is null;
+        if (hidden == _clientCursorHidden)
+        {
+            return;
+        }
+
+        _clientCursorHidden = hidden;
+        SyncParentPointerLock();
+    }
+
+    private Basin.Desktop.PointerConstraint? ConfineToLock() =>
+        _clientCursorHidden &&
+        _constraints is { Active: { Kind: Basin.Desktop.ConstraintKind.Confine, IsActive: true } confine } &&
+        FindWindow(confine.Surface)?.Quirks.NestedConfineLock != false
+            ? confine
+            : null;
 
     private Basin.Desktop.PointerConstraint? ActiveLock() =>
         _constraints is { IsLocked: true } constraints ? constraints.Active : null;
@@ -307,11 +334,24 @@ internal sealed partial class TinyComp
         }
 
         _parentPointerLock ??= new Basin.Seat.Backends.ParentPointerLock(_layout);
-        if (ActiveLock() is { } locked && _layout.OutputAt(_cursorX, _cursorY) is WaylandOutput wanted)
+        if ((ActiveLock() ?? ConfineToLock()) is { } locked && _layout.OutputAt(_cursorX, _cursorY) is WaylandOutput wanted)
         {
             _parentLockConstraint = _parentPointerLock.Request(_constraints, wanted) ? locked : null;
+            _parentConfineLocked = _parentLockConstraint is { Kind: Basin.Desktop.ConstraintKind.Confine };
+            if (_parentConfineLocked)
+            {
+                _report.Line($"CONFINE-LOCK on output={wanted.Name}");
+            }
+
             return;
         }
+
+        if (_parentConfineLocked)
+        {
+            _report.Line("CONFINE-LOCK off");
+        }
+
+        _parentConfineLocked = false;
 
         if (!_parentPointerLock.IsRequested(_constraints))
         {

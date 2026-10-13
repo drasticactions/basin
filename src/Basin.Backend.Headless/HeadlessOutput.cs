@@ -1,10 +1,11 @@
 namespace Basin.Backend.Headless;
 
-public sealed class HeadlessOutput : OutputBase
+public sealed class HeadlessOutput : OutputBase, IPresentingOutput
 {
     private readonly bool _manualFrameClock;
     private readonly IEventSource? _frameTimer;
     private BufferLock _presented;
+    private ulong _sequence;
 
     internal HeadlessOutput(ICompositorEventLoop loop, string name, OutputMode mode, bool manualFrameClock)
         : base(name)
@@ -25,6 +26,10 @@ public sealed class HeadlessOutput : OutputBase
 
     public IBuffer? PresentedBuffer => _presented.Buffer;
 
+    public ulong Sequence => _sequence;
+
+    public event Action<ulong, uint, ulong>? PresentedOnScreen;
+
     public void StepFrame()
     {
         if (!_manualFrameClock)
@@ -32,7 +37,7 @@ public sealed class HeadlessOutput : OutputBase
             throw new InvalidOperationException("StepFrame requires the manual frame clock.");
         }
 
-        EmitFrame();
+        Present();
     }
 
     protected override bool TestCommitCore(OutputState state)
@@ -75,8 +80,23 @@ public sealed class HeadlessOutput : OutputBase
         _presented.Dispose();
     }
 
-    private void ArmFrameTimer() =>
-        _frameTimer!.UpdateTimer(Math.Max(1, 1_000_000 / CurrentMode.RefreshMilliHz));
+    private long _nextFrameNanos;
+
+    private void ArmFrameTimer()
+    {
+        var interval = (long)CurrentMode.RefreshIntervalNanoseconds;
+        var now = MonotonicClock.Nanos;
+        if (_nextFrameNanos == 0 || now - _nextFrameNanos > interval)
+        {
+            _nextFrameNanos = now + interval;
+        }
+        else if (_nextFrameNanos <= now)
+        {
+            _nextFrameNanos += interval;
+        }
+
+        _frameTimer!.UpdateTimer((int)Math.Max(1, (_nextFrameNanos - now + 999_999) / 1_000_000));
+    }
 
     private void OnFrameTimer()
     {
@@ -85,6 +105,14 @@ public sealed class HeadlessOutput : OutputBase
             ArmFrameTimer();
         }
 
+        Present();
+    }
+
+    private void Present()
+    {
+        _sequence++;
+        PresentedOnScreen?.Invoke(
+            (ulong)MonotonicClock.Nanos, CurrentMode.RefreshIntervalNanoseconds, _sequence);
         EmitFrame();
     }
 }

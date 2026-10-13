@@ -137,14 +137,24 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             offered = true;
         }
 
+        if (WrapsYuv)
+        {
+            resource.SendDmabufFormat((uint)DrmFormat.Nv12, BitConverter.GetBytes(DrmFormatSet.ModifierLinear));
+            offered = true;
+        }
+
         if (offered)
         {
             resource.SendDmabufDevice(BitConverter.GetBytes(device));
         }
     }
 
+    private bool WrapsYuv =>
+        _capture is { CanCaptureYuv: true } && _dmabuf is { } constraints && constraints.Wraps(DrmFormat.Nv12, DrmFormatSet.ModifierLinear);
+
     private bool Accepts(IBuffer target) =>
         !target.TryGetDmabuf(out var attributes) ||
+        (attributes.Format == DrmFormat.Nv12 && attributes.Modifier == DrmFormatSet.ModifierLinear && WrapsYuv) ||
         (_dmabuf is { } constraints && constraints.Formats.Contains(attributes.Format, attributes.Modifier));
 
     private void OnBind(WlClient client, uint version, uint id)

@@ -941,7 +941,7 @@ internal sealed partial class TinyComp
         var nearestDistance = long.MaxValue;
         foreach (var candidate in _xwindows)
         {
-            if (XClientBase(candidate.XWin.WindowId) != client || candidate.Minimized)
+            if (XClientBase(candidate.XWin.WindowId) != client || candidate.Minimized || candidate.XWin.IsOffscreenStub)
             {
                 continue;
             }

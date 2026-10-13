@@ -37,7 +37,7 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
     public WireClockClients? WireClock { get; set; }
 
     public void BeginFrame(IOutput output, long predictedVblankNanos) =>
-        Release(predictedVblankNanos > 0 ? predictedVblankNanos : MonotonicClock.Nanos);
+        Release(predictedVblankNanos > 0 ? predictedVblankNanos : MonotonicClock.Nanos, predictedVblankNanos > 0 ? PresentTiming.GridOf(output) : -1);
 
     public void EndFrame(IOutput output, long presentedNanos)
     {
@@ -126,7 +126,9 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         Release(MonotonicClock.Nanos);
     }
 
-    private void Release(long deadlineNanos)
+    private void Release(long deadlineNanos) => Release(deadlineNanos, -1);
+
+    private void Release(long deadlineNanos, long gridNanos)
     {
         var now = deadlineNanos;
         _sweep.Clear();
@@ -134,7 +136,15 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         var nextNanos = 0L;
         foreach (var surface in _sweep)
         {
-            surface.ReleaseParkedCommits(now, refreshCycleCompleted: false);
+            if (surface.PacingHeld)
+            {
+                continue;
+            }
+
+            if (surface.ReleaseParkedCommits(now, refreshCycleCompleted: false, gridNanos))
+            {
+                surface.NotePacingUse();
+            }
             var target = surface.NextParkedCommitTimeNanos;
             if (target > 0 && (nextNanos == 0 || target < nextNanos))
             {

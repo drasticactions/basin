@@ -56,6 +56,9 @@ public sealed class SceneFit
         {
             SceneFitPolicy.Fit => SceneFitMode.Fit,
             SceneFitPolicy.Center => SceneFitMode.Center,
+            SceneFitPolicy.Integer => SceneFitMode.Integer,
+            SceneFitPolicy.Fill => SceneFitMode.Fill,
+            SceneFitPolicy.Stretch => SceneFitMode.Stretch,
             _ => state == SceneFitState.Fullscreen ? SceneFitMode.Fit : SceneFitMode.Center,
         };
     }
@@ -67,8 +70,21 @@ public sealed class SceneFit
             return (1.0, new Box(target.X, target.Y, Math.Max(0, content.Width), Math.Max(0, content.Height)));
         }
 
-        var fit = Math.Min(target.Width / (double)content.Width, target.Height / (double)content.Height);
-        var scale = mode == SceneFitMode.Fit ? fit : Math.Min(1.0, fit);
+        if (mode == SceneFitMode.Stretch)
+        {
+            return (target.Width / (double)content.Width, target);
+        }
+
+        var ratioX = target.Width / (double)content.Width;
+        var ratioY = target.Height / (double)content.Height;
+        var fit = Math.Min(ratioX, ratioY);
+        var scale = mode switch
+        {
+            SceneFitMode.Fit => fit,
+            SceneFitMode.Fill => Math.Max(ratioX, ratioY),
+            SceneFitMode.Integer => fit > 1.0 ? Math.Floor(fit) : fit,
+            _ => Math.Min(1.0, fit),
+        };
         var width = (int)Math.Round(content.Width * scale);
         var height = (int)Math.Round(content.Height * scale);
         var x = target.X + ((target.Width - width) / 2);
@@ -99,6 +115,7 @@ public sealed class SceneFit
         var scaleX = box.Width / (double)drawn.Width;
         var scaleY = box.Height / (double)drawn.Height;
         IsActive = true;
+        Root.ClipBox = active == SceneFitMode.Fill ? target : default;
         ContentScale = scaleX;
         ContentScaleY = scaleY;
         ContentBox = box;
@@ -127,6 +144,7 @@ public sealed class SceneFit
     private void Deactivate(in Box target, (int Width, int Height) content)
     {
         IsActive = false;
+        Root.ClipBox = default;
         ContentScale = 1.0;
         ContentScaleY = 1.0;
         ContentBox = new Box(target.X, target.Y, Math.Max(0, content.Width), Math.Max(0, content.Height));

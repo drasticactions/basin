@@ -11,6 +11,10 @@ internal sealed class ShaderProgram
     public readonly int Src;
     public readonly int Alpha;
     public readonly int ForceOpaque;
+
+    public readonly int Pixel;
+
+    public readonly int Shaper;
     public readonly int Color;
     public readonly int Lut;
     public readonly int Transform;
@@ -53,6 +57,8 @@ internal sealed class ShaderProgram
         Src = gl.GetUniformLocation(Program, "u_src");
         Alpha = gl.GetUniformLocation(Program, "u_alpha");
         ForceOpaque = gl.GetUniformLocation(Program, "u_forceOpaque");
+        Pixel = gl.GetUniformLocation(Program, "u_pixel");
+        Shaper = gl.GetUniformLocation(Program, "u_shaper");
         Color = gl.GetUniformLocation(Program, "u_color");
         Lut = gl.GetUniformLocation(Program, "u_lut");
         Transform = gl.GetUniformLocation(Program, "u_transform");

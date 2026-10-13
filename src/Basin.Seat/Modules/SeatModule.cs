@@ -41,6 +41,7 @@ public sealed class SeatModule : IProtocolModule
         services.UseDefault<ISelectionStore>(new SeatSelectionStore(Seat));
         services.UseDefault<IActiveKeymap>(Seat.Keyboard);
         services.UseDefault<IKeymapLookup>(Seat.Keyboard);
+        services.UseDefault<IKeymapOverride>(Seat.Keyboard);
 
         if (services.Find<IInputSink>() is SeatInputSink sink)
         {

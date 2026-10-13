@@ -19,7 +19,8 @@ public sealed class IpcCaptureWindowParams : IIpcParams, IIpcReusable
         bool? clientOnly = null,
         bool? cursor = null,
         double? scale = null,
-        long? maxDimension = null)
+        long? maxDimension = null,
+        string? format = null)
     {
         Id = id;
         To = to;
@@ -27,6 +28,7 @@ public sealed class IpcCaptureWindowParams : IIpcParams, IIpcReusable
         Cursor = cursor;
         Scale = scale;
         MaxDimension = maxDimension;
+        Format = format;
     }
 
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
@@ -62,6 +64,9 @@ public sealed class IpcCaptureWindowParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? MaxDimension { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Format { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'id' is required"
@@ -77,5 +82,6 @@ public sealed class IpcCaptureWindowParams : IIpcParams, IIpcReusable
         Cursor = null;
         Scale = null;
         MaxDimension = null;
+        Format = null;
     }
 }

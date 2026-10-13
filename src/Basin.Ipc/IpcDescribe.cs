@@ -26,6 +26,40 @@ internal sealed class IpcDescribe
         Capture = services.Find<IScreenCapture>();
     }
 
+    public IFrameLimits? FrameLimits => _services.Find<IFrameLimits>();
+
+    public IOutputLooks? Looks => _services.Find<IOutputLooks>();
+
+    public IFrameStats? FrameStats => _services.Find<IFrameStats>();
+
+    private bool _statsHeld;
+
+    public IpcFrameStats Stats(in ToplevelInfo info, long nowNanos)
+    {
+        if (FrameStats is not { } stats || info.Surface is not { } surface)
+        {
+            return new IpcFrameStats(info.Id, 0, 0, 0, 0, 0, 0, null, 0);
+        }
+
+        if (!_statsHeld)
+        {
+            _statsHeld = true;
+            stats.Acquire();
+        }
+
+        _ = stats.TryGet(surface, nowNanos, out var snapshot);
+        return new IpcFrameStats(
+            info.Id,
+            snapshot.Commits,
+            snapshot.Presents,
+            Math.Round(snapshot.MeanPresentIntervalMs, 3),
+            Math.Round(snapshot.P99PresentIntervalMs, 3),
+            Math.Round(snapshot.MeanLatencyMs, 3),
+            Math.Round(snapshot.P99LatencyMs, 3),
+            snapshot.Output?.Name,
+            snapshot.RefreshMilliHz);
+    }
+
     public IToplevelModel? Toplevels { get; }
 
     public IToplevelStack? Stack { get; }
@@ -181,7 +215,8 @@ internal sealed class IpcDescribe
                 X11Density.Native => IpcWindow.NativeDensity,
                 X11Density.Low => IpcWindow.LowDensity,
                 _ => null,
-            });
+            },
+            info.Surface is { } surface && FrameLimits?.LimitOf(surface) is > 0 and var limit ? limit : null);
     }
 
     public IpcWindowList WindowList()

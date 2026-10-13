@@ -30,6 +30,10 @@ internal readonly record struct NestedParentOptions
 
     public bool AnswersFrames { get; init; }
 
+    public bool ColorManagement { get; init; }
+
+    public bool ToplevelIcons { get; init; }
+
     public int Width { get; init; }
 
     public int Height { get; init; }
@@ -118,6 +122,17 @@ internal sealed class NestedParent : IDisposable
     public Basin.Desktop.PointerGesturesManager? Gestures { get; private set; }
 
     public Basin.Seat.DataDeviceManager? DataDevices { get; private set; }
+
+    public Basin.Desktop.ColorManager? Color { get; private set; }
+
+    public List<string?> IconNames { get; } = [];
+
+    private sealed class ConvertingResolver : Basin.Capabilities.IColorTransformResolver
+    {
+        public Basin.ColorTransformCapability Capability => Basin.ColorTransformCapability.Lut3D;
+
+        public IColorLut? Resolve(Basin.Capabilities.ImageDescription source, Basin.Capabilities.ImageDescription output) => null;
+    }
 
     public T Invoke<T>(Func<T> body)
     {
@@ -234,6 +249,8 @@ internal sealed class NestedParent : IDisposable
         XdgDecorationManager? decorations = null;
         Basin.Desktop.PointerGesturesManager? gestures = null;
         Basin.Seat.DataDeviceManager? dataDevices = null;
+        Basin.Desktop.ColorManager? color = null;
+        XdgToplevelIconManager? icons = null;
         IEventSource? wake = null;
         try
         {
@@ -286,6 +303,27 @@ internal sealed class NestedParent : IDisposable
             Gestures = gestures;
 
             shell = new XdgShell(display, compositor, seat);
+            if (_options.ColorManagement)
+            {
+                color = new Basin.Desktop.ColorManager(display, compositor)
+                {
+                    Resolver = new ConvertingResolver(),
+                    SupportedTransferFunctions =
+                    [
+                        Basin.Capabilities.ColorTransferFunction.Gamma22, Basin.Capabilities.ColorTransferFunction.St2084Pq,
+                        Basin.Capabilities.ColorTransferFunction.ExtLinear,
+                    ],
+                    SupportedPrimaries = [Basin.Capabilities.ColorPrimaries.Srgb, Basin.Capabilities.ColorPrimaries.Bt2020],
+                };
+                Color = color;
+            }
+
+            if (_options.ToplevelIcons)
+            {
+                icons = new XdgToplevelIconManager(display);
+                icons.IconChanged += (_, name) => IconNames.Add(name);
+            }
+
             if (_options.Decorations)
             {
                 decorations = new XdgDecorationManager(display)
@@ -332,6 +370,8 @@ internal sealed class NestedParent : IDisposable
         finally
         {
             wake?.Remove();
+            icons?.Dispose();
+            color?.Dispose();
             dataDevices?.Dispose();
             gestures?.Dispose();
             decorations?.Dispose();

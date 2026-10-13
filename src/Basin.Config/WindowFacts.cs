@@ -18,6 +18,22 @@ public readonly record struct WindowFacts
 
     public string? WindowType { get; init; }
 
+    public bool? WantsFocus { get; init; }
+
+    public bool? AcceptsInput { get; init; }
+
+    public bool? TakesFocus { get; init; }
+
+    public bool? SkipTaskbar { get; init; }
+
+    public bool? SkipPager { get; init; }
+
+    public uint? HwndStyle { get; init; }
+
+    public uint? HwndStyleEx { get; init; }
+
+    public bool? IsUseless { get; init; }
+
     public static WindowFacts ForWayland(string? appId, string? title, bool dialog, in ProcessIdentity process) =>
         new WindowFacts { AppId = appId, Title = title, WindowType = dialog ? "dialog" : "normal" }.WithProcess(process);
 

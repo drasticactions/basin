@@ -83,6 +83,12 @@ public sealed class BasinCommand
     public int Run(string[] args, Func<ParseResult, int> body)
     {
         ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(args);
+        if (args is [ProcessSubreaper.Mode, ..] && OperatingSystem.IsLinux())
+        {
+            return ProcessSubreaper.Run(args[1..]);
+        }
+
         var baseline = AllocationReport.Capture();
         var wanted = false;
 

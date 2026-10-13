@@ -209,6 +209,37 @@ public sealed class DmabufTests
         host.PumpUntil(() => failed);
     }
 
+    [Theory]
+    [InlineData("gl", 0, false)]
+    [InlineData("gl", -1, true)]
+    [InlineData("vulkan", 0, false)]
+    [InlineData("vulkan", -1, true)]
+    public void A_linear_nv12_chroma_plane_is_bounded_at_half_height(string renderer, int slack, bool fails)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        Assert.SkipUnless(host.Renderer.DmabufTextureFormats.Contains(DrmFormat.Nv12, DrmFormatSet.ModifierLinear), $"{renderer} does not import linear NV12");
+        const int width = 64, height = 32;
+        var fd = CreatePlaneFd((width * height * 3 / 2) + slack);
+
+        var bufferParams = host.Client.Dmabuf!.CreateParams();
+        bufferParams.Add(fd, 0, 0, width, 0, 0);
+        bufferParams.Add(fd, 1, width * height, width, 0, 0);
+        close(fd);
+
+        WlBuffer? created = null;
+        var failed = false;
+        bufferParams.Created += (_, e) => created = e.Buffer;
+        bufferParams.Failed += (_, _) => failed = true;
+        bufferParams.Create(width, height, (uint)DrmFormat.Nv12, 0);
+        host.PumpUntil(() => created is not null || failed);
+        Assert.Equal(fails, failed);
+
+        created?.Dispose();
+        bufferParams.Dispose();
+        host.PumpToServer();
+    }
+
     [Fact]
     public void Out_of_range_plane_index_is_a_protocol_error()
     {

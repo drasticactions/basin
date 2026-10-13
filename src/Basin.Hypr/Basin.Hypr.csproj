@@ -22,6 +22,7 @@
     <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-surface-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
     <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-toplevel-export-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
     <AdditionalFiles Include="$(HyprlandProtocolDir)hyprland-toplevel-mapping-v1.xml" WaylandNamespace="Basin.Hypr.Protocol" />
+    <AdditionalFiles Include="$(BasinProtocolDir)gamescope-action-binding.xml" WaylandNamespace="Basin.Hypr.Protocol" />
   </ItemGroup>
 
 </Project>

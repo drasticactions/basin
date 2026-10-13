@@ -15,14 +15,20 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     public int LastOutFenceFd { get; private set; } = -1;
 
-    public bool LastFlipWasAsync { get; private set; }
+    private bool _lastFlipWasAsync;
+
+    public override bool LastFlipWasAsync => _lastFlipWasAsync;
+
+    private long _planeEpoch;
+
+    public override long PlaneEpoch => _planeEpoch;
 
     private readonly DrmPropertyMap _connectorProps;
     private readonly DrmPropertyMap _crtcProps;
     private readonly DrmPropertyMap _planeProps;
     private readonly DrmPropertyMap? _cursorProps;
-    private readonly List<DrmModeInfo> _nativeModes;
-    private readonly List<OutputMode> _modes;
+    private readonly List<DrmModeInfo> _nativeModes = [];
+    private readonly List<OutputMode> _modes = [];
 
     private readonly DrmAtomicBuilder _builder = new();
 
@@ -68,6 +74,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         PlaneId = planeId;
         CursorPlaneId = cursorPlaneId;
         _connectorProps = new DrmPropertyMap(backend.Device, _connectorId, DrmObjectType.Connector);
+        CacheConnectorEnums();
         _crtcProps = new DrmPropertyMap(backend.Device, crtcId, DrmObjectType.Crtc);
         _planeProps = new DrmPropertyMap(backend.Device, planeId, DrmObjectType.Plane);
         _outFencePin = System.Runtime.InteropServices.GCHandle.Alloc(_outFenceSlot, System.Runtime.InteropServices.GCHandleType.Pinned);
@@ -75,11 +82,6 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         GammaLutSize = _crtcProps.TryGetValue("GAMMA_LUT_SIZE", out var gammaSize) ? (uint)gammaSize : 0;
         DegammaLutSize = _crtcProps.TryGetValue("DEGAMMA_LUT_SIZE", out var degammaSize) ? (uint)degammaSize : 0;
-        _nativeModes = [.. connector.Modes];
-        _modes = [.. _nativeModes.Select(ToOutputMode)];
-        var preferredIndex = Math.Max(0, _nativeModes.FindIndex(m => m.IsPreferred));
-        PreferredMode = _modes.Count > 0 ? _modes[preferredIndex] : default;
-        PhysicalSize = ((int)connector.WidthMm, (int)connector.HeightMm);
         Class = connector.Type is DrmConnectorType.Edp or DrmConnectorType.Lvds or DrmConnectorType.Dsi
             ? OutputClass.Handheld
             : OutputClass.Desktop;
@@ -87,18 +89,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         OverlayScanoutFormats = backend.OverlayFormatsFor(crtcIndex);
 
         MaxBitsPerColorRange = ReadMaxBpcRange();
-        var edidBytes = ReadEdidBytes();
-        _edidBytes = edidBytes;
-        var edid = edidBytes.Length > 0 ? EdidInfo.Parse(edidBytes) : new EdidInfo("unknown", "unknown", string.Empty);
-        Edid = edid;
-        _wideColorGamutCapable = _connectorProps.Has("Colorspace") &&
-            (TryEnumValue("Colorspace", "BT2020_RGB", out _) || TryEnumValue("Colorspace", "BT2020_YCC", out _)) &&
-            edid.SupportsBt2020 && VendorAllowsColorspace();
-        _highDynamicRangeCapable = _connectorProps.Has("HDR_OUTPUT_METADATA") && edid.SupportsPq && _wideColorGamutCapable;
-        Make = edid.Make;
-        Model = edid.Model;
-        Serial = edid.Serial;
-        Description = $"{edid.Make} {edid.Model} ({connector.Name})";
+        LoadConnector(connector, ReadEdidBytes());
         _cursorRetry = backend.Loop.AddTimer(OnCursorRetry);
         _queuedFlush = backend.Loop.AddTimer(OnQueuedFlush);
         if (backend.Liftoff is { } liftoff)
@@ -115,6 +106,92 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    private void LoadConnector(DrmConnector connector, byte[] edidBytes)
+    {
+        _nativeModes.Clear();
+        _nativeModes.AddRange(connector.Modes);
+        _modes.Clear();
+        _modes.AddRange(_nativeModes.Select(ToOutputMode));
+        var preferredIndex = Math.Max(0, _nativeModes.FindIndex(m => m.IsPreferred));
+        PreferredMode = _modes.Count > 0 ? _modes[preferredIndex] : default;
+        PhysicalSize = ((int)connector.WidthMm, (int)connector.HeightMm);
+        _edidBytes = edidBytes;
+        var edid = edidBytes.Length > 0 ? EdidInfo.Parse(edidBytes) : new EdidInfo("unknown", "unknown", string.Empty);
+        Edid = edid;
+        _wideColorGamutCapable = _connectorProps.Has("Colorspace") &&
+            (TryEnumValue("Colorspace", "BT2020_RGB", out _) || TryEnumValue("Colorspace", "BT2020_YCC", out _)) &&
+            edid.SupportsBt2020 && VendorAllowsColorspace();
+        _highDynamicRangeCapable = _connectorProps.Has("HDR_OUTPUT_METADATA") && edid.SupportsPq && _wideColorGamutCapable;
+        _panelOrientation = ReadPanelOrientation();
+        Make = edid.Make;
+        Model = edid.Model;
+        Serial = edid.Serial;
+        Description = $"{edid.Make} {edid.Model} ({connector.Name})";
+    }
+
+    internal bool Refresh(DrmConnector connector)
+    {
+        _connectorProps.Refresh();
+        var edidBytes = ReadEdidBytes();
+        if (edidBytes.AsSpan().SequenceEqual(_edidBytes) && SameModes(connector.Modes))
+        {
+            return false;
+        }
+
+        LoadConnector(connector, edidBytes);
+        if (FindNativeMode(CurrentMode) is null && _modes.Count > 0)
+        {
+            Log.Info($"{Name}: current mode {CurrentMode.Width}x{CurrentMode.Height} is gone; taking {PreferredMode.Width}x{PreferredMode.Height}");
+            ReplaceCurrentMode(PreferredMode);
+        }
+
+        Log.Info($"{Name}: EDID or mode list changed; rebuilt in place as {Description}");
+        _needsModeset = true;
+        RaiseModesChanged();
+        RequestRepaint();
+        return true;
+    }
+
+    internal void CheckLinkStatus()
+    {
+        _connectorProps.Refresh();
+        if (!_connectorProps.TryGetValue("link-status", out var status) || status != LinkStatusBad)
+        {
+            return;
+        }
+
+        Log.Warn($"{Name}: link-status is BAD; retraining with a modeset");
+        _linkBad = true;
+        _needsModeset = true;
+        RequestRepaint();
+    }
+
+    private const ulong LinkStatusGood = 0;
+
+    private const ulong LinkStatusBad = 1;
+
+    private bool SameModes(IReadOnlyList<DrmModeInfo> modes)
+    {
+        if (modes.Count != _nativeModes.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < modes.Count; i++)
+        {
+            var a = modes[i];
+            var b = _nativeModes[i];
+            if (a.HorizontalDisplay != b.HorizontalDisplay || a.VerticalDisplay != b.VerticalDisplay ||
+                a.Clock != b.Clock || a.HorizontalTotal != b.HorizontalTotal || a.VerticalTotal != b.VerticalTotal ||
+                a.IsPreferred != b.IsPreferred)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     internal uint CrtcId { get; }
 
     internal int CrtcIndex { get; }
@@ -125,7 +202,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     public IReadOnlyList<OutputMode> Modes => _modes;
 
-    public OutputMode PreferredMode { get; }
+    public OutputMode PreferredMode { get; private set; }
 
     public override OutputClass Class { get; }
 
@@ -145,7 +222,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     public bool SupportsCtm => _crtcProps.Has("CTM");
 
-    public EdidInfo Edid { get; }
+    public EdidInfo Edid { get; private set; }
 
     public override ReadOnlyMemory<byte> EdidBytes => _edidBytes;
 
@@ -353,13 +430,19 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if ((state.Fields & OutputStateFields.Hdr) != 0)
         {
-            if (!Equals(state.Hdr, _pendingHdr))
+            if (state.Hdr.HasValue != _pendingHdr.HasValue)
             {
                 _needsModeset = true;
             }
 
             _pendingHdr = state.Hdr;
             _hdrDirty = true;
+        }
+
+        if ((state.Fields & OutputStateFields.ContentType) != 0 && state.ContentType != _pendingContentType)
+        {
+            _pendingContentType = state.ContentType;
+            _contentTypeDirty = true;
         }
 
         if ((state.Fields & OutputStateFields.RgbRange) != 0 && state.RgbRange != _pendingRgbRange)
@@ -408,7 +491,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             return true;
         }
 
-        var colorDirty = _gammaDirty || _ctmDirty || _degammaDirty || _hdrDirty;
+        var colorDirty = _gammaDirty || _ctmDirty || _degammaDirty || _hdrDirty || _contentTypeDirty;
         if (buffer is null && !modeChanged && !_needsModeset && !_cursorDirty && !colorDirty && !_enhancementDirty && !_adaptiveSyncDirty)
         {
             return true;
@@ -417,7 +500,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         var modeset = _needsModeset || modeChanged || !_hardwareLit;
         if (modeset)
         {
-            _gammaDirty = _degammaDirty = _ctmDirty = _hdrDirty = true;
+            _gammaDirty = _degammaDirty = _ctmDirty = _hdrDirty = _contentTypeDirty = true;
             colorDirty = true;
             var native = FindNativeMode((state.Fields & OutputStateFields.Mode) != 0 ? state.Mode : CurrentMode)
                 ?? throw new InvalidOperationException($"{Name}: no native mode matches the requested mode");
@@ -465,6 +548,41 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             layers = superseded.Layers;
         }
 
+        var wantOutFence = (state.Fields & OutputStateFields.OutFence) != 0 && _crtcProps.Has("OUT_FENCE_PTR");
+        var cursorStaged = _cursorDirty && _cursorProps is not null;
+        var tearing = (state.Fields & OutputStateFields.Tearing) != 0 && state.Tearing && !modeset &&
+            _backend.SupportsAtomicAsync && buffer is not null && layers is null && !_liftoffActive &&
+            !cursorStaged && !colorDirty && !_adaptiveSyncDirty && !_enhancementDirty && !wantOutFence;
+        if (tearing)
+        {
+            builder.Add(_planeProps, "plane", "FB_ID", fbId);
+            if ((state.Fields & OutputStateFields.InFence) != 0 && state.InFenceFd >= 0 && _planeProps.Has("IN_FENCE_FD"))
+            {
+                builder.Add(_planeProps, "plane", "IN_FENCE_FD", unchecked((ulong)(long)StageFence(state.InFenceFd)));
+            }
+
+            if (Commit(builder, DrmAtomicCommitFlags.Nonblock | DrmAtomicCommitFlags.PageFlipEvent | DrmAtomicCommitFlags.PageFlipAsync, "async flip", quietRefusal: _asyncRefusalLogged))
+            {
+                ReleaseStagedFences();
+                _lastFlipWasAsync = true;
+                _flipPending = true;
+                _lastFrameCommitTick = Environment.TickCount64;
+                LastOutFenceFd = -1;
+                _pendingScanout.Dispose();
+                _pendingScanout = buffer!.Lock();
+                if (state != _queuedFrame)
+                {
+                    DropQueuedFrame();
+                }
+
+                return true;
+            }
+
+            ReleaseStagedFences();
+            _asyncRefusalLogged = true;
+            builder.Reset();
+        }
+
         var layersDirty = false;
         if (_liftoffOutput is not null)
         {
@@ -482,7 +600,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             {
                 if (ApplyLayers(layers, builder, _liftoffOutput, _liftoffLayers, out var anyAccepted))
                 {
-                    _liftoffActive |= anyAccepted;
+                    _liftoffActive = anyAccepted;
                     layersDirty = true;
                 }
                 else
@@ -503,6 +621,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             builder.Add(_crtcProps, "crtc", "MODE_ID", _modeBlobId);
             builder.Add(_crtcProps, "crtc", "ACTIVE", 1);
             AddConnectorPreferences(builder);
+            if (_linkBad && _connectorProps.Has("link-status"))
+            {
+                builder.Add(_connectorProps, "connector", "link-status", LinkStatusGood);
+            }
+
+            AddPlaneDefaults(builder);
         }
 
         AddPlaneProperties(builder, fbId, _committedMode);
@@ -511,14 +635,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             builder.Add(_planeProps, "plane", "IN_FENCE_FD", unchecked((ulong)(long)StageFence(state.InFenceFd)));
         }
 
-        var wantOutFence = (state.Fields & OutputStateFields.OutFence) != 0 && _crtcProps.Has("OUT_FENCE_PTR");
         if (wantOutFence)
         {
             _outFenceSlot[0] = -1;
             builder.Add(_crtcProps, "crtc", "OUT_FENCE_PTR", (ulong)_outFencePin.AddrOfPinnedObject());
         }
 
-        var cursorStaged = _cursorDirty && _cursorProps is not null;
         if (cursorStaged)
         {
             AddCursorProperties(builder);
@@ -543,26 +665,15 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         var flags = modeset
             ? DrmAtomicCommitFlags.AllowModeset | DrmAtomicCommitFlags.PageFlipEvent
             : DrmAtomicCommitFlags.Nonblock | DrmAtomicCommitFlags.PageFlipEvent;
-        var tearing = (state.Fields & OutputStateFields.Tearing) != 0 && state.Tearing && !modeset;
-        if (tearing)
-        {
-            flags |= DrmAtomicCommitFlags.PageFlipAsync;
-        }
-
         if (!Commit(builder, flags, modeset ? "modeset" : "flip"))
         {
-            if (!tearing || !Commit(builder, flags & ~DrmAtomicCommitFlags.PageFlipAsync, "flip"))
-            {
-                ReleaseStagedFences();
-                return false;
-            }
-
-            tearing = false;
+            ReleaseStagedFences();
+            return false;
         }
 
         ReleaseStagedFences();
 
-        LastFlipWasAsync = tearing;
+        _lastFlipWasAsync = false;
 
         if (layersDirty)
         {
@@ -602,6 +713,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _cursorDirty = false;
         _cursorAwaitingFrame = false;
         _adaptiveSyncDirty = false;
+        if (modeset)
+        {
+            _linkBad = false;
+            _planeEpoch++;
+        }
+
         _needsModeset = false;
         _hardwareLit = true;
         _flipPending = true;
@@ -837,7 +954,91 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    private void AddPlaneDefaults(DrmAtomicBuilder builder)
+    {
+        AddPlaneDefaults(builder, _planeProps, "plane");
+        if (_cursorProps is { } cursor)
+        {
+            AddPlaneDefaults(builder, cursor, "cursor");
+        }
+    }
+
+    private void AddPlaneDefaults(DrmAtomicBuilder builder, DrmPropertyMap plane, string label)
+    {
+        foreach (var (property, entry) in PlaneDefaults)
+        {
+            if (plane.Has(property) && TryEnumValue(plane, property, entry, out var value))
+            {
+                builder.Add(plane, label, property, value);
+            }
+        }
+    }
+
+    private static readonly (string Property, string Entry)[] PlaneDefaults =
+    [
+        ("rotation", "rotate-0"),
+        ("pixel blend mode", "Pre-multiplied"),
+        ("COLOR_ENCODING", "ITU-R BT.601 YCbCr"),
+        ("COLOR_RANGE", "YCbCr limited range"),
+    ];
+
+    private bool TryEnumValue(DrmPropertyMap map, string property, string entryName, out ulong value)
+    {
+        value = 0;
+        var info = _backend.Device.GetProperty(map.IdOf(property));
+        foreach (var entry in info.EnumEntries)
+        {
+            if (entry.Name == entryName)
+            {
+                value = (info.Flags & DrmPropertyFlags.Bitmask) != 0 ? 1UL << (int)entry.Value : entry.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static readonly string[] CachedConnectorEnums =
+    [
+        "Colorspace", "content type", "Broadcast RGB", "adaptive backlight modulation", "underscan", "panel orientation",
+    ];
+
+    private readonly Dictionary<(string Property, string Entry), ulong> _connectorEnums = [];
+
+    private void CacheConnectorEnums()
+    {
+        foreach (var property in CachedConnectorEnums)
+        {
+            if (!_connectorProps.Has(property))
+            {
+                continue;
+            }
+
+            var info = _backend.Device.GetProperty(_connectorProps.IdOf(property));
+            foreach (var entry in info.EnumEntries)
+            {
+                _connectorEnums[(property, entry.Name)] =
+                    (info.Flags & DrmPropertyFlags.Bitmask) != 0 ? 1UL << (int)entry.Value : entry.Value;
+            }
+        }
+    }
+
     private bool TryEnumValue(string property, string entryName, out ulong value)
+    {
+        if (_connectorEnums.TryGetValue((property, entryName), out value))
+        {
+            return true;
+        }
+
+        if (Array.IndexOf(CachedConnectorEnums, property) >= 0)
+        {
+            return false;
+        }
+
+        return TryEnumValueUncached(property, entryName, out value);
+    }
+
+    private bool TryEnumValueUncached(string property, string entryName, out ulong value)
     {
         value = 0;
         var propertyId = _connectorProps.IdOf(property);
@@ -860,9 +1061,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     private static readonly bool AllowNvidiaColorspace =
         Environment.GetEnvironmentVariable("BASIN_DRM_ALLOW_NVIDIA_COLORSPACE") == "1";
 
-    private readonly byte[] _edidBytes;
-    private readonly bool _wideColorGamutCapable;
-    private readonly bool _highDynamicRangeCapable;
+    private byte[] _edidBytes = [];
+    private bool _wideColorGamutCapable;
+    private bool _highDynamicRangeCapable;
+    private bool _linkBad;
 
     private bool VendorAllowsColorspace()
     {
@@ -990,8 +1192,51 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     private bool _degammaDirty;
     private bool _hdrDirty;
 
+    private OutputContentType _pendingContentType;
+    private bool _contentTypeDirty;
+
+    private static readonly string[] ContentTypeNames = ["No Data", "Graphics", "Photo", "Cinema", "Game"];
+
+    private static readonly (string Name, OutputTransform Transform)[] PanelOrientations =
+    [
+        ("Normal", OutputTransform.Normal),
+        ("Upside Down", OutputTransform.Rotate180),
+        ("Left Side Up", OutputTransform.Rotate90),
+        ("Right Side Up", OutputTransform.Rotate270),
+    ];
+
+    public override OutputTransform PanelOrientation => _panelOrientation;
+
+    private OutputTransform _panelOrientation;
+
+    public OutputContentType ContentType => _pendingContentType;
+
+    private OutputTransform ReadPanelOrientation()
+    {
+        if (!_connectorProps.TryGetValue("panel orientation", out var value))
+        {
+            return OutputTransform.Normal;
+        }
+
+        foreach (var (name, transform) in PanelOrientations)
+        {
+            if (TryEnumValue("panel orientation", name, out var entry) && entry == value)
+            {
+                return transform;
+            }
+        }
+
+        return OutputTransform.Normal;
+    }
+
     private void AddColorProperties(DrmAtomicBuilder builder)
     {
+        if (_contentTypeDirty && _connectorProps.Has("content type") &&
+            TryEnumValue("content type", ContentTypeNames[(int)_pendingContentType], out var contentType))
+        {
+            builder.Add(_connectorProps, "connector", "content type", contentType);
+        }
+
         if (_hdrDirty && _connectorProps.Has("HDR_OUTPUT_METADATA"))
         {
             ReplaceHdrBlob(_pendingHdr);
@@ -1024,6 +1269,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     private void ClearColorDirty()
     {
+        _contentTypeDirty = false;
         _gammaDirty = false;
         _ctmDirty = false;
         _degammaDirty = false;
@@ -1143,6 +1389,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             builder.Add(_connectorProps, "connector", "Colorspace", colorspace);
         }
 
+        if (_connectorProps.Has("content type") && TryEnumValue("content type", "No Data", out var noData))
+        {
+            builder.Add(_connectorProps, "connector", "content type", noData);
+        }
+
         if (_crtcProps.Has("GAMMA_LUT"))
         {
             builder.Add(_crtcProps, "crtc", "GAMMA_LUT", 0);
@@ -1185,7 +1436,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         builder.Add(_planeProps, "plane", "CRTC_H", mode.VerticalDisplay);
     }
 
-    private bool Commit(DrmAtomicBuilder builder, DrmAtomicCommitFlags flags, string what)
+    private bool _asyncRefusalLogged;
+
+    private bool Commit(DrmAtomicBuilder builder, DrmAtomicCommitFlags flags, string what, bool quietRefusal = false)
     {
         var t0 = MonotonicClock.Nanos;
         try
@@ -1197,7 +1450,15 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
         catch (DrmException e)
         {
-            Log.Warn($"{Name}: {what} rejected by TEST_ONLY ({e.Message}); staged properties:\n{builder}");
+            if (quietRefusal)
+            {
+                Log.Debug($"{Name}: {what} rejected by TEST_ONLY ({e.Message})");
+            }
+            else
+            {
+                Log.Warn($"{Name}: {what} rejected by TEST_ONLY ({e.Message}); staged properties:\n{builder}");
+            }
+
             return false;
         }
 
@@ -1332,6 +1593,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             _cursorBuffer.Dispose();
             _cursorBuffer = default;
             _cursorVisible = false;
+            _planeEpoch++;
             _cursorDirty = true;
             PushCursorState();
             return true;
@@ -1357,6 +1619,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _cursorBuffer = buffer.Lock();
         _hotspotX = hotspotX;
         _hotspotY = hotspotY;
+        if (!_cursorVisible)
+        {
+            _planeEpoch++;
+        }
+
         _cursorVisible = true;
         _cursorDirty = true;
         PushCursorState();
@@ -1564,6 +1831,20 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                 unchecked((ulong)(long)(layer.InFenceFd >= 0 ? StageFence(layer.InFenceFd) : -1)));
 
             target.SetAlpha(layer.Alpha >= 1f ? (ushort)0xFFFF : (ushort)Math.Clamp(layer.Alpha * 0xFFFF, 0, 0xFFFF));
+            layer.YuvEncodingRefused = false;
+            if (layer.Buffer!.Format is DrmFormat.Nv12 or DrmFormat.P010)
+            {
+                if (!_backend.OverlayTakesYuv(CrtcIndex, layer.YuvCoefficients, layer.YuvRange))
+                {
+                    layer.YuvEncodingRefused = true;
+                    _layerFbIds[^1] = 0;
+                    target.Disable();
+                    continue;
+                }
+
+                target.SetProperty("COLOR_ENCODING", (ulong)layer.YuvCoefficients);
+                target.SetProperty("COLOR_RANGE", (ulong)layer.YuvRange);
+            }
         }
 
         for (var i = layers.Count; i < pool.Count; i++)
@@ -1734,29 +2015,91 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Constructor)]
     private static extern DrmModeInfo WrapMode(ref _drmModeModeInfo native);
 
-    private static bool TryBuildCustomMode(OutputMode wanted, out DrmModeInfo built)
+    public Basin.Capabilities.OutputModeGenerator ModeGenerator { get; set; }
+
+    public int MaxClockKhz { get; set; }
+
+    private bool TryBuildCustomMode(OutputMode wanted, out DrmModeInfo built)
     {
         built = default;
-        if (!Libxcvt.TryGenerate(wanted.Width, wanted.Height, wanted.RefreshMilliHz, reducedBlanking: true, out var cvt))
+        if (!TryCustomTiming(wanted, out var timing))
         {
             return false;
         }
 
         var native = default(_drmModeModeInfo);
-        native.clock = (uint)cvt.DotClock;
-        native.hdisplay = (ushort)cvt.HDisplay;
-        native.hsync_start = cvt.HSyncStart;
-        native.hsync_end = cvt.HSyncEnd;
-        native.htotal = cvt.HTotal;
-        native.vdisplay = (ushort)cvt.VDisplay;
-        native.vsync_start = cvt.VSyncStart;
-        native.vsync_end = cvt.VSyncEnd;
-        native.vtotal = cvt.VTotal;
+        native.clock = (uint)timing.ClockKhz;
+        native.hdisplay = (ushort)timing.HDisplay;
+        native.hsync_start = (ushort)timing.HSyncStart;
+        native.hsync_end = (ushort)timing.HSyncEnd;
+        native.htotal = (ushort)timing.HTotal;
+        native.vdisplay = (ushort)timing.VDisplay;
+        native.vsync_start = (ushort)timing.VSyncStart;
+        native.vsync_end = (ushort)timing.VSyncEnd;
+        native.vtotal = (ushort)timing.VTotal;
         native.vrefresh = (uint)Math.Round(wanted.RefreshMilliHz / 1000.0);
-        native.flags = (uint)(cvt.ModeFlags & 0xF);
+        native.flags = timing.Flags;
         native.type = 1u << 5;
         built = WrapMode(ref native);
         return true;
+    }
+
+    private bool TryCustomTiming(OutputMode wanted, out DrmTiming timing)
+    {
+        timing = default;
+        var generator = ModeGenerator;
+        if (generator == Basin.Capabilities.OutputModeGenerator.Auto)
+        {
+            generator = InternalConnectors.IsInternal(this)
+                ? Basin.Capabilities.OutputModeGenerator.SameTiming
+                : Basin.Capabilities.OutputModeGenerator.Cvt;
+        }
+
+        var built = false;
+        if (generator != Basin.Capabilities.OutputModeGenerator.Cvt && BaseTimingFor(wanted) is { } basis)
+        {
+            built = generator == Basin.Capabilities.OutputModeGenerator.SameTiming
+                ? DrmModeGenerator.TrySameTiming(basis, wanted.RefreshMilliHz, out timing)
+                : DrmModeGenerator.TryScaledClock(basis, wanted.RefreshMilliHz, out timing);
+        }
+
+        if (!built)
+        {
+            if (!Libxcvt.TryGenerate(wanted.Width, wanted.Height, wanted.RefreshMilliHz, reducedBlanking: true, out var cvt))
+            {
+                return false;
+            }
+
+            timing = new DrmTiming(
+                (int)cvt.DotClock, (int)cvt.HDisplay, cvt.HSyncStart, cvt.HSyncEnd, cvt.HTotal,
+                (int)cvt.VDisplay, cvt.VSyncStart, cvt.VSyncEnd, cvt.VTotal, (uint)(cvt.ModeFlags & 0xF));
+        }
+
+        return MaxClockKhz <= 0 || timing.ClockKhz <= MaxClockKhz;
+    }
+
+    private DrmTiming? BaseTimingFor(OutputMode wanted)
+    {
+        DrmModeInfo? best = null;
+        foreach (var mode in _nativeModes)
+        {
+            if (mode.HorizontalDisplay != wanted.Width || mode.VerticalDisplay != wanted.Height)
+            {
+                continue;
+            }
+
+            if (best is null || mode.IsPreferred)
+            {
+                best = mode;
+            }
+        }
+
+        return best is { } found
+            ? new DrmTiming(
+                (int)found.Clock, found.HorizontalDisplay, found.HorizontalSyncStart, found.HorizontalSyncEnd,
+                found.HorizontalTotal, found.VerticalDisplay, found.VerticalSyncStart, found.VerticalSyncEnd,
+                found.VerticalTotal, (uint)found.Flags)
+            : null;
     }
 
     private void RebuildCustomModes(IReadOnlyList<OutputMode> wanted)
@@ -1775,7 +2118,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     {
         foreach (var mode in wanted)
         {
-            if (!Libxcvt.TryGenerate(mode.Width, mode.Height, mode.RefreshMilliHz, reducedBlanking: true, out _))
+            if (!TryCustomTiming(mode, out _))
             {
                 return false;
             }

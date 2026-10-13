@@ -29,9 +29,13 @@ public sealed class ColorRepresentationManager : IDisposable
     private readonly Dictionary<Surface, SurfaceRepresentation> _surfaces = [];
     private readonly HashSet<Surface> _claimed = [];
 
-    public ColorRepresentationManager(WlServerDisplay display, CompositorGlobal compositor)
+    private readonly Basin.Capabilities.Defaults.SurfaceHints? _hints;
+
+    public ColorRepresentationManager(
+        WlServerDisplay display, CompositorGlobal compositor, Basin.Capabilities.Defaults.SurfaceHints? hints = null)
     {
         _compositor = compositor;
+        _hints = hints;
         _global = display.CreateGlobal(WpColorRepresentationManagerV1.Interface, Version, OnBind);
     }
 
@@ -67,6 +71,7 @@ public sealed class ColorRepresentationManager : IDisposable
         {
             _claimed.Remove(surface);
             _surfaces.Remove(surface);
+            _hints?.SetYuvEncoding(surface, null);
         };
         return state;
     }
@@ -95,8 +100,23 @@ public sealed class ColorRepresentationManager : IDisposable
         state.Current = state.Latched;
         if (changed)
         {
+            _hints?.SetYuvEncoding(surface, YuvEncodingOf(state.Current));
             RepresentationChanged?.Invoke(surface, state.Current);
         }
+    }
+
+    public static (YuvCoefficients Coefficients, YuvRange Range)? YuvEncodingOf(Representation representation)
+    {
+        YuvCoefficients? coefficients = representation.Coefficients switch
+        {
+            WpColorRepresentationSurfaceV1.Coefficients.Bt601 => YuvCoefficients.Bt601,
+            WpColorRepresentationSurfaceV1.Coefficients.Bt709 => YuvCoefficients.Bt709,
+            WpColorRepresentationSurfaceV1.Coefficients.Bt2020 => YuvCoefficients.Bt2020,
+            _ => null,
+        };
+        return coefficients is { } value
+            ? (value, representation.Range == WpColorRepresentationSurfaceV1.Range.Full ? YuvRange.Full : YuvRange.Limited)
+            : null;
     }
 
     private void OnBind(WlClient client, uint version, uint id)

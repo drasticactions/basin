@@ -11,6 +11,7 @@ namespace Basin.Screencast.PipeWire;
 public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, ICaptureDamageObserver, IDisposable
 {
     private const int CursorMaxSize = 256;
+    private const int RetryMilliseconds = 16;
 
     private readonly ICompositorEventLoop _loop;
     private readonly IScreenCapture _capture;
@@ -20,6 +21,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
     private readonly PipeWireContext _context;
     private readonly PipeWireCore _core;
     private readonly IEventSource _fdSource;
+    private readonly IEventSource _retry;
     private readonly Dictionary<ulong, Entry> _streams = [];
     private bool _flushScheduled;
     private uint _cursorSerial = 1;
@@ -42,6 +44,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         _context = context;
         _core = core;
         _fdSource = loop.AddFd(pwLoop.Fd, FdReadiness.Readable, (_, _) => Pump(0));
+        _retry = loop.AddTimer(ScheduleFlush);
         capture.AddDamageObserver(this);
         BasinCounters.Track();
     }
@@ -124,7 +127,10 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         var modifiers = DmabufModifiersFor(format.Format);
         var offerDmabuf = modifiers.Length > 0;
-        var entry = new Entry(request.StreamId, request.Source, request.Cursor, format, videoFormat, offerDmabuf);
+        var entry = new Entry(request.StreamId, request.Source, request.Cursor, format, videoFormat, offerDmabuf)
+        {
+            OfferYuv = OffersYuv(format),
+        };
         var name = $"basin-screencast-{request.StreamId}";
         using var properties = PipeWireProperties.From(
             "media.class", "Video/Source",
@@ -153,6 +159,16 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         byte[][] formats = offerDmabuf
             ? SpaVideoFormats.BuildDmaBufAndFallback([videoFormat], modifiers, size, defaultFramerate: refresh, minFramerate: (0, 1), maxFramerate: refresh)
             : [SpaVideoFormats.BuildRawChoice([videoFormat], size, defaultFramerate: refresh, minFramerate: (0, 1), maxFramerate: refresh)];
+        if (entry.OfferYuv)
+        {
+            formats =
+            [
+                .. formats,
+                SpaVideoFormats.BuildDmaBuf(
+                    [spa_video_format.SPA_VIDEO_FORMAT_NV12], [DrmFormatSet.ModifierLinear], size,
+                    defaultFramerate: refresh, minFramerate: (0, 1), maxFramerate: refresh, dontFixate: false),
+            ];
+        }
         try
         {
             entry.Stream.Connect(spa_direction.SPA_DIRECTION_OUTPUT, uint.MaxValue, flags, formats);
@@ -255,6 +271,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         _streams.Clear();
         _fdSource.Remove();
+        _retry.Remove();
         _core.Dispose();
         _context.Dispose();
         _pwLoop.Dispose();
@@ -390,6 +407,34 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
             return;
         }
 
+        if (entry.OfferYuv && SpaVideoFormats.TryParseRaw(e.Param, out var raw) &&
+            raw.format == spa_video_format.SPA_VIDEO_FORMAT_NV12)
+        {
+            entry.UsesYuv = true;
+            entry.UsesDmabuf = true;
+            entry.NegotiatedModifier = DrmFormatSet.ModifierLinear;
+            var yuvMetas = new List<byte[]>
+            {
+                SpaBufferParams.Build(
+                    buffers: 3,
+                    blocks: 2,
+                    size: entry.Format.Width * entry.Format.Height,
+                    stride: entry.Format.Width,
+                    dataTypes: SpaBufferParams.DataTypeMask(spa_data_type.SPA_DATA_DmaBuf)),
+                SpaMetaParams.BuildHeader(),
+                SpaMetaParams.BuildVideoDamage(),
+            };
+            if ((entry.Cursor & ScreencastCursorMode.Metadata) != 0)
+            {
+                yuvMetas.Add(SpaMetaParams.BuildCursor(CursorMaxSize, CursorMaxSize));
+            }
+
+            stream.UpdateParams(yuvMetas.ToArray());
+            Log.Debug($"stream {entry.Id}: format fixated, NV12 DmaBuf");
+            return;
+        }
+
+        entry.UsesYuv = false;
         var size = ((uint)entry.Format.Width, (uint)entry.Format.Height);
         var refresh = ((uint)RefreshOf(entry.Source), 1000u);
         if (entry.OfferDmabuf && SpaVideoFormats.NeedsModifierFixation(e.Param))
@@ -534,6 +579,59 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
     }
 
+    private bool OffersYuv(in CaptureFormat format)
+    {
+        if (!_capture.CanCaptureYuv || _dmabufAllocator is not { } allocator)
+        {
+            return false;
+        }
+
+        var probe = allocator.Allocate(format.Width, format.Height, DrmFormat.Nv12, [DrmFormatSet.ModifierLinear], BufferUse.Render);
+        (probe as BufferBase)?.Destroy();
+        return probe is not null;
+    }
+
+    private void AddYuvBuffer(Entry entry, PipeWireBuffer buffer, Slot slot)
+    {
+        var data = buffer.Buffer->datas;
+        if (buffer.DataCount < 2 || _dmabufAllocator is null ||
+            _dmabufAllocator.Allocate(entry.Format.Width, entry.Format.Height, DrmFormat.Nv12, [DrmFormatSet.ModifierLinear], BufferUse.Render)
+                is not { } target)
+        {
+            Log.Warn($"stream {entry.Id}: NV12 allocation failed, the buffer stays empty");
+            return;
+        }
+
+        if (!target.TryGetDmabuf(out var attributes))
+        {
+            (target as BufferBase)?.Destroy();
+            return;
+        }
+
+        slot.Target = target;
+        var heights = (entry.Format.Height, (entry.Format.Height + 1) / 2);
+        for (var plane = 0; plane < 2; plane++)
+        {
+            var rows = plane == 0 ? heights.Item1 : heights.Item2;
+            data[plane].type = (uint)spa_data_type.SPA_DATA_DmaBuf;
+            data[plane].flags = Pipewire.SPA_DATA_FLAG_READABLE;
+            data[plane].fd = attributes.Fds[plane];
+            data[plane].mapoffset = 0;
+            data[plane].maxsize = (uint)(attributes.Offsets[plane] + (attributes.Strides[plane] * rows));
+            data[plane].data = null;
+            if (data[plane].chunk is not null)
+            {
+                data[plane].chunk->offset = attributes.Offsets[plane];
+                data[plane].chunk->stride = (int)attributes.Strides[plane];
+                data[plane].chunk->size = (uint)(attributes.Strides[plane] * rows);
+            }
+        }
+
+        slot.LumaChunk = (attributes.Offsets[0], (uint)(attributes.Strides[0] * heights.Item1), (int)attributes.Strides[0]);
+
+        entry.Slots[(nint)buffer.Handle] = slot;
+    }
+
     private void OnBufferAdded(Entry entry, PipeWireBuffer buffer)
     {
         if (buffer.IsNull || buffer.DataCount < 1)
@@ -543,6 +641,12 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         var data = buffer.Buffer->datas;
         var slot = new Slot();
+        if (entry.UsesYuv)
+        {
+            AddYuvBuffer(entry, buffer, slot);
+            return;
+        }
+
         var stride = entry.Format.Stride;
         var size = stride * entry.Format.Height;
         if (entry.UsesDmabuf && (data[0].type & (1u << (int)spa_data_type.SPA_DATA_DmaBuf)) != 0 && _dmabufAllocator is not null)
@@ -644,10 +748,12 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         {
             var data = buffer[0];
             var found = entry.Slots.TryGetValue((nint)buffer.Handle, out var slot);
-            var rendered = found && Render(entry, slot!, data);
+            var rendered = found && RenderSlot(entry, slot!, data);
             if (!rendered)
             {
                 data.SetChunk(0, 0, entry.Format.Stride);
+                entry.Dirty = true;
+                _retry.UpdateTimer(RetryMilliseconds);
             }
 
             WriteHeader(entry, buffer);
@@ -668,6 +774,25 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
     }
 
+    private bool RenderSlot(Entry entry, Slot slot, PipeWireBufferData data)
+    {
+        if (slot.Warm)
+        {
+            return Render(entry, slot, data);
+        }
+
+        AllocationScope.Pause();
+        try
+        {
+            slot.Warm = Render(entry, slot, data);
+            return slot.Warm;
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
+
     private bool Render(Entry entry, Slot slot, PipeWireBufferData data)
     {
         if (slot.Target is { } dmabuf)
@@ -680,8 +805,16 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
                 return false;
             }
 
-            var chunkStride = data.Stride <= 0 ? entry.Format.Stride : data.Stride;
-            data.SetChunk(data.Offset, (uint)(chunkStride * entry.Format.Height), chunkStride);
+            if (entry.UsesYuv)
+            {
+                data.SetChunk(slot.LumaChunk.Offset, slot.LumaChunk.Size, slot.LumaChunk.Stride);
+            }
+            else
+            {
+                var chunkStride = data.Stride <= 0 ? entry.Format.Stride : data.Stride;
+                data.SetChunk(data.Offset, (uint)(chunkStride * entry.Format.Height), chunkStride);
+            }
+
             return true;
         }
 
@@ -837,6 +970,10 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         public nuint MapSize { get; set; }
 
+        public (uint Offset, uint Size, int Stride) LumaChunk { get; set; }
+
+        public bool Warm { get; set; }
+
         public void Dispose()
         {
             (Target as BufferBase)?.Destroy();
@@ -878,6 +1015,10 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         public bool OfferDmabuf { get; } = offerDmabuf;
 
         public bool UsesDmabuf { get; set; }
+
+        public bool OfferYuv { get; set; }
+
+        public bool UsesYuv { get; set; }
 
         public ulong NegotiatedModifier { get; set; }
 

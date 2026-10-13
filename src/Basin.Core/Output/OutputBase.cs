@@ -35,6 +35,12 @@ public abstract class OutputBase : IOutput
 
     public bool AdaptiveSync { get; private set; }
 
+    public virtual bool LastFlipWasAsync => false;
+
+    public virtual long PlaneEpoch => 0;
+
+    public virtual OutputTransform PanelOrientation => OutputTransform.Normal;
+
     public event Action? Frame;
 
     public event Action? RepaintRequested;
@@ -44,6 +50,12 @@ public abstract class OutputBase : IOutput
     public event Action<OutputStateFields>? Committed;
 
     public event Action? Destroyed;
+
+    public event Action? ModesChanged;
+
+    protected void RaiseModesChanged() => ModesChanged?.Invoke();
+
+    protected void ReplaceCurrentMode(OutputMode mode) => CurrentMode = mode;
 
     public bool TestCommit(OutputState state)
     {

@@ -9,10 +9,13 @@ internal sealed class GlColorLut : IColorLut
 
     public uint TextureId { get; }
 
-    internal GlColorLut(GlRenderer renderer, uint textureId)
+    public float ShaperNits { get; }
+
+    internal GlColorLut(GlRenderer renderer, uint textureId, float shaperNits)
     {
         _renderer = renderer;
         TextureId = textureId;
+        ShaperNits = shaperNits;
         BasinCounters.Track();
     }
 

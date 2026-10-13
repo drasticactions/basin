@@ -86,6 +86,38 @@ internal static unsafe class VulkanDmabufImport
         }
     }
 
+    public static ImportedDmabuf ImportPlane(VulkanDevice device, in DmabufAttributes plane, Format format, ImageUsageFlags usage)
+    {
+        var entry = new VulkanFormatEntry(plane.Format, format, Format.Undefined, IsYcbcr: false);
+        var result = new ImportedDmabuf { Width = plane.Width, Height = plane.Height };
+        var ownedFd = -1;
+        try
+        {
+            CreateImage(device, plane, usage, entry, mutableSrgb: false, disjoint: false, result);
+            ImportAndBindMemory(device, plane, disjoint: false, result, ref ownedFd);
+            var viewInfo = new ImageViewCreateInfo
+            {
+                SType = StructureType.ImageViewCreateInfo,
+                Image = result.Image,
+                ViewType = ImageViewType.Type2D,
+                Format = format,
+                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+            };
+            VulkanDevice.Check(device.Api.CreateImageView(device.Device, in viewInfo, null, out result.View), "vkCreateImageView(plane)");
+            return result;
+        }
+        catch
+        {
+            if (ownedFd >= 0)
+            {
+                Libc.Close(ownedFd);
+            }
+
+            result.Destroy(device);
+            throw;
+        }
+    }
+
     private static void CreateImage(
         VulkanDevice device,
         in DmabufAttributes attributes,

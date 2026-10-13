@@ -51,10 +51,10 @@ public sealed class WindowQuirksTests
         BasinLog.Sink = sink;
         try
         {
-            var quirks = WindowQuirks.Read((TomlTable)Toml.ToModel("letterbox = \"stretch\"\nforce_unmaximize = \"yes\"\nx11_scale = \"upscale\""), BasinLog.For("test"));
+            var quirks = WindowQuirks.Read((TomlTable)Toml.ToModel("letterbox = \"squash\"\nforce_unmaximize = \"yes\"\nx11_scale = \"upscale\""), BasinLog.For("test"));
             Assert.Null(quirks.Letterbox);
             Assert.Null(quirks.ForceUnmaximize);
-            Assert.Contains(sink.Lines, line => line.Contains("letterbox \"stretch\" is not fit, center or off", StringComparison.Ordinal));
+            Assert.Contains(sink.Lines, line => line.Contains("letterbox \"squash\" is not fit, center, integer, fill, stretch or off", StringComparison.Ordinal));
             Assert.Contains(sink.Lines, line => line.Contains("force_unmaximize \"yes\" is not true or false", StringComparison.Ordinal));
             Assert.Contains(sink.Lines, line => line.Contains("x11_scale is removed", StringComparison.Ordinal));
         }

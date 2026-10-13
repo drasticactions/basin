@@ -12,7 +12,8 @@ public static class ColorLutBaker
         Chromaticities.From(source) == Chromaticities.From(output) &&
         source.TransferNamed == output.TransferNamed &&
         source.TransferPower == output.TransferPower &&
-        source.Luminances == output.Luminances;
+        source.Luminances == output.Luminances &&
+        !output.NeedsBakedTable;
 
     public static ColorLut3D Bake(
         ImageDescription source,
@@ -20,7 +21,8 @@ public static class ColorLutBaker
         int size = DefaultSize,
         ColorRenderIntent intent = ColorRenderIntent.Perceptual)
     {
-        var parameters = ColorTransformParameters.From(source, output, intent);
+        var parameters = ColorTransformParameters.From(source, output, intent, softGamut: true);
+        var shaperNits = ShaperNitsFor(parameters.Source);
         var data = new float[size * size * size * 3];
         var index = 0;
         Span<double> rgb = stackalloc double[3];
@@ -30,9 +32,9 @@ public static class ColorLutBaker
             {
                 for (var r = 0; r < size; r++)
                 {
-                    rgb[0] = r / (double)(size - 1);
-                    rgb[1] = g / (double)(size - 1);
-                    rgb[2] = b / (double)(size - 1);
+                    rgb[0] = Unshape(r / (double)(size - 1), shaperNits);
+                    rgb[1] = Unshape(g / (double)(size - 1), shaperNits);
+                    rgb[2] = Unshape(b / (double)(size - 1), shaperNits);
                     parameters.Apply(rgb);
                     data[index++] = (float)rgb[0];
                     data[index++] = (float)rgb[1];
@@ -41,8 +43,18 @@ public static class ColorLutBaker
             }
         }
 
-        return new ColorLut3D(size, data);
+        return new ColorLut3D(size, data)
+        {
+            ShaperNits = (float)shaperNits,
+            ShaperInputMax = shaperNits > 0 ? (float)parameters.Source.SignalCeiling : 1,
+        };
     }
+
+    public static double ShaperNitsFor(in TransferCharacteristics source) =>
+        source.Kind == TransferKind.Linear ? source.MaxLuminance : 0;
+
+    private static double Unshape(double code, double shaperNits) =>
+        shaperNits <= 0 ? code : TransferCharacteristics.PqEotf(code) / shaperNits;
 
     public static ColorLut3D? BakeFromIcc(
         byte[] iccData,

@@ -29,6 +29,10 @@ public interface IOutput
 
     bool AdaptiveSync { get; }
 
+    bool LastFlipWasAsync => false;
+
+    long PlaneEpoch => 0;
+
     bool SupportsInFence => false;
 
     bool CanScanout(DrmFormat format, ulong modifier, bool overlay) => true;
@@ -38,6 +42,8 @@ public interface IOutput
     OutputColorimetry? Colorimetry => null;
 
     ReadOnlyMemory<byte> EdidBytes => default;
+
+    OutputTransform PanelOrientation => OutputTransform.Normal;
 
     void RequestRepaint();
 
@@ -52,4 +58,15 @@ public interface IOutput
     event Action<OutputStateFields>? Committed;
 
     event Action? Destroyed;
+
+    event Action? ModesChanged
+    {
+        add
+        {
+        }
+
+        remove
+        {
+        }
+    }
 }

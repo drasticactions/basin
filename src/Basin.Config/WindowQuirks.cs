@@ -6,7 +6,8 @@ namespace Basin.Config;
 public sealed record WindowQuirks
 {
     public static readonly string[] Keys =
-        ["letterbox", "scale_filter", "readiness", "force_unmaximize", "allow_client_move", "emulated_modes"];
+        ["letterbox", "scale_filter", "readiness", "force_unmaximize", "allow_client_move", "emulated_modes", "frame_limit",
+         "inverse_tone_mapping", "nested_confine_lock"];
 
     public static WindowQuirks None { get; } = new();
 
@@ -22,6 +23,12 @@ public sealed record WindowQuirks
 
     public bool? EmulatedModes { get; init; }
 
+    public int? FrameLimit { get; init; }
+
+    public bool? InverseToneMapping { get; init; }
+
+    public bool? NestedConfineLock { get; init; }
+
     public bool IsEmpty => this == None;
 
     public WindowQuirks Merge(WindowQuirks? weaker) => weaker is null ? this : new()
@@ -32,6 +39,9 @@ public sealed record WindowQuirks
         ForceUnmaximize = ForceUnmaximize ?? weaker.ForceUnmaximize,
         AllowClientMove = AllowClientMove ?? weaker.AllowClientMove,
         EmulatedModes = EmulatedModes ?? weaker.EmulatedModes,
+        FrameLimit = FrameLimit ?? weaker.FrameLimit,
+        InverseToneMapping = InverseToneMapping ?? weaker.InverseToneMapping,
+        NestedConfineLock = NestedConfineLock ?? weaker.NestedConfineLock,
     };
 
     public static WindowQuirks Read(TomlReader row)
@@ -60,14 +70,18 @@ public sealed record WindowQuirks
                 "fit" => LetterboxQuirk.Fit,
                 "center" => LetterboxQuirk.Center,
                 "off" => LetterboxQuirk.Off,
+                "integer" => LetterboxQuirk.Integer,
+                "fill" => LetterboxQuirk.Fill,
+                "stretch" => LetterboxQuirk.Stretch,
                 _ => (LetterboxQuirk?)null,
-            }, "fit, center or off"),
+            }, "fit, center, integer, fill, stretch or off"),
             ScaleFilter = Choice(take("scale_filter"), where("scale_filter"), log, static text => text switch
             {
                 "linear" => TextureFilter.Linear,
                 "nearest" => TextureFilter.Nearest,
+                "pixel" => TextureFilter.Pixel,
                 _ => (TextureFilter?)null,
-            }, "linear or nearest"),
+            }, "linear, nearest or pixel"),
             Readiness = Choice(take("readiness"), where("readiness"), log, static text => text switch
             {
                 "matching" => ReadinessQuirk.Matching,
@@ -77,6 +91,9 @@ public sealed record WindowQuirks
             ForceUnmaximize = Flag(take("force_unmaximize"), where("force_unmaximize"), log),
             AllowClientMove = Flag(take("allow_client_move"), where("allow_client_move"), log),
             EmulatedModes = Flag(take("emulated_modes"), where("emulated_modes"), log),
+            FrameLimit = Count(take("frame_limit"), where("frame_limit"), log),
+            InverseToneMapping = Flag(take("inverse_tone_mapping"), where("inverse_tone_mapping"), log),
+            NestedConfineLock = Flag(take("nested_confine_lock"), where("nested_confine_lock"), log),
         };
     }
 
@@ -95,6 +112,20 @@ public sealed record WindowQuirks
 
         log.Warn($"{where} \"{value}\" is not {allowed}, ignored");
         return null;
+    }
+
+    private static int? Count(object? value, string where, BasinLogger log)
+    {
+        switch (value)
+        {
+            case null:
+                return null;
+            case long number when number is >= 0 and <= 1000:
+                return (int)number;
+            default:
+                log.Warn($"{where} \"{value}\" is not a frame rate from 0 to 1000, ignored");
+                return null;
+        }
     }
 
     private static bool? Flag(object? value, string where, BasinLogger log)

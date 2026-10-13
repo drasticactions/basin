@@ -107,13 +107,21 @@ float bt2390(float nits) {
 
 void main() {
     vec2 uv = pc.src.xy + v_uv * pc.src.zw;
-    if (pc.color.x > 0.5) {
+    if (pc.color.x > 1.5) {
+        vec2 size = vec2(textureSize(u_texture, 0));
+        vec2 extent = max(fwidth(uv * size), vec2(1.0 / 256.0));
+        vec2 pixel = uv * size - 0.5;
+        vec2 base = floor(pixel);
+        vec2 phase = pixel - base;
+        vec2 shift = 0.5 + 0.5 * sin(1.5707963 * clamp((phase - 0.5) / min(extent, vec2(0.25)), -1.0, 1.0));
+        uv = (base + 0.5 + shift) / size;
+    } else if (pc.color.x > 0.5) {
         vec2 size = vec2(textureSize(u_texture, 0));
         uv = (floor(uv * size) + 0.5) / size;
     }
     vec4 c = texture(u_texture, uv);
     c.a = mix(c.a, 1.0, pc.forceOpaque);
-    vec3 straight = clamp(c.a > 0.0 ? c.rgb / c.a : c.rgb, 0.0, 1.0);
+    vec3 straight = clamp(c.a > 0.0 ? c.rgb / c.a : c.rgb, 0.0, int(u.source.x) == 2 ? u.source.y : 1.0);
     vec3 nits = decode(u.source, straight) * u.source.w;
     nits = max(vec3(dot(u.m0.xyz, nits), dot(u.m1.xyz, nits), dot(u.m2.xyz, nits)), vec3(0.0));
     if (u.tone.x > 0.5) {

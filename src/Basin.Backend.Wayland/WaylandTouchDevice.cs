@@ -7,9 +7,11 @@ namespace Basin.Backend.Wayland;
 public sealed class WaylandTouchDevice
 {
     private readonly Dictionary<int, WaylandOutput> _outputs = [];
+    private readonly WlTouch _touch;
 
     internal WaylandTouchDevice(WaylandBackend backend, WlTouch touch)
     {
+        _touch = touch;
         touch.Down += (_, e) =>
         {
             var output = backend.FindOutput(e.Surface);
@@ -50,4 +52,15 @@ public sealed class WaylandTouchDevice
     public event Action? Frame;
 
     public event Action? Cancel;
+
+    internal void Remove()
+    {
+        if (_outputs.Count > 0)
+        {
+            _outputs.Clear();
+            Cancel?.Invoke();
+        }
+
+        WaylandBackend.ReleaseInputProxy(_touch);
+    }
 }

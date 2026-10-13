@@ -93,7 +93,14 @@ public sealed class XWaylandSceneDriver : IDisposable
                 : new Box(0, 0, window.Width, window.Height);
             fit.Update(
                 target, committed, (emulated.Width, emulated.Height),
-                window.Letterbox == SceneFitPolicy.Off ? null : SceneFitMode.Fit);
+                window.Letterbox switch
+                {
+                    SceneFitPolicy.Off => null,
+                    SceneFitPolicy.Integer => SceneFitMode.Integer,
+                    SceneFitPolicy.Fill => SceneFitMode.Fill,
+                    SceneFitPolicy.Stretch => SceneFitMode.Stretch,
+                    _ => SceneFitMode.Fit,
+                });
             return;
         }
 

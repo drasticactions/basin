@@ -12,6 +12,11 @@ public sealed class CaptureDmabufConstraints : ICaptureDmabufConstraints
 
     public DrmFormatSet Formats { get; private set; }
 
+    public DrmFormatSet? Wrappable { get; set; }
+
+    public bool Wraps(DrmFormat format, ulong modifier) =>
+        Formats.Contains(format, modifier) || Wrappable?.Contains(format, modifier) == true;
+
     public bool TryDevice(out ulong device)
     {
         device = _device;

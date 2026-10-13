@@ -18,6 +18,9 @@ public sealed class CompositorModule : IProtocolModule
 
         services.UseDefault(new ClientBufferRegistry());
         services.UseDefault(new ClientScales());
+        services.UseDefault(new PresentedSets());
+        services.UseDefault<Capabilities.ISurfaceHints>(new Capabilities.Defaults.SurfaceHints());
+        services.UseDefault<Capabilities.IFrameStats>(new WindowFrameStats(services));
     }
 
     public IDisposable Install(BasinServices services)
@@ -26,6 +29,7 @@ public sealed class CompositorModule : IProtocolModule
         Global = new CompositorGlobal(services.Display, services.Require<ClientBufferRegistry>(), services.Require<ClientScales>())
         {
             Loop = services.Loop,
+            PresentedSets = services.Find<PresentedSets>() ?? new PresentedSets(),
         };
         services.Use(Global);
         return Global;

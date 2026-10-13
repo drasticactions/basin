@@ -2,7 +2,7 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
-public sealed class ColorOutputConfiguration : IOutputConfiguration
+public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLooks
 {
     private const OutputConfigurationFeatures ColorMask =
         OutputConfigurationFeatures.HighDynamicRange |
@@ -29,6 +29,148 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
     public IOutputBrightness? Brightness { get; set; }
 
     public event Action<IOutput>? EdrChanged;
+
+    public event Action<IOutput>? DescriptionChanged;
+
+    private readonly Dictionary<IOutput, bool> _hdrDemand = [];
+
+    public bool HdrDemandOf(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _hdrDemand.GetValueOrDefault(output);
+    }
+
+    public void SetHdrDemand(IOutput output, bool demand)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        _hdrDemand[output] = demand;
+        var state = StateOf(output);
+        if (!state.HdrOnDemand || state.HighDynamicRange == demand ||
+            (demand && (Supported(output) & OutputConfigurationFeatures.HighDynamicRange) == 0))
+        {
+            return;
+        }
+
+        if (Apply([new OutputConfigurationEntry { Output = output, Enabled = output.Enabled, HighDynamicRange = demand }]))
+        {
+            DescriptionChanged?.Invoke(output);
+        }
+    }
+
+    private readonly Dictionary<IOutput, PanelEntry> _panels = [];
+
+    public PanelEntry? PanelOf(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _panels.GetValueOrDefault(output);
+    }
+
+    public OutputColorimetry? ColorimetryOf(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _panels.TryGetValue(output, out var panel) ? panel.Apply(output.Colorimetry) : output.Colorimetry;
+    }
+
+    public void SetPanel(IOutput output, PanelEntry? panel)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (panel is null)
+        {
+            if (!_panels.Remove(output))
+            {
+                return;
+            }
+        }
+        else
+        {
+            if (_panels.TryGetValue(output, out var previous) && previous == panel)
+            {
+                return;
+            }
+
+            _panels[output] = panel;
+            Record(output, StateOf(output));
+        }
+
+        DescriptionChanged?.Invoke(output);
+    }
+
+    public void SetHdrOnDemand(IOutput output, bool onDemand)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        var state = StateOf(output);
+        if (state.HdrOnDemand == onDemand)
+        {
+            return;
+        }
+
+        Record(output, state with { HdrOnDemand = onDemand });
+        if (onDemand)
+        {
+            SetHdrDemand(output, HdrDemandOf(output));
+        }
+    }
+
+    public void SetInverseToneMapping(IOutput output, InverseToneMapping? mapping)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        var state = StateOf(output);
+        if (state.InverseToneMapping == mapping)
+        {
+            return;
+        }
+
+        Record(output, state with { InverseToneMapping = mapping });
+        DescriptionChanged?.Invoke(output);
+    }
+
+    private readonly Dictionary<IOutput, string> _lookPaths = [];
+
+    public string? LookOf(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _lookPaths.GetValueOrDefault(output);
+    }
+
+    public bool SetLook(IOutput output, string? path, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        error = null;
+        if (path is null)
+        {
+            _lookPaths.Remove(output);
+            SetLook(output, null);
+            return true;
+        }
+
+        ColorLut3D look;
+        try
+        {
+            look = CubeLut.Parse(File.ReadAllBytes(path));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
+        {
+            error = $"{path}: {exception.Message}";
+            return false;
+        }
+
+        _lookPaths[output] = path;
+        SetLook(output, look);
+        return true;
+    }
+
+    public void SetLook(IOutput output, ColorLut3D? look)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        var state = StateOf(output);
+        if (ReferenceEquals(state.Look, look))
+        {
+            return;
+        }
+
+        Record(output, state with { Look = look });
+        DescriptionChanged?.Invoke(output);
+    }
 
     private const double ZeroBrightnessLuminance = 0.04;
     private const double MaxEdrHeadroom = 3.0;
@@ -108,6 +250,13 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
         if (EdrCapable(output))
         {
             features |= OutputConfigurationFeatures.Edr;
+        }
+
+        if (_panels.TryGetValue(output, out var panel) && panel.Hdr is { } hdr)
+        {
+            features = hdr
+                ? features | OutputConfigurationFeatures.HighDynamicRange
+                : features & ~OutputConfigurationFeatures.HighDynamicRange;
         }
 
         return features;
@@ -217,7 +366,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
     {
         ArgumentNullException.ThrowIfNull(output);
         var state = StateOf(output);
-        var colorimetry = output.Colorimetry;
+        var colorimetry = ColorimetryOf(output);
         if (state.HighDynamicRange)
         {
             var description = OutputDescriptions.Hdr10(
@@ -235,13 +384,15 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
                 };
             }
 
-            return description;
+            return state.InverseToneMapping is null && state.Look is null
+                ? description
+                : description with { InverseToneMapping = state.InverseToneMapping, Look = state.Look };
         }
 
         if (state.Source == OutputColorProfileSource.Icc && state.IccProfilePath is { } path &&
             TryReadProfile(path, out var icc))
         {
-            return new ImageDescription { IccData = icc };
+            return new ImageDescription { IccData = icc, Look = state.Look };
         }
 
         ImageDescription sdr;
@@ -268,7 +419,12 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
             };
         }
 
-        return sdr;
+        if (_panels.TryGetValue(output, out var curvePanel) && curvePanel.OutputCurve is { } curve)
+        {
+            sdr = sdr with { TransferNamed = curve };
+        }
+
+        return state.Look is null ? sdr : sdr with { Look = state.Look };
     }
 
     public bool IsKmsRouted(IOutput output)
@@ -284,7 +440,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
         var description = DescriptionOf(output);
         if (output is not IOutputColorPipeline pipeline ||
             pipeline.GammaLutSize == 0 || pipeline.DegammaLutSize == 0 || !pipeline.SupportsCtm ||
-            state.HighDynamicRange)
+            state.HighDynamicRange || description.NeedsBakedTable)
         {
             UnrouteKmsPipeline(output);
             return false;
@@ -496,7 +652,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
             using var state = new OutputState();
             if (next.HighDynamicRange)
             {
-                state.SetHdr(OutputDescriptions.HdrMetadataFor(DescriptionOf(output), output.Colorimetry?.Chromaticities));
+                state.SetHdr(OutputDescriptions.HdrMetadataFor(DescriptionOf(output), ColorimetryOf(output)?.Chromaticities));
             }
             else
             {
@@ -535,6 +691,11 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration
                 _states.Remove(output);
                 _routedCtm.Remove(output);
                 _routedGamma.Remove(output);
+                _edrDemand.Remove(output);
+                _edrHeadroom.Remove(output);
+                _hdrDemand.Remove(output);
+                _panels.Remove(output);
+                _lookPaths.Remove(output);
                 _cleanup.Remove(output);
             }
 

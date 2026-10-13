@@ -39,6 +39,50 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void Pacing_hdr_and_reaper_keys_read_beside_the_connector_tables()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Parse(string.Empty, log, out _);
+        Assert.Equal(Basin.Host.VrrPacingPolicy.Fullscreen, defaults.VrrPacing);
+        Assert.True(defaults.AllowTearing);
+        Assert.False(defaults.InverseToneMapping);
+        Assert.False(defaults.HdrDemand);
+        Assert.Null(defaults.Look);
+        Assert.Null(defaults.ProcessSubreaper);
+
+        var config = TinyComp.Config.Parse(
+            """
+            [output]
+            vrr_pacing = "always"
+            allow_tearing = false
+
+            [output."DP-1"]
+            scale = 1.5
+
+            [color]
+            inverse_tone_mapping = true
+            itm_sdr_nits = 120
+            itm_target_nits = 800
+            look = "/tmp/a.cube"
+            hdr_demand = true
+
+            [process]
+            subreaper = false
+            """,
+            log,
+            out var fatal);
+        Assert.Null(fatal);
+        Assert.Equal(Basin.Host.VrrPacingPolicy.Always, config.VrrPacing);
+        Assert.False(config.AllowTearing);
+        Assert.Equal(1.5, config.OutputSettingFor("DP-1")?.Scale);
+        Assert.True(config.InverseToneMapping);
+        Assert.Equal((120.0, 800.0), (config.ItmSdrNits, config.ItmTargetNits));
+        Assert.Equal("/tmp/a.cube", config.Look);
+        Assert.True(config.HdrDemand);
+        Assert.False(config.ProcessSubreaper);
+    }
+
+    [Fact]
     public void The_overview_keeps_its_own_sides_and_an_output_table_overrides_them()
     {
         var log = BasinLog.For("t");

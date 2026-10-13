@@ -26,6 +26,10 @@ public sealed class SkiaRenderer : IRenderer
         return new SkiaTexture(buffer);
     }
 
+    public IReadOnlyList<DrmFormat> ShmTextureFormats => ShmFormatLists.All;
+
+    public bool RendersHalfFloat => true;
+
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Lut3D;
 
     public RenderFencePrecision FencePrecision => RenderFencePrecision.None;
@@ -141,6 +145,15 @@ public sealed class SkiaRenderer : IRenderer
                 return true;
             case DrmFormat.Xbgr2101010:
                 info = new SKImageInfo(width, height, SKColorType.Rgb101010x, SKAlphaType.Opaque);
+                return true;
+            case DrmFormat.Abgr16161616f:
+                info = new SKImageInfo(width, height, SKColorType.RgbaF16, SKAlphaType.Premul);
+                return true;
+            case DrmFormat.Xbgr16161616f:
+                info = new SKImageInfo(width, height, SKColorType.RgbaF16, SKAlphaType.Opaque);
+                return true;
+            case DrmFormat.Rgb565:
+                info = new SKImageInfo(width, height, SKColorType.Rgb565, SKAlphaType.Opaque);
                 return true;
             default:
                 info = default;

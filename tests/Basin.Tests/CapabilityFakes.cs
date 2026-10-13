@@ -10,6 +10,12 @@ internal sealed class TestCaptureDmabufConstraints : ICaptureDmabufConstraints
 
     public bool HasDevice { get; set; } = true;
 
+    public bool WrapsNv12 { get; set; }
+
+    public bool Wraps(DrmFormat format, ulong modifier) =>
+        Formats.Contains(format, modifier) ||
+        (WrapsNv12 && format == DrmFormat.Nv12 && modifier == DrmFormatSet.ModifierLinear);
+
     public static TestCaptureDmabufConstraints Typical()
     {
         var constraints = new TestCaptureDmabufConstraints();
@@ -39,6 +45,8 @@ internal sealed class TestScreenCapture : IScreenCapture
     public void RemoveDamageObserver(ICaptureDamageObserver observer) => _damageObservers.Remove(observer);
 
     public CaptureSourceKind Refuses { get; set; } = CaptureSourceKind.None;
+
+    public bool CanCaptureYuv { get; set; }
 
     public bool ThrowsOnCapture { get; set; }
 

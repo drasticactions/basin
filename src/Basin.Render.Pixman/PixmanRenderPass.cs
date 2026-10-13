@@ -111,7 +111,7 @@ internal sealed class PixmanRenderPass : IRenderPass
                     src.Height / options.DstBox.Height);
                 var transform = PixmanTransform.Multiply(in translate, in scale);
                 source.SetTransform(in transform);
-                source.SetFilter(options.Filter == TextureFilter.Nearest ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
+                source.SetFilter(options.Filter != TextureFilter.Linear ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
                 source.SetRepeat(PixmanRepeat.Pad);
             }
 
@@ -202,9 +202,9 @@ internal sealed class PixmanRenderPass : IRenderPass
 
                 var fa = alpha / 255f;
                 var (r, g, b) = lut.Sample(
-                    ((value >> 16) & 0xFF) / 255f / fa,
-                    ((value >> 8) & 0xFF) / 255f / fa,
-                    (value & 0xFF) / 255f / fa);
+                    ColorLut3D.Shape(((value >> 16) & 0xFF) / 255f / fa, lut.ShaperNits),
+                    ColorLut3D.Shape(((value >> 8) & 0xFF) / 255f / fa, lut.ShaperNits),
+                    ColorLut3D.Shape((value & 0xFF) / 255f / fa, lut.ShaperNits));
                 row[x] = (alpha << 24)
                     | ((uint)(Math.Clamp(r, 0f, 1f) * fa * 255f + 0.5f) << 16)
                     | ((uint)(Math.Clamp(g, 0f, 1f) * fa * 255f + 0.5f) << 8)
@@ -375,7 +375,7 @@ internal sealed class PixmanRenderPass : IRenderPass
         var linear = Math.Sqrt(Math.Abs((options.Transform.M11 * options.Transform.M22) - (options.Transform.M12 * options.Transform.M21)));
         var magnified = linear / Math.Max(kx, ky) >= 2;
         source.SetTransform(in sample);
-        source.SetFilter(magnified || options.Filter == TextureFilter.Nearest ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
+        source.SetFilter(magnified || options.Filter != TextureFilter.Linear ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
         source.SetRepeat(PixmanRepeat.None);
         ApplyClip(options.Clip);
         var mask = options.Alpha < 1f ? AlphaMask(options.Alpha) : null;

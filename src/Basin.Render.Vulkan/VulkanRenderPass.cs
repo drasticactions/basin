@@ -339,7 +339,13 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             TargetH = _target.Height,
             Alpha = options.Alpha,
             ForceOpaque = forceOpaque ? 1f : 0f,
-            R = options.Filter == TextureFilter.Nearest ? 1f : 0f,
+            R = options.Filter switch
+            {
+                TextureFilter.Nearest => 1f,
+                TextureFilter.Pixel => 2f,
+                _ => 0f,
+            },
+            G = options.Lut is VulkanColorLut shapedLut ? shapedLut.ShaperNits : 0f,
         };
         WriteTransform(ref constants, options.Transform);
         if (options.Shader is VulkanPixelShader vulkanShader && !hasLutOption)
@@ -883,10 +889,47 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         _target = null;
         _entry = null;
 
-        if (entry.TwoPassTarget)
+        if (entry.Wide)
         {
             vk.CmdNextSubpass(_render, SubpassContents.Inline);
-            vk.CmdBindPipeline(_render, PipelineBindPoint.Graphics, _renderer.OutputPipeline);
+            vk.CmdEndRenderPass(_render);
+            var blended = new ImageMemoryBarrier
+            {
+                SType = StructureType.ImageMemoryBarrier,
+                SrcAccessMask = AccessFlags.ColorAttachmentWriteBit,
+                DstAccessMask = AccessFlags.InputAttachmentReadBit,
+                OldLayout = ImageLayout.General,
+                NewLayout = ImageLayout.General,
+                SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+                DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+                Image = entry.BlendImage,
+                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+            };
+            vk.CmdPipelineBarrier(
+                _render,
+                PipelineStageFlags.ColorAttachmentOutputBit,
+                PipelineStageFlags.FragmentShaderBit,
+                0, 0, null, 0, null, 1, &blended);
+            var wideBegin = new RenderPassBeginInfo
+            {
+                SType = StructureType.RenderPassBeginInfo,
+                RenderPass = _renderer.WideOutputPass,
+                Framebuffer = entry.WideFramebuffer,
+                RenderArea = _area,
+            };
+            vk.CmdBeginRenderPass(_render, in wideBegin, SubpassContents.Inline);
+            var wideViewport = new Viewport(0, 0, target.Width, target.Height, 0, 1);
+            vk.CmdSetViewport(_render, 0, 1, in wideViewport);
+        }
+
+        if (entry.TwoPassTarget)
+        {
+            if (!entry.Wide)
+            {
+                vk.CmdNextSubpass(_render, SubpassContents.Inline);
+            }
+
+            vk.CmdBindPipeline(_render, PipelineBindPoint.Graphics, entry.Wide ? _renderer.WideOutputPipeline : _renderer.OutputPipeline);
             var inputSet = entry.BlendSet.Set;
             vk.CmdBindDescriptorSets(_render, PipelineBindPoint.Graphics, _renderer.OutputPipeLayout, 0, 1, &inputSet, 0, null);
             var encode = new Push
@@ -930,7 +973,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 NewLayout = ImageLayout.General,
                 SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
                 DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
-                Image = entry.Image,
+                Image = entry.Wide ? entry.WideImage : entry.Image,
                 SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
             };
             vk.CmdPipelineBarrier(
@@ -944,7 +987,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, 0, 0, 1),
                 ImageExtent = new Extent3D((uint)target.Width, (uint)target.Height, 1),
             };
-            vk.CmdCopyImageToBuffer(_render, entry.Image, ImageLayout.General, entry.Readback, 1, &copy);
+            vk.CmdCopyImageToBuffer(_render, entry.Wide ? entry.WideImage : entry.Image, ImageLayout.General, entry.Readback, 1, &copy);
 
             var toHost = new MemoryBarrier
             {
@@ -1103,7 +1146,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
 
         try
         {
-            var rowBytes = target.Width * 4;
+            var rowBytes = target.Width * (entry.Wide ? 8 : 4);
             for (var y = 0; y < target.Height; y++)
             {
                 System.Buffer.MemoryCopy(

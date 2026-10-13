@@ -9,9 +9,32 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
     private readonly Dictionary<(string AppId, string Id), GlobalShortcutInfo> _registered = [];
     private readonly Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> _bound = [];
     private readonly GlobalShortcutObservers _observers = new();
-    private (string AppId, string Id, uint Key)? _held;
+    private (string AppId, string Id, uint Key, GlobalShortcutFlags Flags)? _held;
+    private IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> _overrides =
+        new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
 
     public Func<uint, Modifiers, bool>? IsTaken { get; set; }
+
+    public IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> Overrides
+    {
+        get => _overrides;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _overrides = value;
+            Rebind();
+        }
+    }
+
+    public bool IsRegistered(string appId, string id) => _registered.ContainsKey((appId, id));
+
+    public void Rebind()
+    {
+        foreach (var (key, info) in _registered.ToArray())
+        {
+            Rebind(key, info);
+        }
+    }
 
     public int Count => _registered.Count;
 
@@ -111,7 +134,12 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
 
             _held = null;
             Trigger(active.AppId, active.Id, pressed: false, now);
-            return true;
+            if ((active.Flags & GlobalShortcutFlags.OneShot) != 0)
+            {
+                Unregister(active.AppId, active.Id);
+            }
+
+            return (active.Flags & GlobalShortcutFlags.NoBlock) == 0;
         }
 
         if (keysym == Keysym.NoSymbol || _held is not null)
@@ -121,7 +149,7 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
 
         foreach (var (name, chord) in _bound)
         {
-            if (chord.Keysym != keysym || chord.Modifiers != held)
+            if (chord.Keysym != keysym || chord.Modifiers != held || !_registered.TryGetValue(name, out var info))
             {
                 continue;
             }
@@ -129,8 +157,8 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
             if (Trigger(name.AppId, name.Id, pressed: true, now))
             {
                 Log.Info($"global shortcut {name.AppId}:{name.Id} fired");
-                _held = (name.AppId, name.Id, key);
-                return true;
+                _held = (name.AppId, name.Id, key, info.Flags);
+                return (info.Flags & GlobalShortcutFlags.NoBlock) == 0;
             }
         }
 
@@ -140,7 +168,13 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
     private GlobalShortcutInfo Rebind((string AppId, string Id) key, GlobalShortcutInfo shortcut)
     {
         var description = "";
-        if (TriggerSyntax.TryParse(shortcut.PreferredTrigger, out var keysym, out var modifiers) &&
+        if (_overrides.TryGetValue(key, out var fixedChord))
+        {
+            _bound[key] = fixedChord;
+            description = TriggerSyntax.Describe(fixedChord.Keysym, fixedChord.Modifiers);
+            Log.Info($"global shortcut {key.AppId}:{key.Id} bound to {description} by the compositor");
+        }
+        else if (TriggerSyntax.TryParse(shortcut.PreferredTrigger, out var keysym, out var modifiers) &&
             !Collides(key, keysym, modifiers))
         {
             _bound[key] = (keysym, modifiers);
@@ -152,7 +186,7 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
             _bound.Remove(key);
             if (string.IsNullOrEmpty(shortcut.PreferredTrigger))
             {
-                Log.Info($"global shortcut {key.AppId}:{key.Id} registered with no preferred trigger and never fires");
+                Log.Info($"global shortcut {key.AppId}:{key.Id} registered with no preferred trigger or compositor row and never fires");
             }
             else
             {

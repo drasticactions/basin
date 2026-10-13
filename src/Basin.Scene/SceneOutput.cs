@@ -269,7 +269,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             if (ReferenceEquals(_settleNodes[i], node))
             {
                 _settleRefusals[i] = new PlaneRefusal(
-                    content.Width, content.Height, planeBox.Width, planeBox.Height, attributes.Format, attributes.Modifier);
+                    content.Width, content.Height, planeBox.Width, planeBox.Height, attributes.Format, attributes.Modifier,
+                    Output.PlaneEpoch);
                 return;
             }
         }
@@ -291,6 +292,30 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     }
 
     public bool IsDirectScanout => _scanningOut;
+
+    public bool HdrMetadataPassthrough { get; set; }
+
+    public HdrStaticMetadata? OutputHdrMetadata { get; set; }
+
+    public HdrStaticMetadata? ContentHdrMetadata => _contentHdr;
+
+    public Basin.Capabilities.ISurfaceHints? SurfaceHints { get; set; }
+
+    public OutputContentType? ContentTypeOverride { get; set; }
+
+    public OutputContentType ContentType => _contentType;
+
+    private OutputContentType _contentType;
+
+    public static OutputContentType ContentTypeFor(Basin.Capabilities.SurfaceContentType type) => type switch
+    {
+        Basin.Capabilities.SurfaceContentType.Photo => OutputContentType.Photo,
+        Basin.Capabilities.SurfaceContentType.Video => OutputContentType.Cinema,
+        Basin.Capabilities.SurfaceContentType.Game => OutputContentType.Game,
+        _ => OutputContentType.None,
+    };
+
+    private HdrStaticMetadata? _contentHdr;
 
     public long ScanoutCommits { get; private set; }
 
@@ -646,6 +671,35 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    public PresentedSet? Presented { get; set; }
+
+    private void RecordPresented(OutputMode mode)
+    {
+        if (Presented is not { } set)
+        {
+            return;
+        }
+
+        set.Begin();
+        var output = new Box(0, 0, mode.Width, mode.Height);
+        for (var i = 0; i < _renderList.Count; i++)
+        {
+            var entry = _renderList[i];
+            if (entry.Node is not SceneBuffer { InputSurface: { IsDestroyed: false } surface } buffer)
+            {
+                continue;
+            }
+
+            var bounds = BufferBounds(buffer);
+            if (bounds.IsEmpty || EntryPhysical(entry, bounds).Intersect(output).IsEmpty)
+            {
+                continue;
+            }
+
+            set.Add(surface);
+        }
+    }
+
     private bool _inCommit;
     private bool _damagedDuringCommit;
     private int _commitsEntered;
@@ -668,6 +722,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         {
             _scene.CollectRenderList(_renderList, -_position.X, -_position.Y);
             _scene.PrepareCaptures(renderer, _renderList, _projection.Scale);
+            RecordPresented(mode);
         }
         finally
         {
@@ -800,6 +855,19 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             state.SetLayers(_layers);
         }
 
+        var restoresHdr = _contentHdr is not null;
+        if (restoresHdr)
+        {
+            state.SetHdr(OutputHdrMetadata);
+        }
+
+        var composedType = ContentTypeOverride ?? OutputContentType.None;
+        var stagesType = composedType != _contentType;
+        if (stagesType)
+        {
+            state.SetContentType(composedType);
+        }
+
         var completion = Output.SupportsInFence ? renderer.ExportLastSubmissionFence() : -1;
         if (completion >= 0)
         {
@@ -819,6 +887,16 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             {
                 RenderFences.CloseFence(completion);
             }
+        }
+
+        if (restoresHdr)
+        {
+            _contentHdr = null;
+        }
+
+        if (stagesType)
+        {
+            _contentType = composedType;
         }
 
         swapchain?.Presented(target);
@@ -942,7 +1020,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return PlaneDeclineReason.ScaledFraction;
         }
 
-        if (entry.Filter == TextureFilter.Nearest
+        if (entry.Filter != TextureFilter.Linear
             && (node.SourceBox != default || physical.Width != content.Width || physical.Height != content.Height))
         {
             return PlaneDeclineReason.Filter;
@@ -977,7 +1055,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return PlaneDeclineReason.Settling;
         }
 
-        var layer = new PlaneRefusal(content.Width, content.Height, planeBox.Width, planeBox.Height, attributes.Format, attributes.Modifier);
+        var layer = new PlaneRefusal(
+            content.Width, content.Height, planeBox.Width, planeBox.Height, attributes.Format, attributes.Modifier, Output.PlaneEpoch);
         return WasRefused(node, layer) ? PlaneDeclineReason.BackendRefused : null;
     }
 
@@ -1043,6 +1122,10 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             layer.Alpha = 1f;
             layer.Opaque = node.IsOpaque;
             layer.Accepted = false;
+            layer.YuvEncodingRefused = false;
+            (layer.YuvCoefficients, layer.YuvRange) = node.InputSurface is { } surface && SurfaceHints is { } hints
+                ? hints.YuvEncodingOf(surface)
+                : (YuvCoefficients.Bt601, YuvRange.Limited);
             _layers.Add(layer);
         }
 
@@ -1071,7 +1154,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             }
             else
             {
-                Decline(_candidateNodes[i], layer.Accepted ? PlaneDeclineReason.Demoted : PlaneDeclineReason.BackendRefused);
+                Decline(
+                    _candidateNodes[i],
+                    layer.Accepted ? PlaneDeclineReason.Demoted
+                    : layer.YuvEncodingRefused ? PlaneDeclineReason.YuvEncoding
+                    : PlaneDeclineReason.BackendRefused);
                 if (!layer.Accepted)
                 {
                     RememberRefusal(_candidateNodes[i], box);
@@ -1708,11 +1795,35 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return false;
         }
 
+        var tearing = (state.Fields & OutputStateFields.Tearing) != 0 && state.Tearing;
         state.Clear();
         state.SetBuffer(buffer);
+        if (tearing)
+        {
+            state.SetTearing(true);
+        }
+
         if (candidate.AcquireFenceFd >= 0)
         {
             state.SetInFence(candidate.AcquireFenceFd);
+        }
+
+        var content = HdrMetadataPassthrough && OutputHdrMetadata is not null
+            ? HdrStaticMetadata.FromContent(candidate.ColorDescription)
+            : null;
+        if (content != _contentHdr)
+        {
+            state.SetHdr(content ?? OutputHdrMetadata);
+        }
+
+        state.SetContentDescription(candidate.ColorDescription);
+        var contentType = ContentTypeOverride ??
+            (candidate.InputSurface is { } scanned && SurfaceHints is { } surfaceHints
+                ? ContentTypeFor(surfaceHints.ContentTypeOf(scanned))
+                : OutputContentType.None);
+        if (contentType != _contentType)
+        {
+            state.SetContentType(contentType);
         }
 
         if (_offloadedPrev.Count > 0)
@@ -1732,6 +1843,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return false;
         }
 
+        _contentHdr = content;
+        _contentType = contentType;
         _scanoutHold.Dispose();
         _scanoutHold = buffer.Lock();
         _scanningOut = true;

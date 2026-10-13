@@ -31,4 +31,10 @@ public sealed record OutputColorState
     public uint Brightness { get; init; } = 10000;
 
     public uint Dimming { get; init; } = 10000;
+
+    public InverseToneMapping? InverseToneMapping { get; init; }
+
+    public ColorLut3D? Look { get; init; }
+
+    public bool HdrOnDemand { get; init; }
 }

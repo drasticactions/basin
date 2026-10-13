@@ -1,4 +1,5 @@
 using System.Text;
+using Basin.Capabilities;
 using Xkb;
 using static Basin.Seat.SeatLog;
 
@@ -8,7 +9,6 @@ public sealed class KeySynthesizer
 {
     private readonly IKeySink _sink;
     private readonly Dictionary<uint, (uint Keycode, uint Modifiers, bool Found)> _cache = [];
-    private readonly List<uint> _held = new(4);
     private XkbKeymap? _keymap;
     private uint _layout;
     private uint[]? _modifierKeys;
@@ -51,16 +51,59 @@ public sealed class KeySynthesizer
 
     public int Type(ReadOnlySpan<char> text, uint timeMs)
     {
-        var typed = 0;
-        foreach (var rune in text.EnumerateRunes())
+        _typer ??= new TextTyper(new Lookup(this), _sink as IKeymapOverride) { SkipUntypable = true };
+        if (HasMissing(text) && _sink.TryCommitText(text))
         {
-            if (TypeRune(rune, timeMs))
+            var committed = 0;
+            foreach (var _ in text.EnumerateRunes())
             {
-                typed++;
+                committed++;
             }
+
+            return committed;
+        }
+
+        _target ??= new Target(_sink);
+        var typed = _typer.Type(text, timeMs, _target, out var error);
+        if (error is not null)
+        {
+            Log.Warn($"{error}; the character is dropped");
         }
 
         return typed;
+    }
+
+    private TextTyper? _typer;
+    private Target? _target;
+
+    private bool HasMissing(ReadOnlySpan<char> text)
+    {
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (!_typer!.CanType(rune))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private sealed class Lookup(KeySynthesizer owner) : IKeymapLookup
+    {
+        public bool TryKeycodeForKeysym(uint keysym, out uint keycode, out uint modifiers) =>
+            owner.TryResolve(keysym, out keycode, out modifiers);
+
+        public uint KeysymForKeycode(uint keycode) => 0;
+    }
+
+    private sealed class Target(IKeySink sink) : ITextKeyTarget
+    {
+        public bool Key(uint timeMs, uint keycode, bool pressed)
+        {
+            sink.NotifyKey(timeMs, keycode, pressed);
+            return true;
+        }
     }
 
     public bool TryResolve(uint keysym, out uint keycode, out uint modifiers)
@@ -75,48 +118,6 @@ public sealed class KeySynthesizer
         var found = Resolve(keysym, out keycode, out modifiers);
         _cache[keysym] = (keycode, modifiers, found);
         return found;
-    }
-
-    private bool TypeRune(Rune rune, uint timeMs)
-    {
-        var keysym = XkbKeysym.FromUtf32((uint)rune.Value);
-        if (keysym.IsNone || !TryResolve(keysym.Value, out var keycode, out var modifiers))
-        {
-            Log.Warn($"no key on the keymap produces U+{rune.Value:X4}; the character is dropped");
-            return false;
-        }
-
-        _held.Clear();
-        for (var bit = 0; bit < 32 && modifiers >> bit != 0; bit++)
-        {
-            if ((modifiers & (1u << bit)) == 0)
-            {
-                continue;
-            }
-
-            var modifierKey = ModifierKeyFor(bit);
-            if (modifierKey == 0)
-            {
-                Log.Warn($"no key on the keymap sets modifier {bit} for U+{rune.Value:X4}; the character is dropped");
-                return false;
-            }
-
-            _held.Add(modifierKey);
-        }
-
-        foreach (var held in _held)
-        {
-            _sink.NotifyKey(timeMs, held, pressed: true);
-        }
-
-        _sink.NotifyKey(timeMs, keycode, pressed: true);
-        _sink.NotifyKey(timeMs, keycode, pressed: false);
-        for (var i = _held.Count - 1; i >= 0; i--)
-        {
-            _sink.NotifyKey(timeMs, _held[i], pressed: false);
-        }
-
-        return true;
     }
 
     private bool Resolve(uint keysym, out uint keycode, out uint modifiers)

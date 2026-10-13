@@ -229,6 +229,7 @@ internal sealed partial class TinyComp
         _focused?.Toplevel.SetActivated(false);
         _focused?.SetDecorationFocus(false);
         _focused = window;
+        UpdateHostIcon();
         if (window is not null)
         {
             _focusedX?.SetDecorationFocus(false);
@@ -772,5 +773,39 @@ internal sealed partial class TinyComp
             RefreshSurfaceLuts();
             _fractionalScale.AnnounceScale(lockSurface.Surface, lockSurface.Output.Output.Scale);
         };
+    }
+
+    private const int HostIconSize = 48;
+    private string? _hostIconName;
+    private Basin.Freedesktop.IconSearch? _hostIconSearch;
+
+    private void UpdateHostIcon()
+    {
+        if (_backend is null)
+        {
+            return;
+        }
+
+        var name = _focused?.IconName;
+        if (name == _hostIconName)
+        {
+            return;
+        }
+
+        _hostIconName = name;
+        uint[]? pixels = null;
+        if (name is not null)
+        {
+            _hostIconSearch ??= new Basin.Freedesktop.IconSearch { Sizes = [HostIconSize] };
+            if (_hostIconSearch.Find(name) is { } path)
+            {
+                pixels = Basin.Icons.Skia.IconRasterizer.Argb(path, HostIconSize);
+            }
+        }
+
+        foreach (var output in _backend.Outputs)
+        {
+            output.SetIcon(name, pixels, pixels is null ? 0 : HostIconSize);
+        }
     }
 }

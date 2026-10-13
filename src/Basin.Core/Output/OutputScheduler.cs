@@ -43,7 +43,45 @@ public sealed class OutputScheduler : IDisposable
 
     public long MissedVblanks { get; private set; }
 
-    public int RenderAheadMillis { get; set; } = 7;
+    public int RenderAheadMillis { get; set; } = 2;
+
+    public bool ArrivalMode { get; set; }
+
+    public bool MeasuresRenderTime => _renderSamples > 0;
+
+    public long RenderLeadNanos => BaseLeadNanos();
+
+    public void NotifyRenderTime(long nanos)
+    {
+        if (nanos <= 0)
+        {
+            return;
+        }
+
+        _renderTimes[_renderNext] = nanos;
+        _renderNext = (_renderNext + 1) % _renderTimes.Length;
+        if (_renderSamples < _renderTimes.Length)
+        {
+            _renderSamples++;
+        }
+
+        var max = 0L;
+        for (var i = 0; i < _renderSamples; i++)
+        {
+            max = Math.Max(max, _renderTimes[i]);
+        }
+
+        _renderMax = max;
+    }
+
+    private readonly long[] _renderTimes = new long[120];
+    private int _renderNext;
+    private int _renderSamples;
+    private long _renderMax;
+
+    private const long UnmeasuredLeadNanos = 7_000_000;
+
+    private const long MeasuredMarginNanos = 1_500_000;
 
     public void ScheduleRepaint()
     {
@@ -62,6 +100,12 @@ public sealed class OutputScheduler : IDisposable
         if (_commitInFlight || _timerArmed || _idleQueued)
         {
             Log.Debug($"scheduler: repaint queued (inFlight={_commitInFlight} timer={_timerArmed})");
+            return;
+        }
+
+        if (ArrivalMode)
+        {
+            ArmArrival();
             return;
         }
 
@@ -86,7 +130,12 @@ public sealed class OutputScheduler : IDisposable
     {
         get
         {
-            var interval = (long)(IntervalMs() * 1_000_000);
+            var interval = IntervalNanos();
+            if (ArrivalMode)
+            {
+                return _lastFrameNanos == 0 ? MonotonicClock.Nanos : Math.Max(MonotonicClock.Nanos, _lastFrameNanos + interval);
+            }
+
             if (_lastFrameNanos == 0 || interval <= 0)
             {
                 return 0;
@@ -100,6 +149,12 @@ public sealed class OutputScheduler : IDisposable
 
             return _lastFrameNanos + (((now - _lastFrameNanos) / interval) + 1) * interval;
         }
+    }
+
+    private long IntervalNanos()
+    {
+        var interval = _output.CurrentMode.RefreshIntervalNanoseconds;
+        return interval > 0 ? interval : 16_000_000L;
     }
 
     private double IntervalMs()
@@ -154,7 +209,7 @@ public sealed class OutputScheduler : IDisposable
         }
 
         var now = MonotonicClock.Nanos;
-        var intervalNanos = (long)(IntervalMs() * 1_000_000);
+        var intervalNanos = IntervalNanos();
         if (now - _lastFrameNanos > intervalNanos + (intervalNanos >> 1))
         {
             return false;
@@ -174,7 +229,7 @@ public sealed class OutputScheduler : IDisposable
 
     private bool TryArmDeadlineAfter(long vblank)
     {
-        var intervalNanos = (long)(IntervalMs() * 1_000_000);
+        var intervalNanos = IntervalNanos();
         if (vblank == 0 || intervalNanos <= 0)
         {
             return false;
@@ -193,9 +248,17 @@ public sealed class OutputScheduler : IDisposable
         return true;
     }
 
+    private void ArmArrival() => QueueIdle();
+
+    private long BaseLeadNanos()
+    {
+        var floor = RenderAheadMillis * 1_000_000L;
+        return _renderSamples > 0 ? Math.Max(floor, _renderMax + MeasuredMarginNanos) : Math.Max(floor, UnmeasuredLeadNanos);
+    }
+
     private long RenderAheadNanos(long intervalNanos)
     {
-        var lead = (RenderAheadMillis * 1_000_000L) + Math.Min(_leadBoostNanos, intervalNanos);
+        var lead = BaseLeadNanos() + Math.Min(_leadBoostNanos, intervalNanos);
         var max = intervalNanos - 1_000_000;
         return Math.Max(1_000_000, Math.Min(lead, max));
     }
@@ -231,7 +294,11 @@ public sealed class OutputScheduler : IDisposable
             _firing = false;
         }
 
-        if (_repaintQueued && !_commitInFlight && !_disposed && !_timerArmed && !_idleQueued &&
+        if (_repaintQueued && !_commitInFlight && !_disposed && !_timerArmed && !_idleQueued && ArrivalMode)
+        {
+            ArmArrival();
+        }
+        else if (_repaintQueued && !_commitInFlight && !_disposed && !_timerArmed && !_idleQueued &&
             !(_commits == commits ? TryArmDeadlineAfter(target) : TryArmDeadline()))
         {
             var elapsed = Environment.TickCount64 - _lastFireTick;
@@ -266,7 +333,7 @@ public sealed class OutputScheduler : IDisposable
     private void OnFrame()
     {
         var now = MonotonicClock.Nanos;
-        var interval = (long)(IntervalMs() * 1_000_000);
+        var interval = IntervalNanos();
         var previousFrame = _lastFrameNanos;
         _lastFrameNanos = _presentedNanos > 0 && now - _presentedNanos < interval * 2 ? _presentedNanos : now;
 
@@ -292,7 +359,11 @@ public sealed class OutputScheduler : IDisposable
 
         _commitInFlight = false;
         _pacedFromLastFrame = _repaintQueued;
-        if (_repaintQueued && !_disposed && !_timerArmed && !_idleQueued)
+        if (_repaintQueued && !_disposed && !_timerArmed && !_idleQueued && ArrivalMode)
+        {
+            ArmArrival();
+        }
+        else if (_repaintQueued && !_disposed && !_timerArmed && !_idleQueued)
         {
             Log.Debug($"scheduler: flip; deadline armed");
             if (!TryArmDeadline())

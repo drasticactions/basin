@@ -193,6 +193,29 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
 
     public DrmFormatSet RenderableFormats => FormatTable.DmabufRenderFormats;
 
+    private DrmFormatSet? _bgraRenderableFormats;
+
+    public DrmFormatSet BgraRenderableFormats => _bgraRenderableFormats ??= BgraOnly(RenderableFormats);
+
+    private static DrmFormatSet BgraOnly(DrmFormatSet formats)
+    {
+        var result = new DrmFormatSet();
+        foreach (var format in formats.Formats)
+        {
+            if (format is not (DrmFormat.Argb8888 or DrmFormat.Xrgb8888))
+            {
+                continue;
+            }
+
+            foreach (var modifier in formats.ModifiersOf(format))
+            {
+                result.Add(format, modifier);
+            }
+        }
+
+        return result;
+    }
+
     private GbmDevice? _gbm;
 
     public GbmDevice Gbm => _gbm ??= GbmDevice.Create(_nodeFd);

@@ -27,10 +27,24 @@ internal static class GlShaders
         uniform vec4 u_src;         // normalized source box
         uniform float u_alpha;
         uniform float u_forceOpaque;
+        uniform float u_pixel;
+        vec2 pixel_uv(vec2 uv) {
+            if (u_pixel < 0.5) {
+                return uv;
+            }
+
+            vec2 size = vec2(textureSize(u_texture, 0));
+            vec2 extent = max(fwidth(uv * size), vec2(1.0 / 256.0));
+            vec2 pixel = uv * size - 0.5;
+            vec2 base = floor(pixel);
+            vec2 phase = pixel - base;
+            vec2 shift = 0.5 + 0.5 * sin(1.5707963 * clamp((phase - 0.5) / min(extent, vec2(0.25)), -1.0, 1.0));
+            return (base + 0.5 + shift) / size;
+        }
         in vec2 v_uv;
         out vec4 color;
         void main() {
-            vec4 c = texture(u_texture, u_src.xy + v_uv * u_src.zw);
+            vec4 c = texture(u_texture, pixel_uv(u_src.xy + v_uv * u_src.zw));
             c.a = mix(c.a, 1.0, u_forceOpaque);
             color = c * u_alpha;    // premultiplied
         }
@@ -45,15 +59,78 @@ internal static class GlShaders
         uniform vec4 u_src;
         uniform float u_alpha;
         uniform float u_forceOpaque;
+        uniform float u_pixel;
+        vec2 pixel_uv(vec2 uv) {
+            if (u_pixel < 0.5) {
+                return uv;
+            }
+
+            vec2 size = vec2(textureSize(u_texture, 0));
+            vec2 extent = max(fwidth(uv * size), vec2(1.0 / 256.0));
+            vec2 pixel = uv * size - 0.5;
+            vec2 base = floor(pixel);
+            vec2 phase = pixel - base;
+            vec2 shift = 0.5 + 0.5 * sin(1.5707963 * clamp((phase - 0.5) / min(extent, vec2(0.25)), -1.0, 1.0));
+            return (base + 0.5 + shift) / size;
+        }
+        uniform float u_shaper;
+        vec3 lut_fetch(ivec3 p) {
+            return texelFetch(u_lut, p, 0).rgb;
+        }
+
+        vec3 lut_tetrahedral(vec3 coord) {
+            int n = textureSize(u_lut, 0).x;
+            vec3 f = clamp(coord, 0.0, 1.0) * float(n - 1);
+            ivec3 base = min(ivec3(f), ivec3(n - 2));
+            vec3 t = f - vec3(base);
+            vec3 c000 = lut_fetch(base);
+            vec3 c111 = lut_fetch(base + ivec3(1));
+            if (t.x >= t.y) {
+                if (t.y >= t.z) {
+                    vec3 c100 = lut_fetch(base + ivec3(1, 0, 0));
+                    vec3 c110 = lut_fetch(base + ivec3(1, 1, 0));
+                    return c000 + t.x * (c100 - c000) + t.y * (c110 - c100) + t.z * (c111 - c110);
+                }
+                if (t.x >= t.z) {
+                    vec3 c100 = lut_fetch(base + ivec3(1, 0, 0));
+                    vec3 c101 = lut_fetch(base + ivec3(1, 0, 1));
+                    return c000 + t.x * (c100 - c000) + t.z * (c101 - c100) + t.y * (c111 - c101);
+                }
+                vec3 c001 = lut_fetch(base + ivec3(0, 0, 1));
+                vec3 c101 = lut_fetch(base + ivec3(1, 0, 1));
+                return c000 + t.z * (c001 - c000) + t.x * (c101 - c001) + t.y * (c111 - c101);
+            }
+            if (t.x >= t.z) {
+                vec3 c010 = lut_fetch(base + ivec3(0, 1, 0));
+                vec3 c110 = lut_fetch(base + ivec3(1, 1, 0));
+                return c000 + t.y * (c010 - c000) + t.x * (c110 - c010) + t.z * (c111 - c110);
+            }
+            if (t.y >= t.z) {
+                vec3 c010 = lut_fetch(base + ivec3(0, 1, 0));
+                vec3 c011 = lut_fetch(base + ivec3(0, 1, 1));
+                return c000 + t.y * (c010 - c000) + t.z * (c011 - c010) + t.x * (c111 - c011);
+            }
+            vec3 c001 = lut_fetch(base + ivec3(0, 0, 1));
+            vec3 c011 = lut_fetch(base + ivec3(0, 1, 1));
+            return c000 + t.z * (c001 - c000) + t.y * (c011 - c001) + t.x * (c111 - c011);
+        }
+
+        vec3 pq_inverse(vec3 nits) {
+            vec3 y = pow(clamp(nits / 10000.0, 0.0, 1.0), vec3(2610.0 / 16384.0));
+            return pow((3424.0 / 4096.0 + 2413.0 / 4096.0 * 32.0 * y) / (1.0 + 2392.0 / 4096.0 * 32.0 * y), vec3(2523.0 / 4096.0 * 128.0));
+        }
+
+        vec3 shape(vec3 straight, float shaperNits) {
+            return shaperNits > 0.0 ? pq_inverse(max(straight, vec3(0.0)) * shaperNits) : clamp(straight, 0.0, 1.0);
+        }
+
         in vec2 v_uv;
         out vec4 color;
         void main() {
-            vec4 c = texture(u_texture, u_src.xy + v_uv * u_src.zw);
+            vec4 c = texture(u_texture, pixel_uv(u_src.xy + v_uv * u_src.zw));
             c.a = mix(c.a, 1.0, u_forceOpaque);
             vec3 straight = c.a > 0.0 ? c.rgb / c.a : c.rgb;
-            float n = float(textureSize(u_lut, 0).x);
-            vec3 coord = clamp(straight, 0.0, 1.0) * ((n - 1.0) / n) + 0.5 / n;
-            c.rgb = texture(u_lut, coord).rgb * c.a;
+            c.rgb = lut_tetrahedral(shape(straight, u_shaper)) * c.a;
             color = c * u_alpha;    // premultiplied
         }
         """;
@@ -71,6 +148,20 @@ internal static class GlShaders
         uniform vec4 u_source;
         uniform vec4 u_output;
         uniform vec4 u_tone;
+        uniform float u_pixel;
+        vec2 pixel_uv(vec2 uv) {
+            if (u_pixel < 0.5) {
+                return uv;
+            }
+
+            vec2 size = vec2(textureSize(u_texture, 0));
+            vec2 extent = max(fwidth(uv * size), vec2(1.0 / 256.0));
+            vec2 pixel = uv * size - 0.5;
+            vec2 base = floor(pixel);
+            vec2 phase = pixel - base;
+            vec2 shift = 0.5 + 0.5 * sin(1.5707963 * clamp((phase - 0.5) / min(extent, vec2(0.25)), -1.0, 1.0));
+            return (base + 0.5 + shift) / size;
+        }
         in vec2 v_uv;
         out vec4 color;
         const float PQ_M1 = 2610.0 / 16384.0;
@@ -141,9 +232,9 @@ internal static class GlShaders
             return pq_eotf1(e2 * u_tone.y);
         }
         void main() {
-            vec4 c = texture(u_texture, u_src.xy + v_uv * u_src.zw);
+            vec4 c = texture(u_texture, pixel_uv(u_src.xy + v_uv * u_src.zw));
             c.a = mix(c.a, 1.0, u_forceOpaque);
-            vec3 straight = clamp(c.a > 0.0 ? c.rgb / c.a : c.rgb, 0.0, 1.0);
+            vec3 straight = clamp(c.a > 0.0 ? c.rgb / c.a : c.rgb, 0.0, int(u_source.x) == 2 ? u_source.y : 1.0);
             vec3 nits = decode(u_source, straight) * u_source.w;
             nits = max(vec3(dot(u_m0, nits), dot(u_m1, nits), dot(u_m2, nits)), vec3(0.0));
             if (u_tone.x > 0.5) {
@@ -154,6 +245,70 @@ internal static class GlShaders
             }
             c.rgb = clamp(encode(u_output, nits), 0.0, 1.0) * c.a;
             color = c * u_alpha;    // premultiplied
+        }
+        """;
+
+    public const string YuvFragment = """
+        #version 300 es
+        precision highp float;
+        uniform sampler2D u_texture;
+        uniform vec4 u_src;
+        uniform vec4 u_rect;
+        uniform vec4 u_coeffs;
+        out vec4 color;
+        vec3 fetch(vec2 luma) {
+            vec2 rel = (luma - u_rect.xy) / u_rect.zw;
+            if (any(lessThan(rel, vec2(0.0))) || any(greaterThanEqual(rel, vec2(1.0)))) {
+                return vec3(0.0);
+            }
+            return texture(u_texture, u_src.xy + rel * u_src.zw).rgb;
+        }
+        void main() {
+            float kr = u_coeffs.x;
+            float kb = u_coeffs.y;
+            vec3 weights = vec3(kr, 1.0 - kr - kb, kb);
+            vec2 p = floor(gl_FragCoord.xy);
+            if (u_coeffs.w < 0.5) {
+                float y = dot(fetch(p + 0.5), weights);
+                y = u_coeffs.z > 0.5 ? (16.0 + 219.0 * y) / 255.0 : y;
+                color = vec4(y, 0.0, 0.0, 1.0);
+                return;
+            }
+            vec2 base = p * 2.0;
+            vec3 rgb = (fetch(base + vec2(0.5, 0.5)) + fetch(base + vec2(1.5, 0.5))
+                + fetch(base + vec2(0.5, 1.5)) + fetch(base + vec2(1.5, 1.5))) * 0.25;
+            float y = dot(rgb, weights);
+            float cb = (rgb.b - y) / (2.0 * (1.0 - kb));
+            float cr = (rgb.r - y) / (2.0 * (1.0 - kr));
+            vec2 c = u_coeffs.z > 0.5 ? (128.0 + 224.0 * vec2(cb, cr)) / 255.0 : vec2(cb, cr) + 0.5;
+            color = vec4(c, 0.0, 1.0);
+        }
+        """;
+
+    public const string NvToRgbFragment = """
+        #version 300 es
+        precision highp float;
+        uniform sampler2D u_texture;
+        uniform sampler2D u_chroma;
+        uniform vec4 u_coeffs;
+        in vec2 v_uv;
+        out vec4 color;
+        void main() {
+            float kr = u_coeffs.x;
+            float kb = u_coeffs.y;
+            float kg = 1.0 - kr - kb;
+            float y = texture(u_texture, v_uv).r;
+            vec2 c = texture(u_chroma, v_uv).rg;
+            if (u_coeffs.z > 0.5) {
+                y = (y * 255.0 - 16.0) / 219.0;
+                c = (c * 255.0 - 128.0) / 224.0;
+            } else {
+                c = c - 128.0 / 255.0;
+            }
+            float r = y + 2.0 * (1.0 - kr) * c.y;
+            float b = y + 2.0 * (1.0 - kb) * c.x;
+            float g = (y - kr * r - kb * b) / kg;
+            color = vec4(clamp(vec3(r, g, b), 0.0, 1.0), 1.0);
         }
         """;
 

@@ -12,6 +12,7 @@ internal static class Program
             + "\n"
             + "  basinctl windows | outputs | workspaces | methods [--detail] | events | version | describe\n"
             + "  basinctl activate ID | close ID | move ID X Y | resize ID W H | wait APP_ID | density ID native|low\n"
+            + "  basinctl stats ID | frame-limit ID FPS\n"
             + "  basinctl shot OUTPUT FILE.png | chord CHORD | key CODE | text TEXT... | spawn [--x11-density low] ARGV...\n"
             + "  basinctl subscribe EVENT... | clipboard [primary] | raw JSON | quit\n"
             + "  basinctl devices | device ID | device ID key=value... | device ID reset [KEY...]\n"
@@ -36,6 +37,10 @@ internal static class Program
         {
             Description = "with shot, scale the image down until its longer side is at most N pixels",
             HelpName = "N",
+        });
+        var hdr = cli.Add(new Option<bool>("--hdr")
+        {
+            Description = "with shot, write a 16-bit PNG in the output's own encoding, PQ on an HDR output, tagged with cICP",
         });
         var detail = cli.Add(new Option<bool>("--detail")
         {
@@ -62,7 +67,7 @@ internal static class Program
                 return cli.Usage(result);
             }
 
-            return new Controller(result.GetValue(socket), result.GetValue(json), result.GetValue(fd), result.GetValue(detail), result.GetValue(maxDimension), result.GetValue(x11Density))
+            return new Controller(result.GetValue(socket), result.GetValue(json), result.GetValue(fd), result.GetValue(detail), result.GetValue(maxDimension), result.GetValue(x11Density), result.GetValue(hdr))
                 .RunAsync(command).GetAwaiter().GetResult();
         });
     }

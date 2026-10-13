@@ -11,5 +11,6 @@ public static class HyprPack
         new HyprlandToplevelExportModule(),
         new HyprlandCtmModule(),
         new HyprlandGlobalShortcutsModule(),
+        new GamescopeActionBindingModule(),
     ]);
 }

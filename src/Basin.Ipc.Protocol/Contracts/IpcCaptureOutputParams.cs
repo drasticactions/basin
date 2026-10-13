@@ -17,13 +17,15 @@ public sealed class IpcCaptureOutputParams : IIpcParams, IIpcReusable
         string? output = null,
         bool? cursor = null,
         double? scale = null,
-        long? maxDimension = null)
+        long? maxDimension = null,
+        string? format = null)
     {
         To = to;
         Output = output;
         Cursor = cursor;
         Scale = scale;
         MaxDimension = maxDimension;
+        Format = format;
     }
 
     public IpcCaptureTo To
@@ -48,6 +50,9 @@ public sealed class IpcCaptureOutputParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? MaxDimension { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Format { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'to' is required"
@@ -61,5 +66,6 @@ public sealed class IpcCaptureOutputParams : IIpcParams, IIpcReusable
         Cursor = null;
         Scale = null;
         MaxDimension = null;
+        Format = null;
     }
 }

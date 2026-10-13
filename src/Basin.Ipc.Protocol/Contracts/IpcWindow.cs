@@ -14,7 +14,8 @@ public readonly record struct IpcWindow(
     string? Output,
     ulong? Workspace,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? X11Display = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? X11Density = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? X11Density = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FrameLimit = null)
 {
     public const string NativeDensity = "native";
 

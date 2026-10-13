@@ -27,6 +27,39 @@ internal static class IpcWindowMethods
                 reply.Write(describe.Window(info, describe.WorkspaceOf()), IpcJsonContext.Default.IpcWindow);
             });
 
+            methods.RegisterLibrary(IpcMethodNames.WindowsStats, (ref IpcParams parameters, IpcReply reply) =>
+            {
+                if (parameters.Read(IpcJsonContext.Default.IpcIdParams) is not { } request || !Found(model, request.Id, reply, out var info))
+                {
+                    return;
+                }
+
+                reply.Write(describe.Stats(info, MonotonicClock.Nanos), IpcJsonContext.Default.IpcFrameStats);
+            });
+
+            methods.RegisterLibrary(IpcMethodNames.WindowsFrameLimit, (ref IpcParams parameters, IpcReply reply) =>
+            {
+                if (parameters.Read(IpcJsonContext.Default.IpcFrameLimitParams) is not { } request || !Found(model, request.Id, reply, out var info))
+                {
+                    return;
+                }
+
+                if (request.Fps is < 0 or > 1000)
+                {
+                    reply.Error(IpcErrorCodes.InvalidParams, "fps is between 0 (no limit) and 1000");
+                    return;
+                }
+
+                if (describe.FrameLimits is not { } limits || info.Surface is not { } surface)
+                {
+                    reply.Error(IpcErrorCodes.Unavailable, "this compositor has no frame limiter");
+                    return;
+                }
+
+                limits.SetLimit(surface, request.Fps);
+                IpcWrite.Empty(reply);
+            });
+
             methods.RegisterLibrary(IpcMethodNames.WindowsActivate, (ref IpcParams parameters, IpcReply reply) =>
                 Simple(ref parameters, reply, model, ToplevelRequestKind.Activate));
 

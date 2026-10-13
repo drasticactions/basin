@@ -13,7 +13,7 @@ public sealed class ManagedShmGlobal : IDisposable
     private readonly ISharedMemory? _sharedMemory;
     private readonly ClientBufferRegistry _registry;
     private readonly ShmLimits _limits;
-    private readonly DrmFormat[] _formats;
+    private readonly List<DrmFormat> _formats;
     private readonly Dictionary<WlClient, ClientState> _clients = [];
 
     private sealed class ClientState
@@ -45,7 +45,8 @@ public sealed class ManagedShmGlobal : IDisposable
         _sharedMemory = sharedMemory;
         _registry = buffers;
         _limits = limits ?? new ShmLimits();
-        _formats = [DrmFormat.Argb8888, DrmFormat.Xrgb8888, .. extraFormats];
+        _formats = [DrmFormat.Argb8888, DrmFormat.Xrgb8888];
+        Advertise(extraFormats);
         Policy = policy == ShmAccessPolicy.Guarded && (sharedMemory is null || !ProbeGuard(sharedMemory))
             ? ShmAccessPolicy.Direct
             : policy;
@@ -53,6 +54,17 @@ public sealed class ManagedShmGlobal : IDisposable
     }
 
     public ShmAccessPolicy Policy { get; }
+
+    public void Advertise(ReadOnlySpan<DrmFormat> formats)
+    {
+        foreach (var format in formats)
+        {
+            if (!_formats.Contains(format))
+            {
+                _formats.Add(format);
+            }
+        }
+    }
 
     private ISharedMemory? SharedMemoryFor(WlClient client) =>
         client.FdSlots is { } slots ? new TokenSharedMemory(slots) : _sharedMemory;
@@ -167,7 +179,7 @@ public sealed class ManagedShmGlobal : IDisposable
             }
 
             var format = DrmFormatExtensions.FromWlShm((uint)e.Format);
-            if (Array.IndexOf(_formats, format) < 0)
+            if (!_formats.Contains(format))
             {
                 poolResource.PostError((uint)WlShm.Error.InvalidFormat, $"unsupported format {e.Format}");
                 return;

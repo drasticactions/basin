@@ -5,9 +5,6 @@ namespace Basin.Ipc;
 
 internal static class IpcKeys
 {
-    private const uint ShiftMask = 1;
-    private const uint Level3Mask = 128;
-
     public static uint KeysymOfModifier(string name) => name.ToLowerInvariant() switch
     {
         "shift" => Keysym.FromName("Shift_L"),
@@ -84,37 +81,4 @@ internal static class IpcKeys
         codes.Add(code);
         return true;
     }
-
-    public static bool TryResolveText(string text, IKeymapLookup lookup, List<(uint Code, uint Mask)> keys, out string? error)
-    {
-        keys.Clear();
-        error = null;
-        var position = -1;
-        foreach (var rune in text.EnumerateRunes())
-        {
-            position++;
-            var keysym = rune.Value switch
-            {
-                '\n' or '\r' => 0xff0du,
-                '\t' => 0xff09u,
-                '\b' => 0xff08u,
-                >= 0x20 and <= 0x7e or >= 0xa0 and <= 0xff => (uint)rune.Value,
-                _ => 0x01000000u | (uint)rune.Value,
-            };
-
-            if (!lookup.TryKeycodeForKeysym(keysym, out var code, out var mask) || (mask & ~(ShiftMask | Level3Mask)) != 0)
-            {
-                error = $"the keymap cannot type '{rune}' at position {position}";
-                return false;
-            }
-
-            keys.Add((code, mask));
-        }
-
-        return true;
-    }
-
-    public static uint? ModifierCode(IKeymapLookup lookup, uint mask) =>
-        lookup.TryKeycodeForKeysym(
-            KeysymOfModifier(mask == ShiftMask ? "shift" : "mod5"), out var code, out _) ? code : null;
 }

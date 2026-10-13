@@ -585,7 +585,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
                 for (var plane = 0; plane < _planeCount; plane++)
                 {
                     var size = lseek(_fds[plane], 0, 2 );
-                    if (size > 0 && _offsets[plane] + (ulong)_strides[plane] * (ulong)height > (ulong)size)
+                    if (size > 0 && _offsets[plane] + (ulong)_strides[plane] * (ulong)format.PlaneHeight(plane, height) > (ulong)size)
                     {
                         Fail(immedId, ZwpLinuxBufferParamsV1.Error.OutOfBounds, $"plane {plane} exceeds its dmabuf ({size} bytes)");
                         return;

@@ -31,6 +31,8 @@ internal sealed partial class Dam : IDisposable
     private readonly Basin.Seat.Backends.InputConfigurator _inputConfigurator = new();
     private readonly Basin.XWayland.XWaylandServer? _xServer;
     private PrimaryClient? _client;
+    private readonly FrameLimiter? _limiter;
+    private readonly Basin.Color.PanelTable _panels;
 
     public static int Run(DamOptions options, BasinLogger log, out long rendered)
     {
@@ -113,6 +115,13 @@ internal sealed partial class Dam : IDisposable
         }
 
         _services.UseDefault<Basin.Capabilities.IInputDeviceConfiguration>(_inputConfigurator);
+        if (options.FrameLimit > 0)
+        {
+            _limiter = new FrameLimiter(_host.Loop, _layout);
+            _services.Use<Basin.Capabilities.IFrameLimits>(_limiter);
+        }
+
+        _panels = Basin.Color.PanelTable.Load(log, options.Panels);
         _services.Freeze();
 
         Seat = _services.Require<Basin.Seat.Seat>();
@@ -132,7 +141,10 @@ internal sealed partial class Dam : IDisposable
             ContinuousRepaint = options.Frames > 0,
             LastOnly = options.LastOutputOnly,
             NestedName = _ => "dam",
+            VrrPacing = options.VrrPacing,
+            ContentTypeOverride = options.GameContent ? OutputContentType.Game : null,
         };
+        _outputs.StampModeset += OnStampModeset;
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
         _outputs.ModesetRefused += card =>
@@ -148,7 +160,13 @@ internal sealed partial class Dam : IDisposable
         _outputs.ModeChanged += view => BasinReport.Line($"MODE {view.Output.Name} {view.Width}x{view.Height}");
         _outputs.ScanoutChanged += (view, choice) =>
             BasinReport.Line(CompositorLines.Scanout(view.Output.Name, choice, view.SwapModifiers.Length));
-        Views = new DamViews(_scene, _layout, Seat, _outputs);
+        Views = new DamViews(_scene, _layout, Seat, _outputs)
+        {
+            Scaler = options.Scaler,
+            Filter = options.Filter,
+            FrameLimit = options.FrameLimit,
+            Limits = _limiter,
+        };
         Views.Attach(Shell, _services.Require<XdgToplevelSource>());
         if (xwayland is not null)
         {
@@ -230,7 +248,7 @@ internal sealed partial class Dam : IDisposable
         if (_options.Application.Length > 0)
         {
             _client = PrimaryClient.Spawn(
-                _options.Application, _host.Socket, _xServer?.DisplayName, _host.Loop, Stop, _log);
+                _options.Application, _host.Socket, _xServer?.DisplayName, _host.Loop, Stop, _log, _options.Subreaper);
             if (_client is null)
             {
                 return 1;
@@ -262,6 +280,7 @@ internal sealed partial class Dam : IDisposable
         _colorPack?.Luts.Dispose();
         _client?.Dispose();
         _outputs.Dispose();
+        _limiter?.Dispose();
         _scene.Root.Destroy();
         _inputConfigurator.Dispose();
         _damSeat.Dispose();

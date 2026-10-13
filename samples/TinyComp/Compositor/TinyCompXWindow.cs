@@ -86,6 +86,9 @@ internal sealed partial class TinyComp
                 Basin.Config.LetterboxQuirk.Fit => SceneFitPolicy.Fit,
                 Basin.Config.LetterboxQuirk.Center => SceneFitPolicy.Center,
                 Basin.Config.LetterboxQuirk.Off => SceneFitPolicy.Off,
+                Basin.Config.LetterboxQuirk.Integer => SceneFitPolicy.Integer,
+                Basin.Config.LetterboxQuirk.Fill => SceneFitPolicy.Fill,
+                Basin.Config.LetterboxQuirk.Stretch => SceneFitPolicy.Stretch,
                 _ => SceneFitPolicy.Auto,
             };
             XWin.Readiness = quirks.Readiness == Basin.Config.ReadinessQuirk.Immediate
@@ -95,11 +98,26 @@ internal sealed partial class TinyComp
             XWin.AllowClientMove = quirks.AllowClientMove ?? false;
             XWin.HonorEmulatedModes = quirks.EmulatedModes ?? true;
             Outer.Filter = quirks.ScaleFilter;
+            if (quirks.FrameLimit is { } limit && XWin.Surface is { } surface)
+            {
+                _comp._services.Find<Basin.Capabilities.IFrameLimits>()?.SetLimit(surface, limit);
+            }
+
             _comp._xSceneDriver.Refit(XWin);
         }
 
         public static Basin.Config.WindowFacts FactsOf(Basin.XWayland.XWaylandWindow xwin) =>
-            Basin.Config.WindowFacts.ForX11(xwin.Class, xwin.Instance, xwin.Title, xwin.SteamGame, xwin.WindowType, xwin.Process);
+            Basin.Config.WindowFacts.ForX11(xwin.Class, xwin.Instance, xwin.Title, xwin.SteamGame, xwin.WindowType, xwin.Process) with
+            {
+                WantsFocus = xwin.WantsFocus,
+                AcceptsInput = xwin.AcceptsInput,
+                TakesFocus = xwin.TakesFocus,
+                SkipTaskbar = xwin.SkipTaskbar,
+                SkipPager = xwin.SkipPager,
+                HwndStyle = xwin.HwndStyle,
+                HwndStyleEx = xwin.HwndStyleEx,
+                IsUseless = xwin.IsUseless,
+            };
 
         public int CornerRadius { get; }
 

@@ -50,9 +50,14 @@ internal sealed class SurfaceCommitQueue : IDisposable
     }
 
     public bool TryReleaseReady(
-        long nowNanos, bool barrierCleared, bool holdCleared, out SurfaceState state, out bool armsBarrier)
+        long nowNanos, bool barrierCleared, bool holdCleared, out SurfaceState state, out bool armsBarrier) =>
+        TryReleaseReady(nowNanos, barrierCleared, holdCleared, 0, 0, -1, out state, out armsBarrier);
+
+    public bool TryReleaseReady(
+        long nowNanos, bool barrierCleared, bool holdCleared, long anchor, long anchorGrid, long grid,
+        out SurfaceState state, out bool armsBarrier)
     {
-        if (_parked.Count > 0 && IsReady(_parked[0], nowNanos, barrierCleared, holdCleared))
+        if (_parked.Count > 0 && IsReady(_parked[0], nowNanos, barrierCleared, holdCleared, anchor, anchorGrid, grid))
         {
             var head = _parked[0];
             _parked.RemoveAt(0);
@@ -83,7 +88,8 @@ internal sealed class SurfaceCommitQueue : IDisposable
         }
     }
 
-    private static bool IsReady(in ParkedCommit parked, long nowNanos, bool barrierCleared, bool holdCleared)
+    private static bool IsReady(
+        in ParkedCommit parked, long nowNanos, bool barrierCleared, bool holdCleared, long anchor, long anchorGrid, long grid)
     {
         if ((parked.Reason & CommitParkReason.FifoBarrier) != 0 && !barrierCleared)
         {
@@ -102,7 +108,9 @@ internal sealed class SurfaceCommitQueue : IDisposable
 
         return (parked.Reason & CommitParkReason.CommitTiming) == 0 ||
                parked.TargetTimeNanos <= 0 ||
-               nowNanos >= parked.TargetTimeNanos;
+               (grid < 0
+                   ? nowNanos >= parked.TargetTimeNanos
+                   : PresentTiming.TargetReached(parked.TargetTimeNanos, nowNanos, anchor, anchorGrid, grid));
     }
 
     private readonly struct ParkedCommit(

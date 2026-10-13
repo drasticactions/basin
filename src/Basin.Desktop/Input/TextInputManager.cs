@@ -24,6 +24,7 @@ public sealed class TextInputManager : IDisposable, ITextInputCommit
         if (_seat is { } withSeat)
         {
             withSeat.Keyboard.ModifiersChanged += OnModifiersChanged;
+            withSeat.Keyboard.CommitText ??= TryCommitString;
         }
 
         if (_method is { } live)
@@ -47,6 +48,10 @@ public sealed class TextInputManager : IDisposable, ITextInputCommit
         if (_seat is { } withSeat)
         {
             withSeat.Keyboard.ModifiersChanged -= OnModifiersChanged;
+            if (withSeat.Keyboard.CommitText == TryCommitString)
+            {
+                withSeat.Keyboard.CommitText = null;
+            }
         }
 
         if (_method is { } live)

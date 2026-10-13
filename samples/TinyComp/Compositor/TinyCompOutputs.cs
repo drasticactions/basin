@@ -54,7 +54,6 @@ internal sealed partial class TinyComp
         _driver.ModeChanged += OnModeChanged;
         _driver.LayoutChanged += OnLayoutChanged;
         _driver.TransformChanged += OnTransformChanged;
-        _driver.StampFrame += OnStampFrame;
         _driver.StampModeset += OnStampModeset;
         _driver.ScanoutChanged += OnScanoutChanged;
         _driver.ScaleRefused += (view, scale) => _log.Warn($"scale {scale} refused by {view.Output.Name}");
@@ -166,9 +165,21 @@ internal sealed partial class TinyComp
             _colorPack.AddOutput(view.Global, view.Output, view.Scene);
             SyncBlendSpace(view);
             RefreshSurfaceLuts();
-            if (_hdr && drmOutput.Edid.SupportsPq)
+            if (_panels.Match(drmOutput) is { } panel)
             {
-                _report.Line($"HDR {drmOutput.Name} PQ peak={drmOutput.Edid.MaxLuminance:F0}cd/m2 bt2020={drmOutput.Edid.SupportsBt2020}");
+                _report.Line($"PANEL {drmOutput.Name} {panel.Vendor}{(panel.Product is { } product ? $" 0x{product:x4}" : string.Empty)}");
+            }
+
+            if (_hdr && (_panels.Match(drmOutput)?.Hdr ?? drmOutput.Edid.SupportsPq))
+            {
+                var peak = _colorConfiguration?.ColorimetryOf(drmOutput)?.MaxLuminance ?? drmOutput.Edid.MaxLuminance;
+                _report.Line($"HDR {drmOutput.Name} PQ peak={peak:F0}cd/m2 bt2020={drmOutput.Edid.SupportsBt2020}");
+                if (view.Scene is { } hdrScene)
+                {
+                    hdrScene.OutputHdrMetadata = Basin.Color.OutputDescriptions.HdrMetadataFor(
+                        DescriptionOf(drmOutput), _colorConfiguration?.ColorimetryOf(drmOutput)?.Chromaticities ?? drmOutput.Edid.Chromaticities);
+                    hdrScene.HdrMetadataPassthrough = true;
+                }
             }
 
             RefreshGammaBaseline(view);
@@ -229,14 +240,33 @@ internal sealed partial class TinyComp
             }
         }
 
-        var driveHdr = _hdr && output.Edid.SupportsPq;
+        var panel = _panels.Match(output);
+        _colorConfiguration?.SetPanel(output, panel);
+        output.ModeGenerator = panel?.ModeGenerator ?? Basin.Capabilities.OutputModeGenerator.Auto;
+        output.MaxClockKhz = panel?.MaxClockKhz ?? 0;
+        if (panel is not null)
+        {
+            if (_config.OutputSettingFor(output.Name)?.Transform is null && panel.Orientation is { } orientation)
+            {
+                state.SetTransform(orientation);
+            }
+
+            if (panel.RefreshMilliHz.Count > 0 && output.PreferredMode.Width > 0)
+            {
+                var preferred = output.PreferredMode;
+                state.SetCustomModes([.. panel.RefreshMilliHz.Select(rate => new OutputMode(preferred.Width, preferred.Height, rate))]);
+            }
+        }
+
+        var driveHdr = _hdr && (panel?.Hdr ?? output.Edid.SupportsPq);
+        var hdrNow = driveHdr && (!_config.HdrDemand || _hdrShown);
         if (driveHdr && _colorConfiguration is { } colorConfiguration &&
             (colorConfiguration.Supported(output) &
              Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange) != 0)
         {
             colorConfiguration.Seed(
                 output,
-                new Basin.Color.OutputColorState { HighDynamicRange = true, Source = _colorSource });
+                new Basin.Color.OutputColorState { HighDynamicRange = hdrNow, HdrOnDemand = _config.HdrDemand, Source = _colorSource });
         }
         else if (_colorSource != Basin.Capabilities.OutputColorProfileSource.Edid &&
             _colorConfiguration is { } sdrConfiguration)
@@ -245,11 +275,13 @@ internal sealed partial class TinyComp
                 output, new Basin.Color.OutputColorState { Source = _colorSource, IccProfilePath = _iccProfile });
         }
 
-        if (driveHdr)
+        if (hdrNow)
         {
             state.SetHdr(Basin.Color.OutputDescriptions.HdrMetadataFor(
-                DescriptionOf(output), output.Edid.Chromaticities));
+                DescriptionOf(output), _colorConfiguration?.ColorimetryOf(output)?.Chromaticities ?? output.Edid.Chromaticities));
         }
+
+        ApplyColorLooks(output, driveHdr);
     }
 
     private static OutputMode? FindMode(Basin.Backend.Drm.DrmOutput output, int width, int height, int? refresh)
@@ -264,14 +296,6 @@ internal sealed partial class TinyComp
         }
 
         return null;
-    }
-
-    private void OnStampFrame(OutputView view, OutputState state)
-    {
-        if (_scanoutFeedbackSurface is { } scanoutSurface && _tearing.PrefersTearing(scanoutSurface))
-        {
-            state.SetTearing(true);
-        }
     }
 
     private void StepEffects(OutputView view, FrameTick tick)
@@ -438,6 +462,10 @@ internal sealed partial class TinyComp
         if (surface is not null && view.Output is Basin.Backend.Drm.DrmOutput drmOutput)
         {
             _dmabufGlobal.SetScanoutTargets(surface, drmOutput.ScanoutFormats);
+        }
+        else if (surface is not null && view.Output is WaylandOutput nested && nested.ScanoutFormats.Count > 0)
+        {
+            _dmabufGlobal.SetScanoutTargets(surface, nested.ScanoutFormats);
         }
     }
 

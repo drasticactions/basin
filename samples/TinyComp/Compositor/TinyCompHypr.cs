@@ -8,7 +8,7 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
-    private TinyCompShortcuts _shortcuts = null!;
+    private Basin.Hypr.PreferredTriggerShortcuts _shortcuts = null!;
     private HyprCtm? _hyprCtm;
     private InputCaptureEngine? _inputCapture;
 
@@ -67,4 +67,29 @@ internal sealed partial class TinyComp
     private bool HandleGlobalShortcut(uint key, bool pressed) =>
         !_sessionLock.IsLocked
         && _shortcuts.HandleKey(key, _seat.Keyboard.RawKeysymFor(key).Value, HeldModifiers(), pressed);
+
+    private void ConfigureShortcuts(Config config)
+    {
+        var bindings = config.Bindings;
+        _shortcuts.IsTaken = (keysym, modifiers) =>
+        {
+            foreach (var binding in bindings)
+            {
+                if (binding.Keysym == keysym && binding.ModifierMask == modifiers)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+        _shortcuts.Overrides = config.Shortcuts;
+        foreach (var (key, _) in config.Shortcuts)
+        {
+            if (!_shortcuts.IsRegistered(key.AppId, key.Id))
+            {
+                _log.Debug($"[shortcuts] {key.AppId}:{key.Id} is bound but no client has registered it");
+            }
+        }
+    }
 }

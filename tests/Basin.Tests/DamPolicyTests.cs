@@ -81,6 +81,41 @@ public sealed class DamPolicyTests
         entry.Surface.Destroy();
     }
 
+    [Theory]
+    [InlineData(Basin.Scene.SceneFitMode.Fit, 2.8125, 280, 0)]
+    [InlineData(Basin.Scene.SceneFitMode.Integer, 2.0, 384, 104)]
+    [InlineData(Basin.Scene.SceneFitMode.Stretch, 5.0, 0, 0)]
+    public void A_primary_that_keeps_its_own_size_is_scaled_onto_the_layout(Basin.Scene.SceneFitMode mode, double scale, int x, int y)
+    {
+        using var host = new DamTestHost(scaler: mode);
+        var entry = CreateToplevel(host.Client);
+        entry.Surface.Commit();
+        host.PumpUntil(() => entry.Serial != 0);
+
+        Map(host, entry, 256, 256);
+        var view = Assert.Single(host.Dam.Views.Views);
+        var fit = Assert.IsType<Basin.Scene.SceneFit>(view.Fit);
+        Assert.True(fit.IsActive);
+        Assert.Equal(scale, fit.ContentScale, 4);
+        Assert.Equal((x, y), (fit.ContentBox.X, fit.ContentBox.Y));
+        entry.Surface.Destroy();
+    }
+
+    [Fact]
+    public void Without_a_scaler_a_small_primary_sits_at_the_layout_origin_as_in_cage()
+    {
+        using var host = new DamTestHost();
+        var entry = CreateToplevel(host.Client);
+        entry.Surface.Commit();
+        host.PumpUntil(() => entry.Serial != 0);
+
+        Map(host, entry, 256, 256);
+        var view = Assert.Single(host.Dam.Views.Views);
+        Assert.Null(view.Fit);
+        Assert.Equal((0, 0), (view.Scene.Tree.X, view.Scene.Tree.Y));
+        entry.Surface.Destroy();
+    }
+
     [Fact]
     public void The_surface_origin_lands_on_the_layout_whatever_the_geometry_offset_as_in_cage()
     {

@@ -26,6 +26,10 @@ public sealed class SurfaceLutDriver
 
     public event Action<int>? CountChanged;
 
+    public Func<Surface, bool>? DeclinesInverseToneMapping { get; set; }
+
+    private readonly Dictionary<ImageDescription, ImageDescription> _declining = new(ImageDescription.ContentComparer);
+
     public static void DeclareSrgb(ColorManager color)
     {
         ArgumentNullException.ThrowIfNull(color);
@@ -86,6 +90,17 @@ public sealed class SurfaceLutDriver
     private ImageDescription? Describe(Surface surface)
     {
         var description = _color.DescriptionOf(surface);
+        if (DeclinesInverseToneMapping?.Invoke(surface) == true)
+        {
+            if (!_declining.TryGetValue(description, out var declining))
+            {
+                declining = description with { DeclinesInverseToneMapping = true };
+                _declining[description] = declining;
+            }
+
+            return declining;
+        }
+
         return ReferenceEquals(description, ImageDescription.SdrDefault) ? null : description;
     }
 }

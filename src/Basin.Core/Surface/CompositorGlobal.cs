@@ -31,6 +31,8 @@ public sealed class CompositorGlobal : IDisposable
 
     public ICompositorEventLoop? Loop { get; init; }
 
+    public PresentedSets PresentedSets { get; init; } = new();
+
     private void OnClientScaleChanged(WlClient client, double scale)
     {
         foreach (var surface in _surfaces.Values)

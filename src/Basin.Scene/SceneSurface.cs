@@ -153,7 +153,7 @@ public sealed class SceneSurface
         var state = Surface.Current;
         var shown = state.Buffer is null ? null : Substitute ?? state.Buffer;
         _content.SetBuffer(shown);
-        _content.AcquireFenceFd = Surface.AcquireFenceFd;
+        _content.FollowFenceOf(Surface);
         _content.SourceBox = state.ViewportSourceWidth >= 0 && state.ViewportSourceHeight >= 0
             ? new FBox(
                 state.ViewportSourceX * state.Scale,

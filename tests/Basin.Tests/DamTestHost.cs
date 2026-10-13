@@ -25,7 +25,7 @@ internal sealed class DamTestHost : IDisposable
 
     private readonly List<ShmTestClient> _clients = [];
 
-    public DamTestHost(bool serverDecorations = false, bool lastOutputOnly = false)
+    public DamTestHost(bool serverDecorations = false, bool lastOutputOnly = false, Basin.Scene.SceneFitMode? scaler = null)
     {
         CompositorTestHost.SkipWithoutWaylandClient();
         BasinCounters.Reset();
@@ -38,6 +38,7 @@ internal sealed class DamTestHost : IDisposable
                 Renderer = "pixman",
                 ServerDecorations = serverDecorations,
                 LastOutputOnly = lastOutputOnly,
+                Scaler = scaler,
             },
             BasinLogger.None);
         Client = ConnectClient();

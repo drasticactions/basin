@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
     <PackageReference Include="lcms2-dotnet" />
   </ItemGroup>
 

@@ -106,6 +106,52 @@ public static class RenderFences
         return -1;
     }
 
+    public static unsafe long SignalTimeNanos(int syncFileFd)
+    {
+        if (syncFileFd < 0)
+        {
+            return 0;
+        }
+
+        var info = stackalloc byte[SyncFileInfoSize];
+        new Span<byte>(info, SyncFileInfoSize).Clear();
+        if (ioctl(syncFileFd, SyncIocFileInfo, info) != 0 || *(int*)(info + 32) != 1)
+        {
+            return 0;
+        }
+
+        var count = *(uint*)(info + 40);
+        if (count == 0 || count > MaxFenceInfos)
+        {
+            return 0;
+        }
+
+        var fences = stackalloc byte[SyncFenceInfoSize * MaxFenceInfos];
+        *(uint*)(info + 40) = count;
+        *(ulong*)(info + 48) = (ulong)fences;
+        if (ioctl(syncFileFd, SyncIocFileInfo, info) != 0)
+        {
+            return 0;
+        }
+
+        var latest = 0L;
+        for (var i = 0; i < count; i++)
+        {
+            var fence = fences + (i * SyncFenceInfoSize);
+            latest = Math.Max(latest, *(long*)(fence + 72));
+        }
+
+        return latest;
+    }
+
+    private const int SyncFileInfoSize = 56;
+
+    private const int SyncFenceInfoSize = 80;
+
+    private const int MaxFenceInfos = 8;
+
+    private const nuint SyncIocFileInfo = 0xC0383E04;
+
     public static unsafe bool IsSignaled(int syncFileFd)
     {
         if (syncFileFd < 0)

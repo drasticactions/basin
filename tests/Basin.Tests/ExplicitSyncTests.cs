@@ -204,19 +204,26 @@ public sealed class ExplicitSyncTests : IDisposable
 
         Assert.Equal(1, manager.ExplicitCommits);
         Assert.Equal(1, manager.ManagedCommits);
-        var sync = manager.CurrentOf(window.ServerSurface);
-        Assert.NotNull(sync);
-        Assert.Equal(1ul, sync!.AcquirePoint);
+        Assert.Equal(1, manager.ParkedAcquires);
+        Assert.Null(manager.CurrentOf(window.ServerSurface));
+        Assert.True(window.ServerSurface.HasParkedCommits);
+        var idled = false;
+        host.Loop.AddIdle(() => idled = true);
+        host.Loop.Dispatch(0);
+        Assert.True(idled, "a parked acquire must not block the loop");
 
-        Assert.False(manager.WaitAcquireCpu(window.ServerSurface, 1_000_000));
-
-        Assert.False(manager.AcquireReady(window.ServerSurface));
         acquire.Signal(1);
+        PumpUntil(host, () => manager.CurrentOf(window.ServerSurface) is not null);
+        var sync = manager.CurrentOf(window.ServerSurface);
+        Assert.Equal(1ul, sync!.AcquirePoint);
+        Assert.False(window.ServerSurface.HasParkedCommits);
         Assert.True(manager.AcquireReady(window.ServerSurface));
         Assert.True(manager.WaitAcquireCpu(window.ServerSurface, 100_000_000));
+        Assert.Equal(0, manager.LateAcquires);
 
         Assert.False(release.IsSignaled(1));
         var buffer3 = host.Client.CreateBuffer(60, 50, Fill.Solid(60, 50, 0xFF00FF00));
+        acquire.Signal(2);
         syncSurface.SetAcquirePoint(acquireProxy, 0, 2);
         syncSurface.SetReleasePoint(releaseProxy, 0, 2);
         window.Surface.Attach(buffer3.Proxy, 0, 0);
@@ -225,7 +232,9 @@ public sealed class ExplicitSyncTests : IDisposable
         host.PumpToServer();
 
         Assert.Equal(2, manager.ExplicitCommits);
+        Assert.Equal(1, manager.ParkedAcquires);
         Assert.True(release.Wait(1, 1_000_000_000));
+        Assert.Equal(0, manager.LateAcquires);
         Assert.Equal(0, manager.DeferredReleases);
 
         acquire.Release();
@@ -234,6 +243,17 @@ public sealed class ExplicitSyncTests : IDisposable
         acquireProxy.Dispose();
         releaseProxy.Dispose();
         host.PumpToServer();
+    }
+
+    private static void PumpUntil(CompositorTestHost host, Func<bool> condition)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && clock.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            host.Loop.Dispatch(10);
+        }
+
+        Assert.True(condition(), "condition not reached within 5 s");
     }
 
     [Fact]
@@ -277,6 +297,8 @@ public sealed class ExplicitSyncTests : IDisposable
 
         var fence = window.ServerSurface.AcquireFenceFd;
         Assert.True(fence >= 0, "a committed acquire point must reach the surface as a fence");
+        var node = host.SurfaceScenes.Single(scene => scene.Surface == window.ServerSurface).Content;
+        Assert.Equal(fence, node.AcquireFenceFd);
         Assert.True(RenderFences.WaitSyncFile(fence, 100));
         Assert.Equal(0, manager.UnexportableAcquires);
 

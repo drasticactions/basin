@@ -51,7 +51,7 @@ internal sealed unsafe class VulkanColorTransform : IDisposable
         }
 
         floats[12] = (int)parameters.Source.Kind;
-        floats[13] = (float)parameters.Source.Gamma;
+        floats[13] = (float)parameters.Source.ShaderParameter;
         floats[14] = (float)parameters.Source.MaxLuminance;
         floats[15] = (float)parameters.Anchor;
         floats[16] = (int)parameters.Output.Kind;

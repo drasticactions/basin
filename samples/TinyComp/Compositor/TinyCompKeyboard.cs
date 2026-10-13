@@ -56,17 +56,20 @@ internal sealed partial class TinyComp
 
         if (!fromInputMethod && HandleGlobalShortcut(key, pressed))
         {
+            _seat.Keyboard.NotifyKeyConsumed(key, pressed);
             return;
         }
 
         if (pressed && !_sessionLock.IsLocked && !_shortcutsInhibit.IsActive(_seat.Keyboard.Focus)
             && HandleKeybind(key))
         {
+            _seat.Keyboard.NotifyKeyConsumed(key, pressed);
             return;
         }
 
         if (!_sessionLock.IsLocked && OverviewKey(key, pressed))
         {
+            _seat.Keyboard.NotifyKeyConsumed(key, pressed);
             return;
         }
 
@@ -83,6 +86,7 @@ internal sealed partial class TinyComp
                     EndSwitcher(focus: false);
                 }
 
+                _seat.Keyboard.NotifyKeyConsumed(key, pressed);
                 return;
             }
         }
@@ -98,6 +102,8 @@ internal sealed partial class TinyComp
 
     private string? _shotPath;
     private int _shotView;
+
+    private bool _shotHdr;
     private long _gcMark;
 
     private void DumpPlanes(OutputView view, string prefix)
@@ -140,7 +146,13 @@ internal sealed partial class TinyComp
 
         var path = _shotPath;
         _shotPath = null;
-        var written = SceneScreenshot.Write(_scene, _renderer, path, view.Width, view.Height, SceneOptions(view.Output));
+        var written = _shotHdr
+            ? SceneScreenshot.Write16(
+                _scene, _renderer, path, view.Width, view.Height,
+                SceneOptions(view.Output) with { ColorDescription = view.Scene?.ColorDescription, Luts = view.Scene },
+                view.Scene?.ContentHdrMetadata ?? view.Scene?.OutputHdrMetadata)
+            : SceneScreenshot.Write(_scene, _renderer, path, view.Width, view.Height, SceneOptions(view.Output));
+        _shotHdr = false;
         if (_shotReply is { } pending)
         {
             _shotReply = null;

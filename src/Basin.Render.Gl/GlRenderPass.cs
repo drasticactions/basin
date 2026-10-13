@@ -124,6 +124,9 @@ internal sealed unsafe class GlRenderPass : IRenderPass
                 }
 
                 break;
+            case GlYuvTexture yuv:
+                yuv.Acquire(out sourceId);
+                break;
             case GlShmTexture shm:
                 if (!shm.Acquire(out sourceId))
                 {
@@ -218,6 +221,10 @@ internal sealed unsafe class GlRenderPass : IRenderPass
                 }
 
                 break;
+            case GlYuvTexture yuv:
+                yuv.Acquire(out textureId);
+                forceOpaque = true;
+                break;
             case GlShmTexture shm:
                 if (!shm.Acquire(out textureId))
                 {
@@ -260,6 +267,10 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             _gl.ActiveTexture(TextureUnit.Texture1);
             _gl.BindTexture(TextureTarget.Texture3D, lut.TextureId);
             _gl.Uniform1(program.Lut, 1);
+            if (program.Shaper >= 0)
+            {
+                _gl.Uniform1(program.Shaper, lut.ShaperNits);
+            }
         }
         else if (custom is null && _renderer.TransformFor(options.ColorDescription, _outputColor) is { } colorTransform)
         {
@@ -296,6 +307,11 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             (float)(src.Height / texture.Height));
         _gl.Uniform1(program.Alpha, options.Alpha);
         _gl.Uniform1(program.ForceOpaque, forceOpaque ? 1f : 0f);
+        if (program.Pixel >= 0)
+        {
+            _gl.Uniform1(program.Pixel, options.Filter == TextureFilter.Pixel ? 1f : 0f);
+        }
+
         SetTransform(program.Transform, options.Transform);
         var opaque = options.Opaque && options.Alpha >= 1f;
         if (opaque)
@@ -369,6 +385,11 @@ internal sealed unsafe class GlRenderPass : IRenderPass
                     _sampled.Add(dmabuf);
                 }
 
+                break;
+            case GlYuvTexture yuv:
+                yuv.Acquire(out textureId);
+                hasTexture = true;
+                forceOpaque = true;
                 break;
             case GlShmTexture shm:
                 if (!shm.Acquire(out textureId))

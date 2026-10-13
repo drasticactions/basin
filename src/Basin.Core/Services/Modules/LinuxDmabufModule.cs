@@ -40,7 +40,7 @@ public sealed class LinuxDmabufModule : IProtocolModule
         if (_captureFormats is { Count: > 0 } captureFormats)
         {
             services.UseDefault<ICaptureDmabufConstraints>(
-                new CaptureDmabufConstraints(captureFormats, _mainDevicePath));
+                new CaptureDmabufConstraints(captureFormats, _mainDevicePath) { Wrappable = _formats });
         }
     }
 

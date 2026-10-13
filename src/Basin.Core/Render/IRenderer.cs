@@ -10,6 +10,14 @@ public interface IRenderer : IDisposable
 
     DrmFormatSet DmabufTextureFormats => DrmFormatSet.Empty;
 
+    IReadOnlyList<DrmFormat> ShmTextureFormats => ShmFormatLists.Basic;
+
+    bool CanConvertYuv => false;
+
+    bool RendersHalfFloat => false;
+
+    bool ConvertToYuv(ITexture source, in FBox sourceBox, IBuffer target, YuvCoefficients coefficients, YuvRange range) => false;
+
     DrmFormatSet DmabufRenderFormats => DrmFormatSet.Empty;
 
     IRenderDevice? Device => null;
@@ -19,6 +27,8 @@ public interface IRenderer : IDisposable
     RenderFencePrecision FencePrecision => RenderFencePrecision.None;
 
     int ExportLastSubmissionFence() => -1;
+
+    bool SupportsFilter(TextureFilter filter) => filter != TextureFilter.Pixel;
 
     bool WaitsOnGpu => false;
 

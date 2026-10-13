@@ -42,20 +42,20 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
         if (_discarded.Remove(output))
         {
             _lastPresent.Remove(output);
-            _presentation.DiscardAllCore();
+            _presentation.DiscardOutputCore(output);
             return;
         }
 
         if (presentedNanos <= 0)
         {
-            _presentation.PresentAllNowCore(output);
+            _presentation.PresentOutputNowCore(output);
             return;
         }
 
         var refreshNs = _lastPresent.Remove(output, out var present)
             ? present.RefreshNs
             : output.CurrentMode.RefreshIntervalNanoseconds;
-        _presentation.PresentAllCore(
+        _presentation.PresentOutputCore(
             output, (ulong)presentedNanos, refreshNs, present.Sequence, PresentedFlags.Vsync | PresentedFlags.HwClock);
     }
 
@@ -119,7 +119,7 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
             target.Frame += onFrame;
             _frameHandlers[target] = onFrame;
 
-            Action<OutputStateFields> onCommit = fields => OnCommitted(fields);
+            Action<OutputStateFields> onCommit = fields => OnCommitted(target, fields);
             target.Committed += onCommit;
             _commitHandlers[target] = onCommit;
 
@@ -139,14 +139,14 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
         }
     }
 
-    private void OnCommitted(OutputStateFields fields)
+    private void OnCommitted(IOutput output, OutputStateFields fields)
     {
         if (_disposed || _presentation.ConsumerSamples || (fields & OutputStateFields.Buffer) == 0)
         {
             return;
         }
 
-        _presentation.SampleAllCore();
+        _presentation.SampleOutputCore(output);
     }
 
     private void OnFrame(IOutput output)
@@ -159,13 +159,13 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
         if (_discarded.Remove(output))
         {
             _lastPresent.Remove(output);
-            _presentation.DiscardAllCore();
+            _presentation.DiscardOutputCore(output);
             return;
         }
 
         if (_lastPresent.Remove(output, out var present))
         {
-            _presentation.PresentAllCore(
+            _presentation.PresentOutputCore(
                 output,
                 present.TimeNs,
                 present.RefreshNs,
@@ -174,6 +174,6 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
             return;
         }
 
-        _presentation.PresentAllNowCore(output);
+        _presentation.PresentOutputNowCore(output);
     }
 }

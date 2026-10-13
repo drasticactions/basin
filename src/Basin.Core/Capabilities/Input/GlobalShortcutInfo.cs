@@ -5,4 +5,5 @@ public readonly record struct GlobalShortcutInfo(
     string Id,
     string Description,
     string TriggerDescription,
-    string PreferredTrigger = "");
+    string PreferredTrigger = "",
+    GlobalShortcutFlags Flags = GlobalShortcutFlags.None);

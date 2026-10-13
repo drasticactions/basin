@@ -6,4 +6,7 @@ public enum SceneFitPolicy
     Fit,
     Center,
     Off,
+    Integer,
+    Fill,
+    Stretch,
 }

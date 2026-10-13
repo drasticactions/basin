@@ -27,6 +27,23 @@ public sealed class OutputDriver : IDisposable
         OutputStateFields.OutFence | OutputStateFields.Layers | OutputStateFields.Tearing;
     private readonly List<DrmBackend> _secondaryCards = [];
     private bool? _hasLidSwitch;
+    private bool _shmAdvertised;
+    private bool _initialCreated;
+
+    private bool AllRendered()
+    {
+        foreach (var view in _views)
+        {
+            if (view.Rendered == 0 && !view.IsSecondary)
+            {
+                return false;
+            }
+        }
+
+        return _views.Count > 0;
+    }
+    private bool _hdrMetadataPassthrough;
+    private OutputContentType? _contentTypeOverride;
 
     public OutputDriver(
         BasinHost host, Scene.Scene scene, OutputLayout layout, IRenderer renderer, IAllocator? deviceAllocator)
@@ -72,7 +89,47 @@ public sealed class OutputDriver : IDisposable
 
     public bool AllowDirectScanout { get; set; } = true;
 
+    public OutputContentType? ContentTypeOverride
+    {
+        get => _contentTypeOverride;
+        set
+        {
+            _contentTypeOverride = value;
+            foreach (var view in _views)
+            {
+                if (view.Scene is { } scene)
+                {
+                    scene.ContentTypeOverride = value;
+                }
+            }
+        }
+    }
+
+    public Func<IOutput, OutputTransform?>? ConfiguredTransform { get; set; }
+
+    public bool HdrMetadataPassthrough
+    {
+        get => _hdrMetadataPassthrough;
+        set
+        {
+            _hdrMetadataPassthrough = value;
+            foreach (var view in _views)
+            {
+                if (view.Scene is { } scene)
+                {
+                    scene.HdrMetadataPassthrough = value;
+                }
+            }
+        }
+    }
+
     public bool AllowPlaneOffload { get; set; } = true;
+
+    public VrrPacingPolicy VrrPacing { get; set; } = VrrPacingPolicy.Fullscreen;
+
+    public bool AllowTearing { get; set; } = true;
+
+    public Capabilities.ISurfaceHints? SurfaceHints { get; set; }
 
     public int Requested { get; set; } = 1;
 
@@ -222,6 +279,7 @@ public sealed class OutputDriver : IDisposable
                 }
             };
 
+            _initialCreated = true;
             return;
         }
 
@@ -236,6 +294,8 @@ public sealed class OutputDriver : IDisposable
                 AddView(_host.Headless!.CreateOutput(HeadlessMode));
             }
         }
+
+        _initialCreated = true;
     }
 
     public OutputView? ViewOf(IOutput output)
@@ -262,6 +322,12 @@ public sealed class OutputDriver : IDisposable
             Disable(_views[^1]);
         }
 
+        if (!_shmAdvertised && _host.Services?.Find<ShmGlobal>() is { } shm)
+        {
+            shm.Advertise(_renderer.ShmTextureFormats);
+            _shmAdvertised = true;
+        }
+
         var view = new OutputView(output, new OutputGlobal(_host.Display, output))
         {
             IsSecondary = secondary,
@@ -278,6 +344,14 @@ public sealed class OutputDriver : IDisposable
             {
                 ScaleRefused?.Invoke(view, scale);
             }
+        }
+
+        var transform = ConfiguredTransform?.Invoke(output) ??
+            (output.PanelOrientation != OutputTransform.Normal ? output.PanelOrientation : output.Transform);
+        if (transform != output.Transform)
+        {
+            using var state = new OutputState();
+            _ = output.Commit(state.SetTransform(transform));
         }
 
         view.Scale = output.Scale;
@@ -560,7 +634,10 @@ public sealed class OutputDriver : IDisposable
         }
 
         view.Scheduler?.Dispose();
+        RenderFences.CloseFence(view.RenderFence);
+        view.RenderFence = -1;
         view.Scene?.Dispose();
+        _host.PresentedSets.Retire(view.Output);
         view.Swapchain?.Dispose();
         view.Global.Dispose();
     }
@@ -696,8 +773,16 @@ public sealed class OutputDriver : IDisposable
             return;
         }
 
-        var sceneOutput = new SceneOutput(_scene, view.Output);
+        var sceneOutput = new SceneOutput(_scene, view.Output)
+        {
+            Presented = _host.PresentedSets.For(view.Output),
+            HdrMetadataPassthrough = _hdrMetadataPassthrough,
+            ContentTypeOverride = _contentTypeOverride,
+            SurfaceHints = Hints(),
+        };
         view.Scene = sceneOutput;
+        sceneOutput.ScanoutCandidateChanged += surface => view.ScanoutCandidate = surface;
+        view.Output.Frame += () => ReportRenderTime(view);
         sceneOutput.DamagePending += () =>
         {
             if (!ReferenceEquals(_preparing, view))
@@ -852,6 +937,7 @@ public sealed class OutputDriver : IDisposable
         }
 
         _frameState.Clear();
+        StampPacing(view);
         AllocationScope.Pause();
         try
         {
@@ -862,6 +948,8 @@ public sealed class OutputDriver : IDisposable
             AllocationScope.Resume();
         }
 
+        var renderStart = MonotonicClock.Nanos;
+        var composedBefore = view.Scene.ComposedCommits;
         var committed = view.Scene.Commit(
             _renderer, view.Swapchain!, _frameState, new SceneCommitOptions
             {
@@ -876,6 +964,22 @@ public sealed class OutputDriver : IDisposable
             view.Scheduler!.NotifyCommitted();
             view.LastPresentedBuffer = _frameState.Buffer;
             view.Rendered++;
+            if (_initialCreated && !_host.Ready && AllRendered())
+            {
+                AllocationScope.Pause();
+                try
+                {
+                    _host.NotifyReady();
+                }
+                finally
+                {
+                    AllocationScope.Resume();
+                }
+            }
+            if (view.Scene.ComposedCommits != composedBefore)
+            {
+                TrackRenderFence(view, renderStart);
+            }
         }
         else if (view.Scene.NeedsRepaint)
         {
@@ -1004,6 +1108,78 @@ public sealed class OutputDriver : IDisposable
         {
             texture.Dispose();
         }
+    }
+
+    private Capabilities.ISurfaceHints? _foundHints;
+
+    private Capabilities.ISurfaceHints? Hints() => SurfaceHints ?? (_foundHints ??= _host.Services?.Find<Capabilities.ISurfaceHints>());
+
+    private void StampPacing(OutputView view)
+    {
+        var candidate = view.ScanoutCandidate;
+        var tearing = AllowTearing && candidate is { IsDestroyed: false } && Hints()?.PrefersTearing(candidate) == true;
+        if (tearing)
+        {
+            _frameState.SetTearing(true);
+        }
+
+        if (view.Scheduler is not { } scheduler)
+        {
+            return;
+        }
+
+        var adaptive = view.Output.AdaptiveSync;
+        var arrival = VrrPacing switch
+        {
+            VrrPacingPolicy.Always => adaptive || tearing,
+            VrrPacingPolicy.Fullscreen => tearing || (adaptive && (candidate is not null || view.Scene?.IsDirectScanout == true)),
+            _ => false,
+        };
+        if (arrival != scheduler.ArrivalMode)
+        {
+            HostLog.Log.Debug($"{view.Output.Name}: arrival pacing {(arrival ? "on" : "off")} (adaptive sync {adaptive}, tearing {tearing})");
+            scheduler.ArrivalMode = arrival;
+        }
+    }
+
+    private void TrackRenderFence(OutputView view, long renderStart)
+    {
+        if (_renderer.FencePrecision == RenderFencePrecision.None)
+        {
+            return;
+        }
+
+        var fence = _renderer.ExportLastSubmissionFence();
+        if (fence < 0)
+        {
+            return;
+        }
+
+        RenderFences.CloseFence(view.RenderFence);
+        view.RenderFence = fence;
+        view.RenderStartNanos = renderStart;
+    }
+
+    private static void ReportRenderTime(OutputView view)
+    {
+        if (view.RenderFence < 0)
+        {
+            return;
+        }
+
+        var signaled = RenderFences.SignalTimeNanos(view.RenderFence);
+        if (signaled == 0 && !RenderFences.IsSignaled(view.RenderFence))
+        {
+            return;
+        }
+
+        if (signaled > view.RenderStartNanos)
+        {
+            view.Scheduler?.NotifyRenderTime(signaled - view.RenderStartNanos);
+        }
+
+        RenderFences.CloseFence(view.RenderFence);
+        view.RenderFence = -1;
     }
 
     private void OracleRepaint(OutputView view)

@@ -4,4 +4,5 @@ public enum TextureFilter
 {
     Linear,
     Nearest,
+    Pixel,
 }

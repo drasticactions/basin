@@ -16,9 +16,14 @@ public static class IpcMethodNames
     public const string OutputsTest = "outputs/test";
     public const string OutputsApply = "outputs/apply";
     public const string OutputsPower = "outputs/power";
+    public const string OutputsLook = "outputs/look";
 
     public const string WindowsList = "windows/list";
     public const string WindowsGet = "windows/get";
+
+    public const string WindowsFrameLimit = "windows/frame-limit";
+
+    public const string WindowsStats = "windows/stats";
     public const string WindowsStack = "windows/stack";
     public const string WindowsActivate = "windows/activate";
     public const string WindowsClose = "windows/close";

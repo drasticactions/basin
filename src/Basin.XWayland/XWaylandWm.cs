@@ -10,6 +10,7 @@ namespace Basin.XWayland;
 public sealed unsafe class XWaylandWm : IDisposable
 {
     private const byte EventFocusIn = 9;
+    private const byte EventFocusOut = 10;
     private const byte EventCreateNotify = 16;
     private const byte EventDestroyNotify = 17;
     private const byte EventUnmapNotify = 18;
@@ -93,15 +94,15 @@ public sealed unsafe class XWaylandWm : IDisposable
         var check = _wmWindow;
         SetProperty32(_root, Atom("_NET_SUPPORTING_WM_CHECK"), 33 , &check, 1);
         SetProperty32(_wmWindow, Atom("_NET_SUPPORTING_WM_CHECK"), 33, &check, 1);
-        var supported = stackalloc uint[13]
+        var supported = stackalloc uint[14]
         {
             Atom("_NET_WM_NAME"), Atom("_NET_WM_STATE"), Atom("_NET_WM_STATE_MODAL"),
             Atom("_NET_WM_STATE_FULLSCREEN"), Atom("_NET_ACTIVE_WINDOW"),
             Atom("_NET_WM_WINDOW_TYPE"), Atom("_NET_SUPPORTING_WM_CHECK"), Atom("_NET_CLIENT_LIST"),
             Atom("_NET_WM_STATE_HIDDEN"), Atom("_NET_WM_ALLOWED_ACTIONS"), Atom("_NET_WM_ACTION_MINIMIZE"),
-            Atom("_NET_WM_STATE_MAXIMIZED_VERT"), Atom("_NET_WM_STATE_MAXIMIZED_HORZ"),
+            Atom("_NET_WM_STATE_MAXIMIZED_VERT"), Atom("_NET_WM_STATE_MAXIMIZED_HORZ"), Atom("_NET_WM_MOVERESIZE"),
         };
-        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 13);
+        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 14);
         PublishClientList();
         Flush();
 
@@ -253,8 +254,20 @@ public sealed unsafe class XWaylandWm : IDisposable
         window.X11Bounds = new Box(x, y, width, height);
         window.CoversScreen = window.OverrideRedirect && window.EmulatedModes.Count > 0 && x == 0 && y == 0
             && (width, height) == RootSize();
+        window.IsOffscreenStub = window.OverrideRedirect && width <= 1 && height <= 1 && IsOutsideScreen(x, y, width, height);
         (window.X, window.Y, window.Width, window.Height) =
             (LogicalPosition(x), LogicalPosition(y), LogicalSize(window, width), LogicalSize(window, height));
+    }
+
+    private bool IsOutsideScreen(int x, int y, int width, int height)
+    {
+        if (x + width <= 0 || y + height <= 0)
+        {
+            return true;
+        }
+
+        var (rootWidth, rootHeight) = RootSize();
+        return rootWidth > 0 && rootHeight > 0 && (x >= rootWidth || y >= rootHeight);
     }
 
     private (int Width, int Height) RootSize()
@@ -310,6 +323,9 @@ public sealed unsafe class XWaylandWm : IDisposable
             "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_PID", "STEAM_GAME",
             "_XSETTINGS_S0", "_XSETTINGS_SETTINGS", "MANAGER", "RESOURCE_MANAGER",
             "_XWAYLAND_RANDR_EMU_MONITOR_RECTS", "_GTK_THEME_VARIANT",
+            "_NET_WM_STATE_SKIP_TASKBAR", "_NET_WM_STATE_SKIP_PAGER", "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_BELOW",
+            "_NET_WM_STATE_STICKY", "_NET_WM_STATE_DEMANDS_ATTENTION",
+            "_NET_WM_MOVERESIZE", "_WINE_HWND_STYLE", "_WINE_HWND_EXSTYLE",
         ];
         var cookies = new xcb_intern_atom_cookie_t[names.Length];
         for (var i = 0; i < names.Length; i++)
@@ -360,6 +376,26 @@ public sealed unsafe class XWaylandWm : IDisposable
         var result = length > 0 ? Encoding.UTF8.GetString(value, length) : string.Empty;
         Libc.Free(reply);
         return result;
+    }
+
+    private int Read32Property(uint window, uint property, uint type, Span<uint> into)
+    {
+        var cookie = Libxcb.xcb_get_property(_conn, 0, window, property, type, 0, (uint)into.Length);
+        var reply = Libxcb.xcb_get_property_reply(_conn, cookie, null);
+        if (reply == null)
+        {
+            return 0;
+        }
+
+        var count = Math.Min(Libxcb.xcb_get_property_value_length(reply) / 4, into.Length);
+        var value = (uint*)Libxcb.xcb_get_property_value(reply);
+        for (var i = 0; i < count; i++)
+        {
+            into[i] = value[i];
+        }
+
+        Libc.Free(reply);
+        return count;
     }
 
     private uint[] Get32Property(uint window, uint property, uint type, uint longLength = 64)
@@ -470,6 +506,14 @@ public sealed unsafe class XWaylandWm : IDisposable
 
         switch (ev->response_type & 0x7F)
         {
+            case EventFocusIn:
+            case EventFocusOut:
+            {
+                var e = (xcb_focus_in_event_t*)ev;
+                OnFocusEvent((ev->response_type & 0x7F) == EventFocusIn, e->@event, e->detail, e->mode);
+                break;
+            }
+
             case EventCreateNotify:
             {
                 var e = (xcb_create_notify_event_t*)ev;
@@ -517,6 +561,9 @@ public sealed unsafe class XWaylandWm : IDisposable
                 var e = (xcb_map_request_event_t*)ev;
                 if (_windows.TryGetValue(e->window, out var window))
                 {
+                    window.OverrideRedirect = false;
+                    var managedEvents = 0x00400000u | 0x00200000u;
+                    _ = Libxcb.xcb_change_window_attributes(_conn, e->window, 0x800, &managedEvents);
                     RefreshProperties(window);
                     RefreshProcess(window);
                     RefreshShape(window);
@@ -535,6 +582,24 @@ public sealed unsafe class XWaylandWm : IDisposable
                 var e = (xcb_map_notify_event_t*)ev;
                 if (_windows.TryGetValue(e->window, out var window))
                 {
+                    var overrideRedirect = e->override_redirect != 0;
+                    if (overrideRedirect != window.OverrideRedirect)
+                    {
+                        var announced = window.AnnouncedMapped;
+                        if (announced)
+                        {
+                            window.AnnouncedMapped = false;
+                            window.RaiseUnmapped();
+                        }
+
+                        window.OverrideRedirect = overrideRedirect;
+                        if (!overrideRedirect)
+                        {
+                            RefreshProperties(window);
+                            RefreshProcess(window);
+                        }
+                    }
+
                     window.IsMappedInX = true;
                     if (window.OverrideRedirect)
                     {
@@ -622,15 +687,29 @@ public sealed unsafe class XWaylandWm : IDisposable
             case EventPropertyNotify:
             {
                 var e = (xcb_property_notify_event_t*)ev;
+                _lastTimestamp = e->time;
                 if (_windows.TryGetValue(e->window, out var window))
                 {
-                    if (e->atom == Atom("_NET_WM_NAME") || e->atom == 39 )
+                    if (e->atom == AtomWmHints || e->atom == Atom("_NET_WM_STATE") ||
+                        e->atom == Atom("_WINE_HWND_STYLE") || e->atom == Atom("_WINE_HWND_EXSTYLE"))
+                    {
+                        if (RefreshFocusFacts(window))
+                        {
+                            window.RaisePropertiesChanged();
+                        }
+                    }
+                    else if (e->atom == Atom("_NET_WM_NAME") || e->atom == 39 )
                     {
                         RefreshTitle(window);
                     }
                     else if (e->atom == Atom("WM_PROTOCOLS"))
                     {
+                        var takesFocus = window.SupportsTakeFocus;
                         RefreshProtocols(window);
+                        if (takesFocus != window.SupportsTakeFocus)
+                        {
+                            window.RaisePropertiesChanged();
+                        }
                     }
                     else if (e->atom == Atom("_NET_WM_ICON"))
                     {
@@ -730,7 +809,15 @@ public sealed unsafe class XWaylandWm : IDisposable
                 {
                     if (_windows.TryGetValue(e->window, out var window))
                     {
+                        UpdateClientState(window, data[0], data[1], data[2]);
                         HandleStateMessage(window, data[0], data[1], data[2]);
+                    }
+                }
+                else if (e->type == Atom("_NET_WM_MOVERESIZE"))
+                {
+                    if (_windows.TryGetValue(e->window, out var window) && !window.OverrideRedirect)
+                    {
+                        HandleMoveResize(window, data[2]);
                     }
                 }
 
@@ -855,6 +942,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         identityChanged |= !ReferenceEquals(transientFor, window.TransientFor);
         window.TransientFor = transientFor;
         identityChanged |= RefreshWindowType(window);
+        identityChanged |= RefreshFocusFacts(window);
         identityChanged |= RefreshSteamGame(window);
         identityChanged |= RefreshEmulatedModes(window);
         identityChanged |= RefreshThemeVariant(window);
@@ -884,6 +972,138 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     private const uint SizeHintBaseSize = 1 << 8;
 
+    private const uint SizeHintUserPosition = 1 << 0;
+
+    private const uint SizeHintProgramPosition = 1 << 2;
+
+    private const uint SizeHintWinGravity = 1 << 9;
+
+    private const uint AtomWmHints = 35;
+
+    private const uint AtomCardinal = 6;
+
+    private bool RefreshFocusFacts(XWaylandWindow window)
+    {
+        Span<uint> hints = stackalloc uint[9];
+        var hintCount = Read32Property(window.WindowId, AtomWmHints, AtomWmHints, hints);
+        var acceptsInput = hintCount < 2 || (hints[0] & 1) == 0 || hints[1] != 0;
+
+        Span<uint> state = stackalloc uint[MaxStateAtoms];
+        var stateCount = Read32Property(window.WindowId, Atom("_NET_WM_STATE"), 4, state);
+        var skipTaskbar = state[..stateCount].Contains(Atom("_NET_WM_STATE_SKIP_TASKBAR"));
+        var skipPager = state[..stateCount].Contains(Atom("_NET_WM_STATE_SKIP_PAGER"));
+
+        Span<uint> word = stackalloc uint[1];
+        uint? style = Read32Property(window.WindowId, Atom("_WINE_HWND_STYLE"), AtomCardinal, word) == 1 ? word[0] : null;
+        uint? styleEx = Read32Property(window.WindowId, Atom("_WINE_HWND_EXSTYLE"), AtomCardinal, word) == 1 ? word[0] : null;
+
+        var changed = acceptsInput != window.AcceptsInput || skipTaskbar != window.SkipTaskbar ||
+            skipPager != window.SkipPager || style != window.HwndStyle || styleEx != window.HwndStyleEx;
+        window.AcceptsInput = acceptsInput;
+        window.SkipTaskbar = skipTaskbar;
+        window.SkipPager = skipPager;
+        window.HwndStyle = style;
+        window.HwndStyleEx = styleEx;
+        return changed;
+    }
+
+    private void HandleMoveResize(XWaylandWindow window, uint direction)
+    {
+        switch (direction)
+        {
+            case <= 7:
+                window.RaiseResizeRequested(MoveResizeEdges[direction], keyboard: false);
+                break;
+            case 8:
+                window.RaiseMoveRequested(keyboard: false);
+                break;
+            case 9:
+                window.RaiseResizeRequested(X11ResizeEdges.BottomRight, keyboard: true);
+                break;
+            case 10:
+                window.RaiseMoveRequested(keyboard: true);
+                break;
+            case 11:
+                window.RaiseMoveResizeCancelled();
+                break;
+        }
+    }
+
+    private static readonly X11ResizeEdges[] MoveResizeEdges =
+    [
+        X11ResizeEdges.TopLeft, X11ResizeEdges.Top, X11ResizeEdges.TopRight, X11ResizeEdges.Right,
+        X11ResizeEdges.BottomRight, X11ResizeEdges.Bottom, X11ResizeEdges.BottomLeft, X11ResizeEdges.Left,
+    ];
+
+    private uint _lastTimestamp;
+
+    private XWaylandWindow? _focused;
+
+    private const byte NotifyGrab = 1;
+
+    private const byte NotifyUngrab = 2;
+
+    private const byte NotifyInferior = 2;
+
+    private const byte NotifyPointerRoot = 6;
+
+    private const byte NotifyDetailNone = 7;
+
+    private void OnFocusEvent(bool focusIn, uint eventWindow, byte detail, byte mode)
+    {
+        if (mode is NotifyGrab or NotifyUngrab || _focused is not { } focused || _disposed)
+        {
+            return;
+        }
+
+        if (!_windows.ContainsKey(focused.WindowId))
+        {
+            _focused = null;
+            return;
+        }
+
+        if (eventWindow == focused.WindowId)
+        {
+            if (!focusIn && detail == NotifyInferior)
+            {
+                focused.FocusChild = CurrentFocus();
+            }
+            else if (!focusIn && detail is NotifyPointerRoot or NotifyDetailNone)
+            {
+                RestoreFocus(focused);
+            }
+
+            return;
+        }
+
+        if (focusIn && _windows.ContainsKey(eventWindow))
+        {
+            RestoreFocus(focused);
+        }
+    }
+
+    private uint? CurrentFocus()
+    {
+        var cookie = Libxcb.xcb_get_input_focus(_conn);
+        var reply = Libxcb.xcb_get_input_focus_reply(_conn, cookie, null);
+        if (reply == null)
+        {
+            return null;
+        }
+
+        var focus = reply->focus;
+        Libc.Free(reply);
+        return focus;
+    }
+
+    private void RestoreFocus(XWaylandWindow focused)
+    {
+        var target = focused.FocusChild is { } child && child != 0 && child != 1 ? child : focused.WindowId;
+        Log.Debug($"X focus left 0x{focused.WindowId:x}; giving it back to 0x{target:x}");
+        _ = Libxcb.xcb_set_input_focus(_conn, 1, target, 0);
+        Flush();
+    }
+
     private void RefreshSizeHints(XWaylandWindow window)
     {
         var hints = Get32Property(window.WindowId, AtomWmNormalHints, AtomWmSizeHints, 18);
@@ -891,6 +1111,24 @@ public sealed unsafe class XWaylandWm : IDisposable
         var minHeight = 0;
         var maxWidth = 0;
         var maxHeight = 0;
+        var userPosition = false;
+        var programPosition = false;
+        uint? gravity = null;
+        if (hints.Length >= 1)
+        {
+            userPosition = (hints[0] & SizeHintUserPosition) != 0;
+            programPosition = (hints[0] & SizeHintProgramPosition) != 0;
+            if ((hints[0] & SizeHintWinGravity) != 0 && hints.Length >= 18)
+            {
+                gravity = hints[17];
+            }
+        }
+
+        var positionChanged = userPosition != window.UserPosition || programPosition != window.ProgramPosition ||
+            gravity != window.Gravity;
+        window.UserPosition = userPosition;
+        window.ProgramPosition = programPosition;
+        window.Gravity = gravity;
         if (hints.Length >= 9)
         {
             var flags = hints[0];
@@ -916,7 +1154,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         minHeight = LogicalMinimum(window, Math.Max(0, minHeight));
         maxWidth = LogicalMaximum(window, Math.Max(0, maxWidth));
         maxHeight = LogicalMaximum(window, Math.Max(0, maxHeight));
-        if (minWidth == window.MinWidth && minHeight == window.MinHeight
+        if (!positionChanged && minWidth == window.MinWidth && minHeight == window.MinHeight
             && maxWidth == window.MaxWidth && maxHeight == window.MaxHeight)
         {
             return;
@@ -966,7 +1204,8 @@ public sealed unsafe class XWaylandWm : IDisposable
             }
         }
 
-        window.WantsFocus = wants;
+        var changed = window.TypeWantsFocus != wants;
+        window.TypeWantsFocus = wants;
 
         string? type = null;
         foreach (var atom in types)
@@ -989,7 +1228,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         type ??= window.TransientFor is not null ? "dialog" : "normal";
         if (type == window.WindowType)
         {
-            return false;
+            return changed;
         }
 
         window.WindowType = type;
@@ -1260,8 +1499,18 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     private void WriteWindowState(XWaylandWindow window)
     {
-        var atoms = stackalloc uint[5];
+        Span<uint> current = stackalloc uint[MaxStateAtoms];
+        var kept = Read32Property(window.WindowId, Atom("_NET_WM_STATE"), 4, current);
+        var atoms = stackalloc uint[MaxStateAtoms + 5];
         uint count = 0;
+        for (var i = 0; i < kept; i++)
+        {
+            if (!IsManagedState(current[i]) && !Contains(atoms, count, current[i]))
+            {
+                atoms[count++] = current[i];
+            }
+        }
+
         if (window.Modal)
         {
             atoms[count++] = Atom("_NET_WM_STATE_MODAL");
@@ -1285,6 +1534,86 @@ public sealed unsafe class XWaylandWm : IDisposable
 
         SetProperty32(window.WindowId, Atom("_NET_WM_STATE"), 4 , atoms, count);
         Flush();
+    }
+
+    private const int MaxStateAtoms = 32;
+
+    private static bool Contains(uint* atoms, uint count, uint atom)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (atoms[i] == atom)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsManagedState(uint atom) =>
+        atom == Atom("_NET_WM_STATE_MODAL") || atom == Atom("_NET_WM_STATE_MAXIMIZED_VERT") ||
+        atom == Atom("_NET_WM_STATE_MAXIMIZED_HORZ") || atom == Atom("_NET_WM_STATE_FULLSCREEN") ||
+        atom == Atom("_NET_WM_STATE_HIDDEN");
+
+    private bool IsClientState(uint atom) =>
+        atom == Atom("_NET_WM_STATE_SKIP_TASKBAR") || atom == Atom("_NET_WM_STATE_SKIP_PAGER") ||
+        atom == Atom("_NET_WM_STATE_ABOVE") || atom == Atom("_NET_WM_STATE_BELOW") ||
+        atom == Atom("_NET_WM_STATE_STICKY") || atom == Atom("_NET_WM_STATE_DEMANDS_ATTENTION");
+
+    private void UpdateClientState(XWaylandWindow window, uint action, uint first, uint second)
+    {
+        if (!(first != 0 && IsClientState(first)) && !(second != 0 && IsClientState(second)))
+        {
+            return;
+        }
+
+        Span<uint> current = stackalloc uint[MaxStateAtoms];
+        var length = Read32Property(window.WindowId, Atom("_NET_WM_STATE"), 4, current);
+        var atoms = stackalloc uint[MaxStateAtoms + 2];
+        uint count = 0;
+        for (var i = 0; i < length; i++)
+        {
+            atoms[count++] = current[i];
+        }
+
+        Apply(first);
+        Apply(second);
+        SetProperty32(window.WindowId, Atom("_NET_WM_STATE"), 4, atoms, count);
+        Flush();
+
+        void Apply(uint atom)
+        {
+            if (atom == 0 || !IsClientState(atom))
+            {
+                return;
+            }
+
+            var index = -1;
+            for (var i = 0; i < count; i++)
+            {
+                if (atoms[i] == atom)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            var want = action switch
+            {
+                NetWmStateRemove => false,
+                NetWmStateAdd => true,
+                _ => index < 0,
+            };
+            if (want && index < 0)
+            {
+                atoms[count++] = atom;
+            }
+            else if (!want && index >= 0)
+            {
+                atoms[index] = atoms[--count];
+            }
+        }
     }
 
     private void RefreshIcon(XWaylandWindow window)
@@ -1418,6 +1747,11 @@ public sealed unsafe class XWaylandWm : IDisposable
     {
         var previous = _keyboardFocus;
         _keyboardFocus = focus;
+        if (_focused is { } focused && (focus is null || !ReferenceEquals(focused.Surface, focus)))
+        {
+            _focused = null;
+        }
+
         if (previous != focus)
         {
             KeyboardFocusChanged?.Invoke(previous, focus);
@@ -1437,6 +1771,18 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     internal void ActivateWindow(XWaylandWindow window)
     {
+        if (!window.WantsFocus)
+        {
+            Log.Debug($"0x{window.WindowId:x} does not take focus; activation leaves the X focus alone");
+            return;
+        }
+
+        if (!ReferenceEquals(_focused, window))
+        {
+            window.FocusChild = null;
+        }
+
+        _focused = window;
         if (window.SupportsTakeFocus)
         {
             var message = new xcb_client_message_event_t
@@ -1448,7 +1794,7 @@ public sealed unsafe class XWaylandWm : IDisposable
             };
             var data = (uint*)&message.data;
             data[0] = Atom("WM_TAKE_FOCUS");
-            data[1] = 0;
+            data[1] = _lastTimestamp;
             _ = Libxcb.xcb_send_event(_conn, 0, window.WindowId, 0, (sbyte*)&message);
         }
 

@@ -29,4 +29,8 @@ public enum DrmFormat : uint
     Nv12 = 0x3231564E,
 
     P010 = 0x30313050,
+
+    R8 = 0x20203852,
+
+    Gr88 = 0x38385247,
 }

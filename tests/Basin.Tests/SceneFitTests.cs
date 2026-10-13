@@ -26,6 +26,49 @@ public sealed class SceneFitTests
     }
 
     [Fact]
+    public void Integer_floors_an_upscale_and_keeps_a_downscale_fractional()
+    {
+        var (scale, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (640, 360), SceneFitMode.Integer);
+        Assert.Equal(3.0, scale);
+        Assert.Equal(new Box(0, 0, 1920, 1080), box);
+
+        (scale, box) = SceneFit.Place(new Box(0, 0, 2560, 1440), (1280, 800), SceneFitMode.Integer);
+        Assert.Equal(1.0, scale);
+        Assert.Equal(new Box(640, 320, 1280, 800), box);
+
+        (scale, _) = SceneFit.Place(new Box(0, 0, 800, 600), (1600, 1200), SceneFitMode.Integer);
+        Assert.Equal(0.5, scale);
+    }
+
+    [Fact]
+    public void Fill_covers_the_target_with_the_larger_ratio_and_clips()
+    {
+        var (scale, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Fill);
+        Assert.Equal(1.5, scale);
+        Assert.Equal(new Box(0, -228, 1920, 1536), box);
+
+        using var host = new CompositorTestHost();
+        var fit = new SceneFit(host.Scene.Root);
+        fit.Update(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Fill);
+        Assert.Equal(new Box(0, 0, 1920, 1080), fit.Root.ClipBox);
+        fit.Update(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Fit);
+        Assert.False(fit.Root.IsClipped);
+        fit.Destroy();
+    }
+
+    [Fact]
+    public void Stretch_fills_each_axis_on_its_own()
+    {
+        using var host = new CompositorTestHost();
+        var fit = new SceneFit(host.Scene.Root);
+        fit.Update(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Stretch);
+        Assert.Equal(new Box(0, 0, 1920, 1080), fit.ContentBox);
+        Assert.Equal(1.5, fit.ContentScale);
+        Assert.Equal(1080 / 1024.0, fit.ContentScaleY, 6);
+        fit.Destroy();
+    }
+
+    [Fact]
     public void Needed_follows_the_state_the_policy_and_convergence()
     {
         Assert.Null(SceneFit.Needed((800, 600), (800, 600), SceneFitState.Fullscreen, SceneFitPolicy.Auto));

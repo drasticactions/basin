@@ -11,6 +11,8 @@ public sealed class ShmGlobal : IDisposable
     private static int _advertisedVersion;
 
     private readonly ManagedShmGlobal? _managed;
+    private readonly WlServerDisplay _display;
+    private readonly HashSet<DrmFormat> _libwaylandFormats = [DrmFormat.Argb8888, DrmFormat.Xrgb8888];
 
     public ShmGlobal(
         WlServerDisplay display,
@@ -20,14 +22,11 @@ public sealed class ShmGlobal : IDisposable
         ShmAccessPolicy? policy = null)
     {
         ArgumentNullException.ThrowIfNull(display);
+        _display = display;
         if (!SelectManaged(display))
         {
             LibWaylandShm.Init(display);
-            foreach (var format in extraFormats)
-            {
-                LibWaylandShm.AddFormat(display, format.ToWlShm());
-            }
-
+            Advertise(extraFormats);
             return;
         }
 
@@ -50,6 +49,32 @@ public sealed class ShmGlobal : IDisposable
     }
 
     public ManagedShmGlobal? Managed => _managed;
+
+    public void Advertise(ReadOnlySpan<DrmFormat> formats)
+    {
+        if (_managed is not null)
+        {
+            _managed.Advertise(formats);
+            return;
+        }
+
+        foreach (var format in formats)
+        {
+            if (_libwaylandFormats.Add(format))
+            {
+                LibWaylandShm.AddFormat(_display, format.ToWlShm());
+            }
+        }
+    }
+
+    public void Advertise(IReadOnlyList<DrmFormat> formats)
+    {
+        ArgumentNullException.ThrowIfNull(formats);
+        foreach (var format in formats)
+        {
+            Advertise([format]);
+        }
+    }
 
     public void Dispose() => _managed?.Dispose();
 

@@ -47,6 +47,8 @@ public sealed class DrmBackend : IDisposable
 
     internal bool CursorRidesWithFrame { get; private set; }
 
+    public bool SupportsAtomicAsync { get; private set; }
+
     private string? ReadDriverName()
     {
         try
@@ -77,12 +79,52 @@ public sealed class DrmBackend : IDisposable
 
     internal LiftoffDevice? Liftoff { get; private set; }
 
-    private readonly List<(uint PossibleCrtcs, DrmFormatSet Formats)> _overlayPlanes = [];
+    private readonly List<(uint PossibleCrtcs, DrmFormatSet Formats, uint Encodings, uint Ranges)> _overlayPlanes = [];
+
+    internal static readonly string[] EncodingNames = ["ITU-R BT.601 YCbCr", "ITU-R BT.709 YCbCr", "ITU-R BT.2020 YCbCr"];
+
+    internal static readonly string[] RangeNames = ["YCbCr limited range", "YCbCr full range"];
+
+    internal bool OverlayTakesYuv(int crtcIndex, YuvCoefficients coefficients, YuvRange range)
+    {
+        foreach (var plane in _overlayPlanes)
+        {
+            if ((plane.PossibleCrtcs & (1u << crtcIndex)) != 0 &&
+                (plane.Encodings & (1u << (int)coefficients)) != 0 &&
+                (plane.Ranges & (1u << (int)range)) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private uint EnumMask(DrmPropertyMap props, string property, string[] names)
+    {
+        if (!props.Has(property))
+        {
+            return 0;
+        }
+
+        var mask = 0u;
+        var info = Device.GetProperty(props.IdOf(property));
+        foreach (var entry in info.EnumEntries)
+        {
+            var index = Array.IndexOf(names, entry.Name);
+            if (index >= 0)
+            {
+                mask |= 1u << index;
+            }
+        }
+
+        return mask;
+    }
 
     internal DrmFormatSet OverlayFormatsFor(int crtcIndex)
     {
         var union = new DrmFormatSet();
-        foreach (var (possibleCrtcs, formats) in _overlayPlanes)
+        foreach (var (possibleCrtcs, formats, _, _) in _overlayPlanes)
         {
             if ((possibleCrtcs & (1u << crtcIndex)) != 0)
             {
@@ -134,8 +176,11 @@ public sealed class DrmBackend : IDisposable
             $"{DevicePath}: driver {DriverName ?? "unknown"}; cursor plane " +
             $"{(CursorRidesWithFrame ? "rides with a frame commit while a layer scans out" : "commits on its own")}");
 
+        SupportsAtomicAsync = Device.TryGetCapability(DrmCapability.AtomicAsyncPageFlip, out var atomicAsync) && atomicAsync != 0;
+        Log.Debug($"{DevicePath}: atomic async page flips {(SupportsAtomicAsync ? "supported" : "not supported")}");
         InitLiftoff();
         SaveCrtcState();
+        UnlinkForeignPlanes();
         RescanConnectors();
 
         _drmSource = _loop.AddFd(Device.Fd, FdReadiness.Readable, (_, _) => Device.DispatchEvents(_eventHandlers));
@@ -242,9 +287,36 @@ public sealed class DrmBackend : IDisposable
         {
             if (!keep.Contains(output.Name))
             {
+                var still = -1;
+                for (var i = 0; i < connected.Count; i++)
+                {
+                    if (connected[i].Connector.Name == output.Name)
+                    {
+                        still = i;
+                    }
+                }
+
+                if (still < 0)
+                {
+                    Log.Debug($"{output.Name}: connector is no longer connected; removing the output");
+                }
+                else
+                {
+                    Log.Debug($"{output.Name}: CRTC changed from {connected[still].CurrentIndex} to {assignment[still]}; rebuilding the output");
+                }
+
                 _outputs.Remove(output);
                 OutputRemoved?.Invoke(output);
                 output.Destroy();
+            }
+        }
+
+        foreach (var (connector, _, _, nonDesktop) in connected)
+        {
+            if (!nonDesktop && _outputs.FirstOrDefault(o => o.Name == connector.Name) is { } kept)
+            {
+                kept.Refresh(connector);
+                kept.CheckLinkStatus();
             }
         }
 
@@ -370,7 +442,11 @@ public sealed class DrmBackend : IDisposable
             {
                 Liftoff.CreatePlane(planeId);
                 overlays++;
-                _overlayPlanes.Add((Device.GetPlane(planeId).PossibleCrtcs, DrmOutput.ReadInFormats(Device, props)));
+                _overlayPlanes.Add((
+                    Device.GetPlane(planeId).PossibleCrtcs,
+                    DrmOutput.ReadInFormats(Device, props),
+                    EnumMask(props, "COLOR_ENCODING", EncodingNames),
+                    EnumMask(props, "COLOR_RANGE", RangeNames)));
             }
             catch (LiftoffException e)
             {
@@ -451,9 +527,76 @@ public sealed class DrmBackend : IDisposable
         {
         }
 
+        UnlinkForeignPlanes();
         foreach (var output in _outputs)
         {
             output.OnSessionEnabled();
+        }
+    }
+
+    internal void UnlinkForeignPlanes()
+    {
+        using var request = new DrmAtomicBuilder();
+        var any = false;
+        foreach (var planeId in Device.GetPlaneIds())
+        {
+            DrmPlane plane;
+            try
+            {
+                plane = Device.GetPlane(planeId);
+            }
+            catch (DrmException)
+            {
+                continue;
+            }
+
+            if (plane.CrtcId == 0)
+            {
+                continue;
+            }
+
+            bool hasMode;
+            try
+            {
+                hasMode = Device.GetCrtc(plane.CrtcId).Mode is not null;
+            }
+            catch (DrmException)
+            {
+                hasMode = true;
+            }
+
+            if (hasMode)
+            {
+                continue;
+            }
+
+            var props = new DrmPropertyMap(Device, planeId, DrmObjectType.Plane);
+            if (!props.Has("FB_ID") || !props.Has("CRTC_ID"))
+            {
+                continue;
+            }
+
+            Log.Debug($"{DevicePath}: unlinking plane {planeId} left on CRTC {plane.CrtcId}, which has no mode");
+            request.Add(props, "plane", "FB_ID", 0);
+            request.Add(props, "plane", "CRTC_ID", 0);
+            any = true;
+        }
+
+        if (!any)
+        {
+            return;
+        }
+
+        try
+        {
+            Device.AtomicCommit(request.Request, DrmAtomicCommitFlags.AllowModeset, 0);
+        }
+        catch (DrmException e) when (e.Errno == 13)
+        {
+        }
+        catch (DrmException e)
+        {
+            Log.Warn($"{DevicePath}: unlinking foreign planes failed ({e.Message}); staged properties:\n{request}");
         }
     }
 

@@ -13,12 +13,15 @@ internal static class IpcInputMethods
         var points = new IpcWindowPoint(describe);
         if (server.SyntheticInput is { } synthetic)
         {
-            RegisterGroup(server, new IpcSyntheticTarget(synthetic), lookup, commit, points, new Guard(exclusion, pointer), seat: false);
+            RegisterGroup(
+                server, new IpcSyntheticTarget(synthetic), lookup, describe.Find<IKeymapOverride>(), commit, points,
+                new Guard(exclusion, pointer), seat: false);
         }
 
         if (describe.Find<IInputSink>() is { } sink)
         {
-            RegisterGroup(server, new IpcSinkTarget(sink, describe.Layout), lookup, commit, points, new Guard(exclusion, pointer), seat: true);
+            RegisterGroup(
+                server, new IpcSinkTarget(sink, describe.Layout), lookup, null, commit, points, new Guard(exclusion, pointer), seat: true);
         }
     }
 
@@ -56,6 +59,7 @@ internal static class IpcInputMethods
         IpcServer server,
         IIpcInputTarget target,
         IKeymapLookup? lookup,
+        IKeymapOverride? keymapOverride,
         ITextInputCommit? commit,
         IpcWindowPoint points,
         Guard guard,
@@ -169,7 +173,8 @@ internal static class IpcInputMethods
             Result(reply, target.Touch(Now, kind, request.Id ?? 0, request.X ?? 0, request.Y ?? 0));
         });
 
-        var keys = new List<(uint Code, uint Mask)>();
+        var typer = lookup is null ? null : new TextTyper(lookup, keymapOverride);
+        var keyTarget = new ReplyKeyTarget(target);
         if (lookup is not null || commit is not null)
         {
             methods.RegisterLibrary(seat ? IpcMethodNames.SeatText : IpcMethodNames.InputText, (ref IpcParams parameters, IpcReply reply) =>
@@ -204,31 +209,23 @@ internal static class IpcInputMethods
                     return;
                 }
 
-                if (!IpcKeys.TryResolveText(text, lookup, keys, out var error))
+                keyTarget.Reply = reply;
+                keyTarget.Failed = false;
+                var typed = typer!.Type(text, Now, keyTarget, out var error);
+                keyTarget.Reply = null;
+                if (error is not null && typed == 0)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, error!);
+                    reply.Error(IpcErrorCodes.InvalidParams, error);
                     return;
                 }
 
-                var time = Now;
-                var ok = true;
-                foreach (var (code, mask) in keys)
+                if (error is not null)
                 {
-                    var modifier = mask == 0 ? null : IpcKeys.ModifierCode(lookup, mask);
-                    if (modifier is { } held)
-                    {
-                        ok &= target.Key(reply, time, held, true);
-                    }
-
-                    ok &= target.Key(reply, time, code, true);
-                    ok &= target.Key(reply, time, code, false);
-                    if (modifier is { } released)
-                    {
-                        ok &= target.Key(reply, time, released, false);
-                    }
+                    reply.Error(IpcErrorCodes.Failed, $"{error}, after {typed} characters were typed");
+                    return;
                 }
 
-                Result(reply, ok, KeymapVia);
+                Result(reply, !keyTarget.Failed, KeymapVia);
             });
         }
 
@@ -329,5 +326,19 @@ internal static class IpcInputMethods
         }
 
         reply.Write(new IpcTextResult(via), IpcJsonContext.Default.IpcTextResult);
+    }
+
+    private sealed class ReplyKeyTarget(IIpcInputTarget target) : ITextKeyTarget
+    {
+        public IpcReply? Reply { get; set; }
+
+        public bool Failed { get; set; }
+
+        public bool Key(uint timeMs, uint keycode, bool pressed)
+        {
+            var ok = Reply is { } reply && target.Key(reply, timeMs, keycode, pressed);
+            Failed |= !ok;
+            return ok;
+        }
     }
 }

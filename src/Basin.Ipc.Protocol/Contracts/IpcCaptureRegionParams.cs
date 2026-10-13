@@ -24,7 +24,8 @@ public sealed class IpcCaptureRegionParams : IIpcParams, IIpcReusable
         IpcCaptureTo to,
         bool? cursor = null,
         double? scale = null,
-        long? maxDimension = null)
+        long? maxDimension = null,
+        string? format = null)
     {
         X = x;
         Y = y;
@@ -34,6 +35,7 @@ public sealed class IpcCaptureRegionParams : IIpcParams, IIpcReusable
         Cursor = cursor;
         Scale = scale;
         MaxDimension = maxDimension;
+        Format = format;
     }
 
     public int X
@@ -95,6 +97,9 @@ public sealed class IpcCaptureRegionParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? MaxDimension { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Format { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'x' is required"
@@ -115,5 +120,6 @@ public sealed class IpcCaptureRegionParams : IIpcParams, IIpcReusable
         Cursor = null;
         Scale = null;
         MaxDimension = null;
+        Format = null;
     }
 }

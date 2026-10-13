@@ -54,6 +54,47 @@ internal static class Program
         {
             Description = "do not start Xwayland",
         });
+        var scalerOption = cli.Add(new Option<string?>("--scaler")
+        {
+            Description = "beyond cage: scale a primary window that keeps another size onto the output",
+            HelpName = "fit|integer|fill|stretch",
+        });
+        scalerOption.AcceptOnlyFromAmong("fit", "integer", "fill", "stretch");
+        var filterOption = cli.Add(new Option<string?>("--filter")
+        {
+            Description = "beyond cage: how a scaled window is sampled; pixel is vulkan and gl only",
+            HelpName = "linear|nearest|pixel",
+        });
+        filterOption.AcceptOnlyFromAmong("linear", "nearest", "pixel");
+        var frameLimitOption = cli.Add(new Option<int>("--frame-limit")
+        {
+            Description = "beyond cage: tell the application to draw at most N frames a second, 0 is off",
+            HelpName = "N",
+        });
+        var contentTypeOption = cli.Add(new Option<string?>("--content-type")
+        {
+            Description = "beyond cage: the content type every output reports to the display",
+            HelpName = "game",
+        });
+        contentTypeOption.AcceptOnlyFromAmong("game");
+        var panelsOption = cli.Add(new Option<string?>("--panels")
+        {
+            Description = "beyond cage: a panel table in place of $XDG_CONFIG_HOME/basin/panels.toml",
+            HelpName = "PATH",
+        });
+        var itmOption = cli.Add(new Option<bool>("--inverse-tone-mapping")
+        {
+            Description = "beyond cage: drive HDR on a PQ panel and expand SDR content onto it",
+        });
+        var vrrOption = cli.Add(new Option<string>("--vrr-pacing")
+        {
+            Description = "beyond cage: when a VRR output repaints on arrival",
+            HelpName = "fullscreen|always|never",
+            DefaultValueFactory = _ => "fullscreen",
+        });
+        vrrOption.AcceptOnlyFromAmong("fullscreen", "always", "never");
+        var subreaperOption = cli.Add(CommonOptions.Subreaper(defaultOn: true));
+        subreaperOption.Description = "run the application under a reaper that adopts every orphan and ends the whole tree when the application exits";
         var backendOption = cli.Add(CommonOptions.Backend(
             [BackendKind.Nested, BackendKind.Drm, BackendKind.Headless]));
         var rendererOption = cli.Add(CommonOptions.Renderer(
@@ -81,6 +122,32 @@ internal static class Program
                 Frames = result.GetValue(framesOption),
                 Application = result.GetValue(applicationArgument) ?? [],
                 Ipc = IpcCli.Read(cli, result),
+                Scaler = result.GetValue(scalerOption) switch
+                {
+                    "fit" => Basin.Scene.SceneFitMode.Fit,
+                    "integer" => Basin.Scene.SceneFitMode.Integer,
+                    "fill" => Basin.Scene.SceneFitMode.Fill,
+                    "stretch" => Basin.Scene.SceneFitMode.Stretch,
+                    _ => null,
+                },
+                Filter = result.GetValue(filterOption) switch
+                {
+                    "linear" => Basin.TextureFilter.Linear,
+                    "nearest" => Basin.TextureFilter.Nearest,
+                    "pixel" => Basin.TextureFilter.Pixel,
+                    _ => null,
+                },
+                FrameLimit = Math.Max(0, result.GetValue(frameLimitOption)),
+                GameContent = result.GetValue(contentTypeOption) == "game",
+                Panels = result.GetValue(panelsOption),
+                InverseToneMapping = result.GetValue(itmOption),
+                VrrPacing = result.GetValue(vrrOption) switch
+                {
+                    "always" => Basin.Host.VrrPacingPolicy.Always,
+                    "never" => Basin.Host.VrrPacingPolicy.Never,
+                    _ => Basin.Host.VrrPacingPolicy.Fullscreen,
+                },
+                Subreaper = result.GetValue(subreaperOption),
             };
             var status = Dam.Run(options, BasinLog.For("Dam"), out var rendered);
             cli.ReportFrames(rendered);

@@ -14,6 +14,20 @@ public sealed class ConfigTests
     }
 
     [Fact]
+    public void The_takeover_table_sets_the_scaler_filter_and_frame_limit()
+    {
+        var defaults = DungeonWmConfig.Parse("", BasinLog.For("test"));
+        Assert.Null(defaults.TakeoverScaler);
+        Assert.Null(defaults.TakeoverFilter);
+        Assert.Equal(0, defaults.TakeoverFrameLimit);
+
+        var settings = DungeonWmConfig.Parse("[takeover]\nscaler = \"integer\"\nfilter = \"pixel\"\nframe_limit = 30\n", BasinLog.For("test"));
+        Assert.Equal(Basin.Scene.SceneFitMode.Integer, settings.TakeoverScaler);
+        Assert.Equal(Basin.TextureFilter.Pixel, settings.TakeoverFilter);
+        Assert.Equal(30, settings.TakeoverFrameLimit);
+    }
+
+    [Fact]
     public void A_spawn_runs_through_the_shell_and_an_array_is_an_argv()
     {
         var settings = DungeonWmConfig.Parse("[keybindings]\n\"Super+Return\" = \"spawn foot -e 'a b'\"\n\"Super+T\" = [\"foot\", \"-e\", \"htop\"]\n\"Super+K\" = \"takeover\"\n", BasinLog.For("test"));
