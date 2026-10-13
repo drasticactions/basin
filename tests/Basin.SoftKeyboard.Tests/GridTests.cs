@@ -15,9 +15,9 @@ public sealed class GridTests
         foreach (var bottom in Enum.GetValues<BottomRow>())
         {
             var grid = layout.Grid(bottom);
-            Assert.Equal(KeyGrid.CellCount, grid.Cells.Count);
-            Assert.Equal(layout.WidthUnits, grid.RowWeight(KeyGrid.Rows - 1), 3);
-            for (var row = 0; row < KeyGrid.Rows; row++)
+            Assert.Equal(KeyGrid.DefaultRows * KeyGrid.DefaultColumns, grid.Cells.Count);
+            Assert.Equal(layout.WidthUnits, grid.RowWeight(KeyGrid.DefaultRows - 1), 3);
+            for (var row = 0; row < KeyGrid.DefaultRows; row++)
             {
                 Assert.True(grid.RowWeight(row) > 0, $"{id} row {row}");
             }
@@ -35,7 +35,7 @@ public sealed class GridTests
     {
         var layout = Keys.Layout(id);
         var grid = layout.Grid();
-        for (var row = 0; row < KeyGrid.Rows; row++)
+        for (var row = 0; row < KeyGrid.DefaultRows; row++)
         {
             Assert.Equal(layout.WidthUnits, grid.RowWeight(row), 3);
         }
@@ -78,14 +78,14 @@ public sealed class GridTests
         var layout = Keys.Layout();
         var languages = new[] { KeyCap.LanguageChoice(0, "En"), KeyCap.LanguageChoice(1, "Fr") };
         var grid = layout.Grid(BottomRow.Default, languages);
-        var symbol = grid[KeyGrid.Rows - 1, KeyboardLayout.SymbolColumn];
-        var language = grid[KeyGrid.Rows - 1, KeyboardLayout.SymbolColumn + 1];
+        var symbol = grid[KeyGrid.DefaultRows - 1, KeyboardLayout.SymbolColumn];
+        var language = grid[KeyGrid.DefaultRows - 1, KeyboardLayout.SymbolColumn + 1];
         Assert.Equal(1, symbol.Weight);
         Assert.Equal(KeyFunction.Language, language.Plain!.Function);
         Assert.Equal("En", language.Plain.Label);
         Assert.Equal(2, language.LongPress!.Count);
-        Assert.Equal(layout.WidthUnits, grid.RowWeight(KeyGrid.Rows - 1), 3);
-        Assert.Equal(2, layout.Grid(BottomRow.Default, [languages[0]])[KeyGrid.Rows - 1, KeyboardLayout.SymbolColumn].Weight);
+        Assert.Equal(layout.WidthUnits, grid.RowWeight(KeyGrid.DefaultRows - 1), 3);
+        Assert.Equal(2, layout.Grid(BottomRow.Default, [languages[0]])[KeyGrid.DefaultRows - 1, KeyboardLayout.SymbolColumn].Weight);
     }
 
     [Fact]

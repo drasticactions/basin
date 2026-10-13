@@ -479,7 +479,7 @@ public sealed class OutputDriver : IDisposable
         Removed?.Invoke(view);
         _layout.Remove(view.Output);
         Capture?.DmabufCapture.Forget(view.Output);
-        Teardown(view);
+        Teardown(view, retire: true);
 
         if (_views.Count == 0 && nested)
         {
@@ -540,7 +540,7 @@ public sealed class OutputDriver : IDisposable
     {
         foreach (var view in _views)
         {
-            Teardown(view);
+            Teardown(view, retire: false);
         }
 
         _views.Clear();
@@ -621,7 +621,7 @@ public sealed class OutputDriver : IDisposable
         }
     }
 
-    private void Teardown(OutputView view)
+    private void Teardown(OutputView view, bool retire)
     {
         if (_hostChrome.Remove(view, out var chrome))
         {
@@ -639,7 +639,14 @@ public sealed class OutputDriver : IDisposable
         view.Scene?.Dispose();
         _host.PresentedSets.Retire(view.Output);
         view.Swapchain?.Dispose();
-        view.Global.Dispose();
+        if (retire)
+        {
+            view.Global.Retire();
+        }
+        else
+        {
+            view.Global.Dispose();
+        }
     }
 
     private void Enable(OutputView view)

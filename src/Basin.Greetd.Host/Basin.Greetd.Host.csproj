@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Greetd.Host</PackageId>
+    <RootNamespace>Basin.Greetd.Host</RootNamespace>
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
+    <Description>The compositor scaffold a greetd greeter runs in: outputs, the chrome seat, the login flow, the screen reader and the control socket.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../Basin.Greetd/Basin.Greetd.csproj" />
+    <ProjectReference Include="../Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
+    <ProjectReference Include="../Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../Basin.Ipc/Basin.Ipc.csproj" />
+    <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../Basin.Renderers/Basin.Renderers.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <ProjectReference Include="../Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+
+</Project>

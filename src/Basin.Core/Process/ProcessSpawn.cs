@@ -50,6 +50,7 @@ internal static unsafe class ProcessSpawn
                 return -1;
             }
 
+            CloseInherited(actions);
             var lowered = FileDescriptorLimit.LowerForSpawn();
             var result = posix_spawnp(out var pid, argv[0], actions, attributes, argvBlock, envBlock);
             if (lowered)
@@ -135,6 +136,29 @@ internal static unsafe class ProcessSpawn
 
     [DllImport("libc")]
     private static extern int posix_spawn_file_actions_adddup2(nint actions, int fd, int target);
+
+    [DllImport("libc")]
+    private static extern int posix_spawn_file_actions_addclosefrom_np(nint actions, int from);
+
+    private static bool _noCloseFrom;
+
+    private static void CloseInherited(nint actions)
+    {
+        if (_noCloseFrom)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = posix_spawn_file_actions_addclosefrom_np(actions, 3);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            _noCloseFrom = true;
+            Diagnostics.CoreLog.Log.Debug($"posix_spawn_file_actions_addclosefrom_np is missing; a spawned process inherits every descriptor without close-on-exec");
+        }
+    }
 
     [DllImport("libc")]
     private static extern int sigemptyset(nint set);

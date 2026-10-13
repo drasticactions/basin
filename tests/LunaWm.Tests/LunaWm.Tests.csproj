@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,12 +20,20 @@
     <ProjectReference Include="../../samples/BasinCtl/BasinCtl.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../samples/BasinMcp/BasinMcp.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd/Basin.Greetd.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Goldens/**" />
+    <Compile Include="../BasinGreeter.Tests/FakeSystem.cs" Link="FakeSystem.cs" />
+    <Compile Include="../Basin.Tests/Greetd/FakeGreetd.cs" Link="FakeGreetd.cs" />
+    <Compile Include="../BasinGreeter.Tests/AccessibilityBus.cs" Link="AccessibilityBus.cs" />
+    <Compile Include="../BasinGreeter.Tests/AtSpiTree.cs" Link="AtSpiTree.cs" />
+    <Compile Include="../BasinGreeter.Tests/TempDir.cs" Link="TempDir.cs" />
+    <Compile Include="../Basin.Tests/SystemStatus/MockSystemService.cs" Link="MockSystemService.cs" />
+    <Compile Include="../Basin.Tests/Portal/PrivateBus.cs" Link="SystemPrivateBus.cs" />
   </ItemGroup>
 
 </Project>

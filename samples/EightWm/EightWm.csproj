@@ -40,6 +40,13 @@
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd/Basin.Greetd.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd.Host/Basin.Greetd.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard.Avalonia/Basin.SoftKeyboard.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard.Ipc/Basin.SoftKeyboard.Ipc.csproj" />
+    <ProjectReference Include="../../src/Basin.SystemStatus/Basin.SystemStatus.csproj" />
   </ItemGroup>
 
   <ItemGroup>

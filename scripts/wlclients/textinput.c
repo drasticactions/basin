@@ -3,8 +3,12 @@
    keeps its own text and caret at the end, and reports what the compositor sends:
    COMMIT TEXT, PREEDIT TEXT CURSOR, DELETE BEFORE AFTER, TEXT [whole field], KEY CODE STATE,
    ENTER, LEAVE and CONFIGURE W H.
+   caret=Y puts the cursor rectangle at Y in surface coordinates (default 10), and step=N moves it
+   N pixels further down for each character in the field, so a test can watch a pan follow it.
+   mark paints the field's band dark and the caret rectangle black, so a screenshot shows where they are.
    usage: textinput [normal|alpha|digits|number|phone|url|email|name|password|pin|date|time|datetime|terminal]
-                    [completion|spellcheck|auto_capitalization|lowercase|uppercase|titlecase|hidden_text|sensitive_data|latin|multiline...] */
+                    [completion|spellcheck|auto_capitalization|lowercase|uppercase|titlecase|hidden_text|sensitive_data|latin|multiline...]
+                    [caret=Y] [step=N] [mark] */
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +31,9 @@ static int width = 256, height = 256;
 static int running = 1;
 static uint32_t purpose;
 static uint32_t hints;
+static int caret_y = 10;
+static int caret_step;
+static int mark;
 
 static char text[4096];
 static char *pending_commit;
@@ -47,7 +54,7 @@ static void send_state(void)
     size_t len = strlen(text);
     zwp_text_input_v3_set_surrounding_text(text_input, text, (int32_t)len, (int32_t)len);
     zwp_text_input_v3_set_content_type(text_input, hints, purpose);
-    zwp_text_input_v3_set_cursor_rectangle(text_input, 10, 10, 1, 20);
+    zwp_text_input_v3_set_cursor_rectangle(text_input, 10, caret_y + caret_step * (int32_t)len, 1, 20);
     zwp_text_input_v3_commit(text_input);
 }
 
@@ -69,6 +76,12 @@ static struct wl_buffer *make_buffer(int w, int h)
     uint32_t *data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (data == MAP_FAILED) { close(fd); return NULL; }
     for (int i = 0; i < w * h; i++) data[i] = 0xfff0f0e8;
+    if (mark) {
+        int top = caret_y + caret_step * (int)strlen(text);
+        for (int y = top - 6; y < top + 26 && y < h; y++)
+            for (int x = 0; x < w && y >= 0; x++)
+                data[y * w + x] = (x >= 10 && x < 13 && y >= top && y < top + 20) ? 0xff000000 : 0xffc8c8c0;
+    }
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
     struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_XRGB8888);
     wl_shm_pool_destroy(pool);
@@ -288,6 +301,9 @@ int main(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
         int matched = 0;
+        if (strncmp(argv[i], "caret=", 6) == 0) { caret_y = atoi(argv[i] + 6); continue; }
+        if (strncmp(argv[i], "step=", 5) == 0) { caret_step = atoi(argv[i] + 5); continue; }
+        if (strcmp(argv[i], "mark") == 0) { mark = 1; continue; }
         for (int p = 0; purposes[p]; p++)
             if (strcmp(argv[i], purposes[p]) == 0) { purpose = (uint32_t)p; matched = 1; }
         for (int h = 0; hint_names[h]; h++)

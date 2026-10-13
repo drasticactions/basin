@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:luna="using:LunaWm"
+             xmlns:basin="using:Basin.UI.Avalonia"
              x:Class="LunaWm.LockScreenView"
              x:DataType="luna:LockScreenModel"
              Focusable="True">
@@ -33,8 +34,8 @@
         <Border Classes="lockentry" IsVisible="{Binding Pin}">
           <TextBlock Text="{Binding Dots}" FontSize="26" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
-        <TextBox x:Name="PasswordBox" IsVisible="{Binding Password}" PasswordChar="&#x25cf;" Text="{Binding Entry}" PlaceholderText="Password"
-                 KeyDown="OnPasswordKey" />
+        <basin:SecretTextBox x:Name="PasswordBox" IsVisible="{Binding Password}" PasswordChar="&#x25cf;" Text="{Binding Entry}" PlaceholderText="Password"
+                             AutomationProperties.Name="Password" KeyDown="OnPasswordKey" />
         <ItemsControl IsVisible="{Binding Pin}" ItemsSource="{x:Static luna:LockScreenView.Keys}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>

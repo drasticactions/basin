@@ -24,6 +24,8 @@ public sealed class SoftKeyboardEngine
     private int _traceCount;
     private int _traceSlot = -1;
     private KeyTiming _timing;
+    private KeyPageSet? _pages;
+    private string _page = KeyPageSet.MainPage;
 
     public SoftKeyboardEngine(KeyGrid grid, KeyTiming? timing = null)
     {
@@ -54,12 +56,26 @@ public sealed class SoftKeyboardEngine
         set
         {
             ArgumentNullException.ThrowIfNull(value);
-            CloseLongPress();
-            StopRepeat();
-            _hit.Grid = value;
-            Invalidated?.Invoke();
+            _pages = null;
+            _page = KeyPageSet.MainPage;
+            SwapGrid(value);
         }
     }
+
+    public KeyPageSet? Pages
+    {
+        get => _pages;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _pages = value;
+            _page = KeyPageSet.MainPage;
+            SwapGrid(value.Main);
+            PageChanged?.Invoke(_page);
+        }
+    }
+
+    public string Page => _page;
 
     public bool Diamonds { get; set; } = true;
 
@@ -141,6 +157,10 @@ public sealed class SoftKeyboardEngine
 
     public event Action? DeadlineChanged;
 
+    public event Action<string>? PageChanged;
+
+    public event Action<string?>? ShapeRequested;
+
     public void Layout(float width, float keymapHeight, float padding)
     {
         _padding = padding;
@@ -149,7 +169,7 @@ public sealed class SoftKeyboardEngine
         Invalidated?.Invoke();
     }
 
-    public KeyCap? CapAt(int cell) => cell is >= 0 and < KeyGrid.CellCount ? State.Resolve(_hit.Grid[cell]) : null;
+    public KeyCap? CapAt(int cell) => cell >= 0 && cell < _hit.Grid.CellCount ? State.Resolve(_hit.Grid[cell]) : null;
 
     public bool IsPressed(int cell)
     {
@@ -361,7 +381,7 @@ public sealed class SoftKeyboardEngine
         {
             Clicked?.Invoke(cap);
             var wordDelete = State.ShiftHeld || now - _repeatStart > Timing.WordDeleteAfterMs;
-            Typed?.Invoke(new TypedKey(cap, State.Capital, State.ShiftHeld, Repeat: true, WordDelete: cap.Function == KeyFunction.Backspace && wordDelete));
+            Typed?.Invoke(new TypedKey(cap, State.Capital, State.ShiftHeld, Repeat: true, WordDelete: cap.Function == KeyFunction.Backspace && wordDelete, ModifiersFor(cap)));
             _repeatInterval = cap.Function == KeyFunction.Backspace && wordDelete ? Timing.WordDeleteIntervalMs : Timing.RepeatIntervalMs;
             _repeatDeadline += _repeatInterval;
             if (_repeatDeadline <= now)
@@ -422,6 +442,30 @@ public sealed class SoftKeyboardEngine
         HandleKey(entry, now);
     }
 
+    public bool ShowPage(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (_pages is not { } pages)
+        {
+            return false;
+        }
+
+        if (name == _page && name != KeyPageSet.MainPage)
+        {
+            name = KeyPageSet.MainPage;
+        }
+
+        if (!pages.TryGet(name, out var grid))
+        {
+            return false;
+        }
+
+        _page = name;
+        SwapGrid(grid);
+        PageChanged?.Invoke(name);
+        return true;
+    }
+
     public bool OpenLongPress(int cell, bool cancelIfSame = false)
     {
         var entries = LongPressFor(cell);
@@ -454,7 +498,7 @@ public sealed class SoftKeyboardEngine
 
     private IReadOnlyList<KeyCap>? LongPressFor(int cell)
     {
-        if (cell is < 0 or >= KeyGrid.CellCount)
+        if (cell < 0 || cell >= _hit.Grid.CellCount)
         {
             return null;
         }
@@ -705,7 +749,16 @@ public sealed class SoftKeyboardEngine
             case KeyFunction.Tab:
             case KeyFunction.Left:
             case KeyFunction.Right:
-                Typed?.Invoke(new TypedKey(cap, State.Capital && cap.IsText, State.ShiftHeld, Repeat: false, WordDelete: false));
+            case KeyFunction.Escape:
+            case KeyFunction.Up:
+            case KeyFunction.Down:
+            case KeyFunction.Home:
+            case KeyFunction.End:
+            case KeyFunction.PageUp:
+            case KeyFunction.PageDown:
+            case KeyFunction.Delete:
+            case KeyFunction.FunctionKey:
+                Typed?.Invoke(new TypedKey(cap, (State.Modifiers == KeyModifiers.None ? State.Capital : State.CapActive) && cap.IsText, State.ShiftHeld, Repeat: false, WordDelete: false, ModifiersFor(cap)));
                 State.Consume();
                 if (cap.IsSpace || cap.Function == KeyFunction.Return)
                 {
@@ -724,8 +777,28 @@ public sealed class SoftKeyboardEngine
                 }
 
                 break;
+            case KeyFunction.Shift when cap.IsCapsLock:
+                State.SetShift(State.Shift == ShiftMode.Lock ? ShiftMode.Off : ShiftMode.Lock);
+                break;
             case KeyFunction.Shift:
                 State.TapShift(now);
+                break;
+            case KeyFunction.Control:
+            case KeyFunction.Alt:
+            case KeyFunction.Super:
+                State.TapModifier(cap.Function, now);
+                break;
+            case KeyFunction.Page:
+                ShowPage(cap.Target);
+                break;
+            case KeyFunction.Emoji:
+                ShowPage(EmojiPage);
+                break;
+            case KeyFunction.LayoutSwitch:
+                ShapeRequested?.Invoke(null);
+                break;
+            case KeyFunction.ShapeChoice:
+                ShapeRequested?.Invoke(cap.Target);
                 break;
             case KeyFunction.Hide:
                 HideRequested?.Invoke();
@@ -740,6 +813,28 @@ public sealed class SoftKeyboardEngine
                 LanguageChosen?.Invoke(cap.Argument);
                 break;
         }
+    }
+
+    public const string EmojiPage = "emoji";
+
+    private KeyModifiers ModifiersFor(KeyCap cap)
+    {
+        var modifiers = State.Modifiers;
+        if (cap.IsText || modifiers == KeyModifiers.None && cap.Function is KeyFunction.Backspace or KeyFunction.Return
+            or KeyFunction.Tab or KeyFunction.Left or KeyFunction.Right)
+        {
+            return modifiers;
+        }
+
+        return State.ShiftActive ? modifiers | KeyModifiers.Shift : modifiers;
+    }
+
+    private void SwapGrid(KeyGrid grid)
+    {
+        CloseLongPress();
+        StopRepeat();
+        _hit.Grid = grid;
+        Invalidated?.Invoke();
     }
 
     private void BeginTrace(int slot, float x, float y)

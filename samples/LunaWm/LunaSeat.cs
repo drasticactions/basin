@@ -8,6 +8,7 @@ using Basin.Diagnostics;
 using Basin.Host;
 using Basin.Scene;
 using Basin.Seat;
+using Basin.SoftKeyboard;
 using Basin.Seat.Backends;
 
 namespace LunaWm;
@@ -304,7 +305,7 @@ internal sealed class LunaSeat :
 
     private void UsePointer()
     {
-        _shell.NoteInput(LunaShell.LastInput.Pointer);
+        _shell.NoteInput(LastInput.Pointer);
         if (!_touchDriving)
         {
             return;
@@ -702,7 +703,7 @@ internal sealed class LunaSeat :
     void ITouchActivitySink.OnTouchActivity()
     {
         _idle?.NotifyActivity();
-        _shell.NoteInput(LunaShell.LastInput.Touch);
+        _shell.NoteInput(LastInput.Touch);
         UseTouch();
     }
 

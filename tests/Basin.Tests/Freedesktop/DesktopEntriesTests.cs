@@ -25,6 +25,8 @@ public sealed class DesktopEntriesTests : IDisposable
         Write("usr/share/applications/terminal.desktop", "[Desktop Entry]\nType=Application\nName=Top\nExec=htop\nTerminal=true\nCategories=System;Monitor;\n");
         Write("usr/share/applications/tryexec-missing.desktop", "[Desktop Entry]\nType=Application\nName=Gone\nExec=gone\nTryExec=/nonexistent/gone\n");
         Write("usr/share/applications/onlyshowin.desktop", "[Desktop Entry]\nType=Application\nName=Gnome Only\nExec=gnome-thing\nOnlyShowIn=GNOME;\n");
+        Write("usr/share/wayland-sessions/sway.desktop", "[Desktop Entry]\nType=Application\nName=Sway\nExec=sway\nDesktopNames=sway;wlroots;\n");
+        Write("usr/share/xsessions/i3.desktop", "[Desktop Entry]\nType=Application\nName=i3\nExec=i3\n");
         Write("usr/share/icons/hicolor/48x48/apps/org.gnome.Nautilus.png", "png");
         Write("usr/share/pixmaps/kate.png", "png");
     }
@@ -61,6 +63,19 @@ public sealed class DesktopEntriesTests : IDisposable
         Assert.True(entries.Find("terminal")!.Terminal);
         Assert.Equal(DesktopMainCategory.System, DesktopCategories.MainOf(entries.Find("terminal")!));
         Assert.Equal(["nautilus"], entries.Find("org.gnome.Nautilus")!.Argv);
+    }
+
+    [Fact]
+    public void A_subdirectory_lists_sessions_with_the_same_rules_and_reads_desktop_names()
+    {
+        var sessions = new DesktopEntries(DesktopLocale.None, DataDirectories, "wayland-sessions");
+        Assert.Equal("wayland-sessions", sessions.Subdirectory);
+        Assert.Equal(["sway.desktop"], sessions.All().Select(e => e.Id));
+        Assert.Equal(["sway", "wlroots"], sessions.Find("sway")!.DesktopNames);
+        Assert.Null(sessions.Find("user"));
+        Assert.Empty(Entries().Find("user")!.DesktopNames);
+        Assert.Equal(["i3.desktop"], new DesktopEntries(DesktopLocale.None, DataDirectories, "xsessions").All().Select(e => e.Id));
+        Assert.DoesNotContain("sway.desktop", Entries().All().Select(e => e.Id));
     }
 
     [Fact]

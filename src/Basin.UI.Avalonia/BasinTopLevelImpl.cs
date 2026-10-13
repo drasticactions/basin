@@ -127,7 +127,17 @@ internal abstract class BasinTopLevelImpl : ITopLevelImpl, IFramebufferPlatformS
 
     public void SetFrameThemeVariant(PlatformThemeVariant? themeVariant) => FrameThemeVariant = themeVariant;
 
-    public virtual object? TryGetFeature(Type featureType) => _context.TryGetFeature(featureType);
+    private BasinTextInputMethod? _textInput;
+
+    public virtual object? TryGetFeature(Type featureType)
+    {
+        if (featureType == typeof(global::Avalonia.Input.TextInput.ITextInputMethodImpl) && _context.Host is { } host)
+        {
+            return _textInput ??= new BasinTextInputMethod(host.TextFields);
+        }
+
+        return _context.TryGetFeature(featureType);
+    }
 
     public IFramebufferRenderTarget CreateFramebufferRenderTarget() => new RenderTarget(this);
 

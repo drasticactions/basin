@@ -129,7 +129,11 @@ public static class BasinPlatform
         var context = new BasinPlatformContext(compositor, TryGetFeature) { Gpu = options.Gpu, Screens = screens };
         AvaloniaLocator.CurrentMutable.Bind<IWindowingPlatform>().ToConstant(new BasinWindowingPlatform(context));
 
-        _host = new AvaloniaUIHost(dispatcher, renderTimer, context) { Settings = settings };
+        _host = new AvaloniaUIHost(dispatcher, renderTimer, context)
+        {
+            Settings = settings,
+            Wake = options.EventLoop is { } loop ? new CompositorSynchronizationContext(loop) : null,
+        };
 
         object? TryGetFeature(Type featureType)
         {

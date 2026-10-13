@@ -102,6 +102,7 @@ public static class DesktopEntryReader
             OnlyShowIn = entry.OnlyShowIn,
             NotShowIn = entry.NotShowIn,
             Implements = entry.Implements,
+            DesktopNames = entry.DesktopNames,
             Actions = attached,
         };
     }
@@ -129,6 +130,7 @@ public static class DesktopEntryReader
         public IReadOnlyList<string> OnlyShowIn = [];
         public IReadOnlyList<string> NotShowIn = [];
         public IReadOnlyList<string> Implements = [];
+        public IReadOnlyList<string> DesktopNames = [];
         public IReadOnlyList<string> Actions = [];
 
         public void Set(ReadOnlySpan<char> key, string? suffix, ReadOnlySpan<char> value, DesktopLocale locale)
@@ -226,6 +228,10 @@ public static class DesktopEntryReader
             else if (key.SequenceEqual("Implements"))
             {
                 Implements = SplitList(value);
+            }
+            else if (key.SequenceEqual("DesktopNames"))
+            {
+                DesktopNames = SplitList(value);
             }
             else if (key.SequenceEqual("Actions"))
             {

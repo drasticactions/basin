@@ -46,7 +46,7 @@ internal sealed partial class LunaShell
         }
 
         _log.Info($"keyboard: owns {Fcitx5Keyboard.BusName}, fcitx5 can compose for it");
-        _kbRouter.Backend = _fcitx;
+        _kbSession.Router.Backend = _fcitx;
         _fcitx.BackendChanged += OnFcitx5Backend;
         _fcitx.CandidatesChanged += OnFcitx5Candidates;
         _fcitx.PreeditChanged += OnFcitx5Preedit;
@@ -62,7 +62,7 @@ internal sealed partial class LunaShell
             return;
         }
 
-        _kbRouter.Backend = null;
+        _kbSession.Router.Backend = null;
         fcitx.Dispose();
         _fcitx = null;
         _fcitxReason = "fcitx5 is off in [keyboard]";
@@ -75,7 +75,7 @@ internal sealed partial class LunaShell
     {
         if (_fcitx is { } fcitx)
         {
-            fcitx.HasFocusedField = _softInput.ActiveSurface is not null && (_imRelay?.HasInputMethodClient ?? false);
+            fcitx.HasFocusedField = _kbSession.TextInput.ActiveSurface is not null && (_imRelay?.HasInputMethodClient ?? false);
         }
     }
 
@@ -147,7 +147,7 @@ internal sealed partial class LunaShell
         _report.Line($"CANDIDATE {index} {word}");
         if (fcitx.InputMethod?.StartsWith("keyboard-", StringComparison.Ordinal) == true)
         {
-            _kbRouter.Send(new TypedKey(KeyCap.Space, false, false, false, false), KeyboardNow);
+            _kbSession.Router.Send(new TypedKey(KeyCap.Space, false, false, false, false), KeyboardNow);
         }
     }
 

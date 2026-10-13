@@ -83,6 +83,21 @@ public sealed class ProcessTracker : IDisposable
         return false;
     }
 
+    public bool OwnsTree(int pid)
+    {
+        for (var hops = 0; pid > 1 && hops < 32; hops++)
+        {
+            if (Owns(pid))
+            {
+                return true;
+            }
+
+            pid = ProcessIdentity.ParentOf(pid);
+        }
+
+        return false;
+    }
+
     public static Dictionary<string, string?> SessionEnvironment(
         string? waylandSocket, string? xDisplay, string? basinSocket, IReadOnlyDictionary<string, string>? extra)
     {
@@ -154,10 +169,18 @@ public sealed class ProcessTracker : IDisposable
         return true;
     }
 
-    public void TerminateAll(TimeSpan grace)
+    public void TerminateAll(TimeSpan grace) => Terminate(_processes, grace);
+
+    public void Terminate(TrackedProcess process, TimeSpan grace)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+        Terminate([process], grace);
+    }
+
+    private void Terminate(IReadOnlyList<TrackedProcess> processes, TimeSpan grace)
     {
         var running = new List<TrackedProcess>();
-        foreach (var process in _processes)
+        foreach (var process in processes)
         {
             if (Terminate(process))
             {

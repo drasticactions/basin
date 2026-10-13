@@ -48,6 +48,8 @@ public sealed class DesktopEntry
 
     public IReadOnlyList<string> Implements { get; init; } = [];
 
+    public IReadOnlyList<string> DesktopNames { get; init; } = [];
+
     public IReadOnlyList<DesktopAction> Actions { get; init; } = [];
 
     public IReadOnlyList<string> Argv => _argv ??= ExecLine.Split(Exec ?? "");

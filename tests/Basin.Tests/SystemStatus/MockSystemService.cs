@@ -73,6 +73,18 @@ internal sealed class MockSystemService : IPathMethodHandler, IDisposable
         }
     }
 
+    public void Signal(string path, string @interface, string member, params uint[] values)
+    {
+        using var writer = _connection.GetMessageWriter();
+        writer.WriteSignalHeader(null, path, @interface, member, new string('u', values.Length));
+        foreach (var value in values)
+        {
+            writer.WriteUInt32(value);
+        }
+
+        _ = _connection.TrySendMessage(writer.CreateMessage());
+    }
+
     public List<(string Path, string Interface, string Member, VariantValue[] Arguments)> Calls()
     {
         lock (_lock)

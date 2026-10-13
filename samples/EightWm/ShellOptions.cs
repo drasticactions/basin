@@ -38,6 +38,8 @@ internal sealed record ShellOptions
 
     public int SocketFd { get; init; } = -1;
 
+    public string? PamHelperCommand { get; init; }
+
     public HashSet<string> Explicit { get; init; } = [];
 
     public IpcChoice Ipc { get; init; } = IpcChoice.Off;

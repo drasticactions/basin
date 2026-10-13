@@ -100,6 +100,18 @@ public sealed class LunaSession : IDisposable
         _process.BeginErrorReadLine();
     }
 
+    public Process Process => _process;
+
+    public List<string> Lines()
+    {
+        lock (_gate)
+        {
+            return [.. _lines];
+        }
+    }
+
+    public bool WaitForExit(int milliseconds) => _process.WaitForExit(milliseconds);
+
     public async Task SendAsync(string command)
     {
         await _process.StandardInput.WriteLineAsync(command);

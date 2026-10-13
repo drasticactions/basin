@@ -1,0 +1,127 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             xmlns:basin="using:Basin.UI.Avalonia"
+             xmlns:osk="using:Basin.SoftKeyboard.Avalonia"
+             x:Class="EightWm.SignInView"
+             x:DataType="local:SignInModel"
+             AutomationProperties.Name="Sign in">
+  <Grid x:Name="Root" Background="{DynamicResource SignInBackground}">
+    <Button x:Name="BackButton" Classes="backarrow" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="40"
+            Command="{Binding Back}" IsVisible="{Binding CanGoBack}" AutomationProperties.Name="Switch user">
+      <PathIcon Width="18" Height="18" Data="{StaticResource GlyphArrowLeft}" />
+    </Button>
+
+    <ItemsControl x:Name="UserList" ItemsSource="{Binding Users}" IsVisible="{Binding ShowList}"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="32" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="local:UserTileModel">
+          <Button Classes="userTile" Command="{Binding $parent[local:SignInView].((local:SignInModel)DataContext).Choose}" CommandParameter="{Binding}"
+                  AutomationProperties.Name="{Binding DisplayName}">
+            <StackPanel Spacing="12">
+              <Grid Width="160" Height="160">
+                <Border Background="{DynamicResource SignInTile}" />
+                <TextBlock Text="{Binding Initials}" FontSize="56" FontWeight="Light" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasPicture}" />
+                <Image Source="{Binding Picture}" Stretch="UniformToFill" IsVisible="{Binding HasPicture}" />
+              </Grid>
+              <TextBlock Text="{Binding DisplayName}" FontSize="22" FontWeight="Light" Foreground="{DynamicResource SignInText}" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <StackPanel x:Name="Box" IsVisible="{Binding ShowBox}" HorizontalAlignment="Center" VerticalAlignment="Center" Width="400" Spacing="14">
+      <Grid x:Name="Tile" Width="192" Height="192" HorizontalAlignment="Center">
+        <Border Background="{DynamicResource SignInTile}" />
+        <TextBlock Text="{Binding SelectedUser.Initials, FallbackValue=?}" FontSize="64" FontWeight="Light" Foreground="White"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !SelectedUser.HasPicture, FallbackValue=True}" />
+        <Image Source="{Binding SelectedUser.Picture, FallbackValue={x:Null}}" Stretch="UniformToFill" IsVisible="{Binding SelectedUser.HasPicture, FallbackValue=False}" />
+      </Grid>
+      <TextBlock x:Name="UserName" Text="{Binding CurrentName}" FontSize="36" FontWeight="Light" Foreground="{DynamicResource SignInText}" HorizontalAlignment="Center" />
+      <Grid ColumnDefinitions="*,Auto,Auto" Height="40">
+        <basin:SecretTextBox x:Name="PasswordBox" Grid.Column="0" Text="{Binding Password, Mode=TwoWay}" PasswordChar="●"
+                             RevealPassword="{Binding Revealed}" Watermark="{Binding Prompt}" IsEnabled="{Binding !Busy}"
+                             AutomationProperties.Name="{Binding Prompt}" VerticalContentAlignment="Center" />
+        <Button x:Name="RevealButton" Grid.Column="1" Classes="eye" Width="40" Height="40" IsVisible="{Binding RevealAllowed}"
+                Focusable="False" AutomationProperties.Name="Reveal password">
+          <PathIcon Width="20" Height="20" Data="{StaticResource GlyphEye}" />
+        </Button>
+        <Button x:Name="SubmitButton" Grid.Column="2" Classes="submit" Width="40" Height="40" Command="{Binding Submit}" AutomationProperties.Name="Submit">
+          <PathIcon Width="18" Height="18" Data="{StaticResource GlyphArrowRight}" />
+        </Button>
+      </Grid>
+      <TextBlock x:Name="MessageText" Text="{Binding Message}" IsVisible="{Binding HasMessage}" Foreground="{DynamicResource SignInText}" TextWrapping="Wrap" FontSize="16" />
+      <TextBlock x:Name="ErrorText" Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource SignInError}" TextWrapping="Wrap" FontSize="16" />
+      <Button x:Name="OptionsButton" Classes="link" Content="Sign-in options" IsVisible="{Binding OptionsAvailable}" Command="{Binding ToggleOptions}" HorizontalAlignment="Left" />
+      <osk:RevealPanel x:Name="OptionsReveal" IsOpen="{Binding OptionsOpen}">
+        <Border x:Name="OptionsPanel" Background="{DynamicResource SignInFlyout}" Padding="16">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Session" FontSize="18" Foreground="{DynamicResource SignInText}" IsVisible="{Binding HasSessions}" />
+            <ScrollViewer x:Name="SessionScroller" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasSessions}">
+              <ItemsControl x:Name="SessionList" ItemsSource="{Binding Sessions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:SignInOption">
+                    <RadioButton GroupName="session" Content="{Binding Name}" IsChecked="{Binding Chosen, Mode=OneWay}"
+                                 Command="{Binding $parent[local:SignInView].((local:SignInModel)DataContext).ChooseSession}" CommandParameter="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="Keyboard layout" FontSize="18" Foreground="{DynamicResource SignInText}" Margin="0,8,0,0" IsVisible="{Binding HasLayouts}" />
+            <ScrollViewer x:Name="LayoutScroller" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasLayouts}">
+              <ItemsControl x:Name="LayoutList" ItemsSource="{Binding Layouts}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:SignInOption">
+                    <RadioButton GroupName="layout" Content="{Binding Name}" IsChecked="{Binding Chosen, Mode=OneWay}"
+                                 Command="{Binding $parent[local:SignInView].((local:SignInModel)DataContext).ChooseLayout}" CommandParameter="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
+        </Border>
+      </osk:RevealPanel>
+    </StackPanel>
+
+    <Button x:Name="EaseButton" Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="40"
+            Command="{Binding ToggleEase}" AutomationProperties.Name="Ease of Access">
+      <PathIcon Width="28" Height="28" Data="{StaticResource GlyphEase}" />
+    </Button>
+    <Border x:Name="EasePanel" IsVisible="{Binding EaseOpen}" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="40,0,0,104"
+            Width="340" Background="{DynamicResource SignInFlyout}" Padding="20">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Ease of Access" FontSize="24" FontWeight="Light" Foreground="{DynamicResource SignInText}" />
+        <ToggleSwitch x:Name="HighContrastSwitch" Content="High contrast" IsChecked="{Binding HighContrast}" />
+        <ToggleSwitch x:Name="NarratorSwitch" Content="Narrator" IsChecked="{Binding Narrator}" IsEnabled="{Binding NarratorAvailable}" />
+        <ToggleSwitch x:Name="KeyboardSwitch" Content="On-Screen Keyboard" IsChecked="{Binding OnScreenKeyboard}" />
+        <TextBlock Text="Make everything bigger" Foreground="{DynamicResource SignInText}" />
+        <UniformGrid Columns="4">
+          <Button Content="100%" Command="{Binding ChooseTextScale}" CommandParameter="1" Classes="scale" />
+          <Button Content="125%" Command="{Binding ChooseTextScale}" CommandParameter="1.25" Classes="scale" />
+          <Button Content="150%" Command="{Binding ChooseTextScale}" CommandParameter="1.5" Classes="scale" />
+          <Button Content="200%" Command="{Binding ChooseTextScale}" CommandParameter="2" Classes="scale" />
+        </UniformGrid>
+      </StackPanel>
+    </Border>
+
+    <Button x:Name="PowerButton" Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="40"
+            Command="{Binding TogglePower}" IsVisible="{Binding PowerAvailable}" AutomationProperties.Name="Power">
+      <PathIcon Width="28" Height="28" Data="{StaticResource GlyphPower}" />
+    </Button>
+    <Border x:Name="PowerPanel" IsVisible="{Binding PowerOpen}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,40,104"
+            Width="220" Background="{DynamicResource SignInFlyout}" Padding="8">
+      <StackPanel Spacing="4">
+        <Button Classes="menuRow" Content="Sleep" Command="{Binding Power}" CommandParameter="suspend" HorizontalAlignment="Stretch" />
+        <Button Classes="menuRow" Content="Shut down" Command="{Binding Power}" CommandParameter="shutdown" HorizontalAlignment="Stretch" />
+        <Button Classes="menuRow" Content="Restart" Command="{Binding Power}" CommandParameter="restart" HorizontalAlignment="Stretch" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

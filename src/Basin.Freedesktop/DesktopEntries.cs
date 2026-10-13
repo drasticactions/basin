@@ -8,17 +8,22 @@ public sealed class DesktopEntries
 
     private readonly DesktopLocale _locale;
     private readonly IReadOnlyList<string>? _dataDirectories;
+    private readonly string _subdirectory;
     private readonly Dictionary<string, DesktopEntry?> _byAppId = new(StringComparer.Ordinal);
     private List<DesktopEntry>? _all;
     private Dictionary<string, DesktopEntry>? _byId;
     private readonly HashSet<string> _watched = new(StringComparer.Ordinal);
     private DirectoryWatch? _watch;
 
-    public DesktopEntries(DesktopLocale? locale = null, IReadOnlyList<string>? dataDirectories = null)
+    public DesktopEntries(DesktopLocale? locale = null, IReadOnlyList<string>? dataDirectories = null, string subdirectory = "applications")
     {
+        ArgumentException.ThrowIfNullOrEmpty(subdirectory);
         _locale = locale ?? DesktopLocale.FromEnvironment();
         _dataDirectories = dataDirectories;
+        _subdirectory = subdirectory;
     }
+
+    public string Subdirectory => _subdirectory;
 
     public event Action? Changed;
 
@@ -73,7 +78,7 @@ public sealed class DesktopEntries
 
         foreach (var directory in _dataDirectories ?? XdgDirectories.DataDirectories())
         {
-            var path = Path.Combine(directory, "applications", id);
+            var path = Path.Combine(directory, _subdirectory, id);
             if (File.Exists(path) && HasExactName(path, id))
             {
                 return DesktopEntryReader.Parse(path, id, _locale);
@@ -190,7 +195,7 @@ public sealed class DesktopEntries
         var taken = new HashSet<string>(StringComparer.Ordinal);
         foreach (var directory in _dataDirectories ?? XdgDirectories.DataDirectories())
         {
-            var root = Path.Combine(directory, "applications");
+            var root = Path.Combine(directory, _subdirectory);
             if (!Directory.Exists(root))
             {
                 continue;
@@ -237,7 +242,7 @@ public sealed class DesktopEntries
 
         foreach (var directory in _dataDirectories ?? XdgDirectories.DataDirectories())
         {
-            var root = Path.Combine(directory, "applications");
+            var root = Path.Combine(directory, _subdirectory);
             if (!Directory.Exists(root))
             {
                 continue;

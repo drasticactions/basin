@@ -27,6 +27,7 @@ internal sealed class ShellView
         DimFrame = new SceneTransform(Dim);
         Transients = new SceneTree(Root);
         Chrome = new SceneTree(Root);
+        KeyboardFrame = new SceneTransform(Chrome) { Enabled = false };
         TitleFrame = new SceneTransform(Chrome);
         SwitcherFrame = new SceneTransform(Chrome);
         CharmsPaneFrame = new SceneTransform(Chrome);
@@ -137,6 +138,16 @@ internal sealed class ShellView
 
     public SceneTransform TitleFrame { get; }
 
+    public SceneTransform KeyboardFrame { get; }
+
+    public Tween KeyboardMotion;
+
+    public AvaloniaChrome? Keyboard { get; set; }
+
+    public Basin.SoftKeyboard.Avalonia.SoftKeyboardCanvas? KeyboardCanvas { get; set; }
+
+    public Basin.Box KeyboardBox { get; set; }
+
     public AppTitleBar? Title { get; set; }
 
     public CharmsBar? Charms { get; set; }
@@ -191,6 +202,9 @@ internal sealed class ShellView
         Splash = null;
         FlipFace?.Dispose();
         FlipFace = null;
+        Keyboard?.Dispose();
+        Keyboard = null;
+        KeyboardCanvas = null;
     }
 
     public void Destroy()

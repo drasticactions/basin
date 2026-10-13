@@ -277,6 +277,7 @@ public sealed class AvaloniaUISurface : IUISurface
     {
         AssertThread();
         var keys = pressed.ToArray();
+        HasKeyboardFocus = true;
         OnUiThread(() =>
         {
             _pressedKeys.Clear();
@@ -286,8 +287,40 @@ public sealed class AvaloniaUISurface : IUISurface
                 _pressedKeys.Add(key);
                 _modifiers = EvdevInput.WithKey(_modifiers, key, pressed: true);
             }
+
+            if (_root is not null)
+            {
+                global::Avalonia.Automation.AutomationProperties.SetControlTypeOverride(_root, global::Avalonia.Automation.Peers.AutomationControlType.Window);
+            }
+
+            if (!_disposed && _impl is BasinWindowImpl window)
+            {
+                window.Activated?.Invoke();
+            }
         });
     }
+
+    public string? AccessibleName
+    {
+        get => _root is null ? null : global::Avalonia.Automation.AutomationProperties.GetName(_root);
+        set
+        {
+            if (_root is not null)
+            {
+                global::Avalonia.Automation.AutomationProperties.SetName(_root, value);
+            }
+        }
+    }
+
+    internal bool HasKeyboardFocus { get; private set; }
+
+    internal void Reactivate() => OnUiThread(() =>
+    {
+        if (!_disposed && HasKeyboardFocus && _impl is BasinWindowImpl window)
+        {
+            window.Activated?.Invoke();
+        }
+    });
 
     public void NotifyKey(uint timeMs, uint key, bool pressed)
     {
@@ -331,6 +364,7 @@ public sealed class AvaloniaUISurface : IUISurface
     public void NotifyKeyboardLeave()
     {
         AssertThread();
+        HasKeyboardFocus = false;
         OnUiThread(() =>
         {
             _pressedKeys.Clear();
@@ -338,6 +372,11 @@ public sealed class AvaloniaUISurface : IUISurface
             if (!_disposed)
             {
                 _impl.LostFocus?.Invoke();
+                (_impl as BasinWindowImpl)?.Deactivated?.Invoke();
+                if (_root is not null)
+                {
+                    _root.ClearValue(global::Avalonia.Automation.AutomationProperties.ControlTypeOverrideProperty);
+                }
             }
         });
     }
@@ -487,6 +526,11 @@ public sealed class AvaloniaUISurface : IUISurface
             if (slot >= 0 && type == RawPointerEventType.TouchEnd)
             {
                 _touchLive[slot] = false;
+            }
+
+            if (type == RawPointerEventType.TouchBegin && _root is { } root)
+            {
+                _impl.Context.Host?.TextFields.Classify(root, point);
             }
 
             Raise(new RawTouchEventArgs(_touch, timeMs, InputRootOf(), type, point, _modifiers, id));

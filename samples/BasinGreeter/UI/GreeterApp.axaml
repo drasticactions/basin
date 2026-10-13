@@ -1,0 +1,34 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BasinGreeter.UI.GreeterApp">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="GreeterBox" Color="#F2FAFAFA" />
+          <SolidColorBrush x:Key="GreeterBoxBorder" Color="#33000000" />
+          <SolidColorBrush x:Key="GreeterError" Color="#C42B1C" />
+          <SolidColorBrush x:Key="GreeterMuted" Color="#5C5C5C" />
+          <SolidColorBrush x:Key="GreeterAvatar" Color="#D0D0D0" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="GreeterBox" Color="#EE202020" />
+          <SolidColorBrush x:Key="GreeterBoxBorder" Color="#33FFFFFF" />
+          <SolidColorBrush x:Key="GreeterError" Color="#FF99A4" />
+          <SolidColorBrush x:Key="GreeterMuted" Color="#B0B0B0" />
+          <SolidColorBrush x:Key="GreeterAvatar" Color="#404040" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <StreamGeometry x:Key="GlyphBattery">F0 M2,6 H19 V18 H2 Z M4,8 V16 H17 V8 Z M20,10 H22 V14 H20 Z M5,9 H11 V15 H5 Z</StreamGeometry>
+      <StreamGeometry x:Key="GlyphWifi">M12,20 L1.5,8.5 A15,15 0 0 1 22.5,8.5 Z</StreamGeometry>
+      <StreamGeometry x:Key="GlyphWired">M7,3 H17 V13 H14 V17 H10 V13 H7 Z M11,17 H13 V21 H11 Z</StreamGeometry>
+      <StreamGeometry x:Key="GlyphOffline">F0 M12,20 L1.5,8.5 A15,15 0 0 1 22.5,8.5 Z M12,16.5 L5,8.8 A11,11 0 0 1 19,8.8 Z</StreamGeometry>
+      <StreamGeometry x:Key="GlyphKeyboard">F0 M1,4 H23 V20 H1 Z M3,6 V18 H21 V6 Z M5,8 H8 V11 H5 Z M10,8 H13 V11 H10 Z M15,8 H18 V11 H15 Z M7,14 H17 V16 H7 Z</StreamGeometry>
+      <StreamGeometry x:Key="GlyphAccessibility">F0 M12,1 A11,11 0 1 1 11.99,1 Z M12,3 A9,9 0 1 0 12.01,3 Z M12,5 A1.6,1.6 0 1 1 11.99,5 Z M7,8.5 H17 V10 H13.5 V13 L15.5,18.5 L14,19 L12,14 L10,19 L8.5,18.5 L10.5,13 V10 H7 Z</StreamGeometry>
+      <StreamGeometry x:Key="GlyphPower">F0 M11,2 H13 V12 H11 Z M6.3,5.3 L7.7,6.7 A7,7 0 1 0 16.3,6.7 L17.7,5.3 A9,9 0 1 1 6.3,5.3 Z</StreamGeometry>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+</Application>

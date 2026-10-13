@@ -22,6 +22,7 @@
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
     <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
   </ItemGroup>
 
 </Project>

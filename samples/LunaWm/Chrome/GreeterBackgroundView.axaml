@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:luna="using:LunaWm"
+             x:Class="LunaWm.GreeterBackgroundView"
+             x:DataType="luna:GreeterBackgroundModel">
+  <Panel>
+    <Panel.Background>
+      <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+        <GradientStop Offset="0" Color="#1C2633" />
+        <GradientStop Offset="1" Color="#0A0D12" />
+      </LinearGradientBrush>
+    </Panel.Background>
+    <Image Source="{Binding Wallpaper}" IsVisible="{Binding HasWallpaper}" Stretch="UniformToFill" />
+    <Border Background="Black" IsVisible="{Binding HighContrast}" />
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,70,0,0">
+      <TextBlock Classes="lockclock" Text="{Binding Clock}" />
+      <TextBlock Classes="lockdate" Text="{Binding Date}" />
+    </StackPanel>
+  </Panel>
+</UserControl>

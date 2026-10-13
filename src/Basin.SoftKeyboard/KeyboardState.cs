@@ -4,6 +4,8 @@ public sealed class KeyboardState
 {
     private long _lastShiftTap = long.MinValue / 2;
     private long _lastUnlock = long.MinValue / 2;
+    private readonly ShiftMode[] _modifiers = new ShiftMode[3];
+    private readonly long[] _lastModifierTap = [long.MinValue / 2, long.MinValue / 2, long.MinValue / 2];
 
     public KeyboardState(KeyTiming? timing = null)
     {
@@ -33,6 +35,19 @@ public sealed class KeyboardState
     public bool CapActive => ShiftHeld ? Shift == ShiftMode.Off : Shift != ShiftMode.Off;
 
     public bool Capital => CapActive || AutoCap;
+
+    public ShiftMode Control => _modifiers[0];
+
+    public ShiftMode Alt => _modifiers[1];
+
+    public ShiftMode Super => _modifiers[2];
+
+    public KeyModifiers Modifiers =>
+        (_modifiers[0] != ShiftMode.Off ? KeyModifiers.Control : KeyModifiers.None) |
+        (_modifiers[1] != ShiftMode.Off ? KeyModifiers.Alt : KeyModifiers.None) |
+        (_modifiers[2] != ShiftMode.Off ? KeyModifiers.Super : KeyModifiers.None);
+
+    public ShiftMode ModifierMode(KeyFunction function) => Slot(function) is var slot and >= 0 ? _modifiers[slot] : function == KeyFunction.Shift ? Shift : ShiftMode.Off;
 
     public event Action? Changed;
 
@@ -97,8 +112,62 @@ public sealed class KeyboardState
         Changed?.Invoke();
     }
 
+    public void TapModifier(KeyFunction function, long now)
+    {
+        var slot = Slot(function);
+        if (slot < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(function), function, "a sticky modifier is Control, Alt or Super");
+        }
+
+        var mode = _modifiers[slot];
+        if (mode == ShiftMode.Lock)
+        {
+            mode = ShiftMode.Off;
+            now = long.MinValue / 2;
+        }
+        else if (mode == ShiftMode.Once && _lastModifierTap[slot] + Timing.ShiftDoubleTapMs > now)
+        {
+            mode = ShiftMode.Lock;
+        }
+        else
+        {
+            mode = mode == ShiftMode.Off ? ShiftMode.Once : ShiftMode.Off;
+        }
+
+        _lastModifierTap[slot] = now;
+        _modifiers[slot] = mode;
+        Changed?.Invoke();
+    }
+
+    public void SetModifier(KeyFunction function, ShiftMode mode)
+    {
+        var slot = Slot(function);
+        if (slot >= 0 && _modifiers[slot] != mode)
+        {
+            _modifiers[slot] = mode;
+            Changed?.Invoke();
+        }
+    }
+
     public void Consume()
     {
+        var latched = false;
+        for (var slot = 0; slot < _modifiers.Length; slot++)
+        {
+            if (_modifiers[slot] == ShiftMode.Once)
+            {
+                _modifiers[slot] = ShiftMode.Off;
+                latched = true;
+            }
+        }
+
+        if (latched && Shift != ShiftMode.Once && !AutoCap)
+        {
+            Changed?.Invoke();
+            return;
+        }
+
         if (Shift == ShiftMode.Once || AutoCap)
         {
             if (Shift == ShiftMode.Once)
@@ -163,6 +232,15 @@ public sealed class KeyboardState
         ShiftHeld = false;
         SymbolHeld = false;
         AutoCap = false;
+        Array.Clear(_modifiers);
         Changed?.Invoke();
     }
+
+    private static int Slot(KeyFunction function) => function switch
+    {
+        KeyFunction.Control => 0,
+        KeyFunction.Alt => 1,
+        KeyFunction.Super => 2,
+        _ => -1,
+    };
 }

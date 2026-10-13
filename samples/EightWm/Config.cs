@@ -45,6 +45,20 @@ internal sealed class Config
 
     public Basin.Config.LaunchRules Launch { get; private set; } = Basin.Config.LaunchRules.Empty;
 
+    public int IdleLockSeconds { get; private set; }
+
+    public string PamService { get; private set; } = "login";
+
+    public string LockPicture { get; private set; } = "";
+
+    public bool KeyboardEnabled { get; private set; } = true;
+
+    public IReadOnlyList<string> KeyboardLayouts { get; private set; } = [];
+
+    public Basin.SoftKeyboard.KeyboardSize KeyboardSize { get; private set; } = Basin.SoftKeyboard.KeyboardSize.Medium;
+
+    public string KeyboardChord { get; private set; } = "Super+k";
+
     public static Config Load(string? path, BasinLogger log)
     {
         var config = new Config();
@@ -110,6 +124,25 @@ internal sealed class Config
         }
 
         config.Rules.AddRange(WindowRule.MostSpecificFirst(rules));
+
+        if (reader.Section("lock") is { } lockTable)
+        {
+            config.IdleLockSeconds = Math.Max(0, lockTable.Number("idle_seconds", config.IdleLockSeconds));
+            config.PamService = lockTable.Text("pam_service") is { Length: > 0 } service ? service : config.PamService;
+            config.LockPicture = lockTable.Text("picture") ?? config.LockPicture;
+        }
+
+        if (reader.Section("keyboard") is { } keyboard)
+        {
+            config.KeyboardEnabled = keyboard.Flag("enabled", config.KeyboardEnabled);
+            config.KeyboardLayouts = keyboard.Words("layouts") ?? config.KeyboardLayouts;
+            config.KeyboardSize = Basin.SoftKeyboard.KeyboardSizes.Parse(keyboard.Choice("size", "m", "xs", "s", "m", "l"), config.KeyboardSize);
+        }
+
+        if (reader.Section("keybindings") is { } bindings)
+        {
+            config.KeyboardChord = bindings.Text("keyboard") ?? config.KeyboardChord;
+        }
 
         if (reader.Section("ui") is { } ui && ui.Text("font") is { } fontName)
         {

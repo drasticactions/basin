@@ -2,9 +2,11 @@ namespace Basin.SoftKeyboard;
 
 public sealed class KeyGrid
 {
-    public const int Rows = 5;
-    public const int Columns = 14;
-    public const int CellCount = Rows * Columns;
+    public const int MaxRows = 8;
+    public const int MaxColumns = 20;
+    public const int MaxCells = MaxRows * MaxColumns;
+    public const int DefaultRows = 5;
+    public const int DefaultColumns = 14;
 
     private static readonly float[] DefaultRowHeights = [55, 70, 70, 70, 70];
 
@@ -12,22 +14,63 @@ public sealed class KeyGrid
     private readonly float[] _rowHeights;
 
     public KeyGrid(IReadOnlyList<KeyCell> cells, IReadOnlyList<float>? rowHeights = null, float widthUnits = 11)
+        : this(DefaultRows, DefaultColumns, cells, rowHeights ?? DefaultRowHeights, widthUnits, rowBias: true)
+    {
+    }
+
+    public KeyGrid(int rows, int columns, IReadOnlyList<KeyCell> cells, IReadOnlyList<float>? rowHeights = null, float widthUnits = 11)
+        : this(rows, columns, cells, rowHeights, widthUnits, rowBias: false)
+    {
+    }
+
+    private KeyGrid(int rows, int columns, IReadOnlyList<KeyCell> cells, IReadOnlyList<float>? rowHeights, float widthUnits, bool rowBias)
     {
         ArgumentNullException.ThrowIfNull(cells);
+        if (rows is < 1 or > MaxRows)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rows), rows, $"a key grid has 1 to {MaxRows} rows");
+        }
+
+        if (columns is < 1 or > MaxColumns)
+        {
+            throw new ArgumentOutOfRangeException(nameof(columns), columns, $"a key grid has 1 to {MaxColumns} columns");
+        }
+
+        Rows = rows;
+        Columns = columns;
+        CellCount = rows * columns;
         if (cells.Count != CellCount)
         {
-            throw new ArgumentException($"a key grid has {CellCount} cells, not {cells.Count}", nameof(cells));
+            throw new ArgumentException($"a {rows} x {columns} key grid has {CellCount} cells, not {cells.Count}", nameof(cells));
         }
 
         _cells = [.. cells];
-        _rowHeights = rowHeights is null ? [.. DefaultRowHeights] : [.. rowHeights];
+        if (rowHeights is null)
+        {
+            _rowHeights = new float[rows];
+            Array.Fill(_rowHeights, 70f);
+        }
+        else
+        {
+            _rowHeights = [.. rowHeights];
+        }
+
         if (_rowHeights.Length != Rows)
         {
             throw new ArgumentException($"a key grid has {Rows} row heights", nameof(rowHeights));
         }
 
         WidthUnits = widthUnits;
+        RowBias = rowBias;
     }
+
+    public int Rows { get; }
+
+    public int Columns { get; }
+
+    public int CellCount { get; }
+
+    public bool RowBias { get; }
 
     public float WidthUnits { get; }
 
@@ -39,11 +82,11 @@ public sealed class KeyGrid
 
     public KeyCell this[int index] => _cells[index];
 
-    public static int Index(int row, int column) => (row * Columns) + column;
+    public int Index(int row, int column) => (row * Columns) + column;
 
-    public static int RowOf(int index) => index / Columns;
+    public int RowOf(int index) => index / Columns;
 
-    public static int ColumnOf(int index) => index % Columns;
+    public int ColumnOf(int index) => index % Columns;
 
     public float RowWeight(int row)
     {
@@ -63,8 +106,8 @@ public sealed class KeyGrid
             throw new ArgumentException($"the span needs {CellCount} rects", nameof(rects));
         }
 
-        Span<float> rowBottoms = stackalloc float[Rows];
-        Span<float> columnRights = stackalloc float[Columns];
+        Span<float> rowBottoms = stackalloc float[MaxRows];
+        Span<float> columnRights = stackalloc float[MaxColumns];
         RowLimits(keymapHeight, rowBottoms);
         for (var row = 0; row < Rows; row++)
         {
@@ -109,6 +152,6 @@ public sealed class KeyGrid
     {
         var cells = (KeyCell[])_cells.Clone();
         cells[Index(row, column)] = cell;
-        return new KeyGrid(cells, _rowHeights, WidthUnits);
+        return new KeyGrid(Rows, Columns, cells, _rowHeights, WidthUnits, RowBias);
     }
 }

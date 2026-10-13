@@ -62,7 +62,7 @@ public sealed class TraceDecoder
 
         _centers.Clear();
         var unit = float.MaxValue;
-        for (var cell = 0; cell < KeyGrid.CellCount; cell++)
+        for (var cell = 0; cell < grid.CellCount; cell++)
         {
             var key = grid[cell];
             if (!key.IsVisible || !TracesLetter(key.Plain))

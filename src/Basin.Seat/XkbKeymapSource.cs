@@ -17,22 +17,40 @@ public sealed class XkbKeymapSource : IKeymapSource, IDisposable
     {
         ArgumentNullException.ThrowIfNull(keymapText);
         _context ??= XkbContext.Create();
-        return Finish(_context.CreateKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(keymapText)), out keymap);
+        XkbKeymap? compiled;
+        try
+        {
+            compiled = _context.CreateKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(keymapText));
+        }
+        catch (XkbException)
+        {
+            compiled = null;
+        }
+
+        return Finish(compiled, out keymap);
     }
 
     public bool TryCompile(in KeymapNames names, out Keymap keymap)
     {
         _context ??= XkbContext.Create();
-        return Finish(
-            _context.CreateKeymap(new XkbRuleNames
+        XkbKeymap? compiled;
+        try
+        {
+            compiled = _context.CreateKeymap(new XkbRuleNames
             {
                 Rules = names.Rules,
                 Model = names.Model,
                 Layout = names.Layout,
                 Variant = names.Variant,
                 Options = names.Options,
-            }),
-            out keymap);
+            });
+        }
+        catch (XkbException)
+        {
+            compiled = null;
+        }
+
+        return Finish(compiled, out keymap);
     }
 
     public void Dispose()

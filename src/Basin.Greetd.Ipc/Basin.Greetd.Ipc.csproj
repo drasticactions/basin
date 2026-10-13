@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Greetd.Ipc</PackageId>
+    <RootNamespace>Basin.Greetd.Ipc</RootNamespace>
+    <Description>The greeter/* control socket methods over a Basin.Greetd GreeterFlow.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Greetd/Basin.Greetd.csproj" />
+    <ProjectReference Include="../Basin.Ipc/Basin.Ipc.csproj" />
+  </ItemGroup>
+
+</Project>

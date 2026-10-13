@@ -14,7 +14,7 @@ public sealed class XkbGridTests
     }
 
     private static string Row(KeyGrid grid, int row) =>
-        string.Concat(Enumerable.Range(0, KeyGrid.Columns)
+        string.Concat(Enumerable.Range(0, KeyGrid.DefaultColumns)
             .Select(c => grid[row, c])
             .Where(static c => c.IsVisible)
             .Select(static c => c.Plain!.IsText ? c.Plain.Text : "<" + c.Plain.Name + ">"));
@@ -63,7 +63,7 @@ public sealed class XkbGridTests
 
         var engine = new SoftKeyboardEngine(grid);
         engine.Layout(1024, 335, 5);
-        var last = engine.Rects[KeyGrid.Index(0, 12)];
+        var last = engine.Rects[engine.Grid.Index(0, 12)];
         Assert.Equal(1024f, last.Right, 0.01f);
         Assert.Equal(1024f / 13, last.Width, 0.01f);
     }
@@ -72,7 +72,7 @@ public sealed class XkbGridTests
     public void Long_press_offers_levels_three_and_four()
     {
         var grid = Build("de").Grid();
-        var q = Enumerable.Range(0, KeyGrid.Columns).Select(c => grid[1, c]).First(static c => c.Plain?.Text == "q");
+        var q = Enumerable.Range(0, KeyGrid.DefaultColumns).Select(c => grid[1, c]).First(static c => c.Plain?.Text == "q");
         Assert.NotNull(q.LongPress);
         Assert.Equal("q", q.LongPress![0].Text);
         Assert.Contains(q.LongPress, static c => c.Text == "@");

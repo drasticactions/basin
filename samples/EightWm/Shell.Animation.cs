@@ -92,6 +92,8 @@ internal sealed partial class Shell
             AdvanceCharms(view, _clockMillis);
             AdvanceTitle(view, _clockMillis);
             AdvanceSwitcher(view, _clockMillis);
+            AdvanceKeyboard(view, _clockMillis);
+            AdvancePan(view, _clockMillis);
             if (Animating(view))
             {
                 view.Scheduler?.ScheduleRepaint();
@@ -129,6 +131,11 @@ internal sealed partial class Shell
         }
 
         if (view.Title is { } title && title.Motion.IsRunning)
+        {
+            return true;
+        }
+
+        if (view.KeyboardMotion.IsRunning || _panRunning)
         {
             return true;
         }

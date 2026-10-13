@@ -175,109 +175,22 @@ internal sealed partial class LunaShell
         var rows = menu.Model.Rows;
         if (!rebuild && rows.Count > 0 && menu.Kind is "sound" or "battery")
         {
-            SyncSliders(view, menu);
+            _status?.SyncSliders(menu.Kind, rows, view.Output);
             return;
         }
 
         rows.Clear();
-        switch (menu.Kind)
+        if (menu.Kind == "device")
         {
-            case "battery":
-                rows.Add(new HeaderRow { Label = "Battery", Detail = BatteryText() });
-                if (_brightness is { } brightness && brightness.Supports(view.Output))
-                {
-                    rows.Add(new DividerRow());
-                    rows.Add(new SliderRow { Key = "brightness", Label = "Brightness", Value = BrightnessOf(view), Changed = value => SetBrightness(view, value) });
-                }
-
-                rows.Add(new DividerRow());
-                AddDeviceRows(rows);
-                break;
-            case "device":
-                rows.Add(new HeaderRow { Label = "Device", Detail = Environment.MachineName });
-                rows.Add(new DividerRow());
-                AddDeviceRows(rows);
-                break;
-            case "wifi":
-                FillWifi(rows);
-                break;
-            case "bluetooth":
-                FillBluetooth(rows);
-                break;
-            case "sound":
-                if (_volume is not { IsAvailable: true } volume)
-                {
-                    rows.Add(new HeaderRow { Label = "Sound" });
-                    rows.Add(new NoteRow { Label = "No sound output" });
-                    break;
-                }
-
-                rows.Add(new HeaderRow { Label = "Sound", Detail = $"{Math.Round(volume.Volume * 100)}%" });
-                rows.Add(new SliderRow { Key = "volume", Label = "Volume", Value = Math.Min(1, volume.Volume), Changed = value => _volume?.SetVolume((float)value) });
-                rows.Add(new DividerRow());
-                rows.Add(new ToggleRow { Key = "mute", Label = "Mute", On = volume.Muted, Changed = muted => _volume?.SetMuted(muted) });
-                break;
-        }
-    }
-
-    private void SyncSliders(LunaView view, MenuSurface menu)
-    {
-        foreach (var row in menu.Model.Rows)
-        {
-            switch (row)
-            {
-                case SliderRow { Key: "volume" } volumeRow when _volume is { IsAvailable: true } volume:
-                    volumeRow.Sync(Math.Min(1, volume.Volume));
-                    break;
-                case SliderRow { Key: "brightness" } brightnessRow:
-                    brightnessRow.Sync(BrightnessOf(view));
-                    break;
-                case ToggleRow { Key: "mute" } mute when _volume is { } sink:
-                    mute.On = sink.Muted;
-                    break;
-                case HeaderRow header when menu.Kind == "battery":
-                    header.Detail = BatteryText();
-                    break;
-                case HeaderRow header when menu.Kind == "sound" && _volume is { } sound:
-                    header.Detail = $"{Math.Round(sound.Volume * 100)}%";
-                    break;
-            }
-        }
-    }
-
-    private string BatteryText()
-    {
-        if (_battery is not { IsAvailable: true, IsPresent: true } battery)
-        {
-            return _battery is { IsAvailable: true } ? "No battery" : "Not available";
+            rows.Add(new HeaderRow { Label = "Device", Detail = Environment.MachineName });
+            rows.Add(new DividerRow());
+            AddDeviceRows(rows);
+            return;
         }
 
-        var percent = $"{Math.Round(battery.Percentage).ToString(CultureInfo.InvariantCulture)}%";
-        return battery.State switch
+        if (_status is { } status)
         {
-            BatteryState.Charging => $"Charging, {percent}",
-            BatteryState.Full => "Charged",
-            _ => percent,
-        };
-    }
-
-    private double BrightnessOf(LunaView view)
-    {
-        if (_brightness is not { } brightness || !brightness.TryGet(view.Output, out var value))
-        {
-            return 1;
-        }
-
-        var max = brightness.Max(view.Output);
-        return max == 0 ? 1 : value / (double)max;
-    }
-
-    private void SetBrightness(LunaView view, double value)
-    {
-        if (_brightness is { } brightness && brightness.Supports(view.Output))
-        {
-            var max = brightness.Max(view.Output);
-            brightness.Set(view.Output, (uint)Math.Clamp(Math.Round(value * max), 1, max));
+            status.Fill(menu.Kind, rows, view.Output, AddDeviceRows);
         }
     }
 
@@ -288,96 +201,20 @@ internal sealed partial class LunaShell
         rows.Add(new ActionRow { Key = "shutdown", Label = "Shut Down" });
     }
 
-    private void FillWifi(System.Collections.ObjectModel.ObservableCollection<MenuRow> rows)
+    private void RefreshWifiMenus()
     {
-        if (_network is not { IsAvailable: true, HasWirelessDevice: true } network)
+        foreach (var view in _views)
         {
-            rows.Add(new HeaderRow { Label = "Wi-Fi" });
-            rows.Add(new NoteRow { Label = _network?.Reason ?? "No Wi-Fi device" });
-            return;
-        }
-
-        rows.Add(new ToggleRow { Key = "wifi", Label = "Wi-Fi", On = network.WirelessEnabled, Changed = on => _ = network.SetWirelessEnabled(on) });
-        if (network.WirelessEnabled)
-        {
-            rows.Add(new DividerRow());
-            foreach (var point in network.AccessPoints)
+            if (view.Menu is { Open: true, Kind: "wifi" } menu)
             {
-                var secured = point.Security != AccessPointSecurity.Open;
-                rows.Add(new ActionRow
+                FillSystemMenu(view, menu, rebuild: true);
+                if (_status is { WifiAsking: true } && menu.Chrome.Surface is { } surface)
                 {
-                    Key = $"ap:{point.Ssid}",
-                    Label = point.Ssid,
-                    Detail = $"{(secured ? "secured  " : "")}{point.Strength}%",
-                    Checked = point.IsActive,
-                    Invoked = () => JoinNetwork(network, point),
-                });
+                    _seat.Router.SetKeyboardFocus(surface);
+                }
+
+                view.Scheduler?.ScheduleRepaint();
             }
-        }
-
-        rows.Add(new DividerRow());
-        rows.Add(new NoteRow { Key = "settings", Label = "Use your network settings to join a new secured network." });
-    }
-
-    private void JoinNetwork(NetworkStatus network, NetworkAccessPoint point)
-    {
-        if (point.IsActive)
-        {
-            return;
-        }
-
-        if (point.Saved is not null)
-        {
-            _ = network.ActivateSaved(point);
-            _report.Line($"WIFI join {point.Ssid} saved");
-            return;
-        }
-
-        if (point.Security == AccessPointSecurity.Open)
-        {
-            _ = network.ActivateOpen(point);
-            _report.Line($"WIFI join {point.Ssid} open");
-            return;
-        }
-
-        _report.Line($"WIFI join {point.Ssid} needs-settings");
-    }
-
-    private void FillBluetooth(System.Collections.ObjectModel.ObservableCollection<MenuRow> rows)
-    {
-        if (_bluetooth is not { IsAvailable: true, HasAdapter: true } bluetooth)
-        {
-            rows.Add(new HeaderRow { Label = "Bluetooth" });
-            rows.Add(new NoteRow { Label = _bluetooth?.Reason ?? "No Bluetooth adapter" });
-            return;
-        }
-
-        rows.Add(new ToggleRow { Key = "bluetooth", Label = "Bluetooth", On = bluetooth.Powered, Changed = on => _ = bluetooth.SetPowered(on) });
-        if (!bluetooth.Powered)
-        {
-            return;
-        }
-
-        rows.Add(new DividerRow());
-        if (bluetooth.Devices.Count == 0)
-        {
-            rows.Add(new NoteRow { Label = "No paired devices" });
-        }
-
-        foreach (var device in bluetooth.Devices)
-        {
-            rows.Add(new ActionRow
-            {
-                Key = $"bt:{device.Address}",
-                Label = device.Name,
-                Detail = device.Connected ? "Connected" : "",
-                Checked = device.Connected,
-                Invoked = () =>
-                {
-                    _ = device.Connected ? bluetooth.Disconnect(device) : bluetooth.Connect(device);
-                    _report.Line($"BLUETOOTH {(device.Connected ? "disconnect" : "connect")} {device.Address}");
-                },
-            });
         }
     }
 
@@ -437,6 +274,7 @@ internal sealed partial class LunaShell
                 SliderRow slider => $"slider {slider.Label} {slider.Value:0.##}",
                 ActionRow action => $"action {action.Label}{(action.Checked ? " checked" : "")}{(action.Detail.Length > 0 ? $" | {action.Detail}" : "")}",
                 NoteRow note => $"note {note.Label}",
+                PassphraseRow passphrase => $"passphrase {passphrase.Label}",
                 _ => "divider",
             };
             _report.Line($"  row {text}");

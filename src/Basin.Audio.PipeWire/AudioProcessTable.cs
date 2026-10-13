@@ -1,14 +1,12 @@
-using System.Globalization;
-
 namespace Basin.Audio.PipeWire;
 
 public sealed class AudioProcessTable : IAudioProcessTable
 {
     public static AudioProcessTable Instance { get; } = new();
 
-    public int ParentOf(int pid) => StatField(pid, 1);
+    public int ParentOf(int pid) => ProcessIdentity.ParentOf(pid);
 
-    public int GroupOf(int pid) => StatField(pid, 2);
+    public int GroupOf(int pid) => ProcessIdentity.ProcessGroupOf(pid);
 
     public string? FlatpakAppOf(int pid)
     {
@@ -44,32 +42,5 @@ public sealed class AudioProcessTable : IAudioProcessTable
         }
 
         return null;
-    }
-
-    private static int StatField(int pid, int index)
-    {
-        if (pid <= 0)
-        {
-            return 0;
-        }
-
-        string stat;
-        try
-        {
-            stat = File.ReadAllText($"/proc/{pid}/stat");
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            return 0;
-        }
-
-        var close = stat.LastIndexOf(')');
-        if (close < 0)
-        {
-            return 0;
-        }
-
-        var fields = stat[(close + 2)..].Split(' ');
-        return fields.Length > index && int.TryParse(fields[index], NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : 0;
     }
 }

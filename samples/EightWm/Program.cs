@@ -9,6 +9,11 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        if (args.Length == 3 && args[0] == "--pam-helper")
+        {
+            return Basin.Session.PamHelper.Run(args[1], args[2]);
+        }
+
         var cli = new BasinCommand("A Windows 8 tablet shell on basin.");
         var renderer = cli.Add(CommonOptions.Renderer(Basin.Renderers.RendererCatalog.Names, "vulkan"));
         var backend = cli.Add(CommonOptions.Backend(
@@ -67,15 +72,65 @@ internal static class Program
             Description = "the accent color, as #rrggbb",
             HelpName = "COLOR",
         });
+        var pamHelper = cli.Add(new Option<string?>("--pam-helper-command")
+        {
+            Description = "run `sh -c <command>` to check an unlock entry instead of the PAM helper; it reads one line and prints 1 or 0",
+            HelpName = "COMMAND",
+        });
+        var greeter = cli.Add(new Option<bool>("--greeter")
+        {
+            Description = $"run as a greetd greeter with the Windows 8 lock screen and sign-in screen, reading {EightGreeterConfig.DefaultPath} and no user configuration",
+        });
+        var greetdSock = cli.Add(new Option<string?>("--greetd-sock")
+        {
+            Description = "with --greeter, the greetd socket instead of GREETD_SOCK",
+            HelpName = "PATH",
+        });
+        var demo = cli.Add(new Option<bool>("--demo")
+        {
+            Description = "with --greeter, serve a fake greetd in the process: any user, password demo. Refused when GREETD_SOCK is set",
+        });
+        var state = cli.Add(new Option<string?>("--state")
+        {
+            Description = "with --greeter, the state file (default $STATE_DIRECTORY/state.toml, else /var/lib/eight-wm-greeter/state.toml)",
+            HelpName = "PATH",
+        });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var client = cli.Add(CommonOptions.Client());
         var frames = cli.Add(CommonOptions.Frames());
-        _ = IpcCli.AddOption(cli);
+        var ipcOption = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
             var chosen = result.GetValue(backend);
             cli.ConfigureLogging(result);
+            if (result.GetValue(greeter))
+            {
+                var greeterConfig = result.GetValue(config);
+                var statePath = result.GetValue(state);
+                Basin.Greetd.GreeterEnvironment.PrepareDirectories(Path.GetDirectoryName(statePath ?? Basin.Greetd.GreeterMemory.DefaultPath(EightGreeter.StateProgram)));
+                Basin.Greetd.GreeterEnvironment.PrepareSessionBus();
+                var greeterOptions = new EightGreeterOptions
+                {
+                    Backend = chosen.Kind,
+                    SocketFd = chosen.SocketFd,
+                    Renderer = result.GetValue(renderer)!,
+                    RendererGiven = result.GetResult(renderer) is { Implicit: false } || Environment.GetEnvironmentVariable("BASIN_RENDERER") is { Length: > 0 },
+                    Outputs = Math.Max(1, result.GetValue(outputs)),
+                    Scales = result.GetValue(scales)!,
+                    Frames = result.GetValue(frames),
+                    Screenshot = result.GetValue(screenshot),
+                    ConfigPath = string.Equals(greeterConfig, "false", StringComparison.OrdinalIgnoreCase) ? null : greeterConfig ?? EightGreeterConfig.DefaultPath,
+                    StatePath = statePath,
+                    GreetdSocket = result.GetValue(greetdSock),
+                    Demo = result.GetValue(demo),
+                    Ipc = result.GetResult(ipcOption) is { Implicit: false } ? IpcCli.Read(cli, result) : IpcChoice.Off,
+                };
+                var greeterStatus = EightGreeter.Run(greeterOptions, BasinLog.For("greeter"), out var greeterRendered);
+                cli.ReportFrames(greeterRendered);
+                return greeterStatus;
+            }
+
             var explicitly = new HashSet<string>(StringComparer.Ordinal);
             void Note<T>(string name, Option<T> option)
             {
@@ -114,6 +169,7 @@ internal static class Program
                 Accent = Basin.Config.TomlColor.Argb(result.GetValue(accent), Shell.DefaultAccent) | 0xff000000,
                 SocketFd = chosen.SocketFd,
                 Explicit = explicitly,
+                PamHelperCommand = result.GetValue(pamHelper),
             };
 
             var status = Shell.Run(options, BasinLog.For("EightWm"), out var rendered);

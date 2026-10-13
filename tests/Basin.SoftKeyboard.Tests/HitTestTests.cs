@@ -32,7 +32,7 @@ public sealed class HitTestTests
     }
 
     private static int Cell(SoftKeyboardEngine engine, string name) =>
-        name == "right shift" ? KeyGrid.Index(3, 10) : Keys.Find(engine, name);
+        name == "right shift" ? engine.Grid.Index(3, 10) : Keys.Find(engine, name);
 
     [Fact]
     public void Space_wins_its_own_upper_edge_against_a_letter_above()

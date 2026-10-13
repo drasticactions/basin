@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             xmlns:basin="using:Basin.UI.Avalonia"
+             x:Class="EightWm.NetworkFlyoutView"
+             x:DataType="local:NetworkModel"
+             AutomationProperties.Name="Networks">
+  <Border x:Name="Panel" Width="346" Background="{DynamicResource SignInFlyout}" Padding="20" IsVisible="{Binding Open}">
+    <StackPanel Spacing="10">
+      <TextBlock Text="Networks" FontSize="28" FontWeight="Light" Foreground="{DynamicResource SignInText}" />
+      <ToggleSwitch x:Name="WifiSwitch" Content="Wi-Fi" IsChecked="{Binding WifiEnabled}" IsVisible="{Binding HasWifi}" />
+      <ItemsControl x:Name="PointList" ItemsSource="{Binding Points}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="local:NetworkPointEntry">
+            <Button Classes="menuRow" Command="{Binding Choose}" IsEnabled="{Binding Enabled}" HorizontalAlignment="Stretch"
+                    AutomationProperties.Name="{Binding Ssid}">
+              <StackPanel>
+                <TextBlock Text="{Binding Ssid}" FontSize="18" />
+                <TextBlock Text="{Binding Detail}" FontSize="13" Opacity="0.7" />
+              </StackPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <StackPanel x:Name="PassphrasePanel" Spacing="8" IsVisible="{Binding Asking}">
+        <TextBlock Text="{Binding AskingFor, StringFormat='Enter the network security key for {0}'}" TextWrapping="Wrap" Foreground="{DynamicResource SignInText}" />
+        <basin:SecretTextBox x:Name="Passphrase" PasswordChar="●" Text="{Binding Passphrase, Mode=TwoWay}" AutomationProperties.Name="Network security key" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Button Content="Next" Command="{Binding Connect}" />
+          <Button Content="Cancel" Command="{Binding CancelPassphrase}" />
+        </StackPanel>
+      </StackPanel>
+      <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SignInError}" />
+    </StackPanel>
+  </Border>
+</UserControl>

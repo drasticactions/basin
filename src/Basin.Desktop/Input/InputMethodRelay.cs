@@ -5,7 +5,7 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
-public sealed class InputMethodRelay : ITextInputMethod, IDisposable
+public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, IDisposable
 {
     public const int Version = 1;
 

@@ -1,6 +1,7 @@
 using System.Text;
 using Basin;
 using Basin.Config;
+using Basin.Session;
 
 namespace LunaWm;
 

@@ -56,7 +56,10 @@ internal sealed partial class Shell
                 surface.SetOutputPresence(view.Global, ReferenceEquals(view, home));
             }
 
-            _scales.AnnounceScale(surface, home.Output.Scale);
+            if (home is not null)
+            {
+                _scales.AnnounceScale(surface, home.Output.Scale);
+            }
         }
     }
 
@@ -90,7 +93,7 @@ internal sealed partial class Shell
 
     internal ShellView PrimaryView => Views.Count > 0 ? Views[0] : throw new InvalidOperationException("no output");
 
-    internal ShellView HomeOf(AppWindow app) => _homes.TryGetValue(app, out var view) ? view : PrimaryView;
+    internal ShellView? HomeOf(AppWindow app) => _homes.TryGetValue(app, out var view) ? view : Views.Count > 0 ? PrimaryView : null;
 
     internal ShellView ViewAt(double x, double y)
     {
@@ -178,8 +181,18 @@ internal sealed partial class Shell
             }
 
             configured = true;
-            var view = HomeOf(app);
-            if (app.IsTransient)
+            if (HomeOf(app) is not { } view)
+            {
+                if (app.IsTransient)
+                {
+                    app.PlaceCentered(_lastAppArea);
+                }
+                else
+                {
+                    app.PlaceInCell(_lastAppArea);
+                }
+            }
+            else if (app.IsTransient)
             {
                 app.PlaceCentered(CellOfParent(app, view));
             }
@@ -227,6 +240,20 @@ internal sealed partial class Shell
 
     private void Map(AppWindow app)
     {
+        if (Views.Count == 0)
+        {
+            _apps.Add(app);
+            ApplyRules(app);
+            if (app.Surface is { } parkedSurface)
+            {
+                _owners[parkedSurface] = app;
+            }
+
+            Park(app);
+            _report.Line($"APP + {app.AppId} {app.Title}");
+            return;
+        }
+
         var view = PlacementView();
         _homes[app] = view;
         _apps.Add(app);
@@ -288,7 +315,18 @@ internal sealed partial class Shell
             _owners.Remove(surface);
         }
 
-        var view = HomeOf(app);
+        if (_parked.Remove(app) || HomeOf(app) is not { } view)
+        {
+            _homes.Remove(app);
+            if (!app.Slot.IsDestroyed)
+            {
+                app.Slot.Enabled = false;
+            }
+
+            _report.Line($"APP - {app.AppId}");
+            return;
+        }
+
         if (view.Flip is { } flip && ReferenceEquals(flip.App, app))
         {
             flip.App = null;
@@ -616,7 +654,7 @@ internal sealed partial class Shell
         app.FocusStamp = ++_focusClock;
         app.Slot.RaiseToTop();
         _capture.Stack.RaiseChanged();
-        HomeOf(app).Host.Activate(app);
+        HomeOf(app)?.Host.Activate(app);
         if (_locked)
         {
             _lockedFocus = app;
@@ -628,7 +666,11 @@ internal sealed partial class Shell
 
     internal void Show(AppWindow app)
     {
-        var view = HomeOf(app);
+        if (HomeOf(app) is not { } view)
+        {
+            return;
+        }
+
         if (!view.Host.Holds(app))
         {
             view.Host.Replace(app);
@@ -686,11 +728,14 @@ internal sealed partial class Shell
         }
 
         app.Closing = true;
-        var view = HomeOf(app);
-        view.Host.Eject(app);
-        view.Host.Forget(app);
-        view.Switcher?.Forget(app);
-        Relayout(view);
+        if (HomeOf(app) is { } view)
+        {
+            view.Host.Eject(app);
+            view.Host.Forget(app);
+            view.Switcher?.Forget(app);
+            Relayout(view);
+        }
+
         _report.Line($"CLOSE {app.AppId}");
     }
 

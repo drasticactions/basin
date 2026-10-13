@@ -141,6 +141,7 @@ internal sealed partial class Dam : IDisposable
             ContinuousRepaint = options.Frames > 0,
             LastOnly = options.LastOutputOnly,
             NestedName = _ => "dam",
+            ConfiguredScale = static _ => 1,
             VrrPacing = options.VrrPacing,
             ContentTypeOverride = options.GameContent ? OutputContentType.Game : null,
         };

@@ -369,6 +369,41 @@ internal sealed partial class LunaShell
 
         _report.Register(methods, "lunawm/appmenu", "appmenu", PrintAppMenu);
 
+        _report.Register(methods, "lunawm/wifi-join", "wifi-join {ssid...}", (ref IpcParams p, IpcReply _) =>
+        {
+            var ssid = p.GetString("ssid");
+            if (!p.Failed)
+            {
+                if (_status?.Network?.AccessPoints.FirstOrDefault(point => point.Ssid == ssid) is { } point)
+                {
+                    _status.Join(point);
+                }
+                else
+                {
+                    _report.Line($"WIFI join {ssid} unknown");
+                }
+            }
+        });
+
+        _report.Register(methods, "lunawm/wifi-passphrase", "wifi-passphrase {text...}", (ref IpcParams p, IpcReply _) =>
+        {
+            var text = p.GetString("text");
+            if (!p.Failed)
+            {
+                foreach (var view in _views)
+                {
+                    if (view.Menu is { Open: true, Kind: "wifi" } menu && menu.Model.Rows.OfType<PassphraseRow>().FirstOrDefault() is { } row)
+                    {
+                        row.Text = text;
+                        row.Submit();
+                        return;
+                    }
+                }
+
+                _report.Line("WIFI passphrase none");
+            }
+        });
+
         _report.Register(methods, "lunawm/appmenu-choose", "appmenu-choose {path...}", (ref IpcParams p, IpcReply _) =>
         {
             var path = p.GetString("path");

@@ -43,6 +43,9 @@
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
     <ProjectReference Include="../../src/Basin.Kinematics/Basin.Kinematics.csproj" />
     <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd/Basin.Greetd.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd.Host/Basin.Greetd.Host.csproj" />
     <ProjectReference Include="../../src/Basin.SystemStatus/Basin.SystemStatus.csproj" />
     <ProjectReference Include="../../src/Basin.Audio.PipeWire/Basin.Audio.PipeWire.csproj" />
     <ProjectReference Include="../../src/Basin.AppMenu/Basin.AppMenu.csproj" />
@@ -51,7 +54,9 @@
     <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
     <ProjectReference Include="../../src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
     <ProjectReference Include="../../src/Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard.Avalonia/Basin.SoftKeyboard.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.SoftKeyboard.Fcitx5/Basin.SoftKeyboard.Fcitx5.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard.Ipc/Basin.SoftKeyboard.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />

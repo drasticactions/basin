@@ -1,0 +1,65 @@
+# basin-greeter configuration. The greeter reads /etc/basin-greeter/basin-greeter.toml,
+# or the file --config names. It never writes this file. SIGHUP rereads it.
+# Every key below shows its default.
+
+[look]
+# auto | light | dark
+theme = "auto"
+# An image path, scaled to cover each output, or "" for background_color.
+background = ""
+background_color = "#203040"
+accent = "#3b82f6"
+# A font family, or "" for the toolkit's default.
+font = ""
+# strftime-style: %H %M %S %I %p %a %A %b %B %d %e %m %Y %%
+clock = "%H:%M"
+
+[users]
+# false skips the list and shows a username field.
+list = true
+# User names that are never listed.
+hide = []
+# 0 reads UID_MIN and UID_MAX from /etc/login.defs.
+min_uid = 0
+max_uid = 0
+
+[sessions]
+# The session id for a user with no last session. "" picks the first Wayland entry.
+default = ""
+# The command that starts an X11 session. [] hides xsessions.
+x11_wrapper = ["startx"]
+# gtkgreet's file: one command for each line.
+environments = "/etc/greetd/environments"
+# true shows a field where the user types any command to run as the session.
+allow_command = false
+
+[keyboard]
+# xkb layouts the picker offers, as "us" or "de(neo)". [] shows no picker.
+layouts = []
+# auto | always | never
+on_screen = "auto"
+# xs | s | m | l
+on_screen_size = "m"
+
+[power]
+enabled = true
+
+[status]
+battery = true
+network = true
+
+[network]
+# false makes the network glyph read-only.
+join = true
+
+[accessibility]
+high_contrast = false
+# 1.0, 1.25, 1.5 or 2.0
+text_scale = 1.0
+# off | toggle | on
+screen_reader = "toggle"
+orca = ["orca", "--replace"]
+
+[render]
+# A renderer name, or "" for the fallback chain vulkan, gl, pixman.
+renderer = ""

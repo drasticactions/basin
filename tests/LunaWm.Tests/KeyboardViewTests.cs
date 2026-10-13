@@ -55,7 +55,7 @@ public sealed class KeyboardViewTests
     private static Point FaceCenter(KeyboardModel model, string name)
     {
         var grid = model.Engine.Grid;
-        for (var cell = 0; cell < KeyGrid.CellCount; cell++)
+        for (var cell = 0; cell < KeyGrid.DefaultRows * KeyGrid.DefaultColumns; cell++)
         {
             if (grid[cell] is { IsVisible: true, Plain: { } plain } && (plain.IsText ? plain.Text : plain.Name) == name)
             {
@@ -223,7 +223,7 @@ public sealed class KeyboardViewTests
     private static int KeyIndex(KeyboardModel model, string name)
     {
         var grid = model.Engine.Grid;
-        for (var cell = 0; cell < KeyGrid.CellCount; cell++)
+        for (var cell = 0; cell < KeyGrid.DefaultRows * KeyGrid.DefaultColumns; cell++)
         {
             if (grid[cell] is { IsVisible: true, Plain: { } plain } && (plain.IsText ? plain.Text : plain.Name) == name)
             {

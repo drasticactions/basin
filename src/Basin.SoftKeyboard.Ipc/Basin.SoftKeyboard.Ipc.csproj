@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.SoftKeyboard.Ipc</PackageId>
+    <RootNamespace>Basin.SoftKeyboard.Ipc</RootNamespace>
+    <Description>The keyboard control socket methods over a Basin.SoftKeyboard SoftKeyboardSession.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
+    <ProjectReference Include="../Basin.Ipc/Basin.Ipc.csproj" />
+  </ItemGroup>
+
+</Project>

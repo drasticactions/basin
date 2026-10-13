@@ -103,6 +103,8 @@ public abstract class SystemStatusReader : IDisposable
 
     private protected MessageWriter Writer() => Connection!.GetMessageWriter();
 
+    private protected void Refresh() => Schedule();
+
     private async Task RunCallAsync(DBusConnection connection, MessageBuffer message, string what, TaskCompletionSource<bool> completion)
     {
         var result = false;

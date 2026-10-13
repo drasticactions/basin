@@ -110,10 +110,13 @@ internal sealed partial class Shell : IDisposable
             .Use(_layout)
             .With(servicePack)
             .With(_colorPack)
-            .Use<Basin.Capabilities.IInputSink>(inputSink);
+            .Use<Basin.Capabilities.IInputSink>(inputSink)
+            .Use<Basin.Capabilities.ILockState>(_lockState);
 
-        _services.Install(DesktopPack.For("eight-wm"));
         _config = Config.Load(_options.ConfigPath, _log);
+        var desktop = DesktopPack.For("eight-wm");
+        InstallKeyboard(desktop);
+        _services.Install(desktop);
         Basin.XWayland.XWaylandModule? xwayland = null;
         if (OperatingSystem.IsLinux() && _options.XWayland)
         {
@@ -174,6 +177,7 @@ internal sealed partial class Shell : IDisposable
 
             var view = ViewOf(driver);
             _shellViews.Remove(view);
+            Evacuate(view);
             view.Destroy();
         };
         _loop = new CompositorRunLoop(_host, _outputs);
@@ -213,6 +217,7 @@ internal sealed partial class Shell : IDisposable
         });
         _popupLayer = new SceneTree(_scene.Root);
         _uiDriver = new UIDriver(_ui, _host.Loop) { Index = _chromeIndex, PopupLayer = _popupLayer };
+        StillCaret.Apply(Avalonia.Application.Current);
         _router = new UISurfaceRouter(_scene, _chromeIndex);
 
         _seat = new ShellSeat(_host, _services, this, _outputs, _scene, _layout, cursorTheme, inputSink, log);
@@ -222,6 +227,7 @@ internal sealed partial class Shell : IDisposable
         AttachColor();
         AttachScales();
         AttachShell();
+        AttachKeyboard();
         AttachLayerShell();
         if (xwayland is not null)
         {
@@ -238,6 +244,7 @@ internal sealed partial class Shell : IDisposable
         _outputs.Added += driver => AttachTitle(ViewOf(driver));
         _outputs.Added += driver => AttachSwitcher(ViewOf(driver));
         _outputs.Added += _ => _popupLayer.RaiseToTop();
+        _outputs.Added += driver => Unpark(ViewOf(driver));
         AttachSessionLock();
         _outputs.CreateInitialOutputs();
         if (_options.Backend == BackendKind.Drm && Views.Count == 0)
@@ -258,6 +265,7 @@ internal sealed partial class Shell : IDisposable
         }
 
         ApplySettings();
+        StartIdleLock();
         if (_host.Parent is { } parent)
         {
             parent.ParentGone += Stop;
@@ -396,10 +404,12 @@ internal sealed partial class Shell : IDisposable
     private static RenderStack CreateStack(string rendererName, BasinLogger log)
     {
         var name = rendererName;
-        return RendererCatalog.CreateWithFallback(
+        var stack = RendererCatalog.CreateWithFallback(
             ref name,
             RendererCatalog.FindRenderNode(),
             fallback => log.Warn($"{(fallback.Describe())}"));
+        Basin.Diagnostics.BasinReport.Line($"RENDERER {name}");
+        return stack;
     }
 
     internal Basin.UI.Avalonia.AvaloniaUIHost Ui => _ui;
@@ -416,6 +426,8 @@ internal sealed partial class Shell : IDisposable
         _processes.Dispose();
         _desktopWatch?.Dispose();
         _colorPack?.Luts.Dispose();
+        StopOwnLock();
+        StopKeyboard();
         ReleaseChrome();
         _uiDriver.Dispose();
         _screens.Dispose();

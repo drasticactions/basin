@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Basin.Cli;
 using Basin.Diagnostics;
+using Basin.Session;
 
 namespace LunaWm;
 
@@ -32,14 +33,59 @@ internal static class Program
             Description = "run `sh -c <command>` to check an unlock entry instead of the PAM helper; it reads one line and prints 1 or 0",
             HelpName = "COMMAND",
         });
+        var greeter = cli.Add(new Option<bool>("--greeter")
+        {
+            Description = $"run as a greetd greeter with LunaWm's lock screen look, reading {LunaGreeterConfig.DefaultPath} and no user configuration",
+        });
+        var greetdSock = cli.Add(new Option<string?>("--greetd-sock")
+        {
+            Description = "with --greeter, the greetd socket instead of GREETD_SOCK",
+            HelpName = "PATH",
+        });
+        var demo = cli.Add(new Option<bool>("--demo")
+        {
+            Description = "with --greeter, serve a fake greetd in the process: any user, password demo. Refused when GREETD_SOCK is set",
+        });
+        var state = cli.Add(new Option<string?>("--state")
+        {
+            Description = "with --greeter, the state file (default $STATE_DIRECTORY/state.toml, else /var/lib/luna-wm-greeter/state.toml)",
+            HelpName = "PATH",
+        });
         var screenshot = cli.Add(CommonOptions.Screenshot());
         var frames = cli.Add(CommonOptions.Frames());
-        _ = IpcCli.AddOption(cli);
+        var ipcOption = IpcCli.AddOption(cli);
 
         return cli.Run(args, result =>
         {
             var chosen = result.GetValue(backend);
             cli.ConfigureLogging(result);
+            if (result.GetValue(greeter))
+            {
+                var greeterConfig = result.GetValue(config);
+                var statePath = result.GetValue(state);
+                Basin.Greetd.GreeterEnvironment.PrepareDirectories(Path.GetDirectoryName(statePath ?? Basin.Greetd.GreeterMemory.DefaultPath(LunaGreeter.StateProgram)));
+                Basin.Greetd.GreeterEnvironment.PrepareSessionBus();
+                var greeterOptions = new LunaGreeterOptions
+                {
+                    Backend = chosen.Kind,
+                    SocketFd = chosen.SocketFd,
+                    Renderer = result.GetValue(renderer)!,
+                    RendererGiven = result.GetResult(renderer) is { Implicit: false } || Environment.GetEnvironmentVariable("BASIN_RENDERER") is { Length: > 0 },
+                    Outputs = Math.Max(1, result.GetValue(outputs)),
+                    Scales = result.GetValue(scales)!,
+                    Frames = result.GetValue(frames),
+                    Screenshot = result.GetValue(screenshot),
+                    ConfigPath = string.Equals(greeterConfig, "false", StringComparison.OrdinalIgnoreCase) ? null : greeterConfig ?? LunaGreeterConfig.DefaultPath,
+                    StatePath = statePath,
+                    GreetdSocket = result.GetValue(greetdSock),
+                    Demo = result.GetValue(demo),
+                    Ipc = result.GetResult(ipcOption) is { Implicit: false } ? IpcCli.Read(cli, result) : Basin.Cli.IpcChoice.Off,
+                };
+                var greeterStatus = LunaGreeter.Run(greeterOptions, BasinLog.For("greeter"), out var greeterRendered);
+                cli.ReportFrames(greeterRendered);
+                return greeterStatus;
+            }
+
             var log = BasinLog.For("LunaWm");
             var configValue = result.GetValue(config);
             var noConfig = string.Equals(configValue, "false", StringComparison.OrdinalIgnoreCase);

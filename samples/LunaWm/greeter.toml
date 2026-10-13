@@ -1,0 +1,60 @@
+# luna-wm --greeter configuration. The greeter reads /etc/luna-wm/greeter.toml,
+# or the file --config names. It never reads ~/.config/luna-wm and never writes
+# this file. SIGHUP rereads it. Every key below shows its default.
+
+[look]
+# An image path, scaled to cover each output, or "" for the lock screen gradient.
+wallpaper = ""
+# 12 | 24
+clock = "12"
+
+[users]
+# false skips the avatar strip and asks for a username.
+list = true
+# User names that are never listed.
+hide = []
+# 0 reads UID_MIN and UID_MAX from /etc/login.defs.
+min_uid = 0
+max_uid = 0
+
+[sessions]
+# The session id for a user with no last session. "" picks the first Wayland entry.
+default = ""
+# The command that starts an X11 session. [] hides xsessions.
+x11_wrapper = ["startx"]
+# gtkgreet's file: one command for each line.
+environments = "/etc/greetd/environments"
+# true runs the command text the greeter is given through greeter/command as the session.
+allow_command = false
+
+[keyboard]
+# xkb layouts the device menu offers, as "us" or "de(neo)". One or none shows no list.
+layouts = []
+# When the on-screen keyboard rises: auto (on a touch in a field) | always | never
+on_screen = "auto"
+# xs | s | m | l
+on_screen_size = "m"
+
+[power]
+# false removes Restart and Shut Down from the menus.
+enabled = true
+
+[status]
+battery = true
+network = true
+
+[network]
+# false makes the Wi-Fi menu read-only.
+join = true
+
+[accessibility]
+high_contrast = false
+# 1.0, 1.25, 1.5 or 2.0
+text_scale = 1.0
+# off | toggle | on
+screen_reader = "toggle"
+orca = ["orca", "--replace"]
+
+[render]
+# A renderer name, or "" for the fallback chain vulkan, gl, pixman.
+renderer = ""

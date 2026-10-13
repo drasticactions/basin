@@ -196,6 +196,9 @@ public sealed class RoutingTests
 
         public void ControlKey(uint keycode, uint timeMs) => Log += $"[ctrl+{keycode}]";
 
+        public void ModifiedKey(uint keycode, uint xkbModifiers, KeyModifiers modifiers, uint timeMs) =>
+            Log += $"[{modifiers}+{keycode}{(xkbModifiers != 0 ? "/" + xkbModifiers : string.Empty)}]";
+
         public int Type(string text, uint timeMs)
         {
             Log += text;

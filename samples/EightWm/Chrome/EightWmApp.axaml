@@ -1,12 +1,14 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:win="https://github.com/avawin"
+             xmlns:local="using:EightWm"
              x:Class="EightWm.EightWmApp"
              RequestedThemeVariant="Default">
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://eight-wm/Chrome/CharmGlyphs.axaml" />
+        <ResourceInclude Source="avares://eight-wm/Chrome/SignIn/SignInGlyphs.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>
@@ -44,6 +46,69 @@
     </Style>
     <Style Selector="Button.pagearrow:pressed">
       <Setter Property="Foreground" Value="Black" />
+    </Style>
+    <Style Selector="local|SignInView Button, local|LockCurtainView Button, local|NetworkFlyoutView Button">
+      <Setter Property="Transitions" Value="{x:Null}" />
+    </Style>
+    <Style Selector="Button.curtainGlyph, Button.corner, Button.eye, Button.submit, Button.userTile, Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource SignInText}" />
+    </Style>
+    <Style Selector="Button.userTile:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.userTile:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.userTile:pressed">
+      <Setter Property="RenderTransform" Value="scale(0.975)" />
+    </Style>
+    <Style Selector="Button.submit, Button.eye">
+      <Setter Property="Background" Value="{DynamicResource SignInTile}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.backarrow">
+      <Setter Property="Width" Value="40" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="20" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="BorderBrush" Value="White" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}">
+            <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.scale">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,6,0" />
+      <Setter Property="Padding" Value="4,6" />
+    </Style>
+    <Style Selector="Button.menuRow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Foreground" Value="{DynamicResource SignInText}" />
+      <Setter Property="Padding" Value="12,8" />
     </Style>
   </Application.Styles>
 </Application>

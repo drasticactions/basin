@@ -20,6 +20,7 @@ internal sealed partial class Shell
     private static readonly XkbKeysym KeyH = XkbKeysym.FromName("h");
     private static readonly XkbKeysym KeyK = XkbKeysym.FromName("k");
     private static readonly XkbKeysym KeyI = XkbKeysym.FromName("i");
+    private static readonly XkbKeysym KeyL = XkbKeysym.FromName("l");
     private static readonly XkbKeysym KeyPeriod = XkbKeysym.FromName("period");
     private static readonly XkbKeysym KeyGreater = XkbKeysym.FromName("greater");
     private static readonly XkbKeysym KeyF4 = XkbKeysym.FromName("F4");
@@ -75,6 +76,12 @@ internal sealed partial class Shell
             return true;
         }
 
+        if (IsKeyboardChord(symbol, super, shift, alt, control))
+        {
+            ToggleKeyboard();
+            return true;
+        }
+
         if (!super)
         {
             return !control && !alt && TypeOnStart(view, symbol, shift);
@@ -99,6 +106,12 @@ internal sealed partial class Shell
         if (symbol == KeyC)
         {
             ToggleCharms(view);
+            return true;
+        }
+
+        if (symbol == KeyL)
+        {
+            Lock();
             return true;
         }
 

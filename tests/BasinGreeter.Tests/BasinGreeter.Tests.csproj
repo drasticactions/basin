@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>BasinGreeter.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../samples/BasinGreeter/BasinGreeter.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd/Basin.Greetd.csproj" />
+    <ProjectReference Include="../../src/Basin.SystemStatus/Basin.SystemStatus.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../Basin.Tests/Greetd/FakeGreetd.cs" Link="FakeGreetd.cs" />
+    <Compile Include="../Basin.Tests/SystemStatus/MockSystemService.cs" Link="MockSystemService.cs" />
+    <Compile Include="../Basin.Tests/Portal/PrivateBus.cs" Link="PrivateBus.cs" />
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Goldens/**" />
+  </ItemGroup>
+
+</Project>

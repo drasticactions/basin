@@ -15,7 +15,8 @@ internal sealed partial class Shell
     private void CreateLockDriver()
     {
         _lockLayer = new SceneTree(_scene.Root);
-        _lockDriver = new SessionLockSceneDriver(_services, _lockLayer, _layout, SetLocked);
+        _lockDriver = new SessionLockSceneDriver(_services, _lockLayer, _layout, SetExternalLocked);
+        CreateOwnLock();
     }
 
     private void AttachSessionLock()
@@ -23,6 +24,13 @@ internal sealed partial class Shell
         _lockDriver.Locked += () => _report.Line($"LOCKED");
         _lockDriver.Unlocked += () =>
         {
+            if (_ownLocked)
+            {
+                _report.Line($"UNLOCKED external");
+                ApplyLock();
+                return;
+            }
+
             if (_lockedFocus is { Surface: { } surface } && _apps.Contains(_lockedFocus))
             {
                 Seat.Keyboard.NotifyEnter(surface);
@@ -39,9 +47,17 @@ internal sealed partial class Shell
         _outputs.Added += driver =>
         {
             ViewOf(driver).Root.Enabled = !_locked;
+            if (_ownLocked)
+            {
+                AddLockScreen(ViewOf(driver));
+                UpdateLockClock();
+            }
+
+            _ownLockLayer.RaiseToTop();
             _lockLayer.RaiseToTop();
         };
         _outputs.LayoutChanged += _lockDriver.Reconfigure;
+        _outputs.LayoutChanged += PlaceLockScreens;
     }
 
     private void SetLocked(bool locked)

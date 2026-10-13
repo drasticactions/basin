@@ -31,6 +31,7 @@ internal sealed partial class ShellSeat :
     private readonly CursorController _cursor;
     private readonly CursorImageTheme _cursorTheme;
     private readonly SeatIdleSource _idle;
+    private Basin.Capabilities.IUISurface? _lockButtonSurface;
     private readonly PointerDelivery _delivery;
     private readonly EdgeSwipeGesture _edgeGesture = new();
     private readonly SeatTouchDriver _touch;
@@ -102,6 +103,7 @@ internal sealed partial class ShellSeat :
             if (surface is not null)
             {
                 _shell.Focus(_shell.OwnerOf(surface));
+                _shell.NoteClientTouch(surface);
             }
         };
 
@@ -116,7 +118,7 @@ internal sealed partial class ShellSeat :
         inputSink.OnKey = (keyboard, timeMs, key, pressed) =>
         {
             _seat.Keyboard.Activate(keyboard);
-            OnKey(timeMs, key, pressed);
+            OnKey(timeMs, key, pressed, _shell.IsInputMethodKeyboard(keyboard?.Tag));
             return true;
         };
         inputSink.OnKeyboardCreated = () => _seat.SetCapability(SeatCapability.Keyboard, true);
@@ -187,6 +189,7 @@ internal sealed partial class ShellSeat :
 
     private void UsePointer()
     {
+        _shell.NotePointerInput();
         if (!_touchDriving)
         {
             return;
@@ -253,11 +256,32 @@ internal sealed partial class ShellSeat :
         _binder.BindLibinput(libinput);
     }
 
-    internal void OnKey(uint timeMs, uint key, bool pressed)
+    internal void OnKey(uint timeMs, uint key, bool pressed) => OnKey(timeMs, key, pressed, fromInputMethod: false);
+
+    internal void OnKey(uint timeMs, uint key, bool pressed, bool fromInputMethod)
     {
         _idle.NotifyActivity();
         var symbol = _seat.Keyboard.KeysymFor(key);
+        if (!fromInputMethod && key is not (29 or 97 or 42 or 54 or 56 or 100 or 125 or 126) &&
+            !(pressed && _shell.IsKeyboardChord(symbol, SuperHeld, ShiftHeld, AltHeld, ControlHeld)))
+        {
+            _shell.NoteHardwareKey(pressed);
+        }
+
         if (_shell.IsLocked)
+        {
+            if (_shell.OwnLockShown)
+            {
+                _shell.Router.Key(timeMs, key, pressed);
+                _seat.Keyboard.NotifyKeyConsumed(key, pressed);
+                return;
+            }
+
+            _seat.Keyboard.NotifyKey(timeMs, key, pressed);
+            return;
+        }
+
+        if (_shell.Views.Count == 0)
         {
             _seat.Keyboard.NotifyKey(timeMs, key, pressed);
             return;
@@ -291,6 +315,16 @@ internal sealed partial class ShellSeat :
         uint timeMs, double dx = 0, double dy = 0, double? unaccelDx = null, double? unaccelDy = null,
         bool fromMotion = true)
     {
+        if (fromMotion)
+        {
+            _idle.NotifyActivity();
+        }
+
+        if (_shell.Views.Count == 0)
+        {
+            return;
+        }
+
         if (_shell.IsLocked)
         {
             _pointerEdge = false;
@@ -300,9 +334,15 @@ internal sealed partial class ShellSeat :
             }
 
             _cursor.MoveTo(_pointer.X, _pointer.Y);
+            if (_shell.OwnLockShown)
+            {
+                var lockRoute = _shell.Router.PointerMotion(timeMs, _pointer.X, _pointer.Y);
+                TakeCursor(lockRoute.Cursor ?? Shell.PointerCursor);
+                return;
+            }
+
             var locked = _scene.SurfaceAt(_pointer.X, _pointer.Y);
             _delivery.Motion(timeMs, locked?.Surface, locked?.X ?? 0, locked?.Y ?? 0, _pointer.X, _pointer.Y);
-            _idle.NotifyActivity();
             return;
         }
 
@@ -314,7 +354,6 @@ internal sealed partial class ShellSeat :
                 case TouchGestureVerdict.Claim:
                 case TouchGestureVerdict.Owned:
                     _cursor.MoveTo(_pointer.X, _pointer.Y);
-                    _idle.NotifyActivity();
                     return;
                 case TouchGestureVerdict.Decline:
                     _pointerEdge = false;
@@ -336,7 +375,6 @@ internal sealed partial class ShellSeat :
         {
             _shell.DragSplitter(dragging, _pointer.X - dragging.Box.X, _pointer.Y - dragging.Box.Y);
             TakeCursor(Shell.SplitterCursor(dragging));
-            _idle.NotifyActivity();
             return;
         }
 
@@ -345,7 +383,6 @@ internal sealed partial class ShellSeat :
                 hoverView, _pointer.X - hoverView.Box.X, _pointer.Y - hoverView.Box.Y, PointerTouchId))
         {
             TakeCursor(Shell.PointerCursor);
-            _idle.NotifyActivity();
             return;
         }
 
@@ -360,7 +397,6 @@ internal sealed partial class ShellSeat :
         {
             _shell.Router.PointerLeave();
             TakeCursor(owned);
-            _idle.NotifyActivity();
             return;
         }
 
@@ -373,7 +409,6 @@ internal sealed partial class ShellSeat :
         if (route.Surface is not null)
         {
             TakeCursor(route.Cursor ?? Shell.PointerCursor);
-            _idle.NotifyActivity();
             return;
         }
 
@@ -382,20 +417,17 @@ internal sealed partial class ShellSeat :
                 hit?.Surface) is { } chrome)
         {
             TakeCursor(chrome);
-            _idle.NotifyActivity();
             return;
         }
 
         _delivery.Motion(timeMs, hit?.Surface, hit?.X ?? 0, hit?.Y ?? 0, _pointer.X, _pointer.Y);
-
-        _idle.NotifyActivity();
     }
 
     private int _chromeKey = -1;
 
     internal void RefreshCursor()
     {
-        if ((_seat.Capabilities & SeatCapability.Pointer) == 0)
+        if ((_seat.Capabilities & SeatCapability.Pointer) == 0 || _shell.Views.Count == 0)
         {
             return;
         }
@@ -432,6 +464,23 @@ internal sealed partial class ShellSeat :
         {
             _pointerEdge = false;
             _idle.NotifyActivity();
+            if (_shell.OwnLockShown)
+            {
+                if (pressed)
+                {
+                    _shell.Router.PointerMotion(timeMs, _pointer.X, _pointer.Y);
+                    _lockButtonSurface = _shell.Router.Hovered;
+                }
+
+                _shell.Router.PointerButton(timeMs, button, pressed, _lockButtonSurface);
+                if (!pressed)
+                {
+                    _lockButtonSurface = null;
+                }
+
+                return;
+            }
+
             _seat.Pointer.NotifyButton(timeMs, button, pressed);
             _seat.Pointer.NotifyFrame();
             return;
@@ -468,6 +517,11 @@ internal sealed partial class ShellSeat :
     {
         _idle.NotifyActivity();
         UsePointer();
+        if (_shell.Views.Count == 0)
+        {
+            return;
+        }
+
         if (button == InputCodes.BtnLeft && !pressed && _splitTouch < 0 && _splitView is { } dragging)
         {
             _shell.EndSplitDrag(dragging, commit: true);
@@ -600,6 +654,11 @@ internal sealed partial class ShellSeat :
     {
         if (_shell.IsLocked)
         {
+            return _shell.OwnLockShown && _shell.Router.TouchDown(timeMs, id, x, y);
+        }
+
+        if (_shell.Views.Count == 0)
+        {
             return false;
         }
 
@@ -633,6 +692,11 @@ internal sealed partial class ShellSeat :
             return;
         }
 
+        if (_shell.Views.Count == 0)
+        {
+            return;
+        }
+
         var view = _shell.ViewAt(x, y);
         if (_shell.ChromeMove(view, x - view.Box.X, y - view.Box.Y, id))
         {
@@ -657,6 +721,11 @@ internal sealed partial class ShellSeat :
                 _splitView = null;
             }
 
+            return;
+        }
+
+        if (_shell.Views.Count == 0)
+        {
             return;
         }
 
@@ -688,13 +757,19 @@ internal sealed partial class ShellSeat :
 
     bool IEdgeSwipeHandler.TryArea(double layoutX, double layoutY, out EdgeSwipeArea area)
     {
-        if (_shell.IsLocked)
+        if (_shell.IsLocked || _shell.Views.Count == 0)
         {
             area = default;
             return false;
         }
 
         var view = _shell.ViewAt(layoutX, layoutY);
+        if (_shell.KeyboardCovers(view, layoutX - view.Box.X, layoutY - view.Box.Y))
+        {
+            area = default;
+            return false;
+        }
+
         _edgeView = view;
         _edgeGesture.Recognizer.BandWidth = _shell.EdgeBandNow;
         area = new EdgeSwipeArea(view.Box.X, view.Box.Y, view.Box.Width, view.Box.Height);

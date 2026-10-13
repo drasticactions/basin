@@ -9,6 +9,7 @@ public sealed class OutputUISurface : IDisposable
     private double _scale = 1.0;
     private bool _placed;
     private bool _disposed;
+    private bool _zoomed;
 
     public OutputUISurface(SceneTree parent, IUIHost host, UISurfaceIndex? index = null)
     {
@@ -52,6 +53,8 @@ public sealed class OutputUISurface : IDisposable
 
     public Func<Box, double, Box>? Anchor { get; set; }
 
+    public double Zoom { get; set; } = 1.0;
+
     public event Action<IUISurface>? Realized;
 
     public bool Enabled
@@ -72,7 +75,11 @@ public sealed class OutputUISurface : IDisposable
 
         var realized = IsRealized;
         _node.SetPosition(box.X, box.Y);
-        if (!_node.Configure(box.Width, box.Height, scale))
+        var zoom = Zoom > 0 ? Zoom : 1.0;
+        var configured = zoom == 1.0
+            ? Unzoomed(box, scale)
+            : Zoomed(box, scale, zoom);
+        if (!configured)
         {
             return false;
         }
@@ -93,6 +100,31 @@ public sealed class OutputUISurface : IDisposable
     }
 
     public bool Publish() => _node.Publish();
+
+    private bool Unzoomed(in Box box, double scale)
+    {
+        if (_node.DevicePixels is not null && _zoomed)
+        {
+            _node.DevicePixels = null;
+            _node.InputScale = 1.0;
+            _node.OutputScale = 1.0;
+        }
+
+        _zoomed = false;
+        return _node.Configure(box.Width, box.Height, scale);
+    }
+
+    private bool Zoomed(in Box box, double scale, double zoom)
+    {
+        _zoomed = true;
+        _node.OutputScale = scale;
+        _node.InputScale = 1.0 / zoom;
+        _node.DevicePixels = ((int)Math.Round(box.Width * scale), (int)Math.Round(box.Height * scale));
+        return _node.Configure(
+            Math.Max(1, (int)Math.Ceiling(box.Width / zoom)),
+            Math.Max(1, (int)Math.Ceiling(box.Height / zoom)),
+            scale * zoom);
+    }
 
     public void Dispose()
     {

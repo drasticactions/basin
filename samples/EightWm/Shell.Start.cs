@@ -106,6 +106,9 @@ internal sealed partial class Shell
         ClearLiveSettings();
         ApplySettings();
         RelayoutAll();
+        StartIdleLock();
+        ReadKeyboardChord();
+        _kbSession.Reload(KeyboardOptions());
         _report.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}");
     }
 

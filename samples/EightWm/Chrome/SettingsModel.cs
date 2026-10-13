@@ -9,7 +9,21 @@ public sealed class SettingsModel : ObservableModel
     private bool _hotCorners = true;
     private uint _accent;
 
+    public SettingsModel()
+    {
+        Lock = new RelayCommand(_ => LockRequested?.Invoke());
+        Keyboard = new RelayCommand(_ => KeyboardRequested?.Invoke());
+    }
+
     public event Action<string>? Changed;
+
+    public event Action? LockRequested;
+
+    public event Action? KeyboardRequested;
+
+    public System.Windows.Input.ICommand Keyboard { get; }
+
+    public System.Windows.Input.ICommand Lock { get; }
 
     public ObservableCollection<AccentSwatch> Accents { get; } = [];
 

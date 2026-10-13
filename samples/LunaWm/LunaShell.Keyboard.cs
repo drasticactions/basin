@@ -5,6 +5,7 @@ using Basin.Desktop;
 using Basin.Ipc;
 using Basin.Scene;
 using Basin.SoftKeyboard;
+using Basin.SoftKeyboard.Ipc;
 
 namespace LunaWm;
 
@@ -13,44 +14,23 @@ internal sealed partial class LunaShell
     private const string KeyboardEvent = "lunawm/keyboard";
     private const double KeyboardEdgeTravel = 60;
 
-    private readonly SoftKeyboardTextInput _softInput = new();
-    private readonly List<KeyboardLayout> _kbLayouts = [];
     private readonly KeyboardTouch[] _kbTouches = new KeyboardTouch[SoftKeyboardEngine.MaxTouches];
+    private SoftKeyboardSession _kbSession = null!;
     private SoftKeyboardEngine _kb = null!;
-    private KeyboardRouter _kbRouter = null!;
-    private SoftKeyboardTimer? _kbTimer;
     private KeyboardModel _kbModel = null!;
     private TextInputManager? _textInputs;
     private InputMethodRelay? _imRelay;
     private Action _kbIdle = null!;
     private bool _kbIdleQueued;
-    private int _kbLayoutIndex;
-    private KeyboardSize _kbSize = KeyboardSize.Medium;
-    private bool _kbSizeChosen;
-    private string? _kbSavedLayout;
     private LunaView? _kbView;
-    private bool _kbManual;
-    private bool _kbAuto;
     private bool _kbPending;
     private bool _kbProbing;
-    private long _kbClockFloor;
     private ShiftMode _kbShiftReported;
-    private BottomRow _kbBottom;
-    private LastInput _lastInput = LastInput.Pointer;
     private SoundClip? _kbClick;
     private SoundClip? _kbSpace;
     private SoundClip? _kbDelete;
     private SoundClip? _kbReturn;
     private SoundClip? _kbTick;
-
-    internal enum LastInput
-    {
-        Pointer,
-
-        Touch,
-
-        Keyboard,
-    }
 
     private struct KeyboardTouch
     {
@@ -66,51 +46,63 @@ internal sealed partial class LunaShell
         public Basin.Seat.VelocityTracker Tracker;
     }
 
-    internal long KeyboardNow => Math.Max(Environment.TickCount64, _kbClockFloor);
+    internal long KeyboardNow => _kbSession.Now;
 
     internal bool KeyboardShown => _kbView is { Keyboard.Shown: true };
 
     private void InstallKeyboard(ProtocolPack pack)
     {
+        _kbSession = new SoftKeyboardSession(_host.Loop, KeyboardOptions());
+        _kb = _kbSession.Engine;
         foreach (var module in pack)
         {
             if (module is InputMethodModule inputMethod)
             {
-                inputMethod.Fallback = _softInput;
+                inputMethod.Fallback = _kbSession.TextInput;
             }
         }
     }
+
+    private SoftKeyboardSessionOptions KeyboardOptions() => new()
+    {
+        Layouts = _config.Keyboard.Layouts,
+        Locale = Environment.GetEnvironmentVariable("LC_ALL") is { Length: > 0 } all ? all : Environment.GetEnvironmentVariable("LANG"),
+        UserLayoutDirectory = KeyboardConfig.UserLayoutDirectory(),
+        StatePath = KeyboardStatePath(),
+        Timing = _config.Keyboard.Timing,
+        Diamonds = _config.Keyboard.Diamonds,
+        SpacesToPeriod = _config.Keyboard.SpacesToPeriod,
+        Size = _config.Keyboard.Size,
+        TypistTouchId = KeyboardCommandTouch,
+        Log = _log,
+    };
 
     private void AttachKeyboard()
     {
         _textInputs = _services.Find<TextInputManager>();
         _imRelay = _services.Find<InputMethodRelay>();
-        Seat.Keyboard.FocusChanged += OnKeyboardFocus;
-        Seat.Keyboard.KeymapChanged += OnKeymapForKeyboard;
-        if (_imRelay is { } relay)
-        {
-            relay.AvailabilityChanged += OnInputMethodAvailability;
-        }
-
         if (_config.Keyboard.Enabled)
         {
             Seat.SetCapability(Basin.Seat.SeatCapability.Keyboard, true);
         }
 
-        LoadKeyboardState();
-        LoadKeyboardLayouts();
-        _kb = new SoftKeyboardEngine(CurrentKeyboardGrid(), _config.Keyboard.Timing) { Diamonds = _config.Keyboard.Diamonds };
-        _kbModel = new KeyboardModel(_kb) { Layout = CurrentKeyboardLayout, Size = _kbSize };
-        _kbRouter = new KeyboardRouter(_softInput, new SeatKeyOutput(Seat.Keyboard))
+        _kbSession.SameWindow = (a, b) => OwnerOf(a) is { } owner && ReferenceEquals(OwnerOf(b), owner);
+        _kbSession.Attach(Seat.Keyboard, _textInputs, _imRelay);
+        _kbModel = new KeyboardModel(_kb) { Layout = _kbSession.CurrentLayout, Size = _kbSession.Size };
+        _kbSession.Router.Sent += OnKeySent;
+        _kbSession.FocusChanged += OnKeyboardFocus;
+        _kbSession.TextInputChanged += SyncFcitx5Field;
+        _kbSession.InputMethodChanged += ReportKeyboard;
+        _kbSession.WantedChanged += (_, _) => ApplyKeyboard();
+        _kbSession.LayoutChanged += OnKeyboardLayoutChanged;
+        _kbSession.LayoutSelected += layout =>
         {
-            SpacesToPeriod = _config.Keyboard.SpacesToPeriod,
-            Commit = _textInputs,
+            UpdateTraceEnabled();
+            _report.Line($"LAYOUT {layout.Id}");
         };
-        _kbRouter.Attach(_kb, () => KeyboardNow);
-        _kbRouter.Sent += OnKeySent;
+        _kbSession.SizeChanged += OnKeyboardSizeChanged;
         StartFcitx5();
         AttachTrace();
-        _kbTimer = new SoftKeyboardTimer(_host.Loop, _kb, () => KeyboardNow);
         _kbIdle = () =>
         {
             _kbIdleQueued = false;
@@ -121,12 +113,6 @@ internal sealed partial class LunaShell
         _kb.Clicked += PlayKeySound;
         _kb.LongPressOpened += (_, _) => PlayClip(_kbTick);
         _kb.HideRequested += () => HideKeyboard("key");
-        _kb.SizeChosen += ChooseKeyboardSize;
-        _kb.LanguageNext += () => SelectKeyboardLayout((_kbLayoutIndex + 1) % Math.Max(1, _kbLayouts.Count));
-        _kb.LanguageChosen += SelectKeyboardLayout;
-        _softInput.Activated += OnTextInputActivated;
-        _softInput.Deactivated += OnTextInputDeactivated;
-        _softInput.FieldChanged += OnFieldChanged;
         foreach (var view in _views)
         {
             AttachKeyboardSurface(view);
@@ -137,8 +123,7 @@ internal sealed partial class LunaShell
     {
         StopFcitx5();
         StopTrace();
-        _kbTimer?.Dispose();
-        _kbTimer = null;
+        _kbSession.Dispose();
     }
 
     private void AttachKeyboardSurface(LunaView view)
@@ -152,78 +137,9 @@ internal sealed partial class LunaShell
         view.Keyboard.Slide.Jump(0);
     }
 
-    private KeyboardLayout CurrentKeyboardLayout => _kbLayouts[Math.Clamp(_kbLayoutIndex, 0, _kbLayouts.Count - 1)];
-
-    private void LoadKeyboardLayouts()
+    private void OnKeyboardLayoutChanged()
     {
-        _kbLayouts.Clear();
-        var ids = _config.Keyboard.Layouts.Count > 0
-            ? _config.Keyboard.Layouts
-            : [KeyboardLayouts.DefaultFor(Environment.GetEnvironmentVariable("LC_ALL") is { Length: > 0 } all ? all : Environment.GetEnvironmentVariable("LANG"))];
-        var user = KeyboardConfig.UserLayoutDirectory();
-        foreach (var id in ids)
-        {
-            var layout = id == KeyboardLayouts.Xkb ? BuildXkbLayout() : KeyboardLayouts.Load(id, user, _log);
-            if (layout is null)
-            {
-                _log.Warn($"keyboard: layout '{id}' cannot be loaded");
-                continue;
-            }
-
-            _kbLayouts.Add(layout);
-        }
-
-        if (_kbLayouts.Count == 0)
-        {
-            _kbLayouts.Add(KeyboardLayouts.Load("us-qwerty")!);
-        }
-
-        _kbLayoutIndex = 0;
-        if (_kbSavedLayout is { } saved)
-        {
-            var index = _kbLayouts.FindIndex(layout => layout.Id == saved);
-            if (index >= 0)
-            {
-                _kbLayoutIndex = index;
-            }
-        }
-    }
-
-    private KeyboardLayout? BuildXkbLayout()
-    {
-        if (Seat.Keyboard.Keymap is not { } keymap || KeyboardLayouts.Load("us-qwerty") is not { } symbols)
-        {
-            return null;
-        }
-
-        var layout = Seat.Keyboard.State?.SerializeLayout(Xkb.XkbStateComponent.LayoutEffective) ?? 0;
-        return XkbGrid.Build(keymap, layout, symbols);
-    }
-
-    private KeyGrid CurrentKeyboardGrid()
-    {
-        IReadOnlyList<KeyCap>? languages = null;
-        if (_kbLayouts.Count >= 2)
-        {
-            var caps = new KeyCap[_kbLayouts.Count];
-            for (var i = 0; i < caps.Length; i++)
-            {
-                caps[i] = KeyCap.LanguageChoice(i, _kbLayouts[i].LanguageLabel);
-            }
-
-            languages = caps;
-        }
-
-        _kbBottom = _softInput.Field.BottomRow;
-        var layout = CurrentKeyboardLayout;
-        return layout.Grid(_kbBottom, languages, layout.LanguageLabel);
-    }
-
-    private void RebuildKeyboardGrid()
-    {
-        _kb.Grid = CurrentKeyboardGrid();
-        _kb.State.LayoutNumLock = CurrentKeyboardLayout.NumLock;
-        _kbModel.Layout = CurrentKeyboardLayout;
+        _kbModel.Layout = _kbSession.CurrentLayout;
         if (_kbView is { } view)
         {
             PlaceKeyboard(view, immediate: true);
@@ -232,47 +148,11 @@ internal sealed partial class LunaShell
         _kbModel.Invalidate();
     }
 
-    private void SelectKeyboardLayout(int index)
+    private void ChooseKeyboardSize(KeyboardSize size) => _kbSession.ChooseSize(size);
+
+    private void OnKeyboardSizeChanged(KeyboardSize size)
     {
-        if (index < 0 || index >= _kbLayouts.Count)
-        {
-            return;
-        }
-
-        _kbLayoutIndex = index;
-        _kbSavedLayout = CurrentKeyboardLayout.Id;
-        SaveKeyboardState();
-        RebuildKeyboardGrid();
-        UpdateTraceEnabled();
-        _report.Line($"LAYOUT {CurrentKeyboardLayout.Id}");
-    }
-
-    private void OnKeymapForKeyboard()
-    {
-        if (_kb is null)
-        {
-            return;
-        }
-
-        var xkb = _kbLayouts.FindIndex(layout => layout.Id == KeyboardLayouts.Xkb);
-        if (xkb < 0 || BuildXkbLayout() is not { } rebuilt)
-        {
-            return;
-        }
-
-        _kbLayouts[xkb] = rebuilt;
-        if (xkb == _kbLayoutIndex)
-        {
-            RebuildKeyboardGrid();
-        }
-    }
-
-    private void ChooseKeyboardSize(KeyboardSize size)
-    {
-        _kbSize = size;
-        _kbSizeChosen = true;
         _kbModel.Size = size;
-        SaveKeyboardState();
         if (_kbView is { } view)
         {
             PlaceKeyboard(view, immediate: true);
@@ -284,79 +164,20 @@ internal sealed partial class LunaShell
 
     private void OnKeyboardFocus(Surface? surface)
     {
-        _textInputs?.NotifyFocus(surface);
         if (_kbView is { } view && (surface is null || OwnerOf(surface) is not { } card || !ReferenceEquals((card.Parent ?? card).Home, view) ||
             !ReferenceEquals(card.Parent ?? card, view.Deck.ActiveCard)))
         {
-            _kbManual = false;
-            _kbAuto = false;
-        }
-
-        ApplyKeyboard();
-    }
-
-    private void OnInputMethodAvailability()
-    {
-        _softInput.ExternalInputMethod = _imRelay?.HasInputMethodClient ?? false;
-        SyncFcitx5Field();
-        ReportKeyboard();
-    }
-
-    private void OnTextInputActivated(Surface surface)
-    {
-        SyncFcitx5Field();
-        if (_lastInput == LastInput.Touch)
-        {
-            _kbAuto = true;
-        }
-
-        ApplyKeyboard();
-    }
-
-    private void OnTextInputDeactivated()
-    {
-        SyncFcitx5Field();
-        _kbAuto = false;
-        ApplyKeyboard();
-    }
-
-    private void OnFieldChanged(FieldState field)
-    {
-        if (field.BottomRow != _kbBottom && _kb is not null)
-        {
-            RebuildKeyboardGrid();
+            _kbSession.ClearIntent();
         }
     }
 
-    internal void NoteInput(LastInput input) => _lastInput = input;
+    internal void NoteInput(LastInput input) => _kbSession.NoteInput(input);
 
-    internal bool IsInputMethodKeyboard(object? tag) => _imRelay?.IsInputMethodClient(tag) ?? false;
+    internal bool IsInputMethodKeyboard(object? tag) => _kbSession.IsInputMethodKeyboard(tag);
 
-    internal void NoteHardwareKey(bool pressed)
-    {
-        if (!pressed)
-        {
-            return;
-        }
+    internal void NoteHardwareKey(bool pressed) => _kbSession.NoteHardwareKey(pressed);
 
-        _lastInput = LastInput.Keyboard;
-        if (_kbManual || _kbAuto)
-        {
-            _kbManual = false;
-            _kbAuto = false;
-            ApplyKeyboard();
-        }
-    }
-
-    internal void NoteClientTouch(Surface surface)
-    {
-        _lastInput = LastInput.Touch;
-        if (_softInput.ActiveSurface is { } active && OwnerOf(active) is { } owner && ReferenceEquals(OwnerOf(surface), owner) && !_kbAuto)
-        {
-            _kbAuto = true;
-            ApplyKeyboard();
-        }
-    }
+    internal void NoteClientTouch(Surface surface) => _kbSession.NoteTouch(surface);
 
     internal void ToggleKeyboard()
     {
@@ -369,23 +190,17 @@ internal sealed partial class LunaShell
         RaiseKeyboard();
     }
 
-    internal void RaiseKeyboard()
-    {
-        _kbManual = true;
-        ApplyKeyboard();
-    }
+    internal void RaiseKeyboard() => _kbSession.Raise();
 
     internal void HideKeyboard(string why)
     {
-        _kbManual = false;
-        _kbAuto = false;
-        ApplyKeyboard();
+        _kbSession.Hide(why);
         _report.Line($"KBHIDE {why}");
     }
 
     private LunaView? KeyboardTarget()
     {
-        if (!_config.Keyboard.Enabled || _locked || _sessionLocked || (!_kbManual && !_kbAuto))
+        if (!_config.Keyboard.Enabled || _locked || _sessionLocked || !_kbSession.Wanted)
         {
             return null;
         }
@@ -435,9 +250,7 @@ internal sealed partial class LunaShell
         }
         else
         {
-            _kbManual = false;
-            _kb.Reset();
-            _kb.State.ClearSymbolLock();
+            _kbSession.NoteHidden();
         }
 
         ReportKeyboard();
@@ -452,7 +265,7 @@ internal sealed partial class LunaShell
     }
 
     private KeyboardMetrics KeyboardMetricsFor(LunaView view) =>
-        KeyboardMetrics.For(_kbSize, view.Box.Width, view.Box.Height, _kbSizeChosen);
+        KeyboardMetrics.For(_kbSession.Size, view.Box.Width, view.Box.Height, _kbSession.SizeChosen);
 
     private int KeyboardInset(LunaView view) => KeyboardMetricsFor(view).Height + (int)_kbModel.BarHeight;
 
@@ -816,7 +629,6 @@ internal sealed partial class LunaShell
 
     private void OnKeySent(TypedKey key, KeyRoute route)
     {
-        _lastInput = LastInput.Touch;
         if (_kbProbing)
         {
             return;
@@ -861,7 +673,7 @@ internal sealed partial class LunaShell
         }
 
         var height = _kbView is { } view ? KeyboardInset(view) : 0;
-        _report.Line($"KEYBOARD {(_kbView is null ? "off" : "on")} {height} layout={CurrentKeyboardLayout.Id} size={KeyboardConfig.SizeName(_kbSize)} route={RouteName(_kbRouter.Route)} {PredictState}");
+        _report.Line($"KEYBOARD {(_kbView is null ? "off" : "on")} {height} layout={_kbSession.CurrentLayout.Id} size={KeyboardConfig.SizeName(_kbSession.Size)} route={RouteName(_kbSession.Router.Route)} {PredictState}");
         RaiseKeyboardEvent(height);
     }
 
@@ -881,8 +693,8 @@ internal sealed partial class LunaShell
             json.WriteString("output"u8, view.Output.Name);
         }
 
-        json.WriteString("layout"u8, CurrentKeyboardLayout.Id);
-        json.WriteString("size"u8, KeyboardConfig.SizeName(_kbSize));
+        json.WriteString("layout"u8, _kbSession.CurrentLayout.Id);
+        json.WriteString("size"u8, KeyboardConfig.SizeName(_kbSession.Size));
         json.WriteEndObject();
         ipc.Events.EndEvent();
     }
@@ -931,55 +743,6 @@ internal sealed partial class LunaShell
         }
     }
 
-    private void LoadKeyboardState()
-    {
-        _kbSize = _config.Keyboard.Size;
-        _kbSizeChosen = false;
-        _kbSavedLayout = null;
-        try
-        {
-            var path = KeyboardStatePath();
-            if (!File.Exists(path))
-            {
-                return;
-            }
-
-            var file = JsonSerializer.Deserialize(File.ReadAllText(path), KeyboardJsonContext.Default.KeyboardFile);
-            if (file?.Size is { } size)
-            {
-                _kbSize = KeyboardConfig.ParseSize(size, _kbSize);
-                _kbSizeChosen = true;
-            }
-
-            _kbSavedLayout = file?.Layout;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
-        {
-            _log.Warn($"keyboard: cannot read the state file: {error.Message}");
-        }
-    }
-
-    private void SaveKeyboardState()
-    {
-        try
-        {
-            var path = KeyboardStatePath();
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var file = new KeyboardFile
-            {
-                Size = _kbSizeChosen ? KeyboardConfig.SizeName(_kbSize) : null,
-                Layout = _kbSavedLayout,
-            };
-            var temp = path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(file, KeyboardJsonContext.Default.KeyboardFile));
-            File.Move(temp, path, overwrite: true);
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            _log.Warn($"keyboard: cannot write the state file: {error.Message}");
-        }
-    }
-
     private static string KeyboardStatePath() => Path.Combine(Path.GetDirectoryName(LauncherState.DefaultPath())!, "keyboard.json");
 
     private void ReloadKeyboard(LunaConfig previous)
@@ -1001,21 +764,12 @@ internal sealed partial class LunaShell
             }
         }
 
-        var savedSize = _kbSize;
-        var chosen = _kbSizeChosen;
-        _kb.Timing = _config.Keyboard.Timing;
-        _kb.Diamonds = _config.Keyboard.Diamonds;
-        _kbRouter.SpacesToPeriod = _config.Keyboard.SpacesToPeriod;
-        if (!_config.Keyboard.Layouts.SequenceEqual(previous.Keyboard.Layouts))
-        {
-            LoadKeyboardLayouts();
-            RebuildKeyboardGrid();
-        }
-
+        var savedSize = _kbSession.Size;
+        var chosen = _kbSession.SizeChosen;
+        _kbSession.Reload(KeyboardOptions());
         if (!chosen)
         {
-            _kbSize = _config.Keyboard.Size;
-            _kbModel.Size = _kbSize;
+            _kbModel.Size = _kbSession.Size;
             if (_kbView is { } view)
             {
                 PlaceKeyboard(view, immediate: true);
@@ -1036,297 +790,28 @@ internal sealed partial class LunaShell
             return;
         }
 
-        _report.Line($"  keyboard {(_kbView is null ? "off" : "on")} layout={CurrentKeyboardLayout.Id} size={KeyboardConfig.SizeName(_kbSize)} shift={_kb.State.Shift.ToString().ToLowerInvariant()} symbol={(_kb.State.SymbolLock ? "lock" : "off")} field={_softInput.Field.Kind.ToString().ToLowerInvariant()} autocap={(_kb.State.AutoCap ? "on" : "off")} last={_lastInput.ToString().ToLowerInvariant()}");
+        _report.Line($"  keyboard {(_kbView is null ? "off" : "on")} layout={_kbSession.CurrentLayout.Id} size={KeyboardConfig.SizeName(_kbSession.Size)} shift={_kb.State.Shift.ToString().ToLowerInvariant()} symbol={(_kb.State.SymbolLock ? "lock" : "off")} field={_kbSession.Field.Kind.ToString().ToLowerInvariant()} autocap={(_kb.State.AutoCap ? "on" : "off")} last={_kbSession.LastInput.ToString().ToLowerInvariant()}");
     }
 
-    private int FindKeyboardCell(string name)
-    {
-        var grid = _kb.Grid;
-        var wanted = name switch
-        {
-            "space" => " ",
-            "sym" => "symbol",
-            "lang" => "language",
-            "enter" => "return",
-            _ => name,
-        };
-        for (var cell = 0; cell < KeyGrid.CellCount; cell++)
-        {
-            if (grid[cell] is { IsVisible: true, Plain: { } plain } &&
-                (plain.IsText ? plain.Text == wanted || plain.Text == wanted.ToLowerInvariant() : plain.Name == wanted))
-            {
-                return cell;
-            }
-        }
+    private int FindKeyboardCell(string name) => _kbSession.Typer.Find(name);
 
-        return -1;
-    }
+    private long KeyboardStep(int milliseconds) => _kbSession.Typer.Step(milliseconds);
 
-    private long KeyboardStep(int milliseconds)
-    {
-        _kbClockFloor = KeyboardNow + milliseconds;
-        return _kbClockFloor;
-    }
-
-    private bool KeyboardTap(int cell, int stepMs = 600)
-    {
-        if (cell < 0 || _kbView is null)
-        {
-            return false;
-        }
-
-        _lastInput = LastInput.Touch;
-        _kb.TapCell(KeyboardCommandTouch, cell, KeyboardStep(stepMs));
-        return true;
-    }
+    private bool KeyboardTap(int cell, int stepMs = 600) => _kbView is not null && _kbSession.Typer.TapCell(cell, stepMs);
 
     private const int KeyboardCommandTouch = 900;
 
-    private bool KeyboardTypeCharacter(char c)
-    {
-        var text = c.ToString();
-        for (var attempt = 0; attempt < 5; attempt++)
-        {
-            var cell = ProducingCell(text);
-            if (cell >= 0)
-            {
-                return KeyboardTap(cell);
-            }
-
-            if (LongPressFor(text, out var holder, out var index))
-            {
-                KeyboardHoldCell(holder, 0);
-                _kb.ChooseLongPress(index, KeyboardStep(100));
-                return true;
-            }
-
-            var state = _kb.State;
-            if (char.IsLetter(c) && !CellFor(char.ToLowerInvariant(c).ToString(), alternate: true, out _))
-            {
-                KeyboardTap(FindKeyboardCell("shift"));
-                continue;
-            }
-
-            if (CellFor(text, alternate: true, out var alternateCell))
-            {
-                var plain = _kb.Grid[alternateCell].Plain!;
-                KeyboardTap(FindKeyboardCell(plain.IsLetter ? "symbol" : "shift"));
-                continue;
-            }
-
-            if (CellFor(text, alternate: false, out _))
-            {
-                KeyboardTap(FindKeyboardCell(state.SymbolActive ? "symbol" : "shift"));
-                continue;
-            }
-
-            return false;
-        }
-
-        return false;
-    }
-
-    private int ProducingCell(string text)
-    {
-        var state = _kb.State;
-        for (var cell = 0; cell < KeyGrid.CellCount; cell++)
-        {
-            if (_kb.Grid[cell] is not { IsVisible: true } key || state.Resolve(key) is not { IsText: true } cap)
-            {
-                continue;
-            }
-
-            var produced = cap.Text.Length == 1 && state.Capital ? cap.UpperText : cap.Text;
-            if (produced == text)
-            {
-                return cell;
-            }
-        }
-
-        return -1;
-    }
-
-    private bool CellFor(string text, bool alternate, out int found)
-    {
-        for (var cell = 0; cell < KeyGrid.CellCount; cell++)
-        {
-            if (_kb.Grid[cell] is not { IsVisible: true } key)
-            {
-                continue;
-            }
-
-            var cap = alternate ? key.Alternate : key.Plain;
-            if (cap is { IsText: true } && (cap.Text == text || (cap.Text.Length == 1 && cap.UpperText == text && !alternate)))
-            {
-                found = cell;
-                return true;
-            }
-        }
-
-        found = -1;
-        return false;
-    }
-
-    private bool LongPressFor(string text, out int cell, out int index)
-    {
-        for (cell = 0; cell < KeyGrid.CellCount; cell++)
-        {
-            if (_kb.Grid[cell] is not { IsVisible: true, LongPress: { } entries })
-            {
-                continue;
-            }
-
-            for (index = 1; index < entries.Count; index++)
-            {
-                if (entries[index].IsText && entries[index].Text == text)
-                {
-                    return true;
-                }
-            }
-        }
-
-        cell = -1;
-        index = -1;
-        return false;
-    }
-
-    private void KeyboardHoldCell(int cell, int releaseAfterMs)
-    {
-        var rect = _kb.Rects[cell];
-        var start = KeyboardStep(600);
-        _lastInput = LastInput.Touch;
-        _kb.TouchDown(KeyboardCommandTouch, rect.CenterX, rect.CenterY, start);
-        _kb.Frame(start);
-        var deadline = _kb.NextDeadline;
-        if (deadline != long.MaxValue)
-        {
-            _kbClockFloor = Math.Max(_kbClockFloor, deadline);
-            _kb.Tick(deadline);
-        }
-
-        if (releaseAfterMs <= 0)
-        {
-            _kb.TouchUp(KeyboardCommandTouch, KeyboardNow);
-        }
-    }
-
     private void RegisterKeyboardCommands(IpcMethodRegistry methods)
     {
-        _report.Register(methods, "lunawm/keyboard", "keyboard [{state}]",
-            Info("Raise, hide or toggle the on-screen keyboard by hand, or print its KEYBOARD line.",
-                """{"type":"object","properties":{"state":{"type":"string","enum":["show","hide","toggle"]}}}"""),
-            (ref IpcParams p, IpcReply _) =>
-            {
-                var state = p.TryGetString("state", out var given) ? given : "";
-                switch (state)
-                {
-                    case "show":
-                        RaiseKeyboard();
-                        break;
-                    case "hide":
-                        HideKeyboard("command");
-                        break;
-                    case "toggle":
-                        ToggleKeyboard();
-                        break;
-                    default:
-                        ReportKeyboard();
-                        break;
-                }
-            });
-
-        _report.Register(methods, "lunawm/keyboard-tap", "keyboard-tap {key}",
-            Info("Press and release one keyboard key by its cap: a letter, shift, space, backspace, return, sym, hide, lang, tab, .com."),
-            (ref IpcParams p, IpcReply reply) =>
-            {
-                var key = p.GetString("key");
-                if (!p.Failed && !KeyboardTap(FindKeyboardCell(key), 100))
-                {
-                    reply.Error(IpcErrorCodes.NotFound, _kbView is null ? "the keyboard is not shown" : $"no key {key}");
-                }
-            });
-
-        _report.Register(methods, "lunawm/keyboard-type", "keyboard-type {text...}",
-            Info("Tap each character's key in turn through the keyboard engine, with Shift, the symbol page and long-press lists as needed."),
-            (ref IpcParams p, IpcReply reply) =>
-            {
-                var text = p.GetString("text");
-                if (p.Failed)
-                {
-                    return;
-                }
-
-                if (_kbView is null)
-                {
-                    reply.Error(IpcErrorCodes.InvalidParams, "the keyboard is not shown");
-                    return;
-                }
-
-                foreach (var c in text)
-                {
-                    if (!KeyboardTypeCharacter(c))
-                    {
-                        reply.Error(IpcErrorCodes.NotFound, $"no key types '{c}'");
-                        return;
-                    }
-                }
-            });
-
-        _report.Register(methods, "lunawm/keyboard-hold", "keyboard-hold {key} {ms:int}",
-            Info("Press a keyboard key, hold it for ms milliseconds of keyboard time, and release it. A long press opens the key's list."),
-            (ref IpcParams p, IpcReply reply) =>
-            {
-                var key = p.GetString("key");
-                var ms = (int)p.GetInt("ms");
-                if (p.Failed)
-                {
-                    return;
-                }
-
-                var cell = FindKeyboardCell(key);
-                if (cell < 0 || _kbView is null)
-                {
-                    reply.Error(IpcErrorCodes.NotFound, $"no key {key}");
-                    return;
-                }
-
-                var rect = _kb.Rects[cell];
-                var start = KeyboardStep(600);
-                _lastInput = LastInput.Touch;
-                _kb.TouchDown(KeyboardCommandTouch, rect.CenterX, rect.CenterY, start);
-                _kb.Frame(start);
-                var end = start + Math.Max(0, ms);
-                while (_kb.NextDeadline <= end)
-                {
-                    _kb.Tick(_kb.NextDeadline);
-                }
-
-                _kbClockFloor = Math.Max(_kbClockFloor, end);
-                _kb.TouchUp(KeyboardCommandTouch, end);
-                if (_kb.IsLongPressOpen)
-                {
-                    _report.Line($"LONGPRESS {string.Join(',', _kb.LongPressEntries!.Select(static e => e.IsText ? e.Text : e.Label ?? e.Name))}");
-                }
-            });
-
-        _report.Register(methods, "lunawm/keyboard-choose", "keyboard-choose {index:int}",
-            Info("Choose an entry of the open long-press list, counted from 0."),
-            (ref IpcParams p, IpcReply reply) =>
-            {
-                var index = (int)p.GetInt("index");
-                if (p.Failed)
-                {
-                    return;
-                }
-
-                if (!_kb.IsLongPressOpen || index < 0 || index >= _kb.LongPressEntries!.Count)
-                {
-                    reply.Error(IpcErrorCodes.InvalidParams, "no such long-press entry");
-                    return;
-                }
-
-                _kb.ChooseLongPress(index, KeyboardStep(100));
-            });
+        SoftKeyboardSessionIpc.Register(methods, _report, _kbSession, new SoftKeyboardIpcHooks
+        {
+            Namespace = "lunawm",
+            IsShown = () => _kbView is not null,
+            Show = RaiseKeyboard,
+            Hide = HideKeyboard,
+            Toggle = ToggleKeyboard,
+            Report = ReportKeyboard,
+        });
 
         _report.Register(methods, "lunawm/keyboard-candidate", "keyboard-candidate {index:int}",
             Info("Tap candidate N in the keyboard's candidate bar, counted from 0, as fcitx5 last listed them."),
@@ -1356,38 +841,6 @@ internal sealed partial class LunaShell
                 {
                     reply.Error(IpcErrorCodes.InvalidParams, _kbView is null ? "the keyboard is not shown" : "trace typing is off here, or the word has a letter the layout lacks");
                 }
-            });
-
-        _report.Register(methods, "lunawm/keyboard-size", "keyboard-size {size}",
-            Info("Set the keyboard size as the Hide key's list does: xs, s, m or l.",
-                """{"type":"object","properties":{"size":{"type":"string","enum":["xs","s","m","l"]}},"required":["size"]}"""),
-            (ref IpcParams p, IpcReply _) =>
-            {
-                var size = p.GetString("size");
-                if (!p.Failed)
-                {
-                    ChooseKeyboardSize(KeyboardConfig.ParseSize(size, _kbSize));
-                }
-            });
-
-        _report.Register(methods, "lunawm/keyboard-layout", "keyboard-layout {id}",
-            Info("Switch the keyboard to a layout in [keyboard] layouts, by id."),
-            (ref IpcParams p, IpcReply reply) =>
-            {
-                var id = p.GetString("id");
-                if (p.Failed)
-                {
-                    return;
-                }
-
-                var index = _kbLayouts.FindIndex(layout => layout.Id == id);
-                if (index < 0)
-                {
-                    reply.Error(IpcErrorCodes.NotFound, $"no layout {id} in [keyboard] layouts");
-                    return;
-                }
-
-                SelectKeyboardLayout(index);
             });
     }
 

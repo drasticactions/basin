@@ -113,6 +113,32 @@ public sealed class MenuTests
     }
 
     [Fact]
+    public async Task A_wpa_network_asks_for_a_passphrase_and_joins_system_wide()
+    {
+        using var networkManager = await BasinGreeter.Tests.FakeSystem.StartAsync();
+        using var bus = PrivateBus.Start();
+        using var config = new TempConfig();
+        var environment = config.Environment;
+        environment["DBUS_SESSION_BUS_ADDRESS"] = bus.Address;
+        environment["DBUS_SYSTEM_BUS_ADDRESS"] = networkManager.Bus.Address;
+        environment["LUNAWM_NO_POWER"] = "1";
+        using var session = new LunaSession(LunaSession.Compositor(), config.Path, environment);
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "SOCKET ")));
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "  indicators ") && !line.Contains("wifi=hidden", StringComparison.Ordinal), poke: "where", fresh: true));
+        await session.SendAsync("menu wifi");
+        Assert.NotNull(await session.WaitForAsync(line => line == "MENU wifi on"));
+        await session.SendAsync("wifi-join Lab");
+        Assert.NotNull(await session.WaitForAsync(line => line == "WIFI ask Lab sae"));
+        Assert.NotNull(await session.WaitForAsync(line => line == "  row passphrase Passphrase for Lab", poke: "where", fresh: true));
+        await session.SendAsync("wifi-passphrase battery staple");
+        Assert.NotNull(await session.WaitForAsync(line => line == "WIFI join Lab secured"));
+        Assert.NotNull(await session.WaitForAsync(line => line == "WIFI Lab ok"));
+        Assert.NotNull(await session.WaitForAsync(line => line == "  row note Joined Lab", poke: "where", fresh: true));
+        await session.SendAsync("quit");
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "FRAMES ")));
+    }
+
+    [Fact]
     public async Task An_entry_with_a_documentation_key_gets_help_in_its_local_menu()
     {
         var ssdwin = WlClient("ssdwin");

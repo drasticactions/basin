@@ -15,7 +15,7 @@ public static class XkbGrid
     {
         ArgumentNullException.ThrowIfNull(keymap);
         ArgumentNullException.ThrowIfNull(symbols);
-        var rows = new KeyCell[KeyGrid.Rows - 1][];
+        var rows = new KeyCell[KeyGrid.DefaultRows - 1][];
         rows[0] = Row(keymap, layoutIndex, symbols, 0, NumberRow, leading: null, trailing: null);
         rows[1] = Row(keymap, layoutIndex, symbols, 1, TopRow, leading: null, trailing: new KeyCell(1, KeyCap.Backspace, null, null, KeyClass.Function));
         rows[2] = Row(keymap, layoutIndex, symbols, 2, HomeRow, leading: null, trailing: new KeyCell(1.5f, KeyCap.Return, null, null, KeyClass.Function));
@@ -37,10 +37,164 @@ public static class XkbGrid
         };
     }
 
+    private static readonly uint[] FullNumberRow = [41, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+    private static readonly uint[] FullTopRow = [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 43];
+    private static readonly uint[] FullHomeRow = [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
+    private static readonly uint[] FullBottomRow = [44, 45, 46, 47, 48, 49, 50, 51, 52, 53];
+
+    public static KeyboardLayout Standard(XkbKeymap keymap, uint layoutIndex, KeyboardLayout? template = null, string? language = null)
+    {
+        ArgumentNullException.ThrowIfNull(keymap);
+        template ??= KeyboardLayouts.Load("win8-standard-en-us") ?? throw new InvalidOperationException("win8-standard-en-us is not embedded");
+        return Shape(keymap, layoutIndex, template, "xkb-standard", language, [TopRow, HomeRow, BottomRow], lettersOnly: true);
+    }
+
+    public static KeyboardLayout Full(XkbKeymap keymap, uint layoutIndex, KeyboardLayout? template = null, string? language = null)
+    {
+        ArgumentNullException.ThrowIfNull(keymap);
+        template ??= KeyboardLayouts.Load("win8-full-en-us") ?? throw new InvalidOperationException("win8-full-en-us is not embedded");
+        return Shape(keymap, layoutIndex, template, "xkb-full", language, [FullNumberRow, FullTopRow, FullHomeRow, FullBottomRow], lettersOnly: false);
+    }
+
+    private static KeyboardLayout Shape(
+        XkbKeymap keymap, uint layout, KeyboardLayout template, string id, string? language, uint[][] keyRows, bool lettersOnly)
+    {
+        var generated = new KeyCell[keyRows.Length][];
+        for (var i = 0; i < keyRows.Length; i++)
+        {
+            generated[i] = Keys(keymap, layout, keyRows[i], lettersOnly);
+        }
+
+        var reference = new string[keyRows.Length];
+        var next = 0;
+        for (var row = 0; row < template.GridRows - 1 && next < keyRows.Length; row++)
+        {
+            if (Run(template.Row(row), lettersOnly, out _, out _))
+            {
+                reference[next++] = Signature(template.Row(row));
+            }
+        }
+
+        KeyCell[] Map(KeyCell[] cells)
+        {
+            var match = Array.IndexOf(reference, Signature(cells));
+            if (match < 0 || !Run(cells, lettersOnly, out var first, out var last) || generated[match].Length == 0)
+            {
+                return cells;
+            }
+
+            var result = new KeyCell[cells.Length];
+            Array.Fill(result, KeyCell.Empty);
+            var column = 0;
+            for (var i = 0; i < first; i++)
+            {
+                result[column++] = cells[i];
+            }
+
+            var trailing = 0;
+            for (var i = last + 1; i < cells.Length; i++)
+            {
+                trailing += cells[i].Weight != 0 ? 1 : 0;
+            }
+
+            foreach (var key in generated[match])
+            {
+                if (column >= result.Length - trailing)
+                {
+                    break;
+                }
+
+                result[column++] = key;
+            }
+
+            for (var i = last + 1; i < cells.Length && column < result.Length; i++)
+            {
+                if (cells[i].Weight != 0)
+                {
+                    result[column++] = cells[i];
+                }
+            }
+
+            return result;
+        }
+
+        return template.MapRows(id, keymap.GetLayoutName(layout) ?? id, language ?? LanguageOf(keymap, layout), "Xkb", Map);
+    }
+
+    private static bool Run(KeyCell[] cells, bool lettersOnly, out int first, out int last)
+    {
+        first = -1;
+        last = -1;
+        for (var i = 0; i < cells.Length; i++)
+        {
+            if (cells[i].Plain is { IsText: true } cap && !cap.IsSpace && (!lettersOnly || IsLetterText(cap)))
+            {
+                if (first < 0)
+                {
+                    first = i;
+                }
+
+                last = i;
+            }
+            else if (first >= 0 && cells[i].Weight != 0)
+            {
+                break;
+            }
+        }
+
+        return first >= 0;
+    }
+
+    private static bool IsLetterText(KeyCap cap) => cap.Text.Length == 1 && char.IsLetter(cap.Text[0]);
+
+    private static string Signature(KeyCell[] cells) =>
+        string.Join('\u001f', cells.Where(static c => c.Weight != 0).Select(static c => c.Plain?.Name ?? "_"));
+
+    private static KeyCell[] Keys(XkbKeymap keymap, uint layout, uint[] keycodes, bool lettersOnly)
+    {
+        var keys = new List<KeyCell>(keycodes.Length);
+        foreach (var keycode in keycodes)
+        {
+            var plain = Level(keymap, keycode, layout, 0);
+            if (plain is null)
+            {
+                continue;
+            }
+
+            var shifted = Level(keymap, keycode, layout, 1);
+            var letter = plain.Length == 1 && char.IsLetter(plain[0]) &&
+                shifted is not null && shifted == plain.ToUpper(CultureInfo.InvariantCulture);
+            if (lettersOnly && !(plain.Length == 1 && char.IsLetter(plain[0])))
+            {
+                continue;
+            }
+
+            var plainCap = KeyCap.Character(plain, null, letter);
+            var alternate = letter || shifted is null ? plainCap : KeyCap.Character(shifted);
+            var longPress = new List<KeyCap>(3);
+            for (var level = 2u; level < 4; level++)
+            {
+                if (Level(keymap, keycode, layout, level) is { } extra && extra != plain && extra != shifted)
+                {
+                    longPress.Add(KeyCap.Character(extra));
+                }
+            }
+
+            if (longPress.Count > 0)
+            {
+                longPress.Insert(0, plainCap);
+            }
+
+            keys.Add(new KeyCell(1, plainCap, alternate, longPress.Count > 0 ? [.. longPress] : null, letter ? KeyClass.Letter : KeyClass.Punctuation));
+        }
+
+        return [.. keys];
+    }
+
     private static KeyCell[] Row(
         XkbKeymap keymap, uint layout, KeyboardLayout symbols, int row, uint[] keycodes, KeyCell? leading, KeyCell? trailing)
     {
-        var cells = new KeyCell[KeyGrid.Columns];
+        var cells = new KeyCell[KeyGrid.DefaultColumns];
         Array.Fill(cells, KeyCell.Empty);
         var column = 0;
         if (leading is not null)
@@ -49,7 +203,7 @@ public static class XkbGrid
         }
 
         var reference = symbols.Row(row);
-        for (var i = 0; i < keycodes.Length && column < KeyGrid.Columns - (trailing is null ? 0 : 1); i++)
+        for (var i = 0; i < keycodes.Length && column < KeyGrid.DefaultColumns - (trailing is null ? 0 : 1); i++)
         {
             var plain = Level(keymap, keycodes[i], layout, 0);
             if (plain is null)

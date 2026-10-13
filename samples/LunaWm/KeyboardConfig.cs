@@ -36,22 +36,9 @@ internal sealed record KeyboardConfig
         RepeatIntervalMs = RepeatIntervalMs,
     };
 
-    public static KeyboardSize ParseSize(string? text, KeyboardSize fallback) => text switch
-    {
-        "xs" => KeyboardSize.ExtraSmall,
-        "s" => KeyboardSize.Small,
-        "m" => KeyboardSize.Medium,
-        "l" => KeyboardSize.Large,
-        _ => fallback,
-    };
+    public static KeyboardSize ParseSize(string? text, KeyboardSize fallback) => KeyboardSizes.Parse(text, fallback);
 
-    public static string SizeName(KeyboardSize size) => size switch
-    {
-        KeyboardSize.ExtraSmall => "xs",
-        KeyboardSize.Small => "s",
-        KeyboardSize.Large => "l",
-        _ => "m",
-    };
+    public static string SizeName(KeyboardSize size) => KeyboardSizes.Name(size);
 
     public static KeyboardConfig Read(TomlReader table)
     {

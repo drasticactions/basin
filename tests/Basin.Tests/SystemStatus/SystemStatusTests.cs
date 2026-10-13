@@ -302,11 +302,135 @@ public sealed class SystemStatusTests
     [InlineData(0u, 0u, 0u, AccessPointSecurity.Open)]
     [InlineData(1u, 0u, 0u, AccessPointSecurity.Wep)]
     [InlineData(1u, 0u, 0x188u, AccessPointSecurity.Wpa)]
-    [InlineData(1u, 0u, 0x400u, AccessPointSecurity.Wpa)]
+    [InlineData(1u, 0u, 0x400u, AccessPointSecurity.Wpa3)]
+    [InlineData(1u, 0u, 0x500u, AccessPointSecurity.Wpa3)]
     [InlineData(1u, 0x200u, 0x200u, AccessPointSecurity.Enterprise)]
     [InlineData(0u, 0u, 0x800u, AccessPointSecurity.Open)]
     public void Access_point_flags_map_onto_a_security_kind(uint flags, uint wpa, uint rsn, AccessPointSecurity expected) =>
         Assert.Equal(expected, NetworkStatus.SecurityOf(flags, wpa, rsn));
+
+    [Fact]
+    public void Activate_secured_sends_psk_or_sae_system_wide_and_clears_the_passphrase()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost();
+        using var nm = StartNetworkManager(host, daemon);
+        const string Active = "/org/freedesktop/NetworkManager/ActiveConnection/7";
+        nm.Add(Active, "org.freedesktop.NetworkManager.Connection.Active", new() { ["State"] = VariantValue.UInt32(2) });
+        var sent = new List<Dictionary<string, Dictionary<string, VariantValue>>>();
+        var previous = nm.OnMethod;
+        nm.OnMethod = context =>
+        {
+            if (context.Request.MemberAsString != "AddAndActivateConnection")
+            {
+                return previous!(context);
+            }
+
+            sent.Add(ReadSettings(context.Request));
+            using var writer = context.CreateReplyWriter("oo");
+            writer.WriteObjectPath("/org/freedesktop/NetworkManager/Settings/9");
+            writer.WriteObjectPath(Active);
+            context.Reply(writer.CreateMessage());
+            return true;
+        };
+        using var bus = new SystemStatusBus(host.Loop, new SystemStatusOptions { Address = daemon.Address });
+        using var network = NetworkStatus.TryCreate(bus, out _)!;
+        PortalBusTests.PumpUntil(host, () => network.IsReady);
+        var home = network.AccessPoints.Single(a => a.Ssid == "Home");
+
+        var passphrase = Encoding.UTF8.GetBytes("correct horse");
+        var result = PortalBusTests.Await(host, network.ActivateSecured(home, passphrase));
+        Assert.True(result.Succeeded, result.Error);
+        Assert.All(passphrase, b => Assert.Equal(0, b));
+        var wpa3 = home with { Security = AccessPointSecurity.Wpa3 };
+        Assert.True(PortalBusTests.Await(host, network.ActivateSecured(wpa3, Encoding.UTF8.GetBytes("battery staple"))).Succeeded);
+
+        Assert.Equal(2, sent.Count);
+        Assert.Equal(["802-11-wireless-security"], sent[0].Keys);
+        Assert.Equal("wpa-psk", sent[0]["802-11-wireless-security"]["key-mgmt"].GetString());
+        Assert.Equal("correct horse", sent[0]["802-11-wireless-security"]["psk"].GetString());
+        Assert.Equal("sae", sent[1]["802-11-wireless-security"]["key-mgmt"].GetString());
+        Assert.DoesNotContain(sent, settings => settings.ContainsKey("connection"));
+        Assert.DoesNotContain(nm.Calls(), call => call.Member == "Delete");
+
+        var cafe = network.AccessPoints.Single(a => a.Ssid == "Cafe");
+        Assert.False(PortalBusTests.Await(host, network.ActivateSecured(cafe, new byte[] { 1 })).Succeeded);
+    }
+
+    [Fact]
+    public void Activate_secured_reports_a_refusal_and_a_wrong_key_in_words()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost();
+        using var nm = StartNetworkManager(host, daemon);
+        const string Active = "/org/freedesktop/NetworkManager/ActiveConnection/8";
+        nm.Add(Active, "org.freedesktop.NetworkManager.Connection.Active", new() { ["State"] = VariantValue.UInt32(1) });
+        nm.Add(WifiDevice, "org.freedesktop.NetworkManager.Device", new()
+        {
+            ["DeviceType"] = VariantValue.UInt32(2),
+            ["StateReason"] = VariantValue.Struct(VariantValue.UInt32(30), VariantValue.UInt32(0)),
+        });
+        var refuse = true;
+        var previous = nm.OnMethod;
+        nm.OnMethod = context =>
+        {
+            if (context.Request.MemberAsString != "AddAndActivateConnection")
+            {
+                return previous!(context);
+            }
+
+            if (refuse)
+            {
+                context.ReplyError("org.freedesktop.NetworkManager.PermissionDenied", "Not authorized to add this connection");
+                return true;
+            }
+
+            using (var writer = context.CreateReplyWriter("oo"))
+            {
+                writer.WriteObjectPath("/org/freedesktop/NetworkManager/Settings/9");
+                writer.WriteObjectPath(Active);
+                context.Reply(writer.CreateMessage());
+            }
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(300);
+                nm.Signal(WifiDevice, "org.freedesktop.NetworkManager.Device", "StateChanged", 120, 60, 7);
+                nm.Signal(WifiDevice, "org.freedesktop.NetworkManager.Device", "StateChanged", 30, 120, 0);
+                nm.Set(Active, "org.freedesktop.NetworkManager.Connection.Active", "State", VariantValue.UInt32(4));
+            });
+            return true;
+        };
+        using var bus = new SystemStatusBus(host.Loop, new SystemStatusOptions { Address = daemon.Address });
+        using var network = NetworkStatus.TryCreate(bus, out _)!;
+        PortalBusTests.PumpUntil(host, () => network.IsReady);
+        var home = network.AccessPoints.Single(a => a.Ssid == "Home");
+
+        var refused = PortalBusTests.Await(host, network.ActivateSecured(home, Encoding.UTF8.GetBytes("pw")));
+        Assert.False(refused.Succeeded);
+        Assert.Contains("Not authorized to add this connection", refused.Error, StringComparison.Ordinal);
+
+        refuse = false;
+        var wrong = PortalBusTests.Await(host, network.ActivateSecured(home, Encoding.UTF8.GetBytes("pw")));
+        Assert.False(wrong.Succeeded);
+        Assert.Equal("the passphrase was not accepted", wrong.Error);
+        var forgotten = Assert.Single(nm.Calls(), call => call.Member == "Delete");
+        Assert.Equal(("/org/freedesktop/NetworkManager/Settings/9", "org.freedesktop.NetworkManager.Settings.Connection"), (forgotten.Path, forgotten.Interface));
+    }
+
+    private static Dictionary<string, Dictionary<string, VariantValue>> ReadSettings(Message request)
+    {
+        var reader = request.GetBodyReader();
+        var settings = new Dictionary<string, Dictionary<string, VariantValue>>();
+        var groups = reader.ReadDictionaryStart();
+        while (reader.HasNext(groups))
+        {
+            var name = reader.ReadString();
+            settings[name] = reader.ReadDictionaryOfStringToVariantValue();
+        }
+
+        return settings;
+    }
 
     private static MockSystemService StartNetworkManager(CompositorTestHost host, PrivateBus daemon)
     {

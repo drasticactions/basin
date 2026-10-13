@@ -37,6 +37,43 @@ public sealed class ClientTeardownTests
         }
     }
 
+    [Fact]
+    public void A_spawned_client_inherits_no_descriptor_beyond_its_standard_three()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the check reads /proc/self/fd");
+
+        var marker = Path.Combine(Path.GetTempPath(), $"basin-fds-{Environment.ProcessId}-{Environment.TickCount64}");
+        var leaked = OpenInheritable("/dev/null");
+        Assert.True(leaked > 2, "could not open a descriptor without close-on-exec");
+        using var host = new CompositorTestHost();
+        try
+        {
+            using var tracker = new ProcessTracker(host.Loop, () => ProcessTracker.SessionEnvironment("wayland-not-connected", null, null));
+            var client = tracker.SpawnShell($"ls /proc/self/fd > '{marker}.tmp'; mv '{marker}.tmp' '{marker}'", out var error);
+            Assert.True(client is not null, error);
+            for (var i = 0; i < 200 && !File.Exists(marker); i++)
+            {
+                Thread.Sleep(20);
+            }
+
+            var fds = File.ReadAllLines(marker).Select(line => int.Parse(line, CultureInfo.InvariantCulture)).ToList();
+            Assert.DoesNotContain(leaked, fds);
+            Assert.Contains(0, fds);
+            tracker.TerminateAll(TimeSpan.FromSeconds(1));
+        }
+        finally
+        {
+            _ = CloseDescriptor(leaked);
+            File.Delete(marker);
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int OpenInheritable(string path, int flags = 0);
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close")]
+    private static extern int CloseDescriptor(int fd);
+
     private static int WaitForMarker(string marker)
     {
         for (var i = 0; i < 200; i++)

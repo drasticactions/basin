@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:luna="using:LunaWm"
+             xmlns:osk="using:Basin.SoftKeyboard.Avalonia"
+             xmlns:basin="using:Basin.UI.Avalonia"
+             x:Class="LunaWm.GreeterLoginView"
+             x:DataType="luna:GreeterLoginModel">
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding Cancel}" />
+  </UserControl.KeyBindings>
+  <Grid Classes.contrast="{Binding HighContrast}">
+  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="{Binding PadMargin}" Spacing="18">
+    <ItemsControl x:Name="UserStrip" AutomationProperties.Name="Users" ItemsSource="{Binding Users}" HorizontalAlignment="Center">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="18" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="luna:GreeterUserEntry">
+          <Button Classes="greeteruser" Classes.selected="{Binding Selected}" AutomationProperties.Name="{Binding DisplayName}"
+                  Command="{Binding $parent[ItemsControl].((luna:GreeterLoginModel)DataContext).Choose}" CommandParameter="{Binding}">
+            <StackPanel Spacing="8" Width="96">
+              <Panel Width="72" Height="72" HorizontalAlignment="Center">
+                <Border Classes="greeteravatar" IsVisible="{Binding !HasAvatar}">
+                  <TextBlock Text="{Binding Initials}" FontSize="26" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <Border Classes="greeteravatar" ClipToBounds="True" IsVisible="{Binding HasAvatar}">
+                  <Image Source="{Binding Avatar}" Stretch="UniformToFill" />
+                </Border>
+              </Panel>
+              <TextBlock Text="{Binding DisplayName}" Classes="greetername" />
+            </StackPanel>
+          </Button>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <TextBlock Classes="lockhint" Text="Tap your picture to log in" HorizontalAlignment="Center" IsVisible="{Binding ShowUsers}" />
+    <Border x:Name="Pad" Classes="lockpad" IsVisible="{Binding ShowPad}" HorizontalAlignment="Center">
+      <Border.RenderTransform>
+        <TranslateTransform />
+      </Border.RenderTransform>
+      <StackPanel Spacing="12" Width="320">
+        <TextBlock Text="{Binding CurrentUser}" FontSize="22" Foreground="White" HorizontalAlignment="Center" IsVisible="{Binding ShowCurrentUser}" />
+        <TextBox x:Name="NameBox" AutomationProperties.Name="Username" PlaceholderText="Username" Text="{Binding NameText}" IsVisible="{Binding AskName}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding Submit}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+        <ItemsControl ItemsSource="{Binding Messages}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Text="{Binding}" Classes="lockmessage" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{Binding PromptText}" Classes="lockmessage" IsVisible="{Binding HasPrompt}" TextWrapping="Wrap" />
+        <basin:SecretTextBox x:Name="Field" AutomationProperties.Name="{Binding PromptText}" PasswordChar="&#x25cf;" Text="{Binding FieldText}"
+                             IsVisible="{Binding SecretShown}" IsEnabled="{Binding CanSubmit}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding Submit}" />
+          </TextBox.KeyBindings>
+        </basin:SecretTextBox>
+        <TextBox x:Name="VisibleField" AutomationProperties.Name="{Binding PromptText}" Text="{Binding FieldText}"
+                 IsVisible="{Binding VisibleShown}" IsEnabled="{Binding CanSubmit}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding Submit}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+        <TextBlock Text="{Binding ErrorText}" Classes="greetererror" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="*,12,*">
+          <Button Grid.Column="0" Classes="lockdone" Content="Back" HorizontalAlignment="Stretch" Command="{Binding Cancel}" />
+          <Button Grid.Column="2" Classes="lockdone" Content="Done" HorizontalAlignment="Stretch" Command="{Binding Submit}"
+                  IsVisible="{Binding ShowDone}" IsEnabled="{Binding CanSubmit}" />
+          <Button x:Name="OkButton" Grid.Column="2" Classes="lockdone" Content="OK" HorizontalAlignment="Stretch" Command="{Binding Dismiss}"
+                  IsVisible="{Binding NeedsDismiss}" />
+        </Grid>
+      </StackPanel>
+    </Border>
+  </StackPanel>
+  <osk:SoftKeyboardPanel x:Name="KeyboardHost" VerticalAlignment="Bottom" IsOpen="{Binding KeyboardVisible}">
+    <luna:KeyboardView x:Name="Keyboard" AutomationProperties.Name="On-screen keyboard" Height="{Binding KeyboardHeight}" />
+  </osk:SoftKeyboardPanel>
+  </Grid>
+</UserControl>

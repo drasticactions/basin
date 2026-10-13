@@ -12,9 +12,13 @@ public static class KeyboardLayouts
 
     private static readonly string[] BuiltIn = ["us-qwerty", "us-dvorak", "se-qwerty", "se-dvorak", "fr-azerty", "de-qwertz"];
 
+    private static readonly string[] Windows8BuiltIn = ["win8-standard-en-us", "win8-thumb-en-us", "win8-full-en-us"];
+
     public static IReadOnlyList<string> Ids => BuiltIn;
 
-    public static bool IsBuiltIn(string id) => Array.IndexOf(BuiltIn, id) >= 0;
+    public static IReadOnlyList<string> Windows8Ids => Windows8BuiltIn;
+
+    public static bool IsBuiltIn(string id) => Array.IndexOf(BuiltIn, id) >= 0 || Array.IndexOf(Windows8BuiltIn, id) >= 0;
 
     public static string DefaultFor(string? locale)
     {
@@ -100,44 +104,127 @@ public static class KeyboardLayouts
         var units = (float)top.Number("width_units", 11.0);
         var numLock = top.Flag("num_lock", false);
         var symbolLabel = top.Text("symbol_label") ?? "+ = [  ]";
-        if (top.Raw("rows") is not TomlArray rowArray || rowArray.Count != KeyGrid.Rows - 1)
+        var gridRows = (int)top.Number("grid_rows", KeyGrid.DefaultRows);
+        var gridColumns = (int)top.Number("grid_columns", KeyGrid.DefaultColumns);
+        float[]? rowHeights = null;
+        if (top.Raw("row_heights") is TomlArray heights)
         {
-            throw new FormatException($"{source}: rows must be an array of {KeyGrid.Rows - 1} rows");
+            rowHeights = new float[heights.Count];
+            for (var i = 0; i < heights.Count; i++)
+            {
+                rowHeights[i] = heights[i] switch
+                {
+                    double d => (float)d,
+                    long l => l,
+                    _ => throw new FormatException($"{source}: row_heights[{i}] is not a number"),
+                };
+            }
         }
 
-        var rows = new KeyCell[KeyGrid.Rows - 1][];
+        var shaped = rowHeights is not null || gridRows != KeyGrid.DefaultRows || gridColumns != KeyGrid.DefaultColumns;
+        if (gridRows is < 2 or > KeyGrid.MaxRows || gridColumns is < 1 or > KeyGrid.MaxColumns)
+        {
+            throw new FormatException($"{source}: a layout has 2 to {KeyGrid.MaxRows} rows and 1 to {KeyGrid.MaxColumns} columns");
+        }
+
+        if (shaped && rowHeights is null)
+        {
+            rowHeights = new float[gridRows];
+            Array.Fill(rowHeights, 70f);
+        }
+
+        if (rowHeights is not null && rowHeights.Length != gridRows)
+        {
+            throw new FormatException($"{source}: row_heights has {rowHeights.Length} entries, not {gridRows}");
+        }
+
+        var bottomTable = top.Section("bottom");
+        if (top.Raw("rows") is not TomlArray rowArray ||
+            (rowArray.Count != gridRows - 1 && !(shaped && bottomTable is null && rowArray.Count == gridRows)))
+        {
+            throw new FormatException($"{source}: rows must be an array of {gridRows - 1} rows");
+        }
+
+        var rows = new KeyCell[gridRows - 1][];
         for (var row = 0; row < rows.Length; row++)
         {
-            rows[row] = ParseRow(rowArray[row] as TomlArray, row, logger, $"{source}: rows[{row}]");
+            rows[row] = ParseRow(rowArray[row] as TomlArray, row, gridColumns, logger, $"{source}: rows[{row}]");
         }
 
         var dotCom = ParseCaps(top.Raw("dotcom") as TomlArray, logger, $"{source}: dotcom") ?? [];
-        var bottom = top.Section("bottom") ?? throw new FormatException($"{source}: [bottom] is missing");
         var bottoms = new KeyCell[3][];
-        bottoms[(int)BottomRow.Default] = ParseRow(bottom.Raw("default") as TomlArray, KeyGrid.Rows - 1, logger, $"{source}: bottom.default");
-        bottoms[(int)BottomRow.Email] = bottom.Raw("email") is TomlArray email
-            ? ParseRow(email, KeyGrid.Rows - 1, logger, $"{source}: bottom.email")
-            : bottoms[(int)BottomRow.Default];
-        bottoms[(int)BottomRow.Url] = bottom.Raw("url") is TomlArray url
-            ? ParseRow(url, KeyGrid.Rows - 1, logger, $"{source}: bottom.url")
-            : bottoms[(int)BottomRow.Default];
+        if (bottomTable is null)
+        {
+            if (rowArray.Count != gridRows)
+            {
+                throw new FormatException($"{source}: [bottom] is missing");
+            }
+
+            bottoms[0] = bottoms[1] = bottoms[2] = ParseRow(rowArray[gridRows - 1] as TomlArray, gridRows - 1, gridColumns, logger, $"{source}: rows[{gridRows - 1}]");
+        }
+        else
+        {
+            bottoms[(int)BottomRow.Default] = ParseRow(bottomTable.Raw("default") as TomlArray, gridRows - 1, gridColumns, logger, $"{source}: bottom.default");
+            bottoms[(int)BottomRow.Email] = bottomTable.Raw("email") is TomlArray email
+                ? ParseRow(email, gridRows - 1, gridColumns, logger, $"{source}: bottom.email")
+                : bottoms[(int)BottomRow.Default];
+            bottoms[(int)BottomRow.Url] = bottomTable.Raw("url") is TomlArray url
+                ? ParseRow(url, gridRows - 1, gridColumns, logger, $"{source}: bottom.url")
+                : bottoms[(int)BottomRow.Default];
+        }
+
+        Dictionary<string, KeyCell[][]>? pages = null;
+        if (top.Section("pages") is { } pageTable)
+        {
+            pages = new Dictionary<string, KeyCell[][]>(StringComparer.Ordinal);
+            foreach (var pageName in pageTable.Table.Keys.ToArray())
+            {
+                if (pageTable.Section(pageName) is not { } page)
+                {
+                    throw new FormatException($"{source}: pages.{pageName} must be a table");
+                }
+
+                if (page.Raw("rows") is not TomlArray pageRows || pageRows.Count != gridRows)
+                {
+                    throw new FormatException($"{source}: pages.{pageName}.rows must be an array of {gridRows} rows");
+                }
+
+                var cells = new KeyCell[gridRows][];
+                for (var row = 0; row < gridRows; row++)
+                {
+                    cells[row] = ParseRow(pageRows[row] as TomlArray, row, gridColumns, logger, $"{source}: pages.{pageName}.rows[{row}]");
+                }
+
+                pages[pageName] = cells;
+            }
+        }
+
         top.ReportUnknown();
-        return new KeyboardLayout(id, name, language, units, numLock, symbolLabel, rows, bottoms, dotCom);
+        var layout = new KeyboardLayout(id, name, language, units, numLock, symbolLabel, gridRows, gridColumns, rowHeights, rows, bottoms, dotCom, pages);
+        return HasEmojiKey(rows, bottoms, pages)
+            ? layout.WithPages(EmojiPages.Build(gridRows, gridColumns, EmojiPages.BuiltIn))
+            : layout;
     }
 
-    private static KeyCell[] ParseRow(TomlArray? array, int row, BasinLogger log, string where)
+    internal static bool HasEmojiKey(KeyCell[][] rows, KeyCell[][] bottoms, Dictionary<string, KeyCell[][]>? pages)
+    {
+        static bool Any(KeyCell[][] cells) => cells.Any(static row => row.Any(static cell => cell.Plain?.Function == KeyFunction.Emoji));
+        return Any(rows) || Any(bottoms) || (pages is not null && pages.Values.Any(Any));
+    }
+
+    private static KeyCell[] ParseRow(TomlArray? array, int row, int columns, BasinLogger log, string where)
     {
         if (array is null)
         {
             throw new FormatException($"{where}: expected an array of keys");
         }
 
-        if (array.Count > KeyGrid.Columns)
+        if (array.Count > columns)
         {
-            throw new FormatException($"{where}: {array.Count} keys, at most {KeyGrid.Columns}");
+            throw new FormatException($"{where}: {array.Count} keys, at most {columns}");
         }
 
-        var cells = new KeyCell[KeyGrid.Columns];
+        var cells = new KeyCell[columns];
         Array.Fill(cells, KeyCell.Empty);
         for (var column = 0; column < array.Count; column++)
         {
@@ -155,6 +242,13 @@ public static class KeyboardLayouts
                 plainToken = literal;
             }
 
+            if (reader.Flag("spacer", false))
+            {
+                reader.ReportUnknown();
+                cells[column] = weight > 0 ? KeyCell.Spacer(weight) : throw new FormatException($"{where}[{column}]: a spacer needs a weight above 0");
+                continue;
+            }
+
             if (weight == 0 || plainToken is null)
             {
                 reader.ReportUnknown();
@@ -167,9 +261,9 @@ public static class KeyboardLayouts
                 throw new FormatException($"{where}[{column}]: unknown key '{plainToken}'");
             }
 
-            if (label is not null && plain.IsText)
+            if (label is not null)
             {
-                plain = KeyCap.Character(plain.Text, label);
+                plain = plain.WithLabel(label);
             }
 
             KeyCap? alternate = null;

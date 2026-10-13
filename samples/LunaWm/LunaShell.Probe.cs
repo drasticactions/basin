@@ -150,7 +150,7 @@ internal sealed partial class LunaShell
                 }
 
                 bytes = GC.GetAllocatedBytesForCurrentThread() - bytes;
-                _kbClockFloor = Math.Max(_kbClockFloor, now);
+                _kbSession.Typer.AdvanceTo(now);
                 _kb.Cancel(78);
                 KeyboardTouchUp(78, time);
             }

@@ -4,6 +4,7 @@
     <PackageId>Basin.Session</PackageId>
     <RootNamespace>Basin.Session</RootNamespace>
     <Description>Session and device management for Basin over libseat.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

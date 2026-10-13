@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:EightWm"
+             x:Class="EightWm.LockCurtainView"
+             x:DataType="local:CurtainModel"
+             Focusable="True"
+             ClipToBounds="True"
+             AutomationProperties.Name="Lock screen">
+  <Grid x:Name="Sheet" Background="Transparent">
+    <Grid.RenderTransform>
+      <TranslateTransform />
+    </Grid.RenderTransform>
+    <Border Background="{Binding Fill}" />
+    <Image Source="{Binding Picture}" Stretch="UniformToFill" IsVisible="{Binding !HighContrast}" />
+    <Border Background="Black" IsVisible="{Binding HighContrast}" />
+    <Border Background="#99000000" IsVisible="{Binding Dimmed}" />
+    <StackPanel x:Name="Status" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="80,0,0,64">
+      <TextBlock x:Name="ClockText" Text="{Binding Clock}" FontSize="120" FontWeight="Light" Foreground="White" />
+      <TextBlock x:Name="DateText" Text="{Binding Date}" FontSize="40" FontWeight="Light" Foreground="White" Margin="4,-12,0,0" />
+      <StackPanel Orientation="Horizontal" Spacing="20" Margin="4,28,0,0">
+        <Button x:Name="NetworkButton" Classes="curtainGlyph" IsVisible="{Binding HasNetwork}" AutomationProperties.Name="{Binding NetworkName}">
+          <PathIcon x:Name="NetworkIcon" Width="28" Height="28" Foreground="White" />
+        </Button>
+        <PathIcon x:Name="BatteryIcon" Width="28" Height="28" Foreground="White" Data="{StaticResource GlyphBattery}" IsVisible="{Binding HasBattery}" />
+        <TextBlock Text="{Binding BatteryText}" FontSize="20" Foreground="White" VerticalAlignment="Center" IsVisible="{Binding HasBattery}" />
+      </StackPanel>
+    </StackPanel>
+  </Grid>
+</UserControl>

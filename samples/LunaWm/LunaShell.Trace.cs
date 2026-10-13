@@ -25,7 +25,7 @@ internal sealed partial class LunaShell
         };
         _kb.TraceUpdated += _kbModel.Invalidate;
         _kb.TraceEnded += OnTraceEnded;
-        _softInput.FieldChanged += _ => UpdateTraceEnabled();
+        _kbSession.TextInput.FieldChanged += _ => UpdateTraceEnabled();
     }
 
     private void StopTrace()
@@ -75,10 +75,10 @@ internal sealed partial class LunaShell
             return;
         }
 
-        var field = _softInput.Field;
+        var field = _kbSession.TextInput.Field;
         var wanted = _config.Keyboard.Trace && _kbView is not null &&
             (!field.Active || field.Kind is FieldKind.Text or FieldKind.Terminal);
-        var enabled = wanted && DecoderFor(CurrentKeyboardLayout.Language) is not null;
+        var enabled = wanted && DecoderFor(_kbSession.CurrentLayout.Language) is not null;
         _kb.TraceEnabled = enabled;
         _kb.SlowLongPress = enabled;
     }
@@ -88,7 +88,7 @@ internal sealed partial class LunaShell
         var path = _kb.TracePath;
         _traceFade.Start(TraceFade, 1, 0, Now, TimeScale);
         _kbView?.Scheduler?.ScheduleRepaint();
-        if (!_decoders.TryGetValue(CurrentKeyboardLayout.Language, out var decoder) || decoder is null)
+        if (!_decoders.TryGetValue(_kbSession.CurrentLayout.Language, out var decoder) || decoder is null)
         {
             _report.Line("TRACE none");
             return;
@@ -109,7 +109,7 @@ internal sealed partial class LunaShell
         _traceCandidates = results;
         var best = results[0].Word;
         _traceCommitted = best + " ";
-        _kbRouter.CommitWord(_traceCommitted, KeyboardNow);
+        _kbSession.Router.CommitWord(_traceCommitted, KeyboardNow);
         var alternatives = results.Count > 1 ? $" alt={string.Join(',', results.Skip(1).Take(2).Select(static r => r.Word))}" : "";
         _report.Line($"TRACE {best}{alternatives}");
         if (_kbModel.BarHeight > 0)
@@ -130,9 +130,9 @@ internal sealed partial class LunaShell
 
         if (index > 0)
         {
-            _kbRouter.DeleteCommitted(committed, KeyboardNow);
+            _kbSession.Router.DeleteCommitted(committed, KeyboardNow);
             _traceCommitted = _traceCandidates[index].Word + " ";
-            _kbRouter.CommitWord(_traceCommitted, KeyboardNow);
+            _kbSession.Router.CommitWord(_traceCommitted, KeyboardNow);
             _report.Line($"TRACE {_traceCandidates[index].Word} replaced");
         }
 
@@ -179,7 +179,7 @@ internal sealed partial class LunaShell
         }
 
         var now = KeyboardStep(600);
-        _lastInput = LastInput.Touch;
+        _kbSession.NoteInput(LastInput.Touch);
         _kb.TouchDown(KeyboardCommandTouch, centers[0].X, centers[0].Y, now);
         _kb.Frame(now);
         for (var i = 1; i < centers.Count; i++)
@@ -201,7 +201,7 @@ internal sealed partial class LunaShell
             _kb.TouchMotion(KeyboardCommandTouch, last.X, last.Y, now += 8);
         }
 
-        _kbClockFloor = Math.Max(_kbClockFloor, now);
+        _kbSession.Typer.AdvanceTo(now);
         _kb.TouchUp(KeyboardCommandTouch, now);
         return true;
     }

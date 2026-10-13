@@ -60,6 +60,10 @@
         <ToggleSwitch x:Name="AnimationsSwitch" OnContent="On" OffContent="Off" IsChecked="{Binding Animations}" />
         <TextBlock Text="Hot corners" Classes="win-type-medium" />
         <ToggleSwitch x:Name="HotCornersSwitch" OnContent="On" OffContent="Off" IsChecked="{Binding HotCorners}" />
+        <TextBlock Text="Keyboard" Classes="win-type-medium" />
+        <Button x:Name="KeyboardButton" Content="Touch keyboard" Command="{Binding Keyboard}" AutomationProperties.Name="Touch keyboard" />
+        <TextBlock Text="Power" Classes="win-type-medium" />
+        <Button x:Name="LockButton" Content="Lock" Command="{Binding Lock}" AutomationProperties.Name="Lock" />
       </StackPanel>
     </Panel>
   </win:SettingsFlyout>

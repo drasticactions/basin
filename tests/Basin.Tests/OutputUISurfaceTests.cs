@@ -47,6 +47,36 @@ public sealed class OutputUISurfaceTests
     }
 
     [Fact]
+    public void A_zoom_shrinks_the_logical_size_and_keeps_the_box_and_the_input_mapping()
+    {
+        var scene = new Scene.Scene();
+        using var host = new FalsifierUIHost();
+        var index = new UISurfaceIndex();
+        var zoomed = new OutputUISurface(scene.Root, host, index) { Zoom = 2.0 };
+
+        Assert.True(zoomed.Place(new Box(100, 0, 1280, 720), 1.5));
+        Assert.Equal(new UISurfaceSize(640, 360, 3.0), zoomed.Surface!.Size);
+        Assert.Equal(1280, zoomed.Node.Node.DestinationWidth);
+        Assert.Equal(720, zoomed.Node.Node.DestinationHeight);
+        Assert.Equal(new Box(100, 0, 1280, 720), zoomed.Bounds);
+
+        var router = new UISurfaceRouter(scene, index);
+        zoomed.Publish();
+        Assert.True(router.TryLocal(zoomed.Surface!, 300, 200, out var localX, out var localY));
+        Assert.Equal(100, localX, 6);
+        Assert.Equal(100, localY, 6);
+
+        zoomed.Zoom = 1.0;
+        Assert.True(zoomed.Place(new Box(100, 0, 1280, 720), 1.5));
+        Assert.Equal(new UISurfaceSize(1280, 720, 1.5), zoomed.Surface!.Size);
+        Assert.Null(zoomed.Node.DevicePixels);
+        Assert.Equal(1.0, zoomed.Node.InputScale);
+
+        zoomed.Dispose();
+        scene.Root.Destroy();
+    }
+
+    [Fact]
     public void A_mode_or_scale_change_reconfigures_the_same_surface()
     {
         var scene = new Scene.Scene();

@@ -1,0 +1,195 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:BasinGreeter.UI"
+             xmlns:basin="using:Basin.UI.Avalonia"
+             xmlns:osk="using:Basin.SoftKeyboard.Avalonia"
+             x:Class="BasinGreeter.UI.LoginView"
+             x:DataType="ui:LoginModel">
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding Cancel}" />
+  </UserControl.KeyBindings>
+  <DockPanel>
+    <Border x:Name="Bar" DockPanel.Dock="Bottom" HorizontalAlignment="Stretch" Padding="16,10"
+            Background="{DynamicResource GreeterBox}" BorderBrush="{DynamicResource GreeterBoxBorder}" BorderThickness="0,1,0,0">
+      <DockPanel LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="20">
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding Bar.BatteryVisible}">
+            <PathIcon Data="{StaticResource GlyphBattery}" Width="20" Height="20" />
+            <TextBlock x:Name="BatteryText" Text="{Binding Bar.BatteryText}" VerticalAlignment="Center" />
+          </StackPanel>
+          <Button x:Name="NetworkButton" AutomationProperties.Name="Network" IsVisible="{Binding Bar.NetworkVisible}" Command="{Binding Bar.Network.Toggle}"
+                  IsHitTestVisible="{Binding Bar.Network.CanJoin}" Background="Transparent" BorderThickness="0" Padding="4,2">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon x:Name="NetworkGlyph" Width="20" Height="20" />
+              <TextBlock x:Name="NetworkText" Text="{Binding Bar.NetworkText}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="AccessibilityButton" AutomationProperties.Name="Accessibility" Command="{Binding Accessibility.Toggle}" ToolTip.Tip="Accessibility">
+            <PathIcon Data="{StaticResource GlyphAccessibility}" Width="20" Height="20" />
+          </Button>
+          <Button x:Name="KeyboardButton" AutomationProperties.Name="On-screen keyboard" IsVisible="{Binding KeyboardAllowed}" Command="{Binding ToggleKeyboard}" ToolTip.Tip="On-screen keyboard">
+            <PathIcon Data="{StaticResource GlyphKeyboard}" Width="20" Height="18" />
+          </Button>
+          <ComboBox x:Name="LayoutBox" AutomationProperties.Name="Keyboard layout" ItemsSource="{Binding Bar.Layouts}" SelectedItem="{Binding Bar.SelectedLayout}"
+                    IsVisible="{Binding Bar.LayoutVisible}" MinWidth="110" ToolTip.Tip="Keyboard layout" />
+          <Button x:Name="PowerButton" AutomationProperties.Name="Power" IsVisible="{Binding Bar.PowerVisible}" ToolTip.Tip="Power">
+            <PathIcon Data="{StaticResource GlyphPower}" Width="18" Height="18" />
+            <Button.Flyout>
+              <MenuFlyout Placement="TopEdgeAlignedRight">
+                <MenuItem Header="Suspend" Command="{Binding Bar.Suspend}" IsVisible="{Binding Bar.CanSuspend}" />
+                <MenuItem Header="Restart" Command="{Binding Bar.Restart}" IsVisible="{Binding Bar.CanRestart}" />
+                <MenuItem Header="Shut Down" Command="{Binding Bar.ShutDown}" IsVisible="{Binding Bar.CanShutDown}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <osk:SoftKeyboardPanel x:Name="KeyboardHost" DockPanel.Dock="Bottom" IsOpen="{Binding KeyboardVisible}">
+      <osk:SoftKeyboardCanvas x:Name="Keyboard" AutomationProperties.Name="On-screen keyboard" Height="{Binding KeyboardHeight}" />
+    </osk:SoftKeyboardPanel>
+    <Panel>
+    <Border x:Name="NetworkMenu" IsVisible="{Binding Bar.Network.Open}" ZIndex="5"
+              HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="16,0,0,8" Width="340" Padding="12" CornerRadius="8"
+              Background="{DynamicResource GreeterBox}" BorderBrush="{DynamicResource GreeterBoxBorder}" BorderThickness="1">
+        <StackPanel Spacing="8">
+          <DockPanel IsVisible="{Binding Bar.Network.HasWifi}">
+            <ToggleSwitch DockPanel.Dock="Right" AutomationProperties.Name="Wi-Fi" IsChecked="{Binding Bar.Network.WifiEnabled}" OnContent="" OffContent="" />
+            <TextBlock Text="Wi-Fi" VerticalAlignment="Center" FontWeight="SemiBold" />
+          </DockPanel>
+          <ItemsControl ItemsSource="{Binding Bar.Network.Points}" MaxHeight="320">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ui:NetworkPointEntry">
+                <Button Command="{Binding Choose}" IsEnabled="{Binding Enabled}" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0" Margin="0,1">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Foreground="{DynamicResource GreeterMuted}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Ssid}" FontWeight="{Binding Active, Converter={x:Static ui:BoldWhen.Instance}}" VerticalAlignment="Center" />
+                  </DockPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Spacing="6" IsVisible="{Binding Bar.Network.Asking}">
+            <TextBlock Text="{Binding Bar.Network.AskingFor}" FontWeight="SemiBold" />
+            <basin:SecretTextBox x:Name="Passphrase" AutomationProperties.Name="Passphrase" PasswordChar="●" PlaceholderText="Passphrase" Text="{Binding Bar.Network.Passphrase}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding Bar.Network.Connect}" />
+                <KeyBinding Gesture="Escape" Command="{Binding Bar.Network.CancelPassphrase}" />
+              </TextBox.KeyBindings>
+            </basin:SecretTextBox>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+              <Button Content="Cancel" Command="{Binding Bar.Network.CancelPassphrase}" />
+              <Button Content="Connect" Command="{Binding Bar.Network.Connect}" Classes="accent" />
+            </StackPanel>
+          </StackPanel>
+          <TextBlock Text="{Binding Bar.Network.Message}" IsVisible="{Binding Bar.Network.HasMessage}" TextWrapping="Wrap"
+                     Foreground="{DynamicResource GreeterMuted}" />
+        </StackPanel>
+      </Border>
+      <Border x:Name="AccessibilityMenu" IsVisible="{Binding Accessibility.Open}" ZIndex="5"
+              HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,8" Width="300" Padding="16" CornerRadius="8"
+              Background="{DynamicResource GreeterBox}" BorderBrush="{DynamicResource GreeterBoxBorder}" BorderThickness="1">
+        <StackPanel Spacing="12">
+          <DockPanel>
+            <ToggleSwitch x:Name="ContrastSwitch" AutomationProperties.Name="High contrast" DockPanel.Dock="Right" IsChecked="{Binding Accessibility.HighContrast}" OnContent="" OffContent="" />
+            <TextBlock Text="High contrast" VerticalAlignment="Center" />
+          </DockPanel>
+          <DockPanel IsVisible="{Binding Accessibility.ReaderAvailable}">
+            <ToggleSwitch x:Name="ReaderSwitch" AutomationProperties.Name="Screen reader" DockPanel.Dock="Right" IsChecked="{Binding Accessibility.ReaderOn}" OnContent="" OffContent="" />
+            <TextBlock Text="Screen reader" VerticalAlignment="Center" />
+          </DockPanel>
+          <DockPanel>
+            <ComboBox x:Name="TextSizeBox" AutomationProperties.Name="Text size" DockPanel.Dock="Right" ItemsSource="{Binding Accessibility.TextSizes}" SelectedItem="{Binding Accessibility.TextSize}" MinWidth="100" />
+            <TextBlock Text="Text size" VerticalAlignment="Center" />
+          </DockPanel>
+        </StackPanel>
+      </Border>
+      <Border x:Name="Confirm" IsVisible="{Binding Bar.Confirming}" ZIndex="10"
+              HorizontalAlignment="Center" VerticalAlignment="Center" Width="400" Padding="24" CornerRadius="8"
+              Background="{DynamicResource GreeterBox}" BorderBrush="{DynamicResource GreeterBoxBorder}" BorderThickness="1">
+        <StackPanel Spacing="16">
+          <TextBlock Text="{Binding Bar.ConfirmText}" FontSize="16" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Cancel" Command="{Binding Bar.CancelConfirm}" />
+            <Button Content="OK" Command="{Binding Bar.Confirm}" Classes="accent" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+      <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="{DynamicResource GreeterBox}"
+              BorderBrush="{DynamicResource GreeterBoxBorder}" BorderThickness="1"
+              CornerRadius="8" Padding="24" Width="400" IsVisible="{Binding !Bar.Confirming}">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="8" IsVisible="{Binding ShowList}">
+            <ListBox x:Name="UserList" AutomationProperties.Name="Users" ItemsSource="{Binding Users}" SelectedItem="{Binding SelectedUser}"
+                     MaxHeight="360" Background="Transparent">
+              <ListBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding ChooseSelected}" />
+              </ListBox.KeyBindings>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="ui:UserEntry">
+                  <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Panel Width="40" Height="40">
+                      <Border CornerRadius="20" Background="{DynamicResource GreeterAvatar}" IsVisible="{Binding !HasAvatar}">
+                        <TextBlock Text="{Binding Initials}" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" />
+                      </Border>
+                      <Border CornerRadius="20" ClipToBounds="True" IsVisible="{Binding HasAvatar}">
+                        <Image Source="{Binding Avatar}" Stretch="UniformToFill" />
+                      </Border>
+                    </Panel>
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" FontSize="16" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
+
+          <StackPanel Spacing="10" IsVisible="{Binding ShowConversation}">
+            <TextBlock Text="{Binding CurrentUser}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"
+                       IsVisible="{Binding !AskUsername}" />
+            <TextBox x:Name="UsernameBox" AutomationProperties.Name="Username" PlaceholderText="Username" Text="{Binding UsernameText}" IsVisible="{Binding AskUsername}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding Submit}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <ItemsControl ItemsSource="{Binding Messages}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{Binding}" Foreground="{DynamicResource GreeterMuted}" TextWrapping="Wrap" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding PromptText}" IsVisible="{Binding HasPrompt}" TextWrapping="Wrap" />
+            <basin:SecretTextBox x:Name="Field" AutomationProperties.Name="{Binding PromptText}" Text="{Binding FieldText}" PasswordChar="{Binding MaskChar}"
+                     IsVisible="{Binding HasPrompt}" IsEnabled="{Binding CanSubmit}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding Submit}" />
+              </TextBox.KeyBindings>
+            </basin:SecretTextBox>
+            <TextBlock Text="{Binding ErrorText}" IsVisible="{Binding HasError}"
+                       Foreground="{DynamicResource GreeterError}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <ComboBox x:Name="SessionBox" AutomationProperties.Name="Session" ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession}"
+                    HorizontalAlignment="Stretch" PlaceholderText="Session">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="ui:SessionEntry">
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBox PlaceholderText="Command" AutomationProperties.Name="Command" Text="{Binding CommandText}" IsVisible="{Binding AllowCommand}" />
+
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Back" Command="{Binding Cancel}" IsVisible="{Binding ShowConversation}" />
+            <Button Content="OK" Command="{Binding Dismiss}" IsVisible="{Binding NeedsDismiss}" />
+            <Button Content="Log In" Command="{Binding Submit}" Classes="accent" IsEnabled="{Binding CanSubmit}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

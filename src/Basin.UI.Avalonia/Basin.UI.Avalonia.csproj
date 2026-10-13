@@ -18,6 +18,7 @@
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.FreeDesktop.AtSpi" />
     <PackageReference Include="Avalonia.HarfBuzz" />
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>

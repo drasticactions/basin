@@ -80,12 +80,12 @@ public sealed class HeadlessSessionTests
         Assert.Equal(Field(area, "Height = "), Field(mapped, "Height = "));
 
         await Chord(session, 33);
-        var restored = await Geometry(session, holding: "fullscreen=False");
+        var restored = await Geometry(session, holding: "fullscreen=False", until: line => Field(line, "Width = ") < Field(area, "Width = "));
         Assert.NotNull(restored);
         Assert.Contains("fullscreen=False", restored!, StringComparison.Ordinal);
         Assert.Contains("kind=Normal", restored, StringComparison.Ordinal);
-        Assert.True(Field(restored, "Width = ") < Field(area, "Width = "));
-        Assert.True(Field(restored, "Y = ") > Field(area, "Y = "));
+        Assert.True(Field(restored, "Width = ") < Field(area, "Width = "), restored);
+        Assert.True(Field(restored, "Y = ") > Field(area, "Y = "), restored);
 
         if (!app.HasExited)
         {
@@ -774,7 +774,7 @@ public sealed class HeadlessSessionTests
             poke: "where",
             fresh: true));
 
-    private static async Task<string?> Geometry(Session session, string? changedFrom = null, string? holding = null)
+    private static async Task<string?> Geometry(Session session, string? changedFrom = null, string? holding = null, Func<string, bool>? until = null)
     {
         var deadline = Environment.TickCount64 + 10_000;
         string? previous = null;
@@ -784,7 +784,8 @@ public sealed class HeadlessSessionTests
             var line = await session.WaitForAsync(l => l.StartsWith("WINDOW ", StringComparison.Ordinal), poke: "where", fresh: true);
             if (line is not null && line == previous &&
                 (changedFrom is null || line != changedFrom) &&
-                (holding is null || line.Contains(holding, StringComparison.Ordinal)))
+                (holding is null || line.Contains(holding, StringComparison.Ordinal)) &&
+                (until is null || until(line)))
             {
                 return line;
             }

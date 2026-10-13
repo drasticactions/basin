@@ -231,6 +231,23 @@ internal sealed partial class Shell
             }
         });
 
+        _report.Register(methods, "eightwm/unplug", "unplug [{index:number}]", (ref IpcParams p, IpcReply _) =>
+        {
+            var index = p.TryGetDouble("index", out var at) ? (int)at : _outputs.Views.Count - 1;
+            if (_host.Headless is not null && index >= 0 && index < _outputs.Views.Count)
+            {
+                _outputs.RemoveView(_outputs.Views[index]);
+            }
+        });
+
+        _report.Register(methods, "eightwm/plug", "plug", () =>
+        {
+            if (_host.Headless is { } headless)
+            {
+                _outputs.AddView(headless.CreateOutput(_outputs.HeadlessMode));
+            }
+        });
+
         _report.Register(methods, "eightwm/mousedown", "mousedown", () => _seat.ButtonAt(pressed: true));
         _report.Register(methods, "eightwm/mouseup", "mouseup", () => _seat.ButtonAt(pressed: false));
 
@@ -289,6 +306,25 @@ internal sealed partial class Shell
                     : null);
         });
 
+        _report.Register(methods, "eightwm/shotraw", "shotraw {path}", (ref IpcParams p, IpcReply _) =>
+        {
+            var path = p.GetString("path");
+            if (!p.Failed)
+            {
+                var view = Views.Count > 0 ? Views[0].Driver : null;
+                var blit = view?.Output is Basin.IHardwareCursor hardware && hardware.TryPresentedCursor(out var sprite, out var where)
+                    ? new Basin.Scene.CursorBlit(sprite, where)
+                    : default;
+                var buffer = view?.LastPresentedBuffer;
+                _report.Line(Basin.Scene.SceneScreenshot.WritePresented(buffer, view?.Scene?.PresentedLayers, blit, _renderer, path, out var planes) switch
+                {
+                    Basin.Scene.ScreenshotOutcome.NoFrame => "SHOTRAW none",
+                    Basin.Scene.ScreenshotOutcome.Unreadable => $"SHOTRAW unreadable {buffer!.Width}x{buffer.Height}",
+                    _ => $"SHOTRAW {path} {buffer!.Width}x{buffer.Height} planes={planes}",
+                });
+            }
+        });
+
         _report.Register(methods, "eightwm/shot", "shot {path} [{index:int}]", (ref IpcParams p, IpcReply reply) =>
         {
             var path = p.GetString("path");
@@ -315,6 +351,34 @@ internal sealed partial class Shell
             _shotReply = reply.Defer();
             _outputs.RepaintNow(Views[index].Driver);
         });
+
+        RegisterKeyboardCommands(methods);
+        _report.Register(methods, "eightwm/lock", "lock", Lock);
+        _report.Register(methods, "eightwm/unlock-type", "unlock-type {text...}", (ref IpcParams p, IpcReply _) =>
+        {
+            var text = p.GetString("text");
+            if (!p.Failed)
+            {
+                _uiDriver.Pump();
+                UnlockType(text);
+                _uiDriver.Pump();
+            }
+        });
+        _report.Register(methods, "eightwm/unlock-submit", "unlock-submit", () =>
+        {
+            _uiDriver.Pump();
+            UnlockSubmit();
+        });
+        _report.Register(methods, "eightwm/lock-clock", "lock-clock {text...}", (ref IpcParams p, IpcReply _) =>
+        {
+            var text = p.GetString("text");
+            if (!p.Failed)
+            {
+                SetLockClock(text);
+            }
+        });
+        _report.Register(methods, "eightwm/lock-state", "lock-state", () =>
+            _report.Line($"LOCKSTATE own={(_ownLocked ? "on" : "off")} external={(_externalLocked ? "on" : "off")} shown={(OwnLockShown ? "yes" : "no")} curtain={(_lockCurtain.Raised ? "up" : "down")} failures={_failures} busy={(_lockSignIn.Busy ? "yes" : "no")} error=\"{_lockSignIn.Error}\""));
 
         _report.Register(methods, "eightwm/reload", "reload", Reload);
 

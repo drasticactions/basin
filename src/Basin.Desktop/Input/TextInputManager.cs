@@ -5,7 +5,7 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
-public sealed class TextInputManager : IDisposable, ITextInputCommit
+public sealed class TextInputManager : IDisposable, ITextInputFocus
 {
     public const int TextInputVersion = 1;
 

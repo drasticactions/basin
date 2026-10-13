@@ -15,7 +15,7 @@ internal static class Keys
     public static int Find(SoftKeyboardEngine engine, string name)
     {
         var grid = engine.Grid;
-        for (var i = 0; i < KeyGrid.CellCount; i++)
+        for (var i = 0; i < grid.CellCount; i++)
         {
             if (grid[i] is { IsVisible: true, Plain: { } plain } && (plain.IsText ? plain.Text : plain.Name) == name)
             {

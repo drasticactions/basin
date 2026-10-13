@@ -18,6 +18,7 @@
     <Project Path="samples/TinyComp/TinyComp.csproj" />
     <Project Path="samples/TinyWl/TinyWl.csproj" />
     <Project Path="samples/DungeonWm/DungeonWm.csproj" />
+    <Project Path="samples/BasinGreeter/BasinGreeter.csproj" />
     <Project Path="samples/Westonia/Westonia.csproj" />
     <Project Path="samples/System7Wm/System7Wm.csproj" />
     <Project Path="samples/LunaWm/LunaWm.csproj" />
@@ -36,7 +37,12 @@
     <Project Path="src/Basin.Themes.MsStyles/Basin.Themes.MsStyles.csproj" />
     <Project Path="src/Basin.Pty/Basin.Pty.csproj" />
     <Project Path="src/Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
+    <Project Path="src/Basin.SoftKeyboard.Avalonia/Basin.SoftKeyboard.Avalonia.csproj" />
     <Project Path="src/Basin.SoftKeyboard.Fcitx5/Basin.SoftKeyboard.Fcitx5.csproj" />
+    <Project Path="src/Basin.SoftKeyboard.Ipc/Basin.SoftKeyboard.Ipc.csproj" />
+    <Project Path="src/Basin.Greetd/Basin.Greetd.csproj" />
+    <Project Path="src/Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
+    <Project Path="src/Basin.Greetd.Host/Basin.Greetd.Host.csproj" />
     <Project Path="src/Basin.Notifications/Basin.Notifications.csproj" />
     <Project Path="src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
     <Project Path="src/Basin.Backend.Wayland.Skia/Basin.Backend.Wayland.Skia.csproj" />
@@ -120,6 +126,7 @@
     <Project Path="tests/BasinChurn/BasinChurn.csproj" />
     <Project Path="tests/BasinMcp.Tests/BasinMcp.Tests.csproj" />
     <Project Path="tests/MauiComp.Tests/MauiComp.Tests.csproj" />
+    <Project Path="tests/BasinGreeter.Tests/BasinGreeter.Tests.csproj" />
     <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
     <Project Path="tests/EightWm.Tests/EightWm.Tests.csproj" />
     <Project Path="tests/System7Wm.Tests/System7Wm.Tests.csproj" />

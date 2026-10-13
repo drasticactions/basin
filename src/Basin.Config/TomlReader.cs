@@ -8,6 +8,7 @@ public sealed class TomlReader
     private readonly TomlTable _table;
     private readonly HashSet<string> _read = new(StringComparer.Ordinal);
     private readonly List<TomlReader> _children = [];
+    private readonly Dictionary<string, TomlReader> _sections = new(StringComparer.Ordinal);
     private readonly string _prefix;
 
     public TomlReader(TomlTable table, BasinLogger log)
@@ -34,8 +35,14 @@ public sealed class TomlReader
             return null;
         }
 
+        if (_sections.TryGetValue(key, out var known) && ReferenceEquals(known._table, child))
+        {
+            return known;
+        }
+
         var reader = new TomlReader(child, _prefix + key + ".", Log);
         _children.Add(reader);
+        _sections[key] = reader;
         return reader;
     }
 

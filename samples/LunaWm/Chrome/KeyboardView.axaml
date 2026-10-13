@@ -1,7 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:luna="using:LunaWm"
+             xmlns:osk="using:Basin.SoftKeyboard.Avalonia"
              x:Class="LunaWm.KeyboardView"
              IsHitTestVisible="False">
-  <luna:KeyboardCanvas x:Name="Canvas" />
+  <Panel>
+    <luna:KeyboardBarCanvas x:Name="Bar" />
+    <osk:SoftKeyboardCanvas x:Name="Canvas" Input="External" />
+  </Panel>
 </UserControl>

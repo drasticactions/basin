@@ -38,6 +38,17 @@
               <Slider Minimum="0" Maximum="1" Value="{Binding Value}" />
             </StackPanel>
           </DataTemplate>
+          <DataTemplate DataType="luna:PassphraseRow">
+            <StackPanel Margin="0,6,0,8" Spacing="8">
+              <TextBlock Text="{Binding Label}" FontSize="16" Opacity="0.8" />
+              <TextBox Classes="passphrase" Text="{Binding Text}" PasswordChar="&#x25cf;" PlaceholderText="Passphrase"
+                       Tag="{Binding}" KeyDown="OnPassphraseKey" AttachedToVisualTree="OnPassphraseShown" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Tag="{Binding}" Click="OnPassphraseCancel" />
+                <Button Content="Join" Tag="{Binding}" Click="OnPassphraseJoin" />
+              </StackPanel>
+            </StackPanel>
+          </DataTemplate>
           <DataTemplate DataType="luna:ActionRow">
             <Border Classes="menurow" Padding="0,9" Background="Transparent" Tag="{Binding}" PointerReleased="OnAction"
                     IsEnabled="{Binding Enabled}" Margin="{Binding Indent}">

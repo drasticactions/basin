@@ -10,10 +10,20 @@ public sealed class KeyboardRouter
     public const uint ReturnCode = 28;
     public const uint LeftCode = 105;
     public const uint RightCode = 106;
+    public const uint EscapeCode = 1;
+    public const uint UpCode = 103;
+    public const uint DownCode = 108;
+    public const uint HomeCode = 102;
+    public const uint EndCode = 107;
+    public const uint PageUpCode = 104;
+    public const uint PageDownCode = 109;
+    public const uint DeleteCode = 111;
 
     private const uint XkbOffset = 8;
     private const uint ShiftMask = 1;
     private const uint ControlMask = 4;
+    private const uint AltMask = 8;
+    private const uint SuperMask = 64;
     private const string NoPeriodAfter = ".,;:!?";
 
     private readonly SoftKeyboardTextInput _textInput;
@@ -61,6 +71,13 @@ public sealed class KeyboardRouter
     public void Send(in TypedKey key, long now)
     {
         var route = Route;
+        if (key.Modifiers != KeyModifiers.None && (key.Cap.IsText || key.Cap.IsKeystroke))
+        {
+            Chord(route, key, (uint)now);
+            Sent?.Invoke(key, route);
+            return;
+        }
+
         if (key.Cap.IsText && !key.Cap.IsShortcut && DoubleSpace(key, now))
         {
             Emit(route, new TypedKey(KeyCap.Backspace, false, false, false, false), (uint)now);
@@ -120,15 +137,7 @@ public sealed class KeyboardRouter
             return;
         }
 
-        var (code, keysym) = cap.Function switch
-        {
-            KeyFunction.Backspace => (BackspaceCode, 0xff08u),
-            KeyFunction.Return => (ReturnCode, 0xff0du),
-            KeyFunction.Tab => (TabCode, 0xff09u),
-            KeyFunction.Left => (LeftCode, 0xff51u),
-            KeyFunction.Right => (RightCode, 0xff53u),
-            _ => (0u, 0u),
-        };
+        var (code, keysym) = Keystroke(cap);
         if (code == 0)
         {
             return;
@@ -167,6 +176,71 @@ public sealed class KeyboardRouter
 
                 break;
         }
+    }
+
+    public static (uint Code, uint Keysym) Keystroke(KeyCap cap)
+    {
+        ArgumentNullException.ThrowIfNull(cap);
+        return cap.Function switch
+        {
+            KeyFunction.Backspace => (BackspaceCode, 0xff08u),
+            KeyFunction.Return => (ReturnCode, 0xff0du),
+            KeyFunction.Tab => (TabCode, 0xff09u),
+            KeyFunction.Left => (LeftCode, 0xff51u),
+            KeyFunction.Right => (RightCode, 0xff53u),
+            KeyFunction.Escape => (EscapeCode, 0xff1bu),
+            KeyFunction.Up => (UpCode, 0xff52u),
+            KeyFunction.Down => (DownCode, 0xff54u),
+            KeyFunction.Home => (HomeCode, 0xff50u),
+            KeyFunction.End => (EndCode, 0xff57u),
+            KeyFunction.PageUp => (PageUpCode, 0xff55u),
+            KeyFunction.PageDown => (PageDownCode, 0xff56u),
+            KeyFunction.Delete => (DeleteCode, 0xffffu),
+            KeyFunction.FunctionKey when cap.Argument is >= 1 and <= 10 => (58u + (uint)cap.Argument, 0xffbdu + (uint)cap.Argument),
+            KeyFunction.FunctionKey when cap.Argument is 11 or 12 => (76u + (uint)cap.Argument, 0xffbdu + (uint)cap.Argument),
+            _ => (0u, 0u),
+        };
+    }
+
+    private void Chord(KeyRoute route, in TypedKey key, uint time)
+    {
+        _lastKey = '\0';
+        _spaceArmed = false;
+        var modifiers = key.Modifiers;
+        uint code;
+        uint keysym;
+        uint resolved = 0;
+        if (key.Cap.IsText)
+        {
+            Rune.DecodeFromUtf16(key.Text, out var rune, out _);
+            keysym = XkbKeysym.FromUtf32((uint)rune.Value).Value;
+            if (!_output.TryResolve(keysym, out code, out resolved))
+            {
+                return;
+            }
+        }
+        else
+        {
+            (code, keysym) = Keystroke(key.Cap);
+            if (code == 0)
+            {
+                return;
+            }
+        }
+
+        if (route == KeyRoute.Backend)
+        {
+            var state = resolved;
+            state |= (modifiers & KeyModifiers.Shift) != 0 ? ShiftMask : 0;
+            state |= (modifiers & KeyModifiers.Control) != 0 ? ControlMask : 0;
+            state |= (modifiers & KeyModifiers.Alt) != 0 ? AltMask : 0;
+            state |= (modifiers & KeyModifiers.Super) != 0 ? SuperMask : 0;
+            Backend!.ProcessKey(keysym, code + XkbOffset, state, release: false, time);
+            Backend.ProcessKey(keysym, code + XkbOffset, state, release: true, time);
+            return;
+        }
+
+        _output.ModifiedKey(code, resolved, modifiers, time);
     }
 
     private void Text(KeyRoute route, string text, uint time)

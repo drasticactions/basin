@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.SoftKeyboard.Avalonia</PackageId>
+    <RootNamespace>Basin.SoftKeyboard.Avalonia</RootNamespace>
+    <Description>An Avalonia control that draws and drives a Basin on-screen keyboard through a skin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+
+</Project>

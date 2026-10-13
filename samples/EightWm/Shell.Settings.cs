@@ -26,6 +26,8 @@ internal sealed partial class Shell
         model.SetPalette(AccentPalette);
         model.Load(DarkNow, AccentNow, AnimationsOn, HotCornersOn);
         model.Changed += name => OnSettingChanged(model, name);
+        model.LockRequested += Lock;
+        model.KeyboardRequested += RaiseKeyboard;
         _settingsModels.Add(model);
     }
 

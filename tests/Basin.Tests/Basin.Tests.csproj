@@ -36,6 +36,11 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.Pty/Basin.Pty.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd/Basin.Greetd.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
+    <ProjectReference Include="../../src/Basin.Greetd.Host/Basin.Greetd.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
+    <ProjectReference Include="../../src/Basin.SoftKeyboard.Ipc/Basin.SoftKeyboard.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.Notifications/Basin.Notifications.csproj" />
     <ProjectReference Include="../../samples/Dam/Dam.csproj" />
     <ProjectReference Include="../../samples/EightWm/EightWm.csproj" />

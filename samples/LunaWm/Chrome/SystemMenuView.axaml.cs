@@ -23,6 +23,47 @@ public sealed partial class SystemMenuView : UserControl
         }
     }
 
+    private void OnPassphraseKey(object? sender, KeyEventArgs e)
+    {
+        if (sender is Control { Tag: PassphraseRow row })
+        {
+            if (e.Key == Key.Enter)
+            {
+                row.Submit();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                row.Cancelled?.Invoke();
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void OnPassphraseShown(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => box.Focus(NavigationMethod.Tab), Avalonia.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    private void OnPassphraseJoin(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: PassphraseRow row })
+        {
+            row.Submit();
+        }
+    }
+
+    private void OnPassphraseCancel(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: PassphraseRow row })
+        {
+            row.Cancelled?.Invoke();
+        }
+    }
+
     private void OnAction(object? sender, PointerReleasedEventArgs e)
     {
         if (sender is Control { Tag: ActionRow row, IsEffectivelyEnabled: true })

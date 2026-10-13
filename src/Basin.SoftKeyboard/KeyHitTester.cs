@@ -2,9 +2,9 @@ namespace Basin.SoftKeyboard;
 
 public sealed class KeyHitTester
 {
-    private readonly float[] _columnRights = new float[KeyGrid.CellCount];
-    private readonly float[] _rowBottoms = new float[KeyGrid.Rows];
-    private readonly KeyRect[] _rects = new KeyRect[KeyGrid.CellCount];
+    private readonly float[] _columnRights = new float[KeyGrid.MaxCells];
+    private readonly float[] _rowBottoms = new float[KeyGrid.MaxRows];
+    private readonly KeyRect[] _rects = new KeyRect[KeyGrid.MaxCells];
     private KeyGrid _grid;
     private float _width;
     private float _height;
@@ -30,7 +30,7 @@ public sealed class KeyHitTester
 
     public float Height => _height;
 
-    public ReadOnlySpan<KeyRect> Rects => _rects;
+    public ReadOnlySpan<KeyRect> Rects => _rects.AsSpan(0, _grid.CellCount);
 
     public KeyRect RectOf(int cell) => _rects[cell];
 
@@ -39,9 +39,9 @@ public sealed class KeyHitTester
         _width = width;
         _height = keymapHeight;
         _grid.RowLimits(keymapHeight, _rowBottoms);
-        for (var row = 0; row < KeyGrid.Rows; row++)
+        for (var row = 0; row < _grid.Rows; row++)
         {
-            _grid.ColumnLimits(row, width, _columnRights.AsSpan(row * KeyGrid.Columns, KeyGrid.Columns));
+            _grid.ColumnLimits(row, width, _columnRights.AsSpan(row * _grid.Columns, _grid.Columns));
         }
 
         _grid.Layout(width, keymapHeight, _rects);
@@ -50,26 +50,31 @@ public sealed class KeyHitTester
     public int Find(float x, float y, bool diamonds = true)
     {
         var row = 0;
-        while (y > _rowBottoms[row] && ++row < KeyGrid.Rows)
+        while (y > _rowBottoms[row] && ++row < _grid.Rows)
         {
         }
 
-        if (row >= KeyGrid.Rows)
+        if (row >= _grid.Rows)
         {
             return -1;
         }
 
         var column = 0;
-        while (x > Right(row, column) && ++column < KeyGrid.Columns)
+        while (x > Right(row, column) && ++column < _grid.Columns)
         {
         }
 
-        if (column >= KeyGrid.Columns)
+        if (column >= _grid.Columns)
         {
             return -1;
         }
 
         var cell = _grid[row, column];
+        if (cell.IsSpacer)
+        {
+            return -1;
+        }
+
         var changed = false;
         if (diamonds)
         {
@@ -80,7 +85,7 @@ public sealed class KeyHitTester
             {
                 otherRow = row - 1;
             }
-            else if (row < KeyGrid.Rows - 1 && y > centerY + min)
+            else if (row < _grid.Rows - 1 && y > centerY + min)
             {
                 otherRow = row + 1;
             }
@@ -93,11 +98,11 @@ public sealed class KeyHitTester
                     otherColumn--;
                 }
 
-                while (x > Right(otherRow, otherColumn) && ++otherColumn < KeyGrid.Columns)
+                while (x > Right(otherRow, otherColumn) && ++otherColumn < _grid.Columns)
                 {
                 }
 
-                if (otherColumn < KeyGrid.Columns)
+                if (otherColumn < _grid.Columns)
                 {
                     var centerX = CenterOfKey(x, row, column, cell.Weight);
                     var other = _grid[otherRow, otherColumn];
@@ -124,25 +129,25 @@ public sealed class KeyHitTester
 
         if (!changed && cell.IsInvisible)
         {
-            for (var nearColumn = Math.Max(0, column - 1); nearColumn <= column + 1 && nearColumn < KeyGrid.Columns; nearColumn++)
+            for (var nearColumn = Math.Max(0, column - 1); nearColumn <= column + 1 && nearColumn < _grid.Columns; nearColumn++)
             {
-                for (var nearRow = Math.Max(0, row - 1); nearRow <= row + 1 && nearRow < KeyGrid.Rows; nearRow++)
+                for (var nearRow = Math.Max(0, row - 1); nearRow <= row + 1 && nearRow < _grid.Rows; nearRow++)
                 {
                     if ((nearColumn != column || nearRow != row) && _grid[nearRow, nearColumn] is { IsVisible: true } near && SameCap(near.Plain, cell.Plain))
                     {
-                        return KeyGrid.Index(nearRow, nearColumn);
+                        return _grid.Index(nearRow, nearColumn);
                     }
                 }
             }
         }
 
-        return cell.IsKey ? KeyGrid.Index(row, column) : -1;
+        return cell.IsKey ? _grid.Index(row, column) : -1;
     }
 
     internal static bool SameCap(KeyCap? a, KeyCap? b) =>
         a is not null && b is not null && a.Function == b.Function && a.Text == b.Text;
 
-    private float Right(int row, int column) => _columnRights[(row * KeyGrid.Columns) + column];
+    private float Right(int row, int column) => _columnRights[(row * _grid.Columns) + column];
 
     private float Left(int row, int column) => column > 0 ? Right(row, column - 1) : 0;
 
@@ -173,12 +178,17 @@ public sealed class KeyHitTester
     {
         var top = row > 0 ? _rowBottoms[row - 1] : 0;
         var bottom = _rowBottoms[row];
+        if (!_grid.RowBias)
+        {
+            return (top + bottom) / 2;
+        }
+
         if (row == 0)
         {
             return bottom / 4;
         }
 
-        if (row < KeyGrid.Rows - 1)
+        if (row < _grid.Rows - 1)
         {
             return (top + bottom) / 2;
         }
