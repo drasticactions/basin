@@ -255,7 +255,7 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     private void OnTransactionCompleted()
     {
-        if (_awaiting)
+        if (_awaiting && _participant.Transaction is { IsComplete: true })
         {
             FinishAwait();
             _participant = default;

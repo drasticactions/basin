@@ -50,6 +50,10 @@ public sealed class XWaylandSceneDriver : IDisposable
         entry.Scene.SetSubstitute(entry.Mask.Render(buffer, shape));
     }
 
+    private static bool AwaitsResizedBuffer(XWaylandWindow window) =>
+        window.Surface is { IsDestroyed: false } surface && surface.Current.Buffer is { } buffer
+        && (buffer.Width != window.X11Bounds.Width || buffer.Height != window.X11Bounds.Height);
+
     public SceneFit? FitOf(XWaylandWindow window) => Find(window)?.Fit;
 
     public SceneTree? ParentOf(XWaylandWindow window) => Find(window)?.Parent;
@@ -275,7 +279,13 @@ public sealed class XWaylandSceneDriver : IDisposable
                 Reshape(entry, ShapeRenderer, ShapeAllocator);
             }
         };
-        entry.Reshape = () => Reshape(entry, ShapeRenderer, ShapeAllocator);
+        entry.Reshape = () =>
+        {
+            if (!AwaitsResizedBuffer(window))
+            {
+                Reshape(entry, ShapeRenderer, ShapeAllocator);
+            }
+        };
         window.ShapeChanged += entry.Reshape;
         entry.Drop = () => Remove(entry);
         window.GeometryChanged += entry.Layout;

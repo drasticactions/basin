@@ -154,7 +154,7 @@ internal sealed partial class TinyComp
         }
 
         internal void LayoutShadow() =>
-            _shadow?.SetGeometry(new Box(0, 0, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1)));
+            _shadow?.SetGeometry(new Box(0, 0, Math.Max(Shown.Width, 1), Math.Max(Shown.Height, 1)));
 
         internal FrameCornerRig? DetachCornerRig()
         {
@@ -232,6 +232,13 @@ internal sealed partial class TinyComp
 
         public void MoveTo(int x, int y) => ResizeTo(x, y, XWin.Width, XWin.Height, ResizeEdges.None);
 
+        private Box Shown => _shown ?? new Box(X, Y, XWin.Width, XWin.Height);
+
+        private Box? _shown;
+        private Transaction? _resizeFlow;
+        private Box? _heldResize;
+        private bool _resizing;
+
         public void ResizeTo(int x, int y, int width, int height, ResizeEdges edges)
         {
             _comp._effects.OnResized(
@@ -241,25 +248,94 @@ internal sealed partial class TinyComp
                 new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
                 0,
                 0);
-            var root = _comp.XRoot();
-            var sideX = Inside(x, width, root.X, root.Right);
-            var sideY = Inside(y, height, root.Y, root.Bottom);
-            OffsetX = x - sideX;
-            OffsetY = y - sideY;
-            XWin.Configure(sideX, sideY, width, height);
+            var box = new Box(x, y, width, height);
+            if (_resizing && _comp._useTransactions)
+            {
+                if (_resizeFlow is not null)
+                {
+                    _heldResize = box;
+                }
+                else if (box != new Box(X, Y, XWin.Width, XWin.Height))
+                {
+                    SendPacedResize(box);
+                }
+
+                return;
+            }
+
+            DropResizeFlow();
+            Place(box);
+            XWin.Configure(box.X - OffsetX, box.Y - OffsetY, width, height);
             Layout();
+        }
+
+        private void Place(Box box)
+        {
+            var root = _comp.XRoot();
+            var sideX = Inside(box.X, box.Width, root.X, root.Right);
+            var sideY = Inside(box.Y, box.Height, root.Y, root.Bottom);
+            OffsetX = box.X - sideX;
+            OffsetY = box.Y - sideY;
+        }
+
+        private void SendPacedResize(Box box)
+        {
+            _shown = Shown;
+            Place(box);
+            var flow = new Transaction(_comp.Loop);
+            _resizeFlow = flow;
+            flow.Completed += () => OnPacedResizeLanded(flow);
+            XWin.Configure(flow, box.X - OffsetX, box.Y - OffsetY, box.Width, box.Height);
+            flow.Seal();
+        }
+
+        private void OnPacedResizeLanded(Transaction flow)
+        {
+            if (!ReferenceEquals(_resizeFlow, flow))
+            {
+                return;
+            }
+
+            _resizeFlow = null;
+            flow.Dispose();
+            _shown = null;
+            if (SceneSurface.IsDestroyed)
+            {
+                return;
+            }
+
+            Layout();
+            if (_heldResize is { } held)
+            {
+                _heldResize = null;
+                if (held != new Box(X, Y, XWin.Width, XWin.Height))
+                {
+                    SendPacedResize(held);
+                }
+            }
+        }
+
+        private void DropResizeFlow()
+        {
+            _heldResize = null;
+            if (_resizeFlow is { } flow)
+            {
+                _resizeFlow = null;
+                flow.Dispose();
+            }
+
+            _shown = null;
         }
 
         private static int Inside(int origin, int size, int low, int high) =>
             origin >= low && origin + size <= high ? origin : Math.Clamp(origin, low, Math.Max(low, high - size));
 
-        public void SetResizing(bool resizing)
-        {
-        }
+        public void SetResizing(bool resizing) => _resizing = resizing;
 
         public void Layout()
         {
-            Tree.SetPosition(X, Y);
+            var shown = Shown;
+            Tree.SetPosition(shown.X, shown.Y);
             Outer.SetPosition(0, 0);
             LayoutShadow();
             if (Framable)
@@ -269,17 +345,18 @@ internal sealed partial class TinyComp
 
             ReportGeometry();
             _comp._workspaceModel.RaiseMembersChanged();
-            if (_frame is not null && XWin.Width > 0 && XWin.Height > 0)
+            if (_frame is not null && shown.Width > 0 && shown.Height > 0)
             {
                 _frame.Visible = true;
-                _frame.Configure(new Box(0, 0, XWin.Width, XWin.Height), _comp.ScaleAt(X + 1, Y + 1), BuildState());
+                _frame.Configure(new Box(0, 0, shown.Width, shown.Height), _comp.ScaleAt(shown.X + 1, shown.Y + 1), BuildState());
                 _frame.Commit();
             }
         }
 
         public void ReportGeometry()
         {
-            var client = new Box(X, Y, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1));
+            var shown = Shown;
+            var client = new Box(shown.X, shown.Y, Math.Max(shown.Width, 1), Math.Max(shown.Height, 1));
             var frame = _frame is null ? client : FrameBox;
             _comp._xwaylandModule.DisplayOf(XWin)?.Toplevels?.SetGeometry(XWin, frame, client);
         }
@@ -424,12 +501,13 @@ internal sealed partial class TinyComp
                     return default;
                 }
 
-                var insets = _frame.Measure(BuildState(), _comp.ScaleAt(X + 1, Y + 1));
+                var shown = Shown;
+                var insets = _frame.Measure(BuildState(), _comp.ScaleAt(shown.X + 1, shown.Y + 1));
                 return new Box(
-                    X - insets.Left,
-                    Y - insets.Top,
-                    XWin.Width + insets.Left + insets.Right,
-                    XWin.Height + insets.Top + insets.Bottom);
+                    shown.X - insets.Left,
+                    shown.Y - insets.Top,
+                    shown.Width + insets.Left + insets.Right,
+                    shown.Height + insets.Top + insets.Bottom);
             }
         }
 
@@ -553,6 +631,7 @@ internal sealed partial class TinyComp
 
         public void Destroy()
         {
+            DropResizeFlow();
             if (!SceneSurface.IsDestroyed)
             {
                 SceneSurface.Destroy();

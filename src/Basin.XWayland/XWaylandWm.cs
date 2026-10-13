@@ -673,10 +673,10 @@ public sealed unsafe class XWaylandWm : IDisposable
                     break;
                 }
 
-                var values = stackalloc uint[4] { (uint)e->x, (uint)e->y, e->width, e->height };
+                var values = stackalloc uint[5] { (uint)e->x, (uint)e->y, e->width, e->height, 0 };
                 _ = Libxcb.xcb_configure_window(
                     _conn, e->window,
-                    0x1 | 0x2 | 0x4 | 0x8 ,
+                    0x1 | 0x2 | 0x4 | 0x8 | 0x10,
                     values);
                 if (window is not null)
                 {
@@ -1738,8 +1738,8 @@ public sealed unsafe class XWaylandWm : IDisposable
             window.EmulatedLogical = new Box(x, y, width, height);
         }
 
-        var values = stackalloc uint[4] { (uint)x11X, (uint)x11Y, (uint)x11Width, (uint)x11Height };
-        _ = Libxcb.xcb_configure_window(_conn, window.WindowId, 0x1 | 0x2 | 0x4 | 0x8, values);
+        var values = stackalloc uint[5] { (uint)x11X, (uint)x11Y, (uint)x11Width, (uint)x11Height, 0 };
+        _ = Libxcb.xcb_configure_window(_conn, window.WindowId, 0x1 | 0x2 | 0x4 | 0x8 | 0x10, values);
         (window.X, window.Y, window.Width, window.Height) = (x, y, width, height);
         window.X11Bounds = new Box(x11X, x11Y, x11Width, x11Height);
 
