@@ -100,7 +100,7 @@ internal sealed class OverviewSetting
         GestureFingers = DefaultFingers,
         HotCorner = ScreenCorner.TopLeft,
         HotCornerMs = DefaultHotCornerMs,
-        Wall = OverviewWall.Slope,
+        Wall = OverviewWall.Step,
         WallWidth = DefaultWallWidth,
         WallColor = DefaultWallColor,
         WallShade = DefaultWallShade,
@@ -131,7 +131,7 @@ internal sealed class OverviewSetting
 
     public int HotCornerMillis => HotCornerMs ?? DefaultHotCornerMs;
 
-    public OverviewWall WallValue => Wall ?? OverviewWall.Slope;
+    public OverviewWall WallValue => Wall ?? OverviewWall.Step;
 
     public bool Steps => WallValue == OverviewWall.Step;
 
@@ -324,7 +324,7 @@ internal sealed class OverviewSetting
                     wall = WallFromName(wallName);
                     if (wall is null)
                     {
-                        log.Warn($"[{section}] wall \"{wallName}\" is not slope|step, keeping slope");
+                        log.Warn($"[{section}] wall \"{wallName}\" is not slope|step, keeping step");
                     }
 
                     break;

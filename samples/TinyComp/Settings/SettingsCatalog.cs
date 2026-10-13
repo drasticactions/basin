@@ -320,7 +320,7 @@ internal static class SettingsCatalog
                 Default = "\"top-left\"", Choices = ["top-left", "top-right", "bottom-left", "bottom-right", "none"],
             },
             new(Overview, "overview", "hot_corner_ms", "Hot corner delay (ms)", SettingKind.Integer) { Default = "150", Min = 0, Max = 2000 },
-            new(Overview, "overview", "wall", "Wall", SettingKind.Choice) { Default = "\"slope\"", Choices = ["slope", "step"] },
+            new(Overview, "overview", "wall", "Wall", SettingKind.Choice) { Default = "\"step\"", Choices = ["slope", "step"] },
             new(Overview, "overview", "anchor", "Anchor", SettingKind.Choice) { Default = "\"fill\"", Choices = ["fill", "center"] },
             new(Overview, "overview", "wall_width", "Wall width", SettingKind.Real) { Default = "0.04", Min = 0, Max = 0.2, Step = 0.01 },
             new(Overview, "overview", "wall_color", "Wall color", SettingKind.Color) { Default = "\"#262a3a\"" },

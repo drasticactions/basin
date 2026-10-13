@@ -613,7 +613,7 @@ public sealed class TinyCompConfigTests : IDisposable
     {
         var log = BasinLog.For("t");
         var defaults = TinyComp.Config.Load(Write(string.Empty), log, out _).Overview;
-        Assert.Equal(TinyComp.OverviewWall.Slope, defaults.WallValue);
+        Assert.Equal(TinyComp.OverviewWall.Step, defaults.WallValue);
         Assert.Equal(0.04, defaults.WallWidthValue, 9);
         Assert.Equal(0x262a3affu, defaults.WallRgba);
         Assert.Equal(0.25, defaults.WallShadeValue, 9);
@@ -631,15 +631,15 @@ public sealed class TinyCompConfigTests : IDisposable
 
         _lines.Clear();
         var bad = TinyComp.Config.Load(Write("[overview]\nwall = \"cliff\"\n"), log, out _).Overview;
-        Assert.Equal(TinyComp.OverviewWall.Slope, bad.WallValue);
+        Assert.Equal(TinyComp.OverviewWall.Step, bad.WallValue);
         Assert.Contains(_lines, line => line.Contains("wall \"cliff\"", StringComparison.Ordinal));
 
-        var outputs = TinyComp.Config.Load(Write("[output.\"DP-2\"]\noverview_wall = \"step\"\n"), log, out _);
-        Assert.True(outputs.OverviewFor("DP-2").Steps);
-        Assert.False(outputs.OverviewFor("DP-1").Steps);
-        var back = TinyComp.Config.Load(Write("[overview]\nwall = \"step\"\n[output.\"DP-2\"]\noverview_wall = \"slope\"\n"), log, out _);
-        Assert.False(back.OverviewFor("DP-2").Steps);
-        Assert.True(back.OverviewFor("DP-1").Steps);
+        var outputs = TinyComp.Config.Load(Write("[output.\"DP-2\"]\noverview_wall = \"slope\"\n"), log, out _);
+        Assert.False(outputs.OverviewFor("DP-2").Steps);
+        Assert.True(outputs.OverviewFor("DP-1").Steps);
+        var back = TinyComp.Config.Load(Write("[overview]\nwall = \"slope\"\n[output.\"DP-2\"]\noverview_wall = \"step\"\n"), log, out _);
+        Assert.True(back.OverviewFor("DP-2").Steps);
+        Assert.False(back.OverviewFor("DP-1").Steps);
     }
 
     [Fact]
@@ -687,7 +687,7 @@ public sealed class TinyCompConfigTests : IDisposable
     {
         var log = BasinLog.For("t");
         _lines.Clear();
-        _ = TinyComp.Config.Load(Write("[overview]\nwall_texture = \"stone\"\nshelf_texture = \"wood\"\n"), log, out _);
+        _ = TinyComp.Config.Load(Write("[overview]\nwall = \"slope\"\nwall_texture = \"stone\"\nshelf_texture = \"wood\"\n"), log, out _);
         Assert.Single(_lines, line => line.Contains("wall_texture and shelf_texture apply only to wall = \"step\"", StringComparison.Ordinal));
 
         _lines.Clear();

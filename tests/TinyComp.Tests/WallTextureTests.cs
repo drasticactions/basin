@@ -224,7 +224,7 @@ public sealed class WallTextureTests
     public void A_texture_on_a_slope_wall_warns_once_and_draws_the_slope()
     {
         using var session = CanvasSession.Start(
-            "[overview]\ngrid = \"never\"\nanimation_ms = 100\nwall_texture = \"stone\"\n", SsdWin());
+            "[overview]\ngrid = \"never\"\nanimation_ms = 100\nwall = \"slope\"\nwall_texture = \"stone\"\n", SsdWin());
         Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
         var overview = OpenTextured(session!);
         Assert.Equal("slope", overview["wall"]);

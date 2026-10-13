@@ -41,7 +41,7 @@ internal static class CanvasRows
         };
     }
 
-    internal const string OverviewConfig = "[overview]\ngrid = \"never\"\nanimation_ms = 100\n";
+    internal const string OverviewConfig = "[overview]\ngrid = \"never\"\nanimation_ms = 100\nwall = \"slope\"\n";
 
     internal static Dictionary<string, string> Fields(string line)
     {
