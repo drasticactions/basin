@@ -9,7 +9,8 @@ namespace Basin.Frames.Quill;
 
 public sealed class QuillFrameRenderer : IFrameRenderer
 {
-    private readonly QuillFrameTheme _theme;
+    private readonly QuillFrameTheme _base;
+    private QuillFrameTheme _theme;
     private readonly QuillFrameGeometry _geometry = new();
     private readonly QuillFrameMenu _menu;
     private readonly HashSet<Canvas> _prepared = [];
@@ -20,13 +21,25 @@ public sealed class QuillFrameRenderer : IFrameRenderer
     public QuillFrameRenderer(QuillFrameTheme theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
+        _base = theme;
         _theme = theme;
         _menu = new QuillFrameMenu(theme);
     }
 
     public Type SurfaceContract => typeof(IQuillUISurface);
 
-    public QuillFrameTheme Theme => _theme;
+    public QuillFrameTheme Theme => _base;
+
+    public QuillFrameTheme? LightTheme { get; set; }
+
+    public QuillFrameTheme? DarkTheme { get; set; }
+
+    private QuillFrameTheme ThemeFor(FrameColorScheme scheme) => scheme switch
+    {
+        FrameColorScheme.Light => LightTheme ?? _base,
+        FrameColorScheme.Dark => DarkTheme ?? _base,
+        _ => _base,
+    };
 
     public QuillFrameGeometry Geometry => _geometry;
 
@@ -53,6 +66,7 @@ public sealed class QuillFrameRenderer : IFrameRenderer
 
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
     {
+        _theme = ThemeFor(state.ColorScheme);
         ArgumentNullException.ThrowIfNull(surface);
         var quill = (IQuillUISurface)surface;
         Layout(clientBox, state);

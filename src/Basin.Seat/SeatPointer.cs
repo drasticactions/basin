@@ -185,7 +185,8 @@ public sealed class SeatPointer
     {
         if (Focus is { IsDestroyed: false } focus && _seat.ClientOf(focus) == client && _lastEnterSerial != 0)
         {
-            pointer.SendEnter(_lastEnterSerial, focus.Resource, WlFixed.FromDouble(X), WlFixed.FromDouble(Y));
+            var scale = focus.ServerScale;
+            pointer.SendEnter(_lastEnterSerial, focus.Resource, WlFixed.FromDouble(X * scale), WlFixed.FromDouble(Y * scale));
             SendFrame(pointer);
         }
     }
@@ -216,9 +217,10 @@ public sealed class SeatPointer
         {
             var serial = _seat.NextSerial(SerialKind.PointerEnter);
             _lastEnterSerial = serial;
+            var scale = surface.ServerScale;
             foreach (var pointer in client.Pointers)
             {
-                pointer.SendEnter(serial, surface.Resource, WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+                pointer.SendEnter(serial, surface.Resource, WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
                 SendFrame(pointer);
             }
         }
@@ -255,9 +257,10 @@ public sealed class SeatPointer
 
         if (_seat.ClientOf(Focus) is { } client)
         {
+            var scale = Focus!.ServerScale;
             foreach (var pointer in client.Pointers)
             {
-                pointer.SendMotion(timeMs, WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+                pointer.SendMotion(timeMs, WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
                 SendFrame(pointer);
             }
         }
@@ -269,15 +272,16 @@ public sealed class SeatPointer
         Y = y;
         if (_seat.ClientOf(Focus) is { } client)
         {
+            var scale = Focus!.ServerScale;
             foreach (var pointer in client.Pointers)
             {
                 if (pointer.SupportsSendWarp)
                 {
-                    pointer.SendWarp(WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+                    pointer.SendWarp(WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
                 }
                 else
                 {
-                    pointer.SendMotion(timeMs, WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+                    pointer.SendMotion(timeMs, WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
                 }
 
                 SendFrame(pointer);
@@ -388,7 +392,9 @@ public sealed class SeatPointer
             }
         }
 
-        CursorRequested?.Invoke(new CursorRequest(cursorSurface, e.HotspotX, e.HotspotY));
+        var hotspotScale = cursorSurface?.ServerScale ?? 1.0;
+        CursorRequested?.Invoke(new CursorRequest(
+            cursorSurface, ServerScaling.ToLogical(e.HotspotX, hotspotScale), ServerScaling.ToLogical(e.HotspotY, hotspotScale)));
     }
 
     private static void SendFrame(WlPointerResource pointer)

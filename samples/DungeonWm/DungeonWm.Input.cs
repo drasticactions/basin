@@ -483,7 +483,7 @@ internal sealed partial class DungeonWm
         if (pressed && !_locked)
         {
             var symbol = _seat.Keyboard.RawKeysymFor(key).Value;
-            if (_bindings.Match(symbol, held) is { } hotkey && !(LayerHoldsKeyboard && ReferenceEquals(hotkey, _layerOpener)) && Applies(hotkey))
+            if (_bindings.Match(symbol, held, _takeover is not null) is { } hotkey && !(LayerHoldsKeyboard && ReferenceEquals(hotkey, _layerOpener)) && Applies(hotkey))
             {
                 _swallowed.Add(key);
                 if (hotkey.Action is "use" or "rotate")

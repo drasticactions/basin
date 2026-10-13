@@ -57,6 +57,7 @@ internal sealed partial class DungeonWm
         _settings.Render.MaxLights = loaded.Render.MaxLights;
         _settings.Render.DirectSampleMin = loaded.Render.DirectSampleMin;
         _settings.Render.DirectSampleMax = loaded.Render.DirectSampleMax;
+        _settings.Launch = loaded.Launch;
         _settings.FieldOfView = loaded.FieldOfView;
         _settings.Near = loaded.Near;
         _settings.Far = loaded.Far;

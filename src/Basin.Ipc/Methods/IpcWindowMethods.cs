@@ -169,6 +169,38 @@ internal static class IpcWindowMethods
                 new IpcWindowWait(server, describe, model, request.AppId, request.Title, reply.Defer()).Start((int)timeout);
             });
 
+            if (describe.Find<IX11DensityControl>() is { } density)
+            {
+                methods.RegisterLibrary(IpcMethodNames.WindowsSetX11Density, (ref IpcParams parameters, IpcReply reply) =>
+                {
+                    if (parameters.Read(IpcJsonContext.Default.IpcSetX11DensityParams) is not { } request || !Found(model, request.Id, reply, out _))
+                    {
+                        return;
+                    }
+
+                    X11Density target;
+                    switch (request.Density)
+                    {
+                        case IpcWindow.NativeDensity:
+                            target = X11Density.Native;
+                            break;
+                        case IpcWindow.LowDensity:
+                            target = X11Density.Low;
+                            break;
+                        default:
+                            reply.Error(IpcErrorCodes.InvalidParams, $"'density' is native or low, not '{request.Density}'");
+                            return;
+                    }
+
+                    var pending = reply.Defer();
+                    if (!density.TrySet(request.Id, target, result => Answer(pending, result), out var error))
+                    {
+                        pending.Error(IpcErrorCodes.Refused, error ?? "the window cannot change its X server");
+                        _ = pending.Complete();
+                    }
+                });
+            }
+
             methods.RegisterLibrary(IpcMethodNames.WindowsWaitIdle, (ref IpcParams parameters, IpcReply reply) =>
             {
                 if (parameters.Read(IpcJsonContext.Default.IpcWaitIdleParams) is not { } request)
@@ -215,6 +247,26 @@ internal static class IpcWindowMethods
             methods.RegisterLibrary(IpcMethodNames.WindowsStack, (ref IpcParams _, IpcReply reply) =>
                 reply.Write(describe.StackIds(), IpcJsonContext.Default.IpcStack));
         }
+    }
+
+    private static void Answer(IpcPendingReply reply, X11DensityResult result)
+    {
+        if (reply.IsDone)
+        {
+            return;
+        }
+
+        var outcome = result.Outcome switch
+        {
+            X11DensityOutcome.Relaunched => IpcX11DensityResult.Relaunched,
+            X11DensityOutcome.StillRunning => IpcX11DensityResult.StillRunning,
+            X11DensityOutcome.Unchanged => IpcX11DensityResult.Unchanged,
+            _ => IpcX11DensityResult.AppliesNextStart,
+        };
+        reply.Write(
+            new IpcX11DensityResult(outcome, result.Rule, result.Reason, result.LaunchId == 0 ? null : result.LaunchId),
+            IpcJsonContext.Default.IpcX11DensityResult);
+        _ = reply.Complete();
     }
 
     internal static bool Found(IToplevelModel model, ulong id, IpcReply reply, out ToplevelInfo info)

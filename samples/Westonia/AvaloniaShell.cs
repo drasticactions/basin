@@ -31,7 +31,7 @@ internal sealed class AvaloniaShell : IDisposable
         ShellLayers layers,
         WestonIni ini,
         BasinLogger log,
-        Action<string> spawn,
+        Action<string, Basin.X11Density?> spawn,
         UISurfaceIndex index)
     {
         _host = host;
@@ -44,10 +44,11 @@ internal sealed class AvaloniaShell : IDisposable
         foreach (var launcher in ini.Launchers)
         {
             var path = launcher.Path;
+            var x11 = launcher.X11;
             _launchers.Add(new LauncherModel(
                 launcher.DisplayName,
                 LoadIcon(launcher.Icon, log),
-                () => spawn(path)));
+                () => spawn(path, x11)));
         }
     }
 

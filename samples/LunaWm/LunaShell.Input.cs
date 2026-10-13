@@ -65,7 +65,8 @@ internal sealed partial class LunaShell
             return false;
         }
 
-        if (_config.Bindings.Match(keysym, held) is { Action: { } action })
+        var fullscreen = !view.InCardView && view.Deck.ActiveCard is { Fullscreen: true };
+        if (_config.Bindings.Match(keysym, held, fullscreen) is { Action: { } action })
         {
             _consumedKeys.Add(key);
             RunAction(view, action);

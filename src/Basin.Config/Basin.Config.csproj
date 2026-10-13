@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Freedesktop/Basin.Freedesktop.csproj" />
   </ItemGroup>
 
 </Project>

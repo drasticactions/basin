@@ -34,6 +34,84 @@ public sealed class ZeroAllocationTests
     }
 
     [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public void A_surface_shown_through_a_shaped_substitute_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var scene = host.SurfaceScenes[0];
+        using var mask = new Basin.XWayland.XWaylandShapeMask(host.Renderer, host.DeviceAllocator);
+        using var shape = new Pixman.PixmanRegion32(8, 8, 40, 30);
+        scene.SetSubstitute(mask.Render(scene.Surface.Current.Buffer!, shape));
+        Assert.NotNull(scene.Substitute);
+
+        for (var i = 0; i < 20; i++)
+        {
+            scene.Tree.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        }
+
+        NothingAllocated(1000, i =>
+        {
+            scene.Tree.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        });
+        scene.SetSubstitute(null);
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public void A_nearest_filtered_upscale_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(16, 12, Fill.Gradient(16, 12));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var tree = new Scene.SceneTree(host.Scene.Root) { Filter = TextureFilter.Nearest };
+        var node = new Scene.SceneBuffer(tree);
+        var content = new MemoryBuffer(8, 8, DrmFormat.Argb8888);
+        node.SetBuffer(content);
+        node.DestinationWidth = 64;
+        node.DestinationHeight = 64;
+
+        for (var i = 0; i < 20; i++)
+        {
+            tree.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        }
+
+        NothingAllocated(1000, i =>
+        {
+            tree.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        });
+        node.Destroy();
+        content.Destroy();
+    }
+
+    [Theory]
     [InlineData("gl")]
     [InlineData("vulkan")]
     [InlineData("skia-gl")]

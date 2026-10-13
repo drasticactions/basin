@@ -41,7 +41,6 @@ internal sealed partial class Shell
 
     private void LoadConfig()
     {
-        _config = Config.Load(_options.ConfigPath, _log);
         _desktopWatch = new DirectoryWatch(_host.Loop);
         _desktop.Watch(_desktopWatch);
         _desktop.Changed += OnDesktopEntriesChanged;
@@ -59,9 +58,35 @@ internal sealed partial class Shell
         BuildTiles();
     }
 
+    private Basin.XWayland.XWaylandModule? _xwaylandModule;
+
+    private void ApplyQuirks(AppWindow app, Basin.Config.WindowQuirks quirks)
+    {
+        if (app.X11 is { } x11)
+        {
+            x11.Letterbox = quirks.Letterbox switch
+            {
+                Basin.Config.LetterboxQuirk.Fit => Basin.Scene.SceneFitPolicy.Fit,
+                Basin.Config.LetterboxQuirk.Center => Basin.Scene.SceneFitPolicy.Center,
+                Basin.Config.LetterboxQuirk.Off => Basin.Scene.SceneFitPolicy.Off,
+                _ => Basin.Scene.SceneFitPolicy.Auto,
+            };
+            x11.Readiness = quirks.Readiness == Basin.Config.ReadinessQuirk.Immediate
+                ? Basin.XWayland.XWaylandReadiness.Immediate
+                : Basin.XWayland.XWaylandReadiness.OnMatchingCommit;
+            x11.ForceUnmaximize = quirks.ForceUnmaximize ?? false;
+            x11.AllowClientMove = quirks.AllowClientMove ?? false;
+            x11.HonorEmulatedModes = quirks.EmulatedModes ?? true;
+            _xwayland.Refit(x11);
+        }
+
+        app.Frame.Filter = quirks.ScaleFilter;
+    }
+
     internal void Reload()
     {
         _config = Config.Load(_options.ConfigPath, _log);
+        _xwaylandModule?.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
         BuildTiles();
         foreach (var view in Views)
         {
@@ -84,9 +109,11 @@ internal sealed partial class Shell
     internal void ApplyRules(AppWindow app)
     {
         app.MinWidth = 0;
+        var facts = app.Facts;
+        ApplyQuirks(app, Basin.Config.WindowRule.QuirksFor(_config.Rules, facts));
         foreach (var rule in _config.Rules)
         {
-            if (rule.MatchesText(app.AppId, null) && rule.MinWidth > 0)
+            if (rule.Matches(facts) && rule.MinWidth > 0)
             {
                 app.MinWidth = rule.MinWidth;
                 return;

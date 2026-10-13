@@ -28,5 +28,9 @@ public readonly record struct FrameState
 
     public bool Sticky { get; init; }
 
+    public bool LowDensity { get; init; }
+
     public FramePlacement Placement { get; init; }
+
+    public FrameColorScheme ColorScheme { get; init; }
 }

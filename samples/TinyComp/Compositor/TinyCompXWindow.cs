@@ -34,15 +34,19 @@ internal sealed partial class TinyComp
             _comp = comp;
             XWin = xwin;
             Framable = framable;
-            Rule = framable ? comp._config.RuleFor(xwin.Class, xwin.Title) : null;
+            Rule = framable ? comp._config.RuleFor(FactsOf(xwin)) : null;
             CornerRadius = Rule?.CornerRadius ?? comp._cornerRadius;
-            Tree = scene.Tree.Parent!;
+            Tree = comp._xSceneDriver.ParentOf(xwin) ?? scene.Tree.Parent!;
             Tree.SetPosition(xwin.X, xwin.Y);
             SceneSurface = scene;
-            scene.Tree.SetPosition(0, 0);
+            Outer = comp._xSceneDriver.OuterOf(xwin) ?? scene.Tree;
+            Outer.SetPosition(0, 0);
             comp.RefreshSurfaceLuts();
             comp.ApplyCorners(SceneSurface, CornerRadius);
             SetShadow(framable ? comp._shadowTexture : null);
+            ApplyQuirks();
+            xwin.PropertiesChanged += ApplyQuirks;
+            xwin.PropertiesChanged += RefreshScheme;
             xwin.TitleChanged += Layout;
             xwin.IconChanged += RefreshIcon;
             UpdateDecorations();
@@ -50,6 +54,52 @@ internal sealed partial class TinyComp
         }
 
         public Rule? Rule { get; }
+
+        public SceneTree Outer { get; }
+
+        public Basin.Config.WindowQuirks Quirks { get; private set; } = Basin.Config.WindowQuirks.None;
+
+        private string _shownVariant = string.Empty;
+
+        private void RefreshScheme()
+        {
+            if (_frame is null || SceneSurface.IsDestroyed || XWin.ThemeVariant == _shownVariant)
+            {
+                return;
+            }
+
+            _shownVariant = XWin.ThemeVariant;
+            Layout();
+        }
+
+        private void ApplyQuirks()
+        {
+            if (!Framable || SceneSurface.IsDestroyed)
+            {
+                return;
+            }
+
+            var quirks = Basin.Config.WindowRule.QuirksFor(_comp._config.Rules, FactsOf(XWin));
+            Quirks = quirks;
+            XWin.Letterbox = quirks.Letterbox switch
+            {
+                Basin.Config.LetterboxQuirk.Fit => SceneFitPolicy.Fit,
+                Basin.Config.LetterboxQuirk.Center => SceneFitPolicy.Center,
+                Basin.Config.LetterboxQuirk.Off => SceneFitPolicy.Off,
+                _ => SceneFitPolicy.Auto,
+            };
+            XWin.Readiness = quirks.Readiness == Basin.Config.ReadinessQuirk.Immediate
+                ? Basin.XWayland.XWaylandReadiness.Immediate
+                : Basin.XWayland.XWaylandReadiness.OnMatchingCommit;
+            XWin.ForceUnmaximize = quirks.ForceUnmaximize ?? false;
+            XWin.AllowClientMove = quirks.AllowClientMove ?? false;
+            XWin.HonorEmulatedModes = quirks.EmulatedModes ?? true;
+            Outer.Filter = quirks.ScaleFilter;
+            _comp._xSceneDriver.Refit(XWin);
+        }
+
+        public static Basin.Config.WindowFacts FactsOf(Basin.XWayland.XWaylandWindow xwin) =>
+            Basin.Config.WindowFacts.ForX11(xwin.Class, xwin.Instance, xwin.Title, xwin.SteamGame, xwin.WindowType, xwin.Process);
 
         public int CornerRadius { get; }
 
@@ -192,7 +242,7 @@ internal sealed partial class TinyComp
         public void Layout()
         {
             Tree.SetPosition(X, Y);
-            SceneSurface.Tree.SetPosition(0, 0);
+            Outer.SetPosition(0, 0);
             LayoutShadow();
             if (Framable)
             {
@@ -213,7 +263,7 @@ internal sealed partial class TinyComp
         {
             var client = new Box(X, Y, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1));
             var frame = _frame is null ? client : FrameBox;
-            _comp._xwaylandModule.Toplevels?.SetGeometry(XWin, frame, client);
+            _comp._xwaylandModule.DisplayOf(XWin)?.Toplevels?.SetGeometry(XWin, frame, client);
         }
 
         public void SetNoBorderOverride(bool noBorder)
@@ -234,10 +284,58 @@ internal sealed partial class TinyComp
 
         private bool? _noBorderOverride;
 
-        private bool WantsFrame => Framable && (_noBorderOverride is { } o ? !o : XWin.WantsDecorations);
+        private bool WantsFrame => Framable && !_fullscreen && (_noBorderOverride is { } o ? !o : XWin.WantsDecorations);
+
+        private bool _fullscreen;
+
+        public bool Fullscreen => _fullscreen;
+
+        public void SetFullscreen(bool fullscreen)
+        {
+            if (fullscreen == _fullscreen)
+            {
+                XWin.SetFullscreen(fullscreen);
+                return;
+            }
+
+            if (fullscreen)
+            {
+                var view = _comp.Views.FirstOrDefault(v => _comp._layout.OutputAt(_comp._cursorX, _comp._cursorY) == v.Output)
+                    ?? _comp.Views[0];
+                if (!_maximized)
+                {
+                    _restore = _restore.Saving(new Box(X, Y, XWin.Width, XWin.Height));
+                }
+
+                _fullscreen = true;
+                XWin.SetFullscreen(true);
+                UpdateDecorations();
+                _comp.StraightenForFill(this);
+                var box = _comp._layout.BoxOf(view.Output);
+                ResizeTo(box.X, box.Y, box.Width, box.Height, ResizeEdges.None);
+                return;
+            }
+
+            _fullscreen = false;
+            XWin.SetFullscreen(false);
+            UpdateDecorations();
+            if (_maximized)
+            {
+                ReapplyPinnedGeometry();
+            }
+            else if (_restore.TryGet(out var saved))
+            {
+                _restore = RestoreGeometry.None;
+                ResizeTo(saved.X, saved.Y, saved.Width, saved.Height, ResizeEdges.None);
+            }
+            else
+            {
+                _comp.PlaceCascade(this);
+            }
+        }
 
         private void ReportDecoration() =>
-            _comp._xwaylandModule.Toplevels?.SetDecoration(XWin, noBorder: !WantsFrame, userCanSet: Framable);
+            _comp._xwaylandModule.DisplayOf(XWin)?.Toplevels?.SetDecoration(XWin, noBorder: !WantsFrame, userCanSet: Framable);
 
         internal void DisposeFrame()
         {
@@ -285,7 +383,7 @@ internal sealed partial class TinyComp
             _comp.ApplyFrameBackdrop(_frame, renderer);
             _frame.Requested += OnFrameAction;
             _frame.Faulted += e => _comp.Log.Error($"frame fault {XWin.Class}: {e.Message}");
-            SceneSurface.Tree.RaiseToTop();
+            Outer.RaiseToTop();
             Layout();
             if (CornerRadius > 0)
             {
@@ -324,8 +422,16 @@ internal sealed partial class TinyComp
             Icon = new FrameIcon(null, _iconBuffer),
             Active = _active,
             Maximized = _maximized,
-            Capabilities = FrameCapabilities.WindowMenu | FrameCapabilities.Maximize | FrameCapabilities.Minimize,
+            Capabilities = FrameCapabilities.WindowMenu | FrameCapabilities.Maximize | FrameCapabilities.Minimize
+                | (_comp._densityControl is null || _comp._xwaylandModule.LowDensity is null ? FrameCapabilities.None : FrameCapabilities.X11Density),
+            LowDensity = _comp._xwaylandModule.DisplayOf(XWin)?.Density == Basin.X11Density.Low,
             Kind = XWin.TransientFor is null ? FrameKind.Normal : FrameKind.Dialog,
+            ColorScheme = XWin.ThemeVariant switch
+            {
+                "dark" => FrameColorScheme.Dark,
+                "light" => FrameColorScheme.Light,
+                _ => FrameColorScheme.Default,
+            },
         };
 
         public bool Minimized { get; set; }
@@ -349,6 +455,9 @@ internal sealed partial class TinyComp
                 case FrameActionKind.Resize:
                     _comp.BeginResize(this, (ResizeEdges)action.Edges);
                     break;
+                case FrameActionKind.ToggleX11Density:
+                    _comp.ToggleX11Density(XWin);
+                    break;
             }
         }
 
@@ -360,6 +469,7 @@ internal sealed partial class TinyComp
             }
 
             _maximized = false;
+            XWin.SetMaximized(false);
             if (_restore.TryGet(out var saved))
             {
                 _restore = RestoreGeometry.None;
@@ -375,6 +485,7 @@ internal sealed partial class TinyComp
             if (_maximized)
             {
                 _maximized = false;
+                XWin.SetMaximized(false);
                 if (_restore.TryGet(out var saved))
                 {
                     _restore = RestoreGeometry.None;
@@ -392,6 +503,7 @@ internal sealed partial class TinyComp
                 ?? _comp.Views[0];
             _restore = _restore.Saving(new Box(X, Y, XWin.Width, XWin.Height));
             _maximized = true;
+            XWin.SetMaximized(true);
             _comp.StraightenForFill(this);
             ApplyMaximizeGeometry(view);
         }

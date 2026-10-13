@@ -9,6 +9,8 @@ internal sealed class SkiaColorTransforms : IDisposable
     private readonly Dictionary<(ImageDescription Source, ImageDescription Output), SkiaColorTransform?> _transforms =
         new(ImageDescriptionPairComparer.Instance);
 
+    internal SkiaSharp.SKColorFilter OpaqueAlpha { get; } = SkiaCensus.Track(SkiaDraw.CreateOpaqueAlpha());
+
     internal SkiaColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)
     {
         source ??= ImageDescription.SdrDefault;
@@ -62,5 +64,6 @@ internal sealed class SkiaColorTransforms : IDisposable
         }
 
         _transforms.Clear();
+        SkiaCensus.Release(OpaqueAlpha);
     }
 }

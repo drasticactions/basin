@@ -26,11 +26,27 @@ internal sealed class SurfaceCommitQueue : IDisposable
         }
     }
 
-    public void Park(SurfaceState pending, CommitParkReason reason, long targetTimeNanos, bool armsBarrier)
+    public void Park(SurfaceState pending, CommitParkReason reason, long targetTimeNanos, bool armsBarrier, object? fence = null)
     {
         var state = _free.Count > 0 ? _free.Pop() : new SurfaceState();
         SurfaceCommit.Move(pending, state);
-        _parked.Add(new ParkedCommit(state, reason, targetTimeNanos, armsBarrier));
+        _parked.Add(new ParkedCommit(state, reason, targetTimeNanos, armsBarrier, fence));
+    }
+
+    public bool ClearFence(object fence)
+    {
+        for (var i = 0; i < _parked.Count; i++)
+        {
+            if (ReferenceEquals(_parked[i].Fence, fence))
+            {
+                var parked = _parked[i];
+                _parked[i] = new ParkedCommit(
+                    parked.State, parked.Reason & ~CommitParkReason.Fence, parked.TargetTimeNanos, parked.ArmsBarrier, null);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public bool TryReleaseReady(
@@ -79,6 +95,11 @@ internal sealed class SurfaceCommitQueue : IDisposable
             return false;
         }
 
+        if ((parked.Reason & CommitParkReason.Fence) != 0)
+        {
+            return false;
+        }
+
         return (parked.Reason & CommitParkReason.CommitTiming) == 0 ||
                parked.TargetTimeNanos <= 0 ||
                nowNanos >= parked.TargetTimeNanos;
@@ -88,7 +109,8 @@ internal sealed class SurfaceCommitQueue : IDisposable
         SurfaceState state,
         CommitParkReason reason,
         long targetTimeNanos,
-        bool armsBarrier)
+        bool armsBarrier,
+        object? fence)
     {
         public SurfaceState State { get; } = state;
 
@@ -97,5 +119,7 @@ internal sealed class SurfaceCommitQueue : IDisposable
         public long TargetTimeNanos { get; } = targetTimeNanos;
 
         public bool ArmsBarrier { get; } = armsBarrier;
+
+        public object? Fence { get; } = fence;
     }
 }

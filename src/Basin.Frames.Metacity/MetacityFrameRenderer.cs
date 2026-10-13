@@ -12,7 +12,10 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
     private const int CornerZone = 16;
     private const int TopResizeHeight = 4;
 
-    private readonly MetacityPainter _painter;
+    private readonly MetacityPainter _base;
+    private MetacityPainter _painter;
+    private MetacityPainter? _light;
+    private MetacityPainter? _dark;
     private readonly MetacityFrameGeometry _geometry = new();
     private bool _laidOut;
     private bool _shaded;
@@ -21,6 +24,7 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
     public MetacityFrameRenderer(MetacityPainter painter)
     {
         ArgumentNullException.ThrowIfNull(painter);
+        _base = painter;
         _painter = painter;
     }
 
@@ -29,7 +33,14 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
     {
     }
 
-    public MetacityPainter Painter => _painter;
+    public MetacityPainter Painter => _base;
+
+    private MetacityPainter PainterFor(FrameColorScheme scheme) => scheme switch
+    {
+        FrameColorScheme.Light => _light ??= new MetacityPainter(_base.Theme, MetacityPalette.Light, _base.ButtonLayout, _base.Font, _base.Resources),
+        FrameColorScheme.Dark => _dark ??= new MetacityPainter(_base.Theme, MetacityPalette.Dark, _base.ButtonLayout, _base.Font, _base.Resources),
+        _ => _base,
+    };
 
     public MetacityFrameGeometry Geometry => _geometry;
 
@@ -73,6 +84,7 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
     {
         var skia = (ISkiaUISurface)surface;
+        _painter = PainterFor(state.ColorScheme);
         var input = new MetacityFrameInput(state, interaction);
         _laidOut = _painter.Layout(input, clientBox.Width, clientBox.Height, _geometry);
         _shaded = state.Shaded;

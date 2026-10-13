@@ -11,7 +11,13 @@ internal sealed class SkiaRenderPass : IRenderPass
     private SKCanvas? _canvas;
     private bool _endsDataAccess;
 
-    internal SkiaRenderPass(SKPaint paint) => _paint = paint;
+    private readonly SKColorFilter? _opaqueAlpha;
+
+    internal SkiaRenderPass(SKPaint paint, SKColorFilter? opaqueAlpha = null)
+    {
+        _paint = paint;
+        _opaqueAlpha = opaqueAlpha;
+    }
 
     internal void Begin(IBuffer target, SKCanvas canvas) => Begin(target, canvas, endsDataAccess: true);
 
@@ -27,6 +33,12 @@ internal sealed class SkiaRenderPass : IRenderPass
         _endsDataAccess = endsDataAccess;
     }
 
+    public void Clear(in RenderColor color)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        SkiaDraw.Clear(_canvas!, color);
+    }
+
     public void AddRect(in RenderColor color, in Box box, PixmanRegion32? clip = null)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
@@ -36,7 +48,7 @@ internal sealed class SkiaRenderPass : IRenderPass
     public void AddTexture(ITexture texture, in TextureRenderOptions options)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
-        SkiaDraw.Texture(_canvas!, _paint, (ISkiaTexture)texture, options);
+        SkiaDraw.Texture(_canvas!, _paint, (ISkiaTexture)texture, options, opaqueAlpha: _target!.Format.IsOpaque() ? null : _opaqueAlpha);
     }
 
     public void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)

@@ -144,7 +144,8 @@ internal sealed partial class TinyComp
         var held = HeldModifiers();
         foreach (var binding in _config.Bindings)
         {
-            if (binding.Keysym == symbol && binding.ModifierMask == held && binding.Action is { } action)
+            if (binding.Keysym == symbol && binding.ModifierMask == held && binding.AppliesTo(FocusedFullscreen())
+                && binding.Action is { } action)
             {
                 return PassesThroughUI(action);
             }

@@ -13,6 +13,10 @@ internal sealed class DungeonWmSettings
 
     public string Renderer { get; set; } = "vulkan";
 
+    public bool XWaylandLowDensity { get; set; } = true;
+
+    public Basin.Config.LaunchRules Launch { get; set; } = Basin.Config.LaunchRules.Empty;
+
     public int Rooms { get; set; } = 4;
 
     public Vector3 SkyColor { get; set; } = new(0.03f, 0.03f, 0.05f);

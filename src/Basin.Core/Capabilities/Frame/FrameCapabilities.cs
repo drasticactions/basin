@@ -11,4 +11,5 @@ public enum FrameCapabilities
     Shade = 16,
     Above = 32,
     Stick = 64,
+    X11Density = 128,
 }

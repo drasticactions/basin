@@ -106,7 +106,12 @@ float bt2390(float nits) {
 }
 
 void main() {
-    vec4 c = texture(u_texture, pc.src.xy + v_uv * pc.src.zw);
+    vec2 uv = pc.src.xy + v_uv * pc.src.zw;
+    if (pc.color.x > 0.5) {
+        vec2 size = vec2(textureSize(u_texture, 0));
+        uv = (floor(uv * size) + 0.5) / size;
+    }
+    vec4 c = texture(u_texture, uv);
     c.a = mix(c.a, 1.0, pc.forceOpaque);
     vec3 straight = clamp(c.a > 0.0 ? c.rgb / c.a : c.rgb, 0.0, 1.0);
     vec3 nits = decode(u.source, straight) * u.source.w;

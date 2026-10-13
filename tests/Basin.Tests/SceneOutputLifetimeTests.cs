@@ -56,6 +56,10 @@ public sealed class SceneOutputLifetimeTests
         {
         }
 
+        public void Clear(in RenderColor color)
+        {
+        }
+
         public void AddTexture(ITexture texture, in TextureRenderOptions options)
         {
         }

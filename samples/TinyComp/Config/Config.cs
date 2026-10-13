@@ -131,6 +131,12 @@ internal sealed class Config
 
     public bool ShakeCursor { get; set; }
 
+    public Basin.XWayland.XWaylandScale XWaylandScale { get; set; }
+
+    public int[] XWaylandDpiBuckets { get; set; } = [];
+
+    public bool XWaylandLowDensity { get; set; } = true;
+
     public double RotateStep { get; set; } = 15;
 
     public bool RotateSpin { get; set; }
@@ -187,6 +193,8 @@ internal sealed class Config
         new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
 
     public IReadOnlyList<Rule> Rules { get; private set; } = [];
+
+    public LaunchRules Launch { get; internal set; } = LaunchRules.Empty;
 
     public static IReadOnlyList<InputRule> DefaultInputRules { get; } =
     [
@@ -387,11 +395,13 @@ internal sealed class Config
         typeof(Config).Assembly.GetManifestResourceStream("tinycomp.toml")
             ?? throw new InvalidOperationException("tinycomp.toml is not embedded");
 
-    public Rule? RuleFor(string? appId, string? title)
+    public Rule? RuleFor(string? appId, string? title) => RuleFor(new WindowFacts { AppId = appId, Title = title });
+
+    public Rule? RuleFor(in WindowFacts facts)
     {
         foreach (var rule in Rules)
         {
-            if (rule.MatchesText(appId, title))
+            if (rule.Matches(facts))
             {
                 return rule;
             }
@@ -619,6 +629,31 @@ internal sealed class Config
             Physics = PhysicsSetting.Parse(physics);
         }
 
+        if (reader.Section("xwayland") is { } xwayland)
+        {
+            var raw = xwayland.Raw("scale");
+            if (Basin.XWayland.XWaylandScale.TryParse(raw, out var scale))
+            {
+                XWaylandScale = scale;
+            }
+            else
+            {
+                log.Warn($"[xwayland] scale {raw} is not \"auto\" or a number of at least 1, keeping {XWaylandScale}");
+            }
+
+            if (xwayland.Numbers("dpi_buckets") is { } buckets)
+            {
+                XWaylandDpiBuckets = [.. buckets.Where(static b => b > 0).Select(static b => (int)Math.Round(b))];
+            }
+
+            if (xwayland.Table.ContainsKey("low_density"))
+            {
+                FromFile.Add("xwayland.low_density");
+            }
+
+            XWaylandLowDensity = xwayland.Flag("low_density", XWaylandLowDensity);
+        }
+
         if (reader.Section("touch") is { } touch)
         {
             HideCursorOnTouch = touch.Flag("hide_cursor", HideCursorOnTouch);
@@ -709,6 +744,8 @@ internal sealed class Config
         {
             Rules = WindowRule.MostSpecificFirst(rules.Select(row => ParseRule(row, log)).OfType<Rule>());
         }
+
+        Launch = LaunchRules.Read(reader.FreeArray(LaunchRules.Table), log);
 
         reader.ReportUnknown();
         WarnOverviewAgainstCanvas(log);
@@ -841,7 +878,7 @@ internal sealed class Config
                 hotkey.Keysym,
                 hotkey.ModifierMask,
                 hotkey.Action is { } name ? ActionFromName(name) : null,
-                hotkey.Command));
+                hotkey.Command) { When = hotkey.When });
         }
 
         return merged;
@@ -851,9 +888,15 @@ internal sealed class Config
     {
         var appIds = WindowRule.Strings(table, "app_id");
         var titleRegex = WindowRule.Pattern(table, "title_regex", log);
-        if (appIds is null && titleRegex is null)
+        var steamGames = WindowRule.SteamGameIds(table, "steam_game", log);
+        var processes = WindowRule.Strings(table, "process");
+        var x11Classes = WindowRule.Strings(table, "x11_class");
+        var x11Instances = WindowRule.Strings(table, "x11_instance");
+        var windowTypes = WindowRule.Strings(table, "window_type");
+        if (appIds is null && titleRegex is null && steamGames is null && processes is null
+            && x11Classes is null && x11Instances is null && windowTypes is null)
         {
-            log.Warn($"a [[rule]] naming neither app_id nor title_regex is dropped");
+            log.Warn($"a [[rule]] naming no match key is dropped");
             return null;
         }
 
@@ -873,6 +916,11 @@ internal sealed class Config
         {
             AppIds = appIds,
             TitleRegex = titleRegex,
+            SteamGames = steamGames,
+            Processes = processes,
+            X11Classes = x11Classes,
+            X11Instances = x11Instances,
+            WindowTypes = windowTypes,
             FrameStyle = Text("frame") switch
             {
                 "beos" => global::TinyComp.FrameStyle.Beos,
@@ -900,6 +948,7 @@ internal sealed class Config
             Friction = Real("friction"),
             Pin = Flag("pin"),
             NoCollide = Flag("no_collide"),
+            Quirks = WindowQuirks.Read(table, log),
             Canvas = Text("canvas") switch
             {
                 "left" => CanvasSide.Left,

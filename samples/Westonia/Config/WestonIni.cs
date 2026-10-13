@@ -26,6 +26,8 @@ public sealed class WestonIni
 
     public string? XWaylandPath { get; set; }
 
+    public bool XWaylandLowDensity { get; set; } = true;
+
     public string? InputMethodPath { get; set; }
 
     public string? InputMethodArgs { get; set; }
@@ -142,7 +144,7 @@ public sealed class WestonIni
     {
         if (launcher is { Path: not null })
         {
-            Launchers.Add(new WestonLauncher(launcher.Icon ?? string.Empty, launcher.Path, launcher.DisplayName));
+            Launchers.Add(new WestonLauncher(launcher.Icon ?? string.Empty, launcher.Path, launcher.DisplayName, launcher.X11));
         }
 
         if (output is { Name: not null })
@@ -186,6 +188,19 @@ public sealed class WestonIni
                     case "displayname":
                         launcher.DisplayName = value;
                         return;
+                    case "x11-density":
+                        launcher.X11 = value switch
+                        {
+                            "low" => Basin.X11Density.Low,
+                            "native" => Basin.X11Density.Native,
+                            _ => null,
+                        };
+                        if (launcher.X11 is null)
+                        {
+                            Refusals.Add($"weston.ini: [launcher] x11-density={value} is not low or native, ignored");
+                        }
+
+                        return;
                     default:
                         Refuse(section, key);
                         return;
@@ -222,6 +237,12 @@ public sealed class WestonIni
                 if (key == "path")
                 {
                     XWaylandPath = value;
+                    return;
+                }
+
+                if (key == "low-density")
+                {
+                    XWaylandLowDensity = Bool(value, XWaylandLowDensity);
                     return;
                 }
 
@@ -544,5 +565,7 @@ public sealed class WestonIni
         public string? Path { get; set; }
 
         public string? DisplayName { get; set; }
+
+        public Basin.X11Density? X11 { get; set; }
     }
 }

@@ -14,13 +14,33 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
     private ulong _nextId;
 
     public XWaylandToplevelSource(XWaylandWm wm)
+        : this(wm, null)
+    {
+    }
+
+    public XWaylandToplevelSource(XWaylandWm wm, XWaylandDisplay? display)
     {
         ArgumentNullException.ThrowIfNull(wm);
         _wm = wm;
+        Display = display;
         _wm.WindowMapped += Track;
+        _wm.KeyboardFocusChanged += OnKeyboardFocusChanged;
+    }
+
+    private void OnKeyboardFocusChanged(Surface? previous, Surface? focus)
+    {
+        foreach (var (window, id) in _ids)
+        {
+            if (window.Surface is { } surface && (surface == previous || surface == focus))
+            {
+                _observers.Changed(id);
+            }
+        }
     }
 
     private readonly ToplevelObservers _observers = new();
+
+    public XWaylandDisplay? Display { get; }
 
     public void AddObserver(IToplevelObserver observer) => _observers.Add(observer);
 
@@ -153,7 +173,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
         switch (request.Kind)
         {
             case ToplevelRequestKind.Activate:
-                window.Activate();
+                _wm.RequestActivation(window);
                 return true;
             case ToplevelRequestKind.Close:
                 window.Close();
@@ -187,7 +207,11 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
         }
     }
 
-    public void Dispose() => _wm.WindowMapped -= Track;
+    public void Dispose()
+    {
+        _wm.WindowMapped -= Track;
+        _wm.KeyboardFocusChanged -= OnKeyboardFocusChanged;
+    }
 
     private void Track(XWaylandWindow window)
     {
@@ -203,6 +227,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
         window.AppMenuChanged += () => _observers.Changed(id);
         window.GeometryChanged += () => _observers.Changed(id);
         window.PropertiesChanged += () => _observers.Changed(id);
+        window.StateChanged += () => _observers.Changed(id);
         window.MinimizeRequested += _ => _observers.Changed(id);
         window.Destroyed += () =>
         {
@@ -227,7 +252,23 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             state |= ToplevelState.Minimized;
         }
 
-        if (!_pids.TryGetValue(id, out var pid) && window.Surface is { } surface)
+        if (window.IsMaximized)
+        {
+            state |= ToplevelState.Maximized;
+        }
+
+        if (window.IsFullscreen)
+        {
+            state |= ToplevelState.Fullscreen;
+        }
+
+        if (window.Surface is { } focused && focused == _wm.KeyboardFocus)
+        {
+            state |= ToplevelState.Activated;
+        }
+
+        var pid = window.PidVerified ? (uint)window.Pid : 0;
+        if (pid == 0 && !_pids.TryGetValue(id, out pid) && window.Surface is { } surface)
         {
             pid = surface.Resource.Client.TryGetCredentials(out var credentials) ? (uint)credentials.Pid : 0;
             _pids[id] = pid;
@@ -246,6 +287,8 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
             window.TransientFor is { } transient ? _ids.GetValueOrDefault(transient) : 0,
             AppMenuService: window.AppMenuServiceName,
             AppMenuObjectPath: window.AppMenuObjectPath,
-            MinimizedGeometry: _minimized.GetValueOrDefault(id));
+            MinimizedGeometry: _minimized.GetValueOrDefault(id),
+            X11Display: Display?.DisplayName,
+            X11Density: Display?.Density);
     }
 }

@@ -54,6 +54,7 @@ public sealed class MetacityFrameTests
         { "dialog", 1.0, "metacity-atlanta-dialog" },
         { "hot-close", 1.0, "metacity-atlanta-hot-close" },
         { "long-title", 1.0, "metacity-atlanta-long-title" },
+        { "dark", 1.0, "metacity-atlanta-dark" },
     };
 
     internal static FrameState StateFor(string name) => name switch
@@ -63,6 +64,7 @@ public sealed class MetacityFrameTests
         "shaded" => new FrameState { Title = "基盤 Basin", Active = true, Shaded = true, Capabilities = AllThree },
         "tiled-left" => new FrameState { Title = "基盤 Basin", Active = true, Tiled = FrameTiling.Left, Capabilities = AllThree },
         "dialog" => new FrameState { Title = "基盤 Basin", Active = true, Kind = FrameKind.Dialog, Capabilities = AllThree },
+        "dark" => new FrameState { Title = "基盤 Basin", Active = true, Capabilities = AllThree, ColorScheme = FrameColorScheme.Dark },
         "long-title" => new FrameState { Title = "A window title far too long for the titlebar it is drawn into", Active = true, Capabilities = AllThree },
         _ => new FrameState { Title = "基盤 Basin", Active = true, Capabilities = AllThree },
     };

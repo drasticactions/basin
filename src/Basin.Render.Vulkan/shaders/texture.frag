@@ -22,7 +22,12 @@ vec3 srgb_to_linear(vec3 c) {
 }
 
 void main() {
-    vec4 c = texture(u_texture, pc.src.xy + v_uv * pc.src.zw);
+    vec2 uv = pc.src.xy + v_uv * pc.src.zw;
+    if (pc.color.x > 0.5) {
+        vec2 size = vec2(textureSize(u_texture, 0));
+        uv = (floor(uv * size) + 0.5) / size;
+    }
+    vec4 c = texture(u_texture, uv);
     c.a = mix(c.a, 1.0, pc.forceOpaque);
     if (TEXTURE_TRANSFORM == 1) {
         vec3 straight = c.a > 0.0 ? c.rgb / c.a : c.rgb;

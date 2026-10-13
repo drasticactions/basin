@@ -8,12 +8,16 @@ namespace Basin.Tests;
 internal static class IpcFullRig
 {
     public static IpcTestRig Create(
-        string? path = null, bool listen = false, Action<IpcServer>? register = null, TestSelectionStore? selection = null)
+        string? path = null, bool listen = false, Action<IpcServer>? register = null, TestSelectionStore? selection = null,
+        Action<BasinServices>? services = null)
     {
         selection ??= new TestSelectionStore();
+        var extra = services;
         var rig = new IpcTestRig(
             (services, host) =>
             {
+                extra?.Invoke(services);
+                services.UseDefault<IX11DensityControl>(new NextStartDensityControl());
                 services.Use(host.Layout);
                 services.Use<IToplevelModel>(new TestToplevelModel());
                 services.Use<IToplevelStack>(new TestToplevelStack());
@@ -39,6 +43,16 @@ internal static class IpcFullRig
         rig.Server.Approvals = new IpcApprovalBroker();
         register?.Invoke(rig.Server);
         return rig;
+    }
+
+    private sealed class NextStartDensityControl : IX11DensityControl
+    {
+        public bool TrySet(ulong toplevelId, X11Density density, Action<X11DensityResult> completed, out string? error)
+        {
+            error = null;
+            completed(new X11DensityResult(X11DensityOutcome.AppliesNextStart, "exec=test x11=native"));
+            return true;
+        }
     }
 
     private sealed class Lock : ILockState

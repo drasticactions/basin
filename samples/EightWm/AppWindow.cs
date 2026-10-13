@@ -57,13 +57,25 @@ internal sealed class AppWindow : IShellApp, IClosable
 
     public bool Closing { get; set; }
 
-    public bool IsAttributable => X11 is null;
+    public bool IsAttributable => X11 is null || X11.PidVerified;
+
+    private ProcessIdentity? _process;
+
+    public Basin.Config.WindowFacts Facts => X11 is { } x11
+        ? Basin.Config.WindowFacts.ForX11(x11.Class, x11.Instance, x11.Title, x11.SteamGame, x11.WindowType, x11.Process)
+        : Basin.Config.WindowFacts.ForWayland(
+            AppId, Title, IsTransient, _process ??= Surface is { } surface ? ProcessIdentity.Of(surface) : default);
 
     public int Pid
     {
         get
         {
-            if (X11 is not null || Surface is not { IsDestroyed: false } surface)
+            if (X11 is not null)
+            {
+                return X11.PidVerified ? X11.Pid : 0;
+            }
+
+            if (Surface is not { IsDestroyed: false } surface)
             {
                 return 0;
             }

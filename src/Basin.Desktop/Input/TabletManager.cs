@@ -558,6 +558,12 @@ public sealed class TabletManager : ITabletObserver, IDisposable
 
         public void SetFocus(Surface? surface, double x, double y)
         {
+            if (surface is not null)
+            {
+                x *= surface.ServerScale;
+                y *= surface.ServerScale;
+            }
+
             if (ReferenceEquals(surface, _surface))
             {
                 if (surface is not null)
@@ -609,8 +615,13 @@ public sealed class TabletManager : ITabletObserver, IDisposable
 
         public void NotifyUp() => ForCurrent((resource, _) => resource.SendUp());
 
-        public void NotifyMotion(double x, double y) =>
+        public void NotifyMotion(double x, double y)
+        {
+            var scale = _surface?.ServerScale ?? 1.0;
+            x *= scale;
+            y *= scale;
             ForCurrent((resource, _) => resource.SendMotion(WlFixed.FromDouble(x), WlFixed.FromDouble(y)));
+        }
 
         public void NotifyPressure(double pressure) =>
             ForCurrent((resource, _) => resource.SendPressure((uint)Math.Clamp(pressure * 65535, 0, 65535)));

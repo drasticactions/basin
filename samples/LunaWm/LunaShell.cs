@@ -87,7 +87,11 @@ internal sealed partial class LunaShell : IDisposable
         {
             SocketFd = options.SocketFd,
         });
-        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path));
+        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
+        {
+            X11Routes = density => _xwaylandModule?.Route(density),
+            X11Default = launch => _config.Launch.ForArgv(launch.DesktopId, launch.Argv),
+        };
 
         _colorPack = new Basin.Desktop.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
@@ -110,7 +114,8 @@ internal sealed partial class LunaShell : IDisposable
         Basin.XWayland.XWaylandModule? xwayland = null;
         if (OperatingSystem.IsLinux() && (options.XWayland ?? _config.XWayland))
         {
-            xwayland = new Basin.XWayland.XWaylandModule();
+            xwayland = new Basin.XWayland.XWaylandModule { IncludeLowDensity = _config.XWaylandLowDensity };
+            _xwaylandModule = xwayland;
             _services.Install(xwayland);
         }
 
@@ -188,9 +193,18 @@ internal sealed partial class LunaShell : IDisposable
         AttachKeyboard();
         if (xwayland is not null)
         {
-            _xServer = _services.Require<Basin.XWayland.XWaylandServer>();
-            xwayland.WindowManagerReady += AttachXWayland;
+            _xServer = xwayland.Native!.Server;
+            xwayland.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
+            foreach (var display in xwayland.Displays)
+            {
+                display.WindowManagerReady += AttachXWayland;
+            }
+
             BasinReport.Line($"XWAYLAND {_xServer.DisplayName}");
+            if (xwayland.LowDensity is { } lowDensity)
+            {
+                BasinReport.Line($"XWAYLAND LOW {lowDensity.DisplayName}");
+            }
         }
 
         _outputs.CreateInitialOutputs();
@@ -294,7 +308,9 @@ internal sealed partial class LunaShell : IDisposable
         StartIdleLock();
         if (_options.Command is { Length: > 0 } command)
         {
-            _initProcess = InitProcess.Start(command, _host.Socket, _xServer?.DisplayName, _log);
+            _initProcess = InitProcess.Start(
+                command, _host.Socket, _xServer?.DisplayName, _log, _xwaylandModule?.ChildEnvironment(),
+                _config.Launch.ForCommand(null, command) is { } density ? _xwaylandModule?.Route(density) : null);
         }
 
         _loop.Iterating += _uiDriver.Pump;
@@ -337,9 +353,12 @@ internal sealed partial class LunaShell : IDisposable
         _report.Line(restart.Length > 0 ? $"RELOAD restart-needed {restart}" : "RELOAD ok");
     }
 
+    private Basin.XWayland.XWaylandModule? _xwaylandModule;
+
     private void ApplyConfig()
     {
         ApplyInput();
+        _xwaylandModule?.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
         ApplyClockFormat();
         Relayout();
     }
@@ -370,6 +389,7 @@ internal sealed partial class LunaShell : IDisposable
 
     public void Dispose()
     {
+        _xwayland.Dispose();
         _host.DisconnectClients();
         _ipc?.Dispose();
         _ipc = null;

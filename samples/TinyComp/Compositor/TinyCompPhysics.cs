@@ -231,7 +231,7 @@ internal sealed partial class TinyComp
 
     private Rule? RuleOf(IGrabTarget window) => window switch
     {
-        Window w => _config.RuleFor(w.Toplevel.AppId, w.Toplevel.Title),
+        Window w => _config.RuleFor(w.Facts with { Title = w.Toplevel.Title, AppId = w.Toplevel.AppId }),
         XWindow x => x.Rule,
         _ => null,
     };

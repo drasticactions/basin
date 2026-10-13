@@ -7,10 +7,19 @@ namespace DungeonWm;
 internal sealed partial class DungeonWm
 {
     private readonly XWaylandSceneDriver _xDriver = new();
+    private bool _xDriverWired;
     private readonly List<(XWaylandWindow Window, SceneSurface Scene)> _overrides = [];
 
     private void AttachXWayland(XWaylandWm wm)
     {
+        if (_xDriverWired)
+        {
+            _xDriver.Attach(wm);
+            BasinReport.Line($"XWAYLAND WM ready");
+            return;
+        }
+
+        _xDriverWired = true;
         _xDriver.ManagedParent = _ => _layers.Windows;
         _xDriver.OverrideRedirectParent = _ => _layers.Windows;
         _xDriver.Adopted += OnXAdopted;

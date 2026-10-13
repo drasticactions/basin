@@ -416,7 +416,7 @@ internal sealed partial class LunaShell
 
         ShowLauncher(view, false);
         CloseJustType(view);
-        Launch(ExecLine.Join(argv), entry.Name, entry.Icon);
+        Launch(ExecLine.Join(argv), entry.Name, entry.Icon, entry.Id);
     }
 
     private void LauncherTabCommand(LunaView view, string name)

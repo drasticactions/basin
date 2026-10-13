@@ -18,12 +18,12 @@ public sealed class WaypipeDmabufChannelTests
 
     private sealed class ChannelCompositor : IDisposable
     {
-        public ChannelCompositor(bool gpu)
-            : this(new WaypipeChannelOptions { CarriesDmabuf = gpu }, WaypipeVideoCodec.None)
+        public ChannelCompositor(bool gpu, string? corpus = null)
+            : this(new WaypipeChannelOptions { CarriesDmabuf = gpu }, WaypipeVideoCodec.None, corpus)
         {
         }
 
-        public ChannelCompositor(WaypipeChannelOptions options, WaypipeVideoCodec video)
+        public ChannelCompositor(WaypipeChannelOptions options, WaypipeVideoCodec video, string? corpus = null)
         {
             BasinCounters.Reset();
             Display = WlServerDisplay.Create(new ManagedTransport());
@@ -44,7 +44,12 @@ public sealed class WaypipeDmabufChannelTests
                 EndedEvent.Set();
             };
             Display.CreateClient(Peer.Channel.Transport);
-            Peer.SendConnectionHeader(WaypipeCompression.None, video);
+            if (corpus is not null)
+            {
+                Peer.RecordCorpus(corpus);
+            }
+
+            Peer.SendConnectionHeader(WaypipeCompression.None, video, refusesDmabuf: !options.CarriesDmabuf);
         }
 
         public WlServerDisplay Display { get; }
@@ -181,7 +186,7 @@ public sealed class WaypipeDmabufChannelTests
     public void A_filled_dmabuf_reaches_the_surface_and_a_diff_updates_it()
     {
         const int width = 16, height = 8, stride = width * 4;
-        using var host = new ChannelCompositor(gpu: true);
+        using var host = new ChannelCompositor(gpu: true, corpus: "dmabuf-fill-diff.none.bin");
 
         host.SendFrame(WaypipeMessageType.OpenDmabuf, OpenBody(RemoteId, height * stride, width, height, (uint)DrmFormat.Xrgb8888));
 

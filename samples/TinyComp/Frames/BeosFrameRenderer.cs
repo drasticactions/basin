@@ -166,7 +166,8 @@ internal sealed class BeosFrameRenderer(FrameTheme theme) : IFrameRenderer
 
     private static int MenuItemCount(in FrameState state) =>
         1 + (state.Capabilities.HasFlag(FrameCapabilities.Minimize) ? 1 : 0)
-          + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0);
+          + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0)
+          + (state.Capabilities.HasFlag(FrameCapabilities.X11Density) ? 1 : 0);
 
     public UISurfaceSize MeasureMenu(in FrameState state, double scale) =>
         new(MenuWidth, MenuItemCount(state) * MenuItemHeight + 2 * MenuPadding, scale);
@@ -225,8 +226,13 @@ internal sealed class BeosFrameRenderer(FrameTheme theme) : IFrameRenderer
     {
         "Close" => new FrameAction(FrameActionKind.Close),
         "Minimize" => new FrameAction(FrameActionKind.Minimize),
+        DensityLow or DensityFull => new FrameAction(FrameActionKind.ToggleX11Density),
         _ => new FrameAction(FrameActionKind.ToggleMaximize),
     };
+
+    private const string DensityLow = "Use low density";
+
+    private const string DensityFull = "Use full density";
 
     private static string LabelOf(int item, in FrameState state)
     {
@@ -240,8 +246,27 @@ internal sealed class BeosFrameRenderer(FrameTheme theme) : IFrameRenderer
             item--;
         }
 
-        var hasZoom = state.Capabilities.HasFlag(FrameCapabilities.Maximize);
-        return item == 0 && hasZoom ? (state.Maximized ? "Restore" : "Zoom") : "Close";
+        if (state.Capabilities.HasFlag(FrameCapabilities.Maximize))
+        {
+            if (item == 0)
+            {
+                return (state.Maximized ? "Restore" : "Zoom");
+            }
+
+            item--;
+        }
+
+        if (state.Capabilities.HasFlag(FrameCapabilities.X11Density))
+        {
+            if (item == 0)
+            {
+                return state.LowDensity ? DensityFull : DensityLow;
+            }
+
+            item--;
+        }
+
+        return "Close";
     }
 
     private static bool Hits(in Box box, double x, double y) =>

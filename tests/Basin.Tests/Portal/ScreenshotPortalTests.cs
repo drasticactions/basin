@@ -12,11 +12,17 @@ public sealed class ScreenshotPortalTests
 {
     private const string Impl = "org.freedesktop.impl.portal.Screenshot";
 
-    private static string TempDirectory()
+    private sealed class ShotDirectory : IDisposable
     {
-        var path = Path.Combine(Path.GetTempPath(), "basin-shots-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
+        public string Path { get; } = Directory.CreateTempSubdirectory("basin-shots-").FullName;
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
     }
 
     private static BasinServices Services(CompositorTestHost host, PortalBus bus, IScreenCapture capture, IPortalPrompts prompts, string shots, Action<BasinServices>? more = null)
@@ -42,7 +48,8 @@ public sealed class ScreenshotPortalTests
         _ = new SceneRect(host.Scene.Root, 64, 48, new RenderColor(0f, 0f, 1f, 1f));
         var capture = new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer, Background = RenderColor.Black };
         var prompts = new AutoAnswerPrompts { Area = new Box(10, 10, 20, 15) };
-        var shots = TempDirectory();
+        using var shotDirectory = new ShotDirectory();
+        var shots = shotDirectory.Path;
         using var bus = new PortalBus(host.Loop, fixture.Address, PortalBusTests.BusName);
         using var services = Services(host, bus, capture, prompts, shots);
         Ready(host, bus);
@@ -75,7 +82,6 @@ public sealed class ScreenshotPortalTests
         var area = Assert.IsType<AreaPrompt>(Assert.Single(prompts.Asked));
         Assert.False(area.PickPoint);
         Assert.Null(area.Output);
-        Directory.Delete(shots, recursive: true);
     }
 
     [Fact]
@@ -86,7 +92,8 @@ public sealed class ScreenshotPortalTests
         _ = new SceneRect(host.Scene.Root, 64, 48, new RenderColor(1f, 0f, 0f, 1f));
         var capture = new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer, Background = RenderColor.Black };
         var prompts = new AutoAnswerPrompts();
-        var shots = TempDirectory();
+        using var shotDirectory = new ShotDirectory();
+        var shots = shotDirectory.Path;
         using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
         using var services = Services(host, bus, capture, prompts, shots);
         Ready(host, bus);
@@ -109,7 +116,6 @@ public sealed class ScreenshotPortalTests
         (response, results) = PortalBusTests.Await(host, frontend.CallScreenshotAsync("org.example.App", "", []));
         Assert.Equal(1u, response);
         Assert.Empty(results);
-        Directory.Delete(shots, recursive: true);
     }
 
     [Fact]
@@ -124,7 +130,8 @@ public sealed class ScreenshotPortalTests
         var second = model.Add("Terminal", "org.example.Terminal");
         stack.SetOrder(first, second);
         var prompts = new AutoAnswerPrompts { Sources = AutoAnswerPrompts.SourceAnswer.Toplevel, ToplevelId = first };
-        var shots = TempDirectory();
+        using var shotDirectory = new ShotDirectory();
+        var shots = shotDirectory.Path;
         using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
         using var services = Services(host, bus, capture, prompts, shots, s => s.Use<IToplevelModel>(model).Use<IToplevelStack>(stack));
         Ready(host, bus);
@@ -155,7 +162,6 @@ public sealed class ScreenshotPortalTests
             ["target"] = VariantValue.UInt32(16),
         }));
         Assert.Equal(2u, response);
-        Directory.Delete(shots, recursive: true);
     }
 
     [Fact]
@@ -166,8 +172,9 @@ public sealed class ScreenshotPortalTests
         _ = new SceneRect(host.Scene.Root, 64, 48, new RenderColor(0.5f, 0f, 0f, 1f));
         var capture = new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer, Background = RenderColor.Black };
         var prompts = new AutoAnswerPrompts { Area = new Box(5, 5, 1, 1) };
+        using var shotDirectory = new ShotDirectory();
         using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
-        using var services = Services(host, bus, capture, prompts, TempDirectory());
+        using var services = Services(host, bus, capture, prompts, shotDirectory.Path);
         Ready(host, bus);
         using var frontend = PortalBusTests.Await(host, PortalTestClient.ConnectAsync(daemon.Address, PortalBusTests.BusName, asFrontend: true));
 
@@ -189,8 +196,9 @@ public sealed class ScreenshotPortalTests
         using var host = new CompositorTestHost(64, 48);
         var capture = new SceneScreenCapture(host.Scene, host.Layout) { Renderer = host.Renderer };
         var prompts = new AutoAnswerPrompts { Hold = true };
+        using var shotDirectory = new ShotDirectory();
         using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
-        using var services = Services(host, bus, capture, prompts, TempDirectory());
+        using var services = Services(host, bus, capture, prompts, shotDirectory.Path);
         Ready(host, bus);
         using var frontend = PortalBusTests.Await(host, PortalTestClient.ConnectAsync(daemon.Address, PortalBusTests.BusName, asFrontend: true));
 

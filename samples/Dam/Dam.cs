@@ -152,8 +152,8 @@ internal sealed partial class Dam : IDisposable
         Views.Attach(Shell, _services.Require<XdgToplevelSource>());
         if (xwayland is not null)
         {
-            _xServer = xwayland.Server;
-            xwayland.WindowManagerReady += Views.AttachXWayland;
+            _xServer = xwayland.Native!.Server;
+            xwayland.Native.WindowManagerReady += Views.AttachXWayland;
         }
         _outputs.LayoutChanged += Views.PositionAll;
         if (_services.Find<Basin.Capabilities.IOutputConfiguration>() is { } outputConfiguration)

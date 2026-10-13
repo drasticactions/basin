@@ -51,6 +51,7 @@ internal sealed partial class Westonia : IDisposable
     private ShellXWayland? _xwayland;
 
     private Basin.XWayland.XWaylandServer? _xServer;
+    private Basin.XWayland.XWaylandModule? _xwaylandModule;
     private IEventSource? _idleTimer;
     private TrackedProcess? _screensaver;
     private readonly DeferredWorkspaceModel _deferredWorkspaces = new();
@@ -103,7 +104,10 @@ internal sealed partial class Westonia : IDisposable
             {
                 SocketFd = options.SocketFd,
             });
-        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path));
+        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
+        {
+            X11Routes = density => _xwaylandModule?.Route(density),
+        };
 
         _colorPack = new Basin.Desktop.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
@@ -125,7 +129,8 @@ internal sealed partial class Westonia : IDisposable
         Basin.XWayland.XWaylandModule? xwaylandModule = null;
         if (_ini.Core.XWayland || options.XWayland)
         {
-            xwaylandModule = new Basin.XWayland.XWaylandModule();
+            xwaylandModule = new Basin.XWayland.XWaylandModule { IncludeLowDensity = _ini.XWaylandLowDensity };
+            _xwaylandModule = xwaylandModule;
             _services.Install(xwaylandModule);
         }
 
@@ -302,7 +307,7 @@ internal sealed partial class Westonia : IDisposable
 
         if (xwaylandModule is not null)
         {
-            _xServer = _services.Require<Basin.XWayland.XWaylandServer>();
+            _xServer = xwaylandModule.Native!.Server;
             _xwayland = new ShellXWayland(
                 _shell,
                 _layers,
@@ -317,8 +322,16 @@ internal sealed partial class Westonia : IDisposable
                 RefreshSurfaceLuts();
                 _outputs.ScheduleAll();
             };
-            xwaylandModule.WindowManagerReady += wm => _xwayland.Attach(wm);
+            foreach (var display in xwaylandModule.Displays)
+            {
+                display.WindowManagerReady += wm => _xwayland.Attach(wm);
+            }
+
             BasinReport.Line($"XWAYLAND {_xServer.DisplayName}");
+            if (xwaylandModule.LowDensity is { } lowDensity)
+            {
+                BasinReport.Line($"XWAYLAND LOW {lowDensity.DisplayName}");
+            }
         }
 
         _animations = new ShellAnimations(_layers, _ini)
@@ -518,9 +531,11 @@ internal sealed partial class Westonia : IDisposable
         _ => now.ToString("h:mm tt ddd MMM d"),
     };
 
-    private void Spawn(string command)
+    private void Spawn(string command) => Spawn(command, null);
+
+    private void Spawn(string command, X11Density? x11)
     {
-        if (_processes.SpawnShell(command, out var error) is null)
+        if (_processes.Spawn(new ProcessLaunch(["/bin/sh", "-c", command]) { X11 = x11 }, out var error) is null)
         {
             _log.Error($"cannot start {command}: {error}");
         }

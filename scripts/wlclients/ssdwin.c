@@ -24,6 +24,7 @@ static struct xdg_surface *xdg_surface;
 static struct xdg_toplevel *toplevel;
 static struct zxdg_toplevel_decoration_v1 *decoration;
 static int width = 256, height = 256;
+static int acked;
 static int running = 1;
 static int move_on_press;
 static uint32_t colour = 0xFF3C7A9E;
@@ -76,7 +77,8 @@ static void preferred_scale(void *data, struct wp_fractional_scale_v1 *f, uint32
     (void)data; (void)f;
     if (scale == pixel_scale) return;
     pixel_scale = scale;
-    draw();
+    /* a preferred scale can arrive before the first configure, and xdg-shell refuses a buffer until that is acked */
+    if (acked) draw();
 }
 
 static const struct wp_fractional_scale_v1_listener fractional_listener = { preferred_scale };
@@ -85,6 +87,7 @@ static void xdg_surface_configure(void *data, struct xdg_surface *s, uint32_t se
 {
     (void)data;
     xdg_surface_ack_configure(s, serial);
+    acked = 1;
     draw();
 }
 

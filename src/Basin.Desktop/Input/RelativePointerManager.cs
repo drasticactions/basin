@@ -51,6 +51,11 @@ public sealed class RelativePointerManager : IDisposable
         }
 
         var client = focus.Resource.Client;
+        var scale = focus.ServerScale;
+        dx *= scale;
+        dy *= scale;
+        dxUnaccelerated *= scale;
+        dyUnaccelerated *= scale;
         foreach (var pointer in _pointers)
         {
             if (!pointer.IsDestroyed && pointer.Client == client)

@@ -48,9 +48,9 @@ internal static partial class SettingsMessages
             return ($"Use {least.Groups["floor"].Value} or more.", true);
         }
 
-        if (raw.Contains("neither app_id nor title_regex", StringComparison.Ordinal))
+        if (raw.Contains("[[rule]] naming no match key", StringComparison.Ordinal))
         {
-            return ("A rule needs an app id or a title pattern.", true);
+            return ("A rule needs at least one match key, such as app_id.", true);
         }
 
         if (raw.StartsWith("rule pattern", StringComparison.Ordinal))

@@ -39,6 +39,13 @@ internal sealed class PixmanRenderPass : IRenderPass
         ResetClip(clip);
     }
 
+    public void Clear(in RenderColor color)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        Span<PixmanBox32> boxes = [new PixmanBox32(0, 0, _target.Width, _target.Height)];
+        _image!.Fill(PixmanOp.Src, ToPixmanColor(color), boxes);
+    }
+
     public void AddTexture(ITexture texture, in TextureRenderOptions options)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
@@ -104,7 +111,7 @@ internal sealed class PixmanRenderPass : IRenderPass
                     src.Height / options.DstBox.Height);
                 var transform = PixmanTransform.Multiply(in translate, in scale);
                 source.SetTransform(in transform);
-                source.SetFilter(PixmanFilter.Bilinear);
+                source.SetFilter(options.Filter == TextureFilter.Nearest ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
                 source.SetRepeat(PixmanRepeat.Pad);
             }
 
@@ -368,7 +375,7 @@ internal sealed class PixmanRenderPass : IRenderPass
         var linear = Math.Sqrt(Math.Abs((options.Transform.M11 * options.Transform.M22) - (options.Transform.M12 * options.Transform.M21)));
         var magnified = linear / Math.Max(kx, ky) >= 2;
         source.SetTransform(in sample);
-        source.SetFilter(magnified ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
+        source.SetFilter(magnified || options.Filter == TextureFilter.Nearest ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
         source.SetRepeat(PixmanRepeat.None);
         ApplyClip(options.Clip);
         var mask = options.Alpha < 1f ? AlphaMask(options.Alpha) : null;

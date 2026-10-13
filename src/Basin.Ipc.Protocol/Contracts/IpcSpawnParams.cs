@@ -18,13 +18,15 @@ public sealed class IpcSpawnParams : IIpcParams, IIpcReusable
         string>? env = null,
         string? cwd = null,
         string? log = null,
-        IReadOnlyList<string>? unsetEnv = null)
+        IReadOnlyList<string>? unsetEnv = null,
+        string? x11Density = null)
     {
         Argv = argv;
         Env = env;
         Cwd = cwd;
         Log = log;
         UnsetEnv = unsetEnv;
+        X11Density = x11Density;
     }
 
     public IReadOnlyList<string> Argv
@@ -49,6 +51,9 @@ public sealed class IpcSpawnParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? UnsetEnv { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? X11Density { get; set; }
+
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'argv' is required"
@@ -62,5 +67,6 @@ public sealed class IpcSpawnParams : IIpcParams, IIpcReusable
         Cwd = null;
         Log = null;
         UnsetEnv = null;
+        X11Density = null;
     }
 }

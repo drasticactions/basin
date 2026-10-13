@@ -16,6 +16,7 @@ internal sealed partial class LunaShell
     private readonly HashSet<int> _launchRoots = [];
     private readonly HashSet<Surface> _shellActivated = [];
     private readonly Basin.XWayland.XWaylandSceneDriver _xwayland = new();
+    private bool _xwaylandWired;
     private readonly List<SurfaceBox> _presence = [];
     private SceneTree _limbo = null!;
     private SceneTree _overrideRedirect = null!;
@@ -186,6 +187,7 @@ internal sealed partial class LunaShell
 
     private void PrepareCard(Card card)
     {
+        ApplyQuirks(card);
         var view = card.Home ?? PlacementView();
         card.Home = view;
         var parent = card.Xdg?.Parent is { } xdgParent ? CardOf(xdgParent) : null;
@@ -200,7 +202,7 @@ internal sealed partial class LunaShell
             return;
         }
 
-        var rule = _config.RuleFor(card.AppId, card.Title);
+        var rule = _config.RuleFor(card.Facts);
         if (rule?.Fullscreen == true)
         {
             card.Fullscreen = true;
@@ -282,7 +284,7 @@ internal sealed partial class LunaShell
         }
 
         var view = card.Home ?? PlacementView();
-        var rule = _config.RuleFor(card.AppId, card.Title);
+        var rule = _config.RuleFor(card.Facts);
         if (rule?.Output is { Length: > 0 } outputName)
         {
             foreach (var each in _views)
@@ -588,6 +590,17 @@ internal sealed partial class LunaShell
 
     private void AttachXWayland(Basin.XWayland.XWaylandWm wm)
     {
+        if (_xwaylandWired)
+        {
+            _xwayland.Attach(wm);
+            return;
+        }
+
+        _xwaylandWired = true;
+        _xwayland.Letterbox = true;
+        _xwayland.PositionsManagedWindows = false;
+        _xwayland.ShapeRenderer = _renderer;
+        _xwayland.ShapeAllocator = _deviceAllocator;
         _xwayland.ManagedParent = _ =>
         {
             var parts = new CardScene(_limbo, _shadowTile, _black);
@@ -604,11 +617,10 @@ internal sealed partial class LunaShell
     {
         if (!managed)
         {
-            scene.Tree.Parent?.SetPosition(window.X, window.Y);
             return;
         }
 
-        if (scene.Tree.Parent is not { } content || !_x11Parts.Remove(content, out var parts))
+        if ((_xwayland.ParentOf(window) ?? scene.Tree.Parent) is not { } content || !_x11Parts.Remove(content, out var parts))
         {
             return;
         }
@@ -616,6 +628,7 @@ internal sealed partial class LunaShell
         var card = new Card(window, null, window, parts, scene);
         _cards.Add(card);
         _x11Cards[window] = card;
+        window.PropertiesChanged += () => ApplyQuirks(card);
         PrepareCard(card);
         Map(card);
     }
@@ -667,11 +680,12 @@ internal sealed partial class LunaShell
         return null;
     }
 
-    internal void Launch(string command, string? label = null, string? icon = null)
+    internal void Launch(string command, string? label = null, string? icon = null, string? desktopId = null)
     {
         var token = _tokens.MintShell();
         var launch = new ProcessLaunch(["sh", "-c", command])
         {
+            DesktopId = desktopId,
             Env = new Dictionary<string, string>
             {
                 ["XDG_ACTIVATION_TOKEN"] = token,

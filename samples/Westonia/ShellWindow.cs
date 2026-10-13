@@ -17,6 +17,8 @@ internal sealed class ShellWindow
 
     public SceneSurface Scene { get; }
 
+    public SceneFit? Fit { get; init; }
+
     public SceneTree Tree { get; }
 
     public Surface Surface => Window.Surface;

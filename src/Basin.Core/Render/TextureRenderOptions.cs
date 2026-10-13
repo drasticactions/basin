@@ -25,4 +25,6 @@ public readonly record struct TextureRenderOptions
     public Capabilities.ImageDescription? ColorDescription { get; init; } = null;
 
     public IPixelShader? Shader { get; init; } = null;
+
+    public TextureFilter Filter { get; init; } = TextureFilter.Linear;
 }

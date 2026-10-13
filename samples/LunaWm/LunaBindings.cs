@@ -68,12 +68,12 @@ internal sealed class LunaBindings
 
     public static bool IsAction(string name) => Array.IndexOf(Actions, name) >= 0;
 
-    public Hotkey? Match(uint keysym, Modifiers held)
+    public Hotkey? Match(uint keysym, Modifiers held, bool focusedFullscreen = false)
     {
         var lower = new Xkb.XkbKeysym(keysym).ToLower().Value;
         foreach (var hotkey in _bindings)
         {
-            if (hotkey.Keysym == lower && hotkey.ModifierMask == held)
+            if (hotkey.Keysym == lower && hotkey.ModifierMask == held && hotkey.AppliesTo(focusedFullscreen))
             {
                 return hotkey;
             }

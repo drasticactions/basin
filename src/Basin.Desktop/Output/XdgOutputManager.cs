@@ -4,7 +4,7 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
-public sealed class XdgOutputManager : IDisposable
+public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalOutputOverrides
 {
     public const int Version = 3;
 

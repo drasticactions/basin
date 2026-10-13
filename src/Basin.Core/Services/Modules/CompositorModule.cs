@@ -17,12 +17,16 @@ public sealed class CompositorModule : IProtocolModule
         ArgumentNullException.ThrowIfNull(services);
 
         services.UseDefault(new ClientBufferRegistry());
+        services.UseDefault(new ClientScales());
     }
 
     public IDisposable Install(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        Global = new CompositorGlobal(services.Display, services.Require<ClientBufferRegistry>());
+        Global = new CompositorGlobal(services.Display, services.Require<ClientBufferRegistry>(), services.Require<ClientScales>())
+        {
+            Loop = services.Loop,
+        };
         services.Use(Global);
         return Global;
     }

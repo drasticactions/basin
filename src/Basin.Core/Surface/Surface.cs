@@ -7,7 +7,7 @@ namespace Basin;
 public sealed class Surface
 {
     private const CommitParkReason DeferredReasons =
-        CommitParkReason.FifoBarrier | CommitParkReason.CommitTiming | CommitParkReason.Held;
+        CommitParkReason.FifoBarrier | CommitParkReason.CommitTiming | CommitParkReason.Held | CommitParkReason.Fence;
 
     private readonly CompositorGlobal _owner;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -18,13 +18,25 @@ public sealed class Surface
     private long _pendingCommitTimeNanos;
     private bool _barrierArmed;
     private bool _pendingHold;
+    private bool _pendingExplicit;
+    private List<ImplicitFence>? _fences;
     private bool _holdCleared;
     private bool _destroyed;
+    private double _clientScale = 1.0;
+    private double _serverScaleOverride;
+    private Pixman.PixmanRegion32? _scaleScratch;
 
     internal Surface(CompositorGlobal owner, WlSurfaceResource resource)
+        : this(owner, resource, 1.0)
+    {
+    }
+
+    internal Surface(CompositorGlobal owner, WlSurfaceResource resource, double clientScale)
     {
         _owner = owner;
         Resource = resource;
+        _clientScale = clientScale;
+        Current.ServerScale = clientScale;
         BasinCounters.Track();
 
         resource.Attach += (_, e) => OnAttach(e);
@@ -66,6 +78,77 @@ public sealed class Surface
     public event Action? CommitRequested;
 
     public event Action? Destroyed;
+
+    public double ServerScale => Current.ServerScale;
+
+    public bool HasServerScaleOverride => _serverScaleOverride > 0;
+
+    public event Action? ServerScaleChanged;
+
+    public void SetServerScale(double scale)
+    {
+        if (!double.IsFinite(scale) || scale <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "a server scale must be positive and finite");
+        }
+
+        _serverScaleOverride = scale;
+        ApplyServerScale(scale);
+    }
+
+    public void ClearServerScale()
+    {
+        _serverScaleOverride = 0;
+        ApplyServerScale(_clientScale);
+    }
+
+    internal void SetClientScale(double scale)
+    {
+        _clientScale = scale;
+        if (_serverScaleOverride <= 0)
+        {
+            ApplyServerScale(scale);
+        }
+    }
+
+    private void ApplyServerScale(double scale)
+    {
+        if (_destroyed || Current.ServerScale == scale)
+        {
+            return;
+        }
+
+        Current.ServerScale = scale;
+        Current.UpdateDerivedSize();
+        ServerScaleChanged?.Invoke();
+    }
+
+    private void ScalePendingToLogical()
+    {
+        var scale = Current.ServerScale;
+        var pending = Pending;
+        if ((pending.Committed & SurfaceStateFields.SurfaceDamage) != 0)
+        {
+            ServerScaling.ToLogical(pending.SurfaceDamage, scale, outward: true, _scaleScratch ??= new());
+            ServerScaling.ToLogicalOutward(ref pending.SurfaceDamageRects, scale);
+        }
+
+        if ((pending.Committed & SurfaceStateFields.OpaqueRegion) != 0 && pending.HasOpaque)
+        {
+            ServerScaling.ToLogical(pending.Opaque, scale, outward: false, _scaleScratch ??= new());
+        }
+
+        if ((pending.Committed & SurfaceStateFields.InputRegion) != 0 && pending.HasInput && !pending.InputIsInfinite)
+        {
+            ServerScaling.ToLogical(pending.Input, scale, outward: true, _scaleScratch ??= new());
+        }
+
+        if ((pending.Committed & SurfaceStateFields.Offset) != 0)
+        {
+            pending.OffsetX = ServerScaling.ToLogical(pending.OffsetX, scale);
+            pending.OffsetY = ServerScaling.ToLogical(pending.OffsetY, scale);
+        }
+    }
 
     public bool CanSetRole(string role) => Role is null || (Role == role && RoleObject is null);
 
@@ -328,6 +411,21 @@ public sealed class Surface
 
     public void HoldNextCommit() => _pendingHold = true;
 
+    public void MarkExplicitAcquire() => _pendingExplicit = true;
+
+    public int ParkedForFences => _fences?.Count ?? 0;
+
+    internal void OnImplicitFenceSignaled(ImplicitFence fence)
+    {
+        _fences?.Remove(fence);
+        if (_destroyed || _queue is not { } queue || !queue.ClearFence(fence))
+        {
+            return;
+        }
+
+        ReleaseParkedCommits(MonotonicClock.Nanos, refreshCycleCompleted: false);
+    }
+
     public bool ReleaseHeldCommits()
     {
         _holdCleared = true;
@@ -352,13 +450,19 @@ public sealed class Surface
             return;
         }
 
+        if (Current.ServerScale != 1.0)
+        {
+            ScalePendingToLogical();
+        }
+
         CommitRequested?.Invoke();
 
         var armsBarrier = _pendingArmBarrier;
         var waitsBarrier = _pendingWaitBarrier;
         var targetTimeNanos = _pendingCommitTimeNanos;
         var held = _pendingHold;
-        (_pendingArmBarrier, _pendingWaitBarrier, _pendingCommitTimeNanos, _pendingHold) = (false, false, 0, false);
+        var explicitAcquire = _pendingExplicit;
+        (_pendingArmBarrier, _pendingWaitBarrier, _pendingCommitTimeNanos, _pendingHold, _pendingExplicit) = (false, false, 0, false, false);
 
         var synchronized = SubsurfaceRole is { IsEffectivelySynchronized: true };
         var reason = synchronized ? CommitParkReason.SubsurfaceSync : CommitParkReason.None;
@@ -378,10 +482,22 @@ public sealed class Surface
             reason |= CommitParkReason.CommitTiming;
         }
 
+        ImplicitFence? fence = null;
+        if (!explicitAcquire && _owner.Loop is { } loop
+            && (Pending.Committed & SurfaceStateFields.Buffer) != 0 && Pending.Buffer is { } committed)
+        {
+            fence = ImplicitFence.For(this, loop, committed);
+            if (fence is not null)
+            {
+                reason |= CommitParkReason.Fence;
+                (_fences ??= []).Add(fence);
+            }
+        }
+
         if ((reason & DeferredReasons) != 0 || HasParkedCommits)
         {
             _queue ??= new SurfaceCommitQueue();
-            _queue.Park(Pending, reason, targetTimeNanos, armsBarrier);
+            _queue.Park(Pending, reason, targetTimeNanos, armsBarrier, fence);
             return;
         }
 
@@ -533,6 +649,7 @@ public sealed class Surface
         if (_guardedShadows is { Count: > 0 })
         {
             var identityDamage = Current.Scale == 1
+                && Current.ServerScale == 1.0
                 && Current.Transform == OutputTransform.Normal
                 && Current.ViewportSourceWidth < 0
                 && Current.ViewportDestinationWidth < 0;
@@ -588,7 +705,7 @@ public sealed class Surface
             return bounds;
         }
 
-        var scale = Math.Max(1, state.Scale);
+        var scale = Math.Max(1, state.Scale) * state.ServerScale;
         var x1 = int.MaxValue;
         var y1 = int.MaxValue;
         var x2 = int.MinValue;
@@ -603,10 +720,10 @@ public sealed class Surface
 
         if (hasBuffer)
         {
-            x1 = Math.Min(x1, buffer.X1 / scale);
-            y1 = Math.Min(y1, buffer.Y1 / scale);
-            x2 = Math.Max(x2, (buffer.X2 + scale - 1) / scale);
-            y2 = Math.Max(y2, (buffer.Y2 + scale - 1) / scale);
+            x1 = Math.Min(x1, (int)Math.Floor(buffer.X1 / scale));
+            y1 = Math.Min(y1, (int)Math.Floor(buffer.Y1 / scale));
+            x2 = Math.Max(x2, (int)Math.Ceiling(buffer.X2 / scale));
+            y2 = Math.Max(y2, (int)Math.Ceiling(buffer.Y2 / scale));
         }
 
         return new Box(x1, y1, x2 - x1, y2 - y1).Intersect(bounds);
@@ -648,8 +765,20 @@ public sealed class Surface
         SubsurfaceRole?.OnSurfaceDestroyed();
         _cached?.Dispose();
         _cached = null;
+        if (_fences is { } fences)
+        {
+            foreach (var pendingFence in fences)
+            {
+                pendingFence.Dispose();
+            }
+
+            fences.Clear();
+        }
+
         _queue?.Dispose();
         _queue = null;
+        _scaleScratch?.Dispose();
+        _scaleScratch = null;
         Pending.Dispose();
         Current.Dispose();
         Destroyed?.Invoke();

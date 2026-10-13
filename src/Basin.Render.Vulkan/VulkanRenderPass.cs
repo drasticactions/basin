@@ -141,6 +141,23 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         Record(0, default, default, constants, clip);
     }
 
+    public void Clear(in RenderColor color)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        var attachment = new ClearAttachment
+        {
+            AspectMask = ImageAspectFlags.ColorBit,
+            ColorAttachment = 0,
+            ClearValue = new ClearValue(new ClearColorValue(
+                LinearizePremultiplied(color.R, color.A),
+                LinearizePremultiplied(color.G, color.A),
+                LinearizePremultiplied(color.B, color.A),
+                color.A)),
+        };
+        var rect = new ClearRect(_area, 0, 1);
+        _renderer.Dev.Api.CmdClearAttachments(_render, 1, in attachment, 1, in rect);
+    }
+
     public void AddShader(IPixelShader shader, in ShaderRenderOptions options)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
@@ -322,6 +339,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             TargetH = _target.Height,
             Alpha = options.Alpha,
             ForceOpaque = forceOpaque ? 1f : 0f,
+            R = options.Filter == TextureFilter.Nearest ? 1f : 0f,
         };
         WriteTransform(ref constants, options.Transform);
         if (options.Shader is VulkanPixelShader vulkanShader && !hasLutOption)

@@ -8,6 +8,7 @@ public sealed class SkiaRenderer : IRenderer
     private readonly Dictionary<IBuffer, TargetEntry> _targets = [];
     private readonly SkiaRenderPass _pass;
     private readonly SKPaint _paint;
+    private readonly SKColorFilter _opaqueAlpha;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
 
     public static RenderStack CreateStack() => new(new SkiaRenderer(), null);
@@ -15,7 +16,8 @@ public sealed class SkiaRenderer : IRenderer
     public SkiaRenderer()
     {
         _paint = SkiaCensus.Track(new SKPaint());
-        _pass = new SkiaRenderPass(_paint);
+        _opaqueAlpha = SkiaCensus.Track(SkiaDraw.CreateOpaqueAlpha());
+        _pass = new SkiaRenderPass(_paint, _opaqueAlpha);
     }
 
     public ITexture? ImportTexture(IBuffer buffer)
@@ -109,6 +111,7 @@ public sealed class SkiaRenderer : IRenderer
 
         _targets.Clear();
         SkiaCensus.Release(_paint);
+        SkiaCensus.Release(_opaqueAlpha);
     }
 
     public static bool TryImageInfo(int width, int height, DrmFormat format, out SKImageInfo info)

@@ -942,6 +942,12 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return PlaneDeclineReason.ScaledFraction;
         }
 
+        if (entry.Filter == TextureFilter.Nearest
+            && (node.SourceBox != default || physical.Width != content.Width || physical.Height != content.Height))
+        {
+            return PlaneDeclineReason.Filter;
+        }
+
         if (!CoversWholeNode(entry, physical))
         {
             return PlaneDeclineReason.Clipped;

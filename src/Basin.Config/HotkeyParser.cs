@@ -75,6 +75,26 @@ public static class HotkeyParser
             return null;
         }
 
+        var when = HotkeyScope.Always;
+        if (value is TomlTable table)
+        {
+            if (table.TryGetValue("when", out var scope))
+            {
+                when = scope switch
+                {
+                    "always" => HotkeyScope.Always,
+                    "windowed" => HotkeyScope.Windowed,
+                    "fullscreen" => HotkeyScope.Fullscreen,
+                    _ => Warn(log, chord, scope),
+                };
+            }
+
+            if (table.TryGetValue("action", out var action))
+            {
+                value = action;
+            }
+        }
+
         if (value is false or "none")
         {
             return new Hotkey(keysym, modifiers, null, null);
@@ -82,7 +102,7 @@ public static class HotkeyParser
 
         if (value is string named && isAction?.Invoke(named) == true)
         {
-            return new Hotkey(keysym, modifiers, named, null);
+            return new Hotkey(keysym, modifiers, named, null) { When = when };
         }
 
         var command = Words(value);
@@ -92,7 +112,13 @@ public static class HotkeyParser
             return null;
         }
 
-        return new Hotkey(keysym, modifiers, null, command);
+        return new Hotkey(keysym, modifiers, null, command) { When = when };
+    }
+
+    private static HotkeyScope Warn(BasinLogger log, string chord, object? scope)
+    {
+        log.Warn($"binding '{chord}' when = \"{scope}\" is not always, windowed or fullscreen; always is used");
+        return HotkeyScope.Always;
     }
 
     private static string[] Words(object? value) => value switch

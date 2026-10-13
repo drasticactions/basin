@@ -194,7 +194,7 @@ public sealed class TextInputManager : IDisposable, ITextInputCommit
 
         if (textInput.CursorRectangle is { } caret)
         {
-            method.CursorRectangle(caret);
+            method.CursorRectangle(ServerScaling.ToLogicalNearest(caret, _focus?.ServerScale ?? 1.0));
         }
 
         method.Commit(0);

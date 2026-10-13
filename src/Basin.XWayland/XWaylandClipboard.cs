@@ -50,12 +50,26 @@ internal sealed unsafe class XWaylandClipboard : IDisposable
     }
 
     public XWaylandClipboard(xcb_connection_t* conn, Seat.Seat seat, ICompositorEventLoop loop, uint root, uint rootVisual, Func<string, uint> atom)
+        : this(conn, seat, loop, root, rootVisual, atom, null)
+    {
+    }
+
+    private readonly Action? _flushed;
+
+    private void Flush()
+    {
+        _ = Libxcb.xcb_flush(_conn);
+        _flushed?.Invoke();
+    }
+
+    internal XWaylandClipboard(xcb_connection_t* conn, Seat.Seat seat, ICompositorEventLoop loop, uint root, uint rootVisual, Func<string, uint> atom, Action? flushed)
     {
         _conn = conn;
         _seat = seat;
         _loop = loop;
         _root = root;
         _atom = atom;
+        _flushed = flushed;
 
         _window = Libxcb.xcb_generate_id(conn);
         var mask = (uint)0x00400000 ;
@@ -143,7 +157,7 @@ internal sealed unsafe class XWaylandClipboard : IDisposable
     {
         _ = Libxcb.xcb_convert_selection(
             _conn, _window, _atom("CLIPBOARD"), _atom("TARGETS"), _atom("_BASIN_SELECTION"), 0);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
         if (!WaitForSelectionNotify(out var property) || property == 0)
         {
             return [];
@@ -173,7 +187,7 @@ internal sealed unsafe class XWaylandClipboard : IDisposable
     {
         _ = Libxcb.xcb_convert_selection(
             _conn, _window, _atom("CLIPBOARD"), _atom("UTF8_STRING"), _atom("_BASIN_SELECTION"), 0);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
         if (WaitForSelectionNotify(out var property) && property != 0)
         {
             var data = ReadProperty8(property);
@@ -212,7 +226,7 @@ internal sealed unsafe class XWaylandClipboard : IDisposable
 
         _wlSourceForX = source;
         _ = Libxcb.xcb_set_selection_owner(_conn, _window, _atom("CLIPBOARD"), 0);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
     }
 
     private void AnswerSelectionRequest(xcb_selection_request_event_t* e)
@@ -313,7 +327,7 @@ internal sealed unsafe class XWaylandClipboard : IDisposable
             property = property,
         };
         _ = Libxcb.xcb_send_event(_conn, 0, requestor, 0, (sbyte*)&notify);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
     }
 
     private bool WaitForSelectionNotify(out uint property)

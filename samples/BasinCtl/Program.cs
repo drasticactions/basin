@@ -11,8 +11,8 @@ internal static class Program
             "Control a running basin compositor through its control socket.\n"
             + "\n"
             + "  basinctl windows | outputs | workspaces | methods [--detail] | events | version | describe\n"
-            + "  basinctl activate ID | close ID | move ID X Y | resize ID W H | wait APP_ID\n"
-            + "  basinctl shot OUTPUT FILE.png | chord CHORD | key CODE | text TEXT... | spawn ARGV...\n"
+            + "  basinctl activate ID | close ID | move ID X Y | resize ID W H | wait APP_ID | density ID native|low\n"
+            + "  basinctl shot OUTPUT FILE.png | chord CHORD | key CODE | text TEXT... | spawn [--x11-density low] ARGV...\n"
             + "  basinctl subscribe EVENT... | clipboard [primary] | raw JSON | quit\n"
             + "  basinctl devices | device ID | device ID key=value... | device ID reset [KEY...]\n"
             + "  basinctl METHOD [key=value ...]")
@@ -41,6 +41,11 @@ internal static class Program
         {
             Description = "with methods, print each method's traits and description",
         });
+        var x11Density = cli.Add(new Option<string?>("--x11-density")
+        {
+            Description = "with spawn, the X server for an X11 program: native or low",
+            HelpName = "native|low",
+        });
         var words = new Argument<string[]>("command")
         {
             Description = "the command and its arguments",
@@ -57,7 +62,7 @@ internal static class Program
                 return cli.Usage(result);
             }
 
-            return new Controller(result.GetValue(socket), result.GetValue(json), result.GetValue(fd), result.GetValue(detail), result.GetValue(maxDimension))
+            return new Controller(result.GetValue(socket), result.GetValue(json), result.GetValue(fd), result.GetValue(detail), result.GetValue(maxDimension), result.GetValue(x11Density))
                 .RunAsync(command).GetAwaiter().GetResult();
         });
     }

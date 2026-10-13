@@ -29,6 +29,7 @@ public static class IpcMethodNames
     public const string WindowsSendToWorkspace = "windows/send-to-workspace";
     public const string WindowsWait = "windows/wait";
     public const string WindowsWaitIdle = "windows/wait-idle";
+    public const string WindowsSetX11Density = "windows/set-x11-density";
 
     public const string WorkspacesList = "workspaces/list";
     public const string WorkspacesActivate = "workspaces/activate";

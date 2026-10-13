@@ -36,6 +36,7 @@ internal sealed partial class Shell : IDisposable
     private readonly ShellSeat _seat;
     private readonly List<AppWindow> _apps = [];
     private readonly Basin.XWayland.XWaylandSceneDriver _xwayland = new();
+    private bool _xwaylandWired;
     private readonly Dictionary<Basin.XWayland.XWaylandWindow, AppWindow> _x11Windows = [];
     private readonly Dictionary<Surface, AppWindow> _owners = [];
     private Basin.Desktop.PopupPlacer _popups = null!;
@@ -93,7 +94,11 @@ internal sealed partial class Shell : IDisposable
             {
                 SocketFd = options.SocketFd,
             });
-        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path));
+        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
+        {
+            X11Routes = density => _xwaylandModule?.Route(density),
+            X11Default = launch => _config.Launch.ForArgv(launch.DesktopId, launch.Argv),
+        };
 
         _popups = new Basin.Desktop.PopupPlacer(_layout);
         _colorPack = new Basin.Desktop.ColorCapabilityPack(_layout, _renderer);
@@ -108,10 +113,12 @@ internal sealed partial class Shell : IDisposable
             .Use<Basin.Capabilities.IInputSink>(inputSink);
 
         _services.Install(DesktopPack.For("eight-wm"));
+        _config = Config.Load(_options.ConfigPath, _log);
         Basin.XWayland.XWaylandModule? xwayland = null;
         if (OperatingSystem.IsLinux() && _options.XWayland)
         {
-            xwayland = new Basin.XWayland.XWaylandModule();
+            xwayland = new Basin.XWayland.XWaylandModule { IncludeLowDensity = _config.XWaylandLowDensity };
+            _xwaylandModule = xwayland;
             _services.Install(xwayland);
         }
 
@@ -218,8 +225,12 @@ internal sealed partial class Shell : IDisposable
         AttachLayerShell();
         if (xwayland is not null)
         {
-            _xServer = xwayland.Server;
-            xwayland.WindowManagerReady += AttachXWayland;
+            _xServer = xwayland.Native!.Server;
+            xwayland.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
+            foreach (var display in xwayland.Displays)
+            {
+                display.WindowManagerReady += AttachXWayland;
+            }
         }
 
         _outputs.Added += driver => AttachStart(ViewOf(driver));
@@ -374,9 +385,9 @@ internal sealed partial class Shell : IDisposable
         }
     }
 
-    internal void Spawn(string command)
+    internal void Spawn(string command, string? desktopId = null)
     {
-        if (_processes.SpawnShell(command, out var error) is null)
+        if (_processes.Spawn(new ProcessLaunch(["/bin/sh", "-c", command]) { DesktopId = desktopId }, out var error) is null)
         {
             _log.Warn($"cannot start '{command}': {error}");
         }
@@ -399,6 +410,7 @@ internal sealed partial class Shell : IDisposable
 
     public void Dispose()
     {
+        _xwayland.Dispose();
         _host.DisconnectClients();
         _processes.TerminateAll(TimeSpan.FromMilliseconds(500));
         _processes.Dispose();

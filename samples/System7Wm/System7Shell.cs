@@ -94,7 +94,11 @@ internal sealed partial class System7Shell : IDisposable
         {
             SocketFd = options.SocketFd,
         });
-        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path));
+        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
+        {
+            X11Routes = density => _xwaylandModule?.Route(density),
+            X11Default = launch => _config.Launch.ForArgv(launch.DesktopId, launch.Argv),
+        };
 
         _colorPack = new Basin.Desktop.ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm) { Bell = new AlertBell(Beep) };
@@ -113,7 +117,8 @@ internal sealed partial class System7Shell : IDisposable
         Basin.XWayland.XWaylandModule? xwayland = null;
         if (options.XWayland ?? _config.XWayland)
         {
-            xwayland = new Basin.XWayland.XWaylandModule();
+            xwayland = new Basin.XWayland.XWaylandModule { IncludeLowDensity = _config.XWaylandLowDensity };
+            _xwaylandModule = xwayland;
             _services.Install(xwayland);
         }
         else if (Environment.GetEnvironmentVariable("DISPLAY") is { Length: > 0 } inherited)
@@ -131,6 +136,14 @@ internal sealed partial class System7Shell : IDisposable
         _layers = new System7Layers(_scene.Root);
         CreateLayerDrivers();
         _services.UseDefault<IInputDeviceConfiguration>(_inputConfigurator);
+        _densityControl = new Basin.Config.LaunchRuleDensityControl(
+            () => _services.Find<IToplevelModel>(), _processes, _host.Loop,
+            () => _options.NoConfig ? null : _options.ConfigPath ?? System7Config.DefaultPath(), _log)
+        {
+            DesktopIdForAppId = appId => _desktopEntries.FindForAppId(appId)?.Id,
+        };
+        _densityControl.RulesWritten += rules => _config.Launch = rules;
+        _services.Use<IX11DensityControl>(_densityControl);
         _services.Freeze();
 
         _pattern = new DesktopPattern(_layers.Pattern)
@@ -233,9 +246,18 @@ internal sealed partial class System7Shell : IDisposable
         AttachLayers();
         if (xwayland is not null)
         {
-            _xServer = _services.Require<Basin.XWayland.XWaylandServer>();
-            xwayland.WindowManagerReady += AttachXWayland;
+            _xServer = xwayland.Native!.Server;
+            xwayland.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
+            foreach (var display in xwayland.Displays)
+            {
+                display.WindowManagerReady += AttachXWayland;
+            }
+
             BasinReport.Line($"XWAYLAND {_xServer.DisplayName}");
+            if (xwayland.LowDensity is { } lowDensity)
+            {
+                BasinReport.Line($"XWAYLAND LOW {lowDensity.DisplayName}");
+            }
         }
 
         WireColor();
@@ -315,7 +337,9 @@ internal sealed partial class System7Shell : IDisposable
         StartClock();
         if (_options.Command is { Length: > 0 } command)
         {
-            _initProcess = InitProcess.Start(command, _host.Socket, _xServer?.DisplayName, _log);
+            _initProcess = InitProcess.Start(
+                command, _host.Socket, _xServer?.DisplayName, _log, _xwaylandModule?.ChildEnvironment(),
+                _config.Launch.ForCommand(null, command) is { } density ? _xwaylandModule?.Route(density) : null);
         }
 
         _loop.Iterating += _uiDriver.Pump;
@@ -356,9 +380,13 @@ internal sealed partial class System7Shell : IDisposable
         BasinReport.Line(restart.Length > 0 ? $"RELOAD restart-needed {restart}" : "RELOAD ok");
     }
 
+    private Basin.XWayland.XWaylandModule? _xwaylandModule;
+    private Basin.Config.LaunchRuleDensityControl? _densityControl;
+
     internal void ApplyConfig()
     {
         ApplyInput();
+        _xwaylandModule?.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
         _pattern.Depth = _config.Depth;
         _pattern.Pattern = System7DesktopPattern.Find(_config.Pattern) ?? System7DesktopPattern.Default;
         _pattern.Wallpaper = _config.Wallpaper;
@@ -371,9 +399,9 @@ internal sealed partial class System7Shell : IDisposable
         Relayout();
     }
 
-    internal void Spawn(string command)
+    internal void Spawn(string command, string? desktopId = null)
     {
-        if (_processes.SpawnShell(command, out var error) is null)
+        if (_processes.Spawn(new ProcessLaunch(["/bin/sh", "-c", command]) { DesktopId = desktopId }, out var error) is null)
         {
             _log.Error($"cannot start {command}: {error}");
         }

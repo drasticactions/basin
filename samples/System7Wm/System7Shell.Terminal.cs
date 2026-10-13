@@ -123,15 +123,27 @@ internal sealed partial class System7Shell
         return (clampedX, clampedY);
     }
 
-    private Dictionary<string, string?> TerminalEnvironment() => new(StringComparer.Ordinal)
+    private Dictionary<string, string?> TerminalEnvironment()
     {
-        ["TERM"] = "xterm-256color",
-        ["COLORTERM"] = null,
-        ["TERM_PROGRAM"] = "system7-wm",
-        ["WAYLAND_DISPLAY"] = _host.Socket,
-        ["XDG_SESSION_TYPE"] = "wayland",
-        ["DISPLAY"] = _xServer?.DisplayName is { Length: > 0 } display ? display : null,
-    };
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["TERM"] = "xterm-256color",
+            ["COLORTERM"] = null,
+            ["TERM_PROGRAM"] = "system7-wm",
+            ["WAYLAND_DISPLAY"] = _host.Socket,
+            ["XDG_SESSION_TYPE"] = "wayland",
+            ["DISPLAY"] = _xServer?.DisplayName is { Length: > 0 } display ? display : null,
+        };
+        if (_xwaylandModule is { } module)
+        {
+            foreach (var (name, value) in module.ChildEnvironment())
+            {
+                values[name] = value;
+            }
+        }
+
+        return values;
+    }
 
     private void OnTerminalExited(ShellWindow window, TerminalWindow terminal, PtyExit exit)
     {

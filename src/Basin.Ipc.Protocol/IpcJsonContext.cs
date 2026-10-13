@@ -70,6 +70,8 @@ namespace Basin.Ipc;
 [JsonSerializable(typeof(IpcSendToWorkspaceParams))]
 [JsonSerializable(typeof(IpcSessionDescription))]
 [JsonSerializable(typeof(IpcSetStateParams))]
+[JsonSerializable(typeof(IpcSetX11DensityParams))]
+[JsonSerializable(typeof(IpcX11DensityResult))]
 [JsonSerializable(typeof(IpcShortcutActivated))]
 [JsonSerializable(typeof(IpcSize))]
 [JsonSerializable(typeof(IpcSpawnParams))]

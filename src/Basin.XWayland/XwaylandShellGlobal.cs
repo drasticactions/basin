@@ -10,7 +10,7 @@ public sealed class XwaylandShellGlobal : IDisposable
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
-    private readonly Dictionary<ulong, Surface> _bySerial = [];
+    private readonly Dictionary<(WlClient Client, ulong Serial), Surface> _bySerial = [];
     private Func<WlClient, bool>? _isXwayland;
 
     public XwaylandShellGlobal(WlServerDisplay display, CompositorGlobal compositor)
@@ -19,15 +19,47 @@ public sealed class XwaylandShellGlobal : IDisposable
         _global = display.CreateGlobal(XwaylandShellV1.Interface, Version, OnBind);
     }
 
-    public event Action<ulong, Surface>? SerialCommitted;
+    public event Action<WlClient, ulong, Surface>? SerialCommitted;
 
     public void RestrictTo(Func<WlClient, bool> isXwayland) => _isXwayland = isXwayland;
 
     public void Dispose() => _global.Dispose();
 
-    public Surface? SurfaceFor(ulong serial) => _bySerial.GetValueOrDefault(serial);
+    public Surface? SurfaceFor(WlClient? client, ulong serial)
+    {
+        if (client is not null)
+        {
+            return _bySerial.GetValueOrDefault((client, serial));
+        }
 
-    internal void Forget(ulong serial) => _bySerial.Remove(serial);
+        foreach (var (key, surface) in _bySerial)
+        {
+            if (key.Serial == serial)
+            {
+                return surface;
+            }
+        }
+
+        return null;
+    }
+
+    internal void Forget(WlClient? client, ulong serial)
+    {
+        if (client is not null)
+        {
+            _bySerial.Remove((client, serial));
+            return;
+        }
+
+        foreach (var (key, _) in _bySerial)
+        {
+            if (key.Serial == serial)
+            {
+                _bySerial.Remove(key);
+                return;
+            }
+        }
+    }
 
     private void OnBind(WlClient client, uint version, uint id)
     {
@@ -55,8 +87,8 @@ public sealed class XwaylandShellGlobal : IDisposable
                 if (pendingSerial is { } serial)
                 {
                     pendingSerial = null;
-                    _bySerial[serial] = surface;
-                    SerialCommitted?.Invoke(serial, surface);
+                    _bySerial[(client, serial)] = surface;
+                    SerialCommitted?.Invoke(client, serial, surface);
                 }
             }
 

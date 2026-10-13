@@ -37,6 +37,14 @@ internal sealed class Config
 
     public uint Accent { get; private set; } = Shell.DefaultAccent;
 
+    public Basin.XWayland.XWaylandScale XWaylandScale { get; private set; }
+
+    public int[] XWaylandDpiBuckets { get; private set; } = [];
+
+    public bool XWaylandLowDensity { get; private set; } = true;
+
+    public Basin.Config.LaunchRules Launch { get; private set; } = Basin.Config.LaunchRules.Empty;
+
     public static Config Load(string? path, BasinLogger log)
     {
         var config = new Config();
@@ -68,14 +76,36 @@ internal sealed class Config
                 var other => Warn(log, $"[shell] theme '{other}' is neither dark nor light; dark is used", true),
             };
             config.Accent = TomlColor.Argb(shell.Text("accent"), config.Accent) | 0xff000000;
+            var scale = shell.Raw("xwayland_scale");
+            config.XWaylandScale = Basin.XWayland.XWaylandScale.TryParse(scale, out var parsed)
+                ? parsed
+                : Warn(log, $"[shell] xwayland_scale {scale} is not \"auto\" or a number of at least 1; auto is used", Basin.XWayland.XWaylandScale.Auto);
+            if (shell.Numbers("xwayland_dpi_buckets") is { } buckets)
+            {
+                config.XWaylandDpiBuckets = [.. buckets.Where(static b => b > 0).Select(static b => (int)Math.Round(b))];
+            }
+
+            config.XWaylandLowDensity = shell.Flag("xwayland_low_density", config.XWaylandLowDensity);
         }
 
+        config.Launch = Basin.Config.LaunchRules.Read(reader);
         var rules = new List<Rule>();
         foreach (var row in reader.Sections("rule"))
         {
-            if (row.Text("app_id") is { Length: > 0 } appId)
+            var rule = new Rule
             {
-                rules.Add(new Rule { AppIds = [appId], MinWidth = row.Number("min_width", 0) });
+                AppIds = row.Text("app_id") is { Length: > 0 } appId ? [appId] : null,
+                SteamGames = WindowRule.SteamGameIds(row.Raw("steam_game"), row.Where("steam_game"), log),
+                Processes = row.Words("process"),
+                X11Classes = row.Words("x11_class"),
+                X11Instances = row.Words("x11_instance"),
+                WindowTypes = row.Words("window_type"),
+                Quirks = WindowQuirks.Read(row),
+                MinWidth = row.Number("min_width", 0),
+            };
+            if (rule.HasAppCriteria || rule.FactCriteriaCount > 0 || rule.HasTitleCriteria)
+            {
+                rules.Add(rule);
             }
         }
 
@@ -152,6 +182,7 @@ internal sealed class Config
             Name = name,
             Exec = exec,
             Icon = icon,
+            DesktopId = row.Text("desktop") is { Length: > 0 } tileDesktop ? Basin.Config.LaunchRule.NormalizeDesktopId(tileDesktop) : null,
             Size = row.Text("size") switch
             {
                 "small" => TileSize.Small,

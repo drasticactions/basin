@@ -115,6 +115,70 @@ public sealed unsafe class XWaylandServer : IDisposable
 
     public event Action<int>? Ready;
 
+    public event Action<Wayland.Server.WlClient>? ClientCreated;
+
+    public event Action? SettingsChanged;
+
+    private XWaylandScale _x11Scale;
+    private IReadOnlyList<int> _dpiBuckets = [];
+    private string _cursorTheme = Environment.GetEnvironmentVariable("XCURSOR_THEME") ?? string.Empty;
+    private int _cursorSize =
+        int.TryParse(Environment.GetEnvironmentVariable("XCURSOR_SIZE"), out var size) && size > 0 ? size : 24;
+
+    public XWaylandScale X11Scale
+    {
+        get => _x11Scale;
+        set
+        {
+            if (_x11Scale != value)
+            {
+                _x11Scale = value;
+                SettingsChanged?.Invoke();
+            }
+        }
+    }
+
+    public IReadOnlyList<int> DpiBuckets
+    {
+        get => _dpiBuckets;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (!_dpiBuckets.SequenceEqual(value))
+            {
+                _dpiBuckets = [.. value];
+                SettingsChanged?.Invoke();
+            }
+        }
+    }
+
+    public string CursorTheme
+    {
+        get => _cursorTheme;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (_cursorTheme != value)
+            {
+                _cursorTheme = value;
+                SettingsChanged?.Invoke();
+            }
+        }
+    }
+
+    public int CursorSize
+    {
+        get => _cursorSize;
+        set
+        {
+            if (_cursorSize != value && value > 0)
+            {
+                _cursorSize = value;
+                SettingsChanged?.Invoke();
+            }
+        }
+    }
+
     public event Action? Exited;
 
     public void Dispose()
@@ -307,6 +371,7 @@ public sealed unsafe class XWaylandServer : IDisposable
         _client = _display.CreateClient(wayland[0]);
         _client.Destroyed += OnClientGone;
         _wmFd = wm[0];
+        ClientCreated?.Invoke(_client);
 
         var actions = Marshal.AllocHGlobal(80);
         _ = posix_spawn_file_actions_init(actions);

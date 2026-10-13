@@ -7,6 +7,13 @@ renderer = ""
 wallpaper = ""
 # Host X11 clients through Xwayland: true or false. --xwayland beats it, and a change needs a restart.
 xwayland = true
+# The X11 scale: "auto" follows the largest output scale, or a number of at least 1.
+xwayland_scale = "auto"
+# Snap the DPI that X11 clients see to the nearest of these, e.g. [72, 96, 160, 240]. Empty publishes the exact DPI.
+xwayland_dpi_buckets = []
+# A second Xwayland at scale 1 and 96 DPI, stretched to the output, for [[launch]] rules
+# with x11 = "low-density". It starts on its first client. Needs a restart.
+xwayland_low_density = true
 
 [cards]
 # Scale of the focused card in card view, as a fraction of the output.
@@ -111,6 +118,8 @@ repeat_interval_ms = 120
 [keybindings]
 # Chord = action. Actions: card_view, launcher, quick_launch, maximize, back, next,
 # previous, home, dashboard, lock, close, keyboard. "Super" alone is a press and release of Super.
+# A table says when a chord applies: "Super+q" = { action = "close", when = "windowed" }
+# (always | windowed | fullscreen; a fullscreen card counts as fullscreen).
 "Super" = "card_view"
 "Super+space" = "launcher"
 "Super+d" = "quick_launch"
@@ -124,8 +133,20 @@ repeat_interval_ms = 120
 "Super+q" = "close"
 "Super+k" = "keyboard"
 
-# Window rules. Each rule matches app_id and title, and sets:
+# Window rules. Each rule matches app_id and title, and also steam_game, process,
+# x11_class, x11_instance and window_type. Quirks: letterbox = "fit" | "center" | "off",
+# scale_filter = "linear" | "nearest",
+# readiness = "matching" | "immediate", force_unmaximize, allow_client_move and
+# emulated_modes (true or false). Each rule also sets:
 # stack = "new" | "join" | "auto", output = an output name, fullscreen = true | false.
 # [[rule]]
 # app_id = "mpv"
 # fullscreen = true
+
+# Launch rules choose the X server an X11 application starts on, before it starts.
+# desktop_id is the desktop entry id and exec the base name of the program. A rule
+# with both keys beats desktop_id, and desktop_id beats exec. x11 = "low-density"
+# suits GTK 2, Tk, Motif and programs that ignore the DPI.
+# [[launch]]
+# desktop_id = "leafpad.desktop"
+# x11 = "low-density"

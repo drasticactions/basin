@@ -247,6 +247,11 @@ impacts       = ["squash"]   # squash | shake
 # [physics.workspace.2]
 # gravity     = 2000         # per-workspace gravity
 
+[xwayland]
+scale       = "auto"         # the X11 scale: "auto" follows the largest output scale, or a number of at least 1
+dpi_buckets = []             # snap the published DPI to the nearest of these, e.g. [72, 96, 160, 240]
+low_density = true           # a second Xwayland at scale 1 and 96 DPI for [[launch]] rules with x11 = "low-density"
+
 [touch]
 hide_cursor    = true        # hide the cursor while the touchscreen is used, show it on mouse input
 titlebar_twist = true        # two fingers, one on the titlebar, turn the window
@@ -306,6 +311,8 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 
 # Key bindings, Mod+Mod+Key with an xkb keysym name.
 [bindings]
+# A binding can be a table that says when it applies, which defaults to always:
+# "Alt+Tab" = { action = "cycle", when = "windowed" }   # always | windowed | fullscreen
 "Alt+Escape"      = "quit"
 "Alt+Tab"         = "cycle"
 "Alt+s"           = "cycle-scale"
@@ -347,6 +354,11 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 # [[rule]]
 # app_id      = "mpv"        # exact match
 # title_regex = ""           # regex
+# steam_game  = 570          # the game id from STEAM_GAME, SteamGameId or SteamAppId
+# process     = "dota2"      # the process name or its executable, exact
+# x11_class   = "Steam"      # the class half of WM_CLASS, X11 only
+# x11_instance = "steamwebhelper"  # the instance half of WM_CLASS, X11 only
+# window_type = "dialog"     # or a list: normal, dialog, utility, splash, ...
 # frame       = "none"       # beos | flat | metacity | msstyles | quill | none
 # effects     = false        # or per effect: wobbly = false, open = "none"
 # workspace   = 2
@@ -361,4 +373,20 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 # mass       = 2.0           # density
 # gravity    = 0.5           # gravity scale
 # bounce     = 0.8           # restitution
+# letterbox  = "fit"         # fit | center | off: a fullscreen, maximized or tiled window that keeps another size
+# scale_filter = "nearest"   # linear | nearest: how a scaled window is sampled
+# readiness  = "immediate"   # matching | immediate: X11 only, whether a configure waits for a matching commit
+# force_unmaximize = true    # X11 only: ignore a maximize request at map
+# allow_client_move = true   # X11 only: honor the position in a ConfigureRequest after map
+# emulated_modes = false     # X11 only: ignore a game's RandR mode emulation
 # friction   = 0.1
+
+# Launch rules choose the X server an X11 application starts on. A rule matches
+# before the process exists. The most specific rule wins: desktop_id and exec
+# together, then desktop_id, then exec. x11 = "low-density" starts it on the
+# second Xwayland at scale 1 and 96 DPI ([xwayland] low_density), which suits
+# GTK 2, Tk, Motif and programs that ignore the DPI. The scene stretches it.
+# [[launch]]
+# desktop_id = "leafpad.desktop"   # the desktop entry id
+# exec       = "leafpad"           # the base name of the program, after env and NAME=value words
+# x11        = "low-density"       # native | low-density

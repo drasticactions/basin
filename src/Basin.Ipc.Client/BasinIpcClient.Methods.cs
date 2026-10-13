@@ -64,6 +64,14 @@ public sealed partial class BasinIpcClient
     public async Task<IReadOnlyList<IpcWindow>> ListWindowsAsync(CancellationToken cancellationToken = default) =>
         (await CallAsync(IpcMethodNames.WindowsList, Json.IpcWindowList, cancellationToken).ConfigureAwait(false)).Windows.Items();
 
+    public Task<IpcX11DensityResult> SetX11DensityAsync(ulong id, string density, CancellationToken cancellationToken = default) =>
+        CallAsync(
+            IpcMethodNames.WindowsSetX11Density,
+            new IpcSetX11DensityParams(id, density),
+            Json.IpcSetX11DensityParams,
+            Json.IpcX11DensityResult,
+            cancellationToken);
+
     public Task<IpcWindow> GetWindowAsync(ulong id, CancellationToken cancellationToken = default) =>
         CallAsync(IpcMethodNames.WindowsGet, new IpcIdParams(id), Json.IpcIdParams, Json.IpcWindow, cancellationToken);
 
@@ -333,8 +341,9 @@ public sealed partial class BasinIpcClient
         IReadOnlyList<string> argv,
         IReadOnlyDictionary<string, string>? env = null,
         string? cwd = null,
+        string? x11Density = null,
         CancellationToken cancellationToken = default) =>
-        (await CallAsync(IpcMethodNames.ProcessSpawn, new IpcSpawnParams(argv, env, cwd), Json.IpcSpawnParams, Json.IpcSpawnResult, cancellationToken)
+        (await CallAsync(IpcMethodNames.ProcessSpawn, new IpcSpawnParams(argv, env, cwd, x11Density: x11Density), Json.IpcSpawnParams, Json.IpcSpawnResult, cancellationToken)
             .ConfigureAwait(false)).Pid;
 
     public async Task<IReadOnlyList<IpcDevice>> ListDevicesAsync(CancellationToken cancellationToken = default) =>

@@ -32,6 +32,58 @@ public sealed class GoldenTests
 
     [Theory]
     [MemberData(nameof(Renderers))]
+    public void Golden_nearest_upscale(string renderer)
+    {
+        SkipWithoutGpu(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        static void Checker(nint data, int stride)
+        {
+            unsafe
+            {
+                for (var y = 0; y < 4; y++)
+                {
+                    var row = (uint*)(data + y * stride);
+                    for (var x = 0; x < 4; x++)
+                    {
+                        row[x] = ((x + y) & 1) == 0 ? 0xFFFFFFFFu : 0xFF2050C0u;
+                    }
+                }
+            }
+        }
+
+        for (var i = 0; i < 2; i++)
+        {
+            var surface = host.Client.Compositor.CreateSurface();
+            var viewport = host.Client.Viewporter!.GetViewport(surface);
+            viewport.SetDestination(64, 64);
+            var buffer = host.Client.CreateBuffer(4, 4, Checker);
+            surface.Attach(buffer.Proxy, 0, 0);
+            surface.Damage(0, 0, 4, 4);
+            surface.Commit();
+        }
+
+        host.PumpToServer();
+        var nearest = host.SurfaceScenes[0].Tree;
+        nearest.SetPosition(8, 8);
+        nearest.Filter = TextureFilter.Nearest;
+        host.SurfaceScenes[1].Tree.SetPosition(88, 8);
+        host.RenderFrame();
+
+        for (var cellY = 0; cellY < 4; cellY++)
+        {
+            for (var cellX = 0; cellX < 4; cellX++)
+            {
+                var expected = ((cellX + cellY) & 1) == 0 ? 0xFFFFFFFFu : 0xFF2050C0u;
+                Assert.Equal(expected, host.Pixel(8 + (cellX * 16) + 1, 8 + (cellY * 16) + 1));
+                Assert.Equal(expected, host.Pixel(8 + (cellX * 16) + 14, 8 + (cellY * 16) + 14));
+            }
+        }
+
+        Golden.AssertMatches(host, GoldenName("nearest-upscale", renderer));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
     public void Golden_window_borders(string renderer)
     {
         SkipWithoutGpu(renderer);

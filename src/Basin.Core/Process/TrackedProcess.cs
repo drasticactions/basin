@@ -18,6 +18,8 @@ public sealed class TrackedProcess
 
     public string? LogPath { get; }
 
+    public ProcessLaunch? Launch { get; internal init; }
+
     public bool IsRunning { get; private set; } = true;
 
     public int? ExitCode { get; private set; }

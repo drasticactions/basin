@@ -140,9 +140,10 @@ public sealed class SeatTouch
         _points[id] = (surface, serial);
         if (_seat.ClientOf(surface) is { } client)
         {
+            var scale = surface.ServerScale;
             foreach (var touch in client.Touches)
             {
-                touch.SendDown(serial, timeMs, surface.Resource, id, WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+                touch.SendDown(serial, timeMs, surface.Resource, id, WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
             }
 
             _frameClients.Add(client);
@@ -177,9 +178,10 @@ public sealed class SeatTouch
             return;
         }
 
+        var scale = point.Surface.ServerScale;
         foreach (var touch in client.Touches)
         {
-            touch.SendMotion(timeMs, id, WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+            touch.SendMotion(timeMs, id, WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
         }
 
         _frameClients.Add(client);

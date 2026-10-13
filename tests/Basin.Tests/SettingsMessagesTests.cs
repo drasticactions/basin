@@ -13,7 +13,7 @@ public sealed class SettingsMessagesTests
         { "canvas.mesh_cell: expected a whole number", "Enter a whole number.", true },
         { "[compositor] background \"orange\" is not #rrggbb, keeping the default", "Use a color like #1a2b3c.", true },
         { "[settings] font_size must be at least 6, keeping 14", "Use 6 or more.", true },
-        { "a [[rule]] naming neither app_id nor title_regex is dropped", "A rule needs an app id or a title pattern.", true },
+        { "a [[rule]] naming no match key is dropped", "A rule needs at least one match key, such as app_id.", true },
         { "unknown keysym 'Enterr' in binding 'Super+Enterr', skipping", "\"Enterr\" isn't a key name.", true },
         { "[canvas] edge_scale 0.9 must stay below zone / extension = 0.240, clamping it to 0.228", "Too high for this zone and extension, so 0.228 is used.", false },
         { "[canvas] min_scale 0.1 is below edge_scale 0.200 and has no effect", "This has no effect with the current edge scale.", false },

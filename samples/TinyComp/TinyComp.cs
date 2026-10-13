@@ -104,7 +104,11 @@ internal sealed partial class TinyComp :
             return new Basin.UI.Skia.FlatFrameRenderer(FlatThemeOrLoad());
         }
 
-        return new Basin.Frames.Quill.QuillFrameRenderer(QuillThemeOrLoad());
+        return new Basin.Frames.Quill.QuillFrameRenderer(QuillThemeOrLoad())
+        {
+            LightTheme = QuillThemeOf(_config, "light"),
+            DarkTheme = QuillThemeOf(_config, "dark"),
+        };
     }
 
     private IFrameRenderer CreateMsStylesFrameRenderer()
@@ -117,7 +121,11 @@ internal sealed partial class TinyComp :
             _log.Warn($"[frame.msstyles] painter = \"quill\" cannot run beside the {_config.Renderer} renderer: {_quillDeclined}; Skia paints the frames instead");
         }
 
-        return frames.CreateRenderer(quill);
+        var renderer = frames.CreateRenderer(quill);
+        IFrameRenderer menu = quill
+            ? new Basin.Frames.Quill.QuillFrameRenderer(QuillThemeOrLoad())
+            : new Basin.UI.Skia.FlatFrameRenderer(FlatThemeOrLoad());
+        return new MenuDonorFrameRenderer(renderer, menu);
     }
 
     private SkiaSharp.SKImage? MsStylesIcon(string name, int scale) => FrameThemeOrLoad().IconFor(name, scale);
@@ -140,9 +148,11 @@ internal sealed partial class TinyComp :
 
     private Basin.Frames.Quill.QuillFrameTheme QuillThemeOrLoad() => _quillTheme ??= QuillThemeOf(_config);
 
-    private static Basin.Frames.Quill.QuillFrameTheme QuillThemeOf(Config config)
+    private static Basin.Frames.Quill.QuillFrameTheme QuillThemeOf(Config config) => QuillThemeOf(config, config.QuillPalette);
+
+    private static Basin.Frames.Quill.QuillFrameTheme QuillThemeOf(Config config, string palette)
     {
-        var theme = config.QuillPalette == "light"
+        var theme = palette == "light"
             ? Basin.Frames.Quill.QuillFrameTheme.Light()
             : new Basin.Frames.Quill.QuillFrameTheme();
         theme.CornerRadius = (float)config.QuillCornerRadius;
@@ -224,7 +234,7 @@ internal sealed partial class TinyComp :
                 _log.Warn($"[frame.metacity] backdrop_blur is set, but the {metacity.Painter.Theme.Name} theme sets no window_background_alpha, so its frames are opaque and hide the blur");
             }
         }
-        else if (renderer is Basin.Frames.MsStyles.MsStylesFrameRenderer or Basin.Frames.MsStyles.Quill.MsStylesQuillFrameRenderer
+        else if (renderer is MenuDonorFrameRenderer { Frame: Basin.Frames.MsStyles.MsStylesFrameRenderer or Basin.Frames.MsStyles.Quill.MsStylesQuillFrameRenderer }
                  && _msstyles is { Frosted: true, Glass: true })
         {
             frame.BackdropKey = frame;
@@ -282,9 +292,10 @@ internal sealed partial class TinyComp :
     private Basin.Desktop.TextInputManager _textInput = null!;
     private Basin.Desktop.ColorManager _color = null!;
     private Basin.XWayland.XwaylandShellGlobal _xwaylandShell = null!;
-    private Basin.XWayland.XWaylandServer? _xwayland;
+    private Basin.XWayland.XWaylandDisplay? _xwayland;
+    private Basin.Config.LaunchRuleDensityControl? _densityControl;
+    private Basin.Freedesktop.DesktopEntries? _desktopEntries;
     private readonly ProcessTracker _processes;
-    private Basin.XWayland.XWaylandWm? _xwm;
     private readonly List<XWindow> _xwindows = [];
     private readonly Basin.XWayland.XWaylandSceneDriver _xSceneDriver = new();
     private Basin.Desktop.TearingControlManager _tearing = null!;
@@ -458,7 +469,11 @@ internal sealed partial class TinyComp :
                     : Basin.Host.HostTransport.LibWayland,
                 SocketFd = socketFd,
             });
-        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xwayland?.DisplayName, _ipc?.Path));
+        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xwayland?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment()))
+        {
+            X11Routes = density => _xwaylandModule?.Route(density),
+            X11Default = launch => _config.Launch.ForArgv(launch.DesktopId, launch.Argv),
+        };
         _channelEndpoint = channelEndpoint;
         _display = _host.Display;
         _socket = _host.Socket;
@@ -669,7 +684,7 @@ internal sealed partial class TinyComp :
         ApplyEffectShaders();
         ApplyCornerRadius(config.CornerRadius);
 
-        var xwayland = new Basin.XWayland.XWaylandModule();
+        var xwayland = new Basin.XWayland.XWaylandModule { IncludeLowDensity = config.XWaylandLowDensity };
         _xwaylandModule = xwayland;
         var desktopPack = Basin.Desktop.DesktopPack.For("tinycomp");
         var hyprPack = HyprPackFor(config);
@@ -706,6 +721,13 @@ internal sealed partial class TinyComp :
 
         _services.UseDefault<IInputDeviceConfiguration>(_inputConfigurator);
         CreateLayerDrivers();
+        _densityControl = new Basin.Config.LaunchRuleDensityControl(
+            () => _services.Find<Basin.Capabilities.IToplevelModel>(), _processes, _host.Loop, () => SettingsPath, _log)
+        {
+            DesktopIdForAppId = appId => (_desktopEntries ??= new Basin.Freedesktop.DesktopEntries()).FindForAppId(appId)?.Id,
+        };
+        _densityControl.RulesWritten += rules => _config.Launch = rules;
+        _services.Use<Basin.Capabilities.IX11DensityControl>(_densityControl);
         _services.Freeze();
         _dmabufGlobal = dmabufModule?.Global;
         WireInputCapture();
@@ -837,36 +859,46 @@ internal sealed partial class TinyComp :
         _frameClock = _services.Require<Basin.Capabilities.IFrameClock>();
         _driver.Frames = _frameClock;
         _xwaylandShell = _services.Require<Basin.XWayland.XwaylandShellGlobal>();
-        _xwayland = _services.Require<Basin.XWayland.XWaylandServer>();
-        xwayland.WindowManagerReady += wm =>
+        _xwayland = xwayland.Native!;
+        ApplyXWaylandScale();
+        _xSceneDriver.Letterbox = true;
+        _xSceneDriver.ShapeRenderer = _renderer;
+        _xSceneDriver.ShapeAllocator = _allocator;
+        _xSceneDriver.ManagedParent = ManagedXParent;
+        _xSceneDriver.OverrideRedirectParent = AdoptOverrideRedirect;
+        _xSceneDriver.Adopted += OnXAdopted;
+        _xSceneDriver.Removed += OnXRemoved;
+        _xSceneDriver.ActivationRequested += ActivateXWindow;
+        foreach (var display in xwayland.Displays)
         {
-            _xwm = wm;
-            _xSceneDriver.ManagedParent = ManagedXParent;
-            _xSceneDriver.OverrideRedirectParent = AdoptOverrideRedirect;
-            _xSceneDriver.Adopted += OnXAdopted;
-            _xSceneDriver.Removed += OnXRemoved;
-            _xSceneDriver.ActivationRequested += ActivateXWindow;
-            _xSceneDriver.Attach(wm);
-            if (xwayland.Toplevels is { } xToplevels)
+            display.WindowManagerReady += wm =>
             {
-                xToplevels.NoBorderRequested += (xwin, noBorder) =>
-                    FindXWindow(xwin)?.SetNoBorderOverride(noBorder);
-                xToplevels.CaptureExclusionRequested += (xwin, excluded) =>
-                    xToplevels.SetExcludedFromCapture(xwin, excluded);
-                xToplevels.MoveRequested += (xwin, box) => FindXWindow(xwin)?.MoveTo(box.X, box.Y);
-                xToplevels.ResizeRequested += (xwin, box) =>
+                _xSceneDriver.Attach(wm);
+                if (display.Toplevels is { } xToplevels)
                 {
-                    if (FindXWindow(xwin) is { } xwindow)
+                    xToplevels.NoBorderRequested += (xwin, noBorder) =>
+                        FindXWindow(xwin)?.SetNoBorderOverride(noBorder);
+                    xToplevels.CaptureExclusionRequested += (xwin, excluded) =>
+                        xToplevels.SetExcludedFromCapture(xwin, excluded);
+                    xToplevels.MoveRequested += (xwin, box) => FindXWindow(xwin)?.MoveTo(box.X, box.Y);
+                    xToplevels.ResizeRequested += (xwin, box) =>
                     {
-                        xwindow.ResizeTo(xwindow.X, xwindow.Y, box.Width, box.Height, ResizeEdges.None);
-                    }
-                };
-            }
+                        if (FindXWindow(xwin) is { } xwindow)
+                        {
+                            xwindow.ResizeTo(xwindow.X, xwindow.Y, box.Width, box.Height, ResizeEdges.None);
+                        }
+                    };
+                }
 
-            _report.Line($"XWAYLAND WM {_xwayland.DisplayName}");
-        };
-        _xwayland.Exited += () => _xwm = null;
+                _report.Line($"XWAYLAND WM {display.DisplayName}");
+            };
+        }
+
         _report.Line($"XWAYLAND {_xwayland.DisplayName}");
+        if (xwayland.LowDensity is { } lowDensity)
+        {
+            _report.Line($"XWAYLAND LOW {lowDensity.DisplayName}");
+        }
         _privilegedFilter = (client, _, interfaceName) =>
             !Basin.Desktop.PrivilegedProtocols.Contains(interfaceName) || IsTrusted(client);
         _display.SetGlobalFilter(_privilegedFilter);
@@ -1057,7 +1089,9 @@ internal sealed partial class TinyComp :
 
         if (_init is { } init)
         {
-            _initProcess = Basin.Host.InitProcess.Start(init, _socket, _xwayland?.DisplayName, _log);
+            _initProcess = Basin.Host.InitProcess.Start(
+                init, _socket, _xwayland?.DisplayName, _log, _xwaylandModule?.ChildEnvironment(),
+                _config.Launch.ForCommand(null, init) is { } density ? _xwaylandModule?.Route(density) : null);
         }
 
         var hangup = _loop.AddSignal(Signal.Hangup, _ => Reload());
@@ -1114,8 +1148,10 @@ internal sealed partial class TinyComp :
 
         _cursor.Dispose();
 
-        _xwm?.Dispose();
-        _xwayland?.Dispose();
+        foreach (var display in _xwaylandModule.Displays)
+        {
+            display.Dispose();
+        }
         _protocolTrace?.Dispose();
         _tablets?.Dispose();
         _inputConfigurator.Dispose();
@@ -1155,6 +1191,7 @@ internal sealed partial class TinyComp :
         _seam = null;
         _seamTextInput?.Dispose();
         _seamTextInput = null;
+        _xSceneDriver.Dispose();
         _scene.Root.Destroy();
         _services.Dispose();
         _host.Dispose();

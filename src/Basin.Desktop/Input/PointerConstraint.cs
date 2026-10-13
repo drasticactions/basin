@@ -29,6 +29,7 @@ public sealed class PointerConstraint
         if (region is not null)
         {
             _region.Copy(region.Pixman);
+            ServerScaling.ToLogical(_region, surface.ServerScale, outward: true, _effective);
             _regionInfinite = false;
         }
 
@@ -213,6 +214,7 @@ public sealed class PointerConstraint
             if (!_regionInfinite)
             {
                 _region.Copy(_pendingRegion);
+                ServerScaling.ToLogical(_region, Surface.ServerScale, outward: true, _effective);
             }
         }
 
@@ -223,7 +225,8 @@ public sealed class PointerConstraint
 
         using (carrier)
         {
-            CursorPositionHint = (carrier.X, carrier.Y);
+            var scale = Surface.ServerScale;
+            CursorPositionHint = (carrier.X / scale, carrier.Y / scale);
         }
     }
 

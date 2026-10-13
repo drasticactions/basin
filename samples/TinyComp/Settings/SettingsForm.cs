@@ -71,6 +71,9 @@ internal sealed class SettingsForm
                         case SettingsCatalog.Rules:
                             RulesSection(paper, theme);
                             break;
+                        case SettingsCatalog.Launch:
+                            LaunchSection(paper, theme);
+                            break;
                         case SettingsCatalog.Outputs:
                             OutputsSection(paper, theme);
                             break;
@@ -606,6 +609,38 @@ internal sealed class SettingsForm
             paper.PopID();
         }
     }
+
+    private void LaunchSection(Prowl.PaperUI.Paper paper, SettingsTheme theme)
+    {
+        SettingsWidgets.Note(paper, theme, "launch-note", "A launch rule chooses the X server of an X11 application before it starts. low-density is a server at scale 1 and 96 DPI that is stretched to the output. A rule applies at the next start, and the window menu's density item restarts a running application.");
+        SettingsWidgets.Button(paper, theme, "add-launch", "Add launch rule", () => _draft.Edit(
+            document =>
+            {
+                var index = document.AppendTable(Basin.Config.LaunchRules.Table);
+                document.SetInTable(Basin.Config.LaunchRules.Table, index, "exec", TomlValue.From("program"));
+                document.SetInTable(Basin.Config.LaunchRules.Table, index, "x11", TomlValue.From("low-density"));
+            },
+            Basin.Config.LaunchRules.Table));
+        var count = _draft.Document.TableCount(Basin.Config.LaunchRules.Table);
+        for (var i = 0; i < count; i++)
+        {
+            paper.PushID(i);
+            var index = i;
+            SettingsWidgets.Heading(paper, theme, "launch-heading", $"Launch rule {i + 1}");
+            using (paper.Row("launch-tools").Width(paper.Stretch()).Height(UnitValue.Auto).Gap(6).Enter())
+            {
+                SettingsWidgets.Button(paper, theme, "remove", "Remove", () => _draft.Edit(d => d.RemoveTable(Basin.Config.LaunchRules.Table, index), Basin.Config.LaunchRules.Table));
+            }
+
+            SettingsWidgets.TextRow(paper, theme, "desktop_id", "Desktop id", LaunchSlot(i, "desktop_id", SettingKind.Text), "leafpad.desktop");
+            SettingsWidgets.TextRow(paper, theme, "exec", "Program", LaunchSlot(i, "exec", SettingKind.Text), "base name");
+            SettingsWidgets.EnumRow(paper, theme, "x11", "X server", LaunchSlot(i, "x11", SettingKind.Choice), ["native", "low-density"]);
+            paper.PopID();
+        }
+    }
+
+    private SettingSlot LaunchSlot(int index, string key, SettingKind kind, string? inherit = null) =>
+        new(_draft, _context, Basin.Config.LaunchRules.Table, key, kind, null, index) { Inherit = inherit };
 
     private SettingSlot RuleSlot(int index, string key, SettingKind kind, string? inherit = null, bool onOff = false) =>
         new(_draft, _context, "rule", key, kind, null, index) { Inherit = inherit, OnOff = onOff };

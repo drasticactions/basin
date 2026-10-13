@@ -14,16 +14,18 @@ internal static class SettingsCatalog
     public const string Touch = "Touch";
     public const string Bindings = "Bindings";
     public const string Rules = "Rules";
+    public const string Launch = "Launch";
     public const string Outputs = "Outputs";
     public const string Panel = "Panel";
 
     public static IReadOnlyList<string> Sections { get; } =
-        [Compositor, Frames, Color, Effects, Canvas, Overview, Physics, Hypr, Input, Touch, Bindings, Rules, Outputs, Panel];
+        [Compositor, Frames, Color, Effects, Canvas, Overview, Physics, Hypr, Input, Touch, Bindings, Rules, Launch, Outputs, Panel];
 
     public static IReadOnlyList<string> Restarts { get; } =
     [
         "compositor.renderer", "compositor.outputs", "compositor.frames", "compositor.full_repaint",
         "color.source", "color.icc", "color.hdr", "hypr.enable", "hypr.input_capture", "hypr.ctm",
+        "xwayland.low_density",
     ];
 
     private static readonly string[] TexturePresets = ["none", "stone", "brick", "wood", "noise"];

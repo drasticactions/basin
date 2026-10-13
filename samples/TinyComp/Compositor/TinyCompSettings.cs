@@ -96,6 +96,7 @@ internal sealed partial class TinyComp
         Restarts("hypr.enable", loaded.HyprEnabled != _config.HyprEnabled);
         Restarts("hypr.input_capture", loaded.HyprInputCapture != _config.HyprInputCapture);
         Restarts("hypr.ctm", loaded.HyprCtm != _config.HyprCtm);
+        Restarts("xwayland.low_density", loaded.XWaylandLowDensity != _config.XWaylandLowDensity);
 
         loaded.Renderer = _config.Renderer;
         loaded.Outputs = _config.Outputs;
@@ -107,6 +108,7 @@ internal sealed partial class TinyComp
         loaded.HyprEnabled = _config.HyprEnabled;
         loaded.HyprInputCapture = _config.HyprInputCapture;
         loaded.HyprCtm = _config.HyprCtm;
+        loaded.XWaylandLowDensity = _config.XWaylandLowDensity;
         foreach (var key in _config.FromFlags)
         {
             loaded.FromFlags.Add(key);
@@ -130,6 +132,8 @@ internal sealed partial class TinyComp
         return restart;
     }
 
+    private void ApplyXWaylandScale() => _xwaylandModule?.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
+
     private string? ApplyConfig(Config next, bool crossfade)
     {
         var background = _config.Background != next.Background;
@@ -140,6 +144,7 @@ internal sealed partial class TinyComp
         }
 
         ApplyTouchSettings();
+        ApplyXWaylandScale();
 
         if (background)
         {

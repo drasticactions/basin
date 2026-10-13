@@ -52,8 +52,11 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
         RefreshKeyboardMapping();
         var fd = Libxcb.xcb_get_file_descriptor(conn);
         _source = loop.AddFd(fd, FdReadiness.Readable, (_, _) => Pump());
+        _loop = loop;
         BasinCounters.Track();
     }
+
+    private readonly ICompositorEventLoop _loop;
 
     public static X11HotkeyGrabber? TryConnect(ICompositorEventLoop loop, string? display = null)
     {
@@ -104,6 +107,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         _bindings.Add(binding);
         _ = Libxcb.xcb_flush(_conn);
+        _loop.AddIdle(Pump);
         return true;
     }
 
@@ -209,7 +213,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
     private void Pump()
     {
-        if (_dead)
+        if (_dead || _disposed)
         {
             return;
         }
@@ -219,7 +223,12 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
             var ev = Libxcb.xcb_poll_for_event(_conn);
             if (ev == null)
             {
-                break;
+                _ = Libxcb.xcb_flush(_conn);
+                ev = Libxcb.xcb_poll_for_queued_event(_conn);
+                if (ev == null)
+                {
+                    break;
+                }
             }
 
             try
@@ -239,10 +248,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
             _dead = true;
             _source.Remove();
             Log.Warn($"the X server connection was lost, global hotkeys are off");
-            return;
         }
-
-        _ = Libxcb.xcb_flush(_conn);
     }
 
     private void Dispatch(xcb_generic_event_t* ev)

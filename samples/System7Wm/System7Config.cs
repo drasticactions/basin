@@ -36,6 +36,14 @@ internal sealed class System7Config
 
     public bool XWayland { get; private set; } = true;
 
+    public Basin.XWayland.XWaylandScale XWaylandScale { get; private set; }
+
+    public int[] XWaylandDpiBuckets { get; private set; } = [];
+
+    public bool XWaylandLowDensity { get; private set; } = true;
+
+    public Basin.Config.LaunchRules Launch { get; internal set; } = Basin.Config.LaunchRules.Empty;
+
     public bool ShadeEnabled { get; set; } = true;
 
     public int ShadeClicks { get; set; } = 2;
@@ -145,6 +153,16 @@ internal sealed class System7Config
             config.AppLayering = windows.Flag("app_layering", config.AppLayering);
             config.ClickThrough = windows.Flag("click_through", config.ClickThrough);
             config.XWayland = windows.Flag("xwayland", config.XWayland);
+            var scale = windows.Raw("xwayland_scale");
+            config.XWaylandScale = Basin.XWayland.XWaylandScale.TryParse(scale, out var parsed)
+                ? parsed
+                : Warn(log, $"[windows] xwayland_scale {scale} is not \"auto\" or a number of at least 1; auto is used", Basin.XWayland.XWaylandScale.Auto);
+            if (windows.Numbers("xwayland_dpi_buckets") is { } buckets)
+            {
+                config.XWaylandDpiBuckets = [.. buckets.Where(static b => b > 0).Select(static b => (int)Math.Round(b))];
+            }
+
+            config.XWaylandLowDensity = windows.Flag("xwayland_low_density", config.XWaylandLowDensity);
         }
 
         if (reader.Section("windowshade") is { } shade)
@@ -206,6 +224,7 @@ internal sealed class System7Config
                     : config.NewTerminal;
         }
 
+        config.Launch = Basin.Config.LaunchRules.Read(reader);
         var rules = new List<System7Rule>();
         foreach (var row in reader.Sections("rule"))
         {
@@ -218,6 +237,12 @@ internal sealed class System7Config
             {
                 AppIds = appIds,
                 AppIdPrefixes = prefixes,
+                SteamGames = WindowRule.SteamGameIds(row.Raw("steam_game"), row.Where("steam_game"), log),
+                Processes = row.Words("process"),
+                X11Classes = row.Words("x11_class"),
+                X11Instances = row.Words("x11_instance"),
+                WindowTypes = row.Words("window_type"),
+                Quirks = WindowQuirks.Read(row),
                 EditChords = chords,
                 Decorations = row.Choice("decorations", "auto", "auto", "frame", "none"),
             });
@@ -228,11 +253,13 @@ internal sealed class System7Config
         return config;
     }
 
-    public System7Rule? RuleFor(string? appId)
+    public System7Rule? RuleFor(string? appId) => RuleFor(new WindowFacts { AppId = appId });
+
+    public System7Rule? RuleFor(in WindowFacts facts)
     {
         foreach (var rule in Rules)
         {
-            if (rule.MatchesText(appId, null))
+            if (rule.Matches(facts))
             {
                 return rule;
             }
@@ -251,6 +278,11 @@ internal sealed class System7Config
         if (next.XWayland != XWayland)
         {
             yield return "windows.xwayland";
+        }
+
+        if (next.XWaylandLowDensity != XWaylandLowDensity)
+        {
+            yield return "windows.xwayland_low_density";
         }
     }
 

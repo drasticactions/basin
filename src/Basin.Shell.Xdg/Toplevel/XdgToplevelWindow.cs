@@ -271,6 +271,8 @@ public sealed class XdgToplevelWindow : IToplevelHandle
 
     public bool HasState(XdgToplevel.State state) => _states.Contains(state);
 
+    public (int Width, int Height) ConfiguredSize => (_pendingWidth, _pendingHeight);
+
     public void SetSize(int width, int height)
     {
         if (_pendingWidth == width && _pendingHeight == height)

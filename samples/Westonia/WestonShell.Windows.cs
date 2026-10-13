@@ -482,9 +482,10 @@ internal sealed partial class WestonShell
     private void OnNewToplevel(XdgToplevelWindow window)
     {
         var container = new SceneTree(WorkspaceTree?.Invoke() ?? _layers.Workspaces) { Enabled = false };
-        var scene = new SceneSurface(container, window.Surface);
+        var fit = new SceneFit(container);
+        var scene = new SceneSurface(fit.Content, window.Surface);
         _popups.Add(window.Xdg, scene);
-        var shellWindow = new ShellWindow(window, container, scene);
+        var shellWindow = new ShellWindow(window, container, scene) { Fit = fit };
 
         window.Xdg.Mapped += () =>
         {
@@ -528,6 +529,17 @@ internal sealed partial class WestonShell
         {
             var geometry = window.Xdg.EffectiveGeometry;
             scene.Tree.SetPosition(-geometry.X, -geometry.Y);
+            var committed = (geometry.Width, geometry.Height);
+            if (shellWindow.Fullscreen && !window.Xdg.HasUnackedConfigure)
+            {
+                var target = OutputBox(shellWindow).Translated(-shellWindow.X, -shellWindow.Y);
+                fit.Update(target, committed, SceneFit.Needed(
+                    (target.Width, target.Height), committed, SceneFitState.Fullscreen, SceneFitPolicy.Center));
+            }
+            else
+            {
+                fit.Update(new Box(0, 0, geometry.Width, geometry.Height), committed, null);
+            }
         }
 
         Align();

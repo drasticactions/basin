@@ -17,6 +17,8 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public uint WindowId { get; }
 
+    public XWaylandWm WindowManager => _wm;
+
     public bool OverrideRedirect { get; }
 
     public int X { get; internal set; }
@@ -27,6 +29,8 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public int Height { get; internal set; }
 
+    public Box X11Bounds { get; internal set; }
+
     public string Title { get; internal set; } = string.Empty;
 
     public string Instance { get; internal set; } = string.Empty;
@@ -34,6 +38,18 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public string Class { get; internal set; } = string.Empty;
 
     public XWaylandWindow? TransientFor { get; internal set; }
+
+    public ProcessIdentity Process { get; internal set; }
+
+    public int Pid => Process.Pid;
+
+    public bool PidVerified { get; internal set; }
+
+    public uint? SteamGame { get; internal set; }
+
+    public string WindowType { get; internal set; } = "normal";
+
+    public string ThemeVariant { get; internal set; } = string.Empty;
 
     public bool Modal { get; internal set; }
 
@@ -43,7 +59,53 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public bool WantsFocus { get; internal set; } = true;
 
-    public bool WantsMaximized { get; internal set; }
+    private bool _wantsMaximized;
+
+    public bool WantsMaximized
+    {
+        get => _wantsMaximized && !ForceUnmaximize;
+        internal set => _wantsMaximized = value;
+    }
+
+    public bool ForceUnmaximize { get; set; }
+
+    public bool AllowClientMove { get; set; }
+
+    public bool HonorEmulatedModes { get; set; } = true;
+
+    public IReadOnlyList<Box> EmulatedModes { get; internal set; } = [];
+
+    public Box? EmulatedMode { get; internal set; }
+
+    internal Box EmulatedLogical { get; set; }
+
+    public bool CoversScreen { get; internal set; }
+
+    public Pixman.PixmanRegion32? BoundingShape { get; private set; }
+
+    public Pixman.PixmanRegion32? InputShape { get; private set; }
+
+    public event Action? ShapeChanged;
+
+    internal void SetShapes(Pixman.PixmanRegion32? bounding, Pixman.PixmanRegion32? input)
+    {
+        var changed = !SameRegion(BoundingShape, bounding) || !SameRegion(InputShape, input);
+        if (!changed)
+        {
+            bounding?.Dispose();
+            input?.Dispose();
+            return;
+        }
+
+        BoundingShape?.Dispose();
+        InputShape?.Dispose();
+        BoundingShape = bounding;
+        InputShape = input;
+        ShapeChanged?.Invoke();
+
+        static bool SameRegion(Pixman.PixmanRegion32? a, Pixman.PixmanRegion32? b) =>
+            a is null ? b is null : b is not null && a.Equals(b);
+    }
 
     public bool WantsFullscreen { get; internal set; }
 
@@ -198,6 +260,14 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public bool Minimized { get; internal set; }
 
+    public bool IsMaximized => MaximizedState;
+
+    public bool IsFullscreen => FullscreenState;
+
+    public bool Tiled { get; set; }
+
+    public Basin.Scene.SceneFitPolicy Letterbox { get; set; }
+
     internal bool MaximizedState { get; set; }
 
     internal bool FullscreenState { get; set; }
@@ -251,6 +321,10 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     internal void RaisePropertiesChanged() => PropertiesChanged?.Invoke();
 
+    internal event Action? StateChanged;
+
+    internal void RaiseStateChanged() => StateChanged?.Invoke();
+
     internal void RaiseGeometryChanged() => GeometryChanged?.Invoke();
 
     internal void RaiseDecorationsChanged() => DecorationsChanged?.Invoke();
@@ -261,5 +335,9 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     {
         ReleaseParticipant();
         Destroyed?.Invoke();
+        BoundingShape?.Dispose();
+        BoundingShape = null;
+        InputShape?.Dispose();
+        InputShape = null;
     }
 }

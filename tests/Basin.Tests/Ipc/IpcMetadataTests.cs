@@ -35,7 +35,7 @@ public sealed class IpcMetadataTests
     [Fact]
     public void Traits_follow_the_table()
     {
-        string[] destructive = ["session/quit", "windows/close", "outputs/apply", "outputs/power", "workspaces/remove", "process/kill"];
+        string[] destructive = ["session/quit", "windows/close", "outputs/apply", "outputs/power", "workspaces/remove", "process/kill", "windows/set-x11-density"];
         string[] idempotent =
         [
             "windows/activate", "windows/set-state", "windows/move", "windows/resize", "windows/send-to-output",

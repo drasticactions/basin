@@ -23,6 +23,7 @@ public sealed unsafe class XWaylandWm : IDisposable
     private readonly xcb_connection_t* _conn;
     private readonly ICompositorEventLoop _loop;
     private readonly XwaylandShellGlobal _shell;
+    private readonly WlClient? _client;
     private readonly IEventSource _source;
     private readonly uint _root;
     private readonly uint _wmWindow;
@@ -32,11 +33,30 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     private readonly XWaylandClipboard? _clipboard;
 
+    private XWaylandWmOptions _options;
+
+    private double _scale;
+
     private bool _disposed;
 
     public XWaylandWm(int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat = null)
+        : this(wmFd, loop, shell, seat, new XWaylandWmOptions())
     {
+    }
+
+    public XWaylandWm(int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat, XWaylandWmOptions options)
+        : this(wmFd, loop, shell, seat, options, null)
+    {
+    }
+
+    public XWaylandWm(
+        int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat, XWaylandWmOptions options, WlClient? client)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _client = client;
         _loop = loop;
+        _options = options;
+        _scale = options.Scale;
         _shell = shell;
         _conn = Libxcb.xcb_connect_to_fd(wmFd, null);
         if (Libxcb.xcb_connection_has_error(_conn) != 0)
@@ -53,6 +73,15 @@ public sealed unsafe class XWaylandWm : IDisposable
         _ = LibxcbComposite.xcb_composite_redirect_subwindows(_conn, _root, 1 );
 
         InternAtoms();
+        QueryShapeExtension();
+
+        WriteResourceManager();
+        if (options.PublishXSettings)
+        {
+            XSettings = new XSettingsManager(_conn, loop, _root, screens.data->root_visual, Atom, RequestDrain);
+            PublishDisplaySettings();
+            XSettings.WriteNow();
+        }
 
         _wmWindow = Libxcb.xcb_generate_id(_conn);
         _ = Libxcb.xcb_create_window(
@@ -73,11 +102,14 @@ public sealed unsafe class XWaylandWm : IDisposable
             Atom("_NET_WM_STATE_MAXIMIZED_VERT"), Atom("_NET_WM_STATE_MAXIMIZED_HORZ"),
         };
         SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 13);
-        _ = Libxcb.xcb_flush(_conn);
+        PublishClientList();
+        Flush();
 
         if (seat is not null)
         {
-            _clipboard = new XWaylandClipboard(_conn, seat, loop, _root, screens.data->root_visual, Atom);
+            _clipboard = new XWaylandClipboard(_conn, seat, loop, _root, screens.data->root_visual, Atom, RequestDrain);
+            _keyboard = seat.Keyboard;
+            _keyboard.FocusChanged += OnKeyboardFocusChanged;
         }
 
         shell.SerialCommitted += OnSerialCommitted;
@@ -87,9 +119,157 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     public event Action<XWaylandWindow>? WindowMapped;
 
+    public event Action<XWaylandWm>? Disposed;
+
+    public WlClient? Client => _client;
+
     public event Action<XWaylandWindow>? OverrideRedirectMapped;
 
     public IReadOnlyDictionary<uint, XWaylandWindow> Windows => _windows;
+
+    public double Scale => _scale;
+
+    public XWaylandWmOptions Options => _options;
+
+    public XSettingsManager? XSettings { get; }
+
+    public int Dpi => XWaylandDpi.For(_scale, _options.DpiBuckets);
+
+    public void SetScale(double scale)
+    {
+        if (!double.IsFinite(scale) || scale <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "an X11 scale must be positive and finite");
+        }
+
+        if (scale == _scale)
+        {
+            return;
+        }
+
+        _scale = scale;
+        foreach (var window in _windows.Values)
+        {
+            if (window.OverrideRedirect)
+            {
+                var bounds = window.X11Bounds;
+                SetGeometryFromX11(window, bounds.X, bounds.Y, bounds.Width, bounds.Height);
+                window.RaiseGeometryChanged();
+            }
+            else if (window.IsMappedInX)
+            {
+                RefreshSizeHints(window);
+                ConfigureWindow(window, window.X, window.Y, window.Width, window.Height);
+            }
+        }
+
+        PublishDisplaySettings();
+        WriteResourceManager();
+        Flush();
+    }
+
+    public void UpdateOptions(XWaylandWmOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options;
+        if (options.Scale != _scale)
+        {
+            SetScale(options.Scale);
+            return;
+        }
+
+        PublishDisplaySettings();
+        WriteResourceManager();
+        Flush();
+    }
+
+    private void PublishDisplaySettings()
+    {
+        if (XSettings is not { } settings)
+        {
+            return;
+        }
+
+        var dpi = Dpi;
+        var factor = XWaylandDpi.WindowScalingFactor(_scale);
+        settings.Set("Xft/DPI", dpi * 1024);
+        settings.Set("Gdk/WindowScalingFactor", factor);
+        settings.Set("Gdk/UnscaledDPI", dpi * 1024 / factor);
+        settings.Set("Gtk/CursorThemeSize", (int)Math.Round(_options.CursorSize * _scale / factor));
+        if (_options.CursorTheme.Length > 0)
+        {
+            settings.Set("Gtk/CursorThemeName", _options.CursorTheme);
+        }
+        else
+        {
+            settings.Remove("Gtk/CursorThemeName");
+        }
+    }
+
+    private const uint AtomString = 31;
+
+    private void WriteResourceManager()
+    {
+        var existing = GetStringProperty(_root, Atom("RESOURCE_MANAGER"), AtomString);
+        var values = new List<(string, string)>
+        {
+            ("Xft.dpi", Dpi.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            ("Xcursor.size", ((int)Math.Round(_options.CursorSize * _scale)).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        };
+        if (_options.CursorTheme.Length > 0)
+        {
+            values.Add(("Xcursor.theme", _options.CursorTheme));
+        }
+
+        SetProperty(_root, Atom("RESOURCE_MANAGER"), AtomString, XResourceDatabase.Merge(existing, values));
+    }
+
+    private int X11Position(int value) =>
+        _scale == 1.0 ? value : (int)Math.Round(value * _scale, MidpointRounding.AwayFromZero);
+
+    private int X11Size(XWaylandWindow? window, int value) =>
+        _scale == 1.0
+            ? value
+            : Math.Max(1, (int)Math.Round(value * _scale, MidpointRounding.AwayFromZero));
+
+    private int LogicalPosition(int value) =>
+        _scale == 1.0 ? value : (int)Math.Round(value / _scale, MidpointRounding.AwayFromZero);
+
+    private int LogicalSize(XWaylandWindow? window, int value) =>
+        _scale == 1.0
+            ? value
+            : Math.Max(1, (int)Math.Round(value / _scale, MidpointRounding.AwayFromZero));
+
+    private void SetGeometryFromX11(XWaylandWindow window, int x, int y, int width, int height)
+    {
+        if (window.EmulatedMode is { } emulated && emulated == new Box(x, y, width, height))
+        {
+            window.X11Bounds = emulated;
+            var logical = window.EmulatedLogical;
+            (window.X, window.Y, window.Width, window.Height) = (logical.X, logical.Y, logical.Width, logical.Height);
+            return;
+        }
+
+        window.X11Bounds = new Box(x, y, width, height);
+        window.CoversScreen = window.OverrideRedirect && window.EmulatedModes.Count > 0 && x == 0 && y == 0
+            && (width, height) == RootSize();
+        (window.X, window.Y, window.Width, window.Height) =
+            (LogicalPosition(x), LogicalPosition(y), LogicalSize(window, width), LogicalSize(window, height));
+    }
+
+    private (int Width, int Height) RootSize()
+    {
+        var cookie = Libxcb.xcb_get_geometry(_conn, _root);
+        var reply = Libxcb.xcb_get_geometry_reply(_conn, cookie, null);
+        if (reply == null)
+        {
+            return (0, 0);
+        }
+
+        var size = ((int)reply->width, (int)reply->height);
+        Libc.Free(reply);
+        return size;
+    }
 
     public void Dispose()
     {
@@ -99,10 +279,16 @@ public sealed unsafe class XWaylandWm : IDisposable
         }
 
         _disposed = true;
+        if (_keyboard is not null)
+        {
+            _keyboard.FocusChanged -= OnKeyboardFocusChanged;
+        }
+
         _shell.SerialCommitted -= OnSerialCommitted;
         _clipboard?.Dispose();
         _source.Remove();
         Libxcb.xcb_disconnect(_conn);
+        Disposed?.Invoke(this);
     }
 
     private void InternAtoms()
@@ -120,6 +306,10 @@ public sealed unsafe class XWaylandWm : IDisposable
             "_NET_WM_WINDOW_TYPE_MENU", "_NET_WM_WINDOW_TYPE_NOTIFICATION", "_NET_WM_WINDOW_TYPE_POPUP_MENU",
             "_NET_WM_WINDOW_TYPE_SPLASH", "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_WINDOW_TYPE_TOOLTIP",
             "_NET_WM_WINDOW_TYPE_UTILITY", "_KDE_NET_WM_APPMENU_SERVICE_NAME", "_KDE_NET_WM_APPMENU_OBJECT_PATH",
+            "_NET_WM_WINDOW_TYPE_NORMAL", "_NET_WM_WINDOW_TYPE_DIALOG", "_NET_WM_WINDOW_TYPE_TOOLBAR",
+            "_NET_WM_WINDOW_TYPE_DOCK", "_NET_WM_PID", "STEAM_GAME",
+            "_XSETTINGS_S0", "_XSETTINGS_SETTINGS", "MANAGER", "RESOURCE_MANAGER",
+            "_XWAYLAND_RANDR_EMU_MONITOR_RECTS", "_GTK_THEME_VARIANT",
         ];
         var cookies = new xcb_intern_atom_cookie_t[names.Length];
         for (var i = 0; i < names.Length; i++)
@@ -193,14 +383,60 @@ public sealed unsafe class XWaylandWm : IDisposable
         return result;
     }
 
+    private bool _inPump;
+    private bool _drainQueued;
+    private Action? _drain;
+
+    internal void RequestDrain()
+    {
+        if (_inPump || _drainQueued || _disposed)
+        {
+            return;
+        }
+
+        _drainQueued = true;
+        _loop.AddIdle(_drain ??= () =>
+        {
+            _drainQueued = false;
+            if (!_disposed)
+            {
+                Pump();
+            }
+        });
+    }
+
+    private void Flush()
+    {
+        _ = Libxcb.xcb_flush(_conn);
+        RequestDrain();
+    }
+
     private void Pump()
+    {
+        _inPump = true;
+        try
+        {
+            PumpEvents();
+        }
+        finally
+        {
+            _inPump = false;
+        }
+    }
+
+    private void PumpEvents()
     {
         while (true)
         {
             var ev = Libxcb.xcb_poll_for_event(_conn);
             if (ev == null)
             {
-                break;
+                _ = Libxcb.xcb_flush(_conn);
+                ev = Libxcb.xcb_poll_for_queued_event(_conn);
+                if (ev == null)
+                {
+                    break;
+                }
             }
 
             try
@@ -217,12 +453,21 @@ public sealed unsafe class XWaylandWm : IDisposable
 
             Libc.Free(ev);
         }
-
-        _ = Libxcb.xcb_flush(_conn);
     }
 
     private void Dispatch(xcb_generic_event_t* ev)
     {
+        if (_shapeFirstEvent != 0 && (ev->response_type & 0x7F) == _shapeFirstEvent)
+        {
+            var shape = (xcb_shape_notify_event_t*)ev;
+            if (_windows.TryGetValue(shape->affected_window, out var shaped))
+            {
+                RefreshShape(shaped);
+            }
+
+            return;
+        }
+
         switch (ev->response_type & 0x7F)
         {
             case EventCreateNotify:
@@ -233,10 +478,16 @@ public sealed unsafe class XWaylandWm : IDisposable
                     break;
                 }
 
-                _windows[e->window] = new XWaylandWindow(
+                var created = new XWaylandWindow(
                     this, e->window, e->override_redirect != 0, e->x, e->y, e->width, e->height);
+                SetGeometryFromX11(created, e->x, e->y, e->width, e->height);
+                _windows[e->window] = created;
                 var events = 0x00400000u;
                 _ = Libxcb.xcb_change_window_attributes(_conn, e->window, 0x800, &events);
+                if (_shapeFirstEvent != 0)
+                {
+                    _ = LibxcbShape.xcb_shape_select_input(_conn, e->window, 1);
+                }
                 break;
             }
 
@@ -248,10 +499,14 @@ public sealed unsafe class XWaylandWm : IDisposable
                     if (window.AssociationSerial != 0)
                     {
                         _awaitingSurface.Remove(window.AssociationSerial);
-                        _shell.Forget(window.AssociationSerial);
+                        _shell.Forget(_client, window.AssociationSerial);
                     }
 
                     window.RaiseDestroyed();
+                    if (_clientList.Remove(e->window))
+                    {
+                        PublishClientList();
+                    }
                 }
 
                 break;
@@ -263,6 +518,8 @@ public sealed unsafe class XWaylandWm : IDisposable
                 if (_windows.TryGetValue(e->window, out var window))
                 {
                     RefreshProperties(window);
+                    RefreshProcess(window);
+                    RefreshShape(window);
                     var state = stackalloc uint[2] { NormalState, 0 };
                     SetProperty32(e->window, Atom("WM_STATE"), Atom("WM_STATE"), state, 2);
                     var actions = stackalloc uint[1] { Atom("_NET_WM_ACTION_MINIMIZE") };
@@ -279,6 +536,11 @@ public sealed unsafe class XWaylandWm : IDisposable
                 if (_windows.TryGetValue(e->window, out var window))
                 {
                     window.IsMappedInX = true;
+                    if (window.OverrideRedirect)
+                    {
+                        RefreshShape(window);
+                    }
+
                     AnnounceIfReady(window);
                 }
 
@@ -296,6 +558,11 @@ public sealed unsafe class XWaylandWm : IDisposable
                         window.AnnouncedMapped = false;
                         window.RaiseUnmapped();
                     }
+
+                    if (_clientList.Remove(e->window))
+                    {
+                        PublishClientList();
+                    }
                 }
 
                 break;
@@ -306,8 +573,17 @@ public sealed unsafe class XWaylandWm : IDisposable
                 var e = (xcb_configure_request_event_t*)ev;
                 _windows.TryGetValue(e->window, out var window);
                 if (window is { AnnouncedMapped: true, OverrideRedirect: false } && ConfigureRequest is { } filter
-                    && !filter(window, new Box(e->x, e->y, e->width, e->height)))
+                    && !filter(window, new Box(
+                        LogicalPosition(e->x), LogicalPosition(e->y), LogicalSize(window, e->width), LogicalSize(window, e->height))))
                 {
+                    if (window.AllowClientMove && (e->value_mask & 0x3) != 0)
+                    {
+                        var x = (e->value_mask & 0x1) != 0 ? LogicalPosition(e->x) : window.X;
+                        var y = (e->value_mask & 0x2) != 0 ? LogicalPosition(e->y) : window.Y;
+                        ConfigureWindow(window, x, y, window.Width, window.Height);
+                        window.RaiseGeometryChanged();
+                    }
+
                     break;
                 }
 
@@ -318,7 +594,7 @@ public sealed unsafe class XWaylandWm : IDisposable
                     values);
                 if (window is not null)
                 {
-                    (window.X, window.Y, window.Width, window.Height) = (e->x, e->y, e->width, e->height);
+                    SetGeometryFromX11(window, e->x, e->y, e->width, e->height);
                     window.RaiseGeometryChanged();
                 }
 
@@ -330,7 +606,13 @@ public sealed unsafe class XWaylandWm : IDisposable
                 var e = (xcb_configure_notify_event_t*)ev;
                 if (_windows.TryGetValue(e->window, out var window))
                 {
-                    (window.X, window.Y, window.Width, window.Height) = (e->x, e->y, e->width, e->height);
+                    var resized = window.X11Bounds.Width != e->width || window.X11Bounds.Height != e->height;
+                    SetGeometryFromX11(window, e->x, e->y, e->width, e->height);
+                    if (resized && (window.BoundingShape is not null || window.InputShape is not null))
+                    {
+                        RefreshShape(window);
+                    }
+
                     window.RaiseGeometryChanged();
                 }
 
@@ -360,7 +642,42 @@ public sealed unsafe class XWaylandWm : IDisposable
                     }
                     else if (e->atom == Atom("_NET_WM_WINDOW_TYPE"))
                     {
-                        RefreshWindowType(window);
+                        if (RefreshWindowType(window))
+                        {
+                            window.RaisePropertiesChanged();
+                        }
+                    }
+                    else if (e->atom == Atom("_XWAYLAND_RANDR_EMU_MONITOR_RECTS"))
+                    {
+                        if (RefreshEmulatedModes(window))
+                        {
+                            if (window.FullscreenState && window.IsMappedInX && !window.OverrideRedirect)
+                            {
+                                ConfigureWindow(window, window.X, window.Y, window.Width, window.Height);
+                            }
+                            else if (window.OverrideRedirect)
+                            {
+                                var bounds = window.X11Bounds;
+                                SetGeometryFromX11(window, bounds.X, bounds.Y, bounds.Width, bounds.Height);
+                                window.RaiseGeometryChanged();
+                            }
+
+                            window.RaisePropertiesChanged();
+                        }
+                    }
+                    else if (e->atom == Atom("_GTK_THEME_VARIANT"))
+                    {
+                        if (RefreshThemeVariant(window))
+                        {
+                            window.RaisePropertiesChanged();
+                        }
+                    }
+                    else if (e->atom == Atom("STEAM_GAME"))
+                    {
+                        if (RefreshSteamGame(window))
+                        {
+                            window.RaisePropertiesChanged();
+                        }
                     }
                     else if (e->atom == AtomWmNormalHints)
                     {
@@ -385,7 +702,7 @@ public sealed unsafe class XWaylandWm : IDisposable
                     {
                         var serial = ((ulong)data[1] << 32) | data[0];
                         window.AssociationSerial = serial;
-                        if (_shell.SurfaceFor(serial) is { } surface)
+                        if (_shell.SurfaceFor(_client, serial) is { } surface)
                         {
                             Associate(window, surface);
                         }
@@ -438,7 +755,8 @@ public sealed unsafe class XWaylandWm : IDisposable
             window.RaiseFullscreenRequested(Wanted(window.FullscreenState));
         }
 
-        if (Mentions("_NET_WM_STATE_MAXIMIZED_VERT") || Mentions("_NET_WM_STATE_MAXIMIZED_HORZ"))
+        if ((Mentions("_NET_WM_STATE_MAXIMIZED_VERT") || Mentions("_NET_WM_STATE_MAXIMIZED_HORZ"))
+            && !(window.ForceUnmaximize && !window.AnnouncedMapped))
         {
             window.RaiseMaximizeRequested(Wanted(window.MaximizedState));
         }
@@ -453,8 +771,13 @@ public sealed unsafe class XWaylandWm : IDisposable
         };
     }
 
-    private void OnSerialCommitted(ulong serial, Surface surface)
+    private void OnSerialCommitted(WlClient client, ulong serial, Surface surface)
     {
+        if (_client is not null && !ReferenceEquals(client, _client))
+        {
+            return;
+        }
+
         if (_awaitingSurface.Remove(serial, out var window))
         {
             Associate(window, surface);
@@ -488,10 +811,31 @@ public sealed unsafe class XWaylandWm : IDisposable
         }
         else
         {
+            if (!_clientList.Contains(window.WindowId))
+            {
+                _clientList.Add(window.WindowId);
+                PublishClientList();
+            }
+
             WindowMapped?.Invoke(window);
         }
 
         window.RaiseMapped();
+    }
+
+    private readonly List<uint> _clientList = [];
+
+    private void PublishClientList()
+    {
+        var count = _clientList.Count;
+        var ids = stackalloc uint[Math.Max(count, 1)];
+        for (var i = 0; i < count; i++)
+        {
+            ids[i] = _clientList[i];
+        }
+
+        SetProperty32(_root, Atom("_NET_CLIENT_LIST"), 33, ids, (uint)count);
+        Flush();
     }
 
     private void RefreshProperties(XWaylandWindow window)
@@ -510,6 +854,10 @@ public sealed unsafe class XWaylandWm : IDisposable
         var transientFor = transient.Length > 0 ? _windows.GetValueOrDefault(transient[0]) : null;
         identityChanged |= !ReferenceEquals(transientFor, window.TransientFor);
         window.TransientFor = transientFor;
+        identityChanged |= RefreshWindowType(window);
+        identityChanged |= RefreshSteamGame(window);
+        identityChanged |= RefreshEmulatedModes(window);
+        identityChanged |= RefreshThemeVariant(window);
         if (identityChanged)
         {
             window.RaisePropertiesChanged();
@@ -522,7 +870,6 @@ public sealed unsafe class XWaylandWm : IDisposable
             || Array.IndexOf(state, Atom("_NET_WM_STATE_MAXIMIZED_HORZ")) >= 0;
         RefreshDecorationHints(window);
         RefreshIcon(window);
-        RefreshWindowType(window);
         RefreshSizeHints(window);
         RefreshAppMenu(window);
     }
@@ -565,10 +912,10 @@ public sealed unsafe class XWaylandWm : IDisposable
             }
         }
 
-        minWidth = Math.Max(0, minWidth);
-        minHeight = Math.Max(0, minHeight);
-        maxWidth = Math.Max(0, maxWidth);
-        maxHeight = Math.Max(0, maxHeight);
+        minWidth = LogicalMinimum(window, Math.Max(0, minWidth));
+        minHeight = LogicalMinimum(window, Math.Max(0, minHeight));
+        maxWidth = LogicalMaximum(window, Math.Max(0, maxWidth));
+        maxHeight = LogicalMaximum(window, Math.Max(0, maxHeight));
         if (minWidth == window.MinWidth && minHeight == window.MinHeight
             && maxWidth == window.MaxWidth && maxHeight == window.MaxHeight)
         {
@@ -582,6 +929,16 @@ public sealed unsafe class XWaylandWm : IDisposable
         window.RaiseSizeHintsChanged();
     }
 
+    private int LogicalMinimum(XWaylandWindow window, int value) =>
+        value == 0 || _scale == 1.0
+            ? value
+            : (int)Math.Ceiling(value / _scale);
+
+    private int LogicalMaximum(XWaylandWindow window, int value) =>
+        value == 0 || _scale == 1.0
+            ? value
+            : Math.Max(1, (int)Math.Floor(value / _scale));
+
     private static readonly string[] FocuslessWindowTypes =
     [
         "_NET_WM_WINDOW_TYPE_COMBO", "_NET_WM_WINDOW_TYPE_DND", "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU",
@@ -590,7 +947,13 @@ public sealed unsafe class XWaylandWm : IDisposable
         "_NET_WM_WINDOW_TYPE_UTILITY",
     ];
 
-    private void RefreshWindowType(XWaylandWindow window)
+    private static readonly string[] NamedWindowTypes =
+    [
+        "_NET_WM_WINDOW_TYPE_NORMAL", "_NET_WM_WINDOW_TYPE_DIALOG", "_NET_WM_WINDOW_TYPE_TOOLBAR",
+        "_NET_WM_WINDOW_TYPE_DOCK", .. FocuslessWindowTypes,
+    ];
+
+    private bool RefreshWindowType(XWaylandWindow window)
     {
         var types = Get32Property(window.WindowId, Atom("_NET_WM_WINDOW_TYPE"), 4 );
         var wants = true;
@@ -604,18 +967,272 @@ public sealed unsafe class XWaylandWm : IDisposable
         }
 
         window.WantsFocus = wants;
+
+        string? type = null;
+        foreach (var atom in types)
+        {
+            foreach (var name in NamedWindowTypes)
+            {
+                if (atom != 0 && atom == Atom(name))
+                {
+                    type = name["_NET_WM_WINDOW_TYPE_".Length..].ToLowerInvariant();
+                    break;
+                }
+            }
+
+            if (type is not null)
+            {
+                break;
+            }
+        }
+
+        type ??= window.TransientFor is not null ? "dialog" : "normal";
+        if (type == window.WindowType)
+        {
+            return false;
+        }
+
+        window.WindowType = type;
+        return true;
+    }
+
+    private bool RefreshEmulatedModes(XWaylandWindow window)
+    {
+        var values = Get32Property(window.WindowId, Atom("_XWAYLAND_RANDR_EMU_MONITOR_RECTS"), 6 , 64);
+        var count = values.Length % 4 == 0 ? values.Length / 4 : 0;
+        var modes = new Box[count];
+        for (var i = 0; i < count; i++)
+        {
+            modes[i] = new Box((int)values[i * 4], (int)values[(i * 4) + 1], (int)values[(i * 4) + 2], (int)values[(i * 4) + 3]);
+        }
+
+        if (modes.AsSpan().SequenceEqual(window.EmulatedModes is Box[] known ? known : [.. window.EmulatedModes]))
+        {
+            return false;
+        }
+
+        window.EmulatedModes = modes;
+        return true;
+    }
+
+    private Box? EmulatedModeAt(XWaylandWindow window, int x11X, int x11Y)
+    {
+        if (!window.HonorEmulatedModes)
+        {
+            return null;
+        }
+
+        foreach (var mode in window.EmulatedModes)
+        {
+            if (mode.X == x11X && mode.Y == x11Y && mode.Width > 0 && mode.Height > 0)
+            {
+                return mode;
+            }
+        }
+
+        return null;
+    }
+
+    private bool RefreshThemeVariant(XWaylandWindow window)
+    {
+        var variant = GetStringProperty(window.WindowId, Atom("_GTK_THEME_VARIANT"), 0).TrimEnd('\0');
+        if (variant == window.ThemeVariant)
+        {
+            return false;
+        }
+
+        window.ThemeVariant = variant;
+        return true;
+    }
+
+    private bool RefreshSteamGame(XWaylandWindow window)
+    {
+        var values = Get32Property(window.WindowId, Atom("STEAM_GAME"), 6 , 1);
+        uint? game = values.Length > 0 && values[0] != 0 ? values[0] : null;
+        if (game == window.SteamGame)
+        {
+            return false;
+        }
+
+        window.SteamGame = game;
+        return true;
+    }
+
+    private void RefreshProcess(XWaylandWindow window)
+    {
+        if (window.Pid != 0)
+        {
+            return;
+        }
+
+        var verified = QueryClientPid(window.WindowId);
+        var pid = verified;
+        if (pid <= 0)
+        {
+            var claimed = Get32Property(window.WindowId, Atom("_NET_WM_PID"), 6 , 1);
+            pid = claimed.Length > 0 ? (int)claimed[0] : 0;
+        }
+
+        if (pid <= 0)
+        {
+            return;
+        }
+
+        window.Process = ProcessIdentity.Read(pid);
+        window.PidVerified = verified > 0;
+        window.RaisePropertiesChanged();
+    }
+
+    private byte _shapeFirstEvent;
+
+    private void QueryShapeExtension()
+    {
+        var name = "SHAPE"u8;
+        fixed (byte* ptr = name)
+        {
+            var cookie = Libxcb.xcb_query_extension(_conn, (ushort)name.Length, (sbyte*)ptr);
+            var reply = Libxcb.xcb_query_extension_reply(_conn, cookie, null);
+            if (reply == null)
+            {
+                return;
+            }
+
+            _shapeFirstEvent = reply->present != 0 ? reply->first_event : (byte)0;
+            Libc.Free(reply);
+        }
+    }
+
+    private const byte ShapeBounding = 0;
+
+    private const byte ShapeInput = 2;
+
+    private void RefreshShape(XWaylandWindow window)
+    {
+        if (_shapeFirstEvent == 0)
+        {
+            return;
+        }
+
+        var extents = LibxcbShape.xcb_shape_query_extents_reply(_conn, LibxcbShape.xcb_shape_query_extents(_conn, window.WindowId), null);
+        var boundingShaped = extents != null && extents->bounding_shaped != 0;
+        if (extents != null)
+        {
+            Libc.Free(extents);
+        }
+
+        var bounds = window.X11Bounds;
+        var bounding = boundingShaped ? ShapeRegion(window.WindowId, ShapeBounding, bounds) : null;
+        var input = ShapeRegion(window.WindowId, ShapeInput, bounds);
+        if (input is not null && input.RectangleCount == 1
+            && input.Extents is { X1: <= 0, Y1: <= 0 } whole && whole.X2 >= bounds.Width && whole.Y2 >= bounds.Height)
+        {
+            input.Dispose();
+            input = null;
+        }
+
+        window.SetShapes(bounding, input);
+    }
+
+    private Pixman.PixmanRegion32? ShapeRegion(uint windowId, byte kind, Box bounds)
+    {
+        var reply = LibxcbShape.xcb_shape_get_rectangles_reply(_conn, LibxcbShape.xcb_shape_get_rectangles(_conn, windowId, kind), null);
+        if (reply == null)
+        {
+            return null;
+        }
+
+        var region = new Pixman.PixmanRegion32();
+        var rectangles = LibxcbShape.xcb_shape_get_rectangles_rectangles(reply);
+        var count = LibxcbShape.xcb_shape_get_rectangles_rectangles_length(reply);
+        for (var i = 0; i < count; i++)
+        {
+            var r = rectangles[i];
+            if (r.width > 0 && r.height > 0)
+            {
+                region.UnionRect(region, r.x, r.y, r.width, r.height);
+            }
+        }
+
+        Libc.Free(reply);
+        if (bounds.Width > 0 && bounds.Height > 0)
+        {
+            region.IntersectRect(region, 0, 0, (uint)bounds.Width, (uint)bounds.Height);
+        }
+
+        return region;
+    }
+
+    private bool _xresMissing;
+
+    private int QueryClientPid(uint windowId)
+    {
+        if (_xresMissing)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var spec = new xcb_res_client_id_spec_t { client = windowId, mask = (uint)xcb_res_client_id_mask_t.XCB_RES_CLIENT_ID_MASK_LOCAL_CLIENT_PID };
+            var cookie = LibxcbRes.xcb_res_query_client_ids(_conn, 1, &spec);
+            xcb_generic_error_t* error = null;
+            var reply = LibxcbRes.xcb_res_query_client_ids_reply(_conn, cookie, &error);
+            if (error != null)
+            {
+                Libc.Free(error);
+            }
+
+            if (reply == null)
+            {
+                return 0;
+            }
+
+            var pid = 0;
+            var iterator = LibxcbRes.xcb_res_query_client_ids_ids_iterator(reply);
+            while (iterator.rem > 0)
+            {
+                var value = iterator.data;
+                if ((value->spec.mask & (uint)xcb_res_client_id_mask_t.XCB_RES_CLIENT_ID_MASK_LOCAL_CLIENT_PID) != 0
+                    && LibxcbRes.xcb_res_client_id_value_value_length(value) >= 1)
+                {
+                    pid = (int)LibxcbRes.xcb_res_client_id_value_value(value)[0];
+                    break;
+                }
+
+                LibxcbRes.xcb_res_client_id_value_next(&iterator);
+            }
+
+            Libc.Free(reply);
+            return pid;
+        }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
+        {
+            _xresMissing = true;
+            Log.Debug($"X-Resource is unavailable, so X11 pids are unverified: {error.Message}");
+            return 0;
+        }
     }
 
     internal void SetWindowMaximized(XWaylandWindow window, bool maximized)
     {
+        var changed = window.MaximizedState != maximized;
         window.MaximizedState = maximized;
         WriteWindowState(window);
+        if (changed)
+        {
+            window.RaiseStateChanged();
+        }
     }
 
     internal void SetWindowFullscreen(XWaylandWindow window, bool fullscreen)
     {
+        var changed = window.FullscreenState != fullscreen;
         window.FullscreenState = fullscreen;
         WriteWindowState(window);
+        if (changed)
+        {
+            window.RaiseStateChanged();
+        }
     }
 
     internal void SetWindowMinimized(XWaylandWindow window, bool minimized)
@@ -629,7 +1246,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         WriteWindowState(window);
         var state = stackalloc uint[2] { minimized ? IconicState : NormalState, 0 };
         SetProperty32(window.WindowId, Atom("WM_STATE"), Atom("WM_STATE"), state, 2);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
         window.RaisePropertiesChanged();
     }
 
@@ -667,7 +1284,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         }
 
         SetProperty32(window.WindowId, Atom("_NET_WM_STATE"), 4 , atoms, count);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
     }
 
     private void RefreshIcon(XWaylandWindow window)
@@ -759,22 +1376,63 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     internal void ConfigureWindow(XWaylandWindow window, int x, int y, int width, int height)
     {
-        var values = stackalloc uint[4] { (uint)x, (uint)y, (uint)width, (uint)height };
+        var bounds = window.X11Bounds;
+        var x11X = LogicalPosition(bounds.X) == x ? bounds.X : X11Position(x);
+        var x11Y = LogicalPosition(bounds.Y) == y ? bounds.Y : X11Position(y);
+        var x11Width = bounds.Width > 0 && LogicalSize(window, bounds.Width) == width ? bounds.Width : X11Size(window, width);
+        var x11Height = bounds.Height > 0 && LogicalSize(window, bounds.Height) == height ? bounds.Height : X11Size(window, height);
+        window.EmulatedMode = window.FullscreenState ? EmulatedModeAt(window, x11X, x11Y) : null;
+        if (window.EmulatedMode is { } emulated)
+        {
+            (x11Width, x11Height) = (emulated.Width, emulated.Height);
+            window.EmulatedLogical = new Box(x, y, width, height);
+        }
+
+        var values = stackalloc uint[4] { (uint)x11X, (uint)x11Y, (uint)x11Width, (uint)x11Height };
         _ = Libxcb.xcb_configure_window(_conn, window.WindowId, 0x1 | 0x2 | 0x4 | 0x8, values);
         (window.X, window.Y, window.Width, window.Height) = (x, y, width, height);
+        window.X11Bounds = new Box(x11X, x11Y, x11Width, x11Height);
 
         var notify = new xcb_configure_notify_event_t
         {
             response_type = EventConfigureNotify,
             @event = window.WindowId,
             window = window.WindowId,
-            x = (short)x,
-            y = (short)y,
-            width = (ushort)width,
-            height = (ushort)height,
+            x = (short)x11X,
+            y = (short)x11Y,
+            width = (ushort)x11Width,
+            height = (ushort)x11Height,
         };
         _ = Libxcb.xcb_send_event(_conn, 0, window.WindowId, 0x00020000 , (sbyte*)&notify);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
+    }
+
+    private Seat.SeatKeyboard? _keyboard;
+    private Surface? _keyboardFocus;
+
+    internal Surface? KeyboardFocus => _keyboardFocus;
+
+    internal event Action<Surface?, Surface?>? KeyboardFocusChanged;
+
+    private void OnKeyboardFocusChanged(Surface? focus)
+    {
+        var previous = _keyboardFocus;
+        _keyboardFocus = focus;
+        if (previous != focus)
+        {
+            KeyboardFocusChanged?.Invoke(previous, focus);
+        }
+    }
+
+    internal void RequestActivation(XWaylandWindow window)
+    {
+        if (ActivationRequested is { } activation)
+        {
+            activation.Invoke(window);
+            return;
+        }
+
+        ActivateWindow(window);
     }
 
     internal void ActivateWindow(XWaylandWindow window)
@@ -797,7 +1455,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         _ = Libxcb.xcb_set_input_focus(_conn, 1 , window.WindowId, 0);
         var active = window.WindowId;
         SetProperty32(_root, Atom("_NET_ACTIVE_WINDOW"), 33, &active, 1);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
     }
 
     internal void CloseWindow(XWaylandWindow window)
@@ -821,7 +1479,7 @@ public sealed unsafe class XWaylandWm : IDisposable
             _ = Libxcb.xcb_kill_client(_conn, window.WindowId);
         }
 
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
     }
 
     internal void RaiseWindow(XWaylandWindow window) => Restack(window, StackAbove);
@@ -836,6 +1494,6 @@ public sealed unsafe class XWaylandWm : IDisposable
     {
         var values = stackalloc uint[1] { mode };
         _ = Libxcb.xcb_configure_window(_conn, window.WindowId, 0x40 , values);
-        _ = Libxcb.xcb_flush(_conn);
+        Flush();
     }
 }

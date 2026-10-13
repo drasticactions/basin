@@ -89,6 +89,34 @@ public static class RenderFences
     private const uint DmabufSyncRead = 1 << 0;
     private const uint DmabufSyncWrite = 2 << 0;
 
+    public static unsafe int ExportDmabufSyncFile(int dmabufFd, bool forWrite, out int errno)
+    {
+        var export = new DmabufExportSyncFile
+        {
+            Flags = forWrite ? DmabufSyncWrite : DmabufSyncRead,
+            Fd = -1,
+        };
+        if (ioctl(dmabufFd, DmabufIocExportSyncFile, &export) == 0)
+        {
+            errno = 0;
+            return export.Fd;
+        }
+
+        errno = Marshal.GetLastPInvokeError();
+        return -1;
+    }
+
+    public static unsafe bool IsSignaled(int syncFileFd)
+    {
+        if (syncFileFd < 0)
+        {
+            return true;
+        }
+
+        var pfd = new PollFd { Fd = syncFileFd, Events = PollIn };
+        return poll(&pfd, 1, 0) > 0;
+    }
+
     public static unsafe int ExportDmabufSyncFile(int dmabufFd, bool forWrite)
     {
         var export = new DmabufExportSyncFile

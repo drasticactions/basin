@@ -282,7 +282,7 @@ internal sealed partial class LunaShell
         if (MimeApps.DefaultFor($"x-scheme-handler/{scheme}") is { } id && Desktop.Find(id) is { } handler &&
             handler.LaunchArgv(ExecLine.TerminalFromEnvironment()) is { Length: > 0 } argv)
         {
-            Launch(ExecLine.Join([.. argv, uri]), handler.Name, handler.Icon);
+            Launch(ExecLine.Join([.. argv, uri]), handler.Name, handler.Icon, handler.Id);
             return;
         }
 

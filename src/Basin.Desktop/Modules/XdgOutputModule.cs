@@ -9,6 +9,11 @@ public sealed class XdgOutputModule : DesktopModule<XdgOutputManager>
 
     public override int Version => XdgOutputManager.Version;
 
-    protected override XdgOutputManager Create(BasinServices services) =>
-        new(services.Display, services.Require<OutputLayout>());
+    protected override XdgOutputManager Create(BasinServices services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        var manager = new XdgOutputManager(services.Display, services.Require<OutputLayout>());
+        services.Use<ILogicalOutputOverrides>(manager);
+        return manager;
+    }
 }

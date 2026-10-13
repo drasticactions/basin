@@ -133,6 +133,11 @@ public sealed class QuillFrameMenu
             _items.Add(FrameActionKind.ToggleSticky);
         }
 
+        if (state.Capabilities.HasFlag(FrameCapabilities.X11Density))
+        {
+            _items.Add(FrameActionKind.ToggleX11Density);
+        }
+
         _items.Add(FrameActionKind.Close);
         _built = state;
         _hasBuilt = true;
@@ -146,6 +151,7 @@ public sealed class QuillFrameMenu
         FrameActionKind.ToggleShade => state.Shaded ? "Unshade" : "Shade",
         FrameActionKind.ToggleAbove => state.Above ? "Not always on top" : "Always on top",
         FrameActionKind.ToggleSticky => state.Sticky ? "Only this workspace" : "Always on visible workspace",
+        FrameActionKind.ToggleX11Density => state.LowDensity ? "Use full density" : "Use low density",
         _ => "Close",
     };
 }

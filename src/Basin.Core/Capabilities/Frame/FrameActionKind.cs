@@ -13,4 +13,5 @@ public enum FrameActionKind
     ToggleShade,
     ToggleAbove,
     ToggleSticky,
+    ToggleX11Density,
 }

@@ -165,7 +165,21 @@ pick-up = "PickUp"
 throw = "Throw"
 interact = "Interact"
 
+[xwayland]
+# A second Xwayland at scale 1 and 96 DPI, stretched to the output, for [[launch]] rules
+# with x11 = "low-density". It starts on its first client. Needs a restart.
+low_density = true
+
+# Launch rules choose the X server an X11 application starts on, before it starts.
+# desktop_id is the desktop entry id and exec the base name of the program, after env
+# and NAME=value words. A rule with both keys beats desktop_id, and desktop_id beats exec.
+# [[launch]]
+# exec = "leafpad"
+# x11 = "low-density"
+
 [keybindings]
+# A table says when a chord applies: "Super+Tab" = { action = "next-room", when = "windowed" }
+# (always | windowed | fullscreen; a takeover counts as fullscreen).
 "Super+Escape" = "leave-takeover"
 "Super+Tab" = "next-room"
 "Super+F" = "takeover"

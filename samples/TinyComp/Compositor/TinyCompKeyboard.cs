@@ -200,9 +200,10 @@ internal sealed partial class TinyComp
         }
 
         var held = HeldModifiers();
+        var fullscreen = FocusedFullscreen();
         foreach (var binding in _config.Bindings)
         {
-            if (binding.Keysym != symbol || binding.ModifierMask != held)
+            if (binding.Keysym != symbol || binding.ModifierMask != held || !binding.AppliesTo(fullscreen))
             {
                 continue;
             }
@@ -221,6 +222,10 @@ internal sealed partial class TinyComp
 
         return false;
     }
+
+    private bool FocusedFullscreen() =>
+        _focused?.Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen) == true
+        || _focusedX?.Fullscreen == true;
 
     private void Spawn(string[] command)
     {

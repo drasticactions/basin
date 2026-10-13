@@ -407,7 +407,7 @@ public sealed partial class Scene
                 var (contentX, contentY) = contentTree.ScenePosition;
                 CollectTree(
                     contentTree, contentX - originX, contentY - originY, Unclipped, RenderTransform.Identity,
-                    transformed: false, contentTree.Alpha, list, mirrorDepth: 0);
+                    transformed: false, contentTree.Alpha, list, mirrorDepth: 0, InheritedFilter(contentTree));
             }
 
             if (popups is SceneTree popupTree)
@@ -418,7 +418,7 @@ public sealed partial class Scene
                     var (popupX, popupY) = popupTree.ScenePosition;
                     CollectTree(
                         popupTree, popupX - originX, popupY - originY, clip, RenderTransform.Identity,
-                        transformed: false, popupTree.Alpha, list, mirrorDepth: 0);
+                        transformed: false, popupTree.Alpha, list, mirrorDepth: 0, InheritedFilter(popupTree));
                 }
             }
 
@@ -534,7 +534,7 @@ public sealed partial class Scene
         {
             CollectTree(
                 node, -bounds.X, -bounds.Y, Unclipped, RenderTransform.Identity, transformed: false, alpha: 1f, list,
-                mirrorDepth: 0);
+                mirrorDepth: 0, InheritedFilter(node));
             PrepareCaptures(renderer, list, scale);
             var waitFence = GatherAcquireFences(list, out var ownsFence);
             var pass = renderer.BeginBufferPass(target, new RenderPassOptions { WaitFenceFd = waitFence });
@@ -742,6 +742,7 @@ public sealed partial class Scene
                             Lut = luts?.LutFor(buffer),
                             ColorDescription = buffer.ColorDescription,
                             Shader = buffer.TextureShader,
+                            Filter = entry.Filter,
                             Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
                         });
                     }
@@ -759,6 +760,7 @@ public sealed partial class Scene
                             Lut = luts?.LutFor(buffer),
                             ColorDescription = buffer.ColorDescription,
                             Shader = buffer.TextureShader,
+                            Filter = entry.Filter,
                             Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
                         });
                     }
@@ -1113,8 +1115,9 @@ public sealed partial class Scene
 
     private static void CollectTree(
         SceneTree tree, int x, int y, Box clip, in RenderTransform frame, bool transformed, float alpha,
-        List<RenderEntry> list, int mirrorDepth)
+        List<RenderEntry> list, int mirrorDepth, TextureFilter filter = TextureFilter.Linear)
     {
+        filter = tree.Filter ?? filter;
         foreach (var child in tree.Children)
         {
             if (!child.Enabled)
@@ -1151,13 +1154,13 @@ public sealed partial class Scene
                         list.Add(new RenderEntry(
                             node, childX, childY, childClip.Equals(Unclipped) ? null : childClip,
                             transformed ? frame : RenderTransform.Identity, transformed, alpha * node.Alpha,
-                            mirrorDepth > 0));
+                            mirrorDepth > 0, node.Filter ?? filter));
                         break;
                     }
 
                     if (node.Matrix.IsIdentity)
                     {
-                        CollectTree(node, childX, childY, childClip, frame, transformed, alpha * node.Alpha, list, mirrorDepth);
+                        CollectTree(node, childX, childY, childClip, frame, transformed, alpha * node.Alpha, list, mirrorDepth, filter);
                         break;
                     }
 
@@ -1171,7 +1174,7 @@ public sealed partial class Scene
                         RenderTransform.Translation(-childX, -childY));
                     var childFrame = transformed ? RenderTransform.Multiply(frame, local) : local;
                     CollectTree(
-                        node, childX, childY, childClip, childFrame, transformed: true, alpha * node.Alpha, list, mirrorDepth);
+                        node, childX, childY, childClip, childFrame, transformed: true, alpha * node.Alpha, list, mirrorDepth, filter);
                     break;
 
                 case SceneMirror mirror:
@@ -1195,12 +1198,12 @@ public sealed partial class Scene
 
                     CollectTree(
                         source, childX + mirror.SourceX, childY + mirror.SourceY, mirrorClip, frame, transformed,
-                        alpha, list, mirrorDepth + 1);
+                        alpha, list, mirrorDepth + 1, filter);
                     break;
                 }
 
                 case SceneTree subtree:
-                    CollectTree(subtree, childX, childY, childClip, frame, transformed, alpha * subtree.Alpha, list, mirrorDepth);
+                    CollectTree(subtree, childX, childY, childClip, frame, transformed, alpha * subtree.Alpha, list, mirrorDepth, filter);
                     break;
 
                 default:
@@ -1222,10 +1225,23 @@ public sealed partial class Scene
 
                     list.Add(new RenderEntry(
                         child, childX, childY, entryClip.Equals(Unclipped) ? null : entryClip,
-                        transformed ? frame : RenderTransform.Identity, transformed, alpha, mirrorDepth > 0));
+                        transformed ? frame : RenderTransform.Identity, transformed, alpha, mirrorDepth > 0, filter));
                     break;
             }
         }
+    }
+
+    private static TextureFilter InheritedFilter(SceneNode node)
+    {
+        for (var tree = node.Parent; tree is not null; tree = tree.Parent)
+        {
+            if (tree.Filter is { } filter)
+            {
+                return filter;
+            }
+        }
+
+        return TextureFilter.Linear;
     }
 
     private static readonly Box Unclipped = new(int.MinValue / 4, int.MinValue / 4, int.MaxValue / 2, int.MaxValue / 2);
@@ -1244,5 +1260,6 @@ public sealed partial class Scene
         RenderTransform Transform = default,
         bool Transformed = false,
         float Alpha = 1f,
-        bool Mirrored = false);
+        bool Mirrored = false,
+        TextureFilter Filter = TextureFilter.Linear);
 }

@@ -106,7 +106,8 @@ internal sealed partial class System7Shell
     }
 
     private DecorationMode? RuleDecoration(XdgToplevelWindow window) =>
-        _config.RuleFor(window.AppId)?.Decorations switch
+        _config.RuleFor(Basin.Config.WindowFacts.ForWayland(
+            window.AppId, window.Title, window.Parent is not null, ProcessIdentity.Of(window.Surface)))?.Decorations switch
         {
             "frame" => DecorationMode.ServerSide,
             "none" => DecorationMode.ClientSide,
@@ -157,6 +158,7 @@ internal sealed partial class System7Shell
             window.App = AppFor(toplevel.AppId, PidOf(toplevel.Surface));
             window.App.Windows.Add(window);
             window.Mapped = true;
+            ApplyQuirks(window);
             window.Kind = KindOf(window);
             Place(window);
             Align();
@@ -589,6 +591,7 @@ internal sealed partial class System7Shell
         {
             window.Zoomed = false;
             window.Xdg?.SetMaximized(false);
+            window.X11?.SetMaximized(false);
             if (window.IsShell)
             {
                 window.ShellDevice = new Box(user.X, user.Y, user.Width * chrome, user.Height * chrome);
@@ -610,6 +613,7 @@ internal sealed partial class System7Shell
             : window.Logical;
         window.Zoomed = true;
         window.Xdg?.SetMaximized(true);
+        window.X11?.SetMaximized(true);
         var area = WorkArea(view);
         var areaX = DevicePlacement.ToDevice(area.X - box.X, scale);
         var areaY = DevicePlacement.ToDevice(area.Y - box.Y, scale);

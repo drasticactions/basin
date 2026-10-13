@@ -188,6 +188,14 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         DrawClipped(clip);
     }
 
+    public void Clear(in RenderColor color)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        _gl.Disable(EnableCap.Blend);
+        AddRect(color, new Box(0, 0, _target.Width, _target.Height));
+        _gl.Enable(EnableCap.Blend);
+    }
+
     public void AddTexture(ITexture texture, in TextureRenderOptions options)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
@@ -273,8 +281,9 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         }
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, textureId);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+        var nearest = options.Filter == TextureFilter.Nearest;
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, nearest ? (int)TextureMinFilter.Nearest : (int)TextureMinFilter.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, nearest ? (int)TextureMagFilter.Nearest : (int)TextureMagFilter.Linear);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
         _gl.Uniform4(program.Dst, (float)options.DstBox.X, options.DstBox.Y, options.DstBox.Width, options.DstBox.Height);

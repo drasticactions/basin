@@ -26,10 +26,12 @@ public sealed partial class MetacityFrameRenderer
         Above,
         Stick,
         Unstick,
+        LowDensity,
+        FullDensity,
         Close,
     }
 
-    private readonly MenuEntry[] _menu = new MenuEntry[12];
+    private readonly MenuEntry[] _menu = new MenuEntry[14];
     private int _menuCount;
     private int _menuWidth;
     private int _menuHeight;
@@ -43,6 +45,7 @@ public sealed partial class MetacityFrameRenderer
 
     public void DrawMenu(IUISurface surface, in FrameState state, int hotItem)
     {
+        _painter = PainterFor(state.ColorScheme);
         LayoutMenu(in state);
         var skia = (ISkiaUISurface)surface;
         var palette = _painter.Palette;
@@ -133,6 +136,7 @@ public sealed partial class MetacityFrameRenderer
         return _menu[item] switch
         {
             MenuEntry.Minimize => new FrameAction(FrameActionKind.Minimize),
+            MenuEntry.LowDensity or MenuEntry.FullDensity => new FrameAction(FrameActionKind.ToggleX11Density),
             MenuEntry.Maximize or MenuEntry.Unmaximize => new FrameAction(FrameActionKind.ToggleMaximize),
             MenuEntry.Shade or MenuEntry.Unshade => new FrameAction(FrameActionKind.ToggleShade),
             MenuEntry.Move => new FrameAction(FrameActionKind.Move),
@@ -179,6 +183,12 @@ public sealed partial class MetacityFrameRenderer
                 _menu[n++] = MenuEntry.Stick;
                 _menu[n++] = MenuEntry.Unstick;
             }
+        }
+
+        if (caps.HasFlag(FrameCapabilities.X11Density))
+        {
+            _menu[n++] = MenuEntry.Separator;
+            _menu[n++] = state.LowDensity ? MenuEntry.FullDensity : MenuEntry.LowDensity;
         }
 
         _menu[n++] = MenuEntry.Separator;
@@ -264,6 +274,8 @@ public sealed partial class MetacityFrameRenderer
         MenuEntry.Above => "Always on Top",
         MenuEntry.Stick => "Always on Visible Workspace",
         MenuEntry.Unstick => "Only on This Workspace",
+        MenuEntry.LowDensity => "Use Low Density",
+        MenuEntry.FullDensity => "Use Full Density",
         MenuEntry.Close => "Close",
         _ => string.Empty,
     };

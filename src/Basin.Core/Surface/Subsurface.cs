@@ -66,8 +66,8 @@ public sealed class Subsurface
     {
         if (_hasPendingPosition)
         {
-            X = _pendingX;
-            Y = _pendingY;
+            X = ServerScaling.ToLogical(_pendingX, Parent.ServerScale);
+            Y = ServerScaling.ToLogical(_pendingY, Parent.ServerScale);
             _hasPendingPosition = false;
         }
 

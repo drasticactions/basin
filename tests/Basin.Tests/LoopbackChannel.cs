@@ -56,8 +56,21 @@ internal sealed class LoopbackChannel : IDisposable
 
     public WaypipeChannel Channel { get; }
 
+    private MemoryStream? _record;
+    private string? _recordName;
+
+    public void RecordCorpus(string name)
+    {
+        if (WaypipeCorpus.Recording)
+        {
+            _record = new MemoryStream();
+            _recordName = name;
+        }
+    }
+
     public void Send(ReadOnlySpan<byte> bytes)
     {
+        _record?.Write(bytes);
         if (_toHost is { } pipe)
         {
             pipe.Writer.Write(bytes);
@@ -68,10 +81,10 @@ internal sealed class LoopbackChannel : IDisposable
         _peerStream!.Write(bytes);
     }
 
-    public void SendConnectionHeader(WaypipeCompression compression, WaypipeVideoCodec video = WaypipeVideoCodec.None)
+    public void SendConnectionHeader(WaypipeCompression compression, WaypipeVideoCodec video = WaypipeVideoCodec.None, bool refusesDmabuf = true)
     {
         Span<byte> header = stackalloc byte[WaypipeWire.ConnectionHeaderLength];
-        WaypipeWire.WriteConnectionHeader(header, WaypipeWire.ProtocolVersion, compression, video: video);
+        WaypipeWire.WriteConnectionHeader(header, WaypipeWire.ProtocolVersion, compression, refusesDmabuf, video);
         Send(header);
     }
 
@@ -137,6 +150,11 @@ internal sealed class LoopbackChannel : IDisposable
 
     public void Dispose()
     {
+        if (_record is not null)
+        {
+            WaypipeCorpus.Write(_recordName!, _record.ToArray());
+        }
+
         Channel.Dispose();
         _toHost?.Writer.Complete();
         _toPeer?.Reader.Complete();

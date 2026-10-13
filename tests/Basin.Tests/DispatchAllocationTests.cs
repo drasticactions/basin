@@ -91,6 +91,44 @@ public sealed class DispatchAllocationTests
     }
 
     [Fact]
+    public void An_attach_and_damage_at_a_server_scale_stays_within_budget()
+    {
+        Budgets.Require();
+
+        using var host = new CompositorTestHost();
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Commit();
+        host.PumpToServer();
+        host.SurfaceScenes[0].Surface.SetServerScale(2);
+        host.Seat.Pointer.NotifyEnter(host.SurfaceScenes[0].Surface, 10, 10);
+
+        for (var i = 0; i < 3; i++)
+        {
+            Attaches(host, surface, buffer, Rounds);
+            host.Loop.Dispatch(0);
+            host.Output.StepFrame();
+            host.RenderFrame();
+            for (var j = 0; j < Rounds; j++)
+            {
+                PointerRound(host, j);
+            }
+        }
+
+        Attaches(host, surface, buffer, Rounds);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        host.Loop.Dispatch(0);
+        for (var i = 0; i < Rounds; i++)
+        {
+            PointerRound(host, i);
+        }
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Budgets.Check("server", "attach-and-damage-server-scale", allocated);
+    }
+
+    [Fact]
     public void A_commit_swapping_between_two_buffers_stays_within_budget()
     {
         Budgets.Require();

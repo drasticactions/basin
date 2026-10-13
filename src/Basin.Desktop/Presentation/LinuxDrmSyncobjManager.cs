@@ -296,6 +296,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
             _owner.ManagedCommits++;
             _owner.ExplicitCommits++;
+            _surface.MarkExplicitAcquire();
             _surface.Pending.SetExtension(new PendingSync(acquire.Timeline, acquire.Point, release.Timeline, release.Point));
         }
 

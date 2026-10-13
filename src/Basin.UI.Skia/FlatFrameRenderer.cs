@@ -17,15 +17,23 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
     private const int ButtonWidth = 32;
     private const int ButtonGap = 2;
 
-    private static readonly SKColor ChromeActive = new(0x23, 0x25, 0x2B);
-    private static readonly SKColor ChromeInactive = new(0x17, 0x18, 0x1C);
-    private static readonly SKColor Outline = new(0x0A, 0x0B, 0x0D);
-    private static readonly SKColor TextActive = new(0xDE, 0xE1, 0xE6);
-    private static readonly SKColor TextInactive = new(0x80, 0x84, 0x8C);
-    private static readonly SKColor CloseHot = new(0xC2, 0x40, 0x40);
-    private static readonly SKColor ClosePressed = new(0x95, 0x2F, 0x2F);
-    private static readonly SKColor ButtonHot = new(0x3A, 0x3E, 0x47);
-    private static readonly SKColor ButtonPressed = new(0x2C, 0x2F, 0x36);
+    private Palette _palette = Palette.Dark;
+
+    private readonly record struct Palette(
+        SKColor ChromeActive, SKColor ChromeInactive, SKColor Outline, SKColor TextActive, SKColor TextInactive,
+        SKColor CloseHot, SKColor ClosePressed, SKColor ButtonHot, SKColor ButtonPressed, SKColor Menu)
+    {
+        public static readonly Palette Dark = new(
+            new(0x23, 0x25, 0x2B), new(0x17, 0x18, 0x1C), new(0x0A, 0x0B, 0x0D), new(0xDE, 0xE1, 0xE6), new(0x80, 0x84, 0x8C),
+            new(0xC2, 0x40, 0x40), new(0x95, 0x2F, 0x2F), new(0x3A, 0x3E, 0x47), new(0x2C, 0x2F, 0x36), new(0x1F, 0x21, 0x27));
+
+        public static readonly Palette Light = new(
+            new(0xEC, 0xED, 0xF0), new(0xF6, 0xF6, 0xF8), new(0xB8, 0xBB, 0xC2), new(0x22, 0x24, 0x29), new(0x80, 0x84, 0x8C),
+            new(0xD9, 0x4A, 0x4A), new(0xB0, 0x38, 0x38), new(0xD6, 0xD8, 0xDD), new(0xC4, 0xC7, 0xCE), new(0xF4, 0xF5, 0xF7));
+
+        public static Palette For(FrameColorScheme scheme) => scheme == FrameColorScheme.Light ? Light : Dark;
+    }
+
     private static readonly SKColor[] BadgePalette =
     [
         new(0x5B, 0x7B, 0xA8), new(0x6E, 0x9E, 0x6A), new(0xA8, 0x7B, 0x5B),
@@ -166,7 +174,8 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
 
     private static int MenuItemCount(in FrameState state) =>
         1 + (state.Capabilities.HasFlag(FrameCapabilities.Minimize) ? 1 : 0)
-          + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0);
+          + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0)
+          + (state.Capabilities.HasFlag(FrameCapabilities.X11Density) ? 1 : 0);
 
     public UISurfaceSize MeasureMenu(in FrameState state, double scale) =>
         new(MenuWidth, MenuItemCount(state) * MenuItemHeight + 2 * MenuPadding, scale);
@@ -175,14 +184,15 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
     {
         var skia = (ISkiaUISurface)surface;
         var count = MenuItemCount(state);
+        _palette = Palette.For(state.ColorScheme);
         var canvas = skia.BeginDraw();
         try
         {
             var fill = theme.Fill;
-            fill.Color = new SKColor(0x1F, 0x21, 0x27);
+            fill.Color = _palette.Menu;
             canvas.DrawRect(0, 0, MenuWidth, count * MenuItemHeight + 2 * MenuPadding, fill);
             var stroke = theme.Stroke;
-            stroke.Color = Outline;
+            stroke.Color = _palette.Outline;
             stroke.StrokeWidth = 1;
             canvas.DrawRect(0.5f, 0.5f, MenuWidth - 1, count * MenuItemHeight + 2 * MenuPadding - 1, stroke);
 
@@ -191,7 +201,7 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
                 var top = MenuPadding + item * MenuItemHeight;
                 if (item == hotItem)
                 {
-                    fill.Color = ButtonHot;
+                    fill.Color = _palette.ButtonHot;
                     canvas.DrawRoundRect(MenuPadding, top + 1, MenuWidth - 2 * MenuPadding, MenuItemHeight - 2, 4, 4, fill);
                 }
 
@@ -199,7 +209,7 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
                 if (theme.Text.TryGetBlob(label, theme.TitleFont, out var blob, out _))
                 {
                     var metrics = theme.TitleFont.Metrics;
-                    fill.Color = TextActive;
+                    fill.Color = _palette.TextActive;
                     canvas.DrawText(blob, MenuPadding + 10, top + (MenuItemHeight - (metrics.Descent - metrics.Ascent)) / 2 - metrics.Ascent, fill);
                 }
             }
@@ -225,8 +235,13 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
     {
         "Close" => new FrameAction(FrameActionKind.Close),
         "Minimize" => new FrameAction(FrameActionKind.Minimize),
+        DensityLow or DensityFull => new FrameAction(FrameActionKind.ToggleX11Density),
         _ => new FrameAction(FrameActionKind.ToggleMaximize),
     };
+
+    private const string DensityLow = "Use low density";
+
+    private const string DensityFull = "Use full density";
 
     private static string LabelOf(int item, in FrameState state)
     {
@@ -240,8 +255,27 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
             item--;
         }
 
-        var hasMaximize = state.Capabilities.HasFlag(FrameCapabilities.Maximize);
-        return item == 0 && hasMaximize ? (state.Maximized ? "Restore" : "Maximize") : "Close";
+        if (state.Capabilities.HasFlag(FrameCapabilities.Maximize))
+        {
+            if (item == 0)
+            {
+                return (state.Maximized ? "Restore" : "Maximize");
+            }
+
+            item--;
+        }
+
+        if (state.Capabilities.HasFlag(FrameCapabilities.X11Density))
+        {
+            if (item == 0)
+            {
+                return state.LowDensity ? DensityFull : DensityLow;
+            }
+
+            item--;
+        }
+
+        return "Close";
     }
 
     public string? CursorFor(FramePart part) => part switch
@@ -262,8 +296,9 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
 
     private void DrawChrome(SKCanvas canvas, in Box clientBox, in FrameState state, in FrameInteraction interaction, int iconScale)
     {
-        var chrome = state.Active ? ChromeActive : ChromeInactive;
-        var text = state.Active ? TextActive : TextInactive;
+        _palette = Palette.For(state.ColorScheme);
+        var chrome = state.Active ? _palette.ChromeActive : _palette.ChromeInactive;
+        var text = state.Active ? _palette.TextActive : _palette.TextInactive;
         var fill = theme.Fill;
         var w = _outerWidth;
         var h = _outerHeight;
@@ -276,7 +311,7 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         canvas.DrawRect(0, h - Border, w, Border, fill);
 
         var stroke = theme.Stroke;
-        stroke.Color = Outline;
+        stroke.Color = _palette.Outline;
         stroke.StrokeWidth = 1;
         canvas.DrawRect(0.5f, 0.5f, w - 1, h - 1, stroke);
 
@@ -285,8 +320,8 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         var titleRight = w - Border - 8;
         if (!_close.IsEmpty)
         {
-            DrawButtonBack(canvas, _close, interaction, FramePart.Close, CloseHot, ClosePressed);
-            stroke.Color = interaction.Hot == FramePart.Close ? TextActive : text;
+            DrawButtonBack(canvas, _close, interaction, FramePart.Close, _palette.CloseHot, _palette.ClosePressed);
+            stroke.Color = interaction.Hot == FramePart.Close ? _palette.TextActive : text;
             stroke.StrokeWidth = 1.4f;
             var c = Center(_close);
             canvas.DrawLine(c.X - 4, c.Y - 4, c.X + 4, c.Y + 4, stroke);
@@ -296,8 +331,8 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
 
         if (!_maximize.IsEmpty)
         {
-            DrawButtonBack(canvas, _maximize, interaction, FramePart.Maximize, ButtonHot, ButtonPressed);
-            stroke.Color = interaction.Hot == FramePart.Maximize ? TextActive : text;
+            DrawButtonBack(canvas, _maximize, interaction, FramePart.Maximize, _palette.ButtonHot, _palette.ButtonPressed);
+            stroke.Color = interaction.Hot == FramePart.Maximize ? _palette.TextActive : text;
             stroke.StrokeWidth = 1.2f;
             var c = Center(_maximize);
             if (state.Maximized)
@@ -316,8 +351,8 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
 
         if (!_minimize.IsEmpty)
         {
-            DrawButtonBack(canvas, _minimize, interaction, FramePart.Minimize, ButtonHot, ButtonPressed);
-            stroke.Color = interaction.Hot == FramePart.Minimize ? TextActive : text;
+            DrawButtonBack(canvas, _minimize, interaction, FramePart.Minimize, _palette.ButtonHot, _palette.ButtonPressed);
+            stroke.Color = interaction.Hot == FramePart.Minimize ? _palette.TextActive : text;
             stroke.StrokeWidth = 1.2f;
             var c = Center(_minimize);
             canvas.DrawLine(c.X - 4.5f, c.Y + 3.5f, c.X + 4.5f, c.Y + 3.5f, stroke);

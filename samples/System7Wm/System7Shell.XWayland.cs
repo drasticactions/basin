@@ -12,9 +12,17 @@ internal sealed partial class System7Shell
 
     private void AttachXWayland(XWaylandWm wm)
     {
-        _x11?.Dispose();
+        if (_x11 is { } driver)
+        {
+            driver.Attach(wm);
+            return;
+        }
+
         _x11 = new XWaylandSceneDriver
         {
+            Letterbox = true,
+            ShapeRenderer = _renderer,
+            ShapeAllocator = _deviceAllocator,
             ManagedParent = window =>
             {
                 var container = new SceneTree(_layers.Windows);
@@ -61,7 +69,10 @@ internal sealed partial class System7Shell
         }
 
         var app = AppFor(x11.Class.Length > 0 ? x11.Class : x11.Instance, PidOf(surface));
-        var window = new ShellWindow(container, app) { X11 = x11, Owner = WindowOf, Scene = scene, ContentNode = scene.Tree, Mapped = true };
+        var outer = _x11?.OuterOf(x11) ?? scene.Tree;
+        var window = new ShellWindow(container, app) { X11 = x11, Owner = WindowOf, Scene = scene, ContentNode = outer, Mapped = true };
+        ApplyQuirks(window);
+        x11.PropertiesChanged += () => ApplyQuirks(window);
         _bySurface[surface] = window;
         app.Windows.Add(window);
         window.Kind = KindOf(window);
@@ -76,7 +87,7 @@ internal sealed partial class System7Shell
             window.Y = x11.Y;
         }
 
-        scene.Tree.SetPosition(window.X, window.Y);
+        outer.SetPosition(window.X, window.Y);
         x11.GeometryChanged += () =>
         {
             if (window.Mapped && _drag?.Window != window)

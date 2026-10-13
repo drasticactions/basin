@@ -90,6 +90,15 @@ public sealed class QuillFrameTests
         private readonly string _runtimeDir;
         private readonly List<string> _lines = [];
         private readonly List<string> _errors = [];
+        private readonly List<string> _clientLines = [];
+
+        public bool ClientPrinted(string fragment)
+        {
+            lock (_gate)
+            {
+                return _clientLines.Exists(line => line.Contains(fragment, StringComparison.Ordinal));
+            }
+        }
         private readonly object _gate = new();
         private Process? _client;
 
@@ -99,7 +108,7 @@ public sealed class QuillFrameTests
             _runtimeDir = runtimeDir;
         }
 
-        public static QuillSession? Start(string renderer = "gl", string config = "[frame]\nstyle = \"quill\"\n\n[frame.quill]\ncorner_radius = 8\n", [CallerFilePath] string sourcePath = "")
+        public static QuillSession? Start(string renderer = "gl", string config = "[frame]\nstyle = \"quill\"\n\n[frame.quill]\ncorner_radius = 8\n", string[]? clientArgs = null, [CallerFilePath] string sourcePath = "")
         {
             if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath ||
                 ClientPath(sourcePath) is not { } clientPath)
@@ -173,11 +182,24 @@ public sealed class QuillFrameTests
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
-            clientInfo.ArgumentList.Add("server");
+            foreach (var argument in clientArgs ?? ["server"])
+            {
+                clientInfo.ArgumentList.Add(argument);
+            }
+
             clientInfo.Environment["XDG_RUNTIME_DIR"] = runtimeDir;
             clientInfo.Environment["WAYLAND_DISPLAY"] = socketLine.Split(' ')[1];
             var client = Process.Start(clientInfo)!;
-            client.OutputDataReceived += (_, _) => { };
+            client.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is { } line)
+                {
+                    lock (session._gate)
+                    {
+                        session._clientLines.Add(line);
+                    }
+                }
+            };
             client.ErrorDataReceived += (_, _) => { };
             client.BeginOutputReadLine();
             client.BeginErrorReadLine();

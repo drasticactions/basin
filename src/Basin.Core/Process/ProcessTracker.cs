@@ -26,6 +26,10 @@ public sealed class ProcessTracker : IDisposable
 
     public int MaxFinished { get; set; } = 64;
 
+    public Func<X11Density, X11Route?>? X11Routes { get; set; }
+
+    public Func<ProcessLaunch, X11Density?>? X11Default { get; set; }
+
     public event Action<TrackedProcess>? Exited;
 
     public TrackedProcess? Spawn(ProcessLaunch launch, out string? error)
@@ -54,7 +58,7 @@ public sealed class ProcessTracker : IDisposable
             return null;
         }
 
-        var process = new TrackedProcess(++_nextLaunch, pid, argv, launch.LogPath);
+        var process = new TrackedProcess(++_nextLaunch, pid, argv, launch.LogPath) { Launch = launch };
         _processes.Add(process);
         Watch(process);
         return process;
@@ -77,6 +81,21 @@ public sealed class ProcessTracker : IDisposable
         }
 
         return false;
+    }
+
+    public static Dictionary<string, string?> SessionEnvironment(
+        string? waylandSocket, string? xDisplay, string? basinSocket, IReadOnlyDictionary<string, string>? extra)
+    {
+        var values = SessionEnvironment(waylandSocket, xDisplay, basinSocket);
+        if (extra is not null)
+        {
+            foreach (var (name, value) in extra)
+            {
+                values[name] = value;
+            }
+        }
+
+        return values;
     }
 
     public static Dictionary<string, string?> SessionEnvironment(string? waylandSocket, string? xDisplay, string? basinSocket)
@@ -212,6 +231,15 @@ public sealed class ProcessTracker : IDisposable
                 {
                     values[name] = value;
                 }
+            }
+        }
+
+        if ((launch.X11 ?? X11Default?.Invoke(launch)) is { } density && X11Routes?.Invoke(density) is { } route)
+        {
+            values["DISPLAY"] = route.Display;
+            foreach (var (name, value) in route.Environment)
+            {
+                values[name] = value;
             }
         }
 

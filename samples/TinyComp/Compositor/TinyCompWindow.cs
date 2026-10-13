@@ -28,12 +28,17 @@ internal sealed partial class TinyComp
             Toplevel = toplevel;
             toplevel.Xdg.Mapped += () =>
             {
-                Rule = comp._config.RuleFor(toplevel.AppId, toplevel.Title);
+                Facts = Basin.Config.WindowFacts.ForWayland(
+                    toplevel.AppId, toplevel.Title, toplevel.Parent is not null, ProcessIdentity.Of(toplevel.Surface));
+                Rule = comp._config.RuleFor(Facts);
+                Quirks = Basin.Config.WindowRule.QuirksFor(comp._config.Rules, Facts);
                 CornerRadius = Rule?.CornerRadius ?? comp._cornerRadius;
                 Workspace = comp.WorkspaceForRule(Rule) ?? comp.CurrentWorkspace();
                 Tree = new SceneTree(Workspace?.Tree ?? comp._layers.Windows);
                 Tree.SetPosition(X, Y);
-                SceneSurface = new SceneSurface(Tree, toplevel.Surface);
+                _fit = new SceneFit(Tree) { Filter = Quirks.ScaleFilter };
+                _fit.Root.Filter = Quirks.ScaleFilter;
+                SceneSurface = new SceneSurface(_fit.Content, toplevel.Surface);
                 comp.RefreshSurfaceLuts();
                 comp.ApplyCorners(SceneSurface, CornerRadius);
                 comp.OnWindowMapped(this);
@@ -53,6 +58,8 @@ internal sealed partial class TinyComp
                 _shadow = null;
                 SceneSurface?.Destroy();
                 SceneSurface = null;
+                _fit?.Destroy();
+                _fit = null;
                 comp.ForgetFrameBackdrop(_frame);
                 _frame?.Dispose();
                 _frame = null;
@@ -65,6 +72,8 @@ internal sealed partial class TinyComp
                 Tree = null;
                 comp.OnWindowGone(this);
             };
+            toplevel.Xdg.Committed += UpdateFit;
+            toplevel.StateChanged += UpdateFit;
             toplevel.Xdg.Committed += ApplyResizeAnchor;
             toplevel.Xdg.Committed += LayoutDecorations;
             toplevel.Xdg.Committed += LayoutShadow;
@@ -125,6 +134,49 @@ internal sealed partial class TinyComp
         public XdgToplevelWindow Toplevel { get; }
 
         public Rule? Rule { get; private set; }
+
+        public Basin.Config.WindowFacts Facts { get; private set; }
+
+        private SceneFit? _fit;
+
+        public Basin.Config.WindowQuirks Quirks { get; private set; } = Basin.Config.WindowQuirks.None;
+
+        private SceneFitPolicy FitPolicy => Quirks.Letterbox switch
+        {
+            Basin.Config.LetterboxQuirk.Fit => SceneFitPolicy.Fit,
+            Basin.Config.LetterboxQuirk.Center => SceneFitPolicy.Center,
+            Basin.Config.LetterboxQuirk.Off => SceneFitPolicy.Off,
+            _ => SceneFitPolicy.Auto,
+        };
+
+        public SceneFit? Fit => _fit;
+
+        private SceneFitState FitState =>
+            Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen) ? SceneFitState.Fullscreen
+            : Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Maximized) ? SceneFitState.Maximized
+            : Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.TiledLeft)
+                || Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.TiledRight)
+                || Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.TiledTop)
+                || Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.TiledBottom)
+                ? SceneFitState.Tiled
+                : SceneFitState.Floating;
+
+        private void UpdateFit()
+        {
+            if (_fit is null || SceneSurface is null)
+            {
+                return;
+            }
+
+            var geometry = Toplevel.Xdg.EffectiveGeometry;
+            var configured = Toplevel.ConfiguredSize;
+            var committed = (geometry.Width, geometry.Height);
+            var mode = Toplevel.Xdg.HasUnackedConfigure
+                ? null
+                : SceneFit.Needed(configured, committed, FitState, FitPolicy);
+            _fit.Update(new Box(0, 0, configured.Width, configured.Height), committed, mode);
+            SceneSurface.Tree.SetPosition(_fit.IsActive ? -geometry.X : 0, _fit.IsActive ? -geometry.Y : 0);
+        }
 
         public int CornerRadius { get; private set; }
 
@@ -385,7 +437,7 @@ internal sealed partial class TinyComp
             _comp.ApplyFrameBackdrop(_frame, renderer);
             _frame.Requested += OnFrameAction;
             _frame.Faulted += e => _comp.Log.Error($"frame fault {Toplevel.AppId}: {e.Message}");
-            SceneSurface?.Tree.RaiseToTop();
+            _fit?.Root.RaiseToTop();
             LayoutDecorations();
             ReportGeometry();
             _comp.ApplyCanvas(this);
@@ -525,9 +577,10 @@ internal sealed partial class TinyComp
 
             var scale = _comp.ScaleForWindow(this);
             _frameScale = scale;
-            if (!_frame.HasPendingFor(geometry, scale))
+            var framed = _fit is { IsActive: true } fit ? fit.Target : geometry;
+            if (!_frame.HasPendingFor(framed, scale))
             {
-                _frame.Configure(geometry, scale, BuildState());
+                _frame.Configure(framed, scale, BuildState());
             }
 
             _frame.Commit();

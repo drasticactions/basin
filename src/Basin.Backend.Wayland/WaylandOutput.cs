@@ -603,11 +603,56 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
             DestroySyncobjSurface();
         }
 
+        CancelAcquireWait();
+        var acquire = -1;
         if (unhonored)
         {
-            RenderFences.WaitSyncFile(state.InFenceFd);
+            acquire = RenderFences.DuplicateFence(state.InFenceFd);
+        }
+        else if (synchronized is null && proxy is not null && state.Buffer!.TryGetDmabuf(out var rendered) && rendered.PlaneCount > 0
+            && _imported.ContainsKey(state.Buffer))
+        {
+            acquire = RenderFences.ExportDmabufSyncFile(rendered.Fds[0], forWrite: false);
         }
 
+        if (acquire >= 0 && !RenderFences.IsSignaled(acquire))
+        {
+            _framePending = true;
+            _acquireFence = acquire;
+            _acquireProxy2 = proxy;
+            _acquireWait = _backend.Loop.AddFd(acquire, FdReadiness.Readable, (_, _) =>
+            {
+                var deferred = _acquireProxy2;
+                CancelAcquireWait();
+                if (deferred is not null && !deferred.IsDestroyed && !_disposedOutput)
+                {
+                    Present(deferred);
+                }
+            });
+            return true;
+        }
+
+        RenderFences.CloseFence(acquire);
+        Present(proxy!);
+        return true;
+    }
+
+    private IEventSource? _acquireWait;
+    private int _acquireFence = -1;
+    private WlBuffer? _acquireProxy2;
+    private bool _disposedOutput;
+
+    private void CancelAcquireWait()
+    {
+        _acquireWait?.Remove();
+        _acquireWait = null;
+        RenderFences.CloseFence(_acquireFence);
+        _acquireFence = -1;
+        _acquireProxy2 = null;
+    }
+
+    private void Present(WlBuffer proxy)
+    {
         ApplyWindowGeometry(committingContent: true);
         var callback = _surface.Frame(_frameCallback);
         if (!ReferenceEquals(callback, _frameCallback))
@@ -648,7 +693,6 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _framePending = true;
         _frameFallback.UpdateTimer(FrameFallbackMillis);
         _backend.Flush();
-        return true;
     }
 
     private bool TrySynchronize(IBuffer buffer, ImportedBuffer imported, OutputState state)
@@ -783,7 +827,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
         _syncobjWarned = true;
         Log.Warn(
-            $"wayland backend: presenting without explicit sync — {reason}. On a driver that does not maintain a dmabuf's implicit fences this shows as tearing or corruption.");
+            $"wayland backend: presenting without explicit sync — {reason}. Each frame still waits for its render to finish before the parent sees it, but on a driver that does not keep a dmabuf's implicit fences the parent can still be reading a buffer when it is drawn into again.");
     }
 
     private ImportedBuffer? TryImportDmabuf(IBuffer buffer)
@@ -810,6 +854,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
     private ImportedBuffer CreateImported(IBuffer buffer, ZwpLinuxDmabufV1 dmabuf, in DmabufAttributes attributes)
     {
+        var firstPlane = attributes.PlaneCount > 0 ? attributes.Fds[0] : -1;
         var bufferParams = dmabuf.CreateParams();
         for (var plane = 0; plane < attributes.PlaneCount; plane++)
         {
@@ -833,14 +878,34 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
                 return;
             }
 
-            if (imported.Presented)
+            if (!imported.Presented)
             {
-                imported.Presented = false;
-                buffer.Unlock();
+                return;
             }
+
+            var readers = firstPlane >= 0 ? RenderFences.ExportDmabufSyncFile(firstPlane, forWrite: true) : -1;
+            if (readers >= 0 && !RenderFences.IsSignaled(readers))
+            {
+                imported.ReaderFence = readers;
+                imported.ReaderWait = _backend.Loop.AddFd(readers, FdReadiness.Readable, (_, _) =>
+                {
+                    imported.CancelReaderWait();
+                    if (imported.Presented)
+                    {
+                        imported.Presented = false;
+                        buffer.Unlock();
+                    }
+                });
+                return;
+            }
+
+            RenderFences.CloseFence(readers);
+            imported.Presented = false;
+            buffer.Unlock();
         };
         buffer.Destroyed += () =>
         {
+            imported.CancelReaderWait();
             imported.DisposeSync();
             _imported.Remove(buffer);
             if (imported.Presented)
@@ -862,8 +927,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
     protected override void OnDestroy()
     {
+        _disposedOutput = true;
+        CancelAcquireWait();
         foreach (var (buffer, imported) in _imported)
         {
+            imported.CancelReaderWait();
             imported.DisposeSync();
             if (imported.Presented)
             {
@@ -1060,6 +1128,18 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         public ulong ReleasePoint { get; set; }
 
         public DrmSyncobjTimeline.DrmSyncobjWaiter? ReleaseWaiter { get; set; }
+
+        public int ReaderFence { get; set; } = -1;
+
+        public IEventSource? ReaderWait { get; set; }
+
+        public void CancelReaderWait()
+        {
+            ReaderWait?.Remove();
+            ReaderWait = null;
+            RenderFences.CloseFence(ReaderFence);
+            ReaderFence = -1;
+        }
 
         public void DisposeSync()
         {

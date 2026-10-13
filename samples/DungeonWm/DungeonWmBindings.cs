@@ -42,14 +42,15 @@ internal sealed class DungeonWmBindings
     {
         string name => IsAction(name),
         Tomlyn.Model.TomlArray array => array.Count > 0 && array.All(part => part is string { Length: > 0 }),
+        Tomlyn.Model.TomlTable table => table.TryGetValue("action", out var action) && action is not null && Accepts(action),
         _ => false,
     };
 
-    public Hotkey? Match(uint keysym, Modifiers held)
+    public Hotkey? Match(uint keysym, Modifiers held, bool takeover = false)
     {
         foreach (var hotkey in _bindings)
         {
-            if (hotkey.Keysym == keysym && hotkey.ModifierMask == held)
+            if (hotkey.Keysym == keysym && hotkey.ModifierMask == held && hotkey.AppliesTo(takeover))
             {
                 return hotkey;
             }
@@ -62,6 +63,14 @@ internal sealed class DungeonWmBindings
 
     private static Hotkey? ToHotkey(string chord, object value, BasinLogger log)
     {
+        if (value is Tomlyn.Model.TomlTable table && table.TryGetValue("action", out var inner) && inner is string innerText
+            && SpawnCommand(innerText) is { } tableCommand)
+        {
+            return HotkeyParser.Parse(chord, table, log, static _ => true) is { } scoped
+                ? new Hotkey(scoped.Keysym, scoped.ModifierMask, null, ["/bin/sh", "-c", tableCommand]) { When = scoped.When }
+                : null;
+        }
+
         if (value is string text && SpawnCommand(text) is { } command)
         {
             return HotkeyParser.TryParseChord(chord, log, out var keysym, out var mask)

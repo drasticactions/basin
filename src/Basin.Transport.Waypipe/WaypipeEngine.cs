@@ -55,6 +55,8 @@ public sealed class WaypipeEngine : IDisposable
         }
     }
 
+    internal long RegionBytes => _regionBytes;
+
     public event Action<WaypipeMessageType, int, ReadOnlyMemory<byte>>? Send;
 
     public event Action<Exception>? Failed;
@@ -656,12 +658,13 @@ public sealed class WaypipeEngine : IDisposable
                 $"a diff for remote id {remoteId} declares {diffSize} bytes of blocks and {trailing} trailing");
         }
 
-        var total = diffSize + trailing;
-        if (total > region.Size + 8 || total > _limits.MaxRegionBytes)
+        var declared = (long)diffSize + trailing;
+        if (declared > region.Size + 8L || declared > _limits.MaxRegionBytes)
         {
             throw new WaypipeException($"a diff for remote id {remoteId} is longer than the region it applies to");
         }
 
+        var total = (int)declared;
         var decoded = Rent(total);
         Decompress(payload, decoded.AsSpan(0, total));
         Apply(region, decoded.AsSpan(0, total), diffSize, trailing, remoteId);

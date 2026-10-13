@@ -48,6 +48,32 @@ public sealed class ProcessTests
     }
 
     [Fact]
+    public async Task A_launch_rule_starts_an_X11_program_on_the_low_density_server()
+    {
+        var (compositor, _) = Prerequisites()!.Value;
+        Assert.SkipUnless(Which("Xwayland") is not null && Which("xprop") is not null, "Xwayland and xprop are needed");
+        using var config = new TempFile("[[launch]]\nexec = \"xprop\"\nx11 = \"low-density\"\n");
+        var output = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"eight-low-density-{Guid.NewGuid():N}.txt");
+        try
+        {
+            using var session = new Session(compositor, config.Path, null, "--xwayland", "on", "--scale", "2");
+            Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
+            await session.SendAsync($"launch xprop -root RESOURCE_MANAGER > '{output}'");
+            var deadline = Environment.TickCount64 + 30000;
+            while (Environment.TickCount64 < deadline && !(File.Exists(output) && File.ReadAllText(output).Contains("Xft.dpi", StringComparison.Ordinal)))
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+            }
+
+            Assert.Contains("Xft.dpi:\\t96", File.Exists(output) ? File.ReadAllText(output) : "no output", StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(output);
+        }
+    }
+
+    [Fact]
     public async Task Start_tiles_launch_and_the_chrome_answers_the_stdin_commands()
     {
         var (compositor, _) = Prerequisites()!.Value;
@@ -497,7 +523,7 @@ public sealed class ProcessTests
         private readonly Lock _gate = new();
         private TaskCompletionSource _arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Session(string path, string config, IReadOnlyDictionary<string, string>? environment = null)
+        public Session(string path, string config, IReadOnlyDictionary<string, string>? environment = null, params string[] extra)
         {
             var info = new ProcessStartInfo(path)
             {
@@ -506,7 +532,10 @@ public sealed class ProcessTests
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
-            foreach (var argument in new[] { "--backend", "headless", "--renderer", "pixman", "--xwayland", "off", "--config", config })
+            string[] arguments = extra.Length > 0
+                ? ["--backend", "headless", "--renderer", "pixman", "--config", config, .. extra]
+                : ["--backend", "headless", "--renderer", "pixman", "--xwayland", "off", "--config", config];
+            foreach (var argument in arguments)
             {
                 info.ArgumentList.Add(argument);
             }

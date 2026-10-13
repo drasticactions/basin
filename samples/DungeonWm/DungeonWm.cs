@@ -57,6 +57,7 @@ internal sealed partial class DungeonWm : IDisposable
     private readonly LayerShellSceneDriver _layerDriver;
     private readonly SessionLockSceneDriver _lockDriver;
     private readonly Basin.XWayland.XWaylandServer? _xServer;
+    private readonly Basin.XWayland.XWaylandModule? _xwaylandModule;
     private DungeonWmWindow? _focused;
     private DungeonWmWindow? _takeover;
     private DungeonWmWindow? _pendingTakeover;
@@ -109,7 +110,11 @@ internal sealed partial class DungeonWm : IDisposable
         {
             SocketFd = options.SocketFd,
         });
-        _processes = new ProcessTracker(_host.Loop, LaunchEnvironment);
+        _processes = new ProcessTracker(_host.Loop, LaunchEnvironment)
+        {
+            X11Routes = density => _xwaylandModule?.Route(density),
+            X11Default = launch => _settings.Launch.ForArgv(launch.DesktopId, launch.Argv),
+        };
 
         var kit = Kit.Load();
         _popups = new Basin.Desktop.NestedPopupPlacer(_layout);
@@ -155,7 +160,8 @@ internal sealed partial class DungeonWm : IDisposable
         Basin.XWayland.XWaylandModule? xwaylandModule = null;
         if (options.XWayland)
         {
-            xwaylandModule = new Basin.XWayland.XWaylandModule();
+            xwaylandModule = new Basin.XWayland.XWaylandModule { IncludeLowDensity = _settings.XWaylandLowDensity };
+            _xwaylandModule = xwaylandModule;
             _services.Install(xwaylandModule);
         }
 
@@ -302,9 +308,17 @@ internal sealed partial class DungeonWm : IDisposable
 
         if (xwaylandModule is not null)
         {
-            _xServer = _services.Require<Basin.XWayland.XWaylandServer>();
+            _xServer = xwaylandModule.Native!.Server;
             BasinReport.Line($"XWAYLAND {_xServer.DisplayName}");
-            xwaylandModule.WindowManagerReady += AttachXWayland;
+            if (xwaylandModule.LowDensity is { } lowDensity)
+            {
+                BasinReport.Line($"XWAYLAND LOW {lowDensity.DisplayName}");
+            }
+
+            foreach (var display in xwaylandModule.Displays)
+            {
+                display.WindowManagerReady += AttachXWayland;
+            }
         }
     }
 
@@ -355,7 +369,15 @@ internal sealed partial class DungeonWm : IDisposable
         InitProcess? startup = null;
         if (_options.Command is { } command)
         {
-            startup = InitProcess.Start(command, _host.Socket, _xServer?.DisplayName, _log, InitLaunchTag(out var tag));
+            var initEnvironment = InitLaunchTag(out var tag);
+            foreach (var (name, value) in _xwaylandModule?.ChildEnvironment() ?? new Dictionary<string, string>())
+            {
+                initEnvironment[name] = value;
+            }
+
+            startup = InitProcess.Start(
+                command, _host.Socket, _xServer?.DisplayName, _log, initEnvironment,
+                _settings.Launch.ForCommand(null, command) is { } density ? _xwaylandModule?.Route(density) : null);
             if (startup is not null)
             {
                 _launchGroups[tag] = startup.ProcessGroup;

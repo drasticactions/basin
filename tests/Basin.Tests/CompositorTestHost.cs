@@ -79,7 +79,7 @@ internal sealed class CompositorTestHost : IDisposable
         Loop = new WaylandEventLoop(Display);
         Buffers = new ClientBufferRegistry();
         _ = new ShmGlobal(Display, buffers: Buffers);
-        Compositor = new CompositorGlobal(Display, Buffers);
+        Compositor = new CompositorGlobal(Display, Buffers) { Loop = Loop };
         Subcompositor = new SubcompositorGlobal(Display, Compositor);
         Seat = new Basin.Seat.Seat(Display, Compositor, capabilities:
             Basin.Seat.SeatCapability.Pointer | Basin.Seat.SeatCapability.Keyboard | Basin.Seat.SeatCapability.Touch);

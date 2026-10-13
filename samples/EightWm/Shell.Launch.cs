@@ -41,7 +41,7 @@ internal sealed partial class Shell
             ShowSplash(view, tile.Name, tile.Color, TargetCell(view));
         }
 
-        Spawn(tile.Exec);
+        Spawn(tile.Exec, tile.DesktopId);
         _report.Line($"LAUNCH {tile.Name}");
     }
 

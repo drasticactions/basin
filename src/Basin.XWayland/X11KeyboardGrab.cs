@@ -24,6 +24,7 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
         _key = key;
         _source = loop.AddFd(Libxcb.xcb_get_file_descriptor(conn), FdReadiness.Readable, (_, _) => Pump());
         BasinCounters.Track();
+        loop.AddIdle(Pump);
     }
 
     public static X11KeyboardGrab? TryGrab(ICompositorEventLoop loop, string? display, Action<uint, bool> key)
@@ -100,7 +101,7 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
 
     private void Pump()
     {
-        if (_dead)
+        if (_dead || _disposed)
         {
             return;
         }
@@ -110,7 +111,12 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
             var ev = Libxcb.xcb_poll_for_event(_conn);
             if (ev == null)
             {
-                break;
+                _ = Libxcb.xcb_flush(_conn);
+                ev = Libxcb.xcb_poll_for_queued_event(_conn);
+                if (ev == null)
+                {
+                    break;
+                }
             }
 
             try
@@ -138,9 +144,6 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
             _dead = true;
             _source.Remove();
             Log.Warn($"the X server connection was lost, the keyboard grab is off");
-            return;
         }
-
-        _ = Libxcb.xcb_flush(_conn);
     }
 }

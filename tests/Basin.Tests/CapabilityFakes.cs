@@ -139,6 +139,16 @@ internal sealed class TestToplevelModel : IToplevelModel
         return id;
     }
 
+    public void SetX11(ulong id, string display, X11Density density)
+    {
+        var index = _toplevels.FindIndex(t => t.Id == id);
+        if (index >= 0)
+        {
+            _toplevels[index] = _toplevels[index] with { X11Display = display, X11Density = density };
+            _observers.Changed(id);
+        }
+    }
+
     public void Retitle(ulong id, string title)
     {
         var index = _toplevels.FindIndex(t => t.Id == id);

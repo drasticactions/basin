@@ -716,7 +716,7 @@ internal sealed partial class Shell
     {
         if (!app.IsAttributable)
         {
-            _log.Debug($"no pid for the X11 window {app.AppId}; it is not killed");
+            _log.Debug($"no verified pid for the X11 window {app.AppId}; it is not killed");
             return;
         }
 
@@ -740,6 +740,17 @@ internal sealed partial class Shell
 
     internal void AttachXWayland(Basin.XWayland.XWaylandWm wm)
     {
+        if (_xwaylandWired)
+        {
+            _xwayland.Attach(wm);
+            return;
+        }
+
+        _xwaylandWired = true;
+        _xwayland.Letterbox = true;
+        _xwayland.PositionsManagedWindows = false;
+        _xwayland.ShapeRenderer = _renderer;
+        _xwayland.ShapeAllocator = _deviceAllocator;
         _xwayland.ManagedParent = _ => NewX11Slot(_scene.Root);
         _xwayland.OverrideRedirectParent = _ => NewX11Slot(PlacementView().Apps);
         _xwayland.Adopted += OnX11Adopted;
@@ -751,16 +762,16 @@ internal sealed partial class Shell
 
     private void OnX11Adopted(Basin.XWayland.XWaylandWindow window, SceneSurface scene, bool managed)
     {
-        var frame = (SceneTransform)scene.Tree.Parent!;
+        var frame = (SceneTransform)(_xwayland.ParentOf(window) ?? scene.Tree.Parent!);
         var app = new AppWindow(window, frame.Parent!, frame, scene);
         _x11Windows[window] = app;
+        window.PropertiesChanged += () => ApplyRules(app);
         if (managed)
         {
             Map(app);
             return;
         }
 
-        app.Slot.SetPosition(window.X, window.Y);
         _owners[window.Surface!] = app;
     }
 

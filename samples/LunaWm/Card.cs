@@ -56,6 +56,13 @@ internal sealed class Card : ILayoutCard, IDisposable
 
     public string Label => Title.Length > 0 ? Title : AppId;
 
+    private Basin.ProcessIdentity? _process;
+
+    public Basin.Config.WindowFacts Facts => X11 is { } x11
+        ? Basin.Config.WindowFacts.ForX11(x11.Class, x11.Instance, x11.Title, x11.SteamGame, x11.WindowType, x11.Process)
+        : Basin.Config.WindowFacts.ForWayland(
+            AppId, Title, Xdg?.Parent is not null, _process ??= Surface is { } surface ? Basin.ProcessIdentity.Of(surface) : default);
+
     public LunaView? Home { get; set; }
 
     public Card? Parent { get; set; }

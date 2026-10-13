@@ -25,7 +25,20 @@ internal static class IpcProcessMethods
                 UnsetEnv = request.UnsetEnv,
                 Cwd = request.Cwd,
                 LogPath = request.Log,
+                X11 = request.X11Density switch
+                {
+                    null => null,
+                    IpcWindow.NativeDensity => X11Density.Native,
+                    IpcWindow.LowDensity => X11Density.Low,
+                    _ => (X11Density?)null,
+                },
             };
+            if (request.X11Density is { } density && launch.X11 is null)
+            {
+                reply.Error(IpcErrorCodes.InvalidParams, $"'x11_density' is native or low, not '{density}'");
+                return;
+            }
+
             if (request.Argv.Count == 0 || request.Argv[0].Length == 0)
             {
                 reply.Error(IpcErrorCodes.InvalidParams, "'argv' names at least a program");

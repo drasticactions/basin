@@ -40,6 +40,12 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
         _signalFenceFd = signalFenceFd;
     }
 
+    public void Clear(in RenderColor color)
+    {
+        ObjectDisposedException.ThrowIf(_target is null, this);
+        SkiaDraw.Clear(_entry!.Canvas, _renderer.ColorTransforms.ConvertRect(color, _outputColor));
+    }
+
     public void AddRect(in RenderColor color, in Box box, PixmanRegion32? clip = null)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
@@ -51,7 +57,8 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         SkiaDraw.Texture(
             _entry!.Canvas, _paint, (ISkiaTexture)texture, options,
-            options.Lut is null && options.Shader is null ? _renderer.ColorTransforms.TransformFor(options.ColorDescription, _outputColor) : null);
+            options.Lut is null && options.Shader is null ? _renderer.ColorTransforms.TransformFor(options.ColorDescription, _outputColor) : null,
+            _target!.Format.IsOpaque() ? null : _renderer.ColorTransforms.OpaqueAlpha);
     }
 
     public void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)

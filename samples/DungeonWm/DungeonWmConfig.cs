@@ -34,6 +34,7 @@ internal static class DungeonWmConfig
         Check("world.dynamic_props", running.Bake.DynamicProps != loaded.Bake.DynamicProps);
         Check("world.rooms", running.Rooms != loaded.Rooms);
         Check("physics.prop_density", running.PropDensity != loaded.PropDensity);
+        Check("xwayland.low_density", running.XWaylandLowDensity != loaded.XWaylandLowDensity);
         return changed;
     }
 
@@ -242,6 +243,14 @@ internal static class DungeonWmConfig
 
             avatar.ReportUnknown();
         }
+
+        if (reader.Section("xwayland") is { } xwayland)
+        {
+            settings.XWaylandLowDensity = xwayland.Flag("low_density", settings.XWaylandLowDensity);
+            xwayland.ReportUnknown();
+        }
+
+        settings.Launch = Basin.Config.LaunchRules.Read(reader);
 
         if (reader.Free("keybindings") is TomlTable bindings)
         {

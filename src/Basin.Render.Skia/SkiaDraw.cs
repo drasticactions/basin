@@ -7,6 +7,8 @@ internal static class SkiaDraw
 {
     private static readonly SKSamplingOptions LinearSampling = new(SKFilterMode.Linear);
 
+    private static readonly SKSamplingOptions NearestSampling = new(SKFilterMode.Nearest);
+
     public static void Rect(SKCanvas canvas, SKPaint paint, in RenderColor color, in Box box, PixmanRegion32? clip)
     {
         if (box.IsEmpty)
@@ -32,9 +34,25 @@ internal static class SkiaDraw
         }
     }
 
+    public static void Clear(SKCanvas canvas, in RenderColor color)
+    {
+        canvas.Save();
+        canvas.ResetMatrix();
+        canvas.Clear(new SKColorF(color.R, color.G, color.B, color.A));
+        canvas.Restore();
+    }
+
+    public static SKColorFilter CreateOpaqueAlpha() => SKColorFilter.CreateColorMatrix(
+    [
+        1f, 0f, 0f, 0f, 0f,
+        0f, 1f, 0f, 0f, 0f,
+        0f, 0f, 1f, 0f, 0f,
+        0f, 0f, 0f, 0f, 1f,
+    ]);
+
     public static void Texture(
         SKCanvas canvas, SKPaint paint, ISkiaTexture texture, in TextureRenderOptions options,
-        SkiaColorTransform? transform = null)
+        SkiaColorTransform? transform = null, SKColorFilter? opaqueAlpha = null)
     {
         if (options.DstBox.IsEmpty)
         {
@@ -78,8 +96,13 @@ internal static class SkiaDraw
             {
                 paint.ColorFilter = transform.Filter;
             }
+            else if (opaqueAlpha is not null && options.Alpha >= 1f && image.AlphaType == SKAlphaType.Opaque)
+            {
+                paint.ColorFilter = opaqueAlpha;
+            }
 
             var matrix = ToMatrix(options.Transform);
+            var sampling = options.Filter == TextureFilter.Nearest ? NearestSampling : LinearSampling;
             if (options.Clip is null)
             {
                 if (transformed)
@@ -88,7 +111,7 @@ internal static class SkiaDraw
                     canvas.Concat(matrix);
                 }
 
-                canvas.DrawImage(image, srcRect, dstRect, LinearSampling, paint);
+                canvas.DrawImage(image, srcRect, dstRect, sampling, paint);
                 if (transformed)
                 {
                     canvas.Restore();
@@ -106,13 +129,13 @@ internal static class SkiaDraw
                     canvas.Concat(matrix);
                 }
 
-                canvas.DrawImage(image, srcRect, dstRect, LinearSampling, paint);
+                canvas.DrawImage(image, srcRect, dstRect, sampling, paint);
                 canvas.Restore();
             }
         }
         finally
         {
-            if (options.Lut is SkiaColorLut || transform is not null)
+            if (paint.ColorFilter is not null)
             {
                 paint.ColorFilter = null;
             }
@@ -164,7 +187,7 @@ internal static class SkiaDraw
             throw new ArgumentException("shader does not sample a texture");
         }
 
-        var sampling = LinearSampling;
+        var sampling = options.Filter == TextureFilter.Nearest ? NearestSampling : LinearSampling;
         var child = SkiaShaderNative.ImageShader(image.Handle, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, &sampling, null);
         if (child == 0)
         {

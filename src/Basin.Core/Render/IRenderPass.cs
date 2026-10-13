@@ -6,6 +6,8 @@ public interface IRenderPass
 {
     void AddRect(in RenderColor color, in Box box, PixmanRegion32? clip = null);
 
+    void Clear(in RenderColor color);
+
     void AddTexture(ITexture texture, in TextureRenderOptions options);
 
     void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options);

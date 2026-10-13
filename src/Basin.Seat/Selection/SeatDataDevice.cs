@@ -308,11 +308,11 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
                     _offer.SendSourceActions(source.Actions);
                 }
 
-                device.SendEnter(serial, surface.Resource, WlFixed.FromDouble(x), WlFixed.FromDouble(y), _offer);
+                device.SendEnter(serial, surface.Resource, WlFixed.FromDouble(x * surface.ServerScale), WlFixed.FromDouble(y * surface.ServerScale), _offer);
             }
             else
             {
-                device.SendEnter(serial, surface.Resource, WlFixed.FromDouble(x), WlFixed.FromDouble(y), null);
+                device.SendEnter(serial, surface.Resource, WlFixed.FromDouble(x * surface.ServerScale), WlFixed.FromDouble(y * surface.ServerScale), null);
             }
         }
 
@@ -320,7 +320,8 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         {
             if (_focusDevice is { IsDestroyed: false })
             {
-                _focusDevice.SendMotion(timeMs, WlFixed.FromDouble(x), WlFixed.FromDouble(y));
+                var scale = _focus?.ServerScale ?? 1.0;
+                _focusDevice.SendMotion(timeMs, WlFixed.FromDouble(x * scale), WlFixed.FromDouble(y * scale));
             }
         }
 

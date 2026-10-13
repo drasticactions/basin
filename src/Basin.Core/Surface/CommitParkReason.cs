@@ -12,4 +12,6 @@ public enum CommitParkReason
     CommitTiming = 4,
 
     Held = 8,
+
+    Fence = 16,
 }

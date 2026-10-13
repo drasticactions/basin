@@ -126,6 +126,12 @@ internal sealed partial class System7Shell
             menu.Item("Show All", ShowAll, enabled: _apps.Values.Any(a => a.Hidden)),
             menu.Separator(),
         };
+        if (DensityTarget(front) is { } x11)
+        {
+            var low = _xwaylandModule?.DisplayOf(x11)?.Density == X11Density.Low;
+            items.Add(menu.Item(low ? "Use Full Density" : "Use Low Density", () => ToggleX11Density(x11)));
+            items.Add(menu.Separator());
+        }
         foreach (var app in _apps.Values.OrderBy(a => a.IsFinder ? "" : a.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             var target = app;
@@ -237,7 +243,7 @@ internal sealed partial class System7Shell
             return;
         }
 
-        Spawn(ExecLine.Join(argv));
+        Spawn(ExecLine.Join(argv), entry.Id);
     }
 
     internal void OpenPath(string path)
@@ -255,7 +261,8 @@ internal sealed partial class System7Shell
     {
         var menu = app.Synthesized;
         menu.Clear();
-        var chords = _config.RuleFor(app.AppId)?.EditChords ?? Basin.Config.Modifiers.Ctrl;
+        var facts = app.Windows.Count > 0 ? app.Windows[^1].Facts : new Basin.Config.WindowFacts { AppId = app.AppId };
+        var chords = _config.RuleFor(facts)?.EditChords ?? Basin.Config.Modifiers.Ctrl;
         void Edit(char letter) => SendEditChord(chords, letter);
         menu.Set(
             menu.Submenu(app.Name, [menu.Item($"About {app.Name}…", () => AboutApp(app))]),

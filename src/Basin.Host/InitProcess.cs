@@ -121,7 +121,31 @@ public sealed class InitProcess
     public static void RaiseFileLimit(BasinLogger log) => FileDescriptorLimit.Raise(log);
 
     public static InitProcess? Start(string command, string socket, string? display, BasinLogger log, IReadOnlyDictionary<string, string>? environment = null)
+        => Start(command, socket, display, log, environment, null);
+
+    public static InitProcess? Start(
+        string command, string socket, string? display, BasinLogger log, IReadOnlyDictionary<string, string>? environment, X11Route? x11)
     {
+        if (x11 is not null)
+        {
+            display = x11.Display;
+            var merged = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (environment is not null)
+            {
+                foreach (var (name, value) in environment)
+                {
+                    merged[name] = value;
+                }
+            }
+
+            foreach (var (name, value) in x11.Environment)
+            {
+                merged[name] = value;
+            }
+
+            environment = merged;
+        }
+
         log.Info($"running init executable '{command}'");
 
         var attributes = Marshal.AllocHGlobal(AttrBytes);

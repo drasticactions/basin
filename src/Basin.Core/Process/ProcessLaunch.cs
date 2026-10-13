@@ -9,4 +9,8 @@ public sealed record ProcessLaunch(IReadOnlyList<string> Argv)
     public string? Cwd { get; init; }
 
     public string? LogPath { get; init; }
+
+    public X11Density? X11 { get; init; }
+
+    public string? DesktopId { get; init; }
 }

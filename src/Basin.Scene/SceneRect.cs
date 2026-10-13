@@ -45,6 +45,8 @@ public sealed class SceneRect : SceneNode
 
     public bool IsOpaque => _color.A >= 1f;
 
+    public bool BlocksInput { get; set; }
+
     protected override (int Width, int Height) ContentSize => (_width, _height);
 
     private void Resize(ref int field, int value)

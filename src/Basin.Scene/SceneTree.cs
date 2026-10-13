@@ -30,6 +30,21 @@ public class SceneTree : SceneNode
         }
     }
 
+    private TextureFilter? _filter;
+
+    public TextureFilter? Filter
+    {
+        get => _filter;
+        set
+        {
+            if (_filter != value)
+            {
+                _filter = value;
+                DamageSubtree();
+            }
+        }
+    }
+
     internal Scene? Owner { get; set; }
 
     internal List<SceneMirror>? Mirrors { get; set; }

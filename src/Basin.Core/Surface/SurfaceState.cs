@@ -120,6 +120,8 @@ public sealed class SurfaceState : IDisposable
         }
     }
 
+    public double ServerScale { get; internal set; } = 1.0;
+
     public int Width { get; private set; }
 
     public int Height { get; private set; }
@@ -133,22 +135,29 @@ public sealed class SurfaceState : IDisposable
             return;
         }
 
+        var serverScale = ServerScale;
         if (ViewportDestinationWidth > 0 && ViewportDestinationHeight > 0)
         {
-            Width = ViewportDestinationWidth;
-            Height = ViewportDestinationHeight;
+            Width = ServerScaling.ToLogical(ViewportDestinationWidth, serverScale);
+            Height = ServerScaling.ToLogical(ViewportDestinationHeight, serverScale);
             return;
         }
 
         if (ViewportSourceWidth >= 0 && ViewportSourceHeight >= 0)
         {
-            Width = (int)Math.Round(ViewportSourceWidth);
-            Height = (int)Math.Round(ViewportSourceHeight);
+            Width = (int)Math.Round(ViewportSourceWidth / serverScale);
+            Height = (int)Math.Round(ViewportSourceHeight / serverScale);
             return;
         }
 
         var width = Buffer.Width / Scale;
         var height = Buffer.Height / Scale;
+        if (serverScale != 1.0)
+        {
+            width = ServerScaling.ToLogical(width, serverScale);
+            height = ServerScaling.ToLogical(height, serverScale);
+        }
+
         if (Transform is OutputTransform.Rotate90 or OutputTransform.Rotate270
             or OutputTransform.Flipped90 or OutputTransform.Flipped270)
         {

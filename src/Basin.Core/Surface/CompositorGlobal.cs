@@ -12,18 +12,45 @@ public sealed class CompositorGlobal : IDisposable
     private readonly Dictionary<WlSurfaceResource, Surface> _surfaces = [];
 
     public CompositorGlobal(WlServerDisplay display, ClientBufferRegistry buffers)
+        : this(display, buffers, new ClientScales())
     {
+    }
+
+    public CompositorGlobal(WlServerDisplay display, ClientBufferRegistry buffers, ClientScales clientScales)
+    {
+        ArgumentNullException.ThrowIfNull(clientScales);
         Buffers = buffers;
+        ClientScales = clientScales;
+        clientScales.Changed += OnClientScaleChanged;
         _global = display.CreateGlobal(WlCompositor.Interface, Version, OnBind);
     }
 
     public ClientBufferRegistry Buffers { get; }
 
+    public ClientScales ClientScales { get; }
+
+    public ICompositorEventLoop? Loop { get; init; }
+
+    private void OnClientScaleChanged(WlClient client, double scale)
+    {
+        foreach (var surface in _surfaces.Values)
+        {
+            if (surface.Resource.Client == client)
+            {
+                surface.SetClientScale(scale);
+            }
+        }
+    }
+
     public event Action<Surface>? SurfaceCreated;
 
     public IReadOnlyCollection<Surface> Surfaces => _surfaces.Values;
 
-    public void Dispose() => _global.Dispose();
+    public void Dispose()
+    {
+        ClientScales.Changed -= OnClientScaleChanged;
+        _global.Dispose();
+    }
 
     public Surface? ResolveSurface(WlSurfaceResource? resource) =>
         resource is not null && _surfaces.TryGetValue(resource, out var surface) ? surface : null;
@@ -38,7 +65,7 @@ public sealed class CompositorGlobal : IDisposable
         compositor.CreateSurface += (_, e) =>
         {
             var resource = new WlSurfaceResource(client, compositor.Version, e.Id);
-            var surface = new Surface(this, resource);
+            var surface = new Surface(this, resource, ClientScales.ScaleOf(client));
             _surfaces[resource] = surface;
             surface.Destroyed += () => _surfaces.Remove(resource);
             SurfaceCreated?.Invoke(surface);

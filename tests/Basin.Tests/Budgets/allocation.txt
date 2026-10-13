@@ -83,7 +83,7 @@ server-managed exact    attach-and-damage                 0
 server-managed exact    pointer-axis                      0
 channel    exact    remote-frame                   6400
 channel    exact    remote-dmabuf-frame            6400
-server     exact    popup-cycle                  877600
+server     exact    popup-cycle                  891200
 server-managed exact    popup-cycle                  903200
 server     exact    color-representation-set          0
 server-managed exact    color-representation-set          0
@@ -150,7 +150,7 @@ server     exact    ipc-call-methods-detail      3486400
 server     exact    ipc-call-windows-get-missing   4800
 server     exact    ipc-call-seat-pointer-move     7944
 server     exact    ipc-call-windows-set-state    11040
-server     exact    ipc-call-windows-list        253600
+server     exact    ipc-call-windows-list        134000
 server     exact    ipc-call-events                2400
 server     exact    ipc-call-keyboard-keymap       2800
 server     exact    ipc-call-methods               2400
@@ -217,3 +217,4 @@ audio      exact    voice-update-pan                  0
 audio      exact    voice-update-hrtf                 0
 audio      exact    voice-update-reverb               0
 audio      exact    sound-play-and-mix                0
+server     exact    attach-and-damage-server-scale      0

@@ -218,7 +218,7 @@ internal sealed partial class DungeonWm
 
     private Dictionary<string, string?> LaunchEnvironment()
     {
-        var values = ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path);
+        var values = ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path, _xwaylandModule?.ChildEnvironment());
         ClaimPendingLaunch();
         _pendingLaunchTag = ++_nextLaunchTag;
         foreach (var (name, value) in LaunchTag(_pendingLaunchTag))

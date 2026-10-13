@@ -7,6 +7,7 @@ internal sealed class IpcDescribe
     private readonly BasinServices _services;
     private IpcOutput[] _outputScratch = [];
     private IpcWindow[] _windowScratch = [];
+    private ToplevelInfo[] _toplevelScratch = new ToplevelInfo[16];
     private IpcWorkspaceGroup[] _groupScratch = [];
     private IpcWorkspace[] _workspaceScratch = [];
     private string[] _nameScratch = [];
@@ -173,20 +174,49 @@ internal sealed class IpcDescribe
             info.Pid,
             info.ParentId == 0 ? null : info.ParentId,
             output?.Name,
-            workspaceOf is not null && workspaceOf.TryGetValue(info.Id, out var workspace) ? workspace : null);
+            workspaceOf is not null && workspaceOf.TryGetValue(info.Id, out var workspace) ? workspace : null,
+            info.X11Display,
+            info.X11Density switch
+            {
+                X11Density.Native => IpcWindow.NativeDensity,
+                X11Density.Low => IpcWindow.LowDensity,
+                _ => null,
+            });
     }
 
     public IpcWindowList WindowList()
     {
         var workspaceOf = WorkspaceOf();
-        var windows = Windows();
-        var list = Grow(ref _windowScratch, windows.Length);
-        for (var i = 0; i < windows.Length; i++)
+        var count = EnumerateWindows();
+        var list = Grow(ref _windowScratch, count);
+        for (var i = 0; i < count; i++)
         {
-            list[i] = Window(windows[i], workspaceOf);
+            list[i] = Window(_toplevelScratch[i], workspaceOf);
         }
 
-        return new IpcWindowList(new ReadOnlyMemory<IpcWindow>(list, 0, windows.Length));
+        Array.Clear(_toplevelScratch, 0, count);
+        return new IpcWindowList(new ReadOnlyMemory<IpcWindow>(list, 0, count));
+    }
+
+    private int EnumerateWindows()
+    {
+        if (Toplevels is not { } model)
+        {
+            return 0;
+        }
+
+        while (_toplevelScratch.Length <= 1 << 20)
+        {
+            var written = model.Enumerate(_toplevelScratch);
+            if (written >= 0 && written < _toplevelScratch.Length)
+            {
+                return written;
+            }
+
+            Array.Resize(ref _toplevelScratch, _toplevelScratch.Length * 4);
+        }
+
+        return 0;
     }
 
     public IpcStack StackIds() =>

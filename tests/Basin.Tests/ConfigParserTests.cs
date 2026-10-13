@@ -181,6 +181,44 @@ public sealed class ConfigParserTests
     }
 
     [Fact]
+    public void A_binding_table_names_when_it_applies()
+    {
+        var (log, sink) = Logger();
+        try
+        {
+            var table = (TomlTable)Toml.ToModel("""
+                windowed = { action = "switcher", when = "windowed" }
+                fullscreen = { action = "leave", when = "fullscreen" }
+                always = { exec = "foot", when = "always" }
+                odd = { action = "switcher", when = "sometimes" }
+                """);
+            static bool IsAction(string name) => name is "switcher" or "leave";
+
+            var windowed = HotkeyParser.Parse("Super+Tab", table["windowed"], log, IsAction)!;
+            Assert.Equal(("switcher", HotkeyScope.Windowed), (windowed.Action, windowed.When));
+            Assert.True(windowed.AppliesTo(focusedFullscreen: false));
+            Assert.False(windowed.AppliesTo(focusedFullscreen: true));
+
+            var fullscreen = HotkeyParser.Parse("Super+Escape", table["fullscreen"], log, IsAction)!;
+            Assert.Equal(HotkeyScope.Fullscreen, fullscreen.When);
+            Assert.False(fullscreen.AppliesTo(focusedFullscreen: false));
+            Assert.True(fullscreen.AppliesTo(focusedFullscreen: true));
+
+            var always = HotkeyParser.Parse("Super+Return", table["always"], log, IsAction)!;
+            Assert.Equal(["foot"], always.Command!);
+            Assert.True(always.AppliesTo(false) && always.AppliesTo(true));
+
+            Assert.Equal(HotkeyScope.Always, HotkeyParser.Parse("Super+x", "switcher", log, IsAction)!.When);
+            Assert.Equal(HotkeyScope.Always, HotkeyParser.Parse("Super+y", table["odd"], log, IsAction)!.When);
+            Assert.Contains(sink.Lines, line => line.Contains("when = \"sometimes\" is not always, windowed or fullscreen", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Restore();
+        }
+    }
+
+    [Fact]
     public void A_rule_matches_on_app_id_and_title()
     {
         var rule = new WindowRule

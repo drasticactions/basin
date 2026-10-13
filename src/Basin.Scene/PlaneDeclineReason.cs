@@ -37,4 +37,6 @@ public enum PlaneDeclineReason
     Mirrored,
 
     ScaledFraction,
+
+    Filter,
 }

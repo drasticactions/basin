@@ -52,6 +52,22 @@ internal sealed partial class TinyComp
             window.DecorationsChanged += xwindow.UpdateDecorations;
             window.MinimizeRequested += minimized => SetMinimized(xwindow, minimized);
             PlaceXByRule(xwindow);
+            window.FullscreenRequested += fullscreen => xwindow.SetFullscreen(fullscreen);
+            window.MaximizeRequested += maximized =>
+            {
+                if (maximized != xwindow.Maximized)
+                {
+                    xwindow.ToggleMaximize();
+                }
+            };
+            if (window.WantsFullscreen)
+            {
+                xwindow.SetFullscreen(true);
+            }
+            else if (window.WantsMaximized)
+            {
+                xwindow.ToggleMaximize();
+            }
             ApplyCanvas(xwindow);
             PlaceRuleCanvas(xwindow, xwindow.Rule);
             _feedback?.OnMapped();

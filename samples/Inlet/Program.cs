@@ -465,8 +465,8 @@ internal static class Program
         Basin.XWayland.XWaylandServer? xServer = null;
         if (xwaylandModule is not null)
         {
-            xServer = services.Require<Basin.XWayland.XWaylandServer>();
-            xwaylandModule.WindowManagerReady += wm =>
+            xServer = xwaylandModule.Native!.Server;
+            xwaylandModule.Native.WindowManagerReady += wm =>
             {
                 management.Adopt(wm);
                 BasinReport.Line($"XWAYLAND WM {xServer.DisplayName}");

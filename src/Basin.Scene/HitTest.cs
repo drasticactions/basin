@@ -5,7 +5,7 @@ public sealed partial class Scene
     public SceneHit? NodeAt(double x, double y) => NodeAt(Root, x - Root.X, y - Root.Y);
 
     public SceneHit? SurfaceAt(double x, double y) =>
-        NodeAt(Root, x - Root.X, y - Root.Y, surfacesOnly: true);
+        NodeAt(Root, x - Root.X, y - Root.Y, surfacesOnly: true) is { Node: SceneBuffer } hit ? hit : null;
 
     public bool TryMapToSurface(Surface surface, double x, double y, out double surfaceX, out double surfaceY)
     {
@@ -85,7 +85,7 @@ public sealed partial class Scene
 
                     break;
 
-                case SceneRect rect when !surfacesOnly &&
+                case SceneRect rect when (!surfacesOnly || rect.BlocksInput) &&
                     localX >= 0 && localY >= 0 && localX < rect.Width && localY < rect.Height:
                     return new SceneHit(rect, localX, localY);
             }

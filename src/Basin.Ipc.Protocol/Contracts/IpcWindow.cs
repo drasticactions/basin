@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Basin.Ipc;
 
 public readonly record struct IpcWindow(
@@ -10,4 +12,11 @@ public readonly record struct IpcWindow(
     uint Pid,
     ulong? Parent,
     string? Output,
-    ulong? Workspace);
+    ulong? Workspace,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? X11Display = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? X11Density = null)
+{
+    public const string NativeDensity = "native";
+
+    public const string LowDensity = "low";
+}

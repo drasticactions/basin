@@ -26,6 +26,14 @@ internal sealed class ShellWindow
 
     public XWaylandWindow? X11 { get; init; }
 
+    private ProcessIdentity? _process;
+
+    public Basin.Config.WindowFacts Facts => X11 is { } x11
+        ? Basin.Config.WindowFacts.ForX11(x11.Class, x11.Instance, x11.Title, x11.SteamGame, x11.WindowType, x11.Process)
+        : Xdg is { } xdg
+            ? Basin.Config.WindowFacts.ForWayland(xdg.AppId, xdg.Title, xdg.Parent is not null, _process ??= ProcessIdentity.Of(xdg.Surface))
+            : new Basin.Config.WindowFacts { Title = ShellTitle };
+
     public SceneSurface? Scene { get; set; }
 
     public SceneNode? ContentNode { get; set; }

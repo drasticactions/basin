@@ -6,7 +6,7 @@ using Basin.Ipc;
 
 namespace BasinCtl;
 
-internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool detail, int? maxDimension)
+internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool detail, int? maxDimension, string? x11Density)
 {
     private const int Success = 0;
     private const int ErrorReply = 1;
@@ -87,6 +87,12 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
             case "activate" when rest.Length == 1:
                 await client.ActivateAsync(Id(rest[0])).ConfigureAwait(false);
                 return Success;
+            case "density" when rest.Length == 2 && !raw:
+                var density = await client.SetX11DensityAsync(Id(rest[0]), rest[1]).ConfigureAwait(false);
+                Console.WriteLine($"{density.Outcome} {density.Rule}{(density.LaunchId is { } launch ? $" launch_id={launch}" : string.Empty)}{(density.Reason is { } reason ? $": {reason}" : string.Empty)}");
+                return Success;
+            case "density" when rest.Length == 2:
+                return await GenericAsync(client, IpcMethodNames.WindowsSetX11Density, [$"id={rest[0]}", $"density={rest[1]}"]).ConfigureAwait(false);
             case "close" when rest.Length == 1:
                 await client.CloseAsync(Id(rest[0])).ConfigureAwait(false);
                 return Success;
@@ -111,7 +117,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
                 await client.TextAsync(string.Join(' ', rest)).ConfigureAwait(false);
                 return Success;
             case "spawn" when rest.Length > 0:
-                Console.WriteLine(await client.SpawnAsync(rest).ConfigureAwait(false));
+                Console.WriteLine(await client.SpawnAsync(rest, x11Density: x11Density).ConfigureAwait(false));
                 return Success;
             case "clipboard" when rest is [] or ["primary"] && !raw:
                 var clipboard = await client.ReadClipboardAsync(primary: rest.Length == 1).ConfigureAwait(false);
@@ -353,11 +359,12 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
 
     private static void PrintWindows(IReadOnlyList<IpcWindow> windows)
     {
-        Console.WriteLine($"{"ID",-20} {"APP",-24} {"WS",-6} {"OUTPUT",-10} {"STATE",-10} TITLE");
+        Console.WriteLine($"{"ID",-20} {"APP",-24} {"WS",-6} {"OUTPUT",-10} {"STATE",-10} {"X11",-10} TITLE");
         foreach (var window in windows)
         {
             var state = window.State.Activated ? "focused" : window.State.Minimized ? "minimized" : window.State.Maximized ? "maximized" : window.State.Fullscreen ? "fullscreen" : "-";
-            Console.WriteLine($"{window.Id,-20} {Clip(window.AppId, 24),-24} {window.Workspace?.ToString(CultureInfo.InvariantCulture) ?? "-",-6} {window.Output ?? "-",-10} {state,-10} {window.Title}");
+            var x11 = window.X11Display is { } display ? $"{display} {window.X11Density}" : "-";
+            Console.WriteLine($"{window.Id,-20} {Clip(window.AppId, 24),-24} {window.Workspace?.ToString(CultureInfo.InvariantCulture) ?? "-",-6} {window.Output ?? "-",-10} {state,-10} {x11,-10} {window.Title}");
         }
     }
 

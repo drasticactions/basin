@@ -131,7 +131,7 @@ public sealed class TextInputV1Manager : IDisposable
 
         if (textInput.CursorRectangle is { } rect)
         {
-            method.CursorRectangle(rect);
+            method.CursorRectangle(ServerScaling.ToLogicalNearest(rect, _active?.ServerScale ?? 1.0));
         }
 
         method.Commit(textInput.Serial);

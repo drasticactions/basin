@@ -21,6 +21,14 @@ internal sealed class LunaConfig
 
     public bool XWayland { get; private set; } = true;
 
+    public Basin.XWayland.XWaylandScale XWaylandScale { get; private set; }
+
+    public int[] XWaylandDpiBuckets { get; private set; } = [];
+
+    public bool XWaylandLowDensity { get; private set; } = true;
+
+    public Basin.Config.LaunchRules Launch { get; private set; } = Basin.Config.LaunchRules.Empty;
+
     public double ActiveRatio { get; private set; } = 0.659;
 
     public double InactiveRatio { get; private set; } = 0.61;
@@ -123,6 +131,22 @@ internal sealed class LunaConfig
             Renderer = shell.Text("renderer") is { Length: > 0 } renderer ? renderer : null;
             Wallpaper = shell.Text("wallpaper") ?? "";
             XWayland = shell.Flag("xwayland", XWayland);
+            var scale = shell.Raw("xwayland_scale");
+            if (Basin.XWayland.XWaylandScale.TryParse(scale, out var parsed))
+            {
+                XWaylandScale = parsed;
+            }
+            else
+            {
+                log.Warn($"[shell] xwayland_scale {scale} is not \"auto\" or a number of at least 1; auto is used");
+            }
+
+            if (shell.Numbers("xwayland_dpi_buckets") is { } buckets)
+            {
+                XWaylandDpiBuckets = [.. buckets.Where(static b => b > 0).Select(static b => (int)Math.Round(b))];
+            }
+
+            XWaylandLowDensity = shell.Flag("xwayland_low_density", XWaylandLowDensity);
         }
 
         if (reader.Section("cards") is { } cards)
@@ -218,6 +242,7 @@ internal sealed class LunaConfig
 
         Bindings = new LunaBindings(bindings, log);
 
+        Launch = Basin.Config.LaunchRules.Read(reader);
         var rules = new List<LunaRule>();
         foreach (var row in reader.Sections("rule"))
         {
@@ -227,6 +252,12 @@ internal sealed class LunaConfig
             {
                 AppIds = appIds,
                 Titles = titles,
+                SteamGames = WindowRule.SteamGameIds(row.Raw("steam_game"), row.Where("steam_game"), log),
+                Processes = row.Words("process"),
+                X11Classes = row.Words("x11_class"),
+                X11Instances = row.Words("x11_instance"),
+                WindowTypes = row.Words("window_type"),
+                Quirks = WindowQuirks.Read(row),
                 Stack = row.Choice("stack", "auto", "auto", "new", "join") switch
                 {
                     "new" => StackChoice.New,
@@ -248,11 +279,13 @@ internal sealed class LunaConfig
         reader.ReportUnknown();
     }
 
-    public LunaRule? RuleFor(string? appId, string? title)
+    public LunaRule? RuleFor(string? appId, string? title) => RuleFor(new WindowFacts { AppId = appId, Title = title });
+
+    public LunaRule? RuleFor(in WindowFacts facts)
     {
         foreach (var rule in Rules)
         {
-            if (rule.MatchesText(appId, title))
+            if (rule.Matches(facts))
             {
                 return rule;
             }
@@ -271,6 +304,11 @@ internal sealed class LunaConfig
         if (next.XWayland != XWayland)
         {
             yield return "shell.xwayland";
+        }
+
+        if (next.XWaylandLowDensity != XWaylandLowDensity)
+        {
+            yield return "shell.xwayland_low_density";
         }
 
         if (next.ReplaceDaemon != ReplaceDaemon)

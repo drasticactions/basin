@@ -47,6 +47,20 @@ public sealed class SceneSurface
 
     public bool IsDestroyed { get; private set; }
 
+    public IBuffer? Substitute { get; private set; }
+
+    public void SetSubstitute(IBuffer? buffer)
+    {
+        if (IsDestroyed || ReferenceEquals(buffer, Substitute))
+        {
+            return;
+        }
+
+        Substitute = buffer;
+        Reconcile();
+        _content.NotifyContentChanged();
+    }
+
     public event Action? Destroyed;
 
     public void SendFrameDone(uint timestampMs)
@@ -137,23 +151,24 @@ public sealed class SceneSurface
         }
 
         var state = Surface.Current;
-        _content.SetBuffer(state.Buffer);
+        var shown = state.Buffer is null ? null : Substitute ?? state.Buffer;
+        _content.SetBuffer(shown);
         _content.AcquireFenceFd = Surface.AcquireFenceFd;
         _content.SourceBox = state.ViewportSourceWidth >= 0 && state.ViewportSourceHeight >= 0
             ? new FBox(
-                state.ViewportSourceX,
-                state.ViewportSourceY,
-                state.ViewportSourceWidth,
-                state.ViewportSourceHeight)
+                state.ViewportSourceX * state.Scale,
+                state.ViewportSourceY * state.Scale,
+                state.ViewportSourceWidth * state.Scale,
+                state.ViewportSourceHeight * state.Scale)
             : default;
         _content.DestinationWidth = state.Width;
         _content.DestinationHeight = state.Height;
 
-        _content.IsOpaque = state.Buffer is not null &&
-            (state.Buffer.Format.IsOpaque() ||
-             (state.HasOpaque &&
+        _content.IsOpaque = shown is not null &&
+            (shown.Format.IsOpaque() ||
+             (Substitute is null && state.HasOpaque &&
               state.Opaque.Contains(new Pixman.PixmanBox32(0, 0, state.Width, state.Height)) == Pixman.PixmanRegionOverlap.In));
-        _content.SetOpaqueRegion(!_content.IsOpaque && state.Buffer is not null && state.HasOpaque ? state.Opaque : null);
+        _content.SetOpaqueRegion(!_content.IsOpaque && Substitute is null && state.Buffer is not null && state.HasOpaque ? state.Opaque : null);
 
         _damageScratch.Copy(state.SurfaceDamage);
         _damageScratch.UnionWith(state.BufferDamage);
