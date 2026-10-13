@@ -34,6 +34,10 @@
     <EmbeddedResource Include="shaders/blur_onscreen.frag.spv" LogicalName="blur_onscreen.frag.spv" />
     <EmbeddedResource Include="shaders/blur_dwm_down.frag.spv" LogicalName="blur_dwm_down.frag.spv" />
     <EmbeddedResource Include="shaders/blur_dwm.frag.spv" LogicalName="blur_dwm.frag.spv" />
+    <EmbeddedResource Include="shaders/smol_down.frag.spv" LogicalName="smol_down.frag.spv" />
+    <EmbeddedResource Include="shaders/smol_down4.frag.spv" LogicalName="smol_down4.frag.spv" />
+    <EmbeddedResource Include="shaders/smol_gauss.frag.spv" LogicalName="smol_gauss.frag.spv" />
+    <EmbeddedResource Include="shaders/smol_reconstruct.frag.spv" LogicalName="smol_reconstruct.frag.spv" />
   </ItemGroup>
 
 </Project>

@@ -1,3 +1,4 @@
+using System.Numerics;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Render.Vulkan;
@@ -37,7 +38,13 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
 
     private sealed class Pyramid
     {
-        public required Level[] Chain;
+        public required Extent2D Extent;
+        public required Level Top;
+        public Level[]? Chain;
+        public readonly Dictionary<(int X, int Y), Level> Reduced = [];
+        public readonly Dictionary<(int X, int Y), Level> Filtered = [];
+        public Level? Filtered0;
+        public Level? Reconstructed;
     }
 
     private readonly VulkanDevice _device;
@@ -53,6 +60,10 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     private readonly Pipeline _onscreen;
     private readonly Pipeline _dwmDown;
     private readonly Pipeline _dwm;
+    private readonly Pipeline _smolDown;
+    private readonly Pipeline _smolDown4;
+    private readonly Pipeline _smolGauss;
+    private readonly Pipeline _smolReconstruct;
     private bool _anyVistaDwm;
     private readonly Dictionary<(uint Width, uint Height), Pyramid> _pyramids = [];
     private readonly Dictionary<ulong, (DescriptorSet Set, uint Width, uint Height)> _backdropSets = [];
@@ -197,12 +208,12 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         };
         VulkanDevice.Check(vk.CreateDescriptorSetLayout(device.Device, in noiseSetLayoutInfo, null, out _noiseSetLayout), "vkCreateDescriptorSetLayout(blur noise)");
 
-        var poolSize = new DescriptorPoolSize(DescriptorType.CombinedImageSampler, 256);
+        var poolSize = new DescriptorPoolSize(DescriptorType.CombinedImageSampler, 1024);
         var poolInfo = new DescriptorPoolCreateInfo
         {
             SType = StructureType.DescriptorPoolCreateInfo,
             Flags = DescriptorPoolCreateFlags.FreeDescriptorSetBit,
-            MaxSets = 256,
+            MaxSets = 1024,
             PoolSizeCount = 1,
             PPoolSizes = &poolSize,
         };
@@ -227,17 +238,29 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         var onscreen = CreateShaderModule("blur_onscreen.frag.spv");
         var dwmDown = CreateShaderModule("blur_dwm_down.frag.spv");
         var dwm = CreateShaderModule("blur_dwm.frag.spv");
+        var smolDown = CreateShaderModule("smol_down.frag.spv");
+        var smolDown4 = CreateShaderModule("smol_down4.frag.spv");
+        var smolGauss = CreateShaderModule("smol_gauss.frag.spv");
+        var smolReconstruct = CreateShaderModule("smol_reconstruct.frag.spv");
         _down = CreatePipeline(vertex, down);
         _up = CreatePipeline(vertex, up);
         _onscreen = CreatePipeline(vertex, onscreen);
         _dwmDown = CreatePipeline(vertex, dwmDown);
         _dwm = CreatePipeline(vertex, dwm);
+        _smolDown = CreatePipeline(vertex, smolDown);
+        _smolDown4 = CreatePipeline(vertex, smolDown4);
+        _smolGauss = CreatePipeline(vertex, smolGauss);
+        _smolReconstruct = CreatePipeline(vertex, smolReconstruct);
         vk.DestroyShaderModule(device.Device, vertex, null);
         vk.DestroyShaderModule(device.Device, down, null);
         vk.DestroyShaderModule(device.Device, up, null);
         vk.DestroyShaderModule(device.Device, onscreen, null);
         vk.DestroyShaderModule(device.Device, dwmDown, null);
         vk.DestroyShaderModule(device.Device, dwm, null);
+        vk.DestroyShaderModule(device.Device, smolDown, null);
+        vk.DestroyShaderModule(device.Device, smolDown4, null);
+        vk.DestroyShaderModule(device.Device, smolGauss, null);
+        vk.DestroyShaderModule(device.Device, smolReconstruct, null);
         BlurColorMatrix.Build(_options.Saturation, _options.Contrast, _colorMatrix);
         CreateNoiseImage();
         UploadNoise();
@@ -267,41 +290,232 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         if (!_current.Blur)
         {
             BlurPass(
-                commands, _onscreen, pyramid.Chain[0], _plainSet,
+                commands, _onscreen, pyramid.Top, _plainSet,
                 srcScale: 1f, RegionAtLevel(padded, 0), srcLevel: 0, plain: true);
-            MakeSampleable(commands, pyramid.Chain[0].Image);
-            result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds) { Image = pyramid.Chain[0].Image };
+            MakeSampleable(commands, pyramid.Top.Image);
+            result = new VulkanBackdropResult(pyramid.Top.View, pyramid.Top.Extent, context.Bounds) { Image = pyramid.Top.Image };
             return true;
         }
 
+        if (kernel == BlurKernel.SmolGaussian)
+        {
+            RecordSmol(commands, context, pyramid);
+            result = new VulkanBackdropResult(pyramid.Top.View, pyramid.Top.Extent, context.Bounds) { Image = pyramid.Top.Image };
+            return true;
+        }
+
+        var chain = ChainOf(pyramid);
         if (kernel == BlurKernel.VistaDwm)
         {
-            BlurPass(commands, _dwmDown, pyramid.Chain[1], _plainSet, srcScale: 2f, RegionAtLevel(padded, 1), 0, encoded: context.LinearLight);
-            MakeSampleable(commands, pyramid.Chain[1].Image);
-            BlurPass(commands, _dwm, pyramid.Chain[0], pyramid.Chain[1].Set, srcScale: 0.5f, RegionAtLevel(padded, 0), 1, encoded: context.LinearLight);
-            MakeSampleable(commands, pyramid.Chain[0].Image);
-            result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds) { Image = pyramid.Chain[0].Image };
+            BlurPass(commands, _dwmDown, chain[1], _plainSet, srcScale: 2f, RegionAtLevel(padded, 1), 0, encoded: context.LinearLight);
+            MakeSampleable(commands, chain[1].Image);
+            BlurPass(commands, _dwm, chain[0], chain[1].Set, srcScale: 0.5f, RegionAtLevel(padded, 0), 1, encoded: context.LinearLight);
+            MakeSampleable(commands, chain[0].Image);
+            result = new VulkanBackdropResult(chain[0].View, chain[0].Extent, context.Bounds) { Image = chain[0].Image };
             return true;
         }
 
         for (var i = 1; i <= levels; i++)
         {
-            var srcSet = i == 1 ? _plainSet : pyramid.Chain[i - 1].Set;
-            BlurPass(commands, _down, pyramid.Chain[i], srcSet, srcScale: 2f, RegionAtLevel(padded, i), i - 1);
-            MakeSampleable(commands, pyramid.Chain[i].Image);
+            var srcSet = i == 1 ? _plainSet : chain[i - 1].Set;
+            BlurPass(commands, _down, chain[i], srcSet, srcScale: 2f, RegionAtLevel(padded, i), i - 1);
+            MakeSampleable(commands, chain[i].Image);
         }
 
         for (var i = levels - 1; i >= 0; i--)
         {
-            var src = pyramid.Chain[i + 1];
+            var src = chain[i + 1];
             BlurPass(
-                commands, i == 0 ? _onscreen : _up, pyramid.Chain[i], src.Set,
+                commands, i == 0 ? _onscreen : _up, chain[i], src.Set,
                 srcScale: 0.5f, RegionAtLevel(padded, i), i + 1);
-            MakeSampleable(commands, pyramid.Chain[i].Image);
+            MakeSampleable(commands, chain[i].Image);
         }
 
-        result = new VulkanBackdropResult(pyramid.Chain[0].View, pyramid.Chain[0].Extent, context.Bounds) { Image = pyramid.Chain[0].Image };
+        result = new VulkanBackdropResult(chain[0].View, chain[0].Extent, context.Bounds) { Image = chain[0].Image };
         return true;
+    }
+
+    private void RecordSmol(CommandBuffer commands, in VulkanBackdropContext context, Pyramid pyramid)
+    {
+        var target = context.TargetExtent;
+        var bounds = context.Bounds.Intersect(new Box(0, 0, (int)target.Width, (int)target.Height));
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var sigma = Math.Max(0, SmolRadius()) / 3;
+        var x = SmolAxis.For(sigma, bounds.Width);
+        var y = SmolAxis.For(sigma, bounds.Height);
+        var source = _plainSet;
+        var physical = new Vector2(target.Width, target.Height);
+        var origin = new Vector2(bounds.X, bounds.Y);
+        var size = new Vector2(bounds.Width, bounds.Height);
+        var pad = Vector2.Zero;
+        var steps = new SmolSteps(x, y);
+        while (steps.Next(out var levelX, out var levelY, out var fused))
+        {
+            var dst = SmolLevel(pyramid.Reduced, pyramid, levelX, levelY);
+            var width = SmolAxis.SizeAt(bounds.Width, levelX);
+            var height = SmolAxis.SizeAt(bounds.Height, levelY);
+            var dstPad = new Vector2(levelX > 0 ? 1 : 0, levelY > 0 ? 1 : 0);
+            var parameters = new SmolPassParameters
+            {
+                Source = new Vector4(origin, size.X, size.Y),
+                SourcePad = new Vector4(pad, physical.X, physical.Y),
+                Destination = new Vector4(width, height, dstPad.X, dstPad.Y),
+            };
+            SmolPass(
+                commands, fused ? _smolDown4 : _smolDown, dst, source,
+                new Box(0, 0, width + (2 * (int)dstPad.X), height + (2 * (int)dstPad.Y)), parameters);
+            source = dst.Set;
+            physical = new Vector2(dst.Extent.Width, dst.Extent.Height);
+            origin = dstPad;
+            size = new Vector2(width, height);
+            pad = dstPad;
+        }
+
+        if (x.Level == 0 && y.Level == 0)
+        {
+            var clamp = new Vector4(bounds.X + 0.5f, bounds.Y + 0.5f, bounds.Right - 0.5f, bounds.Bottom - 0.5f);
+            if (x.Filters)
+            {
+                var filtered = y.Filters ? SmolFull(ref pyramid.Filtered0, pyramid) : SmolFull(ref pyramid.Reconstructed, pyramid);
+                SmolGauss(commands, filtered, source, physical, horizontal: true, x, bounds, clamp);
+                source = filtered.Set;
+            }
+
+            if (y.Filters)
+            {
+                var filtered = SmolFull(ref pyramid.Reconstructed, pyramid);
+                SmolGauss(commands, filtered, source, physical, horizontal: false, y, bounds, clamp);
+                source = filtered.Set;
+            }
+        }
+        else
+        {
+            var reduced = SmolLevel(pyramid.Reduced, pyramid, x.Level, y.Level);
+            var other = SmolLevel(pyramid.Filtered, pyramid, x.Level, y.Level);
+            var region = new Box(0, 0, x.Working + (2 * x.Pad), y.Working + (2 * y.Pad));
+            var clamp = new Vector4(0.5f, 0.5f, region.Width - 0.5f, region.Height - 0.5f);
+            var current = reduced;
+            if (x.Filters)
+            {
+                SmolGauss(commands, other, current.Set, physical, horizontal: true, x, region, clamp);
+                current = other;
+            }
+
+            if (y.Filters)
+            {
+                var filtered = current == reduced ? other : reduced;
+                SmolGauss(commands, filtered, current.Set, physical, horizontal: false, y, region, clamp);
+                current = filtered;
+            }
+
+            var reconstructed = SmolFull(ref pyramid.Reconstructed, pyramid);
+            SmolPass(
+                commands, _smolReconstruct, reconstructed, current.Set, bounds,
+                new SmolPassParameters
+                {
+                    Source = new Vector4(x.Pad, y.Pad, x.Working, y.Working),
+                    SourcePad = new Vector4(0, 0, physical.X, physical.Y),
+                    Destination = new Vector4(bounds.X, bounds.Y, bounds.Width, bounds.Height),
+                    Clamp = clamp,
+                });
+            source = reconstructed.Set;
+        }
+
+        var post = new Rect2D(new Offset2D(bounds.X, bounds.Y), new Extent2D((uint)bounds.Width, (uint)bounds.Height));
+        BlurPass(commands, _onscreen, pyramid.Top, source, srcScale: 1f, post, srcLevel: 0, plain: true);
+        MakeSampleable(commands, pyramid.Top.Image);
+    }
+
+    private double SmolRadius() =>
+        _current.Radius
+        ?? (_current.Strength is { } strength ? BlurStrength.For(strength).Radius : _options.Radius ?? _strength.Radius);
+
+    private void SmolGauss(
+        CommandBuffer commands, Level dst, DescriptorSet source, Vector2 physical, bool horizontal, in SmolAxis axis,
+        in Box region, Vector4 clamp)
+    {
+        SmolPass(
+            commands, _smolGauss, dst, source, region,
+            new SmolPassParameters
+            {
+                SourcePad = new Vector4(0, 0, physical.X, physical.Y),
+                Axis = new Vector4(horizontal ? 1 : 0, horizontal ? 0 : 1, (float)axis.Sigma, axis.Taps),
+                Clamp = clamp,
+            });
+    }
+
+    private void SmolPass(
+        CommandBuffer commands, Pipeline pipeline, Level dst, DescriptorSet srcSet, Box region,
+        in SmolPassParameters parameters)
+    {
+        var vk = _device.Api;
+        var width = Math.Min(region.Width, (int)dst.Extent.Width - region.X);
+        var height = Math.Min(region.Height, (int)dst.Extent.Height - region.Y);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var area = new Rect2D(new Offset2D(region.X, region.Y), new Extent2D((uint)width, (uint)height));
+        var passBegin = new RenderPassBeginInfo
+        {
+            SType = StructureType.RenderPassBeginInfo,
+            RenderPass = _pass,
+            Framebuffer = dst.Framebuffer,
+            RenderArea = area,
+        };
+        vk.CmdBeginRenderPass(commands, in passBegin, SubpassContents.Inline);
+        vk.CmdBindPipeline(commands, PipelineBindPoint.Graphics, pipeline);
+        vk.CmdBindDescriptorSets(commands, PipelineBindPoint.Graphics, _layout, 0, 1, in srcSet, 0, null);
+        var viewport = new Viewport(0, 0, dst.Extent.Width, dst.Extent.Height, 0, 1);
+        vk.CmdSetViewport(commands, 0, 1, in viewport);
+        vk.CmdSetScissor(commands, 0, 1, in area);
+        var constants = parameters;
+        vk.CmdPushConstants(commands, _layout, ShaderStageFlags.FragmentBit, 0, (uint)sizeof(SmolPassParameters), &constants);
+        vk.CmdDraw(commands, 3, 1, 0, 0);
+        vk.CmdEndRenderPass(commands);
+        MakeSampleable(commands, dst.Image);
+    }
+
+    private Level SmolLevel(Dictionary<(int X, int Y), Level> levels, Pyramid pyramid, int levelX, int levelY)
+    {
+        if (!levels.TryGetValue((levelX, levelY), out var level))
+        {
+            level = CreateLevel(
+                new Extent2D(
+                    (uint)(SmolAxis.SizeAt((int)pyramid.Extent.Width, levelX) + (levelX > 0 ? 2 : 0)),
+                    (uint)(SmolAxis.SizeAt((int)pyramid.Extent.Height, levelY) + (levelY > 0 ? 2 : 0))),
+                clear: true);
+            levels[(levelX, levelY)] = level;
+        }
+
+        return level;
+    }
+
+    private Level SmolFull(ref Level? slot, Pyramid pyramid) => slot ??= CreateLevel(pyramid.Extent, clear: true);
+
+    private Level[] ChainOf(Pyramid pyramid)
+    {
+        if (pyramid.Chain is { } existing)
+        {
+            return existing;
+        }
+
+        var chain = new Level[_depth + 1];
+        chain[0] = pyramid.Top;
+        for (var i = 1; i <= _depth; i++)
+        {
+            chain[i] = CreateLevel(new Extent2D(
+                Math.Max(1, pyramid.Extent.Width >> i),
+                Math.Max(1, pyramid.Extent.Height >> i)));
+        }
+
+        pyramid.Chain = chain;
+        return chain;
     }
 
     private static Rect2D RegionAtLevel(in Box padded, int level)
@@ -414,20 +628,12 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             return existing;
         }
 
-        var chain = new Level[_depth + 1];
-        for (var i = 0; i <= _depth; i++)
-        {
-            chain[i] = CreateLevel(new Extent2D(
-                Math.Max(1, target.Width >> i),
-                Math.Max(1, target.Height >> i)));
-        }
-
-        var pyramid = new Pyramid { Chain = chain };
+        var pyramid = new Pyramid { Extent = target, Top = CreateLevel(target) };
         _pyramids[(target.Width, target.Height)] = pyramid;
         return pyramid;
     }
 
-    private Level CreateLevel(Extent2D extent)
+    private Level CreateLevel(Extent2D extent, bool clear = false)
     {
         var vk = _device.Api;
         var level = new Level { Extent = extent };
@@ -481,7 +687,21 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
 
         level.Set = AllocateSet(level.View);
         var image = level.Image;
-        _device.SubmitImmediate(commands => _device.TransitionToGeneral(commands, image));
+        if (clear)
+        {
+            _device.SubmitImmediate(commands =>
+            {
+                _device.TransitionToGeneral(commands, image);
+                var zero = default(ClearColorValue);
+                var range = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1);
+                _device.Api.CmdClearColorImage(commands, image, ImageLayout.General, in zero, 1, in range);
+            });
+        }
+        else
+        {
+            _device.SubmitImmediate(commands => _device.TransitionToGeneral(commands, image));
+        }
+
         return level;
     }
 
@@ -715,6 +935,10 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         vk.DestroyPipeline(_device.Device, _onscreen, null);
         vk.DestroyPipeline(_device.Device, _dwmDown, null);
         vk.DestroyPipeline(_device.Device, _dwm, null);
+        vk.DestroyPipeline(_device.Device, _smolDown, null);
+        vk.DestroyPipeline(_device.Device, _smolDown4, null);
+        vk.DestroyPipeline(_device.Device, _smolGauss, null);
+        vk.DestroyPipeline(_device.Device, _smolReconstruct, null);
         vk.DestroyRenderPass(_device.Device, _pass, null);
         vk.DestroyPipelineLayout(_device.Device, _layout, null);
         vk.DestroyDescriptorPool(_device.Device, _descriptorPool, null);
@@ -928,15 +1152,44 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
 
     private void DestroyPyramid(Pyramid pyramid)
     {
-        var vk = _device.Api;
-        foreach (var level in pyramid.Chain)
+        DestroyLevel(pyramid.Top);
+        if (pyramid.Chain is { } chain)
         {
-            _device.NotifyImageViewDestroying(level.View);
-            FreeSet(level.Set);
-            vk.DestroyFramebuffer(_device.Device, level.Framebuffer, null);
-            vk.DestroyImageView(_device.Device, level.View, null);
-            vk.DestroyImage(_device.Device, level.Image, null);
-            vk.FreeMemory(_device.Device, level.Memory, null);
+            for (var i = 1; i < chain.Length; i++)
+            {
+                DestroyLevel(chain[i]);
+            }
         }
+
+        foreach (var level in pyramid.Reduced.Values)
+        {
+            DestroyLevel(level);
+        }
+
+        foreach (var level in pyramid.Filtered.Values)
+        {
+            DestroyLevel(level);
+        }
+
+        if (pyramid.Filtered0 is { } filtered0)
+        {
+            DestroyLevel(filtered0);
+        }
+
+        if (pyramid.Reconstructed is { } reconstructed)
+        {
+            DestroyLevel(reconstructed);
+        }
+    }
+
+    private void DestroyLevel(Level level)
+    {
+        var vk = _device.Api;
+        _device.NotifyImageViewDestroying(level.View);
+        FreeSet(level.Set);
+        vk.DestroyFramebuffer(_device.Device, level.Framebuffer, null);
+        vk.DestroyImageView(_device.Device, level.View, null);
+        vk.DestroyImage(_device.Device, level.Image, null);
+        vk.FreeMemory(_device.Device, level.Memory, null);
     }
 }

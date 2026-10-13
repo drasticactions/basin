@@ -139,7 +139,12 @@ internal sealed partial class TinyComp :
             return;
         }
 
-        var kernel = config.BlurKernel == "vista" ? Basin.Effects.BlurKernel.VistaDwm : Basin.Effects.BlurKernel.DualKawase;
+        var kernel = config.BlurKernel switch
+        {
+            "vista" => Basin.Effects.BlurKernel.VistaDwm,
+            "smol" => Basin.Effects.BlurKernel.SmolGaussian,
+            _ => Basin.Effects.BlurKernel.DualKawase,
+        };
         if (blur.Options.Kernel != kernel)
         {
             blur.Options = blur.Options with { Kernel = kernel };

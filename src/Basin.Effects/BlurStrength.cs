@@ -16,6 +16,33 @@ public readonly record struct BlurStrength(int Iterations, double Offset, int Ex
 
     public static BlurStrength For(int strength) => Table[Math.Clamp(strength, 1, Steps) - 1];
 
+    public double Radius
+    {
+        get
+        {
+            var h = 0.5 * Offset;
+            var down = (0.5 * 0.25) + (0.5 * ((h * h) + Phase(0.5 + h)));
+            var up = (4.0 / 3.0 * h * h)
+                + (0.5 * ((2.0 / 12.0 * Phases(0)) + (4.0 / 12.0 * (Phases(h) + Phases(-h))) + (1.0 / 12.0 * (Phases(2 * h) + Phases(-2 * h)))));
+            var variance = 0.0;
+            for (var i = 0; i < Iterations; i++)
+            {
+                var scale = (double)(1 << i);
+                variance += (down * scale * scale) + (up * 4 * scale * scale);
+            }
+
+            return 3 * Math.Sqrt(variance);
+        }
+    }
+
+    private static double Phases(double offset) => Phase(0.25 + offset) + Phase(0.75 + offset);
+
+    private static double Phase(double position)
+    {
+        var fraction = position - Math.Floor(position);
+        return fraction * (1 - fraction);
+    }
+
     private static BlurStrength[] Build()
     {
         var table = new List<BlurStrength>(Steps);

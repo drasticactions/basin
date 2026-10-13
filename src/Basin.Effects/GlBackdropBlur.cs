@@ -1,3 +1,4 @@
+using System.Numerics;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Render.Gl;
@@ -204,6 +205,11 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         public int Opacity;
         public int Intensity;
         public int Frost;
+        public int PcSource;
+        public int PcSourcePad;
+        public int PcDestination;
+        public int PcAxis;
+        public int PcClamp;
     }
 
     private sealed class Level
@@ -216,7 +222,14 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
 
     private sealed class Pyramid
     {
-        public required Level[] Chain;
+        public required int Width;
+        public required int Height;
+        public required Level Top;
+        public Level[]? Chain;
+        public readonly Dictionary<(int X, int Y), Level> Reduced = [];
+        public readonly Dictionary<(int X, int Y), Level> Filtered = [];
+        public Level? Filtered0;
+        public Level? Reconstructed;
     }
 
     private readonly GlDevice _device;
@@ -225,6 +238,10 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     private readonly Program _onscreen;
     private readonly Program _dwmDown;
     private readonly Program _dwmBlur;
+    private readonly Program _smolDown;
+    private readonly Program _smolDown4;
+    private readonly Program _smolGauss;
+    private readonly Program _smolReconstruct;
     private readonly Dictionary<(int Width, int Height), Pyramid> _pyramids = [];
     private readonly Dictionary<uint, (int Width, int Height)> _backdrops = [];
     private readonly float[] _colorMatrix = new float[BlurColorMatrix.Length];
@@ -308,6 +325,10 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         _onscreen = Compile(OnscreenSource);
         _dwmDown = Compile(DwmDownSource);
         _dwmBlur = Compile(DwmBlurSource);
+        _smolDown = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Down);
+        _smolDown4 = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Down4);
+        _smolGauss = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Gauss);
+        _smolReconstruct = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Reconstruct);
         BlurColorMatrix.Build(_options.Saturation, _options.Contrast, _colorMatrix);
         EnsureNoise();
         _device.TextureDeleting += ForgetTexture;
@@ -343,53 +364,243 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         if (!_current.Blur)
         {
             BlurPass(
-                _onscreen, pyramid.Chain[0], context.Backdrop, context.TargetWidth, context.TargetHeight,
+                _onscreen, pyramid.Top, context.Backdrop, context.TargetWidth, context.TargetHeight,
                 srcScale: 1f, RegionAtLevel(padded, 0), context.Bounds, plain: true);
             gl.Disable(EnableCap.ScissorTest);
-            var flat = pyramid.Chain[0];
+            var flat = pyramid.Top;
             result = new GlBackdropResult(flat.Texture, flat.Width, flat.Height, context.Bounds);
             return true;
         }
 
+        if (kernel == BlurKernel.SmolGaussian)
+        {
+            RecordSmol(context, pyramid);
+            gl.Disable(EnableCap.ScissorTest);
+            var smol = pyramid.Top;
+            result = new GlBackdropResult(smol.Texture, smol.Width, smol.Height, context.Bounds);
+            return true;
+        }
+
+        var chain = ChainOf(pyramid);
         if (kernel == BlurKernel.VistaDwm)
         {
             BlurPass(
-                _dwmDown, pyramid.Chain[1], context.Backdrop, context.TargetWidth, context.TargetHeight, srcScale: 2f,
+                _dwmDown, chain[1], context.Backdrop, context.TargetWidth, context.TargetHeight, srcScale: 2f,
                 RegionAtLevel(padded, 1), context.Bounds);
-            var half = pyramid.Chain[1];
+            var half = chain[1];
             BlurPass(
-                _dwmBlur, pyramid.Chain[0], half.Texture, half.Width, half.Height, srcScale: 0.5f,
+                _dwmBlur, chain[0], half.Texture, half.Width, half.Height, srcScale: 0.5f,
                 RegionAtLevel(padded, 0), RegionAtLevel(context.Bounds, 1));
             gl.Disable(EnableCap.ScissorTest);
-            var blurred = pyramid.Chain[0];
+            var blurred = chain[0];
             result = new GlBackdropResult(blurred.Texture, blurred.Width, blurred.Height, context.Bounds);
             return true;
         }
 
         for (var i = 1; i <= levels; i++)
         {
-            var srcTexture = i == 1 ? context.Backdrop : pyramid.Chain[i - 1].Texture;
-            var srcWidth = i == 1 ? context.TargetWidth : pyramid.Chain[i - 1].Width;
-            var srcHeight = i == 1 ? context.TargetHeight : pyramid.Chain[i - 1].Height;
+            var srcTexture = i == 1 ? context.Backdrop : chain[i - 1].Texture;
+            var srcWidth = i == 1 ? context.TargetWidth : chain[i - 1].Width;
+            var srcHeight = i == 1 ? context.TargetHeight : chain[i - 1].Height;
             var srcValid = i == 1 ? context.Bounds : RegionAtLevel(context.Bounds, i - 1);
             BlurPass(
-                _down, pyramid.Chain[i], srcTexture, srcWidth, srcHeight, srcScale: 2f,
+                _down, chain[i], srcTexture, srcWidth, srcHeight, srcScale: 2f,
                 RegionAtLevel(padded, i), srcValid);
         }
 
         for (var i = levels - 1; i >= 0; i--)
         {
-            var src = pyramid.Chain[i + 1];
+            var src = chain[i + 1];
             BlurPass(
                 i == 0 ? _onscreen : _up,
-                pyramid.Chain[i], src.Texture, src.Width, src.Height, srcScale: 0.5f,
+                chain[i], src.Texture, src.Width, src.Height, srcScale: 0.5f,
                 RegionAtLevel(padded, i), RegionAtLevel(context.Bounds, i + 1));
         }
 
         gl.Disable(EnableCap.ScissorTest);
-        var top = pyramid.Chain[0];
+        var top = chain[0];
         result = new GlBackdropResult(top.Texture, top.Width, top.Height, context.Bounds);
         return true;
+    }
+
+    private void RecordSmol(in GlBackdropContext context, Pyramid pyramid)
+    {
+        var bounds = context.Bounds.Intersect(new Box(0, 0, context.TargetWidth, context.TargetHeight));
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var sigma = Math.Max(0, SmolRadius()) / 3;
+        var x = SmolAxis.For(sigma, bounds.Width);
+        var y = SmolAxis.For(sigma, bounds.Height);
+        var source = context.Backdrop;
+        var physical = new Vector2(context.TargetWidth, context.TargetHeight);
+        var origin = new Vector2(bounds.X, bounds.Y);
+        var size = new Vector2(bounds.Width, bounds.Height);
+        var pad = Vector2.Zero;
+        var steps = new SmolSteps(x, y);
+        while (steps.Next(out var levelX, out var levelY, out var fused))
+        {
+            var dst = SmolLevel(pyramid.Reduced, pyramid, levelX, levelY);
+            var width = SmolAxis.SizeAt(bounds.Width, levelX);
+            var height = SmolAxis.SizeAt(bounds.Height, levelY);
+            var dstPad = new Vector2(levelX > 0 ? 1 : 0, levelY > 0 ? 1 : 0);
+            var parameters = new SmolPassParameters
+            {
+                Source = new Vector4(origin, size.X, size.Y),
+                SourcePad = new Vector4(pad, physical.X, physical.Y),
+                Destination = new Vector4(width, height, dstPad.X, dstPad.Y),
+            };
+            SmolPass(
+                fused ? _smolDown4 : _smolDown, dst, source,
+                new Box(0, 0, width + (2 * (int)dstPad.X), height + (2 * (int)dstPad.Y)), parameters);
+            source = dst.Texture;
+            physical = new Vector2(dst.Width, dst.Height);
+            origin = dstPad;
+            size = new Vector2(width, height);
+            pad = dstPad;
+        }
+
+        if (x.Level == 0 && y.Level == 0)
+        {
+            var clamp = new Vector4(bounds.X + 0.5f, bounds.Y + 0.5f, bounds.Right - 0.5f, bounds.Bottom - 0.5f);
+            if (x.Filters)
+            {
+                var target = y.Filters ? SmolFull(ref pyramid.Filtered0, pyramid) : SmolFull(ref pyramid.Reconstructed, pyramid);
+                SmolGauss(target, source, physical, horizontal: true, x, bounds, clamp);
+                source = target.Texture;
+            }
+
+            if (y.Filters)
+            {
+                var target = SmolFull(ref pyramid.Reconstructed, pyramid);
+                SmolGauss(target, source, physical, horizontal: false, y, bounds, clamp);
+                source = target.Texture;
+            }
+        }
+        else
+        {
+            var reduced = SmolLevel(pyramid.Reduced, pyramid, x.Level, y.Level);
+            var other = SmolLevel(pyramid.Filtered, pyramid, x.Level, y.Level);
+            var region = new Box(0, 0, x.Working + (2 * x.Pad), y.Working + (2 * y.Pad));
+            var clamp = new Vector4(0.5f, 0.5f, region.Width - 0.5f, region.Height - 0.5f);
+            var current = reduced;
+            if (x.Filters)
+            {
+                SmolGauss(other, current.Texture, physical, horizontal: true, x, region, clamp);
+                current = other;
+            }
+
+            if (y.Filters)
+            {
+                var target = current == reduced ? other : reduced;
+                SmolGauss(target, current.Texture, physical, horizontal: false, y, region, clamp);
+                current = target;
+            }
+
+            var reconstructed = SmolFull(ref pyramid.Reconstructed, pyramid);
+            SmolPass(
+                _smolReconstruct, reconstructed, current.Texture, bounds,
+                new SmolPassParameters
+                {
+                    Source = new Vector4(x.Pad, y.Pad, x.Working, y.Working),
+                    SourcePad = new Vector4(0, 0, physical.X, physical.Y),
+                    Destination = new Vector4(bounds.X, bounds.Y, bounds.Width, bounds.Height),
+                    Clamp = clamp,
+                });
+            source = reconstructed.Texture;
+        }
+
+        BlurPass(
+            _onscreen, pyramid.Top, source, context.TargetWidth, context.TargetHeight,
+            srcScale: 1f, bounds, bounds, plain: true);
+    }
+
+    private double SmolRadius() =>
+        _current.Radius
+        ?? (_current.Strength is { } strength ? BlurStrength.For(strength).Radius : _options.Radius ?? _strength.Radius);
+
+    private void SmolGauss(Level dst, uint source, Vector2 physical, bool horizontal, in SmolAxis axis, in Box region, Vector4 clamp)
+    {
+        SmolPass(
+            _smolGauss, dst, source, region,
+            new SmolPassParameters
+            {
+                SourcePad = new Vector4(0, 0, physical.X, physical.Y),
+                Axis = new Vector4(horizontal ? 1 : 0, horizontal ? 0 : 1, (float)axis.Sigma, axis.Taps),
+                Clamp = clamp,
+            });
+    }
+
+    private void SmolPass(Program program, Level dst, uint srcTexture, Box region, in SmolPassParameters parameters)
+    {
+        var gl = _device.Gl;
+        var width = Math.Min(region.Width, dst.Width - region.X);
+        var height = Math.Min(region.Height, dst.Height - region.Y);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        gl.BindFramebuffer(FramebufferTarget.Framebuffer, dst.Fbo);
+        gl.Viewport(0, 0, (uint)dst.Width, (uint)dst.Height);
+        gl.Scissor(region.X, region.Y, (uint)width, (uint)height);
+        gl.UseProgram(program.Handle);
+        gl.ActiveTexture(TextureUnit.Texture0);
+        gl.BindTexture(TextureTarget.Texture2D, srcTexture);
+        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        Uniform(program.PcSource, parameters.Source);
+        Uniform(program.PcSourcePad, parameters.SourcePad);
+        Uniform(program.PcDestination, parameters.Destination);
+        Uniform(program.PcAxis, parameters.Axis);
+        Uniform(program.PcClamp, parameters.Clamp);
+        gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+    }
+
+    private void Uniform(int location, Vector4 value)
+    {
+        if (location >= 0)
+        {
+            _device.Gl.Uniform4(location, value.X, value.Y, value.Z, value.W);
+        }
+    }
+
+    private Level SmolLevel(Dictionary<(int X, int Y), Level> levels, Pyramid pyramid, int levelX, int levelY)
+    {
+        if (!levels.TryGetValue((levelX, levelY), out var level))
+        {
+            level = CreateLevel(
+                SmolAxis.SizeAt(pyramid.Width, levelX) + (levelX > 0 ? 2 : 0),
+                SmolAxis.SizeAt(pyramid.Height, levelY) + (levelY > 0 ? 2 : 0),
+                clear: true);
+            levels[(levelX, levelY)] = level;
+        }
+
+        return level;
+    }
+
+    private Level SmolFull(ref Level? slot, Pyramid pyramid) => slot ??= CreateLevel(pyramid.Width, pyramid.Height, clear: true);
+
+    private Level[] ChainOf(Pyramid pyramid)
+    {
+        if (pyramid.Chain is { } existing)
+        {
+            return existing;
+        }
+
+        var chain = new Level[_depth + 1];
+        chain[0] = pyramid.Top;
+        for (var i = 1; i <= _depth; i++)
+        {
+            chain[i] = CreateLevel(Math.Max(1, pyramid.Width >> i), Math.Max(1, pyramid.Height >> i));
+        }
+
+        pyramid.Chain = chain;
+        return chain;
     }
 
     private static Box RegionAtLevel(in Box padded, int level)
@@ -535,18 +746,12 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             return existing;
         }
 
-        var chain = new Level[_depth + 1];
-        for (var i = 0; i <= _depth; i++)
-        {
-            chain[i] = CreateLevel(Math.Max(1, width >> i), Math.Max(1, height >> i));
-        }
-
-        var pyramid = new Pyramid { Chain = chain };
+        var pyramid = new Pyramid { Width = width, Height = height, Top = CreateLevel(width, height) };
         _pyramids[(width, height)] = pyramid;
         return pyramid;
     }
 
-    private Level CreateLevel(int width, int height)
+    private Level CreateLevel(int width, int height, bool clear = false)
     {
         var gl = _device.Gl;
         var level = new Level { Width = width, Height = height };
@@ -559,6 +764,18 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         if (gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != GLEnum.FramebufferComplete)
         {
             throw new InvalidOperationException("blur level framebuffer incomplete");
+        }
+
+        if (clear)
+        {
+            var scissor = gl.IsEnabled(EnableCap.ScissorTest);
+            gl.Disable(EnableCap.ScissorTest);
+            Span<float> zero = stackalloc float[4];
+            gl.ClearBuffer(BufferKind.Color, 0, zero);
+            if (scissor)
+            {
+                gl.Enable(EnableCap.ScissorTest);
+            }
         }
 
         return level;
@@ -609,6 +826,11 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             Opacity = gl.GetUniformLocation(handle, "u_opacity"),
             Intensity = gl.GetUniformLocation(handle, "u_intensity"),
             Frost = gl.GetUniformLocation(handle, "u_frost"),
+            PcSource = gl.GetUniformLocation(handle, "pc.source"),
+            PcSourcePad = gl.GetUniformLocation(handle, "pc.sourcePad"),
+            PcDestination = gl.GetUniformLocation(handle, "pc.destination"),
+            PcAxis = gl.GetUniformLocation(handle, "pc.axis"),
+            PcClamp = gl.GetUniformLocation(handle, "pc.clampBox"),
         };
     }
 
@@ -630,6 +852,10 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.DeleteProgram(_onscreen.Handle);
         gl.DeleteProgram(_dwmDown.Handle);
         gl.DeleteProgram(_dwmBlur.Handle);
+        gl.DeleteProgram(_smolDown.Handle);
+        gl.DeleteProgram(_smolDown4.Handle);
+        gl.DeleteProgram(_smolGauss.Handle);
+        gl.DeleteProgram(_smolReconstruct.Handle);
         if (_noiseTexture != 0)
         {
             gl.DeleteTexture(_noiseTexture);
@@ -716,12 +942,41 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
 
     private void DestroyPyramid(Pyramid pyramid)
     {
-        var gl = _device.Gl;
-        foreach (var level in pyramid.Chain)
+        DestroyLevel(pyramid.Top);
+        if (pyramid.Chain is { } chain)
         {
-            _device.NotifyTextureDeleting(level.Texture);
-            gl.DeleteFramebuffer(level.Fbo);
-            gl.DeleteTexture(level.Texture);
+            for (var i = 1; i < chain.Length; i++)
+            {
+                DestroyLevel(chain[i]);
+            }
         }
+
+        foreach (var level in pyramid.Reduced.Values)
+        {
+            DestroyLevel(level);
+        }
+
+        foreach (var level in pyramid.Filtered.Values)
+        {
+            DestroyLevel(level);
+        }
+
+        if (pyramid.Filtered0 is { } filtered0)
+        {
+            DestroyLevel(filtered0);
+        }
+
+        if (pyramid.Reconstructed is { } reconstructed)
+        {
+            DestroyLevel(reconstructed);
+        }
+    }
+
+    private void DestroyLevel(Level level)
+    {
+        var gl = _device.Gl;
+        _device.NotifyTextureDeleting(level.Texture);
+        gl.DeleteFramebuffer(level.Fbo);
+        gl.DeleteTexture(level.Texture);
     }
 }

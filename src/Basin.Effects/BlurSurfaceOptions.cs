@@ -12,6 +12,8 @@ public readonly record struct BlurSurfaceOptions
 
     public int? Strength { get; init; }
 
+    public double? Radius { get; init; }
+
     public BlurKernel? Kernel { get; init; }
 
     public BlurCorners Corners { get; init; } = default;

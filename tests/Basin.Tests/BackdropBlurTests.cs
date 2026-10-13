@@ -386,14 +386,16 @@ public sealed class BackdropBlurTests
         return result;
     }
 
-    internal static byte[] RenderEdge(string row, bool vertical, Action<IBackdropBlur>? configure, object? key = null, int low = 0, int high = 255)
+    internal static byte[] RenderEdge(
+        string row, bool vertical, Action<IBackdropBlur>? configure, object? key = null, int low = 0, int high = 255,
+        int veilWidth = 32, int veilHeight = 32)
     {
         var stack = RendererCatalog.Create(row, CompositorTestHost.RenderNodePath);
         var scene = new Scene.Scene();
         var edge = new MemoryBuffer(Size, Size, DrmFormat.Xrgb8888);
-        var veil = new MemoryBuffer(32, 32, DrmFormat.Argb8888);
+        var veil = new MemoryBuffer(veilWidth, veilHeight, DrmFormat.Argb8888);
         var target = new MemoryBuffer(Size, Size, DrmFormat.Xrgb8888);
-        using var region = new Pixman.PixmanRegion32(0, 0, 32, 32);
+        using var region = new Pixman.PixmanRegion32(0, 0, (uint)veilWidth, (uint)veilHeight);
         var blur = BackdropBlurs.For(stack.Renderer);
         try
         {

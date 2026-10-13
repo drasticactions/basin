@@ -72,7 +72,7 @@ notifications = false        # slide in notifications
 dim_inactive = false         # dim unfocused windows
 drop_shadow  = false         # window shadows
 highlight    = false         # ghost unselected switcher cards
-blur_kernel  = "kawase"      # client background blur: kawase | vista (Aero glass, no strength)
+blur_kernel  = "kawase"      # client background blur: kawase | vista (Aero glass, no strength) | smol (Gaussian)
 
 # Screen post stages, a name or an array.
 post = "none"                # none | invert | magnify | zoom | color-blindness | show-paint

@@ -196,8 +196,8 @@ internal static class SettingsCatalog
             Flag(Effects, "effects", "highlight", "Switcher highlight", "Window appearance"),
             new(Effects, "effects", "blur_kernel", "Client blur", SettingKind.Choice)
             {
-                Default = "\"kawase\"", Choices = ["kawase", "vista"], Group = "Window appearance",
-                Note = "vista is Aero glass's blur, which has no strength of its own.",
+                Default = "\"kawase\"", Choices = ["kawase", "vista", "smol"], Group = "Window appearance",
+                Note = "vista is Aero glass's blur, which has no strength of its own. smol is a Gaussian as wide as the strength.",
             },
             new(Effects, "effects", "post", "Post stages", SettingKind.Names)
             {

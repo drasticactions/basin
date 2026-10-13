@@ -285,6 +285,14 @@ public sealed class InitProcess
         {
             log.Error($"failed to stop the init process group: {(Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError()))}");
         }
+
+        _exitWatch?.Remove();
+        _exitWatch = null;
+        if (_pidfd >= 0)
+        {
+            close(_pidfd);
+            _pidfd = -1;
+        }
     }
 
     private static List<string> EnvironmentBlock(string socket, string? display, IReadOnlyDictionary<string, string>? environment)

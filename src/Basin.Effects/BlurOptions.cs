@@ -8,6 +8,8 @@ public readonly record struct BlurOptions
 
     public int Strength { get; init; } = 15;
 
+    public double? Radius { get; init; }
+
     public int NoiseStrength { get; init; } = 5;
 
     public double Saturation { get; init; } = 1.5;

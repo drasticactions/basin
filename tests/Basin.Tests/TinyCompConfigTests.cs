@@ -484,11 +484,15 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
-    public void Blur_kernel_reads_kawase_or_vista()
+    public void Blur_kernel_reads_kawase_vista_or_smol()
     {
         var vista = TinyComp.Config.Load(Write("[effects]\nblur_kernel = \"vista\"\n"), BasinLog.For("t"), out var fatal);
         Assert.Null(fatal);
         Assert.Equal("vista", vista.BlurKernel);
+
+        var smol = TinyComp.Config.Load(Write("[effects]\nblur_kernel = \"smol\"\n"), BasinLog.For("t"), out fatal);
+        Assert.Null(fatal);
+        Assert.Equal("smol", smol.BlurKernel);
 
         var unset = TinyComp.Config.Load(Write("[effects]\nwobbly = false\n"), BasinLog.For("t"), out _);
         Assert.Equal("kawase", unset.BlurKernel);

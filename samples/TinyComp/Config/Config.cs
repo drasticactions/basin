@@ -596,7 +596,7 @@ internal sealed class Config
             Highlight = effects.Flag("highlight", Highlight);
             DimInactive = effects.Flag("dim_inactive", DimInactive);
             DropShadow = effects.Flag("drop_shadow", DropShadow);
-            BlurKernel = effects.Choice("blur_kernel", "kawase", "kawase", "vista");
+            BlurKernel = effects.Choice("blur_kernel", "kawase", "kawase", "vista", "smol");
             SlideBack = effects.Flag("slide_back", SlideBack);
             Stretch = effects.Flag("stretch", Stretch);
             Notifications = effects.Flag("notifications", Notifications);
