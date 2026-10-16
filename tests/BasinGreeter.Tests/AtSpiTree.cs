@@ -46,9 +46,6 @@ internal static class AtSpiTree
         return writer.CreateMessage();
     }
 
-
-
-
     public static async Task<List<(string Role, string Name)>> Where(DBusConnection a11y, Func<List<(string Role, string Name)>, bool> done)
     {
         var nodes = new List<(string Role, string Name)>();

@@ -339,6 +339,30 @@ public sealed class NestedShellTests
     }
 
     [Fact]
+    public void A_maximized_window_that_drops_server_decorations_takes_the_title_bars_room()
+    {
+        using var harness = new NestedShellHarness();
+        var shell = harness.Shell;
+        var toplevel = harness.MapToplevel(width: 250, height: 200, title: "switches", serverDecorated: true);
+        var window = Assert.Single(shell.Windows);
+        Assert.True(window.Decorated);
+
+        shell.SetMaximized(window, true);
+        harness.PumpUntil(() => window.Maximized && toplevel.ConfiguredWidth == shell.WorkArea.Width, "the window never maximized");
+        Assert.True(toplevel.ConfiguredHeight < shell.WorkArea.Height);
+
+        toplevel.Decoration!.Dispose();
+        toplevel.Decoration = null;
+        toplevel.Surface.Commit();
+        harness.PumpUntil(() => !window.Decorated, "the frame outlived the decoration object");
+        harness.PumpUntil(() => toplevel.ConfiguredHeight == shell.WorkArea.Height, "the content never took the title bar's room");
+        Assert.Equal(shell.WorkArea.Width, toplevel.ConfiguredWidth);
+
+        toplevel.Destroy();
+        harness.PumpUntil(() => shell.Windows.Count == 0, "the managed window outlived its toplevel");
+    }
+
+    [Fact]
     public void The_panel_snapshot_follows_the_frame_once_a_maximized_or_restored_buffer_arrives()
     {
         using var harness = new NestedShellHarness();

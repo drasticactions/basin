@@ -161,6 +161,7 @@ public sealed class ManagedWindow
         }
 
         SetDecorated(Content.ServerDecorated);
+        _shell.FitStateGeometry(this);
         _shell.Publish();
     }
 

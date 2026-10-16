@@ -666,6 +666,7 @@ public sealed partial class NestedShell : IDisposable
         if (WindowOf(surface) is { IsMapped: true } window && window.Content.Surface == surface)
         {
             window.SetDecorated(serverSide);
+            FitStateGeometry(window);
             Publish();
         }
     }
@@ -884,6 +885,23 @@ public sealed partial class NestedShell : IDisposable
 
         window.RefreshFrame();
         Publish();
+    }
+
+    internal void FitStateGeometry(ManagedWindow window)
+    {
+        if (window.Fullscreen)
+        {
+            return;
+        }
+
+        if (window.Maximized)
+        {
+            ApplyMaximizedGeometry(window);
+        }
+        else if (window.Tile != TileEdge.None)
+        {
+            ApplyTileGeometry(window, window.Tile);
+        }
     }
 
     private void ApplyMaximizedGeometry(ManagedWindow window)
