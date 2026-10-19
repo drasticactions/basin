@@ -38,6 +38,14 @@
     <EmbeddedResource Include="shaders/smol_down4.frag.spv" LogicalName="smol_down4.frag.spv" />
     <EmbeddedResource Include="shaders/smol_gauss.frag.spv" LogicalName="smol_gauss.frag.spv" />
     <EmbeddedResource Include="shaders/smol_reconstruct.frag.spv" LogicalName="smol_reconstruct.frag.spv" />
+    <EmbeddedResource Include="shaders/glass.frag.spv" LogicalName="glass.frag.spv" />
+    <EmbeddedResource Include="shaders/glass_fused_down.frag.spv" LogicalName="glass_fused_down.frag.spv" />
+    <EmbeddedResource Include="shaders/glass_fused.frag.spv" LogicalName="glass_fused.frag.spv" />
+    <EmbeddedResource Include="shaders/glass_copy.frag.spv" LogicalName="glass_copy.frag.spv" />
+    <EmbeddedResource Include="shaders/blur_mask.frag.spv" LogicalName="blur_mask.frag.spv" />
+    <EmbeddedResource Include="shaders/glass_mesh.vert.spv" LogicalName="glass_mesh.vert.spv" />
+    <EmbeddedResource Include="shaders/glass_mesh.frag.spv" LogicalName="glass_mesh.frag.spv" />
+    <EmbeddedResource Include="shaders/glass_mesh_fused.frag.spv" LogicalName="glass_mesh_fused.frag.spv" />
   </ItemGroup>
 
 </Project>

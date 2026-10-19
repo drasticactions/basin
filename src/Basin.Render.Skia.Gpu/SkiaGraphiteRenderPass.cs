@@ -73,9 +73,31 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
         SkiaDraw.Shader(_entry!.Canvas, _paint, shader, options);
     }
 
-    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null)
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null) =>
+        AddBackdropEffect(effect, bounds, bounds, clip, key);
+
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, in Box extent, PixmanRegion32? clip, object? key) =>
+        RecordBackdropEffect(effect, bounds, extent, clip, key, default);
+
+    public void AddDeformedBackdropEffect(
+        IBackdropEffect effect, in Box bounds, in Box extent, PixmanRegion32? clip, object? key, ReadOnlySpan<MeshVertex> mesh)
+    {
+        if (_backdropMesh.Length < mesh.Length)
+        {
+            _backdropMesh = new MeshVertex[Math.Max(mesh.Length, _backdropMesh.Length * 2)];
+        }
+
+        mesh.CopyTo(_backdropMesh);
+        RecordBackdropEffect(effect, bounds, extent, clip, key, _backdropMesh.AsMemory(0, mesh.Length));
+    }
+
+    private MeshVertex[] _backdropMesh = [];
+
+    private void RecordBackdropEffect(
+        IBackdropEffect effect, in Box requested, in Box extent, PixmanRegion32? clip, object? key, ReadOnlyMemory<MeshVertex> mesh)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
+        var bounds = requested.Intersect(new Box(0, 0, _target.Width, _target.Height));
         if (effect is not IVulkanBackdropEffect vulkanEffect)
         {
             throw new ArgumentException("effect does not belong to this renderer");
@@ -96,11 +118,11 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
             GraphiteNative.RecordingDelete(recording);
         }
 
-        var extent = new Extent2D((uint)_target.Width, (uint)_target.Height);
-        var image = _renderer.BackdropImage(extent);
+        var targetExtent = new Extent2D((uint)_target.Width, (uint)_target.Height);
+        var image = _renderer.BackdropImage(targetExtent);
         if (!_renderer.BackdropCopy.Run(
                 vulkanEffect, entry.Image, entry.BackdropView(), ImageLayout.ColorAttachmentOptimal,
-                extent, bounds, key, out var source)
+                targetExtent, bounds, extent, mesh, key, out var source)
             || image is null)
         {
             return;
@@ -206,6 +228,7 @@ internal sealed class SkiaGraphiteRenderPass : IRenderPass
         if (entry.IsCpuReadback)
         {
             entry.ReadInto(target);
+            entry.SeenWrites = target.WriteCount;
         }
 
         return recording != 0 && inserted == SKGraphiteInsertStatus.Success;

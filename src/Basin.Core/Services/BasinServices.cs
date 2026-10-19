@@ -36,6 +36,8 @@ public sealed class BasinServices : IDisposable
 
     public ICompositorEventLoop Loop { get; }
 
+    private readonly List<Action> _seeds = [];
+
     public bool IsFrozen { get; private set; }
 
     public IReadOnlyDictionary<string, IProtocolModule> Modules => _modules;
@@ -68,6 +70,21 @@ public sealed class BasinServices : IDisposable
         ArgumentNullException.ThrowIfNull(implementation);
         ThrowIfFrozen();
         _table.TryAdd(typeof(T), implementation);
+        return this;
+    }
+
+    public BasinServices SeedDefault<T>(Func<T> create)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ThrowIfFrozen();
+        _seeds.Add(() =>
+        {
+            if (!_table.ContainsKey(typeof(T)))
+            {
+                _table[typeof(T)] = create();
+            }
+        });
         return this;
     }
 
@@ -125,6 +142,12 @@ public sealed class BasinServices : IDisposable
     {
         ThrowIfFrozen();
 
+        foreach (var seed in _seeds)
+        {
+            seed();
+        }
+
+        _seeds.Clear();
         foreach (var module in _queued)
         {
             module.SeedDefaults(this);

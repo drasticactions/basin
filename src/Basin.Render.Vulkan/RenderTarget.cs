@@ -19,6 +19,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
     public ImageView View;
     public Framebuffer Framebuffer;
     public bool IsCpuReadback;
+    public ulong SeenWrites;
     public Silk.NET.Vulkan.Buffer Readback;
     public DeviceMemory ReadbackMemory;
     public void* ReadbackMapped;

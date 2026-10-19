@@ -374,6 +374,16 @@ internal sealed class EffectsPolicy : IDisposable
 
     private bool _lastMoving;
 
+    public string Describe(SceneTree tree)
+    {
+        var wobbly = _wobblies.TryGetValue(tree, out var entry)
+            ? (entry.Wobbly.IsWobbling ? "wobbling" : "still")
+            : "none";
+        return $"wobbly={wobbly}";
+    }
+
+    public string Describe() => $"running={Running} moving={_lastMoving}";
+
     private bool Running =>
         _slide.IsAnimating || _switcher.IsActive || _runner.IsRunning
         || _minimizing.Count > 0 || _stretches.Count > 0

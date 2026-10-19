@@ -21,9 +21,15 @@ public static class IpcEventNames
     public const string DeviceRemoved = "devices/removed";
     public const string DeviceChanged = "devices/changed";
     public const string FrameStats = "frame/stats";
+    public const string DiagDamage = "diag/damage";
+    public const string DiagFrame = "diag/frame";
+    public const string DiagInput = "diag/input";
+    public const string DiagPlane = "diag/plane";
+    public const string DiagCommit = "diag/commit";
 
     public static IReadOnlyList<string> ReservedNamespaces { get; } =
     [
         "window", "stack", "output", "workspace", "lock", "idle", "keyboard", "shortcut", "clipboard", "process", "approval", "devices", "frame",
+        "diag",
     ];
 }

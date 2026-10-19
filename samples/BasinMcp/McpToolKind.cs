@@ -4,4 +4,5 @@ internal enum McpToolKind
 {
     Plain,
     Capture,
+    DiagImage,
 }

@@ -302,6 +302,8 @@ public sealed class PresentationTimeGlobal : IDisposable
         return feedback;
     }
 
+    internal static bool HasPendingFeedback(SurfaceState state) => state.GetExtension<PendingFeedback>() is not null;
+
     private sealed class PendingFeedback : IDisposable
     {
         private readonly SurfaceFeedback _owner;

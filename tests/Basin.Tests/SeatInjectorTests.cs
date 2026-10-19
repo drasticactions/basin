@@ -137,4 +137,64 @@ public sealed class SeatInjectorTests
         Assert.Equal(7u, movedBy!.Value.Time);
         cursor.Dispose();
     }
+
+    [Fact]
+    public void A_binder_injects_through_its_own_events_and_becomes_the_seat_default()
+    {
+        using var host = new CompositorTestHost(200, 100);
+        var pointer = new LayoutPointer(host.Layout);
+        var binder = new SeatBinder(host.Seat, host.Layout, pointer, new CursorController(host.Layout));
+        var second = new SeatBinder(host.Seat, host.Layout, new LayoutPointer(host.Layout), new CursorController(host.Layout));
+        Assert.Same(binder.Injector, host.Seat.SyntheticInput);
+        Assert.NotSame(second.Injector, host.Seat.SyntheticInput);
+
+        var events = new List<string>();
+        binder.Motion += (_, dx, dy, _, _) => events.Add(FormattableString.Invariant($"motion {dx} {dy}"));
+        binder.Button += (_, button, pressed) => events.Add($"button {button} {pressed}");
+        binder.Key += (_, key, pressed) => events.Add($"key {key} {pressed}");
+        binder.Axis += (_, axis) => events.Add(FormattableString.Invariant($"axis {axis.Value}"));
+        var input = binder.Injector;
+        Assert.True(input.PointerMotionAbsolute(1, 30, 40));
+        Assert.True(input.PointerButton(2, Basin.InputCodes.BtnLeft, true));
+        Assert.True(input.Key(3, 30, true));
+        Assert.True(input.PointerAxis(4, 0, 15, 0));
+        Assert.Equal(["motion 30 40", $"button {Basin.InputCodes.BtnLeft} True", "key 30 True", "axis 15"], events);
+        Assert.Equal((30.0, 40.0), (pointer.X, pointer.Y));
+    }
+
+    [Fact]
+    public void The_seat_default_forwards_and_refuses_while_the_session_is_locked()
+    {
+        using var host = new CompositorTestHost(200, 100);
+        var services = new BasinServices(host.Loop);
+        var lockState = new SwitchLock();
+        services.Use<Basin.Capabilities.ILockState>(lockState);
+        var proxy = new SeatSyntheticInput(host.Seat, services);
+        Assert.False(proxy.IsAvailable);
+        Assert.False(proxy.Key(1, 30, true));
+
+        var binder = new SeatBinder(host.Seat, host.Layout, new LayoutPointer(host.Layout), new CursorController(host.Layout));
+        var keys = 0;
+        binder.Key += (_, _, _) => keys++;
+        Assert.True(proxy.Key(1, 30, true));
+        lockState.IsLocked = true;
+        Assert.False(proxy.Key(2, 30, false));
+        Assert.False(proxy.PointerButton(3, Basin.InputCodes.BtnLeft, true));
+        proxy.AllowWhileLocked = true;
+        Assert.True(proxy.Key(4, 30, false));
+        Assert.Equal(2, keys);
+    }
+
+    internal sealed class SwitchLock : Basin.Capabilities.ILockState
+    {
+        public bool IsLocked { get; set; }
+
+        public void AddObserver(Basin.Capabilities.ILockStateObserver observer)
+        {
+        }
+
+        public void RemoveObserver(Basin.Capabilities.ILockStateObserver observer)
+        {
+        }
+    }
 }

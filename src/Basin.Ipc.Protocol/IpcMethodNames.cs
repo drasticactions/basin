@@ -87,9 +87,26 @@ public static class IpcMethodNames
     public const string DevicesSet = "devices/set";
     public const string DevicesReset = "devices/reset";
 
+    public const string DiagTree = "diag/tree";
+    public const string DiagFrames = "diag/frames";
+    public const string DiagDamageTrace = "diag/damage-trace";
+    public const string DiagFrameTrace = "diag/frame-trace";
+    public const string DiagRecord = "diag/record";
+    public const string DiagRecordWindow = "diag/record-window";
+    public const string DiagParts = "diag/parts";
+    public const string DiagClick = "diag/click";
+    public const string DiagDrag = "diag/drag";
+    public const string DiagPlanes = "diag/planes";
+    public const string DiagInputTrace = "diag/input-trace";
+    public const string DiagPlanesState = "diag/planes-state";
+    public const string DiagPlaneTrace = "diag/plane-trace";
+    public const string DiagCommitTrace = "diag/commit-trace";
+    public const string DiagCompare = "diag/compare";
+    public const string DiagTargets = "diag/targets";
+
     public static IReadOnlyList<string> ReservedNamespaces { get; } =
     [
         "ipc", "session", "outputs", "windows", "workspaces", "idle", "lock", "keyboard", "input", "seat",
-        "capture", "process", "clipboard", "approval", "devices",
+        "capture", "process", "clipboard", "approval", "devices", "diag",
     ];
 }

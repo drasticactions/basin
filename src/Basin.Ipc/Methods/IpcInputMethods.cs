@@ -15,13 +15,13 @@ internal static class IpcInputMethods
         {
             RegisterGroup(
                 server, new IpcSyntheticTarget(synthetic), lookup, describe.Find<IKeymapOverride>(), commit, points,
-                new Guard(exclusion, pointer), seat: false);
+                new IpcInputGuard(exclusion, pointer), seat: false);
         }
 
         if (describe.Find<IInputSink>() is { } sink)
         {
             RegisterGroup(
-                server, new IpcSinkTarget(sink, describe.Layout), lookup, null, commit, points, new Guard(exclusion, pointer), seat: true);
+                server, new IpcSinkTarget(sink, describe.Layout), lookup, null, commit, points, new IpcInputGuard(exclusion, pointer), seat: true);
         }
     }
 
@@ -62,7 +62,7 @@ internal static class IpcInputMethods
         IKeymapOverride? keymapOverride,
         ITextInputCommit? commit,
         IpcWindowPoint points,
-        Guard guard,
+        IpcInputGuard guard,
         bool seat)
     {
         var methods = server.Methods;
@@ -170,7 +170,23 @@ internal static class IpcInputMethods
                 return;
             }
 
-            Result(reply, target.Touch(Now, kind, request.Id ?? 0, request.X ?? 0, request.Y ?? 0));
+            var time = Now;
+            if (parameters.TryGetInt("time_ms", out var given))
+            {
+                if (given is < 0 or > uint.MaxValue)
+                {
+                    reply.Error(IpcErrorCodes.InvalidParams, "'time_ms' is a millisecond timestamp from 0 to 2^32-1");
+                    return;
+                }
+
+                time = (uint)given;
+            }
+            else if (parameters.Failed)
+            {
+                return;
+            }
+
+            Result(reply, target.Touch(time, kind, request.Id ?? 0, request.X ?? 0, request.Y ?? 0));
         });
 
         var typer = lookup is null ? null : new TextTyper(lookup, keymapOverride);
@@ -275,41 +291,6 @@ internal static class IpcInputMethods
             codes.CopyTo(codeScratch);
             reply.Write(new IpcChordResult(new ReadOnlyMemory<uint>(codeScratch, 0, codes.Count)), IpcJsonContext.Default.IpcChordResult);
         });
-    }
-
-    private sealed class Guard(ICaptureExclusion? exclusion, Func<(double X, double Y)?>? pointer)
-    {
-        public bool AllowsPoint(double x, double y, IpcReply reply)
-        {
-            if (exclusion is null || !exclusion.IsExcludedAt(x, y))
-            {
-                return true;
-            }
-
-            reply.Error(IpcErrorCodes.Refused, "the point is on a surface that is excluded from capture and from synthetic input");
-            return false;
-        }
-
-        public bool AllowsPointer(bool move, double x, double y, IpcReply reply)
-        {
-            if (move)
-            {
-                return AllowsPoint(x, y, reply);
-            }
-
-            return exclusion is null || pointer?.Invoke() is not { } at || AllowsPoint(at.X, at.Y, reply);
-        }
-
-        public bool AllowsKeyboard(IpcReply reply)
-        {
-            if (exclusion is null || !exclusion.IsKeyboardFocusExcluded)
-            {
-                return true;
-            }
-
-            reply.Error(IpcErrorCodes.Refused, "keyboard focus is on a surface that is excluded from capture and from synthetic input");
-            return false;
-        }
     }
 
     private const string TextInputVia = "text-input";

@@ -40,7 +40,9 @@ internal sealed class McpToolTable
                 continue;
             }
 
-            var kind = McpCaptureTool.IsCapture(method.Name) ? McpToolKind.Capture : McpToolKind.Plain;
+            var kind = McpCaptureTool.IsCapture(method.Name) ? McpToolKind.Capture
+                : McpDiagImageTool.IsDiagImage(method.Name) ? McpToolKind.DiagImage
+                : McpToolKind.Plain;
             var schema = SchemaFor(method, kind, options);
             var tool = new Tool
             {
@@ -68,7 +70,7 @@ internal sealed class McpToolTable
         OpenWorldHint = method.Name == IpcMethodNames.ProcessSpawn,
     };
 
-    private static string? DigitStringBranch(JsonObject property)
+    private static JsonObject? StringIdBranch(JsonObject property)
     {
         if (property["anyOf"] is not JsonArray branches || !branches.Any(branch => branch?["type"]?.GetValue<string>() == "integer"))
         {
@@ -77,9 +79,9 @@ internal sealed class McpToolTable
 
         foreach (var branch in branches)
         {
-            if (branch?["type"]?.GetValue<string>() == "string" && branch["pattern"]?.GetValue<string>() is { } pattern)
+            if (branch is JsonObject stringBranch && stringBranch["type"]?.GetValue<string>() == "string")
             {
-                return pattern;
+                return stringBranch;
             }
         }
 
@@ -112,14 +114,19 @@ internal sealed class McpToolTable
 
             foreach (var (name, value) in properties.ToList())
             {
-                if (value is JsonObject property && DigitStringBranch(property) is { } branch)
+                if (value is JsonObject property && StringIdBranch(property) is { } branch)
                 {
-                    properties[name] = new JsonObject
+                    var flattened = new JsonObject { ["type"] = "string" };
+                    foreach (var key in new[] { "pattern", "minLength" })
                     {
-                        ["type"] = "string",
-                        ["pattern"] = branch,
-                        ["description"] = property["description"]?.GetValue<string>(),
-                    };
+                        if (branch[key] is { } constraint)
+                        {
+                            flattened[key] = constraint.DeepClone();
+                        }
+                    }
+
+                    flattened["description"] = property["description"]?.GetValue<string>();
+                    properties[name] = flattened;
                 }
             }
 

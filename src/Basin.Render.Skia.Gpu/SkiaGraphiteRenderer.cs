@@ -16,6 +16,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     private const string AdditiveSksl = "half4 main(half4 color) { return half4(color.rgb, 0); }";
     private readonly SKGraphiteVkGetProcedureAddressDelegate _getProc;
     private readonly Dictionary<IBuffer, SkiaGraphiteTarget> _targets = [];
+    private readonly HashSet<IBuffer> _watched = [];
     private readonly SkiaGraphiteRenderPass _pass;
     private readonly SKPaint _paint;
     private readonly SkiaVulkanSync _sync;
@@ -193,10 +194,14 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
         }
 
         _sync.WaitFence(options.WaitFenceFd);
-        if (!_targets.TryGetValue(target, out var entry))
+        if (_targets.TryGetValue(target, out var entry) && entry.IsCpuReadback && entry.SeenWrites != target.WriteCount)
         {
-            entry = ImportTarget(target);
+            _targets.Remove(target);
+            entry.Dispose();
+            entry = null;
         }
+
+        entry ??= ImportTarget(target);
 
         _pass.Begin(target, entry, options.SignalFenceFd, options.ColorDescription);
         return _pass;
@@ -205,14 +210,20 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     private SkiaGraphiteTarget ImportTarget(IBuffer target)
     {
         var entry = SkiaGraphiteTarget.Create(_device, _recorder, target);
+        entry.SeenWrites = target.WriteCount;
         _targets[target] = entry;
-        target.Destroyed += () =>
+        if (_watched.Add(target))
         {
-            if (_targets.Remove(target, out var dead))
+            target.Destroyed += () =>
             {
-                dead.Dispose();
-            }
-        };
+                _watched.Remove(target);
+                if (_targets.Remove(target, out var dead))
+                {
+                    dead.Dispose();
+                }
+            };
+        }
+
         return entry;
     }
 

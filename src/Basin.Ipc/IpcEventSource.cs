@@ -24,6 +24,12 @@ public abstract class IpcEventSource
         }
     }
 
+    protected internal virtual string? Validate(string name, System.Text.Json.JsonElement? options) => null;
+
+    protected internal virtual void SubscribersChanged(string name)
+    {
+    }
+
     protected abstract void Attach();
 
     protected abstract void Detach();

@@ -10,7 +10,7 @@ using Basin.Diagnostics;
 
 namespace Dinghy;
 
-internal sealed class Manager
+internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
 {
     private const int CascadePadding = 10;
 
@@ -781,6 +781,50 @@ internal sealed class Manager
         mw.Snap = null;
 
         StartDrag(mw, seat, WmDrag.Quadrant(mw.ContentRect, seat.PointerPosition));
+    }
+
+    public void CollectWindows(List<Basin.Capabilities.WindowParts> into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        foreach (var mw in _windows)
+        {
+            if (mw.Hidden || mw.Chrome != WindowChrome.ServerSide)
+            {
+                continue;
+            }
+
+            var frame = FrameRect(mw);
+            var bar = new Rect(mw.X, mw.Y - Theme.TitlebarHeight + mw.SwallowTop, mw.Width, Theme.TitlebarHeight);
+            var (close, hide, max) = TitlebarSurface.ButtonRects(mw.Width, !mw.IsDialog, !mw.IsDialog && !mw.IsFixedSize);
+            var parts = new List<(Basin.Capabilities.FramePart Part, Basin.Box Box)>();
+            Basin.Box At(Rect local) => new(bar.X + local.X, bar.Y + local.Y, local.Width, local.Height);
+            parts.Add((Basin.Capabilities.FramePart.Close, At(close)));
+            var titleRight = mw.Width;
+            if (hide is { } minimize)
+            {
+                parts.Add((Basin.Capabilities.FramePart.Minimize, At(minimize)));
+                titleRight = Math.Min(titleRight, minimize.X);
+            }
+
+            if (max is { } maximize)
+            {
+                parts.Add((Basin.Capabilities.FramePart.Maximize, At(maximize)));
+                titleRight = Math.Min(titleRight, maximize.X);
+            }
+
+            parts.Add((Basin.Capabilities.FramePart.Title, At(new Rect(close.X + close.Width, 0, Math.Max(titleRight - close.X - close.Width, 0), bar.Height))));
+            var bw = Theme.BorderWidth;
+            if (bw > 0)
+            {
+                parts.Add((Basin.Capabilities.FramePart.Left, new Basin.Box(frame.X, frame.Y, bw, frame.Height)));
+                parts.Add((Basin.Capabilities.FramePart.Right, new Basin.Box(frame.X + frame.Width - bw, frame.Y, bw, frame.Height)));
+                parts.Add((Basin.Capabilities.FramePart.Top, new Basin.Box(frame.X, frame.Y, frame.Width, bw)));
+                parts.Add((Basin.Capabilities.FramePart.Bottom, new Basin.Box(frame.X, frame.Y + frame.Height - bw, frame.Width, bw)));
+            }
+
+            into.Add(new Basin.Capabilities.WindowParts(
+                mw.Window.AppId ?? string.Empty, mw.Window.Title ?? string.Empty, new Basin.Box(frame.X, frame.Y, frame.Width, frame.Height), parts));
+        }
     }
 
     private static Rect FrameRect(ManagedWindow mw)

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.WindowManager.Ipc</PackageId>
+    <RootNamespace>Basin.WindowManager.Ipc</RootNamespace>
+    <Description>A control socket for a river window manager, with the diag/parts of the decorations it draws.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.WindowManager/Basin.WindowManager.csproj" />
+    <ProjectReference Include="../Basin.Ipc/Basin.Ipc.csproj" />
+  </ItemGroup>
+
+</Project>

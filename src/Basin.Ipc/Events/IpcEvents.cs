@@ -100,5 +100,27 @@ internal static class IpcEvents
         {
             bus.DeclareLibrary(IpcEventNames.ShortcutActivated, new IpcShortcutEvents(server, shortcuts));
         }
+
+        if (describe.Diagnostics is { } diagnostics)
+        {
+            bus.DeclareLibrary(IpcEventNames.DiagDamage, new IpcDiagDamageEvents(server, diagnostics));
+            bus.DeclareLibrary(IpcEventNames.DiagFrame, new IpcDiagFrameEvents(server, describe, diagnostics));
+            bus.AddLineFormatter(IpcEventNames.DiagDamage, IpcDiagLines.DamageEvent);
+            bus.AddLineFormatter(IpcEventNames.DiagFrame, IpcDiagLines.FrameEvent);
+            bus.DeclareLibrary(IpcEventNames.DiagPlane, new IpcDiagPlaneEvents(server, diagnostics));
+            bus.AddLineFormatter(IpcEventNames.DiagPlane, IpcDiagLines.PlaneEvent);
+        }
+
+        if (describe.Find<ISurfaceDiagnostics>() is { } surfaces)
+        {
+            bus.DeclareLibrary(IpcEventNames.DiagCommit, new IpcDiagCommitEvents(server, describe, surfaces));
+            bus.AddLineFormatter(IpcEventNames.DiagCommit, IpcDiagLines.CommitEvent);
+        }
+
+        if (describe.Find<IInputDiagnostics>() is { } input)
+        {
+            bus.DeclareLibrary(IpcEventNames.DiagInput, new IpcDiagInputEvents(server, describe, input));
+            bus.AddLineFormatter(IpcEventNames.DiagInput, IpcDiagLines.InputEvent);
+        }
     }
 }

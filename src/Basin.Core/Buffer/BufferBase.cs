@@ -97,8 +97,15 @@ public abstract class BufferBase : IBuffer
         }
 
         _accessDepth++;
+        if ((access & BufferDataAccess.Write) != 0)
+        {
+            WriteCount++;
+        }
+
         return true;
     }
+
+    public ulong WriteCount { get; private set; }
 
     public void EndDataAccess()
     {

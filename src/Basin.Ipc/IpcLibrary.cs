@@ -17,6 +17,8 @@ internal static class IpcLibrary
         IpcInputMethods.Register(server, describe);
         IpcDeviceMethods.Register(server, describe);
         IpcApprovalMethods.Register(server);
+        IpcDiagnosticsMethods.Register(server, describe);
+        IpcWindowSelector.WrapNamed(server.Methods, describe);
         IpcEvents.Declare(server, describe);
     }
 }

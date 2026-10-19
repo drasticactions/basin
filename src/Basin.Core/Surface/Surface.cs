@@ -203,6 +203,11 @@ public sealed class Surface
             return;
         }
 
+        if (Current.FrameResources.Count + Current.FrameCallbacks.Count > 0)
+        {
+            _owner.NotifyFramesDone(this, timestampMs, Current.FrameResources.Count + Current.FrameCallbacks.Count);
+        }
+
         if (Current.FrameResources.Count > 0)
         {
             NotePacingUse();

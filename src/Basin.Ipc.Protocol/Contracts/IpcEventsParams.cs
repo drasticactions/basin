@@ -16,11 +16,15 @@ public sealed class IpcEventsParams : IIpcParams, IIpcReusable
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Events { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, System.Text.Json.JsonElement>? Options { get; set; }
+
     [JsonIgnore]
     public string? Missing => null;
 
     void IIpcReusable.Reset()
     {
         Events = null;
+        Options = null;
     }
 }

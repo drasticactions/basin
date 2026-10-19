@@ -25,6 +25,14 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         DrainQueues();
         _display.FlushClients();
         _display.EventLoop.Dispatch(timeoutMs);
+        var now = Environment.TickCount64;
+        foreach (var timer in _timers)
+        {
+            if (timer.Deadline > 0 && timer.Deadline <= now)
+            {
+                timer.Deadline = 0;
+            }
+        }
     }
 
     public IEventSource AddFd(int fd, FdReadiness events, Action<int, FdReadiness> handler)
@@ -39,12 +47,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
     {
         _thread.Assert();
         ArgumentNullException.ThrowIfNull(handler);
-        var timer = new TimerSource(_timers);
-        timer.Inner = _display.EventLoop.AddTimer(() =>
-        {
-            timer.Deadline = 0;
-            handler();
-        });
+        var timer = new TimerSource(_timers, _display.EventLoop.AddTimer(handler));
         _timers.Add(timer);
         BasinCounters.Track();
         return timer;
@@ -165,9 +168,9 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         public void UpdateFd(FdReadiness events) => _inner.UpdateFd((WlFdEvents)events);
     }
 
-    private sealed class TimerSource(List<TimerSource> owner) : IEventSource
+    private sealed class TimerSource(List<TimerSource> owner, WlEventSource inner) : IEventSource
     {
-        public WlEventSource Inner = null!;
+        public readonly WlEventSource Inner = inner;
         public long Deadline;
 
         public bool IsRemoved => Inner.IsRemoved;

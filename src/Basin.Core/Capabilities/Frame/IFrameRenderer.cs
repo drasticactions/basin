@@ -20,6 +20,12 @@ public interface IFrameRenderer
 
     bool BackdropRegion(in FrameState state, double scale, Pixman.PixmanRegion32 into) => false;
 
+    bool BackdropShape(in FrameState state, double scale, out FrameBackdropShape shape)
+    {
+        shape = default;
+        return false;
+    }
+
     string? CursorFor(FramePart part) => null;
 
     Box PartBounds(FramePart part) => default;

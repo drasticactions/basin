@@ -53,6 +53,8 @@ public sealed class SeatModule : IProtocolModule
         }
 
         services.UseDefault<IIdleSource>(IdleSource);
+        services.UseDefault<ISyntheticInput>(new SeatSyntheticInput(Seat, services));
+        services.UseDefault<IInputDiagnostics>(new SeatDiagnostics(Seat, services));
         return Seat;
     }
 }

@@ -38,6 +38,8 @@ public sealed class SeatBinder
         _layout = layout;
         _pointer = pointer;
         _cursor = cursor;
+        Injector = new SeatInjector(this, seat, layout, pointer) { ThroughBinder = true };
+        seat.SyntheticInput ??= Injector;
         seat.Pointer.CursorRequested += request =>
         {
             _clientCursorHidden = request.Surface is null;
@@ -452,6 +454,14 @@ public sealed class SeatBinder
         Scaled(axis, ScrollFactorFor is { } factorFor ? factorFor(device) : 1.0);
 
     internal void DeliverAxis(uint timeMs, PointerAxis axis, double factor) => Axis?.Invoke(timeMs, Scaled(axis, factor));
+
+    public SeatInjector Injector { get; }
+
+    internal void RaiseMotion(uint timeMs, double dx, double dy) => Motion?.Invoke(timeMs, dx, dy, null, null);
+
+    internal void RaiseButton(uint timeMs, uint button, bool pressed) => Button?.Invoke(timeMs, button, pressed);
+
+    internal void RaiseKey(uint timeMs, uint key, bool pressed) => Key?.Invoke(timeMs, key, pressed);
 
     private static PointerAxis Scaled(PointerAxis axis, double factor) =>
         factor == 1.0

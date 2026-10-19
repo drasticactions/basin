@@ -578,6 +578,8 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         }
 
         _host.NotifyComposited();
+        _host.NotifyPresented(
+            View.SceneOutput, _host.CapturePresented ? Capture(target.Width, target.Height, context) : null, target.Width, target.Height);
 
         if (_captureRequested)
         {

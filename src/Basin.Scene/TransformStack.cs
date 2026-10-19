@@ -38,7 +38,7 @@ public sealed class TransformStack
         }
 
         var parent = index == _entries.Count ? _root : _entries[index].Node;
-        var node = new SceneTransform(parent);
+        var node = new SceneTransform(parent) { DebugName = name };
         for (var i = parent.Children.Count - 1; i >= 0; i--)
         {
             var child = parent.Children[i];

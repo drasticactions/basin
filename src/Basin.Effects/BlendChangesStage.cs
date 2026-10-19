@@ -65,6 +65,12 @@ public sealed class BlendChangesStage : IPostStage, IDisposable
         return false;
     }
 
+    public bool TryMapBox(in Box scene, in PostContext context, out Box output)
+    {
+        output = scene;
+        return true;
+    }
+
     public void Render(IRenderPass pass, ITexture frame, in PostContext context)
     {
         ArgumentNullException.ThrowIfNull(pass);

@@ -32,6 +32,7 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
     private readonly GRContext _context;
     private readonly GRVkGetProcedureAddressDelegate _getProc;
     private readonly Dictionary<IBuffer, SkiaVulkanTarget> _targets = [];
+    private readonly HashSet<IBuffer> _watched = [];
     private readonly SkiaVulkanRenderPass _pass;
     private readonly SKPaint _paint;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -229,10 +230,14 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
         }
 
         _sync.WaitFence(options.WaitFenceFd);
-        if (!_targets.TryGetValue(target, out var entry))
+        if (_targets.TryGetValue(target, out var entry) && entry.IsCpuReadback && entry.SeenWrites != target.WriteCount)
         {
-            entry = ImportTarget(target);
+            _targets.Remove(target);
+            entry.Dispose();
+            entry = null;
         }
+
+        entry ??= ImportTarget(target);
 
         _pass.Begin(target, entry, options.SignalFenceFd, options.ColorDescription);
         return _pass;
@@ -241,14 +246,20 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
     private SkiaVulkanTarget ImportTarget(IBuffer target)
     {
         var entry = SkiaVulkanTarget.Create(_device, _context, target);
+        entry.SeenWrites = target.WriteCount;
         _targets[target] = entry;
-        target.Destroyed += () =>
+        if (_watched.Add(target))
         {
-            if (_targets.Remove(target, out var dead))
+            target.Destroyed += () =>
             {
-                dead.Dispose();
-            }
-        };
+                _watched.Remove(target);
+                if (_targets.Remove(target, out var dead))
+                {
+                    dead.Dispose();
+                }
+            };
+        }
+
         return entry;
     }
 

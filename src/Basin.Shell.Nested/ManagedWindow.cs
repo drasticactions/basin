@@ -320,6 +320,8 @@ public sealed class ManagedWindow
             return;
         }
 
+        _frame.Window = Content.Surface;
+
         var geometry = Geometry;
         var visible = geometry.Width > 0 && geometry.Height > 0 && !Fullscreen;
         _frame.Visible = visible;

@@ -55,6 +55,19 @@ public sealed class IpcMethodRegistry
 
     public bool Contains(string name) => _methods.ContainsKey(name);
 
+    internal bool HasLine(string method)
+    {
+        foreach (var form in _lines)
+        {
+            if (form.Method == method)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public bool TryGetInfo(string name, out IpcMethodInfo info)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -152,7 +165,15 @@ public sealed class IpcMethodRegistry
         }
     }
 
-    public bool IsOmitted(string name)
+    internal void Wrap(string name, Func<IpcHandler, IpcHandler> wrap)
+    {
+        if (_methods.TryGetValue(name, out var handler))
+        {
+            _methods[name] = wrap(handler);
+        }
+    }
+
+        public bool IsOmitted(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
         if (_omitted.Contains(name))

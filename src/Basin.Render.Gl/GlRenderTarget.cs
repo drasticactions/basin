@@ -23,6 +23,8 @@ public sealed unsafe class GlRenderTarget
 
     public bool IsCpuReadback { get; private set; }
 
+    public ulong SeenWrites { get; set; }
+
     public uint ColorTexture => IsCpuReadback ? 0u : _textureOrRenderbuffer;
 
     public uint TargetTexture => _textureOrRenderbuffer;

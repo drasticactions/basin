@@ -83,6 +83,68 @@ public sealed class TinyCompConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_glass_table_reads_every_key_and_refuses_a_short_color()
+    {
+        var log = BasinLog.For("t");
+        var defaults = TinyComp.Config.Parse(string.Empty, log, out _);
+        Assert.Null(defaults.GlassTint);
+        var plain = TinyComp.TinyComp.GlassOptionsOf(defaults);
+        Assert.Equal(0x60202832u, plain.Tint);
+        Assert.Equal(GlassPass.Composite, plain.Pass);
+
+        var config = TinyComp.Config.Parse(
+            """
+            [frame]
+            style = "glass"
+
+            [frame.glass]
+            palette = "light"
+            corner_radius = 16
+            blur = 20
+            blur_kernel = "smol"
+            pass = "fused"
+            tint = "#80102030"
+            refraction = 1.2
+            bevel = 14
+            light_angle = 90
+            client_glass = false
+            shadow = false
+            glow = "#fff"
+            animation_ms = 300
+            inset = 10
+            content_radius = 4
+            content_border = "#80ff0000"
+            content_border_width = 2
+            """,
+            log,
+            out _);
+        Assert.Equal(TinyComp.FrameStyle.Glass, config.FrameStyle);
+        Assert.Equal("light", config.GlassPalette);
+        Assert.Equal(16, config.GlassCornerRadius);
+        Assert.Equal(0x80102030u, config.GlassTint);
+        Assert.Equal(14, config.GlassBevel);
+        Assert.False(config.GlassClientGlass);
+        Assert.False(config.GlassShadow);
+        Assert.Equal(0x5070a0ffu, config.GlassGlow);
+        Assert.Contains(_lines, line => line.Contains("[frame.glass] glow \"#fff\" is not #aarrggbb", StringComparison.Ordinal));
+
+        var options = TinyComp.TinyComp.GlassOptionsOf(config);
+        Assert.Equal(BlurStrength.Steps, options.Strength);
+        Assert.Equal(BlurKernel.SmolGaussian, options.Kernel);
+        Assert.Equal(GlassPass.Fused, options.Pass);
+        Assert.Equal(0x80102030u, options.Tint);
+        Assert.Equal(0x4D102030u, options.InactiveTint);
+        Assert.Equal(1.2, options.Lens);
+        Assert.Equal(90, options.LightAngle);
+        Assert.Equal(0x80ff0000u, options.ContentBorder);
+        Assert.Equal(0x4Dff0000u, options.InactiveContentBorder);
+        Assert.Equal(2, options.ContentBorderWidth);
+        Assert.Equal(10, config.GlassInset);
+        Assert.Equal(4, TinyComp.TinyComp.GlassContentRadiusOf(config));
+        Assert.Equal(6, TinyComp.TinyComp.GlassContentRadiusOf(defaults));
+    }
+
+    [Fact]
     public void The_overview_keeps_its_own_sides_and_an_output_table_overrides_them()
     {
         var log = BasinLog.For("t");

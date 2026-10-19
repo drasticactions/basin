@@ -51,6 +51,8 @@ public sealed class Seat : IDisposable
 
     public IInputSink? InputSink { get; set; }
 
+    public ISyntheticInput? SyntheticInput { get; set; }
+
     internal Surface? ResolveSurface(Wayland.WlSurfaceResource? resource) => Compositor.ResolveSurface(resource);
 
     public SeatPointer Pointer { get; }

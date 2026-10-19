@@ -17,6 +17,7 @@ public sealed class SkiaGlRenderer : IRenderer
     private readonly GRContext _context;
     private readonly GRGlGetProcedureAddressDelegate _getProc;
     private readonly Dictionary<IBuffer, TargetEntry> _targets = [];
+    private readonly HashSet<IBuffer> _watched = [];
     private readonly SkiaGlRenderPass _pass;
     private readonly SKPaint _paint;
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -176,10 +177,14 @@ public sealed class SkiaGlRenderer : IRenderer
             throw new InvalidOperationException("The Ganesh context is abandoned; cached targets were dropped.");
         }
 
-        if (!_targets.TryGetValue(target, out var entry))
+        if (_targets.TryGetValue(target, out var entry) && entry.Native.IsCpuReadback && entry.Native.SeenWrites != target.WriteCount)
         {
-            entry = ImportTarget(target);
+            _targets.Remove(target);
+            ReleaseTarget(entry);
+            entry = null;
         }
+
+        entry ??= ImportTarget(target);
 
         _device.WaitFence(options.WaitFenceFd);
         DirtyGlStateForDebug();
@@ -214,14 +219,20 @@ public sealed class SkiaGlRenderer : IRenderer
         }
 
         var entry = new TargetEntry(native, backendTarget, SkiaCensus.Track(surface), surface.Canvas);
+        native.SeenWrites = target.WriteCount;
         _targets[target] = entry;
-        target.Destroyed += () =>
+        if (_watched.Add(target))
         {
-            if (_targets.Remove(target, out var dead))
+            target.Destroyed += () =>
             {
-                ReleaseTarget(dead);
-            }
-        };
+                _watched.Remove(target);
+                if (_targets.Remove(target, out var dead))
+                {
+                    ReleaseTarget(dead);
+                }
+            };
+        }
+
         return entry;
     }
 

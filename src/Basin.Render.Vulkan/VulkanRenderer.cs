@@ -377,6 +377,8 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
+    public RenderBlendSpace BlendSpace => RenderBlendSpace.Linear;
+
     internal VulkanColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)
     {
         source ??= ImageDescription.SdrDefault;
@@ -481,7 +483,15 @@ public sealed unsafe class VulkanRenderer : IRenderer
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
-        if (!_targets.TryGetValue(target, out var entry))
+        if (_targets.TryGetValue(target, out var entry) && entry.Target.IsCpuReadback && entry.Target.SeenWrites != target.WriteCount)
+        {
+            _targets.Remove(target);
+            target.Destroyed -= entry.Handler;
+            entry.Target.Dispose(this);
+            entry = default;
+        }
+
+        if (entry.Target is null)
         {
             entry = ImportTarget(target);
         }
@@ -493,6 +503,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
     private (RenderTarget Target, Action Handler) ImportTarget(IBuffer target)
     {
         var created = RenderTarget.Create(this, target);
+        created.SeenWrites = target.WriteCount;
         void OnDestroyed()
         {
             if (_targets.Remove(target, out var stale))

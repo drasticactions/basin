@@ -1528,6 +1528,14 @@ public sealed class DispatchAllocationTests
 
             Assert.SkipWhen(windowId is null, "the X client never mapped");
 
+            bool SurfaceMapped() => wm!.Windows.Values.Any(static window => window.Surface is { IsMapped: true });
+            while (!SurfaceMapped() && Environment.TickCount64 < deadline)
+            {
+                host.Loop.Dispatch(20);
+            }
+
+            Assert.SkipUnless(SurfaceMapped(), "Xwayland never committed the window's surface");
+
             long XRounds(int rounds)
             {
                 var allocated = 0L;

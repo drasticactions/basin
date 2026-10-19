@@ -10,7 +10,7 @@ using Basin.Diagnostics;
 
 namespace RetroWm;
 
-internal sealed class Manager
+internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
 {
     private readonly RiverWindowManager _wm;
     private readonly bool _trace;
@@ -896,6 +896,29 @@ internal sealed class Manager
         }
 
         return edges;
+    }
+
+    public void CollectWindows(List<Basin.Capabilities.WindowParts> into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        foreach (var mw in _windows)
+        {
+            if (mw.Chrome != WindowChrome.ServerSide || mw.Frame is not { } frame)
+            {
+                continue;
+            }
+
+            var rect = FrameRect(mw);
+            var parts = Basin.WindowManager.Ipc.WmPartScanner.Scan(rect, (x, y) => frame.PartAt(x, y) switch
+            {
+                FramePart.SystemBox => Basin.Capabilities.FramePart.Menu,
+                FramePart.Title => Basin.Capabilities.FramePart.Title,
+                FramePart.Border => Basin.Capabilities.FramePart.Border,
+                _ => Basin.Capabilities.FramePart.None,
+            });
+            into.Add(new Basin.Capabilities.WindowParts(
+                mw.Window.AppId ?? string.Empty, mw.Window.Title ?? string.Empty, new Basin.Box(rect.X, rect.Y, rect.Width, rect.Height), parts));
+        }
     }
 
     private static Rect FrameRect(ManagedWindow mw)

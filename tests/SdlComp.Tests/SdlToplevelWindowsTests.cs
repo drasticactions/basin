@@ -88,6 +88,28 @@ public sealed class SdlToplevelWindowsTests
     }
 
     [Fact]
+    public void The_window_model_resizes_the_window_and_reports_its_geometry()
+    {
+        using var harness = new SdlCompHarness(SdlRenderDevices.Raster, toplevels: true);
+        var toplevels = harness.Comp.Toplevels!;
+        var mapped = Map(harness, 200, 150, "modelled");
+        harness.PumpUntil(() => toplevels.Entries.Any(e => e.Window is not null), "no SDL window opened");
+        var window = toplevels.Entries.Single().Window!;
+        var model = harness.Host.Services.Require<Basin.Capabilities.IToplevelModel>();
+        var infos = new Basin.Capabilities.ToplevelInfo[4];
+        Assert.Equal(1, model.Enumerate(infos));
+        var id = infos[0].Id;
+        harness.PumpUntil(() => model.TryGet(id, out var info) && info.Geometry == new Basin.Box(0, 0, 200, 150), "the geometry was never reported");
+
+        Assert.True(model.Request(id, new Basin.Capabilities.ToplevelRequest(
+            Basin.Capabilities.ToplevelRequestKind.Resize, Geometry: new Basin.Box(0, 0, 300, 220))));
+        harness.PumpUntil(() => window.Window.PixelSize == (300, 220), "the window never took the requested size");
+        harness.PumpUntil(() => mapped.Sizes.Contains((300, 220)), "the resize never reached the client");
+        Assert.Equal(toplevels.CanMoveWindows, model.Request(id, new Basin.Capabilities.ToplevelRequest(
+            Basin.Capabilities.ToplevelRequestKind.Move, Geometry: new Basin.Box(40, 30, 0, 0))));
+    }
+
+    [Fact]
     public void A_client_that_resizes_itself_resizes_its_window()
     {
         using var harness = new SdlCompHarness(SdlRenderDevices.Raster, toplevels: true);

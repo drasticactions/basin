@@ -23,4 +23,6 @@ public partial interface IBuffer
     bool BeginDataAccess(BufferDataAccess access, out BufferDataView view);
 
     void EndDataAccess();
+
+    ulong WriteCount => 0;
 }

@@ -91,6 +91,12 @@ public sealed class IpcLineReport
         AddLine(methods, IpcMethodNames.WindowsStats, "stats {id}");
     }
 
+    public void AddDiagnosticsLines(IpcMethodRegistry methods)
+    {
+        ArgumentNullException.ThrowIfNull(methods);
+        IpcDiagLines.Add(methods);
+    }
+
     public void AddOutputLines(IpcMethodRegistry methods) =>
         AddLine(methods, IpcMethodNames.OutputsLook, "look {output} [{path}]");
 

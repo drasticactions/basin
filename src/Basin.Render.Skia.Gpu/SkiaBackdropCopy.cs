@@ -75,6 +75,11 @@ internal sealed unsafe class SkiaBackdropCopy
     public bool Run(
         IVulkanBackdropEffect effect, Image target, ImageView targetView, ImageLayout targetLayout,
         Extent2D extent, in Box bounds, object? key, out Box source)
+        => Run(effect, target, targetView, targetLayout, extent, bounds, bounds, default, key, out source);
+
+    public bool Run(
+        IVulkanBackdropEffect effect, Image target, ImageView targetView, ImageLayout targetLayout,
+        Extent2D extent, in Box bounds, in Box whole, ReadOnlyMemory<MeshVertex> mesh, object? key, out Box source)
     {
         var vk = _device.Api;
         var commands = _device.BeginCommands();
@@ -92,6 +97,8 @@ internal sealed unsafe class SkiaBackdropCopy
             Backdrop = targetView,
             TargetExtent = extent,
             Bounds = bounds,
+            Extent = whole,
+            Mesh = mesh,
             Key = key,
         };
         var recorded = effect.Record(in context, out var result);

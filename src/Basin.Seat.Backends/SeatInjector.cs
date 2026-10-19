@@ -19,6 +19,8 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
         _pointer = pointer;
     }
 
+    internal bool ThroughBinder { get; init; }
+
     public Action<uint>? Moved { get; set; }
 
     public Action<uint, double, double>? MovedBy { get; set; }
@@ -106,9 +108,13 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
         {
             movedBy(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
         }
-        else
+        else if (Moved is { } moved)
         {
-            Moved?.Invoke(timeMs);
+            moved(timeMs);
+        }
+        else if (ThroughBinder)
+        {
+            _binder.RaiseMotion(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
         }
 
         return true;
@@ -119,37 +125,59 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
 
     public bool PointerButton(uint timeMs, uint button, bool pressed)
     {
-        if (DeliverButton is not { } deliver)
+        if (DeliverButton is { } deliver)
+        {
+            _binder.EnsurePointerCapability();
+            deliver(timeMs, button, pressed);
+            return true;
+        }
+
+        if (!ThroughBinder)
         {
             return false;
         }
 
         _binder.EnsurePointerCapability();
-        deliver(timeMs, button, pressed);
+        _binder.RaiseButton(timeMs, button, pressed);
         return true;
     }
 
     public bool PointerAxis(uint timeMs, uint axis, double value, uint source)
     {
-        if (DeliverAxis is not { } deliver)
+        if (DeliverAxis is { } deliver)
+        {
+            _binder.EnsurePointerCapability();
+            deliver(timeMs, axis, value, source);
+            return true;
+        }
+
+        if (!ThroughBinder)
         {
             return false;
         }
 
         _binder.EnsurePointerCapability();
-        deliver(timeMs, axis, value, source);
+        _binder.DeliverAxis(
+            timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source), 1.0);
         return true;
     }
 
     public bool Key(uint timeMs, uint keycode, bool pressed)
     {
-        if (DeliverKey is not { } deliver)
+        if (DeliverKey is { } deliver)
+        {
+            _seat.SetCapability(SeatCapability.Keyboard, true);
+            deliver(timeMs, keycode, pressed);
+            return true;
+        }
+
+        if (!ThroughBinder)
         {
             return false;
         }
 
         _seat.SetCapability(SeatCapability.Keyboard, true);
-        deliver(timeMs, keycode, pressed);
+        _binder.RaiseKey(timeMs, keycode, pressed);
         return true;
     }
 

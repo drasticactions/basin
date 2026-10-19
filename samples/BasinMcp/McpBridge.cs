@@ -190,6 +190,14 @@ internal sealed class McpBridge : IAsyncDisposable
             return McpCaptureTool.Result(captured);
         }
 
+        if (entry.Kind == McpToolKind.DiagImage)
+        {
+            var recorded = await client.CallAsync(
+                entry.Method, writer => McpDiagImageTool.WriteParams(writer, entry.Method, arguments, Options.MaxDimension), cancellationToken)
+                .ConfigureAwait(false);
+            return McpDiagImageTool.Result(recorded);
+        }
+
         var result = await client.CallAsync(
             entry.Method, writer => McpCallMapper.WriteArguments(writer, arguments), cancellationToken).ConfigureAwait(false);
         return McpCallMapper.Result(result);

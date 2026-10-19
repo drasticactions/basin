@@ -77,6 +77,11 @@ internal sealed partial class TinyComp :
     private bool _metacityOpaqueWarned;
     private bool _msstylesQuillWarned;
     private bool _msstylesKept;
+    private bool _glassWarned;
+    private bool _glassTried;
+    private Basin.Effects.IBackdropGlass? _glassEffect;
+    private Basin.Effects.DropShadowTexture? _glassShadowTexture;
+    private Basin.Effects.DropShadowTexture? _glassGlowTexture;
     private Basin.Frames.Quill.QuillFrameTheme? _quillTheme;
     private FrameStyle _frameStyle;
     private FrameTheme? _frameTheme;
@@ -93,8 +98,106 @@ internal sealed partial class TinyComp :
         FrameStyle.Metacity => (_metacity ??= MetacityFrames.Load(_config, FrameThemeOrLoad())).CreateRenderer(),
         FrameStyle.MsStyles => CreateMsStylesFrameRenderer(),
         FrameStyle.Quill => CreateQuillFrameRenderer(),
+        FrameStyle.Glass => CreateGlassFrameRenderer(),
         _ => null,
     };
+
+    private IFrameRenderer CreateGlassFrameRenderer()
+    {
+        if (QuillHost() is null)
+        {
+            if (!_glassWarned)
+            {
+                _glassWarned = true;
+                _log.Error($"[frame] style = \"glass\" cannot run beside the {_config.Renderer} renderer: {_quillDeclined}; the flat frames are used instead");
+            }
+
+            return new Basin.UI.Skia.FlatFrameRenderer(FlatThemeOrLoad());
+        }
+
+        if (GlassEffect() is null)
+        {
+            if (!_glassWarned)
+            {
+                _glassWarned = true;
+                _log.Error($"[frame] style = \"glass\" needs backdrop effects, and the {_config.Renderer} renderer runs none; the plain quill frames are used instead");
+            }
+
+            return CreateQuillFrameRenderer();
+        }
+
+        return new Basin.Frames.Quill.QuillFrameRenderer(GlassThemeOf(_config));
+    }
+
+    internal static int GlassContentRadiusOf(Config config) =>
+        (int)Math.Round(GlassThemeOf(config).ResolvedContentRadius);
+
+    private static Basin.Frames.Quill.QuillFrameTheme GlassThemeOf(Config config)
+    {
+        var theme = config.GlassPalette == "light"
+            ? Basin.Frames.Quill.QuillFrameTheme.LightGlass()
+            : Basin.Frames.Quill.QuillFrameTheme.DarkGlass();
+        theme.CornerRadius = (float)Math.Max(0, config.GlassCornerRadius);
+        theme.FontSize = (float)Math.Max(1, config.GlassFontSize);
+        theme.Bevel = (float)Math.Max(0, config.GlassBevel);
+        theme.AnimationMs = (int)Math.Max(1, config.GlassAnimationMs);
+        theme.Border = (int)Math.Round(Math.Max(0, config.GlassInset));
+        theme.ContentRadius = config.GlassContentRadius < 0 ? -1f : (float)config.GlassContentRadius;
+        return theme;
+    }
+
+    internal static Basin.Effects.GlassOptions GlassOptionsOf(Config config)
+    {
+        var tint = config.GlassTint ?? (config.GlassPalette == "light" ? 0x60F0F3F8u : 0x60202832u);
+        var inactiveAlpha = (uint)Math.Round((tint >> 24) * 0.6);
+        var border = config.GlassContentBorder;
+        var inactiveBorderAlpha = (uint)Math.Round((border >> 24) * 0.6);
+        return new Basin.Effects.GlassOptions
+        {
+            Strength = Math.Clamp((int)Math.Round(config.GlassBlur), 1, Basin.Effects.BlurStrength.Steps),
+            Kernel = config.GlassBlurKernel switch
+            {
+                "vista" => Basin.Effects.BlurKernel.VistaDwm,
+                "smol" => Basin.Effects.BlurKernel.SmolGaussian,
+                _ => Basin.Effects.BlurKernel.DualKawase,
+            },
+            Pass = config.GlassPass == "fused" ? Basin.Effects.GlassPass.Fused : Basin.Effects.GlassPass.Composite,
+            Tint = tint,
+            InactiveTint = (tint & 0x00FFFFFFu) | (inactiveAlpha << 24),
+            Saturation = config.GlassSaturation,
+            Noise = config.GlassNoise,
+            Lens = config.GlassRefraction,
+            Specular = config.GlassSpecular,
+            LightAngle = config.GlassLightAngle,
+            Glint = config.GlassGlint,
+            GlintRadius = config.GlassGlintRadius,
+            ContentBorder = border,
+            InactiveContentBorder = (border & 0x00FFFFFFu) | (inactiveBorderAlpha << 24),
+            ContentBorderWidth = Math.Max(0, config.GlassContentBorderWidth),
+        };
+    }
+
+    private Basin.Effects.IBackdropGlass? GlassEffect()
+    {
+        if (_glassTried)
+        {
+            return _glassEffect;
+        }
+
+        _glassTried = true;
+        _glassEffect = Basin.Effects.BackdropGlass.For(_renderer);
+        if (_glassEffect is { } glass)
+        {
+            glass.Options = GlassOptionsOf(_config);
+            var asked = (int)Math.Round(_config.GlassBlur);
+            if (asked != glass.Options.Strength)
+            {
+                _log.Warn($"[frame.glass] blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {glass.Options.Strength}");
+            }
+        }
+
+        return _glassEffect;
+    }
 
     private IFrameRenderer CreateQuillFrameRenderer()
     {
@@ -207,6 +310,14 @@ internal sealed partial class TinyComp :
 
     internal void ApplyFrameBackdrop(Frame frame, IFrameRenderer renderer)
     {
+        if (renderer is Basin.Frames.Quill.QuillFrameRenderer { Theme.Glass: true } && GlassEffect() is { } glass)
+        {
+            frame.UnderlayKey = frame;
+            frame.UnderlayCoversClient = _config.GlassClientGlass;
+            frame.UnderlayEffect = glass;
+            return;
+        }
+
         if (_blurEffect is not { } blur)
         {
             return;
@@ -262,6 +373,7 @@ internal sealed partial class TinyComp :
         if (frame is not null)
         {
             _blurEffect?.ForgetSurface(frame);
+            _glassEffect?.ForgetSurface(frame);
         }
     }
 
@@ -1241,6 +1353,9 @@ internal sealed partial class TinyComp :
         _dimShader?.Dispose();
         _scene.SurfaceBackdrop = null;
         _blurEffect?.Dispose();
+        _glassEffect?.Dispose();
+        _glassShadowTexture?.Dispose();
+        _glassGlowTexture?.Dispose();
         foreach (var shader in _cornerShaders.Values)
         {
             shader.Dispose();

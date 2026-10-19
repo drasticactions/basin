@@ -8,6 +8,7 @@ public sealed unsafe class GlRenderer : IRenderer
 {
     private readonly GlDevice _device;
     private readonly Dictionary<IBuffer, GlRenderTarget> _targets = [];
+    private readonly HashSet<IBuffer> _watched = [];
     private readonly GlRenderPass _pass;
 
     internal readonly ShaderProgram TextureProgram;
@@ -240,10 +241,14 @@ public sealed unsafe class GlRenderer : IRenderer
 
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
-        if (!_targets.TryGetValue(target, out var entry))
+        if (_targets.TryGetValue(target, out var entry) && entry.IsCpuReadback && entry.SeenWrites != target.WriteCount)
         {
-            entry = ImportTarget(target);
+            _targets.Remove(target);
+            entry.Dispose(_device);
+            entry = null;
         }
+
+        entry ??= ImportTarget(target);
 
         _device.FenceWait.Wait(options.WaitFenceFd);
 
@@ -254,14 +259,20 @@ public sealed unsafe class GlRenderer : IRenderer
     private GlRenderTarget ImportTarget(IBuffer target)
     {
         var entry = GlRenderTarget.Create(_device, target);
+        entry.SeenWrites = target.WriteCount;
         _targets[target] = entry;
-        target.Destroyed += () =>
+        if (_watched.Add(target))
         {
-            if (_targets.Remove(target, out var stale))
+            target.Destroyed += () =>
             {
-                stale.Dispose(_device);
-            }
-        };
+                _watched.Remove(target);
+                if (_targets.Remove(target, out var stale))
+                {
+                    stale.Dispose(_device);
+                }
+            };
+        }
+
         return entry;
     }
 

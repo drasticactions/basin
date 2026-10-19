@@ -113,6 +113,7 @@
     <Project Path="src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
     <Project Path="src/Basin.WindowManager/Basin.WindowManager.csproj" />
     <Project Path="src/Basin.WindowManager.Skia/Basin.WindowManager.Skia.csproj" />
+    <Project Path="src/Basin.WindowManager.Ipc/Basin.WindowManager.Ipc.csproj" />
     <Project Path="src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
     <Project Path="src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
     <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />

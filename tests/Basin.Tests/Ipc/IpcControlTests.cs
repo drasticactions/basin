@@ -192,8 +192,8 @@ public sealed class IpcControlTests
         Assert.Null(ErrorCode(peer.Call($$$"""{"method":"windows/activate","params":{"id":"{{{id}}}"}}""")));
         Assert.Contains((id, ToplevelRequestKind.Activate), model.Requests);
 
-        Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"windows/get","params":{"id":"-1"}}""")));
-        Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"windows/get","params":{"id":"0x10"}}""")));
+        Assert.Equal(IpcErrorCodes.NotFound, ErrorCode(peer.Call("""{"method":"windows/get","params":{"id":"-1"}}""")));
+        Assert.Equal(IpcErrorCodes.NotFound, ErrorCode(peer.Call("""{"method":"windows/get","params":{"id":"0x10"}}""")));
         Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"windows/get","params":{"id":"99999999999999999999999"}}""")));
         Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"windows/get","params":{"id":""}}""")));
     }

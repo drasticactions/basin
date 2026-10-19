@@ -161,6 +161,22 @@ public sealed class ZoomStage : IPostStage
         return IsActive;
     }
 
+    public bool TryMapBox(in Box scene, in PostContext context, out Box output)
+    {
+        if (_zoom <= 1.0)
+        {
+            output = scene;
+            return true;
+        }
+
+        output = new Box(
+            (int)Math.Floor((scene.X * _zoom) + _translationX),
+            (int)Math.Floor((scene.Y * _zoom) + _translationY),
+            (int)Math.Ceiling(scene.Width * _zoom),
+            (int)Math.Ceiling(scene.Height * _zoom));
+        return true;
+    }
+
     public void Render(IRenderPass pass, ITexture frame, in PostContext context)
     {
         ArgumentNullException.ThrowIfNull(pass);

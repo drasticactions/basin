@@ -71,6 +71,31 @@ public sealed class WobblyEffectTests
     }
 
     [Fact]
+    public void A_settled_wobble_damages_nothing_on_later_frames()
+    {
+        var (host, _, effect, _) = Attach();
+        using var guard = host;
+
+        effect.Grab(30, 20);
+        effect.NotifyMoved(25, 0);
+        effect.Release();
+        var frame = 1;
+        while (effect.Step(Tick(frame * 16)) && frame < 600)
+        {
+            frame++;
+        }
+
+        var damaged = 0;
+        host.Scene.Damaged += (_, _) => damaged++;
+        for (var later = 1; later <= 30; later++)
+        {
+            Assert.False(effect.Step(Tick((frame + later) * 16)));
+        }
+
+        Assert.Equal(0, damaged);
+    }
+
+    [Fact]
     public void A_released_wobble_settles_and_detaches_the_deformer()
     {
         var (host, _, effect, _) = Attach();

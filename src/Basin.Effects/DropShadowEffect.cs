@@ -8,8 +8,12 @@ public sealed class DropShadowEffect : IDisposable
 
     private readonly SceneTree _tree;
     private readonly SceneBuffer[] _cells = new SceneBuffer[8];
+    private readonly SceneTree _glow;
+    private readonly SceneBuffer[] _glowCells = new SceneBuffer[8];
 
     private DropShadowTexture? _texture;
+    private DropShadowTexture? _glowTexture;
+    private double _glowOpacity;
     private Box _geometry;
     private bool _visible = true;
     private bool _disposed;
@@ -17,11 +21,17 @@ public sealed class DropShadowEffect : IDisposable
     public DropShadowEffect(SceneTree parent)
     {
         ArgumentNullException.ThrowIfNull(parent);
-        _tree = new SceneTree(parent) { Enabled = false };
+        _tree = new SceneTree(parent) { Enabled = false, DebugName = "shadow" };
         _tree.LowerToBottom();
         for (var i = 0; i < _cells.Length; i++)
         {
             _cells[i] = new SceneBuffer(_tree) { InputEnabled = false, Enabled = false };
+        }
+
+        _glow = new SceneTree(_tree) { Enabled = false, DebugName = "shadow-glow" };
+        for (var i = 0; i < _glowCells.Length; i++)
+        {
+            _glowCells[i] = new SceneBuffer(_glow) { InputEnabled = false, Enabled = false };
         }
     }
 
@@ -39,6 +49,42 @@ public sealed class DropShadowEffect : IDisposable
 
             _texture = value;
             Layout();
+        }
+    }
+
+    public DropShadowTexture? GlowTexture
+    {
+        get => _glowTexture;
+        set
+        {
+            if (ReferenceEquals(_glowTexture, value))
+            {
+                return;
+            }
+
+            _glowTexture = value;
+            Layout();
+        }
+    }
+
+    public double GlowOpacity
+    {
+        get => _glowOpacity;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 1);
+            if (_glowOpacity == clamped)
+            {
+                return;
+            }
+
+            var wasShown = _glowOpacity > 0;
+            _glowOpacity = clamped;
+            _glow.Alpha = (float)clamped;
+            if (wasShown != clamped > 0)
+            {
+                Layout();
+            }
         }
     }
 
@@ -79,7 +125,13 @@ public sealed class DropShadowEffect : IDisposable
 
         _disposed = true;
         _texture = null;
+        _glowTexture = null;
         foreach (var cell in _cells)
+        {
+            cell.SetBuffer(null);
+        }
+
+        foreach (var cell in _glowCells)
         {
             cell.SetBuffer(null);
         }
@@ -97,10 +149,25 @@ public sealed class DropShadowEffect : IDisposable
             return;
         }
 
-        if (!_visible || _texture is not { } texture ||
-            _geometry.Width < MinimumSize || _geometry.Height < MinimumSize)
+        if (!_visible || _geometry.Width < MinimumSize || _geometry.Height < MinimumSize ||
+            (_texture is null && (_glowTexture is null || _glowOpacity <= 0)))
         {
             Hide();
+            return;
+        }
+
+        _tree.Enabled = true;
+        LayoutCells(_cells, _texture);
+        var glowing = _glowTexture is not null && _glowOpacity > 0;
+        _glow.Enabled = glowing;
+        LayoutCells(_glowCells, glowing ? _glowTexture : null);
+    }
+
+    private void LayoutCells(SceneBuffer[] cells, DropShadowTexture? texture)
+    {
+        if (texture is null)
+        {
+            HideCells(cells);
             return;
         }
 
@@ -160,31 +227,36 @@ public sealed class DropShadowEffect : IDisposable
         DistributeHorizontally(ref left, ref right);
         DistributeVertically(ref top, ref bottom);
 
-        _tree.Enabled = true;
-        SetCell(0, top, 0, -1);
-        SetCell(1, topRight, 1, -1);
-        SetCell(2, right, 1, 0);
-        SetCell(3, bottomRight, 1, 1);
-        SetCell(4, bottom, 0, 1);
-        SetCell(5, bottomLeft, -1, 1);
-        SetCell(6, left, -1, 0);
-        SetCell(7, topLeft, -1, -1);
+        SetCell(cells, texture, 0, top, 0, -1);
+        SetCell(cells, texture, 1, topRight, 1, -1);
+        SetCell(cells, texture, 2, right, 1, 0);
+        SetCell(cells, texture, 3, bottomRight, 1, 1);
+        SetCell(cells, texture, 4, bottom, 0, 1);
+        SetCell(cells, texture, 5, bottomLeft, -1, 1);
+        SetCell(cells, texture, 6, left, -1, 0);
+        SetCell(cells, texture, 7, topLeft, -1, -1);
     }
 
     private void Hide()
     {
         _tree.Enabled = false;
-        foreach (var cell in _cells)
+        _glow.Enabled = false;
+        HideCells(_cells);
+        HideCells(_glowCells);
+    }
+
+    private static void HideCells(SceneBuffer[] cells)
+    {
+        foreach (var cell in cells)
         {
             cell.Enabled = false;
             cell.SetBuffer(null);
         }
     }
 
-    private void SetCell(int index, in Quad quad, int anchorX, int anchorY)
+    private static void SetCell(SceneBuffer[] cells, DropShadowTexture texture, int index, in Quad quad, int anchorX, int anchorY)
     {
-        var cell = _cells[index];
-        var texture = _texture!;
+        var cell = cells[index];
         var x = (int)Math.Round(quad.Left, MidpointRounding.AwayFromZero);
         var y = (int)Math.Round(quad.Top, MidpointRounding.AwayFromZero);
         var width = (int)Math.Round(quad.Right, MidpointRounding.AwayFromZero) - x;

@@ -325,7 +325,7 @@ public sealed class LayerShellProtocolTests
         layerShell.Dispose();
     }
 
-    private static Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1 BindLayerShell(CompositorTestHost host, ShmTestClient client, uint version = 4)
+    internal static Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1 BindLayerShell(CompositorTestHost host, ShmTestClient client, uint version = 4)
     {
         Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1? shell = null;
         var registry = client.Display.GetRegistry();

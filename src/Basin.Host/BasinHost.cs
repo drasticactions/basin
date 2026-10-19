@@ -161,7 +161,20 @@ public sealed class BasinHost : IDisposable
         services.UseDefault(PresentedSets);
         services.UseDefault<IClientDirectory>(new Basin.Capabilities.Defaults.DisplayClientDirectory(Display));
         Services = services;
+        SeedDiagnostics();
         return services;
+    }
+
+    public OutputDriver? Driver { get; private set; }
+
+    internal void AttachDriver(OutputDriver driver) => Driver ??= driver;
+
+    private void SeedDiagnostics()
+    {
+        if (Services is { IsFrozen: false } services)
+        {
+            services.SeedDefault<ISceneDiagnostics>(() => new HostSceneDiagnostics(this, services));
+        }
     }
 
     public bool EnableOutput(IOutput output)

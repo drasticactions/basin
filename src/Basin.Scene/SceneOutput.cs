@@ -159,6 +159,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    public OutputProjection Projection => _projection;
+
     public Box? ReplicationSource
     {
         get => _replicationSource;
@@ -338,6 +340,14 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     public IReadOnlyList<SceneNode> DeclinedCandidates => _declinedNodes;
 
     public IReadOnlyList<PlaneDeclineReason> DeclineReasons => _declinedReasons;
+
+    public IReadOnlyList<SceneBuffer> OffloadedNodes => _offloadedPrev;
+
+    public IReadOnlyList<Box> OffloadedBoxes => _offloadedPrevBoxes;
+
+    public string? OffloadSkipped { get; private set; }
+
+    public IReadOnlyList<IPostStage> PostStages => _postStages;
 
     private void Decline(SceneNode node, PlaneDeclineReason reason)
     {
@@ -715,6 +725,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _scale = Output.Scale;
         _projection = ComputeProjection();
         _runsBackdropEffects = renderer.SupportsBackdropEffects;
+        _blendsLinear = renderer.BlendSpace == RenderBlendSpace.Linear;
         Ring.Resize(mode.Width, mode.Height);
         _renderList.Clear();
         AllocationScope.Pause();
@@ -765,8 +776,14 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _offloadedNowLayers.Clear();
         _layers.Clear();
         var sendLayers = false;
-        if (options.AllowPlaneOffload && !_projection.IsTransformed && _replicationSource is null &&
-            _softwareCursor.Buffer is null && _postStages.Count == 0 && filter is null)
+        OffloadSkipped = !options.AllowPlaneOffload ? "offload off"
+            : _projection.IsTransformed ? "output transform"
+            : _replicationSource is not null ? "replicated output"
+            : _softwareCursor.Buffer is not null ? "software cursor"
+            : _postStages.Count > 0 ? "post stage"
+            : filter is not null ? "frame filter"
+            : null;
+        if (OffloadSkipped is null)
         {
             SelectOverlayCandidates(mode, options.MaxOffloadLayers);
         }
@@ -998,6 +1015,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         if (entry.Alpha < 1f || (entry.Transformed && !entry.Transform.IsAxisAlignedScale))
         {
             return PlaneDeclineReason.Transformed;
+        }
+
+        if (_blendsLinear && !node.IsOpaque)
+        {
+            return PlaneDeclineReason.BlendSpace;
         }
 
         if (node.Buffer is not { } content || !content.TryGetDmabuf(out var attributes))
@@ -1556,6 +1578,15 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
             clip.SubtractWith(_opaque);
 
+            if (!clip.IsEmpty && _runsBackdropEffects && SamplesBackdrop(entry.Node))
+            {
+                _scratch.Reset(new PixmanBox32(physical.X, physical.Y, physical.Right, physical.Bottom));
+                _opaque.SubtractWith(_scratch);
+                _scratch.IntersectWith(_damage);
+                anyBackground.UnionWith(_scratch);
+                continue;
+            }
+
             if (!clip.IsEmpty && !entry.Transformed && !entry.Mirrored && entry.Alpha >= 1f && IsOpaqueEntry(entry.Node))
             {
                 _scratch.Reset(new PixmanBox32(physical.X, physical.Y, physical.Right, physical.Bottom));
@@ -1670,10 +1701,19 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     private bool _runsBackdropEffects;
 
+    private bool _blendsLinear;
+
     private bool IsOpaqueEntry(SceneNode node) => node switch
     {
         SceneRect rect => rect.IsOpaque,
         SceneBuffer buffer => buffer.IsOpaque && buffer.TextureShader is null && !(buffer.HasActiveBackdrop && _runsBackdropEffects),
+        _ => false,
+    };
+
+    private static bool SamplesBackdrop(SceneNode node) => node switch
+    {
+        SceneBuffer buffer => buffer.HasActiveBackdrop,
+        SceneTransform { Deformer: not null } deformed => SubtreeHasBackdrop(deformed),
         _ => false,
     };
 

@@ -12,5 +12,7 @@ internal enum FrameStyle
 
     Quill,
 
+    Glass,
+
     None,
 }

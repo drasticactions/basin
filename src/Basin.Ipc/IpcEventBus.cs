@@ -8,6 +8,7 @@ public sealed class IpcEventBus : IDisposable
 {
     private readonly Dictionary<string, Topic> _topics = new(StringComparer.Ordinal);
     private readonly List<IpcEventSource> _sources = [];
+    private readonly Dictionary<string, Func<ReadOnlySpan<byte>, string?>> _lineFormatters = new(StringComparer.Ordinal);
     private IpcByteBuffer? _data;
     private IpcByteBuffer? _message;
     private Utf8JsonWriter? _dataWriter;
@@ -57,27 +58,57 @@ public sealed class IpcEventBus : IDisposable
 
     public bool HasSubscribers(string name) => _topics.TryGetValue(name, out var topic) && topic.Subscribers.Count > 0;
 
-    public bool Subscribe(string name, IIpcEventSubscriber subscriber)
+    public bool Subscribe(string name, IIpcEventSubscriber subscriber) => TrySubscribe(name, subscriber, null, out _);
+
+    public string? Validate(string name, JsonElement? options) =>
+        !_topics.TryGetValue(name, out var topic) ? $"no event '{name}' in this session" : topic.Source?.Validate(name, options);
+
+    public bool TrySubscribe(string name, IIpcEventSubscriber subscriber, JsonElement? options, out string? error)
     {
         ArgumentNullException.ThrowIfNull(subscriber);
-        if (!_topics.TryGetValue(name, out var topic))
+        error = Validate(name, options);
+        if (error is not null || !_topics.TryGetValue(name, out var topic))
         {
             return false;
         }
 
-        if (topic.Subscribers.Contains(subscriber))
+        if (options is { } given)
         {
-            return true;
+            (topic.Options ??= [])[subscriber] = given.Clone();
+        }
+        else
+        {
+            topic.Options?.Remove(subscriber);
         }
 
-        topic.Subscribers.Add(subscriber);
-        if (topic.Source is { } source && ++source.Demand == 1)
+        if (!topic.Subscribers.Contains(subscriber))
         {
-            source.SetAttached(true);
+            topic.Subscribers.Add(subscriber);
+            if (topic.Source is { } source && ++source.Demand == 1)
+            {
+                source.SetAttached(true);
+            }
         }
 
+        topic.Source?.SubscribersChanged(name);
         return true;
     }
+
+    public IReadOnlyList<IIpcEventSubscriber> Subscribers(string name) =>
+        _topics.TryGetValue(name, out var topic) ? topic.Subscribers : [];
+
+    public JsonElement? OptionsOf(string name, IIpcEventSubscriber subscriber) =>
+        _topics.TryGetValue(name, out var topic) && topic.Options is { } options && options.TryGetValue(subscriber, out var found)
+            ? found
+            : null;
+
+    public void AddLineFormatter(string name, Func<ReadOnlySpan<byte>, string?> format)
+    {
+        ArgumentNullException.ThrowIfNull(format);
+        _lineFormatters[name] = format;
+    }
+
+    internal Func<ReadOnlySpan<byte>, string?>? LineFormatter(string name) => _lineFormatters.GetValueOrDefault(name);
 
     public void Unsubscribe(string name, IIpcEventSubscriber subscriber)
     {
@@ -86,6 +117,8 @@ public sealed class IpcEventBus : IDisposable
             return;
         }
 
+        topic.Options?.Remove(subscriber);
+        topic.Source?.SubscribersChanged(name);
         if (topic.Source is { } source && --source.Demand == 0)
         {
             source.SetAttached(false);
@@ -140,6 +173,17 @@ public sealed class IpcEventBus : IDisposable
         Emit(name, _data!.Length == 0 ? "{}"u8 : _data.Written);
     }
 
+    public void EmitTo<T>(string name, IIpcEventSubscriber subscriber, T value, JsonTypeInfo<T> info)
+    {
+        ArgumentNullException.ThrowIfNull(subscriber);
+        ArgumentNullException.ThrowIfNull(info);
+        JsonSerializer.Serialize(BeginEvent(name), value, info);
+        _emitting = null;
+        _dataWriter!.Flush();
+        Envelope(name, _data!.Length == 0 ? "{}"u8 : _data.Written);
+        subscriber.OnEvent(name, _message!.Written);
+    }
+
     public void Emit(string name, ReadOnlySpan<byte> data)
     {
         if (!_topics.TryGetValue(name, out var topic) || topic.Subscribers.Count == 0)
@@ -147,6 +191,19 @@ public sealed class IpcEventBus : IDisposable
             return;
         }
 
+        Envelope(name, data);
+        var subscribers = topic.Subscribers;
+        for (var i = subscribers.Count - 1; i >= 0; i--)
+        {
+            if (i < subscribers.Count)
+            {
+                subscribers[i].OnEvent(name, _message!.Written);
+            }
+        }
+    }
+
+    private void Envelope(string name, ReadOnlySpan<byte> data)
+    {
         _message ??= new IpcByteBuffer();
         _messageWriter ??= new Utf8JsonWriter(_message, WriterOptions());
         _message.Clear();
@@ -157,15 +214,6 @@ public sealed class IpcEventBus : IDisposable
         _messageWriter.WriteRawValue(data, skipInputValidation: true);
         _messageWriter.WriteEndObject();
         _messageWriter.Flush();
-
-        var subscribers = topic.Subscribers;
-        for (var i = subscribers.Count - 1; i >= 0; i--)
-        {
-            if (i < subscribers.Count)
-            {
-                subscribers[i].OnEvent(name, _message.Written);
-            }
-        }
     }
 
     public void Dispose()
@@ -223,5 +271,7 @@ public sealed class IpcEventBus : IDisposable
         public IpcEventSource? Source { get; } = source;
 
         public List<IIpcEventSubscriber> Subscribers { get; } = [];
+
+        public Dictionary<IIpcEventSubscriber, JsonElement>? Options { get; set; }
     }
 }

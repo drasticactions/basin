@@ -7,7 +7,7 @@ using static Basin.Ipc.IpcLog;
 
 namespace Basin.Ipc;
 
-public sealed class IpcLineFront : IIpcReplySink, IDisposable
+public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposable
 {
     private readonly IpcServer _server;
     private readonly IpcReply _reply;
@@ -187,9 +187,36 @@ public sealed class IpcLineFront : IIpcReplySink, IDisposable
 
         Stop();
         _disposed = true;
+        _server.Events.UnsubscribeAll(this);
         _input?.Dispose();
         _writer.Dispose();
         State.Dispose();
+    }
+
+    public void OnEvent(string name, ReadOnlySpan<byte> message)
+    {
+        if (_disposed || !IpcJson.TryFindProperty(message, "data"u8, out var data))
+        {
+            return;
+        }
+
+        string? text;
+        try
+        {
+            text = _server.Events.LineFormatter(name) is { } format
+                ? format(data)
+                : $"EVENT {name} {Encoding.UTF8.GetString(data)}";
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"the line for event {name} threw: {exception}");
+            return;
+        }
+
+        if (text is not null)
+        {
+            Report(text);
+        }
     }
 
     private static void Report(string text)

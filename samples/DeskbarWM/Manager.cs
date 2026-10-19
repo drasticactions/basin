@@ -12,7 +12,7 @@ using Basin.Diagnostics;
 
 namespace DeskbarWm;
 
-internal sealed class Manager
+internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
 {
     private const int CascadePadding = 32;
 
@@ -1246,6 +1246,31 @@ internal sealed class Manager
         }
 
         _wm.RequestManage();
+    }
+
+    public void CollectWindows(List<Basin.Capabilities.WindowParts> into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        foreach (var mw in _windows)
+        {
+            if (!mw.Ssd || mw.Hidden)
+            {
+                continue;
+            }
+
+            var rect = mw.FrameRect;
+            var parts = Basin.WindowManager.Ipc.WmPartScanner.Scan(rect, (x, y) => DecorationHitFor(mw, x, y) switch
+            {
+                { Part: FramePart.CloseBox } => Basin.Capabilities.FramePart.Close,
+                { Part: FramePart.ZoomBox } => Basin.Capabilities.FramePart.Maximize,
+                { Part: FramePart.Tab } => Basin.Capabilities.FramePart.Title,
+                { Part: FramePart.ResizeCorner } => Basin.Capabilities.FramePart.BottomRight,
+                { Part: FramePart.Border } hit => Basin.WindowManager.Ipc.WmPartScanner.EdgePart(hit.Edges),
+                _ => Basin.Capabilities.FramePart.None,
+            });
+            into.Add(new Basin.Capabilities.WindowParts(
+                mw.Window.AppId ?? string.Empty, mw.Window.Title ?? string.Empty, new Basin.Box(rect.X, rect.Y, rect.Width, rect.Height), parts));
+        }
     }
 
     private DecorationHit DecorationHitFor(ManagedWindow mw, int localX, int localY)

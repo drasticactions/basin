@@ -41,6 +41,8 @@ public sealed partial class NestedShell : IDisposable
     private bool _showingDesktop;
     private bool _disposed;
 
+    private readonly NestedSyntheticInput _syntheticInput;
+
     public NestedShell(
         BasinCompositorHost host,
         BasinViewOutput view,
@@ -66,6 +68,8 @@ public sealed partial class NestedShell : IDisposable
         UIHost = new SkiaUIHost();
         _frames = MetacityFrames.Load(settings, _themeFallbacks);
         Layers = new ShellLayers(host.Scene.Root);
+        _syntheticInput = new NestedSyntheticInput(this);
+        host.Seat.SyntheticInput ??= _syntheticInput;
         _workspaces = new Workspaces(settings.Workspaces, settings.WorkspaceRows, settings.WorkspaceNames);
         _router = new UISurfaceRouter(host.Scene, _uiIndex);
         _popups = new PopupPlacer(host.Layout);
@@ -1393,6 +1397,11 @@ public sealed partial class NestedShell : IDisposable
         }
 
         _disposed = true;
+        if (ReferenceEquals(_host.Seat.SyntheticInput, _syntheticInput))
+        {
+            _host.Seat.SyntheticInput = null;
+        }
+
         _host.Shell.NewToplevel -= OnNewToplevel;
         _host.Shell.NewPopup -= OnNewPopup;
         _host.Seat.Pointer.CursorRequested -= OnCursorRequested;

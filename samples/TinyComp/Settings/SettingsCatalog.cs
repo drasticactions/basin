@@ -35,7 +35,7 @@ internal static class SettingsCatalog
 
     private static readonly string[] Closings = ["none", "fade", "zoom", "fire", "fire-gpu", "glide", "sheet", "fall-apart"];
 
-    public static IReadOnlyList<string> FrameStyles { get; } = ["beos", "flat", "metacity", "msstyles", "quill", "none"];
+    public static IReadOnlyList<string> FrameStyles { get; } = ["beos", "flat", "metacity", "msstyles", "quill", "glass", "none"];
 
     public static IReadOnlyList<string> PostStages { get; } = ["invert", "magnify", "zoom", "color-blindness", "show-paint"];
 
@@ -168,6 +168,111 @@ internal static class SettingsCatalog
             new(Frames, "frame.quill", "frost_opacity", "Frost opacity", SettingKind.Real)
             {
                 Default = "0.44", Min = 0, Max = 1, Step = 0.01, Group = "Quill", Visible = static d => Style(d, "quill"),
+            },
+            new(Frames, "frame.glass", "palette", "Palette", SettingKind.Choice)
+            {
+                Default = "\"dark\"", Choices = ["dark", "light"], Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "corner_radius", "Corner radius", SettingKind.Real)
+            {
+                Default = "12", Min = 0, Max = 32, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "font_size", "Title size", SettingKind.Real)
+            {
+                Default = "13", Min = 6, Max = 32, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "blur", "Blur", SettingKind.Real)
+            {
+                Default = "8", Min = 1, Max = 15, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "blur_kernel", "Blur kernel", SettingKind.Choice)
+            {
+                Default = "\"kawase\"", Choices = ["kawase", "vista", "smol"], Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "pass", "Pass", SettingKind.Choice)
+            {
+                Default = "\"composite\"", Choices = ["composite", "fused"], Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "The blur pyramid then a glass pass, or one downsample then one fused pass.",
+            },
+            new(Frames, "frame.glass", "tint", "Tint", SettingKind.Color)
+            {
+                Default = "\"#60202832\"", Alpha = true, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "#aarrggbb: the alpha is the strength. Without it, the palette chooses.",
+            },
+            new(Frames, "frame.glass", "saturation", "Saturation", SettingKind.Real)
+            {
+                Default = "1.4", Min = 0, Max = 3, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "noise", "Grain", SettingKind.Real)
+            {
+                Default = "0.03", Min = 0, Max = 0.2, Step = 0.005, Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "refraction", "Refraction", SettingKind.Real)
+            {
+                Default = "0.6", Min = 0, Max = 2, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Lens strength at the rounded edges. 0 is off.",
+            },
+            new(Frames, "frame.glass", "bevel", "Bevel", SettingKind.Real)
+            {
+                Default = "10", Min = 0, Max = 40, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Logical pixels of the lens band along the edge.",
+            },
+            new(Frames, "frame.glass", "specular", "Specular", SettingKind.Real)
+            {
+                Default = "0.5", Min = 0, Max = 2, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "The sheen from the fixed light. 0 is off.",
+            },
+            new(Frames, "frame.glass", "light_angle", "Light angle", SettingKind.Real)
+            {
+                Default = "315", Min = 0, Max = 359, Step = 5, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Degrees. 0 is from the right, 90 from below.",
+            },
+            new(Frames, "frame.glass", "glint", "Glint", SettingKind.Real)
+            {
+                Default = "0.6", Min = 0, Max = 2, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "The highlight that follows the pointer over the chrome. 0 is off.",
+            },
+            new(Frames, "frame.glass", "glint_radius", "Glint radius", SettingKind.Real)
+            {
+                Default = "80", Min = 8, Max = 400, Step = 4, Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "client_glass", "Client glass", SettingKind.Flag)
+            {
+                Default = "true", Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Glass behind the translucent pixels of the client.",
+            },
+            new(Frames, "frame.glass", "shadow", "Shadow", SettingKind.Flag)
+            {
+                Default = "true", Group = "Glass", Visible = static d => Style(d, "glass"),
+            },
+            new(Frames, "frame.glass", "glow", "Active glow", SettingKind.Color)
+            {
+                Default = "\"#5070a0ff\"", Alpha = true, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "#aarrggbb: alpha 0 is off.",
+            },
+            new(Frames, "frame.glass", "animation_ms", "Animation", SettingKind.Real)
+            {
+                Default = "150", Min = 1, Max = 1000, Step = 10, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Milliseconds for the hover, press and focus eases.",
+            },
+            new(Frames, "frame.glass", "inset", "Content inset", SettingKind.Real)
+            {
+                Default = "6", Min = 0, Max = 40, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Logical pixels of glass between the frame's edge and the content.",
+            },
+            new(Frames, "frame.glass", "content_radius", "Content radius", SettingKind.Real)
+            {
+                Default = "-1", Min = -1, Max = 32, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "Rounds the content's corners. -1 follows corner_radius minus inset.",
+            },
+            new(Frames, "frame.glass", "content_border", "Content border", SettingKind.Color)
+            {
+                Default = "\"#38ffffff\"", Alpha = true, Group = "Glass", Visible = static d => Style(d, "glass"),
+                Note = "#aarrggbb: the line around the content. Alpha 0 is off.",
+            },
+            new(Frames, "frame.glass", "content_border_width", "Content border width", SettingKind.Real)
+            {
+                Default = "1", Min = 0, Max = 8, Step = 0.5, Group = "Glass", Visible = static d => Style(d, "glass"),
             },
 
             new(Color, "color", "source", "Source", SettingKind.Choice)

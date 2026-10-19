@@ -47,6 +47,21 @@ public sealed class XWaylandModule : IProtocolModule
                 : new XWaylandOutputs(server, layout, clientScales, services.Find<ILogicalOutputOverrides>);
             var display = new XWaylandDisplay(density, server, outputs, services.Loop, Shell, seat, model, PublishXSettings);
             _displays.Add(display);
+            if (services.Find<Capabilities.Defaults.PopupDirectory>() is { } popups)
+            {
+                XWaylandPopupDirectory? current = null;
+                display.WindowManagerReady += wm =>
+                {
+                    if (current is not null)
+                    {
+                        popups.Remove(current);
+                    }
+
+                    current = new XWaylandPopupDirectory(wm);
+                    popups.Add(current);
+                };
+            }
+
             return display;
         }
 

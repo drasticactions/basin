@@ -143,6 +143,16 @@ public sealed class BackdropBlurTests
         Assert.True(worst <= tolerance, $"max channel delta {worst} against {reference}");
     }
 
+    [Fact]
+    public void The_checked_in_mask_fragment_is_the_vulkan_header_and_the_shared_body()
+    {
+        var frag = File.ReadAllText(Path.Combine(
+            Path.GetDirectoryName(ShaderSource())!, "..", "..", "src", "Basin.Effects", "shaders", "blur_mask.frag"));
+        Assert.Equal(BlurMaskShaders.VulkanHeader + "\n" + BlurMaskShaders.Body + "\n", frag);
+    }
+
+    private static string ShaderSource([System.Runtime.CompilerServices.CallerFilePath] string path = "") => path;
+
     [Theory]
     [MemberData(nameof(BlurRows))]
     public void Golden_frosted_node(string row)

@@ -28,22 +28,27 @@ public sealed class XdgShellModule : IProtocolModule
         }
 
         model.Add(Toplevels);
-        return new ShellHandle(Shell, Toplevels);
+        var popups = new XdgPopupDirectory(Shell);
+        services.Find<Capabilities.Defaults.PopupDirectory>()?.Add(popups);
+        return new ShellHandle(Shell, Toplevels, popups);
     }
 
     private sealed class ShellHandle : IDisposable
     {
         private readonly XdgShell _shell;
         private readonly XdgToplevelSource _toplevels;
+        private readonly XdgPopupDirectory _popups;
 
-        public ShellHandle(XdgShell shell, XdgToplevelSource toplevels)
+        public ShellHandle(XdgShell shell, XdgToplevelSource toplevels, XdgPopupDirectory popups)
         {
             _shell = shell;
             _toplevels = toplevels;
+            _popups = popups;
         }
 
         public void Dispose()
         {
+            _popups.Dispose();
             _toplevels.Dispose();
             _shell.Dispose();
         }

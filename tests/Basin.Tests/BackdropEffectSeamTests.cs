@@ -163,6 +163,42 @@ public sealed class BackdropEffectSeamTests
         content.Destroy();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_backdrop_only_node_draws_its_effect_with_no_buffer(bool deformed)
+    {
+        CompositorTestHost.SkipUnlessVulkanRunnable();
+        using var renderer = new VulkanRenderer(CompositorTestHost.RenderNodePath);
+
+        var scene = new Scene.Scene();
+        SceneTree parent = deformed ? new SceneTransform(scene.Root) { Deformer = new ShiftDeformer(20) } : scene.Root;
+        var node = new SceneBuffer(parent) { BackdropOnly = true, DestinationWidth = 32, DestinationHeight = 32 };
+        node.SetPosition(16, 16);
+        Assert.Equal((32, 32), node.DisplaySize);
+        Assert.Equal((0, 0), new SceneBuffer(scene.Root) { DestinationWidth = 32, DestinationHeight = 32 }.DisplaySize);
+
+        using var region = new Pixman.PixmanRegion32(0, 0, 32, 32);
+        using var effect = new PaintGreenEffect(renderer.Device);
+        node.SetBackdropEffect(effect, region);
+
+        var target = new MemoryBuffer(96, 64, DrmFormat.Xrgb8888);
+        Assert.True(scene.Render(renderer, target, new RenderColor(1, 0, 0, 1)));
+
+        unsafe
+        {
+            Assert.True(target.BeginDataAccess(BufferDataAccess.Read, out var view));
+            var inside = *(uint*)(view.Data + 32 * view.Stride + (deformed ? 50 : 30) * 4);
+            var outside = *(uint*)(view.Data + 32 * view.Stride + (deformed ? 18 : 60) * 4);
+            target.EndDataAccess();
+            Assert.Equal(0xFF00FF00u, inside);
+            Assert.Equal(0xFFFF0000u, outside);
+        }
+
+        node.Destroy();
+        target.Destroy();
+    }
+
     [Fact]
     public void A_captured_deformed_body_stays_translucent_over_its_backdrop()
     {

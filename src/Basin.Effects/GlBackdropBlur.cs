@@ -230,6 +230,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         public readonly Dictionary<(int X, int Y), Level> Filtered = [];
         public Level? Filtered0;
         public Level? Reconstructed;
+        public Level? Masked;
     }
 
     private readonly GlDevice _device;
@@ -242,6 +243,11 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     private readonly Program _smolDown4;
     private readonly Program _smolGauss;
     private readonly Program _smolReconstruct;
+    private readonly uint _maskProgram;
+    private readonly uint _maskMeshProgram;
+    private uint _maskVao;
+    private uint _maskVbo;
+    private float[] _maskData = [];
     private readonly Dictionary<(int Width, int Height), Pyramid> _pyramids = [];
     private readonly Dictionary<uint, (int Width, int Height)> _backdrops = [];
     private readonly float[] _colorMatrix = new float[BlurColorMatrix.Length];
@@ -329,6 +335,8 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         _smolDown4 = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Down4);
         _smolGauss = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Gauss);
         _smolReconstruct = Compile(SmolGaussianShaders.GlHeader + SmolGaussianShaders.Reconstruct);
+        _maskProgram = Compile(BlurMaskShaders.GlHeader + BlurMaskShaders.Body).Handle;
+        _maskMeshProgram = Compile(BlurMaskShaders.GlHeader + BlurMaskShaders.Body, GlassShaders.GlMeshVertex).Handle;
         BlurColorMatrix.Build(_options.Saturation, _options.Contrast, _colorMatrix);
         EnsureNoise();
         _device.TextureDeleting += ForgetTexture;
@@ -338,6 +346,85 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     internal int PyramidCount => _pyramids.Count;
 
     public bool Record(in GlBackdropContext context, out GlBackdropResult result)
+    {
+        if (!RecordBlur(context, out result))
+        {
+            return false;
+        }
+
+        var mesh = context.Mesh.Span;
+        if (mesh.IsEmpty)
+        {
+            return true;
+        }
+
+        var pyramid = PyramidFor(context.TargetWidth, context.TargetHeight);
+        var masked = pyramid.Masked ??= CreateLevel(pyramid.Width, pyramid.Height);
+        var bounds = result.Source;
+        var gl = _device.Gl;
+        gl.Disable(EnableCap.Blend);
+        gl.Enable(EnableCap.ScissorTest);
+        gl.BindFramebuffer(FramebufferTarget.Framebuffer, masked.Fbo);
+        gl.Viewport(0, 0, (uint)masked.Width, (uint)masked.Height);
+        gl.Scissor(bounds.X, bounds.Y, (uint)bounds.Width, (uint)bounds.Height);
+        gl.UseProgram(_maskProgram);
+        gl.ActiveTexture(TextureUnit.Texture0);
+        gl.BindTexture(TextureTarget.Texture2D, context.Backdrop);
+        gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+        DrawMask(mesh, result.Texture, masked);
+        gl.Disable(EnableCap.ScissorTest);
+        result = new GlBackdropResult(masked.Texture, masked.Width, masked.Height, bounds);
+        return true;
+    }
+
+    private unsafe void DrawMask(ReadOnlySpan<MeshVertex> mesh, uint source, Level target)
+    {
+        var gl = _device.Gl;
+        if (_maskVao == 0)
+        {
+            _maskVao = gl.GenVertexArray();
+            _maskVbo = gl.GenBuffer();
+        }
+
+        var floats = mesh.Length * 4;
+        if (_maskData.Length < floats)
+        {
+            _maskData = new float[Math.Max(floats, _maskData.Length * 2)];
+        }
+
+        for (var i = 0; i < mesh.Length; i++)
+        {
+            var vertex = mesh[i];
+            _maskData[(i * 4) + 0] = (vertex.X / target.Width * 2f) - 1f;
+            _maskData[(i * 4) + 1] = (vertex.Y / target.Height * 2f) - 1f;
+            _maskData[(i * 4) + 2] = vertex.U;
+            _maskData[(i * 4) + 3] = vertex.V;
+        }
+
+        gl.BindVertexArray(_maskVao);
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, _maskVbo);
+        fixed (float* data = _maskData)
+        {
+            gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(floats * sizeof(float)), data, BufferUsageARB.StreamDraw);
+        }
+
+        gl.EnableVertexAttribArray(0);
+        gl.EnableVertexAttribArray(1);
+        gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)0);
+        gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+        gl.UseProgram(_maskMeshProgram);
+        gl.ActiveTexture(TextureUnit.Texture0);
+        gl.BindTexture(TextureTarget.Texture2D, source);
+        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+        gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)mesh.Length);
+        gl.DisableVertexAttribArray(0);
+        gl.DisableVertexAttribArray(1);
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
+        gl.BindVertexArray(0);
+    }
+
+    private bool RecordBlur(in GlBackdropContext context, out GlBackdropResult result)
     {
         var gl = _device.Gl;
         _current = context.Key is { } key && _surfaces.TryGetValue(key, out var stored) ? stored : new BlurSurfaceOptions();
@@ -781,11 +868,11 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         return level;
     }
 
-    private Program Compile(string fragmentSource)
+    private Program Compile(string fragmentSource, string vertexSource = VertexSource)
     {
         var gl = _device.Gl;
         var handle = gl.CreateProgram();
-        foreach (var (type, source) in new[] { (ShaderType.VertexShader, VertexSource), (ShaderType.FragmentShader, fragmentSource) })
+        foreach (var (type, source) in new[] { (ShaderType.VertexShader, vertexSource), (ShaderType.FragmentShader, fragmentSource) })
         {
             var shader = gl.CreateShader(type);
             gl.ShaderSource(shader, source);
@@ -856,6 +943,14 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.DeleteProgram(_smolDown4.Handle);
         gl.DeleteProgram(_smolGauss.Handle);
         gl.DeleteProgram(_smolReconstruct.Handle);
+        gl.DeleteProgram(_maskProgram);
+        gl.DeleteProgram(_maskMeshProgram);
+        if (_maskVao != 0)
+        {
+            gl.DeleteVertexArray(_maskVao);
+            gl.DeleteBuffer(_maskVbo);
+        }
+
         if (_noiseTexture != 0)
         {
             gl.DeleteTexture(_noiseTexture);
@@ -969,6 +1064,11 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         if (pyramid.Reconstructed is { } reconstructed)
         {
             DestroyLevel(reconstructed);
+        }
+
+        if (pyramid.Masked is { } masked)
+        {
+            DestroyLevel(masked);
         }
     }
 

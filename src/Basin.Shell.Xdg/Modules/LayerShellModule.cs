@@ -18,6 +18,17 @@ public sealed class LayerShellModule : IProtocolModule
         Shell = new LayerShell(services.Display, services.Require<CompositorGlobal>());
         services.Use(Shell);
         services.Require<ILayerShellDriver>().Attach(Shell);
-        return Shell;
+        var directory = new LayerDirectory(Shell);
+        services.UseDefault<ILayerDirectory>(directory);
+        return new LayerHandle(Shell, directory);
+    }
+
+    private sealed class LayerHandle(LayerShell shell, LayerDirectory directory) : IDisposable
+    {
+        public void Dispose()
+        {
+            directory.Dispose();
+            shell.Dispose();
+        }
     }
 }

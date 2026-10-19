@@ -154,6 +154,62 @@ public sealed partial class ZeroAllocationTests
     }
 
     [Theory]
+    [InlineData("gl", Basin.Effects.GlassPass.Composite)]
+    [InlineData("gl", Basin.Effects.GlassPass.Fused)]
+    [InlineData("vulkan", Basin.Effects.GlassPass.Composite)]
+    [InlineData("vulkan", Basin.Effects.GlassPass.Fused)]
+    [InlineData("skia-gl", Basin.Effects.GlassPass.Composite)]
+    [InlineData("skia-vulkan", Basin.Effects.GlassPass.Composite)]
+    public void A_glass_node_allocates_nothing_over_1000_frames(string renderer, Basin.Effects.GlassPass pass)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        using var glass = Basin.Effects.BackdropGlass.For(host.Renderer);
+        Assert.SkipWhen(glass is null, $"{renderer} runs no backdrop effects");
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var node = new Scene.SceneBuffer(host.Scene.Root) { BackdropOnly = true, DestinationWidth = 60, DestinationHeight = 44 };
+        node.SetPosition(10, 10);
+        using var region = new Pixman.PixmanRegion32();
+        RoundedRegion.Fill(region, 60, 44, 8);
+        var key = new object();
+        glass!.Options = new Basin.Effects.GlassOptions { Pass = pass, Strength = 4 };
+        node.SetBackdropEffect(glass, region, key);
+
+        for (var i = 0; i < 20; i++)
+        {
+            glass.SetShape(key, GlassShape(i));
+            node.SetPosition(10 + (i % 2), 10);
+            host.CommitFrame();
+        }
+
+        NothingAllocated(1000, i =>
+        {
+            glass.SetShape(key, GlassShape(i));
+            node.SetPosition(10 + (i % 2), 10);
+            host.CommitFrame();
+        });
+        node.Destroy();
+    }
+
+    private static Basin.Capabilities.FrameBackdropShape GlassShape(int i) => new()
+    {
+        Width = 60,
+        Height = 44,
+        CornerRadius = 8,
+        EdgeWidth = 6,
+        ClientHole = new Box(4, 20, 52, 20),
+        HighlightX = 10 + (i % 40),
+        HighlightY = 8,
+        HighlightStrength = 1,
+        Emphasis = (i % 10) / 10.0,
+    };
+
+    [Theory]
     [InlineData("pixman")]
     [InlineData("gl")]
     [InlineData("vulkan")]

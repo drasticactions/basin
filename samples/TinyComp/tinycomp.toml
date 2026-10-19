@@ -16,7 +16,7 @@ allow_tearing = true         # honor a fullscreen window's tearing hint
 # mode      = "3840x2560@60"  # WIDTHxHEIGHT or WIDTHxHEIGHT@HZ
 
 [frame]
-style         = "flat"       # beos | flat | metacity | msstyles | quill | none
+style         = "flat"       # beos | flat | metacity | msstyles | quill | glass | none
 corner_radius = 0            # logical pixels
 font_size     = 14           # title size in logical pixels
 
@@ -45,6 +45,32 @@ font_size     = 14           # title size in logical pixels
 # font_size     = 13         # title size in logical pixels
 # backdrop_blur = 0          # 0 off, 1 to 15
 # frost_opacity = 0.44       # titlebar tint over the blur, 0 to 1
+
+# Fully composited glass frames, drawn by Quill and the glass backdrop effect.
+# [frame.glass]
+# palette       = "dark"       # dark | light
+# corner_radius = 12           # logical pixels
+# font_size     = 13           # title size in logical pixels
+# blur          = 8            # 1 to 15
+# blur_kernel   = "kawase"     # kawase | vista | smol
+# pass          = "composite"  # composite | fused
+# tint          = "#60202832"  # #aarrggbb, alpha is the strength; the palette chooses when unset
+# saturation    = 1.4
+# noise         = 0.03
+# refraction    = 0.6          # lens strength, 0 off
+# bevel         = 10           # logical pixels of the lens band
+# specular      = 0.5          # fixed-light sheen, 0 off
+# light_angle   = 315          # degrees, 0 is from the right
+# glint         = 0.6          # pointer glint, 0 off
+# glint_radius  = 80           # logical pixels
+# client_glass  = true         # glass behind translucent client pixels
+# shadow        = true
+# glow          = "#5070a0ff"  # active glow, #aarrggbb, alpha 0 off
+# animation_ms  = 150
+# inset         = 6            # logical pixels of glass around the content
+# content_radius = -1          # content corners; -1 follows corner_radius - inset
+# content_border = "#38ffffff" # line around the content, #aarrggbb, alpha 0 off
+# content_border_width = 1     # logical pixels
 
 [color]
 source      = "edid"         # edid | srgb | icc

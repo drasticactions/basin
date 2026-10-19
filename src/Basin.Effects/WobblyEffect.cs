@@ -168,6 +168,12 @@ public sealed class WobblyEffect : IMeshTransform
             return false;
         }
 
+        if (!IsWobbling && node.Deformer is null)
+        {
+            _lastNanos = tick.TargetPresentNanos;
+            return false;
+        }
+
         if (!_hasLast)
         {
             _lastNanos = tick.TargetPresentNanos;

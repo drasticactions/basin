@@ -22,6 +22,8 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
 
     public bool IsCpuReadback { get; private set; }
 
+    public ulong SeenWrites { get; set; }
+
     public Image Image => _dmabuf?.Image ?? _cpuImage;
 
     public VulkanDeviceImage? Imported => _dmabuf;

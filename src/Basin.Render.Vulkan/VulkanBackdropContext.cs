@@ -14,6 +14,10 @@ public readonly struct VulkanBackdropContext
 
     public required Box Bounds { get; init; }
 
+    public Box Extent { get; init; }
+
+    public ReadOnlyMemory<MeshVertex> Mesh { get; init; }
+
     public object? Key { get; init; }
 
     public bool LinearLight { get; init; }

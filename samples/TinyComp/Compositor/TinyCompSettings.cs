@@ -155,6 +155,7 @@ internal sealed partial class TinyComp
         _config.CursorParkPointer = next.CursorParkPointer;
         ApplyCursorIdle();
         var background = _config.Background != next.Background;
+        var glassBefore = _config;
         _config = next;
         if (!next.HideCursorOnTouch)
         {
@@ -206,6 +207,7 @@ internal sealed partial class TinyComp
         var metacityFailure = ApplyFrameFont(next) ?? ApplyMetacity(next);
         _msstylesKept = ApplyMsStyles(next) is not null;
         ApplyQuill(next);
+        ApplyGlass(glassBefore, next);
         ApplyFrameStyle(next.FrameStyle);
         if (chromeBefore != (_frameStyle, _frameTheme, _metacity, _msstyles, _quillTheme))
         {
@@ -414,6 +416,55 @@ internal sealed partial class TinyComp
         }
     }
 
+    private void ApplyGlass(Config before, Config loaded)
+    {
+        if (_glassEffect is { } glass)
+        {
+            var options = GlassOptionsOf(loaded);
+            if (glass.Options != options)
+            {
+                glass.Options = options;
+                foreach (var view in Views)
+                {
+                    view.Scene?.Ring.AddWhole();
+                    view.Scheduler?.ScheduleRepaint();
+                }
+            }
+        }
+
+        if ((before.GlassCornerRadius, before.GlassShadow, before.GlassGlow)
+            != (loaded.GlassCornerRadius, loaded.GlassShadow, loaded.GlassGlow))
+        {
+            _glassShadowTexture?.Dispose();
+            _glassShadowTexture = null;
+            _glassGlowTexture?.Dispose();
+            _glassGlowTexture = null;
+            RefreshShadows();
+        }
+
+        if ((before.GlassPalette, before.GlassCornerRadius, before.GlassFontSize, before.GlassBevel, before.GlassAnimationMs, before.GlassClientGlass, before.GlassInset, before.GlassContentRadius)
+            == (loaded.GlassPalette, loaded.GlassCornerRadius, loaded.GlassFontSize, loaded.GlassBevel, loaded.GlassAnimationMs, loaded.GlassClientGlass, loaded.GlassInset, loaded.GlassContentRadius))
+        {
+            return;
+        }
+
+        foreach (var window in _windows)
+        {
+            if ((window.Rule?.FrameStyle ?? _frameStyle) == FrameStyle.Glass)
+            {
+                window.RebuildFrame();
+            }
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            if ((xwindow.Rule?.FrameStyle ?? _frameStyle) == FrameStyle.Glass)
+            {
+                xwindow.RebuildFrame();
+            }
+        }
+    }
+
     private void ApplyFrameStyle(FrameStyle style)
     {
         if (style == _frameStyle)
@@ -571,29 +622,54 @@ internal sealed partial class TinyComp
         {
             _shadowTexture?.Dispose();
             _shadowTexture = null;
-            foreach (var window in _windows)
-            {
-                window.SetShadow(null);
-            }
-
-            foreach (var xwindow in _xwindows)
-            {
-                xwindow.SetShadow(null);
-            }
-
+            RefreshShadows();
             return;
         }
 
         _shadowTexture ??= Basin.Effects.DropShadowTexture.Build(new Basin.Effects.DropShadowOptions(), 1.0);
+        RefreshShadows();
+    }
+
+    private void RefreshShadows()
+    {
         foreach (var window in _windows)
         {
-            window.SetShadow(_shadowTexture);
+            window.RefreshShadow();
         }
 
         foreach (var xwindow in _xwindows)
         {
-            xwindow.SetShadow(_shadowTexture);
+            xwindow.RefreshShadow();
         }
+    }
+
+    internal (Basin.Effects.DropShadowTexture? Shadow, Basin.Effects.DropShadowTexture? Glow) ShadowsFor(FrameStyle style, bool framed)
+    {
+        if (framed && style == FrameStyle.Glass && _config.GlassShadow && _glassEffect is not null && _quillHost is not null)
+        {
+            var radius = Math.Max(0, _config.GlassCornerRadius);
+            _glassShadowTexture ??= Basin.Effects.DropShadowTexture.Build(
+                new Basin.Effects.DropShadowOptions { CornerRadius = radius, Overlap = 1 }, 1.0);
+            var glow = _config.GlassGlow;
+            if (glow >> 24 != 0)
+            {
+                _glassGlowTexture ??= Basin.Effects.DropShadowTexture.Build(
+                    new Basin.Effects.DropShadowOptions
+                    {
+                        Primary = new Basin.Effects.DropShadowLayer(0, 0, 32, (glow >> 24) / 255.0),
+                        Secondary = new Basin.Effects.DropShadowLayer(0, 0, 0, 0),
+                        OffsetY = 0,
+                        CornerRadius = radius,
+                        Overlap = 1,
+                        Color = new RenderColor(((glow >> 16) & 0xFF) / 255f, ((glow >> 8) & 0xFF) / 255f, (glow & 0xFF) / 255f, 1f),
+                    },
+                    1.0);
+            }
+
+            return (_glassShadowTexture, glow >> 24 != 0 ? _glassGlowTexture : null);
+        }
+
+        return (_config.DropShadow ? _shadowTexture : null, null);
     }
 
     internal void RefreshDim()

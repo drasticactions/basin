@@ -50,16 +50,16 @@ internal static class IpcCoreMethods
 
             foreach (var name in events)
             {
-                if (!server.Events.IsDeclared(name))
+                if (server.Events.Validate(name, OptionsFor(request, name)) is { } refused)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"no event '{name}' in this session");
+                    reply.Error(IpcErrorCodes.InvalidParams, refused);
                     return;
                 }
             }
 
             foreach (var name in events)
             {
-                _ = server.Events.Subscribe(name, subscriber);
+                _ = server.Events.TrySubscribe(name, subscriber, OptionsFor(request, name), out _);
             }
 
             reply.Write(new IpcEventList(events.ToArray()), IpcJsonContext.Default.IpcEventList);
@@ -120,4 +120,7 @@ internal static class IpcCoreMethods
             (traits & IpcMethodTraits.Idempotent) != 0,
             methods.LineOf(name));
     }
+
+    private static System.Text.Json.JsonElement? OptionsFor(IpcEventsParams request, string name) =>
+        request.Options is { } options && options.TryGetValue(name, out var found) ? found : null;
 }

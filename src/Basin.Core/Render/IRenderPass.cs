@@ -16,6 +16,13 @@ public interface IRenderPass
     {
     }
 
+    void AddBackdropEffect(IBackdropEffect effect, in Box bounds, in Box extent, PixmanRegion32? clip, object? key) =>
+        AddBackdropEffect(effect, bounds, clip, key);
+
+    void AddDeformedBackdropEffect(
+        IBackdropEffect effect, in Box bounds, in Box extent, PixmanRegion32? clip, object? key, ReadOnlySpan<MeshVertex> mesh) =>
+        AddBackdropEffect(effect, bounds, extent, clip, key);
+
     void AddShader(IPixelShader shader, in ShaderRenderOptions options)
     {
     }

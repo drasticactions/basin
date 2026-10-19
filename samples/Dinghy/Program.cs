@@ -54,6 +54,8 @@ internal static class Program
         using (wm)
         {
             var manager = new Manager(wm, trace, noConfig, log);
+            using var control = new Basin.WindowManager.Ipc.WmControlSocket(wm.Loop, "dinghy", manager, wm.Stop);
+
             var refused = false;
             wm.Unavailable += () =>
             {

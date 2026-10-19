@@ -185,9 +185,30 @@ public sealed class McpToolTests
         Assert.True(missing.IsError);
         Assert.StartsWith("not_found: ", Text(missing), StringComparison.Ordinal);
 
-        var invalid = harness.Call("windows_get", """{"id":"nope"}""");
+        var unnamed = harness.Call("windows_get", """{"id":"nope"}""");
+        Assert.True(unnamed.IsError);
+        Assert.StartsWith("not_found: ", Text(unnamed), StringComparison.Ordinal);
+
+        var invalid = harness.Call("windows_get", """{"id":""}""");
         Assert.True(invalid.IsError);
         Assert.StartsWith("invalid_params: ", Text(invalid), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_recording_without_a_path_comes_back_as_an_image_at_the_bridge_default()
+    {
+        using var harness = McpHarness.Full(new McpBridgeOptions { MaxDimension = 64, PollInterval = TimeSpan.FromMilliseconds(50) });
+        Assert.Contains(harness.ListTools(), tool => tool.Name == "diag_record-window");
+        var recorded = harness.Call("diag_record", """{"x":0,"y":0,"width":40,"height":30,"frames":2}""");
+        Assert.NotEqual(true, recorded.IsError);
+        var image = Assert.IsType<ImageContentBlock>(recorded.Content[0]);
+        Assert.Equal((2, 2), PngCodec.Decode(image.DecodedData.ToArray()) is var (_, w, h) ? (w, h) : default);
+        Assert.Equal(7, recorded.StructuredContent!.Value.GetProperty("delta_max").GetInt32());
+        Assert.False(recorded.StructuredContent.Value.TryGetProperty("png", out _));
+
+        var file = Path.Combine(harness.Directory.FullName, "strip.png");
+        var written = harness.Call("diag_record", $$"""{"x":0,"y":0,"width":40,"height":30,"frames":2,"path":"{{file}}"}""");
+        Assert.DoesNotContain(written.Content, block => block is ImageContentBlock);
     }
 
     [Fact]

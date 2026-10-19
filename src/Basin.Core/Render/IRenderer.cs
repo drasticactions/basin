@@ -24,6 +24,8 @@ public interface IRenderer : IDisposable
 
     ColorTransformCapability ColorTransform => ColorTransformCapability.None;
 
+    RenderBlendSpace BlendSpace => RenderBlendSpace.Encoded;
+
     RenderFencePrecision FencePrecision => RenderFencePrecision.None;
 
     int ExportLastSubmissionFence() => -1;

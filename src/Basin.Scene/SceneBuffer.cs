@@ -67,6 +67,8 @@ public sealed class SceneBuffer : SceneNode
         }
     }
 
+    public bool BackdropOnly { get; init; }
+
     public int DestinationWidth
     {
         get => _destinationWidth;
@@ -439,7 +441,7 @@ public sealed class SceneBuffer : SceneNode
         {
             if (_lock.Buffer is not { } buffer)
             {
-                return (0, 0);
+                return BackdropOnly ? (_destinationWidth, _destinationHeight) : (0, 0);
             }
 
             return (

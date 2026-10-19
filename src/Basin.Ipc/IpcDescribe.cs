@@ -32,6 +32,8 @@ internal sealed class IpcDescribe
 
     public IFrameStats? FrameStats => _services.Find<IFrameStats>();
 
+    public ISceneDiagnostics? Diagnostics => _services.Find<ISceneDiagnostics>();
+
     private bool _statsHeld;
 
     public IpcFrameStats Stats(in ToplevelInfo info, long nowNanos)

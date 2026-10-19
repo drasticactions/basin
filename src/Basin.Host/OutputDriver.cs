@@ -7,7 +7,7 @@ using Wayland.Server;
 
 namespace Basin.Host;
 
-public sealed class OutputDriver : IDisposable
+public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 {
     private readonly BasinHost _host;
     private readonly Scene.Scene _scene;
@@ -58,7 +58,12 @@ public sealed class OutputDriver : IDisposable
         _layout = layout;
         _renderer = renderer;
         _deviceAllocator = deviceAllocator;
+        host.AttachDriver(this);
     }
+
+    public Scene.Scene Scene => _scene;
+
+    public IRenderer Renderer => _renderer;
 
     public SceneCapturePack? Capture { get; set; }
 
@@ -88,6 +93,8 @@ public sealed class OutputDriver : IDisposable
     public RenderColor Background { get; set; } = new(0f, 0f, 0f, 1f);
 
     public bool AllowDirectScanout { get; set; } = true;
+
+    public BasinHost Host => _host;
 
     public OutputContentType? ContentTypeOverride
     {
@@ -206,6 +213,79 @@ public sealed class OutputDriver : IDisposable
     public event Action<OutputView>? BeforeRepaint;
 
     public event Action<OutputView>? Painted;
+
+    private Action<SceneOutput>? _presented;
+
+    IReadOnlyList<SceneOutput> Scene.IPresentedOutputs.Outputs
+    {
+        get
+        {
+            var outputs = new List<SceneOutput>(_views.Count);
+            foreach (var view in _views)
+            {
+                if (view.Scene is { } scene)
+                {
+                    outputs.Add(scene);
+                }
+            }
+
+            return outputs;
+        }
+    }
+
+    event Action<SceneOutput>? Scene.IPresentedOutputs.Presented
+    {
+        add => _presented += value;
+        remove => _presented -= value;
+    }
+
+    bool Scene.IPresentedOutputs.CapturePresented { get; set; }
+
+    bool Scene.IPresentedOutputs.TryReadPresented(
+        SceneOutput output, IRenderer renderer, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out byte[]? rgba, out int width, out int height)
+    {
+        rgba = null;
+        width = 0;
+        height = 0;
+        foreach (var view in _views)
+        {
+            if (view.Scene == output && view.LastPresentedBuffer is { } buffer && Diagnostics.BufferCapture.TryReadRgba(buffer, renderer, out rgba))
+            {
+                width = buffer.Width;
+                height = buffer.Height;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void Scene.IPresentedOutputs.RequestRepaint(SceneOutput output)
+    {
+        foreach (var view in _views)
+        {
+            if (view.Scene == output)
+            {
+                output.Ring.AddWhole();
+                view.Scheduler?.ScheduleRepaint();
+            }
+        }
+    }
+
+    void Scene.IPresentedOutputs.AllowPlanes(bool allowed)
+    {
+        AllowPlaneOffload = allowed;
+        AllowDirectScanout = allowed;
+    }
+
+    private void RaisePainted(OutputView view)
+    {
+        Painted?.Invoke(view);
+        if (_presented is { } presented && view.Scene is { } scene)
+        {
+            presented(scene);
+        }
+    }
 
     public event Action<OutputView>? ModeChanged;
 
@@ -1425,7 +1505,7 @@ public sealed class OutputDriver : IDisposable
         AllocationScope.Pause();
         try
         {
-            Painted?.Invoke(view);
+            RaisePainted(view);
             if (committed)
             {
                 Capture?.Capture.NotifyDamaged(view.Output, new Box(0, 0, mode.Width, mode.Height));
@@ -1505,7 +1585,7 @@ public sealed class OutputDriver : IDisposable
             view.Rendered++;
         }
 
-        Painted?.Invoke(view);
+        RaisePainted(view);
         Capture?.Capture.NotifyDamaged(view.Output, new Box(0, 0, mode.Width, mode.Height));
         if (replicating)
         {
@@ -1679,7 +1759,7 @@ public sealed class OutputDriver : IDisposable
             view.Rendered++;
         }
 
-        Painted?.Invoke(view);
+        RaisePainted(view);
         _scene.SendFrameDone((uint)Environment.TickCount);
     }
 }

@@ -36,6 +36,8 @@ public abstract class SceneNode
 
     public bool ExcludedFromCapture { get; set; }
 
+    public string? DebugName { get; set; }
+
     public int X { get; private set; }
 
     public int Y { get; private set; }
@@ -279,6 +281,30 @@ public abstract class SceneNode
                 : RenderTransform.Identity;
             return true;
         }
+    }
+
+    public Box MapToScene(in Box local)
+    {
+        var box = local;
+        for (SceneNode? node = this; node is not null && !box.IsEmpty; node = node.Parent)
+        {
+            if (node is SceneTransform transform)
+            {
+                if (transform.Deformer is { } deformer)
+                {
+                    box = deformer.MapBounds(box);
+                }
+
+                if (!transform.Matrix.IsIdentity)
+                {
+                    box = transform.Matrix.TryMapBounds(box, out var hull) ? hull : default;
+                }
+            }
+
+            box = box.Translated(node.X, node.Y);
+        }
+
+        return box;
     }
 
     internal Scene? RootOwner()

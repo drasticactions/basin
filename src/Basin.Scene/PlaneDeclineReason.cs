@@ -41,4 +41,6 @@ public enum PlaneDeclineReason
     Filter,
 
     YuvEncoding,
+
+    BlendSpace,
 }

@@ -46,9 +46,31 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
     }
 
-    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null)
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, PixmanRegion32? clip = null, object? key = null) =>
+        AddBackdropEffect(effect, bounds, bounds, clip, key);
+
+    public void AddBackdropEffect(IBackdropEffect effect, in Box bounds, in Box extent, PixmanRegion32? clip, object? key) =>
+        RecordBackdropEffect(effect, bounds, extent, clip, key, default);
+
+    public void AddDeformedBackdropEffect(
+        IBackdropEffect effect, in Box bounds, in Box extent, PixmanRegion32? clip, object? key, ReadOnlySpan<MeshVertex> mesh)
+    {
+        if (_backdropMesh.Length < mesh.Length)
+        {
+            _backdropMesh = new MeshVertex[Math.Max(mesh.Length, _backdropMesh.Length * 2)];
+        }
+
+        mesh.CopyTo(_backdropMesh);
+        RecordBackdropEffect(effect, bounds, extent, clip, key, _backdropMesh.AsMemory(0, mesh.Length));
+    }
+
+    private MeshVertex[] _backdropMesh = [];
+
+    private void RecordBackdropEffect(
+        IBackdropEffect effect, in Box requested, in Box extent, PixmanRegion32? clip, object? key, ReadOnlyMemory<MeshVertex> mesh)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
+        var bounds = requested.Intersect(new Box(0, 0, _target.Width, _target.Height));
         if (effect is not IGlBackdropEffect glEffect)
         {
             throw new ArgumentException("effect does not belong to this renderer");
@@ -68,6 +90,8 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             TargetWidth = _target.Width,
             TargetHeight = _target.Height,
             Bounds = bounds,
+            Extent = extent,
+            Mesh = mesh,
             Key = key,
         };
         var recorded = glEffect.Record(in context, out var result);
@@ -502,6 +526,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         {
             ClearSampled();
             entry.ReadInto(_renderer.Device, target);
+            entry.SeenWrites = target.WriteCount;
         }
         else
         {

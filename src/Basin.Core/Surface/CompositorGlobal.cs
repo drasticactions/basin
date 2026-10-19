@@ -46,6 +46,10 @@ public sealed class CompositorGlobal : IDisposable
 
     public event Action<Surface>? SurfaceCreated;
 
+    public event Action<Surface, uint, int>? FramesDone;
+
+    internal void NotifyFramesDone(Surface surface, uint timestampMs, int count) => FramesDone?.Invoke(surface, timestampMs, count);
+
     public IReadOnlyCollection<Surface> Surfaces => _surfaces.Values;
 
     public void Dispose()

@@ -14,6 +14,8 @@ public sealed class SdlFrameLoop : IDisposable
     private bool _ticking;
     private readonly List<SdlOutputWindow> _windows = [];
     private bool _frameWanted;
+    private bool _inTick;
+    private bool _wantedDuringTick;
     private long _lastFrameDone;
 
     public SdlFrameLoop(SdlLoop loop, BasinCompositorHost host)
@@ -22,7 +24,11 @@ public sealed class SdlFrameLoop : IDisposable
         ArgumentNullException.ThrowIfNull(host);
         _loop = loop;
         _host = host;
-        _onFrameRequested = () => _frameWanted = true;
+        _onFrameRequested = () =>
+        {
+            _frameWanted = true;
+            _wantedDuringTick |= _inTick;
+        };
         _onDisplayChanged = _ => FollowRefresh();
         _onExposedInWatch = OnExposedInWatch;
         loop.WindowExposedInWatch += _onExposedInWatch;
@@ -220,8 +226,11 @@ public sealed class SdlFrameLoop : IDisposable
     private void Tick()
     {
         var now = Stopwatch.GetTimestamp();
+        _inTick = true;
+        _wantedDuringTick = false;
         if (!_host.EnterFrame(Stopwatch.GetElapsedTime(0, now)))
         {
+            _inTick = false;
             return;
         }
 
@@ -259,12 +268,13 @@ public sealed class SdlFrameLoop : IDisposable
         {
             _host.ExitFrame();
             _ticking = false;
+            _inTick = false;
         }
     }
 
     private void SendFrameDone()
     {
-        _frameWanted = false;
+        _frameWanted = _wantedDuringTick;
         _lastFrameDone = Stopwatch.GetTimestamp();
         _host.Scene.SendFrameDone((uint)Environment.TickCount);
     }

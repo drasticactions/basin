@@ -7,7 +7,7 @@ using static Basin.Hosted.HostedLog;
 
 namespace Basin.Hosted;
 
-public sealed class BasinCompositorHost : IDisposable
+public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
 
@@ -63,6 +63,8 @@ public sealed class BasinCompositorHost : IDisposable
             }
         }
 
+        services = services.SeedDefault<Capabilities.ISceneDiagnostics>(
+            () => new Scene.SceneDiagnostics(Scene, Renderer, Loop, this) { Services = services });
         options.ConfigureServices?.Invoke(this, services);
         try
         {
@@ -111,6 +113,7 @@ public sealed class BasinCompositorHost : IDisposable
         }
 
         Session = new HostedSession(Display, Loop) { Frames = frames };
+        frames.FrameRequested += Scene.RequestFrame;
         Screens = new HostScreens(this);
         Wake = new HostedWakeSource(Loop);
         if (options.Dmabuf)
@@ -321,6 +324,58 @@ public sealed class BasinCompositorHost : IDisposable
 
     internal void NotifyComposited() => Composited?.Invoke(Session.Composited);
 
+    private readonly Dictionary<Scene.SceneOutput, (byte[] Pixels, int Width, int Height)> _presentedPixels = [];
+    private Action<Scene.SceneOutput>? _presented;
+
+    public bool CapturePresented { get; set; }
+
+    IReadOnlyList<Scene.SceneOutput> Scene.IPresentedOutputs.Outputs => [.. _views.Select(static view => view.SceneOutput)];
+
+    event Action<Scene.SceneOutput>? Scene.IPresentedOutputs.Presented
+    {
+        add => _presented += value;
+        remove => _presented -= value;
+    }
+
+    bool Scene.IPresentedOutputs.TryReadPresented(
+        Scene.SceneOutput output, IRenderer renderer, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out byte[]? rgba, out int width, out int height)
+    {
+        if (_presentedPixels.TryGetValue(output, out var presented))
+        {
+            (rgba, width, height) = presented;
+            return true;
+        }
+
+        (rgba, width, height) = (null, 0, 0);
+        return false;
+    }
+
+    void Scene.IPresentedOutputs.AllowPlanes(bool allowed)
+    {
+    }
+
+    void Scene.IPresentedOutputs.RequestRepaint(Scene.SceneOutput output)
+    {
+        foreach (var view in _views)
+        {
+            if (view.SceneOutput == output)
+            {
+                output.Ring.AddWhole();
+                view.RequestRender?.Invoke();
+            }
+        }
+    }
+
+    internal void NotifyPresented(Scene.SceneOutput output, byte[]? pixels, int width, int height)
+    {
+        if (pixels is not null)
+        {
+            _presentedPixels[output] = (pixels, width, height);
+        }
+
+        _presented?.Invoke(output);
+    }
+
     public void InvalidateDirtyViews()
     {
         _thread.Assert();
@@ -393,7 +448,11 @@ public sealed class BasinCompositorHost : IDisposable
         return view;
     }
 
-    internal void ForgetView(BasinViewOutput view) => _views.Remove(view);
+    internal void ForgetView(BasinViewOutput view)
+    {
+        _views.Remove(view);
+        _presentedPixels.Remove(view.SceneOutput);
+    }
 
     internal IReadOnlyList<BasinViewOutput> Views => _views;
 

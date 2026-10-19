@@ -16,6 +16,7 @@
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />
     <ProjectReference Include="../../src/Basin.WindowManager/Basin.WindowManager.csproj" />
+    <ProjectReference Include="../../src/Basin.WindowManager.Ipc/Basin.WindowManager.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.WindowManager.Skia/Basin.WindowManager.Skia.csproj" />
   </ItemGroup>
 

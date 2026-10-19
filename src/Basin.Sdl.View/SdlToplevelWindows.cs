@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Desktop;
 using Basin.Hosted;
 using Basin.Scene;
@@ -26,6 +27,8 @@ public sealed class SdlToplevelWindows : IDisposable
     private readonly Stack<int> _freeCells = new();
     private readonly XdgDecorationManager? _decorations;
     private readonly KdeServerDecorationManager? _kdeDecorations;
+    private readonly XdgToplevelSource? _toplevelSource;
+    private readonly XdgToplevelRequestHandler? _requestHandler;
     private int _nextCell;
     private bool _disposed;
 
@@ -99,6 +102,13 @@ public sealed class SdlToplevelWindows : IDisposable
         if (_kdeDecorations is not null)
         {
             _kdeDecorations.ModeRequested += (surface, _) => Redecorate(surface);
+        }
+
+        _toplevelSource = host.Services.Find<XdgToplevelSource>();
+        if (_toplevelSource is { RequestHandler: null })
+        {
+            _requestHandler = AnswerRequest;
+            _toplevelSource.RequestHandler = _requestHandler;
         }
 
         host.Shell.NewToplevel += OnNewToplevel;
@@ -200,6 +210,40 @@ public sealed class SdlToplevelWindows : IDisposable
     private bool ServerDecorated(XdgToplevelWindow toplevel) =>
         _kdeDecorations?.ModeOf(toplevel.Surface) == KdeServerDecorationManager.DecorationMode.Server ||
         _decorations?.ModeOf(toplevel) == DecorationMode.ServerSide;
+
+    private bool? AnswerRequest(XdgToplevelWindow toplevel, in ToplevelRequest request)
+    {
+        if (!_entries.TryGetValue(toplevel, out var entry) || entry.Window is not { } window)
+        {
+            return null;
+        }
+
+        var points = window.View.Target.Scale / window.Window.PixelDensity;
+        switch (request.Kind)
+        {
+            case ToplevelRequestKind.Resize:
+                var frame = FrameOf(entry);
+                var geometry = toplevel.Xdg.EffectiveGeometry;
+                var width = request.Geometry.Width + frame.Width - geometry.Width;
+                var height = request.Geometry.Height + frame.Height - geometry.Height;
+                if (request.Geometry.Width <= 0 || request.Geometry.Height <= 0)
+                {
+                    return false;
+                }
+
+                return SDL.SetWindowSize(
+                    window.Window.Handle,
+                    Math.Max(1, (int)Math.Round(width * points)),
+                    Math.Max(1, (int)Math.Round(height * points)));
+            case ToplevelRequestKind.Move:
+                return CanMoveWindows && SDL.SetWindowPosition(
+                    window.Window.Handle,
+                    (int)Math.Round(request.Geometry.X * points),
+                    (int)Math.Round(request.Geometry.Y * points));
+            default:
+                return null;
+        }
+    }
 
     private static Box FrameOf(Entry entry)
     {
@@ -577,7 +621,9 @@ public sealed class SdlToplevelWindows : IDisposable
         }
 
         var geometry = FrameOf(entry);
-        window.View.SceneOutput.Position = new Point(geometry.X, (entry.Cell * CellStride) + geometry.Y);
+        var cellY = entry.Cell * CellStride;
+        window.View.SceneOutput.Position = new Point(geometry.X, cellY + geometry.Y);
+        _toplevelSource?.SetGeometry(entry.Toplevel, geometry.Translated(0, cellY), entry.Toplevel.Xdg.EffectiveGeometry.Translated(0, cellY));
         if (geometry.Width <= 0 || geometry.Height <= 0)
         {
             return;
@@ -768,6 +814,11 @@ public sealed class SdlToplevelWindows : IDisposable
         _host.Shell.NewToplevel -= OnNewToplevel;
         _host.Shell.NewPopup -= OnNewPopup;
         _host.Session.BeforeDispatch -= _followDrag;
+        if (_toplevelSource is not null && _toplevelSource.RequestHandler == _requestHandler)
+        {
+            _toplevelSource.RequestHandler = null;
+        }
+
         _waylandMoves?.Dispose();
         foreach (var entry in _popups.Values.ToArray())
         {

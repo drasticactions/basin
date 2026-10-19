@@ -86,6 +86,52 @@ internal sealed class Config
 
     public double QuillFrostOpacity { get; set; } = 0.44;
 
+    public string GlassPalette { get; set; } = "dark";
+
+    public double GlassCornerRadius { get; set; } = 12;
+
+    public double GlassFontSize { get; set; } = 13;
+
+    public double GlassBlur { get; set; } = 8;
+
+    public string GlassBlurKernel { get; set; } = "kawase";
+
+    public string GlassPass { get; set; } = "composite";
+
+    public uint? GlassTint { get; set; }
+
+    public double GlassSaturation { get; set; } = 1.4;
+
+    public double GlassNoise { get; set; } = 0.03;
+
+    public double GlassRefraction { get; set; } = 0.6;
+
+    public double GlassBevel { get; set; } = 10;
+
+    public double GlassSpecular { get; set; } = 0.5;
+
+    public double GlassLightAngle { get; set; } = 315;
+
+    public double GlassGlint { get; set; } = 0.6;
+
+    public double GlassGlintRadius { get; set; } = 80;
+
+    public bool GlassClientGlass { get; set; } = true;
+
+    public bool GlassShadow { get; set; } = true;
+
+    public uint GlassGlow { get; set; } = 0x5070a0ff;
+
+    public double GlassAnimationMs { get; set; } = 150;
+
+    public double GlassInset { get; set; } = 6;
+
+    public double GlassContentRadius { get; set; } = -1;
+
+    public uint GlassContentBorder { get; set; } = 0x38ffffff;
+
+    public double GlassContentBorderWidth { get; set; } = 1;
+
     public string? MsStylesTheme { get; set; }
 
     public string MsStylesColor { get; set; } = string.Empty;
@@ -502,12 +548,13 @@ internal sealed class Config
 
         if (reader.Section("frame") is { } frame)
         {
-            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "metacity", "msstyles", "quill", "none") switch
+            FrameStyle = frame.Choice("style", "flat", "beos", "flat", "metacity", "msstyles", "quill", "glass", "none") switch
             {
                 "beos" => FrameStyle.Beos,
                 "metacity" => FrameStyle.Metacity,
                 "msstyles" => FrameStyle.MsStyles,
                 "quill" => FrameStyle.Quill,
+                "glass" => FrameStyle.Glass,
                 "none" => FrameStyle.None,
                 _ => FrameStyle.Flat,
             };
@@ -560,6 +607,33 @@ internal sealed class Config
                 QuillFontSize = quill.Number("font_size", QuillFontSize);
                 QuillBackdropBlur = quill.Number("backdrop_blur", QuillBackdropBlur);
                 QuillFrostOpacity = quill.Number("frost_opacity", QuillFrostOpacity);
+            }
+
+            if (frame.Section("glass") is { } glass)
+            {
+                GlassPalette = glass.Choice("palette", "dark", "dark", "light");
+                GlassCornerRadius = glass.Number("corner_radius", GlassCornerRadius);
+                GlassFontSize = glass.Number("font_size", GlassFontSize);
+                GlassBlur = glass.Number("blur", GlassBlur);
+                GlassBlurKernel = glass.Choice("blur_kernel", "kawase", "kawase", "vista", "smol");
+                GlassPass = glass.Choice("pass", "composite", "composite", "fused");
+                GlassTint = GlassColor(glass, "tint", reader.Log) ?? GlassTint;
+                GlassSaturation = glass.Number("saturation", GlassSaturation);
+                GlassNoise = glass.Number("noise", GlassNoise);
+                GlassRefraction = glass.Number("refraction", GlassRefraction);
+                GlassBevel = glass.Number("bevel", GlassBevel);
+                GlassSpecular = glass.Number("specular", GlassSpecular);
+                GlassLightAngle = glass.Number("light_angle", GlassLightAngle);
+                GlassGlint = glass.Number("glint", GlassGlint);
+                GlassGlintRadius = glass.Number("glint_radius", GlassGlintRadius);
+                GlassClientGlass = glass.Flag("client_glass", GlassClientGlass);
+                GlassShadow = glass.Flag("shadow", GlassShadow);
+                GlassGlow = GlassColor(glass, "glow", reader.Log) ?? GlassGlow;
+                GlassAnimationMs = glass.Number("animation_ms", GlassAnimationMs);
+                GlassInset = glass.Number("inset", GlassInset);
+                GlassContentRadius = glass.Number("content_radius", GlassContentRadius);
+                GlassContentBorder = GlassColor(glass, "content_border", reader.Log) ?? GlassContentBorder;
+                GlassContentBorderWidth = glass.Number("content_border_width", GlassContentBorderWidth);
             }
         }
 
@@ -1060,6 +1134,7 @@ internal sealed class Config
                 "metacity" => global::TinyComp.FrameStyle.Metacity,
                 "msstyles" => global::TinyComp.FrameStyle.MsStyles,
                 "quill" => global::TinyComp.FrameStyle.Quill,
+                "glass" => global::TinyComp.FrameStyle.Glass,
                 "none" => global::TinyComp.FrameStyle.None,
                 _ => null,
             },
@@ -1244,6 +1319,22 @@ internal sealed class Config
 
     private static readonly string[] PostNames =
         ["none", "invert", "magnify", "zoom", "color-blindness", "show-paint"];
+
+    private static uint? GlassColor(TomlReader glass, string key, BasinLogger log)
+    {
+        if (glass.Text(key) is not { } text)
+        {
+            return null;
+        }
+
+        if (text.Length == 9 && TomlColor.Rgba(text) is not null)
+        {
+            return TomlColor.Argb(text, 0);
+        }
+
+        log.Warn($"[frame.glass] {key} \"{text}\" is not #aarrggbb, keeping the default");
+        return null;
+    }
 
     private static IReadOnlyList<string> PostStages(TomlReader effects, BasinLogger log)
     {

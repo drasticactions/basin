@@ -180,6 +180,47 @@ public sealed class IpcInputTests
         Assert.Equal(2, sink.CreatedKeyboards);
     }
 
+    [Fact]
+    public void A_touch_takes_the_event_time_it_is_given()
+    {
+        using var rig = new IpcTestRig();
+        var touches = new TouchTimes();
+        rig.Server.SyntheticInput = touches;
+        rig.Server.Start();
+        var peer = rig.Connect();
+
+        Assert.Null(ErrorCode(peer.Call("""{"method":"input/touch","params":{"kind":"down","id":1,"x":1,"y":1,"time_ms":1000}}""")));
+        Assert.Null(ErrorCode(peer.Call("""{"method":"input/touch","params":{"kind":"up","id":1,"time_ms":1088}}""")));
+        Assert.Equal([1000u, 1088u], touches.Times);
+        Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"input/touch","params":{"kind":"up","id":1,"time_ms":-1}}""")));
+        Assert.Null(ErrorCode(peer.Call("""{"method":"input/touch","params":{"kind":"frame"}}""")));
+    }
+
+    private sealed class TouchTimes : ISyntheticInput
+    {
+        public List<uint> Times { get; } = [];
+
+        public bool PointerMotionAbsolute(uint timeMs, double x, double y) => true;
+
+        public bool PointerButton(uint timeMs, uint button, bool pressed) => true;
+
+        public bool Key(uint timeMs, uint keycode, bool pressed) => true;
+
+        public bool TouchDown(uint timeMs, int id, double x, double y)
+        {
+            Times.Add(timeMs);
+            return true;
+        }
+
+        public bool TouchUp(uint timeMs, int id)
+        {
+            Times.Add(timeMs);
+            return true;
+        }
+
+        public bool TouchFrame() => true;
+    }
+
     internal sealed class RecordingSynthetic : ISyntheticInput
     {
         public List<string> Log { get; } = [];

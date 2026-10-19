@@ -45,6 +45,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         public readonly Dictionary<(int X, int Y), Level> Filtered = [];
         public Level? Filtered0;
         public Level? Reconstructed;
+        public Level? Masked;
     }
 
     private readonly VulkanDevice _device;
@@ -64,6 +65,8 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     private readonly Pipeline _smolDown4;
     private readonly Pipeline _smolGauss;
     private readonly Pipeline _smolReconstruct;
+    private readonly Pipeline _mask;
+    private readonly Pipeline _maskMesh;
     private bool _anyVistaDwm;
     private readonly Dictionary<(uint Width, uint Height), Pyramid> _pyramids = [];
     private readonly Dictionary<ulong, (DescriptorSet Set, uint Width, uint Height)> _backdropSets = [];
@@ -242,6 +245,8 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         var smolDown4 = CreateShaderModule("smol_down4.frag.spv");
         var smolGauss = CreateShaderModule("smol_gauss.frag.spv");
         var smolReconstruct = CreateShaderModule("smol_reconstruct.frag.spv");
+        var mask = CreateShaderModule("blur_mask.frag.spv");
+        var meshVertex = CreateShaderModule("glass_mesh.vert.spv");
         _down = CreatePipeline(vertex, down);
         _up = CreatePipeline(vertex, up);
         _onscreen = CreatePipeline(vertex, onscreen);
@@ -251,6 +256,10 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         _smolDown4 = CreatePipeline(vertex, smolDown4);
         _smolGauss = CreatePipeline(vertex, smolGauss);
         _smolReconstruct = CreatePipeline(vertex, smolReconstruct);
+        _mask = CreatePipeline(vertex, mask);
+        _maskMesh = CreatePipeline(meshVertex, mask, mesh: true);
+        vk.DestroyShaderModule(device.Device, mask, null);
+        vk.DestroyShaderModule(device.Device, meshVertex, null);
         vk.DestroyShaderModule(device.Device, vertex, null);
         vk.DestroyShaderModule(device.Device, down, null);
         vk.DestroyShaderModule(device.Device, up, null);
@@ -271,6 +280,70 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     internal int PyramidCount => _pyramids.Count;
 
     public bool Record(in VulkanBackdropContext context, out VulkanBackdropResult result)
+    {
+        if (!RecordBlur(context, out result))
+        {
+            return false;
+        }
+
+        var mesh = context.Mesh.Span;
+        if (mesh.IsEmpty)
+        {
+            return true;
+        }
+
+        var target = context.TargetExtent;
+        var span = _device.Staging.Allocate((ulong)(mesh.Length * 4 * sizeof(float)), 16);
+        if (!span.IsValid)
+        {
+            return true;
+        }
+
+        var mapped = (float*)span.Mapped;
+        for (var i = 0; i < mesh.Length; i++)
+        {
+            var vertex = mesh[i];
+            mapped[(i * 4) + 0] = (vertex.X / target.Width * 2f) - 1f;
+            mapped[(i * 4) + 1] = (vertex.Y / target.Height * 2f) - 1f;
+            mapped[(i * 4) + 2] = vertex.U;
+            mapped[(i * 4) + 3] = vertex.V;
+        }
+
+        var pyramid = PyramidFor(target);
+        var masked = pyramid.Masked ??= CreateLevel(pyramid.Extent);
+        var source = pyramid.Top.Set;
+        var bounds = result.Source;
+        var region = new Rect2D(new Offset2D(bounds.X, bounds.Y), new Extent2D((uint)bounds.Width, (uint)bounds.Height));
+        var vk = _device.Api;
+        var commands = context.Commands;
+        var passBegin = new RenderPassBeginInfo
+        {
+            SType = StructureType.RenderPassBeginInfo,
+            RenderPass = _pass,
+            Framebuffer = masked.Framebuffer,
+            RenderArea = region,
+        };
+        vk.CmdBeginRenderPass(commands, in passBegin, SubpassContents.Inline);
+        var viewport = new Viewport(0, 0, masked.Extent.Width, masked.Extent.Height, 0, 1);
+        vk.CmdSetViewport(commands, 0, 1, in viewport);
+        vk.CmdSetScissor(commands, 0, 1, in region);
+        vk.CmdBindPipeline(commands, PipelineBindPoint.Graphics, _mask);
+        var plain = _plainSet;
+        vk.CmdBindDescriptorSets(commands, PipelineBindPoint.Graphics, _layout, 0, 1, in plain, 0, null);
+        vk.CmdDraw(commands, 3, 1, 0, 0);
+        vk.CmdBindPipeline(commands, PipelineBindPoint.Graphics, _maskMesh);
+        vk.CmdBindDescriptorSets(commands, PipelineBindPoint.Graphics, _layout, 0, 1, in source, 0, null);
+        var buffer = span.Buffer;
+        var offset = span.Offset;
+        vk.CmdBindVertexBuffers(commands, 0, 1, &buffer, &offset);
+        vk.CmdDraw(commands, (uint)mesh.Length, 1, 0, 0);
+        vk.CmdEndRenderPass(commands);
+        MakeSampleable(commands, masked.Image);
+        result = new VulkanBackdropResult(masked.View, masked.Extent, bounds) { Image = masked.Image };
+        return true;
+    }
+
+    private bool RecordBlur(in VulkanBackdropContext context, out VulkanBackdropResult result)
     {
         var commands = context.Commands;
         _plainSet = BackdropSetFor(context.Backdrop, context.TargetExtent);
@@ -813,7 +886,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         return pass;
     }
 
-    private Pipeline CreatePipeline(ShaderModule vertex, ShaderModule fragment)
+    private Pipeline CreatePipeline(ShaderModule vertex, ShaderModule fragment, bool mesh = false)
     {
         var vk = _device.Api;
         var entryPoint = (byte*)Silk.NET.Core.Native.SilkMarshal.StringToPtr("main");
@@ -833,7 +906,22 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
             PName = entryPoint,
         };
 
-        var vertexInput = new PipelineVertexInputStateCreateInfo { SType = StructureType.PipelineVertexInputStateCreateInfo };
+        var meshBinding = new VertexInputBindingDescription(0, 4 * sizeof(float), VertexInputRate.Vertex);
+        var meshAttributes = stackalloc VertexInputAttributeDescription[2]
+        {
+            new(0, 0, Format.R32G32Sfloat, 0),
+            new(1, 0, Format.R32G32Sfloat, 2 * sizeof(float)),
+        };
+        var vertexInput = mesh
+            ? new PipelineVertexInputStateCreateInfo
+            {
+                SType = StructureType.PipelineVertexInputStateCreateInfo,
+                VertexBindingDescriptionCount = 1,
+                PVertexBindingDescriptions = &meshBinding,
+                VertexAttributeDescriptionCount = 2,
+                PVertexAttributeDescriptions = meshAttributes,
+            }
+            : new PipelineVertexInputStateCreateInfo { SType = StructureType.PipelineVertexInputStateCreateInfo };
         var inputAssembly = new PipelineInputAssemblyStateCreateInfo
         {
             SType = StructureType.PipelineInputAssemblyStateCreateInfo,
@@ -939,6 +1027,8 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         vk.DestroyPipeline(_device.Device, _smolDown4, null);
         vk.DestroyPipeline(_device.Device, _smolGauss, null);
         vk.DestroyPipeline(_device.Device, _smolReconstruct, null);
+        vk.DestroyPipeline(_device.Device, _mask, null);
+        vk.DestroyPipeline(_device.Device, _maskMesh, null);
         vk.DestroyRenderPass(_device.Device, _pass, null);
         vk.DestroyPipelineLayout(_device.Device, _layout, null);
         vk.DestroyDescriptorPool(_device.Device, _descriptorPool, null);
@@ -1179,6 +1269,11 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         if (pyramid.Reconstructed is { } reconstructed)
         {
             DestroyLevel(reconstructed);
+        }
+
+        if (pyramid.Masked is { } masked)
+        {
+            DestroyLevel(masked);
         }
     }
 

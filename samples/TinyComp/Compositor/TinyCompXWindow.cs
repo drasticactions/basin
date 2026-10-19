@@ -42,8 +42,8 @@ internal sealed partial class TinyComp
             Outer = comp._xSceneDriver.OuterOf(xwin) ?? scene.Tree;
             Outer.SetPosition(0, 0);
             comp.RefreshSurfaceLuts();
-            comp.ApplyCorners(SceneSurface, CornerRadius);
-            SetShadow(framable ? comp._shadowTexture : null);
+            comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+            RefreshShadow();
             ApplyQuirks();
             xwin.PropertiesChanged += ApplyQuirks;
             xwin.PropertiesChanged += RefreshScheme;
@@ -135,13 +135,19 @@ internal sealed partial class TinyComp
             }
             else
             {
-                _comp.ApplyCorners(SceneSurface, CornerRadius);
+                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
             }
         }
 
-        public void SetShadow(Basin.Effects.DropShadowTexture? texture)
+        public void RefreshShadow()
         {
-            if (texture is null || !Framable)
+            var (shadow, glow) = _comp.ShadowsFor(Rule?.FrameStyle ?? _comp._frameStyle, _frame is not null);
+            SetShadow(shadow, glow);
+        }
+
+        public void SetShadow(Basin.Effects.DropShadowTexture? texture, Basin.Effects.DropShadowTexture? glow = null)
+        {
+            if ((texture is null && glow is null) || !Framable)
             {
                 _shadow?.Dispose();
                 _shadow = null;
@@ -150,11 +156,30 @@ internal sealed partial class TinyComp
 
             _shadow ??= new Basin.Effects.DropShadowEffect(Tree);
             _shadow.Texture = texture;
+            _shadow.GlowTexture = glow;
+            _shadow.GlowOpacity = glow is null ? 0 : _glowEmphasis;
             LayoutShadow();
         }
 
         internal void LayoutShadow() =>
-            _shadow?.SetGeometry(new Box(0, 0, Math.Max(Shown.Width, 1), Math.Max(Shown.Height, 1)));
+            _shadow?.SetGeometry(_frame is { Visible: true } frame && !frame.OuterBounds.IsEmpty
+                ? frame.OuterBounds
+                : new Box(0, 0, Math.Max(Shown.Width, 1), Math.Max(Shown.Height, 1)));
+
+        private void OnShapePublished(FrameBackdropShape shape)
+        {
+            _glowEmphasis = shape.Emphasis;
+            if (_shadow is { GlowTexture: not null } shadow)
+            {
+                shadow.GlowOpacity = shape.Emphasis;
+            }
+        }
+
+        private double _glowEmphasis = 1;
+
+        private int _glassContentRadius = -1;
+
+        public int ClientCornerRadius => _frame is not null && _glassContentRadius >= 0 ? _glassContentRadius : CornerRadius;
 
         internal FrameCornerRig? DetachCornerRig()
         {
@@ -348,8 +373,10 @@ internal sealed partial class TinyComp
             if (_frame is not null && shown.Width > 0 && shown.Height > 0)
             {
                 _frame.Visible = true;
+                _frame.Window = XWin.Surface;
                 _frame.Configure(new Box(0, 0, shown.Width, shown.Height), _comp.ScaleAt(shown.X + 1, shown.Y + 1), BuildState());
                 _frame.Commit();
+                LayoutShadow();
             }
         }
 
@@ -367,7 +394,7 @@ internal sealed partial class TinyComp
             if (noBorder)
             {
                 DisposeFrame();
-                _comp.ApplyCorners(SceneSurface, CornerRadius);
+                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
                 ReportDecoration();
                 ReportGeometry();
             }
@@ -439,6 +466,7 @@ internal sealed partial class TinyComp
             _comp.ForgetFrameBackdrop(_frame);
             _frame?.Dispose();
             _frame = null;
+            RefreshShadow();
         }
 
         public void RebuildFrame()
@@ -458,7 +486,7 @@ internal sealed partial class TinyComp
             if (!WantsFrame)
             {
                 DisposeFrame();
-                _comp.ApplyCorners(SceneSurface, CornerRadius);
+                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
                 ReportGeometry();
                 return;
             }
@@ -476,11 +504,23 @@ internal sealed partial class TinyComp
                 TouchSlop = TouchGripSlop,
             };
             _comp.ApplyFrameBackdrop(_frame, renderer);
+            _frame.ShapePublished += OnShapePublished;
+            _glassContentRadius = renderer is Basin.Frames.Quill.QuillFrameRenderer { Theme.Glass: true } glassRenderer
+                ? (int)Math.Round(glassRenderer.Theme.ResolvedContentRadius)
+                : -1;
             _frame.Requested += OnFrameAction;
             _frame.Faulted += e => _comp.Log.Error($"frame fault {XWin.Class}: {e.Message}");
             Outer.RaiseToTop();
             Layout();
-            if (CornerRadius > 0)
+            RefreshShadow();
+            if (_glassContentRadius >= 0)
+            {
+                if (SceneSurface is not null)
+                {
+                    _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+                }
+            }
+            else if (CornerRadius > 0)
             {
                 _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, CornerRadius);
             }

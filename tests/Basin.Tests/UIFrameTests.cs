@@ -971,6 +971,79 @@ public sealed class UIFrameTests
         Assert.Equal(now, renderer.LastInteraction.ActiveChangedAt);
         frame.Dispose();
     }
+
+    [Fact]
+    public void Pointer_fields_track_enter_motion_and_leave()
+    {
+        using var host = new CompositorTestHost();
+        using var uiHost = new SkiaUIHost();
+        var renderer = new OutsetFrameRenderer { UsesPointer = true };
+        var clock = new Basin.Capabilities.Defaults.FrameClock();
+        var now = 1_000_000_000L;
+        var frame = new Frame(uiHost, renderer, host.Scene.Root) { Clock = clock, Time = () => now };
+        frame.Configure(new Box(40, 60, 64, 48), 1.0, new FrameState { Title = "t", Active = true });
+        frame.Commit();
+        host.RenderFrame();
+
+        frame.PointerEnter(70, 45);
+        clock.BeginFrame(host.Output, now);
+        Assert.True(renderer.LastInteraction.PointerInside);
+        Assert.Equal(40, renderer.LastInteraction.PointerX);
+        Assert.Equal(11, renderer.LastInteraction.PointerY);
+        Assert.Equal(now, renderer.LastInteraction.PointerChangedAt);
+
+        now += 300_000_000;
+        clock.BeginFrame(host.Output, now);
+        Assert.False(frame.Animating);
+
+        frame.PointerMotion(72, 46);
+        Assert.True(frame.Animating);
+        var moved = renderer.Draws;
+        clock.BeginFrame(host.Output, now + 16_000_000);
+        Assert.Equal(moved + 1, renderer.Draws);
+        Assert.Equal(42, renderer.LastInteraction.PointerX);
+        Assert.Equal(12, renderer.LastInteraction.PointerY);
+        Assert.Equal(now, renderer.LastInteraction.PointerChangedAt);
+
+        now += 300_000_000;
+        clock.BeginFrame(host.Output, now);
+        frame.PointerLeave();
+        Assert.True(frame.Animating);
+        clock.BeginFrame(host.Output, now + 16_000_000);
+        Assert.False(renderer.LastInteraction.PointerInside);
+        Assert.Equal(now, renderer.LastInteraction.PointerChangedAt);
+        frame.Dispose();
+    }
+
+    [Fact]
+    public void Pointer_motion_does_not_redraw_a_renderer_that_ignores_it()
+    {
+        using var host = new CompositorTestHost();
+        using var uiHost = new SkiaUIHost();
+        var renderer = new OutsetFrameRenderer();
+        var clock = new Basin.Capabilities.Defaults.FrameClock();
+        var now = 1_000_000_000L;
+        var frame = new Frame(uiHost, renderer, host.Scene.Root) { Clock = clock, Time = () => now };
+        frame.Configure(new Box(40, 60, 64, 48), 1.0, new FrameState { Title = "t", Active = true });
+        frame.Commit();
+        host.RenderFrame();
+
+        frame.PointerMotion(70, 45);
+        now += 300_000_000;
+        clock.BeginFrame(host.Output, now);
+        Assert.False(frame.Animating);
+        var settled = renderer.Draws;
+
+        for (var i = 0; i < 10; i++)
+        {
+            frame.PointerMotion(71 + i, 45);
+            clock.BeginFrame(host.Output, now + (i * 16_000_000));
+        }
+
+        Assert.False(frame.Animating);
+        Assert.Equal(settled, renderer.Draws);
+        frame.Dispose();
+    }
 }
 
 internal sealed class TestFrameTheme : IDisposable
@@ -1190,8 +1263,11 @@ internal sealed class OutsetFrameRenderer : IFrameRenderer
 
     public FrameInsets Outsets(in FrameState state, double scale) => new(Outset, Outset, Outset, Outset);
 
+    public bool UsesPointer { get; set; }
+
     public bool Animating(in FrameState state, in FrameInteraction interaction) =>
-        interaction.HoverChangedAt != 0 && interaction.Now - interaction.HoverChangedAt < 100_000_000;
+        (interaction.HoverChangedAt != 0 && interaction.Now - interaction.HoverChangedAt < 100_000_000) ||
+        (UsesPointer && interaction.PointerChangedAt != 0 && interaction.Now - interaction.PointerChangedAt < 100_000_000);
 
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
     {

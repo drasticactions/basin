@@ -16,6 +16,10 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     private readonly PixmanRegion32 _interactionDamage = new();
     private readonly PixmanRegion32 _backdrop = new();
     private readonly PixmanRegion32 _stripBackdrop = new();
+    private readonly SceneBuffer _underlay;
+    private readonly PixmanRegion32 _underlayRegion = new();
+    private FrameBackdropShape _publishedShape;
+    private bool _shapePublished;
 
     private IUISurface? _surface;
     private UIFrame _shown;
@@ -54,6 +58,8 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     private int _menuHotItem = -1;
     private Point _menuSceneOffset;
 
+    private Scene? _scene;
+
     public Frame(IUIHost host, IFrameRenderer renderer, SceneTree parent)
         : this(new FrameHosts(host), renderer, parent)
     {
@@ -65,13 +71,42 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         ArgumentNullException.ThrowIfNull(renderer);
         _hosts = hosts;
         _renderer = renderer;
-        _tree = new SceneTree(parent);
+        _tree = new SceneTree(parent) { DebugName = "frame" };
+        _underlay = new SceneBuffer(_tree) { Enabled = false, BackdropOnly = true, InputFilter = this, DebugName = "frame-underlay" };
         _strips = new SceneBuffer[4];
         _stripBoxes = new Box[4];
         for (var i = 0; i < 4; i++)
         {
-            _strips[i] = new SceneBuffer(_tree) { Enabled = false, PreciseDamage = true, InputFilter = this };
+            _strips[i] = new SceneBuffer(_tree) { Enabled = false, PreciseDamage = true, InputFilter = this, DebugName = "frame-strip" };
         }
+
+        Register();
+    }
+
+    public Surface? Window { get; set; }
+
+    public long DrawCount { get; private set; }
+
+    public FrameState DrawnState { get; private set; }
+
+    public FrameInteraction DrawnInteraction { get; private set; }
+
+    private void Register()
+    {
+        if (_scene is null && _tree.RootOwner() is { } scene)
+        {
+            _scene = scene;
+            scene.AddFrame(this);
+        }
+    }
+
+    private void NoteDrawn(in FrameState state)
+    {
+        DrawCount++;
+        DrawnState = state;
+        DrawnInteraction = _interaction;
+        _scene?.NotifyFrameDrawn(this);
+        Drawn?.Invoke(state, _interaction);
     }
 
     public SceneTree Tree => _tree;
@@ -113,6 +148,18 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     public IBackdropEffect? BackdropEffect { get; set; }
 
     public object? BackdropKey { get; set; }
+
+    public IBackdropEffect? UnderlayEffect { get; set; }
+
+    public object? UnderlayKey { get; set; }
+
+    public bool UnderlayCoversClient { get; set; } = true;
+
+    public SceneBuffer UnderlayNode => _underlay;
+
+    public event Action<FrameBackdropShape>? ShapePublished;
+
+    public event Action<FrameState, FrameInteraction>? Drawn;
 
     public SceneTree? MenuLayer { get; set; }
 
@@ -234,6 +281,7 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             var clientBox = new Box(outsets.Left + insets.Left, outsets.Top + insets.Top, geometry.Width, geometry.Height);
             _interaction = _interaction with { Now = Time() };
             _renderer.Draw(_surface, clientBox, state, _interaction);
+            NoteDrawn(state);
             UpdateAnimating(state);
 
             if (_hasPending)
@@ -269,6 +317,8 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         {
             return;
         }
+
+        Register();
 
         var buffer = _pending.Buffer;
         if (buffer is null)
@@ -312,6 +362,7 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             }
 
             strip.SetBuffer(buffer);
+            strip.AcquireFenceFd = _pending.AcquireFenceFd;
             strip.IsOpaque = _renderer.OpaqueChrome;
             strip.SourceBox = OutputScaling.ToPhysical(box, _pendingScale);
             strip.DestinationWidth = box.Width;
@@ -322,6 +373,7 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
 
         ApplyBackdrop();
+        ApplyUnderlay();
 
         _shown.Dispose();
         _shown = _pending;
@@ -401,6 +453,94 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    private void ApplyUnderlay()
+    {
+        if (_underlay.IsDestroyed)
+        {
+            return;
+        }
+
+        var shape = default(FrameBackdropShape);
+        var wanted = UnderlayEffect is not null && !_faulted;
+        if (wanted)
+        {
+            try
+            {
+                wanted = _renderer.BackdropShape(_pendingState, _pendingScale, out shape);
+            }
+            catch (Exception e)
+            {
+                Fault(e);
+                return;
+            }
+        }
+
+        if (!wanted)
+        {
+            _underlay.Enabled = false;
+            _underlay.SetBackdropEffect(null, null);
+            _shapePublished = false;
+            return;
+        }
+
+        var o = _pendingOutsets;
+        var i = _pendingInsets;
+        var width = _pendingGeometry.Width + i.Left + i.Right;
+        var height = _pendingGeometry.Height + i.Top + i.Bottom;
+        _underlay.SetPosition(o.Left, o.Top);
+        _underlay.DestinationWidth = width;
+        _underlay.DestinationHeight = height;
+        RoundedRegion.Fill(_underlayRegion, width, height, (int)Math.Round(Math.Max(0, shape.CornerRadius)));
+        var hole = shape.ClientHole;
+        if (!UnderlayCoversClient && !hole.IsEmpty)
+        {
+            _scratch.Reset(new PixmanBox32(hole.X, hole.Y, hole.Right, hole.Bottom));
+            _underlayRegion.Subtract(_underlayRegion, _scratch);
+        }
+
+        _underlay.Enabled = true;
+        _underlay.SetBackdropEffect(UnderlayEffect, _underlayRegion, UnderlayKey ?? _underlay);
+        _shapePublished = false;
+        PublishShape(shape);
+    }
+
+    private void PublishShown()
+    {
+        if (!_underlay.Enabled || UnderlayEffect is null || _underlay.IsDestroyed)
+        {
+            return;
+        }
+
+        if (_renderer.BackdropShape(_shownState, _shownScale, out var shape))
+        {
+            PublishShape(shape);
+        }
+    }
+
+    private void PublishShape(in FrameBackdropShape shape)
+    {
+        if (_shapePublished && shape == _publishedShape)
+        {
+            return;
+        }
+
+        var first = !_shapePublished;
+        _publishedShape = shape;
+        _shapePublished = true;
+        if (UnderlayEffect is IShapedBackdropEffect shaped)
+        {
+            shaped.SetShape(UnderlayKey ?? _underlay, shape);
+        }
+
+        ShapePublished?.Invoke(shape);
+
+        if (!first)
+        {
+            _scratch.Reset(new PixmanBox32(0, 0, _underlay.DestinationWidth, _underlay.DestinationHeight));
+            _underlay.NotifyContentChanged(_scratch);
+        }
+    }
+
     public bool HasPendingFor(in Box geometry, double scale)
     {
         _thread.Assert();
@@ -472,6 +612,11 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             return false;
         }
 
+        if (buffer == _underlay)
+        {
+            return false;
+        }
+
         var index = Array.IndexOf(_strips, buffer);
         if (index < 0)
         {
@@ -508,23 +653,82 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     {
         _thread.Assert();
         var part = PartAt(x, y);
+        TrackPointer(x, y, inside: true);
         if (part != _interaction.Hot)
         {
             var previous = _interaction.Hot;
             SetHot(part);
             RedrawShown(previous, part);
         }
+
+        FollowPointer();
     }
 
     public void PointerLeave()
     {
         _thread.Assert();
+        var wasInside = _interaction.PointerInside;
+        if (wasInside)
+        {
+            _interaction = _interaction with { PointerInside = false, PointerChangedAt = Time() };
+        }
+
         if (_interaction.Hot != FramePart.None || _interaction.Pressed != FramePart.None)
         {
             var previous = _interaction;
             SetHot(FramePart.None);
             SetPressed(FramePart.None);
             RedrawShown(previous.Hot, previous.Pressed);
+        }
+
+        if (wasInside)
+        {
+            FollowPointer();
+        }
+    }
+
+    private void TrackPointer(double x, double y, bool inside)
+    {
+        if (!_shownValid)
+        {
+            return;
+        }
+
+        var sx = x - (_shownGeometry.X - _shownInsets.Left - _shownOutsets.Left);
+        var sy = y - (_shownGeometry.Y - _shownInsets.Top - _shownOutsets.Top);
+        if (_interaction.PointerInside == inside && _interaction.PointerX == sx && _interaction.PointerY == sy)
+        {
+            return;
+        }
+
+        _interaction = _interaction with { PointerX = sx, PointerY = sy, PointerInside = inside, PointerChangedAt = Time() };
+    }
+
+    private void FollowPointer()
+    {
+        if (!_shownValid || _hasPending || _surface is null || _faulted || _disposed || _animating)
+        {
+            return;
+        }
+
+        try
+        {
+            _interaction = _interaction with { Now = Time() };
+            if (!_renderer.Animating(_shownState, _interaction))
+            {
+                return;
+            }
+
+            _fullAnimation = true;
+            UpdateAnimating(_shownState);
+            if (_animating && _clockAttached && Clock is { } clock)
+            {
+                clock.RequestFrame();
+            }
+        }
+        catch (Exception e)
+        {
+            Fault(e);
         }
     }
 
@@ -1012,14 +1216,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             }
 
             _interaction = _interaction with { Now = now };
-            _suppressSurfaceDamage = true;
-            try
+            if (!DrawShown())
             {
-                _renderer.Draw(_surface, ShownClientBox(), _shownState, _interaction);
-            }
-            finally
-            {
-                _suppressSurfaceDamage = false;
+                return;
             }
 
             if (_fullAnimation)
@@ -1028,6 +1227,7 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             }
 
             DamageStrips(_interactionDamage);
+            PublishShown();
             UpdateAnimating(_shownState);
             if (_animating && _clockAttached && Clock is { } clock)
             {
@@ -1056,12 +1256,74 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         try
         {
             _interaction = _interaction with { Now = Time() };
-            _renderer.Draw(_surface, ShownClientBox(), _shownState, _interaction);
+            _interactionDamage.Clear();
+            if (DrawShown())
+            {
+                DamageStrips(_interactionDamage);
+                PublishShown();
+            }
         }
         catch (Exception e)
         {
             Fault(e);
         }
+    }
+
+    private bool DrawShown()
+    {
+        var surface = _surface!;
+        if (_shown.Buffer is not { } current || !current.TryGetDmabuf(out _))
+        {
+            _suppressSurfaceDamage = true;
+            try
+            {
+                _renderer.Draw(surface, ShownClientBox(), _shownState, _interaction);
+                NoteDrawn(_shownState);
+            }
+            finally
+            {
+                _suppressSurfaceDamage = false;
+            }
+
+            return true;
+        }
+
+        var width = _shownGeometry.Width + _shownInsets.Left + _shownInsets.Right + _shownOutsets.Left + _shownOutsets.Right;
+        var height = _shownGeometry.Height + _shownInsets.Top + _shownInsets.Bottom + _shownOutsets.Top + _shownOutsets.Bottom;
+        if (!surface.Configure(width, height, _shownScale))
+        {
+            return false;
+        }
+
+        _suppressSurfaceDamage = true;
+        try
+        {
+            _renderer.Draw(surface, ShownClientBox(), _shownState, _interaction);
+                NoteDrawn(_shownState);
+        }
+        finally
+        {
+            _suppressSurfaceDamage = false;
+        }
+
+        if (!surface.TryAcquire(out var frame) || frame.Buffer is not { } buffer)
+        {
+            frame.Dispose();
+            return true;
+        }
+
+        foreach (var strip in _strips)
+        {
+            if (strip.Enabled && !strip.IsDestroyed)
+            {
+                strip.SetBuffer(buffer);
+                strip.AcquireFenceFd = frame.AcquireFenceFd;
+            }
+        }
+
+        _shown.Dispose();
+        _shown = frame;
+        return true;
     }
 
     private Box ShownClientBox() => new(
@@ -1134,11 +1396,14 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
 
         _disposed = true;
+        _scene?.RemoveFrame(this);
+        _scene = null;
         TearDown();
         _scratch.Dispose();
         _interactionDamage.Dispose();
         _backdrop.Dispose();
         _stripBackdrop.Dispose();
+        _underlayRegion.Dispose();
     }
 
     private void RedrawShown(FramePart changed, FramePart alsoChanged)
@@ -1159,17 +1424,13 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             }
 
             _interaction = _interaction with { Now = Time() };
-            _suppressSurfaceDamage = true;
-            try
+            if (!DrawShown())
             {
-                _renderer.Draw(_surface, ShownClientBox(), _shownState, _interaction);
-            }
-            finally
-            {
-                _suppressSurfaceDamage = false;
+                return;
             }
 
             DamageStrips(_interactionDamage);
+            PublishShown();
             UpdateAnimating(_shownState);
         }
         catch (Exception e)
@@ -1251,10 +1512,22 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     {
         DetachClock();
         DismissMenu();
+        if (UnderlayEffect is { } underlay)
+        {
+            try
+            {
+                underlay.ForgetSurface(UnderlayKey ?? _underlay);
+            }
+            catch
+            {
+            }
+        }
+
         foreach (var strip in _strips)
         {
             if (!strip.IsDestroyed)
             {
+                strip.AcquireFenceFd = -1;
                 strip.SetBuffer(null);
             }
         }

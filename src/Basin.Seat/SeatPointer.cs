@@ -52,6 +52,10 @@ public sealed class SeatPointer
 
     public event Action<uint, bool>? Buttoned;
 
+    public event Action<uint, PointerAxis>? Axised;
+
+    public event Action<IPointerGrab, bool>? GrabChanged;
+
     public bool ValidateEnterSerial(uint serial) => serial != 0 && serial == _lastEnterSerial;
 
     public void NotifyEnter(Surface? surface, double x, double y) => Grab.Enter(surface, x, y);
@@ -172,15 +176,24 @@ public sealed class SeatPointer
 
     public void ClearImplicitGrab() => _pressedButtons = 0;
 
-    public void StartGrab(IPointerGrab grab) => _grabs.Add(grab);
+    public void StartGrab(IPointerGrab grab)
+    {
+        _grabs.Add(grab);
+        GrabChanged?.Invoke(grab, true);
+    }
 
     public void EndGrab(IPointerGrab grab)
     {
         var wasActive = HasGrab && Grab == grab;
-        _grabs.Remove(grab);
+        var removed = _grabs.Remove(grab);
         if (wasActive)
         {
             grab.Cancel();
+        }
+
+        if (removed)
+        {
+            GrabChanged?.Invoke(grab, false);
         }
     }
 
@@ -323,6 +336,7 @@ public sealed class SeatPointer
 
     public void SendAxis(uint timeMs, in PointerAxis axis)
     {
+        Axised?.Invoke(timeMs, axis);
         if (_seat.ClientOf(Focus) is not { } client)
         {
             return;

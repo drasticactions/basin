@@ -17,7 +17,14 @@ public sealed class QuillFrameAllocationTests
     public void A_quill_frame_repaint_on_vulkan_stays_within_budget() =>
         AssertBudget("vulkan", "vulkan", "quill-frame-repaint-vk");
 
-    private static void AssertBudget(string row, string backend, string path)
+    [Fact]
+    public void A_glass_quill_frame_repaint_stays_within_budget() => AssertBudget("gl", "gl", "quill-glass-frame-repaint", glass: true);
+
+    [Fact]
+    public void A_glass_quill_frame_repaint_on_vulkan_stays_within_budget() =>
+        AssertBudget("vulkan", "vulkan", "quill-glass-frame-repaint-vk", glass: true);
+
+    private static void AssertBudget(string row, string backend, string path, bool glass = false)
     {
         Budgets.Require();
         CompositorTestHost.SkipUnlessRunnable(row);
@@ -25,7 +32,9 @@ public sealed class QuillFrameAllocationTests
         using var lease = QuillHostTests.QuillLease.Open(host, backend);
         Assert.SkipWhen(lease is null, $"this row builds no {backend} quill host");
 
-        var renderer = new QuillFrameRenderer(new QuillFrameTheme { Face = QuillFrameFonts.Bundled() });
+        var theme = glass ? QuillFrameTheme.DarkGlass() : new QuillFrameTheme();
+        theme.Face = QuillFrameFonts.Bundled();
+        var renderer = new QuillFrameRenderer(theme);
         var state = new FrameState
         {
             Title = "Quill frame repaint",
@@ -60,7 +69,15 @@ public sealed class QuillFrameAllocationTests
         for (var i = 0; i < rounds; i++)
         {
             var interaction = new FrameInteraction(
-                (i & 1) == 0 ? FramePart.Close : FramePart.None, FramePart.None);
+                (i & 1) == 0 ? FramePart.Close : FramePart.None, FramePart.None)
+            {
+                HoverChangedAt = 1_000_000_000L,
+                Now = 1_000_000_000L + (i * 16_000_000L),
+                PointerX = 40 + i,
+                PointerY = 12,
+                PointerInside = true,
+                PointerChangedAt = 1_000_000_000L,
+            };
             renderer.Draw(surface, client, state, interaction);
             if (surface.TryAcquire(out var frame))
             {

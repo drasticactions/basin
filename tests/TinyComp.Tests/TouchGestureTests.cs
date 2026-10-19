@@ -19,17 +19,18 @@ public sealed class TouchGestureTests
         var (startX, _) = session!.WindowPosition();
         _ = session.WaitForLine("PHYS ");
         var lines = new List<string>();
+        var start = (uint)Environment.TickCount;
         for (var i = 0; i <= 10; i++)
         {
             lines.Add(string.Create(
                 CultureInfo.InvariantCulture,
-                $"ipc input/touch {{\"kind\":\"{(i == 0 ? "down" : "motion")}\",\"id\":1,\"x\":{x + (i * 20):F2},\"y\":{y:F2}}}"));
+                $"ipc input/touch {{\"kind\":\"{(i == 0 ? "down" : "motion")}\",\"id\":1,\"x\":{x + (i * 20):F2},\"y\":{y:F2},\"time_ms\":{start + (i * 8)}}}"));
             lines.Add("ipc input/touch {\"kind\":\"frame\"}");
         }
 
-        lines.Add("ipc input/touch {\"kind\":\"up\",\"id\":1}");
+        lines.Add(string.Create(CultureInfo.InvariantCulture, $"ipc input/touch {{\"kind\":\"up\",\"id\":1,\"time_ms\":{start + 88}}}"));
         lines.Add("ipc input/touch {\"kind\":\"frame\"}");
-        session.SendPaced(lines, 8);
+        session.SendPaced(lines, 40);
 
         var flying = Body(session);
         Assert.Equal("yes", flying.GetValueOrDefault("awake"));

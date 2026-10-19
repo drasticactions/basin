@@ -178,6 +178,8 @@ public sealed partial class Scene
         Root.Owner = this;
     }
 
+    private readonly List<Frame> _frames = [];
+
     public SceneTree Root { get; }
 
     public Func<IBuffer, ICrossDeviceConversion?>? CrossDeviceImport { get; set; }
@@ -190,11 +192,33 @@ public sealed partial class Scene
 
     public event Action? FrameRequested;
 
+    public IReadOnlyList<Frame> Frames => _frames;
+
+    public event Action<Frame>? FrameDrawn;
+
+    internal void AddFrame(Frame frame)
+    {
+        if (!_frames.Contains(frame))
+        {
+            _frames.Add(frame);
+        }
+    }
+
+    internal void RemoveFrame(Frame frame) => _frames.Remove(frame);
+
+    internal void NotifyFrameDrawn(Frame frame) => FrameDrawn?.Invoke(frame);
+
+    internal bool HasDamageHandlers => Damaged is not null;
+
+    internal bool HasFrameDrawnHandlers => FrameDrawn is not null;
+
     internal void NotifyStructureChanged() => StructureChanged?.Invoke();
 
     internal void NotifyInputRegionChanged() => InputRegionChanged?.Invoke();
 
     internal void NotifyFrameRequested() => FrameRequested?.Invoke();
+
+    public void RequestFrame() => NotifyFrameRequested();
 
     public void SendFrameDone(uint timestampMs)
     {
@@ -574,25 +598,8 @@ public sealed partial class Scene
         }
     }
 
-    internal unsafe bool RenderCapture(IRenderer renderer, SceneTransform node, MemoryBuffer target, in Box bounds, double scale)
+    internal bool RenderCapture(IRenderer renderer, SceneTransform node, MemoryBuffer target, in Box bounds, double scale)
     {
-        if (!target.BeginDataAccess(BufferDataAccess.Write, out var view))
-        {
-            return false;
-        }
-
-        try
-        {
-            for (var y = 0; y < target.Height; y++)
-            {
-                new Span<byte>((void*)(view.Data + (y * view.Stride)), target.Width * 4).Clear();
-            }
-        }
-        finally
-        {
-            target.EndDataAccess();
-        }
-
         var list = RentList();
         try
         {
@@ -607,6 +614,7 @@ public sealed partial class Scene
                 RenderFences.CloseFence(waitFence);
             }
 
+            pass.Clear(default);
             var projection = new OutputProjection(scale);
             for (var i = 0; i < list.Count; i++)
             {
@@ -836,6 +844,21 @@ public sealed partial class Scene
 
     private static MeshVertex[] _meshScratch = [];
 
+    private static MeshVertex[] _backdropMeshScratch = [];
+
+    private static MeshVertex Local((double X, double Y) screen, in ClipVertex vertex, double originU, double originV) =>
+        new((float)screen.X, (float)screen.Y, (float)(vertex.U - originU), (float)(vertex.V - originV), default);
+
+    private static Span<MeshVertex> BackdropMeshScratch(int count)
+    {
+        if (_backdropMeshScratch.Length < count)
+        {
+            _backdropMeshScratch = new MeshVertex[Math.Max(count, _backdropMeshScratch.Length * 2)];
+        }
+
+        return _backdropMeshScratch.AsSpan(0, count);
+    }
+
     private static Span<MeshVertex> MeshScratch(int count)
     {
         if (_meshScratch.Length < count)
@@ -972,6 +995,9 @@ public sealed partial class Scene
         IRenderPass pass, SceneTree tree, int x, int y, ReadOnlySpan<MeshVertex> vertices, in RenderTransform full,
         PixmanRegion32? clip)
     {
+        Span<ClipVertex> polygon = stackalloc ClipVertex[9];
+        Span<ClipVertex> spare = stackalloc ClipVertex[9];
+        Span<(double X, double Y)> mapped = stackalloc (double X, double Y)[9];
         foreach (var child in tree.Children)
         {
             if (!child.Enabled)
@@ -996,6 +1022,10 @@ public sealed partial class Scene
                     var minV = y + child.Y + extents.Y1;
                     var maxU = x + child.X + extents.X2;
                     var maxV = y + child.Y + extents.Y2;
+                    var mesh = BackdropMeshScratch(vertices.Length * 5);
+                    var meshCount = 0;
+                    var originU = x + child.X;
+                    var originV = y + child.Y;
                     BackdropScratch.Clear();
                     for (var i = 0; i + 2 < vertices.Length; i += 3)
                     {
@@ -1008,19 +1038,49 @@ public sealed partial class Scene
                             continue;
                         }
 
-                        var (x0, y0) = full.Map(vertices[i].X, vertices[i].Y);
-                        var (x1, y1) = full.Map(vertices[i + 1].X, vertices[i + 1].Y);
-                        var (x2, y2) = full.Map(vertices[i + 2].X, vertices[i + 2].Y);
-                        var left = (int)Math.Floor(Math.Min(x0, Math.Min(x1, x2)));
-                        var top = (int)Math.Floor(Math.Min(y0, Math.Min(y1, y2)));
-                        var right = (int)Math.Ceiling(Math.Max(x0, Math.Max(x1, x2)));
-                        var bottom = (int)Math.Ceiling(Math.Max(y0, Math.Max(y1, y2)));
-                        if (right > left && bottom > top)
+                        for (var k = 0; k < 3; k++)
                         {
-                            BackdropScratch.UnionRect(BackdropScratch, left, top, (uint)(right - left), (uint)(bottom - top));
+                            var vertex = vertices[i + k];
+                            polygon[k] = new ClipVertex(vertex.U, vertex.V, vertex.X, vertex.Y);
+                        }
+
+                        var count = ClipVertex.Clip(polygon, spare, 3, minU, minV, maxU, maxV);
+                        if (count < 3)
+                        {
+                            continue;
+                        }
+
+                        var left = double.MaxValue;
+                        var top = double.MaxValue;
+                        var right = double.MinValue;
+                        var bottom = double.MinValue;
+                        for (var k = 0; k < count; k++)
+                        {
+                            mapped[k] = full.Map(polygon[k].X, polygon[k].Y);
+                            left = Math.Min(left, mapped[k].X);
+                            top = Math.Min(top, mapped[k].Y);
+                            right = Math.Max(right, mapped[k].X);
+                            bottom = Math.Max(bottom, mapped[k].Y);
+                        }
+
+                        for (var k = 1; k + 1 < count; k++)
+                        {
+                            mesh[meshCount++] = Local(mapped[0], polygon[0], originU, originV);
+                            mesh[meshCount++] = Local(mapped[k], polygon[k], originU, originV);
+                            mesh[meshCount++] = Local(mapped[k + 1], polygon[k + 1], originU, originV);
+                        }
+
+                        var boxLeft = (int)Math.Floor(left);
+                        var boxTop = (int)Math.Floor(top);
+                        var boxRight = (int)Math.Ceiling(right);
+                        var boxBottom = (int)Math.Ceiling(bottom);
+                        if (boxRight > boxLeft && boxBottom > boxTop)
+                        {
+                            BackdropScratch.UnionRect(BackdropScratch, boxLeft, boxTop, (uint)(boxRight - boxLeft), (uint)(boxBottom - boxTop));
                         }
                     }
 
+                    var whole = BackdropScratch.Extents;
                     if (clip is not null)
                     {
                         BackdropScratch.IntersectWith(clip);
@@ -1029,11 +1089,13 @@ public sealed partial class Scene
                     if (!BackdropScratch.IsEmpty)
                     {
                         var box = BackdropScratch.Extents;
-                        pass.AddBackdropEffect(
+                        pass.AddDeformedBackdropEffect(
                             buffer.BackdropEffect!,
                             new Box(box.X1, box.Y1, box.X2 - box.X1, box.Y2 - box.Y1),
+                            new Box(whole.X1, whole.Y1, whole.X2 - whole.X1, whole.Y2 - whole.Y1),
                             BackdropScratch,
-                            buffer.BackdropKey);
+                            buffer.BackdropKey,
+                            mesh[..meshCount]);
                     }
 
                     break;
@@ -1114,6 +1176,7 @@ public sealed partial class Scene
             }
         }
 
+        var whole = BackdropScratch.Extents;
         if (clip is not null)
         {
             BackdropScratch.IntersectWith(clip);
@@ -1128,6 +1191,7 @@ public sealed partial class Scene
         pass.AddBackdropEffect(
             buffer.BackdropEffect!,
             new Box(extents.X1, extents.Y1, extents.X2 - extents.X1, extents.Y2 - extents.Y1),
+            new Box(whole.X1, whole.Y1, whole.X2 - whole.X1, whole.Y2 - whole.Y1),
             BackdropScratch,
             buffer.BackdropKey);
     }
@@ -1150,6 +1214,7 @@ public sealed partial class Scene
             }
         }
 
+        var whole = BackdropScratch.Extents;
         if (clip is not null)
         {
             BackdropScratch.IntersectWith(clip);
@@ -1164,6 +1229,7 @@ public sealed partial class Scene
         pass.AddBackdropEffect(
             buffer.BackdropEffect!,
             new Box(extents.X1, extents.Y1, extents.X2 - extents.X1, extents.Y2 - extents.Y1),
+            new Box(whole.X1, whole.Y1, whole.X2 - whole.X1, whole.Y2 - whole.Y1),
             BackdropScratch,
             buffer.BackdropKey);
     }

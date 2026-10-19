@@ -17,6 +17,12 @@ public sealed class QuillFrameRenderer : IFrameRenderer
     private FontFile? _face;
     private bool _laidOut;
     private bool _shaded;
+    private double _glintX;
+    private double _glintY;
+    private double _glintStrength;
+    private long _glintAt;
+    private bool _glintResting = true;
+    private double _emphasis = 1;
 
     public QuillFrameRenderer(QuillFrameTheme theme)
     {
@@ -43,19 +49,62 @@ public sealed class QuillFrameRenderer : IFrameRenderer
 
     public QuillFrameGeometry Geometry => _geometry;
 
-    public bool OpaqueChrome => _laidOut && !_geometry.HasRoundedCorner && !_shaded && !_theme.Frosted;
+    public bool OpaqueChrome => _laidOut && !_geometry.HasRoundedCorner && !_shaded && !_theme.Frosted && !_theme.Glass;
 
     public bool BackdropRegion(in FrameState state, double scale, PixmanRegion32 into)
     {
         ArgumentNullException.ThrowIfNull(into);
         into.Clear();
-        if (!_theme.Frosted || !_laidOut)
+        if (!_theme.Frosted || _theme.Glass || !_laidOut)
         {
             return false;
         }
 
         var radius = (int)Math.Round(Math.Max(0f, _theme.CornerRadius));
         return RoundedRegion.Fill(into, _geometry.Width, _geometry.Height, radius);
+    }
+
+    public bool BackdropShape(in FrameState state, double scale, out FrameBackdropShape shape)
+    {
+        if (!_theme.Glass || !_laidOut)
+        {
+            shape = default;
+            return false;
+        }
+
+        var w = _geometry.Width;
+        var h = _geometry.Height;
+        var border = _geometry.Border;
+        var top = border + _geometry.TitleHeight;
+        shape = new FrameBackdropShape
+        {
+            Width = w,
+            Height = h,
+            CornerRadius = Math.Max(0f, _theme.CornerRadius),
+            EdgeWidth = Math.Max(0f, _theme.Bevel),
+            ClientHole = _shaded || h - top - border <= 0 ? default : new Box(border, top, w - (2 * border), h - top - border),
+            ClientRadius = _theme.ResolvedContentRadius,
+            HighlightX = _glintX,
+            HighlightY = _glintY,
+            HighlightStrength = _glintStrength,
+            Emphasis = _emphasis,
+        };
+        return true;
+    }
+
+    public bool Animating(in FrameState state, in FrameInteraction interaction)
+    {
+        if (!_theme.Glass)
+        {
+            return false;
+        }
+
+        var duration = Duration();
+        var now = interaction.Now;
+        return Running(interaction.ActiveChangedAt, now, duration)
+            || Running(interaction.HoverChangedAt, now, duration)
+            || Running(interaction.PressChangedAt, now, duration)
+            || !GlintSettled(interaction);
     }
 
     public FrameInsets Measure(in FrameState state, double scale) => new(
@@ -70,6 +119,13 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         ArgumentNullException.ThrowIfNull(surface);
         var quill = (IQuillUISurface)surface;
         Layout(clientBox, state);
+        if (_theme.Glass)
+        {
+            var focus = Ease(interaction.ActiveChangedAt, interaction.Now, Duration());
+            _emphasis = interaction.ActiveChangedAt == 0 ? (state.Active ? 1 : 0) : state.Active ? focus : 1 - focus;
+            FollowGlint(interaction);
+        }
+
         var canvas = quill.BeginDraw();
         try
         {
@@ -147,7 +203,18 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         return FramePart.Border;
     }
 
-    public Box PartBounds(FramePart part) => _geometry.BoundsOf(part);
+    public Box PartBounds(FramePart part)
+    {
+        var bounds = _geometry.BoundsOf(part);
+        if (!_theme.Glass || bounds.IsEmpty || part is FramePart.Title or FramePart.Icon or FramePart.Menu)
+        {
+            return bounds;
+        }
+
+        return new Box(bounds.X - GlowReach, bounds.Y - GlowReach, bounds.Width + (2 * GlowReach), bounds.Height + (2 * GlowReach));
+    }
+
+    private const int GlowReach = 4;
 
     public string? CursorFor(FramePart part) => part switch
     {
@@ -254,6 +321,12 @@ public sealed class QuillFrameRenderer : IFrameRenderer
             return;
         }
 
+        if (_theme.Glass)
+        {
+            PaintGlass(canvas, state, interaction);
+            return;
+        }
+
         var w = _geometry.Width;
         var h = _geometry.Height;
         var border = _geometry.Border;
@@ -320,6 +393,162 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         PaintButton(canvas, _geometry.Stick, FramePart.Stick, interaction, _theme.Toggle, state.Active && state.Sticky);
         PaintTitle(canvas, state, text);
     }
+
+    private void PaintGlass(Canvas canvas, in FrameState state, in FrameInteraction interaction)
+    {
+        var w = _geometry.Width;
+        var h = _geometry.Height;
+        var radius = _theme.CornerRadius;
+        var outline = Mix(_theme.OutlineInactive, _theme.Outline, _emphasis);
+        var text = Mix(_theme.TextInactive, _theme.Text, _emphasis);
+        canvas.SetStrokeColor(outline);
+        canvas.SetStrokeWidth(1);
+        canvas.BeginPath();
+        canvas.RoundedRect(0.5f, 0.5f, w - 1f, h - 1f, radius, radius, radius, radius);
+        canvas.Stroke();
+
+        PaintIcon(canvas, state, text);
+        PaintGlassButton(canvas, _geometry.Close, FramePart.Close, interaction, _theme.Close, false);
+        PaintGlassButton(canvas, _geometry.Maximize, FramePart.Maximize, interaction, _theme.Maximize, false);
+        PaintGlassButton(canvas, _geometry.Minimize, FramePart.Minimize, interaction, _theme.Minimize, false);
+        PaintGlassButton(canvas, _geometry.Shade, FramePart.Shade, interaction, _theme.Toggle, state.Shaded);
+        PaintGlassButton(canvas, _geometry.Above, FramePart.Above, interaction, _theme.Toggle, state.Above);
+        PaintGlassButton(canvas, _geometry.Stick, FramePart.Stick, interaction, _theme.Toggle, state.Sticky);
+        PaintTitle(canvas, state, text);
+    }
+
+    private void PaintGlassButton(
+        Canvas canvas, in Box box, FramePart part, in FrameInteraction interaction, Color32 lit, bool on)
+    {
+        if (box.IsEmpty)
+        {
+            return;
+        }
+
+        var duration = Duration();
+        var hover = PartEase(part, interaction.Hot, interaction.PreviousHot, interaction.HoverChangedAt, interaction.Now, duration);
+        var press = PartEase(part, interaction.Pressed, interaction.PreviousPressed, interaction.PressChangedAt, interaction.Now, duration);
+        var radius = box.Width / 2f;
+        var centerX = box.X + box.Width / 2f;
+        var centerY = box.Y + box.Height / 2f;
+        if (hover > 0)
+        {
+            canvas.CircleFilled(centerX, centerY, radius + (3f * (float)hover), WithAlpha(lit, 0x50 * hover));
+        }
+
+        var fill = Mix(_theme.Dormant, lit, Math.Max(on ? 1 : 0, Math.Max(hover, press)) * (0.6 + (0.4 * _emphasis)));
+        canvas.CircleFilled(centerX, centerY, radius - (1.5f * (float)press), fill);
+        var mark = Math.Max(hover, press);
+        if (mark <= 0)
+        {
+            return;
+        }
+
+        canvas.SetStrokeColor(WithAlpha(_theme.Glyph, _theme.Glyph.A * mark));
+        canvas.SetStrokeWidth(1.4f);
+        var arm = radius * 0.42f;
+        canvas.BeginPath();
+        switch (part)
+        {
+            case FramePart.Close:
+                canvas.MoveTo(centerX - arm, centerY - arm);
+                canvas.LineTo(centerX + arm, centerY + arm);
+                canvas.MoveTo(centerX - arm, centerY + arm);
+                canvas.LineTo(centerX + arm, centerY - arm);
+                break;
+            case FramePart.Minimize:
+                canvas.MoveTo(centerX - arm, centerY);
+                canvas.LineTo(centerX + arm, centerY);
+                break;
+            default:
+                canvas.MoveTo(centerX - arm, centerY - arm);
+                canvas.LineTo(centerX + arm, centerY - arm);
+                canvas.LineTo(centerX + arm, centerY + arm);
+                canvas.LineTo(centerX - arm, centerY + arm);
+                canvas.ClosePath();
+                break;
+        }
+
+        canvas.Stroke();
+    }
+
+    private void FollowGlint(in FrameInteraction interaction)
+    {
+        var target = interaction.PointerInside ? 1.0 : 0.0;
+        var from = _glintResting ? Math.Max(_glintAt, interaction.PointerChangedAt) : _glintAt;
+        var elapsed = _glintAt == 0 ? 0 : Math.Max(0, interaction.Now - from);
+        _glintAt = interaction.Now;
+        if (target > 0 && _glintStrength < 0.01)
+        {
+            _glintX = interaction.PointerX;
+            _glintY = interaction.PointerY;
+        }
+
+        var follow = 1 - Math.Exp(-elapsed / (Duration() / 3.0));
+        _glintStrength += (target - _glintStrength) * follow;
+        if (Math.Abs(target - _glintStrength) < 0.01)
+        {
+            _glintStrength = target;
+        }
+
+        if (target > 0)
+        {
+            _glintX += (interaction.PointerX - _glintX) * follow;
+            _glintY += (interaction.PointerY - _glintY) * follow;
+            if (Math.Abs(interaction.PointerX - _glintX) < 0.5 && Math.Abs(interaction.PointerY - _glintY) < 0.5)
+            {
+                _glintX = interaction.PointerX;
+                _glintY = interaction.PointerY;
+            }
+        }
+
+        _glintResting = GlintSettled(interaction);
+    }
+
+    private bool GlintSettled(in FrameInteraction interaction)
+    {
+        var target = interaction.PointerInside ? 1.0 : 0.0;
+        if (_glintStrength != target)
+        {
+            return false;
+        }
+
+        return target == 0 || (_glintX == interaction.PointerX && _glintY == interaction.PointerY);
+    }
+
+    private double Duration() => Math.Max(1, _theme.AnimationMs) * 1_000_000.0;
+
+    private static bool Running(long at, long now, double duration) => at != 0 && now - at < duration;
+
+    private static double Ease(long at, long now, double duration)
+    {
+        if (at == 0)
+        {
+            return 1;
+        }
+
+        var t = Math.Clamp((now - at) / duration, 0, 1);
+        return t * t * (3 - (2 * t));
+    }
+
+    private static double PartEase(FramePart part, FramePart now, FramePart before, long at, long time, double duration)
+    {
+        var eased = Ease(at, time, duration);
+        return part == now ? eased : part == before ? 1 - eased : 0;
+    }
+
+    private static Color32 Mix(Color32 from, Color32 to, double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return new Color32(
+            (byte)Math.Round(from.R + ((to.R - from.R) * t)),
+            (byte)Math.Round(from.G + ((to.G - from.G) * t)),
+            (byte)Math.Round(from.B + ((to.B - from.B) * t)),
+            (byte)Math.Round(from.A + ((to.A - from.A) * t)));
+    }
+
+    private static Color32 WithAlpha(Color32 color, double alpha) =>
+        new(color.R, color.G, color.B, (byte)Math.Clamp(Math.Round(alpha), 0, 255));
 
     private void PaintIcon(Canvas canvas, in FrameState state, Color32 text)
     {

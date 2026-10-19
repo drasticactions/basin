@@ -183,6 +183,55 @@ public sealed class DropShadowTests
         }
     }
 
+    [Fact]
+    public void The_glow_layer_fades_with_its_opacity()
+    {
+        using var host = new CompositorTestHost();
+        using var texture = DropShadowTexture.Build(Large(), 1);
+        using var glowTexture = DropShadowTexture.Build(
+            new DropShadowOptions
+            {
+                Primary = new DropShadowLayer(0, 0, 24, 1),
+                Secondary = new DropShadowLayer(0, 0, 0, 0),
+                OffsetY = 0,
+                CornerRadius = 12,
+                Color = new RenderColor(0.3f, 0.45f, 0.65f, 1f),
+            },
+            1);
+        Assert.NotNull(texture);
+        Assert.NotNull(glowTexture);
+
+        var window = new SceneTree(host.Scene.Root);
+        using var shadow = new DropShadowEffect(window) { Texture = texture, GlowTexture = glowTexture };
+        shadow.SetGeometry(new Box(0, 0, 400, 300));
+        var glow = shadow.Tree.Children.OfType<SceneTree>().Single();
+        Assert.False(glow.Enabled);
+
+        var damaged = 0;
+        host.Scene.Damaged += (_, _) => damaged++;
+        shadow.GlowOpacity = 0.5;
+        Assert.True(glow.Enabled);
+        Assert.Equal(0.5f, glow.Alpha);
+        Assert.Equal(8, glow.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.True(damaged > 0);
+
+        damaged = 0;
+        shadow.GlowOpacity = 0.75;
+        Assert.Equal(0.75f, glow.Alpha);
+        Assert.True(damaged > 0);
+
+        shadow.GlowOpacity = 0;
+        Assert.False(glow.Enabled);
+        Assert.Equal(0, glow.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(8, shadow.Tree.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+
+        shadow.Texture = null;
+        shadow.GlowOpacity = 1;
+        Assert.True(shadow.Tree.Enabled);
+        Assert.Equal(0, shadow.Tree.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(8, glow.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+    }
+
     private static Box BoxOf(SceneBuffer cell) =>
         new(cell.X, cell.Y, cell.DestinationWidth, cell.DestinationHeight);
 }

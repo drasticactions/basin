@@ -29,6 +29,16 @@ public sealed class QuillFrameTheme
 
     public byte FrostAlpha { get; set; } = 0x70;
 
+    public bool Glass { get; set; }
+
+    public float Bevel { get; set; } = 10f;
+
+    public int AnimationMs { get; set; } = 150;
+
+    public float ContentRadius { get; set; } = -1f;
+
+    public float ResolvedContentRadius => ContentRadius >= 0f ? ContentRadius : Math.Max(0f, CornerRadius - Border);
+
     public Color32 TitleTop { get; set; } = new(0x3B, 0x41, 0x4D, 0xFF);
 
     public Color32 TitleBottom { get; set; } = new(0x24, 0x28, 0x31, 0xFF);
@@ -70,6 +80,35 @@ public sealed class QuillFrameTheme
     public int MenuItemHeight { get; set; } = 28;
 
     public int MenuPadding { get; set; } = 6;
+
+    public static QuillFrameTheme DarkGlass() => new()
+    {
+        Glass = true,
+        Border = 6,
+        CornerRadius = 12f,
+        Outline = new Color32(0xFF, 0xFF, 0xFF, 0x70),
+        OutlineInactive = new Color32(0xFF, 0xFF, 0xFF, 0x30),
+        Text = new Color32(0xF7, 0xF8, 0xFA, 0xFF),
+        TextInactive = new Color32(0xC8, 0xCC, 0xD4, 0xC0),
+        Dormant = new Color32(0xFF, 0xFF, 0xFF, 0x48),
+        Glyph = new Color32(0x1B, 0x1D, 0x23, 0xFF),
+    };
+
+    public static QuillFrameTheme LightGlass() => new()
+    {
+        Glass = true,
+        Border = 6,
+        CornerRadius = 12f,
+        Outline = new Color32(0xFF, 0xFF, 0xFF, 0xB0),
+        OutlineInactive = new Color32(0xFF, 0xFF, 0xFF, 0x60),
+        Text = new Color32(0x1B, 0x1D, 0x23, 0xFF),
+        TextInactive = new Color32(0x4A, 0x50, 0x5A, 0xC0),
+        Toggle = new Color32(0x5B, 0x6B, 0x86, 0xFF),
+        Dormant = new Color32(0x1B, 0x1D, 0x23, 0x40),
+        Glyph = new Color32(0xF7, 0xF8, 0xFA, 0xFF),
+        MenuFill = new Color32(0xF7, 0xF8, 0xFA, 0xF7),
+        MenuHot = new Color32(0xD3, 0xDA, 0xE5, 0xFF),
+    };
 
     public static QuillFrameTheme Light() => new()
     {

@@ -18,6 +18,9 @@ public sealed class CompositorModule : IProtocolModule
 
         services.UseDefault(new ClientBufferRegistry());
         services.UseDefault(new ClientScales());
+        var popups = new Capabilities.Defaults.PopupDirectory();
+        services.UseDefault(popups);
+        services.UseDefault<IPopupDirectory>(popups);
         services.UseDefault(new PresentedSets());
         services.UseDefault<Capabilities.ISurfaceHints>(new Capabilities.Defaults.SurfaceHints());
         services.UseDefault<Capabilities.IFrameStats>(new WindowFrameStats(services));
@@ -32,6 +35,7 @@ public sealed class CompositorModule : IProtocolModule
             PresentedSets = services.Find<PresentedSets>() ?? new PresentedSets(),
         };
         services.Use(Global);
+        services.UseDefault<Capabilities.ISurfaceDiagnostics>(new SurfaceDiagnostics(Global));
         return Global;
     }
 }
