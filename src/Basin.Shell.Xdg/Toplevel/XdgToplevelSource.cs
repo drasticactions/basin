@@ -2,7 +2,7 @@ using Basin.Capabilities;
 
 namespace Basin.Shell.Xdg;
 
-public sealed class XdgToplevelSource : IToplevelSource, IDisposable
+public sealed class XdgToplevelSource : IToplevelSource, IToplevelGeometryFeed, IDisposable
 {
     private readonly XdgShell _shell;
     private readonly Dictionary<ulong, XdgToplevelWindow> _windows = [];
@@ -105,6 +105,27 @@ public sealed class XdgToplevelSource : IToplevelSource, IDisposable
 
             _geometry[id] = (frame, client);
             _observers.Changed(id);
+        }
+    }
+
+    public void ReportFrom(ReadOnlySpan<SurfaceBox> boxes)
+    {
+        foreach (var (_, window) in _windows)
+        {
+            var surface = window.Surface;
+            for (var i = 0; i < boxes.Length; i++)
+            {
+                if (!ReferenceEquals(boxes[i].Surface, surface))
+                {
+                    continue;
+                }
+
+                var drawn = boxes[i].Box;
+                var geometry = window.Xdg.EffectiveGeometry;
+                var client = new Box(drawn.X + geometry.X, drawn.Y + geometry.Y, geometry.Width, geometry.Height);
+                SetGeometry(window, client, client);
+                break;
+            }
         }
     }
 

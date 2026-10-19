@@ -5,7 +5,7 @@ namespace Basin.Host;
 public sealed class FrameSettle : IFrameSettle, IDisposable
 {
     private readonly OutputDriver _outputs;
-    private readonly UIDriver? _ui;
+    private readonly List<UIDriver> _ui = [];
     private readonly Action _check;
     private readonly Action<OutputView> _watch;
     private readonly Action<OutputView> _unwatch;
@@ -19,7 +19,6 @@ public sealed class FrameSettle : IFrameSettle, IDisposable
     {
         ArgumentNullException.ThrowIfNull(outputs);
         _outputs = outputs;
-        _ui = ui;
         _check = Check;
         _watch = Watch;
         _unwatch = Unwatch;
@@ -33,8 +32,7 @@ public sealed class FrameSettle : IFrameSettle, IDisposable
 
         if (ui is not null)
         {
-            ui.Pumped += _check;
-            ui.Woken += _woken;
+            Add(ui);
         }
     }
 
@@ -52,7 +50,15 @@ public sealed class FrameSettle : IFrameSettle, IDisposable
                 }
             }
 
-            return _ui?.NextDueMillis is not { } due || due > UIHorizonMillis;
+            for (var i = 0; i < _ui.Count; i++)
+            {
+                if (_ui[i].NextDueMillis is { } due && due <= UIHorizonMillis)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 
@@ -84,6 +90,33 @@ public sealed class FrameSettle : IFrameSettle, IDisposable
         remove => _settled -= value;
     }
 
+    public void Add(UIDriver ui)
+    {
+        ArgumentNullException.ThrowIfNull(ui);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_ui.Contains(ui))
+        {
+            return;
+        }
+
+        _ui.Add(ui);
+        ui.Pumped += _check;
+        ui.Woken += _woken;
+    }
+
+    public void Remove(UIDriver ui)
+    {
+        ArgumentNullException.ThrowIfNull(ui);
+        if (!_ui.Remove(ui))
+        {
+            return;
+        }
+
+        ui.Pumped -= _check;
+        ui.Woken -= _woken;
+        Check();
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -99,11 +132,13 @@ public sealed class FrameSettle : IFrameSettle, IDisposable
             Unwatch(view);
         }
 
-        if (_ui is not null)
+        foreach (var ui in _ui)
         {
-            _ui.Pumped -= _check;
-            _ui.Woken -= _woken;
+            ui.Pumped -= _check;
+            ui.Woken -= _woken;
         }
+
+        _ui.Clear();
     }
 
     private void Watch(OutputView view)

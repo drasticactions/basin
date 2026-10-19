@@ -76,9 +76,16 @@ internal sealed partial class Shell
             return true;
         }
 
-        if (IsKeyboardChord(symbol, super, shift, alt, control))
+        if (IsKeyboardChord(symbol))
         {
             ToggleKeyboard();
+            return true;
+        }
+
+        if (IsInspectorChord(symbol))
+        {
+            _report.Line("ACTION inspector");
+            _inspector?.Toggle();
             return true;
         }
 

@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
     <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
     <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />

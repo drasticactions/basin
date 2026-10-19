@@ -201,7 +201,11 @@ internal sealed partial class TinyComp
         _overviewTouchGesture.Handler = new OverviewTouchHandler(this);
         ConfigureOverviewTriggers();
         _touchDriver.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(_scene);
-        _touchDriver.Router.Chrome = this;
+        _touchDriver.Router.Chrome = new Basin.Seat.Backends.TouchChromeChain
+        {
+            First = new Basin.Seat.Backends.UISurfaceTouchChrome(UIRouter),
+            Then = this,
+        };
         _twistGesture.Handler = new TwistHandler(this);
         _windowTwistGesture.Handler = new WindowTwistHandler(this);
         _holdDragGesture.Handler = new HoldDragHandler(this);

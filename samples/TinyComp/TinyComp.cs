@@ -1129,6 +1129,13 @@ internal sealed partial class TinyComp :
             StartQuillDemo();
         }
 
+        if (_config.ImGuiDemo)
+        {
+            StartImGuiDemo();
+        }
+
+        StartInspector();
+
         if (_init is { } init)
         {
             _initProcess = Basin.Host.InitProcess.Start(
@@ -1194,6 +1201,7 @@ internal sealed partial class TinyComp :
         ClearPhysics();
         _quillDemo?.Dispose();
         _quillDemo = null;
+        DisposeImGui();
         DisposeSettings();
         _quillHost?.Dispose();
         _quillHost = null;

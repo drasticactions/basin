@@ -24,6 +24,7 @@ internal sealed partial class System7Shell : IDisposable
     private readonly BasinServices _services;
     private readonly System7Layers _layers;
     private readonly OutputDriver _outputs;
+    private readonly ToplevelGeometryReporter? _geometryReporter;
     private readonly CompositorRunLoop _loop;
     private readonly BasinGlGpu? _gpu;
     private readonly AvaloniaUIHost _ui;
@@ -34,6 +35,7 @@ internal sealed partial class System7Shell : IDisposable
     private readonly CursorController _cursor;
     private readonly System7Cursors _cursors;
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
+    private readonly Basin.Seat.Backends.HookInputSink _inputSink = new();
     private readonly Basin.Seat.Backends.InputConfigurator _inputConfigurator = new();
     private readonly System7Seat _seat;
     private readonly DesktopPattern _pattern;
@@ -145,6 +147,7 @@ internal sealed partial class System7Shell : IDisposable
         };
         _densityControl.RulesWritten += rules => _config.Launch = rules;
         _services.Use<IX11DensityControl>(_densityControl);
+        _services.Use<IInputSink>(_inputSink);
         _services.Freeze();
 
         _pattern = new DesktopPattern(_layers.Pattern)
@@ -165,6 +168,9 @@ internal sealed partial class System7Shell : IDisposable
             DecorateNested = false,
             HeadlessMode = new OutputMode(1024, 768, 60_000),
         };
+        _geometryReporter = _services.Find<Basin.Capabilities.IToplevelModel>() is { } toplevelModel
+            ? new ToplevelGeometryReporter(_outputs, _scene, toplevelModel)
+            : null;
         _outputs.ConfigureHandoff(config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, config.Handoff.DurationMs, config.Handoff.HoldLimitMs);
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
@@ -232,7 +238,7 @@ internal sealed partial class System7Shell : IDisposable
         servicePack.CursorTheme.Images = _cursor.Images;
         _cursor.ShowNamed("default");
 
-        _seat = new System7Seat(_host, _services, _layout, _scene, _cursor, _chrome, _input)
+        _seat = new System7Seat(_host, _services, _layout, _scene, _cursor, _chrome, _input, _inputSink)
         {
             KeyHook = OnKey,
             PressHook = OnPress,
@@ -240,10 +246,12 @@ internal sealed partial class System7Shell : IDisposable
             GrabRelease = OnGrabRelease,
             CursorHook = CursorAt,
         };
+        CreateInspector();
         _inputConfigurator.Rejected += outcome =>
             log.Debug($"input: {Basin.Capabilities.InputSettingNames.Key(outcome.Setting)} on {outcome.DeviceName ?? "every device"}: {outcome.Result}");
         _inputConfigurator.Attach(Seat, _seat.Binder, _input?.Configuration);
         ApplyInput();
+        ApplyChords();
 
         Shells = _services.Require<XdgShell>();
         AttachWindows(capturePack);
@@ -338,6 +346,7 @@ internal sealed partial class System7Shell : IDisposable
         var hangup = _host.Loop.AddSignal(Signal.Hangup, _ => Reload());
         _watchTimer = _host.Loop.AddTimer(OnWatchTick);
         WireIpc();
+        _inspector?.Start();
         StartClock();
         if (_options.Command is { Length: > 0 } command)
         {
@@ -391,11 +400,13 @@ internal sealed partial class System7Shell : IDisposable
     internal void ApplyConfig()
     {
         ApplyInput();
+        ApplyChords();
         _xwaylandModule?.Configure(_config.XWaylandScale, _config.XWaylandDpiBuckets);
         _pattern.Depth = _config.Depth;
         _pattern.Pattern = System7DesktopPattern.Find(_config.Pattern) ?? System7DesktopPattern.Default;
         _pattern.Wallpaper = _config.Wallpaper;
         ApplyDepth();
+        _inspector?.Apply(_config.Inspector);
         foreach (var window in _hostWindows)
         {
             window.SetDepth(_config.Depth);
@@ -437,6 +448,7 @@ internal sealed partial class System7Shell : IDisposable
         _processes.TerminateAll(TimeSpan.FromMilliseconds(500));
         _processes.Dispose();
         DisposeShell();
+        DisposeInspector();
         _inputConfigurator.Dispose();
         _seat.Dispose();
         _uiDriver.Dispose();
@@ -456,6 +468,7 @@ internal sealed partial class System7Shell : IDisposable
         DisposeApplicationDepth();
         _ui.Dispose();
         _gpu?.Dispose();
+        _geometryReporter?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _services.Dispose();

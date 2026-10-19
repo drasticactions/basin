@@ -10,8 +10,24 @@ internal sealed partial class Westonia
 
     private ShellModifierState Modifiers => _modifierState ??= new ShellModifierState(() => Seat.Keyboard.State);
 
+    private const uint KeyF12 = 88;
+
     private bool OnKeyBinding(uint time, uint key, bool pressed)
     {
+        if (_lock is not { IsLocked: true })
+        {
+            if (pressed && key == KeyF12 && Modifiers.Exactly(ShellModifiers.Super))
+            {
+                _inspector?.Toggle();
+                return true;
+            }
+
+            if (_inspector?.Input.Key(time, key, pressed) == true)
+            {
+                return true;
+            }
+        }
+
         if (Modifiers.IsModifierKey(key))
         {
             if (!pressed && _switcher is { IsOpen: true })

@@ -40,3 +40,12 @@ mode = "auto"            # auto | retain | off. --handoff beats it. Read at star
 transition = "crossfade" # crossfade | cut: how the inherited frame gives way to this one
 duration_ms = 400        # the crossfade
 hold_limit_ms = 3000     # the longest the inherited frame stays before the transition starts
+
+# The inspector: a Dear ImGui overlay over one output. Super+F12 toggles it.
+[inspector]
+enabled    = true            # false never builds it
+open       = false           # open at start
+output     = "focused"       # an output name, or focused (the output under the pointer)
+panels     = ["outputs"]     # outputs | windows | clients | scene | memory
+font_size  = 15
+refresh_hz = 10              # the live panels' rate

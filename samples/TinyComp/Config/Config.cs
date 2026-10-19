@@ -21,6 +21,7 @@ internal sealed class Config
         ("Alt+Shift+Right", "carry-next"),
         ("Alt+n", "workspace-new"),
         ("Super+comma", "settings"),
+        ("Super+F12", "inspector"),
     ];
 
     public string Renderer { get; set; } = "vulkan";
@@ -58,6 +59,8 @@ internal sealed class Config
     public bool HoldMoveTurn { get; set; } = true;
 
     public bool QuillDemo { get; set; }
+
+    public bool ImGuiDemo { get; set; }
 
     public static RenderColor DefaultBackground { get; } = new(0.09f, 0.1f, 0.12f, 1f);
 
@@ -205,6 +208,20 @@ internal sealed class Config
 
     public double SettingsFontSize { get; set; } = 14;
 
+    public static IReadOnlyList<string> InspectorPanelNames { get; } = ["outputs", "windows", "clients", "scene", "memory", "effects", "transform"];
+
+    public bool InspectorEnabled { get; set; } = true;
+
+    public bool InspectorOpen { get; set; }
+
+    public string? InspectorOutput { get; set; }
+
+    public IReadOnlyList<string> InspectorPanels { get; set; } = ["outputs"];
+
+    public double InspectorFontSize { get; set; } = 15;
+
+    public int InspectorRefreshHz { get; set; } = 10;
+
     public bool HyprEnabled { get; set; } = true;
 
     public bool HyprInputCapture { get; set; } = true;
@@ -292,6 +309,7 @@ internal sealed class Config
         "shelve-bottom" => KeyAction.ShelveBottom,
         "unshelve" => KeyAction.Unshelve,
         "settings" => KeyAction.Settings,
+        "inspector" => KeyAction.Inspector,
         "gravity" => KeyAction.Gravity,
         "physics-freeze" => KeyAction.PhysicsFreeze,
         "rotate-left" => KeyAction.RotateLeft,
@@ -308,7 +326,7 @@ internal sealed class Config
         "mark-clear", "bell", "canvas-toggle", "park-left", "park-right", "park-up", "park-down", "recall",
         "shelf-smaller", "shelf-larger", "shelf-reset", "canvas-mode", "overview", "shelve-left",
         "shelve-right", "shelve-top", "shelve-bottom", "unshelve", "settings", "gravity", "physics-freeze",
-        "rotate-left", "rotate-right", "upright", "stop-spin",
+        "rotate-left", "rotate-right", "upright", "stop-spin", "inspector",
     ];
 
     private static readonly string[] SharedKeys =
@@ -723,6 +741,51 @@ internal sealed class Config
             else
             {
                 log.Warn($"[settings] font_size must be at least 6, keeping {SettingsFontSize}");
+            }
+        }
+
+        if (reader.Section("inspector") is { } inspector)
+        {
+            InspectorEnabled = inspector.Flag("enabled", InspectorEnabled);
+            InspectorOpen = inspector.Flag("open", InspectorOpen);
+            var output = inspector.Text("output");
+            InspectorOutput = string.IsNullOrEmpty(output) || output == "focused" ? null : output;
+            if (inspector.Words("panels") is { } panels)
+            {
+                var known = new List<string>();
+                foreach (var panel in panels)
+                {
+                    if (InspectorPanelNames.Contains(panel))
+                    {
+                        known.Add(panel);
+                    }
+                    else
+                    {
+                        log.Warn($"[inspector] panels has no panel \"{panel}\"; the panels are {string.Join(", ", InspectorPanelNames)}");
+                    }
+                }
+
+                InspectorPanels = known;
+            }
+
+            var font = inspector.Number("font_size", InspectorFontSize);
+            if (font >= 6 && font <= 64)
+            {
+                InspectorFontSize = font;
+            }
+            else
+            {
+                log.Warn($"[inspector] font_size must be between 6 and 64, keeping {InspectorFontSize}");
+            }
+
+            var hz = inspector.Number("refresh_hz", InspectorRefreshHz);
+            if (hz is >= 1 and <= 240)
+            {
+                InspectorRefreshHz = hz;
+            }
+            else
+            {
+                log.Warn($"[inspector] refresh_hz must be between 1 and 240, keeping {InspectorRefreshHz}");
             }
         }
 

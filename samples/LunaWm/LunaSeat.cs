@@ -112,7 +112,8 @@ internal sealed class LunaSeat :
         _pinch.Handler = this;
         _touch.Router.Gestures = new TouchGestureSet(_edge, _pinch);
         _touch.Router.HitTester = new SceneTouchHitTester(_scene);
-        _touch.Router.Chrome = this;
+        _touchChrome.Then = this;
+        _touch.Router.Chrome = _touchChrome;
         _touch.Router.Activity = this;
         _touch.Routed += (_, _, surface) =>
         {
@@ -128,20 +129,6 @@ internal sealed class LunaSeat :
         _seat.Keyboard.SetRepeatInfo(25, 600);
         _seat.Pointer.CursorRequested += _cursor.HandleCursorRequest;
 
-        inputSink.OnKey = (keyboard, timeMs, key, pressed) =>
-        {
-            _seat.Keyboard.Activate(keyboard);
-            OnKey(timeMs, key, pressed, _shell.IsInputMethodKeyboard(keyboard?.Tag));
-            return true;
-        };
-        inputSink.OnKeyboardCreated = () => _seat.SetCapability(SeatCapability.Keyboard, true);
-        inputSink.OnPointerMotion = (timeMs, dx, dy) =>
-        {
-            _binder.EnsurePointerCapability();
-            _pointer.Motion(dx, dy);
-            OnMotion(timeMs, fromMotion: true);
-            return true;
-        };
         _injector = new SeatInjector(_binder, _seat, _layout, _pointer)
         {
             Moved = timeMs => OnMotion(timeMs, fromMotion: true),
@@ -151,12 +138,8 @@ internal sealed class LunaSeat :
             DeliverAxis = (timeMs, axis, value, source) =>
                 OnAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
-        inputSink.OnPointerMotionAbsolute = _injector.MotionAbsolute;
-        inputSink.OnPointerButton = (timeMs, button, pressed) =>
-        {
-            OnButton(timeMs, button, pressed);
-            return true;
-        };
+        inputSink.Route(_injector, _seat, (keyboard, timeMs, key, pressed) =>
+            OnKey(timeMs, key, pressed, _shell.IsInputMethodKeyboard(keyboard?.Tag)));
 
         if (_host.Drm is not null && _host.Session is { } session)
         {
@@ -271,6 +254,19 @@ internal sealed class LunaSeat :
         TouchUp(0, time + 16);
     }
 
+    private readonly Basin.Seat.Backends.TouchChromeChain _touchChrome = new();
+    private Basin.Inspector.InspectorInput? _inspector;
+
+    public Basin.Inspector.InspectorInput? Inspector
+    {
+        get => _inspector;
+        set
+        {
+            _inspector = value;
+            _touchChrome.First = value;
+        }
+    }
+
     public string CursorState =>
         $"at={_pointer.X:F0},{_pointer.Y:F0} {(_cursor.IsHidden ? "hidden" : "shown")} driving={(_touchDriving ? "touch" : "pointer")} showing={_cursor.Showing}";
 
@@ -360,6 +356,11 @@ internal sealed class LunaSeat :
             _superAlone = false;
         }
 
+        if (Inspector?.Key(timeMs, key, pressed) == true)
+        {
+            return;
+        }
+
         if (!_shell.IsLocked || _shell.LockAcceptsChromeKeys)
         {
             if (_keys.Chrome(timeMs, key, pressed))
@@ -410,6 +411,14 @@ internal sealed class LunaSeat :
         }
 
         _cursor.MoveTo(x, y);
+        if (Inspector is { } inspector && _latch.Held == 0 && inspector.Motion(timeMs, x, y, out var inspectorCursor))
+        {
+            _router.PointerLeave();
+            _cursor.SetHover(null, overClient: false);
+            _cursor.ShowNamed(inspectorCursor ?? "default");
+            return;
+        }
+
         if (_route == Route.Keyboard && _latch.Held > 0)
         {
             _shell.KeyboardTouchMotion(PointerTouchId, x, y, timeMs);
@@ -455,6 +464,11 @@ internal sealed class LunaSeat :
     internal void OnButton(uint timeMs, uint button, bool pressed)
     {
         _idle?.NotifyActivity();
+        if (Inspector is { } inspector && _latch.Held == 0 && inspector.Button(timeMs, button, pressed))
+        {
+            return;
+        }
+
         if (button == InputCodes.BtnLeft && pressed && !_pointerEdge && _latch.Held == 0 && !_shell.IsLocked)
         {
             if (_touch.Router.SyntheticDown(PointerTouchId, timeMs, _pointer.X, _pointer.Y) == TouchGestureVerdict.Withhold)
@@ -577,6 +591,11 @@ internal sealed class LunaSeat :
     private void OnAxis(uint timeMs, PointerAxis axis)
     {
         _idle?.NotifyActivity();
+        if (Inspector?.Axis(timeMs, axis) == true)
+        {
+            return;
+        }
+
         if (_router.PointerAxis(timeMs, axis))
         {
             return;

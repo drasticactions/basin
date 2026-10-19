@@ -29,6 +29,7 @@ internal sealed partial class DungeonWm
         var soundsBefore = _settings.Sounds;
         CarryOver(loaded);
         ApplyLive(sizeChanged);
+        ApplyInspectorSettings();
         _outputs.ConfigureHandoff(_settings.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _settings.Handoff.DurationMs, _settings.Handoff.HoldLimitMs);
         if (audioBefore != _settings.Audio)
         {
@@ -97,6 +98,12 @@ internal sealed partial class DungeonWm
             _settings.AvatarClips[state] = clip;
         }
 
+        _settings.InspectorEnabled = loaded.InspectorEnabled;
+        _settings.InspectorOpen = loaded.InspectorOpen;
+        _settings.InspectorOutput = loaded.InspectorOutput;
+        _settings.InspectorPanels = loaded.InspectorPanels;
+        _settings.InspectorFontSize = loaded.InspectorFontSize;
+        _settings.InspectorRefreshHz = loaded.InspectorRefreshHz;
         _settings.Bindings.Clear();
         foreach (var (chord, action) in loaded.Bindings)
         {

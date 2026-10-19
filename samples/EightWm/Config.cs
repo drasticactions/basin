@@ -61,6 +61,10 @@ internal sealed class Config
 
     public string KeyboardChord { get; private set; } = "Super+k";
 
+    public Basin.Inspector.InspectorSettings Inspector { get; private set; } = new();
+
+    public string InspectorChord { get; private set; } = "Super+F12";
+
     public static Config Load(string? path, BasinLogger log)
     {
         var config = new Config();
@@ -144,6 +148,7 @@ internal sealed class Config
         if (reader.Section("keybindings") is { } bindings)
         {
             config.KeyboardChord = bindings.Text("keyboard") ?? config.KeyboardChord;
+            config.InspectorChord = bindings.Text("inspector") ?? config.InspectorChord;
         }
 
         if (reader.Section("ui") is { } ui && ui.Text("font") is { } fontName)
@@ -175,6 +180,7 @@ internal sealed class Config
             }
         }
 
+        config.Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
         config.Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
         return config;

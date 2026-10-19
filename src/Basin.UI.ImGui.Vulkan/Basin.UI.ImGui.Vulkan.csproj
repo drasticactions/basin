@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.UI.ImGui.Vulkan</PackageId>
+    <RootNamespace>Basin.UI.ImGui</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Dear ImGui compositor chrome on Vulkan for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <ProjectReference Include="../Basin.UI.ImGui/Basin.UI.ImGui.csproj" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

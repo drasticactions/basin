@@ -91,7 +91,7 @@ public sealed class XWaylandScaleTests
         using var session = new Session(host, XWaylandScale.Auto);
         Assert.Equal(2, session.Outputs.Scale);
 
-        using var eyes = XWaylandTestSupport.Start("xeyes", session.Server.DisplayName, "-geometry", "200x100+40+20");
+        using var eyes = XWaylandTestSupport.Start("xeyes", session.Server.DisplayName, "-geometry", "200x100+40+20", "-bw", "0");
         try
         {
             XWaylandTestSupport.Pump(host, () => session.Mapped.Count > 0);

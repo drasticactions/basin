@@ -8,11 +8,17 @@ internal sealed partial class Westonia
 {
     private readonly IpcLineReport _report = new();
     private IpcServer? _ipc;
+    private Basin.Inspector.InspectorSession? _inspector;
     private Basin.Host.FrameSettle? _settle;
 
     private void WireIpc()
     {
         _settle = new Basin.Host.FrameSettle(_outputs, _uiDriver);
+        if (_inspector is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "westonia",
@@ -25,6 +31,7 @@ internal sealed partial class Westonia
         });
         _ipc.SyntheticInput = _seat?.Injector;
         RegisterCommands(_ipc.Methods);
+        _inspector?.Register(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();
     }

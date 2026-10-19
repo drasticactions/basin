@@ -24,6 +24,11 @@ internal sealed partial class Shell
     private void WireIpc()
     {
         _settle = new Basin.Host.FrameSettle(_outputs, _uiDriver);
+        if (_inspector is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "eight-wm",
@@ -53,6 +58,7 @@ internal sealed partial class Shell
     private void RegisterCommands(IpcMethodRegistry methods)
     {
         _report.AddSessionLines(methods);
+        _inspector?.Register(methods);
 
         _report.Register(methods, "eightwm/start", "start", () => ToggleStart(CommandView));
         _report.Register(methods, "eightwm/close", "close", CloseFocused);

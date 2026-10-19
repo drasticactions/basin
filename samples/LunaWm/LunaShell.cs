@@ -24,6 +24,7 @@ internal sealed partial class LunaShell : IDisposable
     private readonly BasinServices _services;
     private readonly SceneCapturePack _capture;
     private readonly OutputDriver _outputs;
+    private readonly ToplevelGeometryReporter? _geometryReporter;
     private readonly CompositorRunLoop _loop;
     private readonly ProcessTracker _processes;
     private readonly Basin.Desktop.ColorCapabilityPack _colorPack;
@@ -152,6 +153,9 @@ internal sealed partial class LunaShell : IDisposable
             NestedName = index => $"luna-wm-{index + 1}",
             HeadlessMode = new OutputMode(1024, 768, 60_000),
         };
+        _geometryReporter = _services.Find<Basin.Capabilities.IToplevelModel>() is { } toplevelModel
+            ? new ToplevelGeometryReporter(_outputs, _scene, toplevelModel)
+            : null;
         _outputs.ConfigureHandoff(config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, config.Handoff.DurationMs, config.Handoff.HoldLimitMs);
         _loop = new CompositorRunLoop(_host, _outputs) { Outro = new LunaLogoutOutro(line => _report.Line(line)) };
         _outputs.Emptied += Stop;
@@ -184,8 +188,10 @@ internal sealed partial class LunaShell : IDisposable
         });
         _popupLayer = new SceneTree(_scene.Root);
         _uiDriver = new UIDriver(_ui, _host.Loop) { Index = _chromeIndex, PopupLayer = _popupLayer };
+        CreateInspector();
 
         _seat = new LunaSeat(_host, _services, this, _scene, _layout, servicePack.CursorTheme, inputSink, _chromeIndex, log);
+        _seat.Inspector = _inspector?.Input;
         _inputConfigurator.Rejected += outcome =>
             log.Debug($"input: {InputSettingNames.Key(outcome.Setting)} on {outcome.DeviceName ?? "every device"}: {outcome.Result}");
         _seat.AttachConfigurator(_inputConfigurator);
@@ -310,6 +316,7 @@ internal sealed partial class LunaShell : IDisposable
         StartLauncher();
         StartNotifications();
         StartIdleLock();
+        _inspector?.Start();
         if (_options.Command is { Length: > 0 } command)
         {
             _initProcess = InitProcess.Start(
@@ -355,6 +362,7 @@ internal sealed partial class LunaShell : IDisposable
         ApplyConfig();
         _outputs.ConfigureHandoff(next.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, next.Handoff.DurationMs, next.Handoff.HoldLimitMs);
         ReloadKeyboard(previous);
+        _inspector?.Apply(next.Inspector);
         _report.Line(restart.Length > 0 ? $"RELOAD restart-needed {restart}" : "RELOAD ok");
     }
 
@@ -419,12 +427,15 @@ internal sealed partial class LunaShell : IDisposable
             view.ReleaseChrome();
         }
 
+        _inspector?.Dispose();
+        _inspector = null;
         _inputConfigurator.Dispose();
         _seat.Dispose();
         _uiDriver.Dispose();
         _screens.Dispose();
         _ui.Dispose();
         _gpu?.Dispose();
+        _geometryReporter?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _shadowTile.Destroy();

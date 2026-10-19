@@ -111,6 +111,7 @@ internal sealed partial class Shell
         StartIdleLock();
         ReadKeyboardChord();
         _kbSession.Reload(KeyboardOptions());
+        ReloadInspector();
         _report.Line($"RELOAD tiles={_tiles.Count} rules={_config.Rules.Count}" + (previousHandoff != _config.Handoff.Mode ? " restart-required=handoff.mode" : string.Empty));
     }
 

@@ -281,6 +281,15 @@ hold_move_turn = true        # turning the held fingers also turns the window
 palette   = "dark"           # dark | light
 font_size = 14               # logical pixels
 
+# The Dear ImGui inspector overlay, toggled by the inspector binding.
+[inspector]
+enabled    = true            # false never builds it
+open       = false           # open at start
+output     = "focused"       # an output name, or focused
+panels     = ["outputs"]     # open at start: outputs | windows | clients | scene | memory | effects | transform
+font_size  = 15              # logical pixels
+refresh_hz = 10              # how often the live panels redraw
+
 # hyprland-protocols.
 [hypr]
 enable        = true         # the whole pack
@@ -339,6 +348,7 @@ click_method   = "clickfinger"  # none | button_areas | clickfinger
 "Alt+Shift+Right" = "carry-next"
 "Alt+n"           = "workspace-new"
 "Super+comma"     = "settings"
+"Super+F12"       = "inspector"
 "Alt+Return"    = { exec = "foot" }
 # Canvas actions.
 # "Alt+Shift+h"   = "park-left"

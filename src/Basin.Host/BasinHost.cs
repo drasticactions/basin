@@ -159,6 +159,7 @@ public sealed class BasinHost : IDisposable
         var services = new BasinServices(Display, Loop);
         services.UseDefault(frames ?? new FrameClock());
         services.UseDefault(PresentedSets);
+        services.UseDefault<IClientDirectory>(new Basin.Capabilities.Defaults.DisplayClientDirectory(Display));
         Services = services;
         return services;
     }

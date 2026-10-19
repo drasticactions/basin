@@ -216,6 +216,7 @@ internal sealed partial class TinyComp
         ApplyPostStages(next);
         ApplyScreenShader(next);
         ApplyEffectSettings(next);
+        ApplyInspectorSettings(next);
         ConfigureShortcuts(next);
         _textureErrors = LoadStepTextures(next, reload: true);
         _canvasOverride = null;

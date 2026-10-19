@@ -106,6 +106,11 @@ internal sealed partial class LunaShell
         }
 
         _locked = locked;
+        if (locked)
+        {
+            CloseInspector();
+        }
+
         foreach (var view in _views)
         {
             view.Cards.Enabled = !locked;

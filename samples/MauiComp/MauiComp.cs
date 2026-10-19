@@ -24,6 +24,7 @@ internal sealed partial class MauiComp : IDisposable
     private readonly BasinServices _services;
     private readonly ShellLayers _layers;
     private readonly OutputDriver _outputs;
+    private readonly ToplevelGeometryReporter? _geometryReporter;
     private readonly Basin.Desktop.ColorCapabilityPack _colorPack;
     private readonly CompositorRunLoop _loop;
     private readonly BasinGlGpu? _gpu;
@@ -35,6 +36,7 @@ internal sealed partial class MauiComp : IDisposable
     private readonly UISurfaceIndex _shellSurfaces = new();
     private readonly CursorController _cursor;
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
+    private readonly Basin.Seat.Backends.HookInputSink _inputSink = new();
     private readonly Basin.Seat.Backends.InputConfigurator _inputConfigurator = new();
     private readonly UIDriver _uiDriver;
     private readonly ShellAnimations _animations;
@@ -113,6 +115,7 @@ internal sealed partial class MauiComp : IDisposable
         _layers = new ShellLayers(_scene.Root);
         CreateLayerDrivers();
         _services.UseDefault<Basin.Capabilities.IInputDeviceConfiguration>(_inputConfigurator);
+        _services.Use<Basin.Capabilities.IInputSink>(_inputSink);
         _services.Freeze();
 
         _outputs = new OutputDriver(_host, _scene, _layout, _renderer, _deviceAllocator)
@@ -125,6 +128,9 @@ internal sealed partial class MauiComp : IDisposable
             NestedName = index => $"maui-comp-{index + 1}",
             HeadlessMode = new OutputMode(1280, 720, 60_000),
         };
+        _geometryReporter = _services.Find<Basin.Capabilities.IToplevelModel>() is { } toplevelModel
+            ? new ToplevelGeometryReporter(_outputs, _scene, toplevelModel)
+            : null;
         _outputs.ConfigureHandoff(_config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _config.Handoff.DurationMs, _config.Handoff.HoldLimitMs);
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
@@ -216,6 +222,7 @@ internal sealed partial class MauiComp : IDisposable
         WireLayers();
         WireColor();
         WireSeat();
+        WireInspector();
 
         if (options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
@@ -277,6 +284,7 @@ internal sealed partial class MauiComp : IDisposable
         _clock = new Basin.Host.ShellClock(_host.Loop, now => now.ToString("HH:mm ddd d MMM"), text => _shell.SetClock(text!));
         _clock.Refresh();
         WireIpc();
+        _inspector?.Start();
 
         _loop.Iterating += _uiDriver.Pump;
         _loop.Frames = _options.Frames;
@@ -341,6 +349,7 @@ internal sealed partial class MauiComp : IDisposable
         _processes.TerminateAll(TimeSpan.FromMilliseconds(500));
         _processes.Dispose();
         _switcher?.Dispose();
+        _inspector?.Dispose();
         DisposeWindows();
         _animations.Dispose();
         _inputConfigurator.Dispose();
@@ -352,6 +361,7 @@ internal sealed partial class MauiComp : IDisposable
         _shell.Dispose();
         _ui.Dispose();
         _gpu?.Dispose();
+        _geometryReporter?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _blur?.Dispose();

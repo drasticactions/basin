@@ -3,7 +3,7 @@ using Pixman;
 
 namespace Basin.Scene;
 
-public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
+public sealed class UISurfaceNode : IUISurfaceObserver, ISceneInputFilter, IDisposable
 {
     private readonly SceneBuffer _node;
     private readonly IUIHost? _host;
@@ -71,6 +71,12 @@ public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
     }
 
     public double InputScale { get; set; } = 1.0;
+
+    public bool InputFromSurface
+    {
+        get => ReferenceEquals(_node.InputFilter, this);
+        set => _node.InputFilter = value ? this : null;
+    }
 
     public bool AutoEnable { get; set; } = true;
 
@@ -229,7 +235,19 @@ public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
             _node.Enabled = true;
         }
 
-        _node.NotifyContentChanged();
+        if (frame.Damage is { } damage)
+        {
+            _node.NotifyContentChanged(damage);
+        }
+        else
+        {
+            _node.NotifyContentChanged();
+        }
+
+        if (InputFromSurface && _node.RootOwner() is { } scene)
+        {
+            scene.NotifyInputRegionChanged();
+        }
 
         if (_hasShown)
         {
@@ -242,6 +260,9 @@ public sealed class UISurfaceNode : IUISurfaceObserver, IDisposable
     }
 
     public void OnSurfaceDamaged(IUISurface surface, PixmanRegion32 damage) => Publish();
+
+    bool ISceneInputFilter.AcceptsInputAt(SceneBuffer buffer, double x, double y) =>
+        _surface is { } surface && surface.AcceptsInputAt(x * InputScale, y * InputScale);
 
     public void OnSurfaceDestroyed(IUISurface surface)
     {

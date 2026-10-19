@@ -64,7 +64,7 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
     {
         _binder.EnsurePointerCapability();
         var bounds = _layout.Bounds;
-        if (bounds.Width <= 0 || bounds.Height <= 0)
+        if (bounds.Width <= 0 || bounds.Height <= 0 || !(extentWidth > 0) || !(extentHeight > 0))
         {
             return true;
         }
@@ -113,6 +113,9 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
 
         return true;
     }
+
+    public bool PointerMotion(uint timeMs, double dx, double dy) =>
+        PointerMotionAbsolute(timeMs, _pointer.X + dx, _pointer.Y + dy);
 
     public bool PointerButton(uint timeMs, uint button, bool pressed)
     {

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Inspector.Host</PackageId>
+    <RootNamespace>Basin.Inspector</RootNamespace>
+    <Description>The Basin inspector wired to a compositor's seat, outputs and settings.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Inspector/Basin.Inspector.csproj" />
+    <ProjectReference Include="../Basin.Inspector.Ipc/Basin.Inspector.Ipc.csproj" />
+    <ProjectReference Include="../Basin.Renderers.ImGui/Basin.Renderers.ImGui.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

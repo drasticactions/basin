@@ -17,11 +17,7 @@ internal sealed partial class Shell
     private SoftKeyboardSession _kbSession = null!;
     private ShellView? _kbView;
     private bool _kbShown;
-    private XkbKeysym _kbChordKey;
-    private bool _kbChordSuper = true;
-    private bool _kbChordShift;
-    private bool _kbChordAlt;
-    private bool _kbChordControl;
+    private Basin.Seat.Backends.ChordMatcher? _kbChord;
 
     internal bool KeyboardShown => _kbShown;
 
@@ -103,35 +99,11 @@ internal sealed partial class Shell
 
     private void ReadKeyboardChord()
     {
-        var parts = _config.KeyboardChord.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        _kbChordSuper = _kbChordShift = _kbChordAlt = _kbChordControl = false;
-        _kbChordKey = default;
-        foreach (var part in parts)
-        {
-            switch (part.ToLowerInvariant())
-            {
-                case "super" or "mod4" or "logo":
-                    _kbChordSuper = true;
-                    break;
-                case "shift":
-                    _kbChordShift = true;
-                    break;
-                case "alt" or "mod1":
-                    _kbChordAlt = true;
-                    break;
-                case "ctrl" or "control":
-                    _kbChordControl = true;
-                    break;
-                default:
-                    _kbChordKey = XkbKeysym.FromName(part);
-                    break;
-            }
-        }
+        _kbChord ??= new Basin.Seat.Backends.ChordMatcher(Seat.Keyboard);
+        _kbChord.TrySet(_config.KeyboardChord, _log);
     }
 
-    internal bool IsKeyboardChord(XkbKeysym symbol, bool super, bool shift, bool alt, bool control) =>
-        _kbChordKey.Value != 0 && symbol == _kbChordKey &&
-        super == _kbChordSuper && shift == _kbChordShift && alt == _kbChordAlt && control == _kbChordControl;
+    internal bool IsKeyboardChord(XkbKeysym symbol) => _kbChord?.MatchesKeysym(symbol) == true;
 
     internal void NoteHardwareKey(bool pressed)
     {

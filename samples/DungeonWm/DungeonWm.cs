@@ -167,24 +167,7 @@ internal sealed partial class DungeonWm : IDisposable
         }
 
         _services.UseDefault<IInputDeviceConfiguration>(_inputConfigurator);
-        _services.Use<IInputSink>(new Basin.Seat.Backends.HookInputSink
-        {
-            OnPointerMotion = (time, dx, dy) =>
-                _injector is { } injector && injector.PointerMotionAbsolute(time, _pointer.X + dx, _pointer.Y + dy),
-            OnPointerMotionAbsolute = (time, x, y, width, height) =>
-                width > 0 && height > 0 && _injector is { } injector && injector.MotionAbsolute(time, x, y, width, height),
-            OnPointerButton = (time, button, pressed) => _injector is { } injector && injector.PointerButton(time, button, pressed),
-            OnKey = (keyboard, time, keycode, pressed) =>
-            {
-                if (_injector is not { } injector)
-                {
-                    return false;
-                }
-
-                _seat!.Keyboard.Activate(keyboard);
-                return injector.Key(time, keycode, pressed);
-            },
-        });
+        _services.Use<IInputSink>(_inputSink);
         _layers = new SceneLayers(_scene.Root);
         _layerDriver = new LayerShellSceneDriver(_services, _layout, _layers);
         _lockDriver = new SessionLockSceneDriver(_services, _layers.Lock, _layout, SetLocked);
@@ -350,6 +333,7 @@ internal sealed partial class DungeonWm : IDisposable
         }
 
         _worldOutputs.Clear();
+        DisposeInspector();
         _outputs.Dispose();
         _plaques.Dispose();
         _scene.Root.Destroy();
@@ -368,6 +352,7 @@ internal sealed partial class DungeonWm : IDisposable
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
         BasinReport.Line($"WORLD renderer={RendererName} rooms={_world.Map.Rooms.Count} seed={_settings.Map.Seed}");
         using var ipc = StartIpc();
+        StartInspector();
         using var settle = _settle;
         using var processes = _processes;
         InitProcess? startup = null;

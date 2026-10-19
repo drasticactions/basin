@@ -186,9 +186,13 @@ public sealed partial class Scene
 
     public event Action? StructureChanged;
 
+    public event Action? InputRegionChanged;
+
     public event Action? FrameRequested;
 
     internal void NotifyStructureChanged() => StructureChanged?.Invoke();
+
+    internal void NotifyInputRegionChanged() => InputRegionChanged?.Invoke();
 
     internal void NotifyFrameRequested() => FrameRequested?.Invoke();
 

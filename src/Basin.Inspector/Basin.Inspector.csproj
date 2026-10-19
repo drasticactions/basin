@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Inspector</PackageId>
+    <RootNamespace>Basin.Inspector</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>A Dear ImGui inspector overlay for Basin compositors.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../Basin.UI.ImGui/Basin.UI.ImGui.csproj" />
+    <InternalsVisibleTo Include="Basin.Inspector.Ipc" />
+    <InternalsVisibleTo Include="Basin.Inspector.Host" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

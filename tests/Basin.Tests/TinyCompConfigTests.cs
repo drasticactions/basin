@@ -366,7 +366,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Equal(14, config.FontSize);
         Assert.Null(config.NightLight);
         Assert.Empty(config.Rules);
-        Assert.Equal(9, config.Bindings.Count);
+        Assert.Equal(10, config.Bindings.Count);
         Assert.Contains(config.Bindings, b =>
             b.Action == TinyComp.KeyAction.Quit
             && b.ModifierMask == Modifiers.Alt
@@ -1215,7 +1215,7 @@ public sealed class TinyCompConfigTests : IDisposable
             Assert.Equal(TinyComp.Config.Template(), File.ReadAllText(seeded));
             Assert.Contains(_lines, line => line.Contains("wrote the default", StringComparison.Ordinal));
             Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
-            Assert.Equal(10, config.Bindings.Count);
+            Assert.Equal(11, config.Bindings.Count);
 
             var written = File.GetLastWriteTimeUtc(seeded);
             _lines.Clear();
@@ -1319,7 +1319,7 @@ public sealed class TinyCompConfigTests : IDisposable
         Assert.Null(fatal);
         Assert.DoesNotContain(_lines, line => line.Contains("unknown key", StringComparison.Ordinal));
         Assert.DoesNotContain(_lines, line => line.Contains("unknown stage", StringComparison.Ordinal));
-        Assert.Equal(10, config.Bindings.Count);
+        Assert.Equal(11, config.Bindings.Count);
         Assert.Empty(config.Rules);
         Assert.Empty(config.Post);
     }

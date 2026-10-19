@@ -6,7 +6,7 @@ internal sealed partial class MauiComp
 
     private void WireSeat()
     {
-        _seat = new MauiCompSeat(_host, Seat, _layout, _scene, _cursor, _shellSurfaces, _input, _log)
+        _seat = new MauiCompSeat(_host, Seat, _layout, _scene, _cursor, _shellSurfaces, _input, _inputSink, _log)
         {
             KeyHook = OnKeyBinding,
             ButtonHook = OnButton,

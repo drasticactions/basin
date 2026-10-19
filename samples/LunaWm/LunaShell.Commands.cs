@@ -21,6 +21,11 @@ internal sealed partial class LunaShell
     private void WireIpc()
     {
         _settle = new FrameSettle(_outputs, _uiDriver);
+        if (_inspector is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "luna-wm",
@@ -34,6 +39,7 @@ internal sealed partial class LunaShell
         _ipc.SyntheticInput = _seat.Injector;
         _ipc.Events.Declare(KeyboardEvent);
         RegisterCommands(_ipc.Methods);
+        _inspector?.Register(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();
     }
@@ -81,7 +87,7 @@ internal sealed partial class LunaShell
 
         _report.Register(methods, "lunawm/gesture", "gesture {action}",
             Info("Run a gesture action: card_view, launcher, quick_launch, maximize, back, next, previous, home, dashboard, lock, close or keyboard.",
-                """{"type":"object","properties":{"action":{"type":"string","enum":["card_view","launcher","quick_launch","maximize","back","next","previous","home","dashboard","lock","close","keyboard"]}},"required":["action"]}"""),
+                """{"type":"object","properties":{"action":{"type":"string","enum":["card_view","launcher","quick_launch","maximize","back","next","previous","home","dashboard","lock","close","keyboard","inspector"]}},"required":["action"]}"""),
             (ref IpcParams p, IpcReply reply) =>
             {
                 var action = p.GetString("action");

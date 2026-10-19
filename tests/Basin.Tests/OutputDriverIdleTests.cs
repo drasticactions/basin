@@ -149,6 +149,37 @@ public sealed class OutputDriverIdleTests
         }
     }
 
+    [Fact]
+    public void A_second_driver_added_later_holds_the_settle_until_it_is_removed()
+    {
+        Assert.SkipWhen(!CompositorTestHost.HasWaylandServer, "this host has no libwayland server, and the driver hosts a real display");
+        var (host, scene, driver, renderer) = Start();
+        using (host)
+        using (renderer)
+        using (driver)
+        using (var first = new TickingUIHost())
+        using (var firstDriver = new UIDriver(first, host.Loop))
+        using (var second = new TickingUIHost { Due = 0 })
+        using (var secondDriver = new UIDriver(second, host.Loop))
+        using (var settle = new FrameSettle(driver, firstDriver))
+        {
+            var rect = new SceneRect(scene.Root, 40, 40, new RenderColor(1, 0, 0, 1));
+            Pump(host, 200);
+            Assert.True(settle.IsSettled);
+
+            settle.Add(secondDriver);
+            settle.Add(secondDriver);
+            Assert.False(settle.IsSettled);
+
+            var settled = 0;
+            settle.Settled += () => settled++;
+            settle.Remove(secondDriver);
+            Assert.True(settle.IsSettled);
+            Assert.Equal(1, settled);
+            rect.Destroy();
+        }
+    }
+
     private sealed class TickingUIHost : IUIHost
     {
         private readonly FalsifierUIHost _inner = new();

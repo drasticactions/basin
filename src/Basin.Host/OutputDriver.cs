@@ -163,6 +163,24 @@ public sealed class OutputDriver : IDisposable
 
     public IReadOnlyList<OutputView> Views => _views;
 
+    public OutputView? ViewAt(double x, double y)
+    {
+        if (_layout.OutputAt(x, y) is not { } output)
+        {
+            return null;
+        }
+
+        foreach (var view in _views)
+        {
+            if (ReferenceEquals(view.Output, output))
+            {
+                return view;
+            }
+        }
+
+        return null;
+    }
+
     public long PrimaryRendered
     {
         get

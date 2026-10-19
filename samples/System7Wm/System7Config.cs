@@ -86,6 +86,10 @@ internal sealed class System7Config
 
     public Hotkey? NewTerminal { get; private set; } = new(Keysym.FromName("t"), Modifiers.Super | Modifiers.Alt, "new_terminal", null);
 
+    public Hotkey? InspectorChord { get; private set; } = new(Keysym.FromName("F12"), Modifiers.Super, "inspector", null);
+
+    public Basin.Inspector.InspectorSettings Inspector { get; private set; } = new();
+
     public List<System7Rule> Rules { get; } = [];
 
     public static string DefaultPath() => TomlConfig.DefaultPath("system7-wm");
@@ -217,14 +221,13 @@ internal sealed class System7Config
             config.TerminalScrollback = Math.Clamp(terminal.Number("scrollback", config.TerminalScrollback), 0, 100000);
         }
 
-        if (reader.Section("keybindings") is { } keybindings && keybindings.Raw("new_terminal") is string chord)
+        if (reader.Section("keybindings") is { } keybindings)
         {
-            config.NewTerminal = chord.Length == 0
-                ? null
-                : HotkeyParser.TryParseChord(chord, log, out var keysym, out var modifiers)
-                    ? new Hotkey(keysym, modifiers, "new_terminal", null)
-                    : config.NewTerminal;
+            config.NewTerminal = ReadChord(keybindings, "new_terminal", config.NewTerminal, log);
+            config.InspectorChord = ReadChord(keybindings, "inspector", config.InspectorChord, log);
         }
+
+        config.Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
 
         config.Launch = Basin.Config.LaunchRules.Read(reader);
         var rules = new List<System7Rule>();
@@ -255,6 +258,15 @@ internal sealed class System7Config
         reader.ReportUnknown();
         return config;
     }
+
+    private static Hotkey? ReadChord(TomlReader keybindings, string action, Hotkey? fallback, BasinLogger log) =>
+        keybindings.Raw(action) is not string chord
+            ? fallback
+            : chord.Length == 0
+                ? null
+                : HotkeyParser.TryParseChord(chord, log, out var keysym, out var modifiers)
+                    ? new Hotkey(keysym, modifiers, action, null)
+                    : fallback;
 
     public System7Rule? RuleFor(string? appId) => RuleFor(new WindowFacts { AppId = appId });
 

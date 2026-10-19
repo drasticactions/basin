@@ -45,6 +45,53 @@ public sealed class SeatInjectorTests
     }
 
     [Fact]
+    public void Route_sends_injected_input_through_the_injector()
+    {
+        using var host = new CompositorTestHost(200, 100);
+        var pointer = new LayoutPointer(host.Layout);
+        var cursor = new CursorController(host.Layout);
+        var binder = new SeatBinder(host.Seat, host.Layout, pointer, cursor);
+        var buttons = new List<(uint Button, bool Pressed)>();
+        var keys = new List<(uint Key, bool Pressed)>();
+        var axes = new List<(uint Axis, double Value, uint Source)>();
+        var injector = new SeatInjector(binder, host.Seat, host.Layout, pointer)
+        {
+            DeliverButton = (_, button, pressed) => buttons.Add((button, pressed)),
+            DeliverKey = (_, key, pressed) => keys.Add((key, pressed)),
+            DeliverAxis = (_, axis, value, source) => axes.Add((axis, value, source)),
+        };
+        var sink = new HookInputSink();
+        sink.Route(injector, host.Seat);
+
+        Assert.True(sink.PointerMotionAbsolute(1, 50, 25, 100, 100));
+        Assert.Equal((100.0, 25.0), (pointer.X, pointer.Y));
+        Assert.True(sink.PointerMotion(2, 10, 5));
+        Assert.Equal((110.0, 30.0), (pointer.X, pointer.Y));
+        Assert.True(sink.PointerMotionAbsolute(3, 10, 10, 0, 100));
+        Assert.Equal((110.0, 30.0), (pointer.X, pointer.Y));
+
+        Assert.True(sink.PointerButton(4, Basin.InputCodes.BtnLeft, true));
+        Assert.Equal([(Basin.InputCodes.BtnLeft, true)], buttons);
+        Assert.True(sink.Key(null, 5, 30, true));
+        Assert.Equal([(30u, true)], keys);
+
+        Assert.True(sink.PointerAxisSource(1));
+        Assert.True(sink.PointerAxis(6, 0, 15));
+        Assert.Equal([(0u, 15.0, 1u)], axes);
+
+        var routedKeys = new List<uint>();
+        sink.Route(injector, host.Seat, (_, _, key, _) => routedKeys.Add(key));
+        Assert.True(sink.Key(null, 7, 31, true));
+        Assert.Equal([31u], routedKeys);
+        Assert.Equal([(30u, true)], keys);
+
+        injector.DeliverAxis = null;
+        sink.Route(injector, host.Seat);
+        Assert.Null(sink.OnPointerAxis);
+        cursor.Dispose();
+    }
+
+    [Fact]
     public void Touch_reaches_the_touch_driver_and_is_refused_without_one()
     {
         using var host = new CompositorTestHost(200, 100);

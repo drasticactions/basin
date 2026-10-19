@@ -47,4 +47,6 @@ internal sealed record DamOptions
     public VrrPacingPolicy VrrPacing { get; init; } = VrrPacingPolicy.Fullscreen;
 
     public bool Subreaper { get; init; } = true;
+
+    public bool Inspector { get; init; }
 }

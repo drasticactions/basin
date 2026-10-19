@@ -117,7 +117,7 @@ repeat_interval_ms = 120
 
 [keybindings]
 # Chord = action. Actions: card_view, launcher, quick_launch, maximize, back, next,
-# previous, home, dashboard, lock, close, keyboard. "Super" alone is a press and release of Super.
+# previous, home, dashboard, lock, close, keyboard, inspector. "Super" alone is a press and release of Super.
 # A table says when a chord applies: "Super+q" = { action = "close", when = "windowed" }
 # (always | windowed | fullscreen; a fullscreen card counts as fullscreen).
 "Super" = "card_view"
@@ -132,6 +132,18 @@ repeat_interval_ms = 120
 "Super+l" = "lock"
 "Super+q" = "close"
 "Super+k" = "keyboard"
+"Super+F12" = "inspector"
+
+# The developer inspector, a Dear ImGui overlay over one output. It needs the gl or
+# vulkan renderer. The control socket and stdin also open it: inspector open|close,
+# inspector-panel NAME on|off.
+[inspector]
+enabled    = true            # false never builds it
+open       = false           # open at start
+output     = "focused"       # an output name, or focused
+panels     = ["outputs"]     # open at start: outputs | windows | clients | scene | memory
+font_size  = 15              # logical pixels
+refresh_hz = 10              # how often the live panels redraw
 
 # Window rules. Each rule matches app_id and title, and also steam_game, process,
 # x11_class, x11_instance and window_type. Quirks: letterbox = "fit" | "center" | "off",

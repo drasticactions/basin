@@ -45,6 +45,7 @@ internal sealed class WestoniaSeat : IDisposable
         UISurfaceIndex index,
         WestonShell policy,
         Basin.Backend.Libinput.LibinputBackend? input,
+        Basin.Seat.Backends.HookInputSink inputSink,
         BasinLogger log)
     {
         _host = host;
@@ -68,10 +69,14 @@ internal sealed class WestoniaSeat : IDisposable
         {
             DeliverButton = OnButton,
             DeliverKey = OnKey,
+            DeliverAxis = (timeMs, axis, value, source) =>
+                OnAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
+        inputSink.Route(_injector, _seat);
         _touch = new Basin.Seat.Backends.SeatTouchDriver(_binder, _seat);
         _touch.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(scene);
-        _touch.Router.Chrome = new Basin.Seat.Backends.UISurfaceTouchChrome(_router);
+        _touchChrome.Then = new Basin.Seat.Backends.UISurfaceTouchChrome(_router);
+        _touch.Router.Chrome = _touchChrome;
         _touch.Router.Activity =
             services.Find<Basin.Capabilities.IIdleSource>() as Basin.Seat.SeatIdleSource;
 
@@ -97,6 +102,21 @@ internal sealed class WestoniaSeat : IDisposable
     }
 
     public Func<uint, uint, bool, bool>? KeyHook { get; set; }
+
+    private readonly Basin.Seat.Backends.TouchChromeChain _touchChrome = new();
+    private Basin.Inspector.InspectorInput? _inspector;
+
+    public Basin.Inspector.InspectorInput? Inspector
+    {
+        get => _inspector;
+        set
+        {
+            _inspector = value;
+            _touchChrome.First = value;
+        }
+    }
+
+    public (double X, double Y) Position => (_x, _y);
 
     public Action<(double X, double Y)>? PointerMoved { get; set; }
 
@@ -124,7 +144,7 @@ internal sealed class WestoniaSeat : IDisposable
         _pointerRefresh.Dispose();
     }
 
-    private void RefreshPointer() => MoveCursor((uint)Environment.TickCount);
+    internal void RefreshPointer() => MoveCursor((uint)Environment.TickCount);
 
     private void MoveCursor(uint time)
     {
@@ -146,6 +166,14 @@ internal sealed class WestoniaSeat : IDisposable
 
         if (_policy.Grab.Active)
         {
+            return;
+        }
+
+        if (Inspector?.Motion(time, _x, _y, out var inspectorCursor) == true)
+        {
+            _router.PointerLeave();
+            _cursor.SetHover(null, overClient: false);
+            _cursor.ShowNamed(inspectorCursor ?? "default");
             return;
         }
 
@@ -194,6 +222,11 @@ internal sealed class WestoniaSeat : IDisposable
 
     private void OnButton(uint time, uint button, bool pressed)
     {
+        if (Inspector?.Button(time, button, pressed) == true)
+        {
+            return;
+        }
+
         if (pressed)
         {
             if (_latch.Press())
@@ -289,7 +322,7 @@ internal sealed class WestoniaSeat : IDisposable
 
     private void OnAxis(uint time, PointerAxis axis)
     {
-        if (_router.PointerAxis(time, axis))
+        if (Inspector?.Axis(time, axis) == true || _router.PointerAxis(time, axis))
         {
             return;
         }

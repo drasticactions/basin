@@ -19,6 +19,7 @@ internal sealed class System7Layers
         MenuBar = new SceneTree(root);
         Popups = new SceneTree(root);
         LayerOverlay = new SceneTree(root);
+        Inspector = new SceneTree(root);
         Lock = new SceneTree(root);
         Cursor = new SceneTree(root);
     }
@@ -49,6 +50,8 @@ internal sealed class System7Layers
 
     public SceneTree LayerOverlay { get; }
 
+    public SceneTree Inspector { get; }
+
     public SceneTree Lock { get; }
 
     public SceneTree Cursor { get; }
@@ -66,5 +69,6 @@ internal sealed class System7Layers
         MenuBar.Enabled = !locked;
         Popups.Enabled = !locked;
         LayerOverlay.Enabled = !locked;
+        Inspector.Enabled = !locked;
     }
 }

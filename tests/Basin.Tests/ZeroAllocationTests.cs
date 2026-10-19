@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Basin.Tests;
 
-public sealed class ZeroAllocationTests
+public sealed partial class ZeroAllocationTests
 {
     [Theory]
     [InlineData("pixman")]

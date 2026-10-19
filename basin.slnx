@@ -52,6 +52,9 @@
     <Project Path="src/Basin.Core/Basin.Core.csproj" />
     <Project Path="src/Basin.Desktop/Basin.Desktop.csproj" />
     <Project Path="src/Basin.Host/Basin.Host.csproj" />
+    <Project Path="src/Basin.Inspector/Basin.Inspector.csproj" />
+    <Project Path="src/Basin.Inspector.Ipc/Basin.Inspector.Ipc.csproj" />
+    <Project Path="src/Basin.Inspector.Host/Basin.Inspector.Host.csproj" />
     <Project Path="src/Basin.Hypr/Basin.Hypr.csproj" />
     <Project Path="src/Basin.Ipc/Basin.Ipc.csproj" />
     <Project Path="src/Basin.Ipc.Client/Basin.Ipc.Client.csproj" />
@@ -75,6 +78,7 @@
     <Project Path="src/Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
     <Project Path="src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
     <Project Path="src/Basin.Renderers/Basin.Renderers.csproj" />
+    <Project Path="src/Basin.Renderers.ImGui/Basin.Renderers.ImGui.csproj" />
     <Project Path="src/Basin.Renderers.Quill/Basin.Renderers.Quill.csproj" />
     <Project Path="src/Basin.Effects/Basin.Effects.csproj" />
     <Project Path="src/Basin.Eis/Basin.Eis.csproj" />
@@ -110,6 +114,9 @@
     <Project Path="src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
     <Project Path="src/Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <Project Path="src/Basin.UI.Skia.Gpu/Basin.UI.Skia.Gpu.csproj" />
+    <Project Path="src/Basin.UI.ImGui/Basin.UI.ImGui.csproj" />
+    <Project Path="src/Basin.UI.ImGui.Gl/Basin.UI.ImGui.Gl.csproj" />
+    <Project Path="src/Basin.UI.ImGui.Vulkan/Basin.UI.ImGui.Vulkan.csproj" />
     <Project Path="src/Basin.UI.Paper/Basin.UI.Paper.csproj" />
     <Project Path="src/Basin.UI.Quill/Basin.UI.Quill.csproj" />
     <Project Path="src/Basin.UI.Quill.Gl/Basin.UI.Quill.Gl.csproj" />

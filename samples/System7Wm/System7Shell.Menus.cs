@@ -427,6 +427,17 @@ internal sealed partial class System7Shell
 
     private bool OnKey(uint time, uint key, bool pressed)
     {
+        if (pressed && !_locked && TryInspectorChord(key))
+        {
+            _consumedKeys.Add(key);
+            return true;
+        }
+
+        if (!_consumedKeys.Contains(key) && _inspector?.Input.Key(time, key, pressed) == true)
+        {
+            return true;
+        }
+
         if (!pressed)
         {
             return _consumedKeys.Remove(key);

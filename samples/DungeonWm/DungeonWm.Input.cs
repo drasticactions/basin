@@ -26,6 +26,9 @@ internal sealed partial class DungeonWm
     private LayoutPointer _pointer = null!;
     private SeatBinder _binder = null!;
     private SeatInjector _injector = null!;
+    private SeatTouchDriver _touch = null!;
+    private readonly TouchChromeChain _touchChrome = new();
+    private readonly HookInputSink _inputSink = new();
     private DungeonWmBindings _bindings = null!;
     private bool _looking;
     private bool _resizing;
@@ -57,16 +60,7 @@ internal sealed partial class DungeonWm
         _binder.Key += OnKey;
         _binder.Motion += OnMotion;
         _binder.Button += OnButton;
-        _binder.Axis += (time, axis) =>
-        {
-            if (axis.Axis == Wayland.WlPointer.Axis.VerticalScroll && PullAxis(axis.Value))
-            {
-                return;
-            }
-
-            _seat.Pointer.NotifyAxis(time, axis);
-            _seat.Pointer.NotifyFrame();
-        };
+        _binder.Axis += OnAxis;
         _binder.PointerLeft += () => _seat.Pointer.NotifyClearFocus();
         if (_input is not null)
         {
@@ -79,6 +73,8 @@ internal sealed partial class DungeonWm
             _binder.BindParent(parent);
         }
 
+        _touch = new SeatTouchDriver(_binder, _seat);
+        _touch.Router.Chrome = _touchChrome;
         _injector = new SeatInjector(_binder, _seat, _layout, _pointer)
         {
             Moved = PointerMoved,
@@ -110,7 +106,10 @@ internal sealed partial class DungeonWm
             },
             DeliverButton = OnButton,
             DeliverKey = OnKey,
+            DeliverAxis = (time, axis, value, source) =>
+                OnAxis(time, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
+        _inputSink.Route(_injector, _seat);
         _seat.Pointer.MapToSurface = MapToSurface;
         _binder.EnsureCursorLoaded();
         if (_outputs.Views.Count > 0)
@@ -167,6 +166,11 @@ internal sealed partial class DungeonWm
         if (_resizing && _resized is { } window)
         {
             ContinueResize(window);
+            return;
+        }
+
+        if (RouteInspectorMotion(time))
+        {
             return;
         }
 
@@ -240,19 +244,8 @@ internal sealed partial class DungeonWm
         return _picker.Pick(ray, output?.Visible is { Rooms.Count: > 0 } visible ? visible : null);
     }
 
-    private Basin.Host.OutputView? ViewAt(double x, double y)
-    {
-        var output = _layout.OutputAt(x, y);
-        foreach (var view in _outputs.Views)
-        {
-            if (ReferenceEquals(view.Output, output))
-            {
-                return view;
-            }
-        }
-
-        return _outputs.Views.Count > 0 ? _outputs.Views[0] : null;
-    }
+    private Basin.Host.OutputView? ViewAt(double x, double y) =>
+        _outputs.ViewAt(x, y) ?? (_outputs.Views.Count > 0 ? _outputs.Views[0] : null);
 
     private Basin.Host.OutputView? OutputUnderPointer() => ViewAt(_pointer.X, _pointer.Y);
 
@@ -303,6 +296,11 @@ internal sealed partial class DungeonWm
                 CrosshairPress(button);
             }
 
+            return;
+        }
+
+        if (RouteInspectorButton(time, button, pressed))
+        {
             return;
         }
 
@@ -457,6 +455,22 @@ internal sealed partial class DungeonWm
         _resized = null;
     }
 
+    private void OnAxis(uint time, PointerAxis axis)
+    {
+        if (RouteInspectorAxis(time, axis))
+        {
+            return;
+        }
+
+        if (axis.Axis == Wayland.WlPointer.Axis.VerticalScroll && PullAxis(axis.Value))
+        {
+            return;
+        }
+
+        _seat.Pointer.NotifyAxis(time, axis);
+        _seat.Pointer.NotifyFrame();
+    }
+
     private void OnKey(uint time, uint key, bool pressed)
     {
         if (!pressed && _rotating && key == _rotateKey)
@@ -508,6 +522,11 @@ internal sealed partial class DungeonWm
                 return;
             }
 
+            if (RouteInspectorKey(time, key, pressed))
+            {
+                return;
+            }
+
             var super = (held & Modifiers.Super) != 0;
             if (IsWalkKey(key) && _takeover is null && !LayerHoldsKeyboard && (super || _focused is null))
             {
@@ -516,6 +535,11 @@ internal sealed partial class DungeonWm
                 ScheduleAll();
                 return;
             }
+        }
+
+        if (!pressed && RouteInspectorKey(time, key, pressed))
+        {
+            return;
         }
 
         if (key is KeyLeftShift or KeyRightShift)
@@ -604,6 +628,9 @@ internal sealed partial class DungeonWm
                 break;
             case "square":
                 SquareHeld();
+                break;
+            case "inspector":
+                ToggleInspector();
                 break;
             case "look-reset":
                 _camera.Pitch = 0;

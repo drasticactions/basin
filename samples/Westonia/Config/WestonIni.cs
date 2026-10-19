@@ -24,6 +24,8 @@ public sealed class WestonIni
 
     public Dictionary<string, string> Libinput { get; } = [];
 
+    public Basin.Inspector.InspectorSettings Inspector { get; set; } = new();
+
     public string? XWaylandPath { get; set; }
 
     public bool XWaylandLowDensity { get; set; } = true;
@@ -262,6 +264,9 @@ public sealed class WestonIni
                         return;
                 }
 
+            case "inspector":
+                ApplyInspector(key, value);
+                return;
             case "autolaunch":
                 switch (key)
                 {
@@ -283,6 +288,45 @@ public sealed class WestonIni
                 }
 
                 Refuse(section, key);
+                return;
+        }
+    }
+
+    private void ApplyInspector(string key, string value)
+    {
+        switch (key)
+        {
+            case "enabled":
+                Inspector = Inspector with { Enabled = Bool(value, Inspector.Enabled) };
+                return;
+            case "open":
+                Inspector = Inspector with { Open = Bool(value, Inspector.Open) };
+                return;
+            case "output":
+                Inspector = Inspector with { Output = value.Length == 0 || value == "focused" ? null : value };
+                return;
+            case "panels":
+                Inspector = Inspector with
+                {
+                    Panels = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                };
+                return;
+            case "font-size":
+                if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var size) && size is >= 6 and <= 64)
+                {
+                    Inspector = Inspector with { FontSize = size };
+                }
+
+                return;
+            case "refresh-hz":
+                if (int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var hz) && hz is >= 1 and <= 240)
+                {
+                    Inspector = Inspector with { RefreshHz = hz };
+                }
+
+                return;
+            default:
+                Refuse("inspector", key);
                 return;
         }
     }

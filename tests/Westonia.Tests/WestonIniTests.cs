@@ -5,6 +5,23 @@ namespace Westonia.Tests;
 public sealed class WestonIniTests
 {
     [Fact]
+    public void The_inspector_section_maps_onto_the_inspector_settings()
+    {
+        var ini = WestonIni.FromLines([
+            "[inspector]", "enabled=false", "open=true", "output=HEADLESS-2", "panels=windows, memory",
+            "font-size=18", "refresh-hz=30", "bogus=1",
+        ]);
+
+        Assert.False(ini.Inspector.Enabled);
+        Assert.True(ini.Inspector.Open);
+        Assert.Equal("HEADLESS-2", ini.Inspector.Output);
+        Assert.Equal(["windows", "memory"], ini.Inspector.Panels);
+        Assert.Equal(18, ini.Inspector.FontSize);
+        Assert.Equal(30, ini.Inspector.RefreshHz);
+        Assert.Contains(ini.Refusals, refusal => refusal.Contains("bogus", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void An_empty_file_keeps_westons_defaults()
     {
         var ini = WestonIni.FromLines([]);

@@ -64,6 +64,23 @@ public sealed class SceneTests : IDisposable
     }
 
     [Fact]
+    public void Placing_a_node_where_it_already_is_damages_nothing()
+    {
+        var red = new SceneRect(_scene.Root, 50, 50, new RenderColor(1, 0, 0, 1));
+        var blue = new SceneRect(_scene.Root, 50, 50, new RenderColor(0, 0, 1, 1));
+        var damaged = 0;
+        _scene.Damaged += (_, _) => damaged++;
+
+        red.PlaceBelow(blue);
+        blue.PlaceAbove(red);
+        Assert.Equal(0, damaged);
+
+        blue.PlaceBelow(red);
+        Assert.True(damaged > 0);
+        Assert.Equal(0xFFFF0000u, Render(30, 30));
+    }
+
+    [Fact]
     public void Disabled_nodes_do_not_render()
     {
         var rect = new SceneRect(_scene.Root, 50, 50, new RenderColor(1, 0, 0, 1));

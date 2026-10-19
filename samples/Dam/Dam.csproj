@@ -31,6 +31,7 @@
     <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" />
     <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Inspector.Host/Basin.Inspector.Host.csproj" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../Basin.Tests/Shared/InspectorScroll.cs" Link="InspectorScroll.cs" />
     <PackageReference Include="Avalonia" VersionOverride="$(System7AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Skia" VersionOverride="$(System7AvaloniaVersion)" />
     <PackageReference Include="Avalonia.HarfBuzz" VersionOverride="$(System7AvaloniaVersion)" />

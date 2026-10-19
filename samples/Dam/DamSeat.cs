@@ -39,11 +39,13 @@ internal sealed class DamSeat :
     private readonly SeatInjector _injector;
 
     private readonly SeatTouchDriver _touch;
+    private Basin.Inspector.InspectorInput? _inspector;
 
     private LibinputBackend? _libinput;
     private readonly PointerRefresh _pointerRefresh;
     private int _touchId = -1;
     private readonly DragIconFollower _dragIcon;
+    private ChordMatcher? _inspectorChord;
 
     public DamSeat(
         Basin.Host.BasinHost host,
@@ -122,33 +124,16 @@ internal sealed class DamSeat :
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
         _outputs.Removed += view => _cursor.RemoveOutput(view.Output);
 
-        inputSink.OnKey = (keyboard, timeMs, key, pressed) =>
-        {
-            _seat.Keyboard.Activate(keyboard);
-            OnKey(timeMs, key, pressed);
-            return true;
-        };
-        inputSink.OnKeyboardCreated = () => _seat.SetCapability(SeatCapability.Keyboard, true);
-        inputSink.OnPointerMotion = (timeMs, dx, dy) =>
-        {
-            _binder.EnsurePointerCapability();
-            _pointer.Motion(dx, dy);
-            ProcessCursorMotion(timeMs, dx, dy);
-            return true;
-        };
         _injector = new SeatInjector(_binder, _seat, _layout, _pointer)
         {
             Moved = timeMs => ProcessCursorMotion(timeMs),
             MovedBy = (timeMs, dx, dy) => ProcessCursorMotion(timeMs, dx, dy),
             DeliverButton = OnButton,
             DeliverKey = OnKey,
+            DeliverAxis = (timeMs, axis, value, source) =>
+                OnAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
-        inputSink.OnPointerMotionAbsolute = _injector.MotionAbsolute;
-        inputSink.OnPointerButton = (timeMs, button, pressed) =>
-        {
-            OnButton(timeMs, button, pressed);
-            return true;
-        };
+        inputSink.Route(_injector, _seat);
 
         if (_host.Drm is not null)
         {
@@ -161,6 +146,20 @@ internal sealed class DamSeat :
     }
 
     internal TouchRouter TouchRouter => _touch.Router;
+
+    internal Basin.Inspector.InspectorInput? Inspector
+    {
+        get => _inspector;
+        set
+        {
+            _inspector = value;
+            _touch.Router.Chrome = value;
+        }
+    }
+
+    internal Action? ToggleInspector { get; set; }
+
+    internal (double X, double Y) PointerPosition => (_pointer.X, _pointer.Y);
 
     internal void Warp(double x, double y) => _injector.Warp(x, y);
 
@@ -185,6 +184,21 @@ internal sealed class DamSeat :
     internal void OnKey(uint timeMs, uint key, bool pressed)
     {
         _idle.NotifyActivity();
+        if (ToggleInspector is { } toggle && InspectorChord(key, pressed))
+        {
+            if (pressed)
+            {
+                toggle();
+            }
+
+            return;
+        }
+
+        if (Inspector?.Key(timeMs, key, pressed) == true)
+        {
+            return;
+        }
+
         if (pressed && _seat.Keyboard.State?.IsModActive("Mod1") == true &&
             HandleKeybinding(_seat.Keyboard.KeysymFor(key)))
         {
@@ -192,6 +206,25 @@ internal sealed class DamSeat :
         }
 
         _seat.Keyboard.NotifyKey(timeMs, key, pressed);
+    }
+
+    private bool InspectorChord(uint key, bool pressed)
+    {
+        _inspectorChord ??= NewInspectorChord(_seat.Keyboard);
+        if (!_inspectorChord.Matches(key, pressed))
+        {
+            return false;
+        }
+
+        _seat.Keyboard.NotifyKeyConsumed(key, pressed);
+        return true;
+    }
+
+    private static ChordMatcher NewInspectorChord(Basin.Seat.SeatKeyboard keyboard)
+    {
+        var chord = new ChordMatcher(keyboard);
+        chord.Set(Basin.Config.Keysym.FromName("F12"), Basin.Config.Modifiers.Super);
+        return chord;
     }
 
     private bool HandleKeybinding(XkbKeysym symbol)
@@ -209,6 +242,15 @@ internal sealed class DamSeat :
     private void ProcessCursorMotion(uint timeMs, double dx = 0, double dy = 0, double? unaccelDx = null, double? unaccelDy = null)
     {
         _cursor.MoveTo(_pointer.X, _pointer.Y);
+        if (Inspector?.Motion(timeMs, _pointer.X, _pointer.Y, out var cursor) == true)
+        {
+            _cursor.SetHover(null, overClient: false);
+            _cursor.ShowNamed(cursor ?? "default");
+            PositionDragIcon();
+            _idle.NotifyActivity();
+            return;
+        }
+
         var hit = _scene.SurfaceAt(_pointer.X, _pointer.Y);
         _delivery.Motion(timeMs, hit?.Surface, hit?.X ?? 0, hit?.Y ?? 0, _pointer.X, _pointer.Y);
 
@@ -218,6 +260,12 @@ internal sealed class DamSeat :
 
     internal void OnButton(uint timeMs, uint button, bool pressed)
     {
+        if (Inspector?.Button(timeMs, button, pressed) == true)
+        {
+            _idle.NotifyActivity();
+            return;
+        }
+
         _seat.Pointer.NotifyButton(timeMs, button, pressed);
         _seat.Pointer.NotifyFrame();
         PressCursorButton(pressed, _pointer.X, _pointer.Y);
@@ -226,6 +274,12 @@ internal sealed class DamSeat :
 
     private void OnAxis(uint timeMs, PointerAxis axis)
     {
+        if (Inspector?.Axis(timeMs, axis) == true)
+        {
+            _idle.NotifyActivity();
+            return;
+        }
+
         _seat.Pointer.NotifyAxis(timeMs, axis);
         _seat.Pointer.NotifyFrame();
         _idle.NotifyActivity();

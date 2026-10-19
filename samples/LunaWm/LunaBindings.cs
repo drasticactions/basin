@@ -8,7 +8,7 @@ internal sealed class LunaBindings
     public static readonly string[] Actions =
     [
         "card_view", "launcher", "quick_launch", "maximize", "back", "next", "previous",
-        "home", "dashboard", "lock", "close", "keyboard",
+        "home", "dashboard", "lock", "close", "keyboard", "inspector",
     ];
 
     private static readonly (string Chord, string Action)[] Defaults =
@@ -25,6 +25,7 @@ internal sealed class LunaBindings
         ("Super+l", "lock"),
         ("Super+q", "close"),
         ("Super+k", "keyboard"),
+        ("Super+F12", "inspector"),
     ];
 
     private readonly List<Hotkey> _bindings = [];

@@ -41,4 +41,5 @@ internal enum KeyAction
     RotateRight,
     Upright,
     StopSpin,
+    Inspector,
 }

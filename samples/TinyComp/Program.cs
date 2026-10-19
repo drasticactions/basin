@@ -37,6 +37,11 @@ internal static class Program
             Description = "draw one Prowl.Quill chrome mock beside the Skia chrome, on the gl renderer only",
         }, report: false);
 
+        var imguiDemo = cli.Add(new Option<bool>("--imgui-demo")
+        {
+            Description = "draw the Dear ImGui, ImPlot and ImNodes demos over the first output, on the GPU renderers only",
+        }, report: false);
+
         var commandOption = cli.Add(CommonOptions.Command("run `sh -c <command>` on startup instead of the init executable"));
         var exitWithCommand = cli.Add(CommonOptions.ExitWithCommand());
         var subreaper = cli.Add(CommonOptions.Subreaper(defaultOn: true));
@@ -91,6 +96,7 @@ internal static class Program
             settings.FullRepaint = Layered(fullRepaint, "full_repaint", settings.FullRepaint);
             settings.DamageTint = Layered(damageTint, "damage_tint", settings.DamageTint);
             settings.QuillDemo = result.GetValue(quillDemo);
+            settings.ImGuiDemo = result.GetValue(imguiDemo);
 
             Given(renderer, "renderer");
             Given(outputs, "outputs");
@@ -109,6 +115,7 @@ internal static class Program
         cli.AddReport(_ => BasinCommand.Report("full-repaint", settings.FullRepaint));
         cli.AddReport(_ => BasinCommand.Report("damage-tint", settings.DamageTint));
         cli.AddReport(_ => BasinCommand.Report("quill-demo", settings.QuillDemo));
+        cli.AddReport(_ => BasinCommand.Report("imgui-demo", settings.ImGuiDemo));
         cli.AddReport(_ => BasinCommand.Report("offload", settings.Offload));
         cli.AddReport(_ => BasinCommand.Report("transactions", settings.Transactions));
         cli.AddReport(_ => BasinCommand.Report(

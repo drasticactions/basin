@@ -2,7 +2,7 @@ using Basin.Capabilities;
 
 namespace Basin.XWayland;
 
-public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
+public sealed class XWaylandToplevelSource : IToplevelSource, IToplevelGeometryFeed, IDisposable
 {
     private readonly XWaylandWm _wm;
     private readonly Dictionary<ulong, XWaylandWindow> _windows = [];
@@ -62,6 +62,26 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IDisposable
     {
         ArgumentNullException.ThrowIfNull(window);
         return _ids.GetValueOrDefault(window);
+    }
+
+    public void ReportFrom(ReadOnlySpan<SurfaceBox> boxes)
+    {
+        foreach (var (_, window) in _windows)
+        {
+            if (window.Surface is not { } surface)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < boxes.Length; i++)
+            {
+                if (ReferenceEquals(boxes[i].Surface, surface))
+                {
+                    SetGeometry(window, boxes[i].Box, boxes[i].Box);
+                    break;
+                }
+            }
+        }
     }
 
     public void SetGeometry(XWaylandWindow window, in Box frame, in Box client)

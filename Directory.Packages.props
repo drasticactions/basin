@@ -16,6 +16,7 @@
     <AvaWinVersion>0.1.4</AvaWinVersion>
     <AvaEnyoVersion>0.1.1</AvaEnyoVersion>
     <ProwlVersion>3.5.6</ProwlVersion>
+    <HexaImGuiVersion>2.2.9</HexaImGuiVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -67,6 +68,13 @@
     <PackageVersion Include="Prowl.Paper" Version="$(ProwlVersion)" />
     <PackageVersion Include="Prowl.Scaffold" Version="$(ProwlVersion)" />
     <PackageVersion Include="Prowl.Quire" Version="$(ProwlVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Hexa.NET.ImGui" Version="$(HexaImGuiVersion)" />
+    <PackageVersion Include="Hexa.NET.ImPlot" Version="$(HexaImGuiVersion)" />
+    <PackageVersion Include="Hexa.NET.ImGuizmo" Version="$(HexaImGuiVersion)" />
+    <PackageVersion Include="Hexa.NET.ImNodes" Version="$(HexaImGuiVersion)" />
   </ItemGroup>
 
   <ItemGroup>

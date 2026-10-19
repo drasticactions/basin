@@ -432,6 +432,10 @@ internal sealed partial class TinyComp
                 UnshelveByKey();
                 return true;
 
+            case KeyAction.Inspector:
+                ToggleInspector();
+                return true;
+
             case KeyAction.Settings:
                 if (ToggleSettings() is { } unavailable)
                 {

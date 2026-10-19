@@ -17,9 +17,10 @@ internal static class SettingsCatalog
     public const string Launch = "Launch";
     public const string Outputs = "Outputs";
     public const string Panel = "Panel";
+    public const string Inspector = "Inspector";
 
     public static IReadOnlyList<string> Sections { get; } =
-        [Compositor, Frames, Color, Effects, Canvas, Overview, Physics, Hypr, Input, Touch, Bindings, Rules, Launch, Outputs, Panel];
+        [Compositor, Frames, Color, Effects, Canvas, Overview, Physics, Hypr, Input, Touch, Bindings, Rules, Launch, Outputs, Panel, Inspector];
 
     public static IReadOnlyList<string> Restarts { get; } =
     [
@@ -366,6 +367,13 @@ internal static class SettingsCatalog
 
             new(Panel, "settings", "palette", "Palette", SettingKind.Choice) { Default = "\"dark\"", Choices = ["dark", "light"] },
             new(Panel, "settings", "font_size", "Font size", SettingKind.Real) { Default = "14", Min = 10, Max = 24, Step = 1 },
+
+            new(Inspector, "inspector", "enabled", "Enabled", SettingKind.Flag) { Default = "true" },
+            new(Inspector, "inspector", "open", "Open at start", SettingKind.Flag) { Default = "false" },
+            new(Inspector, "inspector", "output", "Output", SettingKind.Text) { Default = "\"focused\"" },
+            new(Inspector, "inspector", "panels", "Panels at start", SettingKind.Names) { Default = "[\"outputs\"]", Choices = Config.InspectorPanelNames },
+            new(Inspector, "inspector", "font_size", "Font size", SettingKind.Real) { Default = "15", Min = 8, Max = 32, Step = 1 },
+            new(Inspector, "inspector", "refresh_hz", "Live refresh (Hz)", SettingKind.Integer) { Default = "10", Min = 1, Max = 240 },
         ];
     }
 

@@ -35,6 +35,8 @@ internal sealed partial class ShellSeat :
     private readonly PointerDelivery _delivery;
     private readonly EdgeSwipeGesture _edgeGesture = new();
     private readonly SeatTouchDriver _touch;
+
+    internal Basin.Seat.Backends.TouchChromeChain TouchChrome { get; } = new();
     private ShellView? _edgeView;
     private bool _pointerEdge;
     private readonly BasinLogger _log;
@@ -96,7 +98,8 @@ internal sealed partial class ShellSeat :
         _edgeGesture.Handler = this;
         _touch.Router.Gestures = _edgeGesture;
         _touch.Router.HitTester = new SceneTouchHitTester(_scene);
-        _touch.Router.Chrome = this;
+        TouchChrome.Then = this;
+        _touch.Router.Chrome = TouchChrome;
         _touch.Router.Activity = this;
         _touch.Routed += (_, _, surface) =>
         {
@@ -115,33 +118,17 @@ internal sealed partial class ShellSeat :
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene!);
         _outputs.Removed += view => _cursor.RemoveOutput(view.Output);
 
-        inputSink.OnKey = (keyboard, timeMs, key, pressed) =>
-        {
-            _seat.Keyboard.Activate(keyboard);
-            OnKey(timeMs, key, pressed, _shell.IsInputMethodKeyboard(keyboard?.Tag));
-            return true;
-        };
-        inputSink.OnKeyboardCreated = () => _seat.SetCapability(SeatCapability.Keyboard, true);
-        inputSink.OnPointerMotion = (timeMs, dx, dy) =>
-        {
-            _binder.EnsurePointerCapability();
-            _pointer.Motion(dx, dy);
-            ProcessCursorMotion(timeMs, dx, dy);
-            return true;
-        };
         _injector = new SeatInjector(_binder, _seat, _layout, _pointer)
         {
             Moved = timeMs => ProcessCursorMotion(timeMs),
             MovedBy = (timeMs, dx, dy) => ProcessCursorMotion(timeMs, dx, dy),
             DeliverButton = OnButton,
             DeliverKey = OnKey,
+            DeliverAxis = (timeMs, axis, value, source) =>
+                OnAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
-        inputSink.OnPointerMotionAbsolute = _injector.MotionAbsolute;
-        inputSink.OnPointerButton = (timeMs, button, pressed) =>
-        {
-            OnButton(timeMs, button, pressed);
-            return true;
-        };
+        inputSink.Route(_injector, _seat, (keyboard, timeMs, key, pressed) =>
+            OnKey(timeMs, key, pressed, _shell.IsInputMethodKeyboard(keyboard?.Tag)));
 
         if (_host.Drm is not null)
         {
@@ -263,7 +250,7 @@ internal sealed partial class ShellSeat :
         _idle.NotifyActivity();
         var symbol = _seat.Keyboard.KeysymFor(key);
         if (!fromInputMethod && key is not (29 or 97 or 42 or 54 or 56 or 100 or 125 or 126) &&
-            !(pressed && _shell.IsKeyboardChord(symbol, SuperHeld, ShiftHeld, AltHeld, ControlHeld)))
+            !(pressed && _shell.IsKeyboardChord(symbol)))
         {
             _shell.NoteHardwareKey(pressed);
         }
@@ -299,6 +286,11 @@ internal sealed partial class ShellSeat :
         else if (_shell.HandleSuperRelease(view, symbol))
         {
             _seat.Keyboard.NotifyKeyConsumed(key, pressed);
+            return;
+        }
+
+        if (_shell.Inspector?.Input.Key(timeMs, key, pressed) == true)
+        {
             return;
         }
 
@@ -344,6 +336,22 @@ internal sealed partial class ShellSeat :
             var locked = _scene.SurfaceAt(_pointer.X, _pointer.Y);
             _delivery.Motion(timeMs, locked?.Surface, locked?.X ?? 0, locked?.Y ?? 0, _pointer.X, _pointer.Y);
             return;
+        }
+
+        if (!_pointerEdge && _splitView is null && _buttonSurface is null && _shell.Inspector is { IsOpen: true } inspector)
+        {
+            if (fromMotion)
+            {
+                UsePointer();
+            }
+
+            _cursor.MoveTo(_pointer.X, _pointer.Y);
+            if (inspector.Input.Motion(timeMs, _pointer.X, _pointer.Y, out var inspectorCursor))
+            {
+                _shell.Router.PointerLeave();
+                TakeCursor(inspectorCursor ?? Shell.PointerCursor);
+                return;
+            }
         }
 
         if (_pointerEdge)
@@ -486,6 +494,12 @@ internal sealed partial class ShellSeat :
             return;
         }
 
+        if (!_pointerEdge && _buttonSurface is null && _shell.Inspector?.Input.Button(timeMs, button, pressed) == true)
+        {
+            _idle.NotifyActivity();
+            return;
+        }
+
         if (button == InputCodes.BtnLeft && pressed && !_pointerEdge &&
             _touch.Router.SyntheticDown(PointerTouchId, timeMs, _pointer.X, _pointer.Y) ==
             TouchGestureVerdict.Withhold)
@@ -624,6 +638,11 @@ internal sealed partial class ShellSeat :
     private void OnAxis(uint timeMs, PointerAxis axis)
     {
         _idle.NotifyActivity();
+        if (_buttonSurface is null && !_shell.IsLocked && _shell.Inspector?.Input.Axis(timeMs, axis) == true)
+        {
+            return;
+        }
+
         if (_buttonSurface is null && !_shell.IsLocked && _shell.Router.Hovered is { } surface &&
             _shell.Router.PointerAxis(timeMs, axis, surface))
         {

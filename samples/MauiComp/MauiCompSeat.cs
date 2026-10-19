@@ -37,6 +37,7 @@ internal sealed class MauiCompSeat : IDisposable
         CursorController cursor,
         UISurfaceIndex index,
         Basin.Backend.Libinput.LibinputBackend? input,
+        Basin.Seat.Backends.HookInputSink inputSink,
         BasinLogger log)
     {
         _seat = seat;
@@ -56,11 +57,15 @@ internal sealed class MauiCompSeat : IDisposable
         {
             DeliverButton = OnButton,
             DeliverKey = OnKey,
+            DeliverAxis = (timeMs, axis, value, source) =>
+                OnAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
+        inputSink.Route(_injector, _seat);
 
         _touch = new Basin.Seat.Backends.SeatTouchDriver(_binder, _seat);
         _touch.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(scene);
-        _touch.Router.Chrome = new Basin.Seat.Backends.UISurfaceTouchChrome(_router);
+        _touchChrome.Then = new Basin.Seat.Backends.UISurfaceTouchChrome(_router);
+        _touch.Router.Chrome = _touchChrome;
 
         _binder.Key += OnKey;
         _binder.ModifiersChanged += OnModifiers;
@@ -99,6 +104,19 @@ internal sealed class MauiCompSeat : IDisposable
 
     public Func<bool>? Grabbing { get; set; }
 
+    private readonly Basin.Seat.Backends.TouchChromeChain _touchChrome = new();
+    private Basin.Inspector.InspectorInput? _inspector;
+
+    public Basin.Inspector.InspectorInput? Inspector
+    {
+        get => _inspector;
+        set
+        {
+            _inspector = value;
+            _touchChrome.First = value;
+        }
+    }
+
     public bool IsOverShell => _router.Hovered is not null;
 
     public UISurfaceRouter Router => _router;
@@ -112,6 +130,8 @@ internal sealed class MauiCompSeat : IDisposable
     public Basin.Seat.Backends.SeatBinder Binder => _binder;
 
     public void CenterPointer() => _injector.Center();
+
+    public void RefreshPointer() => MoveCursor((uint)Environment.TickCount);
 
     public void Dispose()
     {
@@ -139,6 +159,14 @@ internal sealed class MauiCompSeat : IDisposable
 
         if (Grabbing?.Invoke() == true)
         {
+            return;
+        }
+
+        if (Inspector?.Motion(time, _x, _y, out var inspectorCursor) == true)
+        {
+            _router.PointerLeave();
+            _cursor.SetHover(null, overClient: false);
+            _cursor.ShowNamed(inspectorCursor ?? "default");
             return;
         }
 
@@ -178,6 +206,11 @@ internal sealed class MauiCompSeat : IDisposable
 
     private void OnButton(uint time, uint button, bool pressed)
     {
+        if (Inspector?.Button(time, button, pressed) == true)
+        {
+            return;
+        }
+
         if (pressed)
         {
             if (_latch.Press())
@@ -233,6 +266,11 @@ internal sealed class MauiCompSeat : IDisposable
 
     private void OnAxis(uint time, PointerAxis axis)
     {
+        if (Inspector?.Axis(time, axis) == true)
+        {
+            return;
+        }
+
         if (_router.PointerAxis(time, axis))
         {
             return;
@@ -244,6 +282,11 @@ internal sealed class MauiCompSeat : IDisposable
     private void OnKey(uint time, uint key, bool pressed)
     {
         if (KeyHook?.Invoke(time, key, pressed) == true)
+        {
+            return;
+        }
+
+        if (Inspector?.Key(time, key, pressed) == true)
         {
             return;
         }

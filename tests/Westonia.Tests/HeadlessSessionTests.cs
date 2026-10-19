@@ -568,6 +568,32 @@ public sealed class HeadlessSessionTests
     }
 
     [Fact]
+    public async Task A_virtual_pointer_moves_the_pointer()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+        var compositor = Locate("westonia");
+        Assert.SkipWhen(compositor is null, "westonia has not been built beside the tests");
+        var vptr = WlClient("vptr");
+        Assert.SkipWhen(vptr is null, "scripts/wlclients/bin/vptr has not been built");
+
+        using var session = new Session(compositor!);
+        var socket = await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal));
+        Assert.NotNull(socket);
+        var before = await session.WaitForAsync(line => line.StartsWith("POINTER ", StringComparison.Ordinal), poke: "where");
+        Assert.NotNull(before);
+        var output = new List<string>();
+        using (var client = StartListening(vptr!, socket!.Split(' ')[1], output, "25", "50", "100", "100", "0"))
+        {
+            client.WaitForExit(10_000);
+        }
+
+        var after = await session.WaitForAsync(line => line.StartsWith("POINTER ", StringComparison.Ordinal) && line != before, poke: "where", fresh: true);
+        Assert.True(after is not null, $"the pointer stayed at {before}");
+        Assert.Equal("POINTER 320 360", after);
+        await session.SendAsync("quit");
+    }
+
+    [Fact]
     public async Task A_layer_shell_panel_maps_takes_the_keyboard_and_shrinks_the_work_area()
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
@@ -601,6 +627,94 @@ public sealed class HeadlessSessionTests
         Assert.NotNull(frames);
         var live = frames!.Split(' ');
         Assert.Equal("LIVE", live[2]);
+        if (live[3] != "untracked")
+        {
+            Assert.Equal("0", live[3]);
+        }
+    }
+
+    [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    public async Task Virtual_pointer_scroll_reaches_a_window_except_under_a_panel(string renderer)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+        Assert.SkipUnless(File.Exists("/dev/dri/renderD128"), "no render node for the inspector");
+        var compositor = Locate("westonia");
+        Assert.SkipWhen(compositor is null, "westonia has not been built beside the tests");
+
+        using var session = new Session(compositor!, renderer: renderer);
+        var socket = await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal));
+        Assert.NotNull(socket);
+        await session.SettleAsync();
+        var (before, overPanel, overlay, after, where) = await Basin.Tests.InspectorScroll.Run(
+            socket!.Split(' ')[1],
+            (command, match) => session.WaitForAsync(match, poke: command, fresh: true),
+            session.SendAsync,
+            TestContext.Current.CancellationToken);
+        Assert.True(before == 3 && overPanel == 0 && overlay == 3 && after == 3, $"{where}: before={before} over-panel={overPanel} overlay={overlay} after={after}");
+        await session.SendAsync("quit");
+    }
+
+    [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    public async Task The_inspector_opens_takes_a_click_on_a_panel_and_closes(string renderer)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+        Assert.SkipUnless(File.Exists("/dev/dri/renderD128"), "no render node for the inspector");
+        var compositor = Locate("westonia");
+        Assert.SkipWhen(compositor is null, "westonia has not been built beside the tests");
+
+        using var session = new Session(compositor!, renderer: renderer);
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
+        await session.SettleAsync();
+
+        var mark = session.Mark();
+        await session.SendAsync("inspector open");
+        var opened = await session.WaitForAsync(line => line.StartsWith("INSPECTOR ", StringComparison.Ordinal), since: mark);
+        Assert.NotNull(opened);
+        Assert.SkipWhen(opened!.Contains("host=none", StringComparison.Ordinal), $"no inspector host: {opened}");
+        Assert.SkipUnless(opened.Contains($"host={renderer}", StringComparison.Ordinal), $"the {renderer} row fell back: {opened}");
+        Assert.StartsWith("INSPECTOR open=yes", opened, StringComparison.Ordinal);
+        Assert.Contains("panels=Outputs", opened, StringComparison.Ordinal);
+
+        await session.SendAsync("inspector-panel windows on");
+        await session.SettleAsync();
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        await session.SendAsync("move 531 50");
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+        await session.SendAsync("button 272 true");
+        await session.SendAsync("button 272 false");
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        var state = await session.WaitForAsync(
+            line => line.StartsWith("INSPECTOR open=yes", StringComparison.Ordinal) && !line.Contains("Outputs", StringComparison.Ordinal),
+            poke: "inspector-state", fresh: true);
+        Assert.NotNull(state);
+        Assert.Contains("panels=Windows", state!, StringComparison.Ordinal);
+
+        await session.SendAsync("inspector-panel outputs on");
+        await Task.Delay(600, TestContext.Current.CancellationToken);
+        await session.SendAsync("ipc input/touch {\"kind\":\"down\",\"id\":1,\"x\":531,\"y\":50}");
+        await session.SendAsync("ipc input/touch {\"kind\":\"frame\"}");
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await session.SendAsync("ipc input/touch {\"kind\":\"up\",\"id\":1}");
+        await session.SendAsync("ipc input/touch {\"kind\":\"frame\"}");
+        await Task.Delay(400, TestContext.Current.CancellationToken);
+        var touched = await session.WaitForAsync(
+            line => line.StartsWith("INSPECTOR open=yes", StringComparison.Ordinal) && !line.Contains("Outputs", StringComparison.Ordinal),
+            poke: "inspector-state", fresh: true);
+        Assert.True(touched is not null, "a touch on the close box did not close Outputs");
+
+        mark = session.Mark();
+        await session.SendAsync("inspector close");
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("INSPECTOR open=no", StringComparison.Ordinal), since: mark));
+
+        await session.SendAsync("quit");
+        var frames = await session.WaitForAsync(line => line.StartsWith("FRAMES ", StringComparison.Ordinal));
+        Assert.NotNull(frames);
+        var live = frames!.Split(' ');
         if (live[3] != "untracked")
         {
             Assert.Equal("0", live[3]);
@@ -845,7 +959,7 @@ public sealed class HeadlessSessionTests
         private readonly Lock _gate = new();
         private TaskCompletionSource _arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Session(string path, string config = "false")
+        public Session(string path, string config = "false", string renderer = "pixman")
         {
             var info = new ProcessStartInfo(path)
             {
@@ -857,7 +971,7 @@ public sealed class HeadlessSessionTests
             info.ArgumentList.Add("--backend");
             info.ArgumentList.Add("headless");
             info.ArgumentList.Add("--renderer");
-            info.ArgumentList.Add("pixman");
+            info.ArgumentList.Add(renderer);
             info.ArgumentList.Add("--config");
             info.ArgumentList.Add(config);
             info.Environment["BASIN_TRACE"] = string.Empty;

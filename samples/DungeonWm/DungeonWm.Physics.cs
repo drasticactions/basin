@@ -284,13 +284,14 @@ internal sealed partial class DungeonWm
             return false;
         }
 
-        physics.World.Frozen = _locked;
+        physics.World.Frozen = _locked || _inspectorFreeze;
         if (_pull is not null)
         {
             UpdatePull();
         }
 
         var awake = physics.World.Step(new FrameTick(now, PhysicsWorld3D.StepNanos));
+        RecordStep(physics.World.Moved.Length, physics.World.Impacts.Length);
         physics.WriteProps();
         physics.WriteWindows();
         _walker.Sync();

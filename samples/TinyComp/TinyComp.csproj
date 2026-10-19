@@ -33,6 +33,9 @@
     <ProjectReference Include="../../src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
     <ProjectReference Include="../../src/Basin.Renderers/Basin.Renderers.csproj" />
     <ProjectReference Include="../../src/Basin.Renderers.Quill/Basin.Renderers.Quill.csproj" />
+    <ProjectReference Include="../../src/Basin.Renderers.ImGui/Basin.Renderers.ImGui.csproj" />
+    <ProjectReference Include="../../src/Basin.Inspector/Basin.Inspector.csproj" />
+    <ProjectReference Include="../../src/Basin.Inspector.Ipc/Basin.Inspector.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
     <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />

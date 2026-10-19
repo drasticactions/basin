@@ -661,6 +661,11 @@ internal sealed partial class MauiComp
         var symbol = Seat.Keyboard.KeysymFor(key);
         var alt = Seat.Keyboard.State?.IsModActive("Mod1") == true;
 
+        if (InspectorBinding(symbol, pressed))
+        {
+            return true;
+        }
+
         if (pressed && symbol == Escape && _startMenu is { IsOpen: true })
         {
             _startMenu.Close();

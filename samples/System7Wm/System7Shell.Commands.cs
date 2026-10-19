@@ -18,6 +18,11 @@ internal sealed partial class System7Shell
     private void WireIpc()
     {
         _settle = new FrameSettle(_outputs, _uiDriver);
+        if (_inspector is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "system7-wm",
@@ -46,6 +51,7 @@ internal sealed partial class System7Shell
     {
         _report.AddInputLines(methods);
         _report.AddSessionLines(methods);
+        RegisterInspectorCommands(methods);
 
         _report.Register(methods, "system7wm/shot", "shot {path}", (ref IpcParams p, IpcReply _) =>
         {

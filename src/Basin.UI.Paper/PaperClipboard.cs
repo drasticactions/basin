@@ -132,11 +132,9 @@ public sealed class PaperClipboard : IClipboardHandler, IDisposable
         if (!_store.Receive(SelectionKind.Clipboard, chosen, new ClientFd(fds[1], null)))
         {
             close(fds[0]);
-            close(fds[1]);
             return;
         }
 
-        close(fds[1]);
         _readFd = fds[0];
         _buffer = new MemoryStream();
         _reading = _loop.AddFd(_readFd, FdReadiness.Readable, OnReadable);

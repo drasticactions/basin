@@ -37,6 +37,8 @@ internal sealed class DungeonWmPhysics : IDisposable
 
     public int PropBodies => _props.Count;
 
+    public IReadOnlyDictionary<DungeonWmProp, PhysicsBody3D> Props => _props;
+
     public void SyncStatics()
     {
         foreach (var region in _world.Map.Regions)

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Renderers.ImGui</PackageId>
+    <RootNamespace>Basin.Renderers</RootNamespace>
+    <Description>Dear ImGui chrome host selection for Basin renderers.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Renderers/Basin.Renderers.csproj" />
+    <ProjectReference Include="../Basin.UI.ImGui.Gl/Basin.UI.ImGui.Gl.csproj" />
+    <ProjectReference Include="../Basin.UI.ImGui.Vulkan/Basin.UI.ImGui.Vulkan.csproj" />
+  </ItemGroup>
+
+</Project>

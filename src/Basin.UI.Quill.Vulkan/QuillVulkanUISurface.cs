@@ -504,9 +504,11 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         _retired.Add(buffer);
         if (_watched.Add(buffer))
         {
-            buffer.Released += () => OnReleased(buffer);
+            Watch(buffer);
         }
     }
+
+    private void Watch(IBuffer buffer) => buffer.Released += () => OnReleased(buffer);
 
     private void OnReleased(IBuffer buffer)
     {

@@ -20,6 +20,11 @@ internal sealed partial class DungeonWm
     private IpcServer? StartIpc()
     {
         _settle = new FrameSettle(_outputs);
+        if (_inspectorSession is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "dungeon-wm",
@@ -247,6 +252,12 @@ internal sealed partial class DungeonWm
                     return;
                 }
 
+                if (MathF.Abs(window.World.Normal.Y) > 0.7f)
+                {
+                    p.Invalid($"{id} lies flat, and only an upright window can be faced at 1:1");
+                    return;
+                }
+
                 FaceWindow(window, fly: false);
                 ReportCamera(reply);
             });
@@ -291,6 +302,7 @@ internal sealed partial class DungeonWm
         RegisterPhysicsCommands(methods);
         RegisterPlaqueCommands(methods);
         RegisterCrosshairCommands(methods);
+        RegisterInspectorCommands(methods);
     }
 
     private void FaceWindow(DungeonWmWindow window, bool fly)

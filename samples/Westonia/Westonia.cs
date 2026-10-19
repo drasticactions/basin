@@ -29,6 +29,7 @@ internal sealed partial class Westonia : IDisposable
     private readonly BasinServices _services;
     private readonly ShellLayers _layers;
     private readonly OutputDriver _outputs;
+    private readonly ToplevelGeometryReporter? _geometryReporter;
     private Basin.Desktop.ColorCapabilityPack _colorPack = null!;
     private readonly CompositorRunLoop _loop;
     private readonly BasinGlGpu? _gpu;
@@ -40,6 +41,7 @@ internal sealed partial class Westonia : IDisposable
     private Basin.Desktop.FractionalScaleManager? _fractionalScale;
     private readonly Basin.Desktop.CursorController _cursor;
     private readonly Basin.Backend.Libinput.LibinputBackend? _input;
+    private readonly Basin.Seat.Backends.HookInputSink _inputSink = new();
     private readonly Basin.Seat.Backends.InputConfigurator _inputConfigurator = new();
     private WestoniaSeat? _seat;
     private ShellSwitcher? _switcher;
@@ -152,6 +154,7 @@ internal sealed partial class Westonia : IDisposable
         _services.Use<IWorkspaceModel>(_deferredWorkspaces);
         _services.UseDefault<IInputDeviceConfiguration>(_inputConfigurator);
         CreateLayerDrivers();
+        _services.Use<IInputSink>(_inputSink);
         _services.Freeze();
         _shell.Client = _services.Find<IShellClient>();
 
@@ -165,6 +168,9 @@ internal sealed partial class Westonia : IDisposable
             NestedName = index => $"westonia-{index + 1}",
             HeadlessMode = new OutputMode(1280, 720, 60_000),
         };
+        _geometryReporter = _services.Find<Basin.Capabilities.IToplevelModel>() is { } toplevelModel
+            ? new ToplevelGeometryReporter(_outputs, _scene, toplevelModel)
+            : null;
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
@@ -268,7 +274,7 @@ internal sealed partial class Westonia : IDisposable
         ApplyKeyboardConfig();
         ApplyOutputConfig();
         _seat = new WestoniaSeat(
-            _host, _services, _layout, _scene, _cursor, _avalonia, _shellSurfaces, _shell, _input, log)
+            _host, _services, _layout, _scene, _cursor, _avalonia, _shellSurfaces, _shell, _input, _inputSink, log)
         {
             KeyHook = OnKeyBinding,
             ButtonHook = OnButtonBinding,
@@ -276,6 +282,24 @@ internal sealed partial class Westonia : IDisposable
             FrameCursorAt = FrameCursorName,
         };
         _seat.PointerMoved = position => _shell.UpdateGrab(position.X, position.Y);
+        _inspector = new Basin.Inspector.InspectorSession(new Basin.Inspector.InspectorSessionOptions
+        {
+            Driver = _outputs,
+            Scene = _scene,
+            Layer = _layers.LayerOverlay,
+            Loop = _host.Loop,
+            Settle = _settle,
+            Seat = Seat,
+            Services = _services,
+            Renderer = _renderer,
+            Allocator = _deviceAllocator,
+            RenderNode = RendererCatalog.FindRenderNode(),
+            Report = _report,
+            Settings = _ini.Inspector,
+            PointerPosition = () => _seat?.Position ?? (0, 0),
+        });
+        _inspector.Changed += _seat.RefreshPointer;
+        _seat.Inspector = _inspector.Input;
         _seat.Configurator = _inputConfigurator;
         AttachInput();
         _shell.Input = _seat.Router;
@@ -466,6 +490,7 @@ internal sealed partial class Westonia : IDisposable
         _clock.Refresh();
         WireIpc();
         WireIdle();
+        _inspector?.Start();
 
         if (_ini.Shell.StartupAnimation != ShellAnimation.None)
         {
@@ -570,6 +595,7 @@ internal sealed partial class Westonia : IDisposable
         _workspaces?.Dispose();
         _switcher?.Dispose();
         _inputConfigurator.Dispose();
+        _inspector?.Dispose();
         _seat?.Dispose();
         _uiDriver.Dispose();
         _screens.Dispose();
@@ -579,6 +605,7 @@ internal sealed partial class Westonia : IDisposable
         _avalonia.Dispose();
         _ui.Dispose();
         _gpu?.Dispose();
+        _geometryReporter?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _panelBlur?.Dispose();

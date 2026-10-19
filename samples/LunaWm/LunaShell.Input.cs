@@ -132,6 +132,9 @@ internal sealed partial class LunaShell
             case "keyboard":
                 ToggleKeyboard();
                 break;
+            case "inspector":
+                ToggleInspector();
+                break;
             case "close":
                 if (Focused is { } focused)
                 {

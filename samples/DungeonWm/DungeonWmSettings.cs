@@ -117,7 +117,23 @@ internal sealed class DungeonWmSettings
         ["Super+E"] = "release",
         ["R"] = "rotate",
         ["Shift+R"] = "square",
+        ["Super+F12"] = "inspector",
     };
+
+    public static IReadOnlyList<string> InspectorPanelNames { get; } =
+        ["outputs", "windows", "clients", "scene", "memory", "physics", "camera", "rooms", "audio", "pose"];
+
+    public bool InspectorEnabled { get; set; } = true;
+
+    public bool InspectorOpen { get; set; }
+
+    public string? InspectorOutput { get; set; }
+
+    public IReadOnlyList<string> InspectorPanels { get; set; } = ["camera", "physics"];
+
+    public double InspectorFontSize { get; set; } = 15;
+
+    public int InspectorRefreshHz { get; set; } = 10;
 
     public float FieldOfViewRadians => FieldOfView * MathF.PI / 180;
 }

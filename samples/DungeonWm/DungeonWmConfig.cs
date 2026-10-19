@@ -290,6 +290,53 @@ internal static class DungeonWmConfig
             }
         }
 
+        if (reader.Section("inspector") is { } inspector)
+        {
+            settings.InspectorEnabled = inspector.Flag("enabled", settings.InspectorEnabled);
+            settings.InspectorOpen = inspector.Flag("open", settings.InspectorOpen);
+            var output = inspector.Text("output");
+            settings.InspectorOutput = string.IsNullOrEmpty(output) || output == "crosshair" ? null : output;
+            if (inspector.Words("panels") is { } panels)
+            {
+                var known = new List<string>();
+                foreach (var panel in panels)
+                {
+                    if (DungeonWmSettings.InspectorPanelNames.Contains(panel))
+                    {
+                        known.Add(panel);
+                    }
+                    else
+                    {
+                        reader.Log.Warn($"[inspector] panels has no panel \"{panel}\"; the panels are {string.Join(", ", DungeonWmSettings.InspectorPanelNames)}");
+                    }
+                }
+
+                settings.InspectorPanels = known;
+            }
+
+            var font = inspector.Number("font_size", settings.InspectorFontSize);
+            if (font is >= 6 and <= 64)
+            {
+                settings.InspectorFontSize = font;
+            }
+            else
+            {
+                reader.Log.Warn($"[inspector] font_size must be between 6 and 64, keeping {settings.InspectorFontSize}");
+            }
+
+            var hz = inspector.Number("refresh_hz", settings.InspectorRefreshHz);
+            if (hz is >= 1 and <= 240)
+            {
+                settings.InspectorRefreshHz = hz;
+            }
+            else
+            {
+                reader.Log.Warn($"[inspector] refresh_hz must be between 1 and 240, keeping {settings.InspectorRefreshHz}");
+            }
+
+            inspector.ReportUnknown();
+        }
+
         settings.Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
     }

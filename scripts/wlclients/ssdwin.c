@@ -192,7 +192,10 @@ static void pointer_button(void *data, struct wl_pointer *p, uint32_t serial,
 
 static void pointer_axis(void *data, struct wl_pointer *p, uint32_t t, uint32_t a, wl_fixed_t v)
 {
-    (void)data; (void)p; (void)t; (void)a; (void)v;
+    (void)data; (void)p; (void)t;
+    printf("AXIS %s %.2f\n", a == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? "horizontal" : "vertical",
+           wl_fixed_to_double(v));
+    fflush(stdout);
 }
 
 static const struct wl_pointer_listener pointer_listener = {

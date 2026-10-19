@@ -268,13 +268,7 @@ internal sealed partial class System7Shell
 
     private bool TryTerminalChord(uint key)
     {
-        if (_config.NewTerminal is not { } chord || HeldModifiers != chord.ModifierMask)
-        {
-            return false;
-        }
-
-        var symbol = Seat.Keyboard.RawKeysymFor(key).Value;
-        if (Lower(symbol) != Lower(chord.Keysym))
+        if (_terminalChord?.MatchesKeysym(Seat.Keyboard.RawKeysymFor(key)) != true)
         {
             return false;
         }
@@ -337,8 +331,6 @@ internal sealed partial class System7Shell
             }
         });
     }
-
-    private static uint Lower(uint keysym) => keysym is >= 'A' and <= 'Z' ? keysym + 32 : keysym;
 
     private void DisposeTerminals()
     {

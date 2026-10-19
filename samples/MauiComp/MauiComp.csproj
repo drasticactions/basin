@@ -46,6 +46,7 @@
     <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Inspector.Host/Basin.Inspector.Host.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
     <ProjectReference Include="../../src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />

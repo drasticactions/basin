@@ -47,6 +47,31 @@ public sealed class InputBridgeTests
     }
 
     [Fact]
+    public void A_motion_that_does_not_move_reaches_the_client_once()
+    {
+        using var host = new CompositorTestHost();
+        var pointer = host.Client.Seat!.GetPointer();
+        var window = MappedToplevel.Map(host, host.Client);
+        var enters = 0;
+        var motions = 0;
+        pointer.Enter += (_, _) => enters++;
+        pointer.Motion += (_, _) => motions++;
+        host.PumpToClient();
+
+        host.Seat.Pointer.NotifyMotionAt(1, window.ServerSurface, 12, 34, 12, 34);
+        host.Seat.Pointer.NotifyMotionAt(2, window.ServerSurface, 12, 34, 12, 34);
+        host.Seat.Pointer.NotifyMotionAt(3, window.ServerSurface, 12, 34, 12, 34);
+        host.PumpToClient();
+        Assert.Equal((1, 1), (enters, motions));
+
+        host.Seat.Pointer.NotifyMotionAt(4, window.ServerSurface, 13, 34, 13, 34);
+        host.Seat.Pointer.NotifyMotionAt(5, null, 0, 0, 900, 700);
+        host.Seat.Pointer.NotifyMotionAt(6, window.ServerSurface, 13, 34, 13, 34);
+        host.PumpToClient();
+        Assert.Equal((2, 3), (enters, motions));
+    }
+
+    [Fact]
     public void A_held_button_pins_pointer_focus_until_release()
     {
         using var host = new CompositorTestHost();

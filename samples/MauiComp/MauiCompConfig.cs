@@ -21,6 +21,8 @@ internal sealed class MauiCompConfig
 
     public bool BlurTitlebars { get; set; }
 
+    public Basin.Inspector.InspectorSettings Inspector { get; set; } = new();
+
     public IReadOnlyList<Basin.Capabilities.InputRule> InputRules { get; private set; } = [];
 
     public HashSet<string> FromFile { get; } = [];
@@ -87,6 +89,7 @@ internal sealed class MauiCompConfig
         }
 
         Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
         reader.ReportUnknown();
     }
 }

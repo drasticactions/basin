@@ -216,6 +216,7 @@ internal sealed partial class TinyComp
         }
 
         UnshelveFromOutput(view, Views.FirstOrDefault(v => v != view && v.Tag is OutputPolicy));
+        _inspector?.Remove(view, Views.FirstOrDefault(v => v != view && v.Tag is OutputPolicy));
 
         _presenceTracker.RemoveOutput(view.Output);
         _colorPack.RemoveOutput(view.Global);
@@ -338,6 +339,8 @@ internal sealed partial class TinyComp
         ArrangeLayerSurfaces();
         _lockDriver.Reconfigure();
         LayoutCanvasAll();
+        PlaceImGuiDemo();
+        RefitInspector();
     }
 
     private void OnModeChanged(OutputView view)

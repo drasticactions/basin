@@ -11,3 +11,9 @@ is a reserved font name and Selawik is a Microsoft trademark. The two files are
 `selawk.ttf` and `selawksb.ttf` from `Selawik_Release.zip` of the 1.01 release
 of github.com/microsoft/Selawik, renamed. The family names inside them are
 `Selawik` and `Selawik Semibold`, which is what a family lookup must ask for.
+
+`NotoSansMono-Regular.ttf` — Noto Sans Mono Regular 2.014, © 2022 The Noto
+Project Authors, licensed under the SIL Open Font License 1.1
+(`LICENSE-NotoSansMono.txt`). The file is the one Arch's `noto-fonts`
+2026.10.01 package installs as `/usr/share/fonts/noto/NotoSansMono-Regular.ttf`.
+Basin.UI.ImGui embeds it as the Dear ImGui chrome face.

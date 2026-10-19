@@ -187,6 +187,18 @@ low_density = true
 # exec = "leafpad"
 # x11 = "low-density"
 
+[inspector]
+# The Dear ImGui inspector, a 2D overlay over the world that frees the cursor while it is open.
+enabled = true
+open = false
+# An output name, or crosshair for the crosshair output.
+output = "crosshair"
+# Open at start: outputs | windows | clients | scene | memory | physics | camera | rooms | audio | pose
+panels = ["camera", "physics"]
+font_size = 15
+# How often the live panels redraw.
+refresh_hz = 10
+
 [keybindings]
 # A table says when a chord applies: "Super+Tab" = { action = "next-room", when = "windowed" }
 # (always | windowed | fullscreen; a takeover counts as fullscreen).
@@ -194,6 +206,8 @@ low_density = true
 "Super+Tab" = "next-room"
 "Super+F" = "takeover"
 "Super+Q" = "close"
+# inspector opens and closes the inspector overlay.
+"Super+F12" = "inspector"
 # spawn runs the rest of the line through sh -c.
 "Super+Return" = "spawn fuzzel"
 # use gives the window under the crosshair focus and frees the cursor.

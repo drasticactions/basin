@@ -30,6 +30,7 @@
     <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />
     <ProjectReference Include="../../src/Basin.Color/Basin.Color.csproj" />
     <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Inspector.Host/Basin.Inspector.Host.csproj" />
   </ItemGroup>
 
 

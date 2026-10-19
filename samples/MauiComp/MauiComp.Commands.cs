@@ -14,6 +14,11 @@ internal sealed partial class MauiComp
     private void WireIpc()
     {
         _settle = new Basin.Host.FrameSettle(_outputs, _uiDriver);
+        if (_inspector is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "maui-comp",
@@ -25,6 +30,7 @@ internal sealed partial class MauiComp
         });
         _ipc.SyntheticInput = _seat?.Injector;
         RegisterCommands(_ipc.Methods);
+        _inspector?.Register(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();
     }

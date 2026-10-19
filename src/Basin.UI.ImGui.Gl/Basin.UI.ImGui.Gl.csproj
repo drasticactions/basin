@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.UI.ImGui.Gl</PackageId>
+    <RootNamespace>Basin.UI.ImGui</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Dear ImGui compositor chrome on GLES for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../Basin.UI.ImGui/Basin.UI.ImGui.csproj" />
+    <PackageReference Include="Silk.NET.OpenGLES" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

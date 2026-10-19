@@ -1,6 +1,6 @@
 namespace Basin.Capabilities;
 
-public sealed class AggregateToplevelModel : IToplevelModel
+public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFeed
 {
     private const int SourceShift = 56;
 
@@ -94,6 +94,17 @@ public sealed class AggregateToplevelModel : IToplevelModel
 
         public void OnToplevelRemoved(ulong toplevelId) =>
             model._observers.Removed(Global(sourceIndex, toplevelId));
+    }
+
+    public void ReportFrom(ReadOnlySpan<SurfaceBox> boxes)
+    {
+        for (var i = 0; i < _sources.Count; i++)
+        {
+            if (_sources[i] is IToplevelGeometryFeed feed)
+            {
+                feed.ReportFrom(boxes);
+            }
+        }
     }
 
     public int Enumerate(Span<ToplevelInfo> toplevels)

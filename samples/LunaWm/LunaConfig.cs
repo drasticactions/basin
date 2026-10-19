@@ -83,6 +83,8 @@ internal sealed class LunaConfig
 
     public KeyboardConfig Keyboard { get; private set; } = new();
 
+    public Basin.Inspector.InspectorSettings Inspector { get; private set; } = new();
+
     public LunaBindings Bindings { get; private set; } = null!;
 
     public List<LunaRule> Rules { get; } = [];
@@ -278,6 +280,7 @@ internal sealed class LunaConfig
             InputRules = InputConfig.Read(input, reader.Log);
         }
 
+        Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
         Handoff = HandoffSettings.Read(reader.Section("handoff"));
         reader.ReportUnknown();
     }

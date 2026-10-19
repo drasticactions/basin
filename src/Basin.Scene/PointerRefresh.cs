@@ -21,6 +21,7 @@ public sealed class PointerRefresh : IDisposable
         _refresh = refresh;
         _runFromIdle = RunFromIdle;
         _scene.StructureChanged += Request;
+        _scene.InputRegionChanged += Request;
     }
 
     public void Request()
@@ -40,6 +41,7 @@ public sealed class PointerRefresh : IDisposable
         {
             _disposed = true;
             _scene.StructureChanged -= Request;
+            _scene.InputRegionChanged -= Request;
         }
     }
 

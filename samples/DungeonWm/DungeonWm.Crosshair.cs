@@ -18,7 +18,7 @@ internal sealed partial class DungeonWm
     private SceneOutput? _reticleScene;
 
     private bool WantsCrosshair =>
-        _focused is null && _takeover is null && !_locked && !LayerHoldsKeyboard && _outputs.Views.Count > 0;
+        _focused is null && _takeover is null && !_locked && !LayerHoldsKeyboard && !InspectorOpen && _outputs.Views.Count > 0;
 
     private void SyncMode()
     {
@@ -28,26 +28,23 @@ internal sealed partial class DungeonWm
         }
 
         var wanted = WantsCrosshair;
-        if (wanted == _crosshair)
+        if (wanted != _crosshair)
         {
-            return;
+            _crosshair = wanted;
+            if (wanted)
+            {
+                EnterCrosshair();
+            }
+            else
+            {
+                LeaveCrosshair();
+            }
         }
 
-        _crosshair = wanted;
-        if (wanted)
-        {
-            EnterCrosshair();
-        }
-        else
-        {
-            LeaveCrosshair();
-        }
-
-        BasinReport.Line($"MODE {ModeName}");
-        RaiseEvent("dungeonwm/mode");
+        ReportModeChange();
     }
 
-    private string ModeName => _crosshair ? "crosshair" : "window";
+    private string ModeName => InspectorOpen ? "inspector" : _crosshair ? "crosshair" : "window";
 
     private void EnterCrosshair()
     {

@@ -11,6 +11,9 @@ public sealed class SeatPointer
     private readonly List<IPointerGrab> _grabs = [];
     private readonly DefaultGrab _defaultGrab;
     private uint _lastEnterSerial;
+    private Surface? _motionFocus;
+    private double _motionX;
+    private double _motionY;
     private int _pressedButtons;
     private double _focusLayoutOffsetX;
     private double _focusLayoutOffsetY;
@@ -213,6 +216,7 @@ public sealed class SeatPointer
         Focus = surface;
         X = x;
         Y = y;
+        _motionFocus = null;
         if (surface is not null && _seat.ClientOf(surface) is { } client)
         {
             var serial = _seat.NextSerial(SerialKind.PointerEnter);
@@ -255,6 +259,14 @@ public sealed class SeatPointer
             AllocationScope.Resume();
         }
 
+        if (ReferenceEquals(Focus, _motionFocus) && x == _motionX && y == _motionY)
+        {
+            return;
+        }
+
+        _motionFocus = Focus;
+        _motionX = x;
+        _motionY = y;
         if (_seat.ClientOf(Focus) is { } client)
         {
             var scale = Focus!.ServerScale;
@@ -270,6 +282,9 @@ public sealed class SeatPointer
     {
         X = x;
         Y = y;
+        _motionFocus = Focus;
+        _motionX = x;
+        _motionY = y;
         if (_seat.ClientOf(Focus) is { } client)
         {
             var scale = Focus!.ServerScale;

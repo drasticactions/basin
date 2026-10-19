@@ -3,6 +3,7 @@ using Basin.Cli;
 using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Host;
+using Basin.Inspector;
 using Basin.Ipc;
 using Basin.Renderers;
 using Basin.Scene;
@@ -26,6 +27,7 @@ internal sealed partial class Dam : IDisposable
     private Basin.Desktop.ColorCapabilityPack _colorPack = null!;
     private readonly BasinServices _services;
     private readonly OutputDriver _outputs;
+    private readonly ToplevelGeometryReporter? _geometryReporter;
     private readonly CompositorRunLoop _loop;
     private readonly DamSeat _damSeat;
     private readonly Basin.Seat.Backends.InputConfigurator _inputConfigurator = new();
@@ -33,6 +35,9 @@ internal sealed partial class Dam : IDisposable
     private PrimaryClient? _client;
     private readonly FrameLimiter? _limiter;
     private readonly Basin.Color.PanelTable _panels;
+    private readonly string? _renderNode = RendererCatalog.FindRenderNode();
+    private readonly IpcLineReport _lines = new();
+    private InspectorSession? _inspector;
 
     public static int Run(DamOptions options, BasinLogger log, out long rendered)
     {
@@ -81,7 +86,7 @@ internal sealed partial class Dam : IDisposable
         _options = options;
         _log = log;
 
-        var stack = CreateStack(options.Renderer, log);
+        var stack = CreateStack(options.Renderer, _renderNode, log);
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
 
@@ -148,6 +153,9 @@ internal sealed partial class Dam : IDisposable
             VrrPacing = options.VrrPacing,
             ContentTypeOverride = options.GameContent ? OutputContentType.Game : null,
         };
+        _geometryReporter = _services.Find<Basin.Capabilities.IToplevelModel>() is { } toplevelModel
+            ? new ToplevelGeometryReporter(_outputs, _scene, toplevelModel)
+            : null;
         _outputs.StampModeset += OnStampModeset;
         _loop = new CompositorRunLoop(_host, _outputs);
         _outputs.Emptied += Stop;
@@ -199,6 +207,10 @@ internal sealed partial class Dam : IDisposable
             Stop,
             log);
         _damSeat.AttachConfigurator(_inputConfigurator);
+        if (options.Inspector)
+        {
+            CreateInspector();
+        }
 
         _outputs.CreateInitialOutputs();
         WireColor();
@@ -235,6 +247,11 @@ internal sealed partial class Dam : IDisposable
     {
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
         _settle = new Basin.Host.FrameSettle(_outputs);
+        if (_inspector is { } inspectorSession)
+        {
+            inspectorSession.Settle = _settle;
+        }
+
         _ipc = _options.Ipc.Attach(_host.Loop, _services, _host.Socket, new IpcSessionInfo
         {
             Compositor = "dam",
@@ -245,9 +262,10 @@ internal sealed partial class Dam : IDisposable
             Settle = _settle,
         });
         _ipc.SyntheticInput = _damSeat.Injector;
-        var lines = new IpcLineReport();
+        var lines = _lines;
         lines.AddInputLines(_ipc.Methods);
         lines.AddSessionLines(_ipc.Methods);
+        _inspector?.Register(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();
 
@@ -262,18 +280,51 @@ internal sealed partial class Dam : IDisposable
         }
 
         _damSeat.CenterCursor();
+        StartInspector();
 
         _loop.Frames = _options.Frames;
         _loop.Run();
         return 0;
     }
 
-    private static RenderStack CreateStack(string rendererName, BasinLogger log)
+    private void CreateInspector()
+    {
+        _inspector = new InspectorSession(new InspectorSessionOptions
+        {
+            Driver = _outputs,
+            Scene = _scene,
+            Loop = _host.Loop,
+            Settle = _settle,
+            Seat = Seat,
+            Services = _services,
+            Renderer = _renderer,
+            Allocator = _deviceAllocator,
+            RenderNode = _renderNode,
+            Report = _lines,
+            PointerPosition = () => _damSeat.PointerPosition,
+            Settings = new InspectorSettings { Open = true },
+        });
+        _inspector.Input.KeyboardReleased += Views.RestoreKeyboard;
+        _damSeat.Inspector = _inspector.Input;
+        _damSeat.ToggleInspector = _inspector.Toggle;
+    }
+
+    private void StartInspector()
+    {
+        if (_inspector is not { } inspector)
+        {
+            return;
+        }
+
+        inspector.Start();
+    }
+
+    private static RenderStack CreateStack(string rendererName, string? renderNode, BasinLogger log)
     {
         var name = rendererName;
         return RendererCatalog.CreateWithFallback(
             ref name,
-            RendererCatalog.FindRenderNode(),
+            renderNode,
             fallback => log.Warn($"{(fallback.Describe())}"));
     }
 
@@ -285,6 +336,9 @@ internal sealed partial class Dam : IDisposable
         _ipc = null;
         _colorPack?.Luts.Dispose();
         _client?.Dispose();
+        _inspector?.Dispose();
+        _inspector = null;
+        _geometryReporter?.Dispose();
         _outputs.Dispose();
         _limiter?.Dispose();
         _scene.Root.Destroy();

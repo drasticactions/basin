@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.UI.ImGui</PackageId>
+    <RootNamespace>Basin.UI.ImGui</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Dear ImGui compositor chrome for Basin.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <PackageReference Include="Hexa.NET.ImGui" />
+    <PackageReference Include="Hexa.NET.ImPlot" />
+    <PackageReference Include="Hexa.NET.ImGuizmo" />
+    <PackageReference Include="Hexa.NET.ImNodes" />
+    <EmbeddedResource Include="../../assets/fonts/NotoSansMono-Regular.ttf" LogicalName="NotoSansMono-Regular.ttf" />
+    <InternalsVisibleTo Include="Basin.UI.ImGui.Gl" />
+    <InternalsVisibleTo Include="Basin.UI.ImGui.Vulkan" />
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+</Project>

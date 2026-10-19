@@ -34,7 +34,8 @@ internal sealed class System7Seat : IDisposable
         Scene scene,
         CursorController cursor,
         UISurfaceIndex index,
-        Basin.Backend.Libinput.LibinputBackend? input)
+        Basin.Backend.Libinput.LibinputBackend? input,
+        Basin.Seat.Backends.HookInputSink inputSink)
     {
         _seat = services.Require<Seat>();
         _layout = layout;
@@ -51,10 +52,14 @@ internal sealed class System7Seat : IDisposable
         {
             DeliverButton = OnButton,
             DeliverKey = OnKey,
+            DeliverAxis = (timeMs, axis, value, source) =>
+                OnAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source)),
         };
+        inputSink.Route(_injector, _seat);
         _touch = new Basin.Seat.Backends.SeatTouchDriver(_binder, _seat);
         _touch.Router.HitTester = new Basin.Seat.Backends.SceneTouchHitTester(scene);
-        _touch.Router.Chrome = new Basin.Seat.Backends.UISurfaceTouchChrome(_router);
+        _touchChrome.Then = new Basin.Seat.Backends.UISurfaceTouchChrome(_router);
+        _touch.Router.Chrome = _touchChrome;
         _seat.Keyboard.SetKeymap(Basin.Seat.SystemKeymap.Read());
 
         _binder.RelativePointer = services.Find<Basin.Desktop.RelativePointerManager>();
@@ -82,6 +87,8 @@ internal sealed class System7Seat : IDisposable
         Shell,
 
         Chrome,
+
+        Inspector,
     }
 
     public Func<uint, uint, bool, bool>? KeyHook { get; set; }
@@ -95,6 +102,19 @@ internal sealed class System7Seat : IDisposable
     public Func<double, double, string?>? CursorHook { get; set; }
 
     public Action<IUISurface?, Surface?>? Hovered { get; set; }
+
+    private readonly Basin.Seat.Backends.TouchChromeChain _touchChrome = new();
+    private Basin.Inspector.InspectorInput? _inspector;
+
+    public Basin.Inspector.InspectorInput? Inspector
+    {
+        get => _inspector;
+        set
+        {
+            _inspector = value;
+            _touchChrome.First = value;
+        }
+    }
 
     public UISurfaceRouter Router => _router;
 
@@ -137,6 +157,19 @@ internal sealed class System7Seat : IDisposable
         if (Grabbing)
         {
             GrabMotion?.Invoke(_x, _y);
+            return;
+        }
+
+        if (Inspector is { } inspector && inspector.Motion(time, _x, _y, out var inspectorCursor))
+        {
+            if (_router.Hovered is not null)
+            {
+                _router.PointerLeave();
+            }
+
+            _cursor.SetHover(null, overClient: false);
+            _cursor.ShowNamed(inspectorCursor ?? "default");
+            Hovered?.Invoke(null, null);
             return;
         }
 
@@ -191,6 +224,11 @@ internal sealed class System7Seat : IDisposable
 
     private Route Choose(uint time, uint button)
     {
+        if (Inspector is { } inspector && inspector.Router.Hovered is not null)
+        {
+            return Route.Inspector;
+        }
+
         if (PressHook?.Invoke(time, button, true, _x, _y) == true)
         {
             return Route.Shell;
@@ -224,6 +262,9 @@ internal sealed class System7Seat : IDisposable
 
         switch (_route)
         {
+            case Route.Inspector:
+                Inspector?.Button(time, button, pressed);
+                return;
             case Route.Shell:
                 if (!pressed)
                 {
@@ -245,6 +286,11 @@ internal sealed class System7Seat : IDisposable
 
     private void OnAxis(uint time, PointerAxis axis)
     {
+        if (Inspector?.Axis(time, axis) == true)
+        {
+            return;
+        }
+
         if (_router.PointerAxis(time, axis))
         {
             return;

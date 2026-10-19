@@ -337,7 +337,15 @@ public sealed class OutputScheduler : IDisposable
         if (!_idleRaised)
         {
             _idleRaised = true;
-            Idle?.Invoke();
+            AllocationScope.Pause();
+            try
+            {
+                Idle?.Invoke();
+            }
+            finally
+            {
+                AllocationScope.Resume();
+            }
         }
     }
 

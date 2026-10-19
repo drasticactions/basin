@@ -158,6 +158,14 @@ internal sealed class DamViews
         _seat.Keyboard.NotifyEnter(view.Surface);
     }
 
+    public void RestoreKeyboard()
+    {
+        if (FocusedView is { } view)
+        {
+            _seat.Keyboard.NotifyEnter(view.Surface);
+        }
+    }
+
     public void PositionAll()
     {
         foreach (var view in _views)

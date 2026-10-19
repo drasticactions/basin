@@ -24,7 +24,7 @@ public sealed class XWaylandLetterboxTests
             driver.Attach(wm);
         };
 
-        using var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80");
+        using var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80", "-bw", "0");
         try
         {
             XWaylandTestSupport.Pump(host, () => window?.Surface?.Current.Width == 100);

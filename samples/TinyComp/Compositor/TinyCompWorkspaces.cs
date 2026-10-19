@@ -267,24 +267,7 @@ internal sealed partial class TinyComp
         return null;
     }
 
-    private OutputView? ViewAt(double x, double y)
-    {
-        if (Views.Count == 0)
-        {
-            return null;
-        }
-
-        var output = _layout.OutputAt(x, y);
-        for (var i = 0; i < Views.Count; i++)
-        {
-            if (Views[i].Output == output)
-            {
-                return Views[i];
-            }
-        }
-
-        return Views[0];
-    }
+    private OutputView? ViewAt(double x, double y) => _driver.ViewAt(x, y) ?? Views.FirstOrDefault();
 
     private OutputView? ViewAtCursor() => ViewAt(_cursorX, _cursorY);
 

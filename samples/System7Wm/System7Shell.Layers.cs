@@ -98,6 +98,7 @@ internal sealed partial class System7Shell
         if (locked)
         {
             CancelDrag();
+            _inspector?.Close();
             _seat.Router.SetKeyboardFocus(null);
             _seat.Router.PointerLeave();
         }

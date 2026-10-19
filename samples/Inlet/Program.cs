@@ -8,6 +8,7 @@ using Basin.Cli;
 using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Host;
+using Basin.Inspector;
 using Basin.Ipc;
 using Basin.Scene;
 using Basin.Shell.River;
@@ -59,6 +60,10 @@ internal static class Program
         var handoffOption = cli.Add(CommonOptions.Handoff());
         _ = IpcCli.AddOption(cli);
         var commandOption = cli.Add(CommonOptions.Command("run `sh -c <command>` on startup instead of the init executable."));
+        var inspectorOption = cli.Add(new Option<bool>("--inspector")
+        {
+            Description = "open the inspector overlay at start",
+        });
 
         return cli.Run(args, result =>
         {
@@ -79,6 +84,7 @@ internal static class Program
                 result.GetValue(commandOption),
                 IpcCli.Read(cli, result),
                 CommonOptions.ReadHandoff(result, handoffOption).Resolve(HandoffMode.Auto),
+                result.GetValue(inspectorOption),
                 out var rendered);
             cli.ReportFrames(rendered);
             return status;
@@ -109,13 +115,14 @@ internal static class Program
         string? startupCommand,
         IpcChoice ipcChoice,
         HandoffMode handoff,
+        bool inspectorOpen,
         out long renderedFrames)
     {
         BasinCounters.Reset();
 
         var status = RunCompositor(
             log, rendererName, drm, nested, outputCount, width, height, scales, xwayland, frames, screenshotPath,
-            startupCommand, ipcChoice, handoff, out var totalRendered);
+            startupCommand, ipcChoice, handoff, inspectorOpen, out var totalRendered);
 
         renderedFrames = Math.Max(0, totalRendered);
 
@@ -146,6 +153,7 @@ internal static class Program
         string? startupCommand,
         IpcChoice ipcChoice,
         HandoffMode handoff,
+        bool inspectorOpen,
         out long totalRendered)
     {
         totalRendered = -1;
@@ -262,6 +270,7 @@ internal static class Program
         var lockDriver = new Basin.Desktop.SessionLockSceneDriver(services, sceneLayers.Lock, layout, sceneLayers.SetLocked);
         var layerDriver = new Basin.Desktop.LayerShellSceneDriver(services, layout, sceneLayers);
         services.Freeze();
+        using var geometryReporter = new Basin.Host.ToplevelGeometryReporter(driver, scene, services.Require<Basin.Capabilities.IToplevelModel>());
 
         if (blur is not null)
         {
@@ -528,8 +537,30 @@ internal static class Program
 
         ReportCursor();
 
+        var lineReport = new IpcLineReport();
+        var inspector = new InspectorSession(new InspectorSessionOptions
+        {
+            Driver = driver,
+            Scene = scene,
+            Layer = sceneLayers.Overlay,
+            Loop = loop,
+            Seat = seat,
+            Services = services,
+            Renderer = renderer,
+            Allocator = deviceAllocator,
+            RenderNode = Basin.Renderers.RendererCatalog.FindRenderNode(),
+            Report = lineReport,
+            Settings = new InspectorSettings { Open = inspectorOpen },
+            PointerPosition = () => (pointer.X, pointer.Y),
+        });
+
         void DeliverKey(uint timeMs, uint key, bool pressed, bool fromInputMethod = false)
         {
+            if (inspector.Input.Key(timeMs, key, pressed))
+            {
+                return;
+            }
+
             if (management.HandleKey(seat, key, pressed))
             {
                 return;
@@ -561,6 +592,13 @@ internal static class Program
                 return;
             }
 
+            if (inspector.Input.Motion(timeMs, pointer.X, pointer.Y, out var inspectorCursor))
+            {
+                cursor.SetHover(null, overClient: false);
+                cursor.ShowNamed(inspectorCursor ?? "default");
+                return;
+            }
+
             var hit = scene.SurfaceAt(pointer.X, pointer.Y);
             seat.Pointer.NotifyMotionAt(timeMs, hit?.Surface, hit?.X ?? 0, hit?.Y ?? 0, pointer.X, pointer.Y);
             cursor.SetHover(seat.Pointer.Focus, overClient: true);
@@ -568,6 +606,11 @@ internal static class Program
 
         void DeliverPointerButton(uint timeMs, uint button, bool pressed)
         {
+            if (inspector.Input.Button(timeMs, button, pressed))
+            {
+                return;
+            }
+
             if (management.HandlePointerButton(seat, timeMs, button, pressed))
             {
                 return;
@@ -614,11 +657,17 @@ internal static class Program
         touchBinder.Button += DeliverPointerButton;
         touchBinder.Axis += (timeMs, axis) =>
         {
+            if (inspector.Input.Axis(timeMs, axis))
+            {
+                return;
+            }
+
             seat.Pointer.NotifyAxis(timeMs, axis);
             seat.Pointer.NotifyFrame();
         };
         touchBinder.PointerLeft += () => seat.Pointer.NotifyClearFocus();
         var touchDriver = new Basin.Seat.Backends.SeatTouchDriver(touchBinder, seat);
+        touchDriver.Router.Chrome = inspector.Input;
         var touchPolicy = new TouchPolicy
         {
             Pointer = pointer,
@@ -697,8 +746,11 @@ internal static class Program
         if (drmBackend is not null && views.Count == 0)
         {
             log.Error($"no connected output");
+            inspector.Dispose();
             return 1;
         }
+
+        inspector.Start();
 
         if (libinput is not null)
         {
@@ -778,25 +830,11 @@ internal static class Program
             $"INPUT-RULE {outcome.Result.ToString().ToLowerInvariant()} {Basin.Capabilities.InputSettingNames.Key(outcome.Setting)} device={outcome.DeviceName ?? "none"}");
         inputConfigurator.Attach(seat, touchBinder, libinput?.Configuration);
 
-        injectedInput.OnKey = (keyboard, timeMs, key, pressed) =>
-        {
-            seat.Keyboard.Activate(keyboard);
-            DeliverKey(
-                timeMs, key, pressed,
-                fromInputMethod: inputMethod is not null && inputMethod.IsInputMethodClient(keyboard?.Tag));
-            return true;
-        };
         injectedInput.OnModifiers = (keyboard, depressed, latched, locked, group) =>
         {
             seat.Keyboard.Activate(keyboard);
             seat.Keyboard.NotifyModifiers(depressed, latched, locked, group);
             management.NotifyModifiers(seat);
-            return true;
-        };
-        injectedInput.OnPointerMotion = (timeMs, dx, dy) =>
-        {
-            pointer.Motion(dx, dy);
-            PointerMoved(timeMs);
             return true;
         };
         var injector = new Basin.Seat.Backends.SeatInjector(touchBinder, seat, layout, pointer)
@@ -806,16 +844,20 @@ internal static class Program
             DeliverKey = (timeMs, key, pressed) => DeliverKey(timeMs, key, pressed),
             DeliverAxis = (timeMs, axis, value, source) =>
             {
-                seat.Pointer.NotifyAxis(timeMs, new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source));
+                var routed = new PointerAxis((Wayland.WlPointer.Axis)axis, value, Source: (Wayland.WlPointer.AxisSource)source);
+                if (inspector.Input.Axis(timeMs, routed))
+                {
+                    return;
+                }
+
+                seat.Pointer.NotifyAxis(timeMs, routed);
                 seat.Pointer.NotifyFrame();
             },
         };
-        injectedInput.OnPointerMotionAbsolute = injector.MotionAbsolute;
-        injectedInput.OnPointerButton = (timeMs, button, pressed) =>
-        {
-            DeliverPointerButton(timeMs, button, pressed);
-            return true;
-        };
+        injectedInput.Route(injector, seat, (keyboard, timeMs, key, pressed) =>
+            DeliverKey(
+                timeMs, key, pressed,
+                fromInputMethod: inputMethod is not null && inputMethod.IsInputMethodClient(keyboard?.Tag)));
 
         var runLoop = new Basin.Host.CompositorRunLoop(host, driver)
         {
@@ -847,8 +889,8 @@ internal static class Program
             Settle = settle,
         });
         ipc.SyntheticInput = injector;
-        var lineReport = new IpcLineReport();
         lineReport.AddInputLines(ipc.Methods);
+        inspector.Register(ipc.Methods);
         lineReport.AddSessionLines(ipc.Methods);
         ipc.Start();
         ipc.StartLineFront();
@@ -889,6 +931,7 @@ internal static class Program
 
         startup?.Stop(log);
         colorPack.Luts.Dispose();
+        inspector.Dispose();
         driver.Dispose();
         scene.Root.Destroy();
 

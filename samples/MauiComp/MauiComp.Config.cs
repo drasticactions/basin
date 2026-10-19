@@ -64,6 +64,7 @@ internal sealed partial class MauiComp
             _blur.Options = _blur.Options with { Strength = _config.BlurStrength };
         }
 
+        _inspector?.Apply(_config.Inspector);
         if (_inputConfigurator.IsAttached)
         {
             _inputConfigurator.Apply(_config.InputRules);

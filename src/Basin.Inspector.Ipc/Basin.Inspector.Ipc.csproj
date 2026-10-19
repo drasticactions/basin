@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Inspector.Ipc</PackageId>
+    <RootNamespace>Basin.Inspector.Ipc</RootNamespace>
+    <Description>The inspector/* control socket methods over a Basin.Inspector overlay.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Inspector/Basin.Inspector.csproj" />
+    <ProjectReference Include="../Basin.Ipc/Basin.Ipc.csproj" />
+  </ItemGroup>
+
+</Project>

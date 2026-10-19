@@ -27,6 +27,7 @@ internal sealed partial class Shell : IDisposable
     private readonly SceneCapturePack _capture;
     private FifoManager? _fifo;
     private readonly OutputDriver _outputs;
+    private readonly ToplevelGeometryReporter? _geometryReporter;
     private readonly ProcessTracker _processes;
     private Basin.Desktop.ColorCapabilityPack _colorPack = null!;
     private readonly CompositorRunLoop _loop;
@@ -158,6 +159,9 @@ internal sealed partial class Shell : IDisposable
             NestedName = index => $"eight-wm-{index}",
             HeadlessMode = new OutputMode(1366, 768, 60_000),
         };
+        _geometryReporter = _services.Find<Basin.Capabilities.IToplevelModel>() is { } toplevelModel
+            ? new ToplevelGeometryReporter(_outputs, _scene, toplevelModel)
+            : null;
         _outputs.ConfigureHandoff(_config.Handoff.Transition == Basin.Config.HandoffTransitionKind.Crossfade, _config.Handoff.DurationMs, _config.Handoff.HoldLimitMs);
         _outputs.Added += driver =>
         {
@@ -250,6 +254,7 @@ internal sealed partial class Shell : IDisposable
         _outputs.Added += driver => AttachTitle(ViewOf(driver));
         _outputs.Added += driver => AttachSwitcher(ViewOf(driver));
         _outputs.Added += _ => _popupLayer.RaiseToTop();
+        CreateInspector();
         _outputs.Added += driver => Unpark(ViewOf(driver));
         AttachSessionLock();
         _outputs.CreateInitialOutputs();
@@ -272,6 +277,7 @@ internal sealed partial class Shell : IDisposable
 
         ApplySettings();
         StartIdleLock();
+        _inspector?.Start();
         if (_host.Parent is { } parent)
         {
             parent.ParentGone += Stop;
@@ -436,12 +442,14 @@ internal sealed partial class Shell : IDisposable
         StopKeyboard();
         _signOut.Dispose();
         ReleaseChrome();
+        DisposeInspector();
         _uiDriver.Dispose();
         _screens.Dispose();
         _inputConfigurator.Dispose();
         _seat.Dispose();
         _ui.Dispose();
         _gpu?.Dispose();
+        _geometryReporter?.Dispose();
         _outputs.Dispose();
         _scene.Root.Destroy();
         _charmsBlur?.Dispose();

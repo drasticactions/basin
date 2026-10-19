@@ -87,6 +87,23 @@ scrollback = 1000
 [keybindings]
 # Open a new terminal window, or empty for none.
 new_terminal = "Super+Alt+T"
+# Open or close the inspector, or empty for none.
+inspector = "Super+F12"
+
+# The developer inspector, a Dear ImGui overlay drawn on the GPU renderer.
+# pixman and raster skia cannot draw it, and it then reports host=none.
+[inspector]
+# false never builds it.
+enabled = true
+# Open it at start.
+open = false
+# An output name, or "focused" for the output under the pointer.
+output = "focused"
+# The panels shown when it opens: outputs, windows, clients, scene and memory.
+panels = ["outputs"]
+font_size = 15
+# How often the live panels redraw, in Hz.
+refresh_hz = 10
 
 # Per-application overrides. app_id matches exactly, app_id_prefix matches a prefix.
 # steam_game, process, x11_class, x11_instance and window_type match too, and each one

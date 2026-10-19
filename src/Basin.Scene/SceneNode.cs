@@ -468,6 +468,13 @@ public abstract class SceneNode
             throw new InvalidOperationException("Nodes must share a parent.");
         }
 
+        var index = parent.Children.IndexOf(this);
+        var siblingIndex = parent.Children.IndexOf(sibling);
+        if (index == siblingIndex + (offset == 0 ? -1 : 1))
+        {
+            return;
+        }
+
         parent.Children.Remove(this);
         var anchor = parent.Children.IndexOf(sibling);
         parent.Children.Insert(anchor + offset, this);

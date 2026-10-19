@@ -89,6 +89,7 @@ public sealed class QuillFrameTests
         private readonly Process _compositor;
         private readonly string _runtimeDir;
         private readonly List<string> _lines = [];
+        private readonly List<string> _history = [];
         private readonly List<string> _errors = [];
         private readonly List<string> _clientLines = [];
 
@@ -108,7 +109,7 @@ public sealed class QuillFrameTests
             _runtimeDir = runtimeDir;
         }
 
-        public static QuillSession? Start(string renderer = "gl", string config = "[frame]\nstyle = \"quill\"\n\n[frame.quill]\ncorner_radius = 8\n", string[]? clientArgs = null, [CallerFilePath] string sourcePath = "")
+        public static QuillSession? Start(string renderer = "gl", string config = "[frame]\nstyle = \"quill\"\n\n[frame.quill]\ncorner_radius = 8\n", string[]? clientArgs = null, string[]? extra = null, [CallerFilePath] string sourcePath = "")
         {
             if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath ||
                 ClientPath(sourcePath) is not { } clientPath)
@@ -141,6 +142,11 @@ public sealed class QuillFrameTests
             info.ArgumentList.Add(renderer);
             info.ArgumentList.Add("--config");
             info.ArgumentList.Add(configPath);
+            foreach (var argument in extra ?? [])
+            {
+                info.ArgumentList.Add(argument);
+            }
+
             info.Environment["XDG_RUNTIME_DIR"] = runtimeDir;
             info.Environment.Remove("WAYLAND_DISPLAY");
             var compositor = Process.Start(info)!;
@@ -152,6 +158,7 @@ public sealed class QuillFrameTests
                     lock (session._gate)
                     {
                         session._lines.Add(line);
+                        session._history.Add(line);
                         Monitor.PulseAll(session._gate);
                     }
                 }
@@ -213,6 +220,24 @@ public sealed class QuillFrameTests
 
             Thread.Sleep(800);
             return session;
+        }
+
+        public void Rewrite(string config) => File.WriteAllText(Path.Combine(_runtimeDir, "tinycomp.toml"), config);
+
+        public string Errors()
+        {
+            lock (_gate)
+            {
+                return string.Join('\n', _errors);
+            }
+        }
+
+        public string? Printed(string prefix)
+        {
+            lock (_gate)
+            {
+                return _history.FindLast(line => line.StartsWith(prefix, StringComparison.Ordinal));
+            }
         }
 
         public bool Logged(string fragment)

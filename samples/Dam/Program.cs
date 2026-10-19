@@ -93,6 +93,10 @@ internal static class Program
             DefaultValueFactory = _ => "fullscreen",
         });
         vrrOption.AcceptOnlyFromAmong("fullscreen", "always", "never");
+        var inspectorOption = cli.Add(new Option<bool>("--inspector")
+        {
+            Description = "beyond cage: open the inspector overlay at start; Super+F12 and the inspector/* methods drive it",
+        });
         var subreaperOption = cli.Add(CommonOptions.Subreaper(defaultOn: true));
         subreaperOption.Description = "run the application under a reaper that adopts every orphan and ends the whole tree when the application exits";
         var backendOption = cli.Add(CommonOptions.Backend(
@@ -150,6 +154,7 @@ internal static class Program
                     _ => Basin.Host.VrrPacingPolicy.Fullscreen,
                 },
                 Subreaper = result.GetValue(subreaperOption),
+                Inspector = result.GetValue(inspectorOption),
             };
             var status = Dam.Run(options, BasinLog.For("Dam"), out var rendered);
             cli.ReportFrames(rendered);
