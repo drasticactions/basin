@@ -193,6 +193,8 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     public event Action<bool>? FullscreenRequested;
 
+    public Point MoveResizeOrigin { get; internal set; }
+
     public event Action<bool>? MoveRequested;
 
     public event Action<X11ResizeEdges, bool>? ResizeRequested;

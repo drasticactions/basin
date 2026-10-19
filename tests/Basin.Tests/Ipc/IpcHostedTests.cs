@@ -327,6 +327,20 @@ public sealed class IpcHostedTests
     }
 
     [Fact]
+    public void Adopted_content_publishes_the_pid_and_x11_display_it_reports()
+    {
+        using var rig = new IpcHostedRig();
+        var peer = rig.Connect();
+        var details = new Basin.Capabilities.ToplevelInfo(
+            0, "", "", default, null, default, Pid: 4242, X11Display: ":7", X11Density: X11Density.Native);
+        var window = rig.Harness.Shell.Adopt(new StubContent("x11", "org.basin.x11", details: details));
+        var list = peer.Call("""{"method":"windows/list"}""");
+        Assert.Contains("\"pid\":4242", list);
+        Assert.Contains("\"x11_display\":\":7\"", list);
+        rig.Harness.Shell.Release(window);
+    }
+
+    [Fact]
     public void Maximize_placement_maps_every_normal_window_maximized()
     {
         using var rig = new IpcHostedRig(new ShellSettings { Placement = PlacementMode.Maximize });
@@ -349,8 +363,15 @@ public sealed class IpcHostedTests
         shell.Release(window);
     }
 
-    private sealed class StubContent(string title, string appId, bool centered = false) : IWindowContent
+    private sealed class StubContent(string title, string appId, bool centered = false, Basin.Capabilities.ToplevelInfo? details = null)
+        : IWindowContent, IToplevelDetails
     {
+        public bool TryGetDetails(out Basin.Capabilities.ToplevelInfo info)
+        {
+            info = details.GetValueOrDefault();
+            return details is not null;
+        }
+
         private Basin.Scene.SceneTree? _tree;
 
         public string Title => title;

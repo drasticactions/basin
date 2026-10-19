@@ -619,7 +619,7 @@ public sealed partial class NestedShell
         }
     }
 
-    public void BeginMove(ManagedWindow window, uint? serial, bool keepTitleOnScreen = true)
+    public void BeginMove(ManagedWindow window, uint? serial, bool keepTitleOnScreen = true, Point? anchor = null)
     {
         if (!window.IsMapped || window.Fullscreen)
         {
@@ -634,8 +634,8 @@ public sealed partial class NestedShell
         _grabWindow = window;
         _grabStart = window.FrameBox;
         _grabKeepsTitle = keepTitleOnScreen;
-        _grabX = _cursorX - _grabStart.X;
-        _grabY = _cursorY - _grabStart.Y;
+        _grabX = (anchor?.X ?? _cursorX) - _grabStart.X;
+        _grabY = (anchor?.Y ?? _cursorY) - _grabStart.Y;
         SetCursor("fleur", overClient: false);
         if (adopted)
         {
@@ -673,7 +673,7 @@ public sealed partial class NestedShell
             clipped.Height - insets.Top - insets.Bottom);
     }
 
-    public void BeginResize(ManagedWindow window, ResizeEdges edges, uint? serial, bool keepTitleOnScreen = true)
+    public void BeginResize(ManagedWindow window, ResizeEdges edges, uint? serial, bool keepTitleOnScreen = true, Point? anchor = null)
     {
         if (!window.IsMapped || window.Fullscreen || window.Maximized || edges == ResizeEdges.None)
         {
@@ -688,8 +688,8 @@ public sealed partial class NestedShell
         _grabWindow = window;
         _grabEdges = edges;
         _grabKeepsTitle = keepTitleOnScreen;
-        _grabX = _cursorX;
-        _grabY = _cursorY;
+        _grabX = anchor?.X ?? _cursorX;
+        _grabY = anchor?.Y ?? _cursorY;
         _grabStart = window.ClientBox;
         window.SetResizing(true);
         SetCursor(ResizeRing.CursorFor(edges), overClient: false);

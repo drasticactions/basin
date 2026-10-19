@@ -166,7 +166,7 @@ internal sealed class NestedToplevelSource(NestedShell shell) : IToplevelSource
         }
 
         var parent = window.Content.Parent is { } content && shell.OwnerOf(content) is { } owner ? IdOf(owner) : 0;
-        return new ToplevelInfo(
+        var info = new ToplevelInfo(
             id,
             window.Content.Title,
             window.Content.AppId,
@@ -175,5 +175,16 @@ internal sealed class NestedToplevelSource(NestedShell shell) : IToplevelSource
             window.IsMapped ? window.FrameBox : default,
             window.IsMapped ? window.ClientBox : default,
             ParentId: parent);
+        return window.Content is IToplevelDetails source && source.TryGetDetails(out var details)
+            ? info with
+            {
+                ResourceName = details.ResourceName,
+                Pid = details.Pid,
+                AppMenuService = details.AppMenuService,
+                AppMenuObjectPath = details.AppMenuObjectPath,
+                X11Display = details.X11Display,
+                X11Density = details.X11Density,
+            }
+            : info;
     }
 }

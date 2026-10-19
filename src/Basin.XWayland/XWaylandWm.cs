@@ -838,6 +838,7 @@ public sealed unsafe class XWaylandWm : IDisposable
                 {
                     if (_windows.TryGetValue(e->window, out var window) && !window.OverrideRedirect)
                     {
+                        window.MoveResizeOrigin = new Point(LogicalPosition((int)data[0]), LogicalPosition((int)data[1]));
                         HandleMoveResize(window, data[2]);
                     }
                 }

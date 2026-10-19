@@ -14,6 +14,8 @@ public sealed class XWaylandModule : IProtocolModule
 
     public bool IncludeLowDensity { get; init; }
 
+    public bool PublishToplevels { get; init; } = true;
+
     public IReadOnlyList<Type> Capabilities => [typeof(IToplevelModel)];
 
     public XwaylandShellGlobal? Shell { get; private set; }
@@ -35,7 +37,7 @@ public sealed class XWaylandModule : IProtocolModule
         var seat = services.Find<Seat.Seat>();
         Shell = new XwaylandShellGlobal(services.Display, compositor);
         services.Use(Shell);
-        var model = services.Find<IToplevelModel>() as AggregateToplevelModel;
+        var model = PublishToplevels ? services.Find<IToplevelModel>() as AggregateToplevelModel : null;
         var layout = services.Find<OutputLayout>();
         var clientScales = services.Find<ClientScales>() ?? compositor.ClientScales;
 
