@@ -12,6 +12,8 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
 {
     public static readonly object WakeMessage = new();
 
+    public static readonly object StartMessage = new();
+
     private readonly Func<BasinCompositorHost> _createHost;
     private readonly Action<BasinCompositorHost>? _hostReady;
     private readonly Action<Exception>? _hostFailed;
@@ -110,6 +112,12 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
 
     public override void OnMessage(object message)
     {
+        if (ReferenceEquals(message, StartMessage))
+        {
+            Start();
+            return;
+        }
+
         using var affinity = _host is { } adopted ? adopted.Affinity.Adopt() : default;
         if (ReferenceEquals(message, WakeMessage))
         {
@@ -197,6 +205,38 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         catch (Exception error)
         {
             Log.Error($"idle dispatch failed: {error}");
+        }
+    }
+
+    private void Start()
+    {
+        if (_shutdown || _failed || _host is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            EnsureHost();
+        }
+        catch (Exception error)
+        {
+            _failed = true;
+            Log.Error($"the compositor host could not start: {error}");
+            _hostFailed?.Invoke(error);
+            return;
+        }
+
+        using var affinity = _host!.Affinity.Adopt();
+        try
+        {
+            BasinVisualFrame.Pump(_host, CompositionNow);
+            _host.InvalidateDirtyViews();
+            KeepPolling(_host);
+        }
+        catch (Exception error)
+        {
+            Log.Error($"first dispatch failed: {error}");
         }
     }
 

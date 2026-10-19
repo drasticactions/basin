@@ -53,6 +53,24 @@ public sealed class BasinOutputView : Control
         }
     }
 
+    public void StartDetached(Compositor compositor)
+    {
+        ArgumentNullException.ThrowIfNull(compositor);
+        if (_visual is not null)
+        {
+            return;
+        }
+
+        if (_createOwnView)
+        {
+            throw new InvalidOperationException("a detached output view has no size to give its own view output; pass createOwnView: false");
+        }
+
+        _handler = new BasinOutputVisual(_createHost, OnHostReady, _createOwnView, OnHostFailed);
+        _visual = compositor.CreateCustomVisual(_handler);
+        _visual.SendHandlerMessage(BasinOutputVisual.StartMessage);
+    }
+
     public void RequestFrame()
     {
         if (_visual is { } visual)
