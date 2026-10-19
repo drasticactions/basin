@@ -11,4 +11,6 @@ public interface ISkiaUISurface : IUISurface
     SKCanvas BeginDraw();
 
     void EndDraw();
+
+    ISkiaPointerHandler? Pointer { get; set; }
 }

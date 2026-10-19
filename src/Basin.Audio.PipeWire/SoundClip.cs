@@ -63,9 +63,9 @@ public sealed class SoundClip
 
     private static float[] Decode(string name, ReadOnlySpan<byte> data, int format, int channels, int rate, int bits)
     {
-        if (channels <= 0 || rate <= 0 || !((format == 1 && bits == 16) || (format == 3 && bits == 32)))
+        if (channels <= 0 || rate <= 0 || !((format == 1 && bits is 8 or 16) || (format == 3 && bits == 32)))
         {
-            throw new InvalidDataException($"{name} is not 16-bit PCM or 32-bit float");
+            throw new InvalidDataException($"{name} is not 8-bit or 16-bit PCM or 32-bit float");
         }
 
         var width = bits / 8;
@@ -77,7 +77,9 @@ public sealed class SoundClip
             for (var c = 0; c < channels; c++)
             {
                 var at = data[(((i * channels) + c) * width)..];
-                sum += format == 3 ? BinaryPrimitives.ReadSingleLittleEndian(at) : BinaryPrimitives.ReadInt16LittleEndian(at) / 32768f;
+                sum += format == 3 ? BinaryPrimitives.ReadSingleLittleEndian(at)
+                    : bits == 8 ? (at[0] - 128) / 128f
+                    : BinaryPrimitives.ReadInt16LittleEndian(at) / 32768f;
             }
 
             mono[i] = sum / channels;

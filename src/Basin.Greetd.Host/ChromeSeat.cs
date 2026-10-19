@@ -139,10 +139,14 @@ public sealed class ChromeSeat : IDisposable
 
         if (KeyHook?.Invoke(time, key, pressed) == true)
         {
+            _seat.Keyboard.NotifyKeyConsumed(key, pressed);
             return;
         }
 
-        _keys.Chrome(time, key, pressed);
+        if (!_keys.Chrome(time, key, pressed))
+        {
+            _seat.Keyboard.NotifyKeyConsumed(key, pressed);
+        }
     }
 
     private void OnModifiers()

@@ -27,6 +27,7 @@ internal sealed partial class Shell
     private bool _ownLocked;
     private bool _externalLocked;
     private PamCheck? _pamCheck;
+    private PamCheck? _finishedCheck;
     private int _failures;
     private IEventSource? _lockout;
     private IEventSource? _idleTimer;
@@ -428,6 +429,8 @@ internal sealed partial class Shell
 
     private void UnlockResult(bool success)
     {
+        _finishedCheck?.Dispose();
+        _finishedCheck = _pamCheck;
         _pamCheck = null;
         if (success)
         {
@@ -491,6 +494,8 @@ internal sealed partial class Shell
         _lockout = null;
         _pamCheck?.Dispose();
         _pamCheck = null;
+        _finishedCheck?.Dispose();
+        _finishedCheck = null;
         DisposeLockScreens();
         _lockPolicy?.Dispose();
         _lockPolicy = null;

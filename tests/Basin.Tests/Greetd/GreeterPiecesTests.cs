@@ -127,6 +127,14 @@ public sealed class GreeterPiecesTests
             Assert.Equal("i3", again.SessionOf("grace"));
             Assert.Null(again.LayoutOf("grace"));
             Assert.Null(again.SessionOf("nobody"));
+
+            Assert.True(again.RememberValue("ada", "guide", "rover"));
+            var third = GreeterMemory.Load(path, BasinLog.For("test"));
+            Assert.Equal("rover", third.ValueOf("ada", "guide"));
+            Assert.Equal("sway", third.SessionOf("ada"));
+            Assert.Equal("de", third.LayoutOf("ada"));
+            Assert.Null(third.ValueOf("grace", "guide"));
+            Assert.Throws<ArgumentException>(() => third.RememberValue("ada", "session", "x"));
         }
         finally
         {

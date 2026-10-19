@@ -33,6 +33,15 @@ public sealed class SoundPlayerTests(AudioDaemonFixture daemon)
                 Assert.Equal(TimeSpan.FromMilliseconds(100), clip.Duration);
             }
 
+            var unsigned = Path.Combine(directory, "pcm8.wav");
+            WritePcm8(unsigned, 22050, Enumerable.Repeat((byte)192, 2205).ToArray());
+            using (var file = File.OpenRead(unsigned))
+            {
+                var clip = SoundClip.FromWav("pcm8", file);
+                Assert.Equal(4800, clip.Samples.Length);
+                Assert.Equal(0.5f, clip.Samples[100], 4);
+            }
+
             using var junk = new MemoryStream("not a wav file"u8.ToArray());
             Assert.Throws<InvalidDataException>(() => SoundClip.FromWav("junk", junk));
         }
@@ -143,6 +152,25 @@ public sealed class SoundPlayerTests(AudioDaemonFixture daemon)
 
         var end = Math.Min(take.Left.Length, best + window);
         return (take.Left[best..end], take.Right[best..end]);
+    }
+
+    private static void WritePcm8(string path, int rate, byte[] samples)
+    {
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+        writer.Write("RIFF"u8);
+        writer.Write(36 + samples.Length);
+        writer.Write("WAVEfmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)1);
+        writer.Write(rate);
+        writer.Write(rate);
+        writer.Write((short)1);
+        writer.Write((short)8);
+        writer.Write("data"u8);
+        writer.Write(samples.Length);
+        writer.Write(samples);
     }
 
     private static void WritePcm16(string path, int rate, short[] samples)

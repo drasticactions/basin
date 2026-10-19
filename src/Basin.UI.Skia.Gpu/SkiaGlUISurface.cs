@@ -170,26 +170,33 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         return !_disposed && x >= 0 && y >= 0 && x < _width && y < _height;
     }
 
-    public string? CursorAt(double x, double y) => null;
+    public ISkiaPointerHandler? Pointer { get; set; }
+
+    public string? CursorAt(double x, double y) => Pointer?.CursorAt(x, y);
 
     public void NotifyPointerEnter(double x, double y)
     {
+        Pointer?.PointerEnter(x, y);
     }
 
     public void NotifyPointerMotion(uint timeMs, double x, double y)
     {
+        Pointer?.PointerMotion(timeMs, x, y);
     }
 
     public void NotifyPointerButton(uint timeMs, uint button, bool pressed)
     {
+        Pointer?.PointerButton(timeMs, button, pressed);
     }
 
     public void NotifyPointerAxis(uint timeMs, double dx, double dy)
     {
+        Pointer?.PointerAxis(timeMs, dx, dy);
     }
 
     public void NotifyPointerLeave()
     {
+        Pointer?.PointerLeave();
     }
 
     public IUISurface? CreatePopup(in Box anchor, UIPopupGravity gravity)

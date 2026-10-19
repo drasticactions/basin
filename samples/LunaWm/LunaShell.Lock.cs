@@ -15,6 +15,7 @@ internal sealed partial class LunaShell
     private bool _locked;
     private Card? _lockedFocus;
     private PamCheck? _pamCheck;
+    private PamCheck? _finishedCheck;
     private int _failures;
     private IEventSource? _lockout;
     private IEventSource? _idleTimer;
@@ -270,6 +271,8 @@ internal sealed partial class LunaShell
 
     private void UnlockResult(LockScreenModel model, bool success)
     {
+        _finishedCheck?.Dispose();
+        _finishedCheck = _pamCheck;
         _pamCheck = null;
         model.Busy = false;
         if (success)
@@ -335,5 +338,7 @@ internal sealed partial class LunaShell
         _lockout = null;
         _pamCheck?.Dispose();
         _pamCheck = null;
+        _finishedCheck?.Dispose();
+        _finishedCheck = null;
     }
 }

@@ -27,8 +27,8 @@ public sealed partial class GreeterHost : IDisposable
     private readonly Basin.Seat.Seat _seatState;
     private readonly OutputDriver _outputs;
     private readonly CompositorRunLoop _loop;
-    private readonly BasinGlGpu? _gpu;
-    private readonly AvaloniaUIHost _ui;
+    private BasinGlGpu? _gpu;
+    private readonly Basin.Capabilities.IUIHost _ui;
     private readonly UIDriver _uiDriver;
     private readonly OutputScreens _screens;
     private readonly UISurfaceIndex _index = new();
@@ -45,7 +45,7 @@ public sealed partial class GreeterHost : IDisposable
     private string _exit = "signal";
     private int _status;
 
-    private GreeterHost(GreeterHostOptions options, BasinLogger log, Func<BasinPlatformOptions, AvaloniaUIHost> start)
+    private GreeterHost(GreeterHostOptions options, BasinLogger log, Func<GreeterHost, Basin.Capabilities.IUIHost> start)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
@@ -115,17 +115,7 @@ public sealed partial class GreeterHost : IDisposable
         _outputs.BeforeRepaint += _ => _uiDriver?.SyncPopups();
 
         _screens = new OutputScreens(_outputs, _layout);
-        _gpu = _renderer.Device is { } device
-            ? BasinGlGpu.TryCreate(device.DevicePath, device as Basin.Render.Gl.GlDevice, _renderer.DmabufTextureFormats)
-            : null;
-        _ui = start(new BasinPlatformOptions
-        {
-            EventLoop = _host.Loop,
-            Screens = _screens,
-            Theme = options.Theme,
-            Gpu = _gpu,
-            Configure = options.Configure,
-        });
+        _ui = start(this);
         _uiDriver = new UIDriver(_ui, _host.Loop) { PopupLayer = _popupLayer, Index = _index };
         _box = new OutputUISurface(_boxLayer, _ui, _index) { PreciseDamage = true };
         _box.Realized += surface =>
@@ -136,7 +126,26 @@ public sealed partial class GreeterHost : IDisposable
     }
 
     public static GreeterHost Create<TApp>(GreeterHostOptions options, BasinLogger log)
-        where TApp : Application, new() => new(options, log, static platform => BasinPlatform.Start<TApp>(platform));
+        where TApp : Application, new() => new(options, log, static host =>
+        {
+            host._gpu = host._renderer.Device is { } device
+                ? BasinGlGpu.TryCreate(device.DevicePath, device as Basin.Render.Gl.GlDevice, host._renderer.DmabufTextureFormats)
+                : null;
+            return BasinPlatform.Start<TApp>(new BasinPlatformOptions
+            {
+                EventLoop = host._host.Loop,
+                Screens = host._screens,
+                Theme = host._options.Theme,
+                Gpu = host._gpu,
+                Configure = host._options.Configure,
+            });
+        });
+
+    public static GreeterHost Create(GreeterHostOptions options, BasinLogger log, Func<IRenderer, Basin.Capabilities.IUIHost> ui)
+    {
+        ArgumentNullException.ThrowIfNull(ui);
+        return new(options, log, host => ui(host._renderer));
+    }
 
     public GreeterHostOptions Options => _options;
 
@@ -156,7 +165,9 @@ public sealed partial class GreeterHost : IDisposable
 
     public string RendererName => _rendererName;
 
-    public AvaloniaUIHost Ui => _ui;
+    public AvaloniaUIHost Ui => _ui as AvaloniaUIHost ?? throw new InvalidOperationException("this greeter host does not run Avalonia; use UIHost");
+
+    public Basin.Capabilities.IUIHost UIHost => _ui;
 
     public UIDriver UiDriver => _uiDriver;
 
@@ -375,7 +386,7 @@ public sealed partial class GreeterHost : IDisposable
 
     private async Task StartAtSpiAsync()
     {
-        var reason = await _ui.StartAccessibilityAsync();
+        var reason = _ui is AvaloniaUIHost avalonia ? await avalonia.StartAccessibilityAsync() : "the greeter's toolkit has no accessibility tree";
         if (reason is null)
         {
             BasinReport.Line("A11Y on");

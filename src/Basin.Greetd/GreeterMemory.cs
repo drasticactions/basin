@@ -7,6 +7,7 @@ namespace Basin.Greetd;
 public sealed class GreeterMemory
 {
     private readonly Dictionary<string, (string? Session, string? Layout)> _users = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string User, string Key), string> _values = [];
     private readonly BasinLogger _log;
     private bool _warned;
 
@@ -54,6 +55,13 @@ public sealed class GreeterMemory
                     memory._users[name] = (
                         user.TryGetValue("session", out var session) ? session as string : null,
                         user.TryGetValue("layout", out var layout) ? layout as string : null);
+                    foreach (var (key, entry) in user)
+                    {
+                        if (key is not "session" and not "layout" && entry is string text)
+                        {
+                            memory._values[(name, key)] = text;
+                        }
+                    }
                 }
             }
         }
@@ -65,14 +73,28 @@ public sealed class GreeterMemory
 
     public string? LayoutOf(string user) => _users.TryGetValue(user, out var entry) ? entry.Layout : null;
 
+    public string? ValueOf(string user, string key) => _values.TryGetValue((user, key), out var value) ? value : null;
+
+    public bool RememberValue(string user, string key, string value)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(user);
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        if (key is "session" or "layout")
+        {
+            throw new ArgumentException("session and layout are remembered through Remember", nameof(key));
+        }
+
+        _values[(user, key)] = value;
+        return Write(document => document.Set("users." + TomlValue.Key(user), key, TomlValue.From(value)));
+    }
+
     public bool Remember(string user, string? session, string? layout)
     {
         ArgumentException.ThrowIfNullOrEmpty(user);
         LastUser = user;
         _users[user] = (session ?? SessionOf(user), layout ?? LayoutOf(user));
-        try
+        return Write(document =>
         {
-            var document = File.Exists(Path) ? TomlDocument.Load(Path) : TomlDocument.Parse("");
             document.Set("", "last_user", TomlValue.From(user));
             var table = "users." + TomlValue.Key(user);
             if (_users[user].Session is { } chosen)
@@ -84,7 +106,15 @@ public sealed class GreeterMemory
             {
                 document.Set(table, "layout", TomlValue.From(keymap));
             }
+        });
+    }
 
+    private bool Write(Action<TomlDocument> change)
+    {
+        try
+        {
+            var document = File.Exists(Path) ? TomlDocument.Load(Path) : TomlDocument.Parse("");
+            change(document);
             document.Save(Path);
             return true;
         }
