@@ -21,11 +21,13 @@ internal static class BasinVisualFrame
                 using var lease = feature.Lease();
                 if (host.Renderer.BindFrame(lease))
                 {
+                    var composited = false;
                     try
                     {
                         view.SceneOutput.Ring.AddWhole();
                         var options = new Basin.Scene.SceneCommitOptions { Background = RenderColor.Transparent };
-                        if (host.Session.CommitOutput(view.SceneOutput, host.Renderer, view.Target, 0, options))
+                        composited = host.Session.CommitOutput(view.SceneOutput, host.Renderer, view.Target, 0, options);
+                        if (composited)
                         {
                             host.NotifyComposited();
                         }
@@ -33,6 +35,16 @@ internal static class BasinVisualFrame
                     finally
                     {
                         host.Renderer.UnbindFrame();
+                    }
+
+                    if (composited)
+                    {
+                        var target = view.Target;
+                        host.NotifyPresented(
+                            view.SceneOutput,
+                            host.CapturePresented ? HostedViewCapture.Read(host, view, lease.GrContext) : null,
+                            target.Width,
+                            target.Height);
                     }
 
                     if (host.TakeScreenshotRequest(out var path, out var done))

@@ -182,7 +182,7 @@ public sealed class BasinHeadlessDriver : IDisposable
 
     private bool Wanted()
     {
-        if (_frameWanted)
+        if (_frameWanted || _host!.ScreenshotPending)
         {
             return true;
         }
@@ -231,8 +231,12 @@ public sealed class BasinHeadlessDriver : IDisposable
             foreach (var view in host.Views)
             {
                 host.Session.MarkPresented(view.SceneOutput);
+                var target = view.Target;
+                host.NotifyPresented(
+                    view.SceneOutput, host.CapturePresented ? HostedViewCapture.Read(host, view, null) : null, target.Width, target.Height);
             }
 
+            Screenshot(host);
             host.Scene.SendFrameDone((uint)Environment.TickCount);
         }
         finally
@@ -242,6 +246,18 @@ public sealed class BasinHeadlessDriver : IDisposable
 
         Interlocked.Increment(ref _frames);
         FrameCompleted?.Invoke();
+    }
+
+    private static void Screenshot(BasinCompositorHost host)
+    {
+        if (!host.TakeScreenshotRequest(out var path, out var done))
+        {
+            return;
+        }
+
+        var view = host.Views.Count > 0 ? host.Views[0] : null;
+        done(view is not null && HostedViewCapture.Read(host, view, null) is { } pixels &&
+            HostedViewCapture.WritePng(pixels, view.Target.Width, view.Target.Height, path));
     }
 
     private void RunPosted()

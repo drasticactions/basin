@@ -605,7 +605,7 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         {
             fixed (byte* data = pixels)
             {
-                if (Lease.ReadPixels(info, (nint)data, info.RowBytes) || RenderScene(info, (nint)data, context))
+                if (Lease.ReadPixels(info, (nint)data, info.RowBytes) || HostedViewCapture.Render(_host, View, info, (nint)data, context))
                 {
                     return pixels;
                 }
@@ -615,66 +615,8 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         return null;
     }
 
-    private bool RenderScene(SKImageInfo info, nint pixels, GRContext? context)
-    {
-        using var surface = (context is not null ? SKSurface.Create(context, false, info) : null) ?? SKSurface.Create(info);
-        if (surface is null)
-        {
-            return false;
-        }
-
-        var target = View.Target;
-        surface.Canvas.Scale((float)target.Scale);
-        if (!_host.Renderer.BindFrame(surface.Canvas, context))
-        {
-            return false;
-        }
-
-        try
-        {
-            var options = new SceneRenderOptions
-            {
-                Background = new RenderColor(0f, 0f, 0f, 1f),
-                Scale = target.Scale,
-                OriginX = View.SceneOutput.Position.X,
-                OriginY = View.SceneOutput.Position.Y,
-            };
-            if (!_host.Scene.Render(_host.Renderer, target, options))
-            {
-                return false;
-            }
-        }
-        finally
-        {
-            _host.Renderer.UnbindFrame();
-        }
-
-        surface.Canvas.Flush();
-        return surface.ReadPixels(info, pixels, info.RowBytes, 0, 0);
-    }
-
-    private bool WriteScreenshot(int width, int height, string path, GRContext? context)
-    {
-        if (Capture(width, height, context) is not { } pixels)
-        {
-            return false;
-        }
-
-        try
-        {
-            var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-            using var image = SKImage.FromPixelCopy(info, pixels);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            using var file = File.Create(path);
-            data.SaveTo(file);
-            return true;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            Log.Error($"the screenshot could not be written to {path}: {error.Message}");
-            return false;
-        }
-    }
+    private bool WriteScreenshot(int width, int height, string path, GRContext? context) =>
+        Capture(width, height, context) is { } pixels && HostedViewCapture.WritePng(pixels, width, height, path);
 
     public void Dispose()
     {

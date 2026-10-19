@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Hosted;
 using Basin.Shell.Nested;
@@ -124,6 +125,92 @@ public sealed class HeadlessDriverTests
         toplevel.Dispose();
         xdgSurface.Dispose();
         surface.Dispose();
+    }
+
+    [Fact]
+    public async Task A_recording_reads_frames_the_headless_driver_renders_for_it()
+    {
+        using var rig = new Rig();
+        var (toplevel, xdgSurface, surface) = MapColored(rig, 0xFF3366AA);
+
+        var done = new TaskCompletionSource<RecordingResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var refused = await rig.Driver.InvokeAsync(() => rig.Driver.Host.Services.Require<ISceneDiagnostics>().Record(
+            new RecordRequest(string.Empty, 3) { Region = new Box(0, 0, 640, 480), KeepPixels = true, TimeoutMs = 5000 },
+            done.SetResult));
+        Assert.Null(refused);
+        var result = await done.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Assert.False(result.TimedOut);
+        Assert.Equal(3, result.Frames);
+        Assert.True(result.LumaHigh > 0);
+        Assert.True(Count(result.Pixels!, 0x33, 0x66, 0xAA) >= 120 * 90 * 3);
+
+        toplevel.Dispose();
+        xdgSurface.Dispose();
+        surface.Dispose();
+    }
+
+    [Fact]
+    public async Task A_screenshot_request_is_written_by_the_headless_driver()
+    {
+        using var rig = new Rig();
+        var (toplevel, xdgSurface, surface) = MapColored(rig, 0xFF3366AA);
+        var path = Path.Combine(Path.GetTempPath(), $"basin-headless-{Environment.ProcessId}-{Guid.NewGuid():N}.png");
+        try
+        {
+            var written = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            rig.Driver.Post(() => rig.Driver.Host.RequestScreenshot(path, written.SetResult));
+
+            Assert.True(await written.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            var png = File.ReadAllBytes(path);
+            Assert.True(png.AsSpan().StartsWith((ReadOnlySpan<byte>)[0x89, (byte)'P', (byte)'N', (byte)'G']));
+        }
+        finally
+        {
+            File.Delete(path);
+            toplevel.Dispose();
+            xdgSurface.Dispose();
+            surface.Dispose();
+        }
+    }
+
+    private static (Basin.Shell.Xdg.Protocol.XdgToplevel, Basin.Shell.Xdg.Protocol.XdgSurface, Wayland.WlSurface) MapColored(Rig rig, uint argb)
+    {
+        var client = rig.Client;
+        var surface = client.Compositor.CreateSurface();
+        var xdgSurface = client.WmBase!.GetXdgSurface(surface);
+        var toplevel = xdgSurface.GetToplevel();
+        var configured = false;
+        xdgSurface.Configure += (_, e) =>
+        {
+            xdgSurface.AckConfigure(e.Serial);
+            configured = true;
+        };
+        surface.Commit();
+        rig.Until(() => configured, "the headless compositor never configured the toplevel");
+
+        var buffer = client.CreateBuffer(120, 90, NestedShellHarness.Fill(120, 90, argb));
+        var frame = false;
+        surface.Frame().Done += (_, _) => frame = true;
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 120, 90);
+        surface.Commit();
+        rig.Until(() => frame, "the headless driver never framed the mapped toplevel");
+        return (toplevel, xdgSurface, surface);
+    }
+
+    private static int Count(byte[] rgba, byte r, byte g, byte b)
+    {
+        var count = 0;
+        for (var i = 0; i + 3 < rgba.Length; i += 4)
+        {
+            if (rgba[i] == r && rgba[i + 1] == g && rgba[i + 2] == b)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     [Fact]

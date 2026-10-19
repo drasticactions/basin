@@ -308,6 +308,8 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         _screenshotDone = done;
     }
 
+    internal bool ScreenshotPending => _screenshotPath is not null;
+
     internal bool TakeScreenshotRequest(out string path, out Action<bool> done)
     {
         path = _screenshotPath!;
