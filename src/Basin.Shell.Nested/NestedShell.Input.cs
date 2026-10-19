@@ -64,8 +64,18 @@ public sealed partial class NestedShell
         switch (input.Kind)
         {
             case BasinViewInputKind.PointerEnter:
+                MoveCursor(input.X, input.Y, input.TimeMs, relative: false);
+                break;
             case BasinViewInputKind.PointerMotion:
                 MoveCursor(input.X, input.Y, input.TimeMs);
+                break;
+            case BasinViewInputKind.PointerRelative:
+                OnRelative(input.TimeMs, input.DeltaX, input.DeltaY, input.X, input.Y);
+                break;
+            case BasinViewInputKind.GesturePinchBegin:
+            case BasinViewInputKind.GesturePinchUpdate:
+            case BasinViewInputKind.GesturePinchEnd:
+                OnPinch(input.Kind, input.TimeMs, input.DeltaX, input.Pressed);
                 break;
             case BasinViewInputKind.PointerLeave:
                 LeaveFrameHover(null);
@@ -121,7 +131,17 @@ public sealed partial class NestedShell
         }
     }
 
-    private void MoveCursor(double x, double y, uint time)
+    private void MoveCursor(double x, double y, uint time, bool relative = true)
+    {
+        if (!GatePointer(time, ref x, ref y, relative))
+        {
+            return;
+        }
+
+        MoveCursorTo(x, y, time);
+    }
+
+    private void MoveCursorTo(double x, double y, uint time)
     {
         _cursorX = x;
         _cursorY = y;

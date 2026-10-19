@@ -12,6 +12,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
     private readonly List<Action> _idleRunning = [];
     private readonly List<IDisposable> _deferredFrees = [];
     private readonly List<IDisposable> _deferredFreesRunning = [];
+    private readonly List<TimerSource> _timers = [];
 
     public WaylandEventLoop(WlServerDisplay display)
     {
@@ -37,9 +38,36 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
     public IEventSource AddTimer(Action handler)
     {
         _thread.Assert();
-        var inner = _display.EventLoop.AddTimer(handler);
+        ArgumentNullException.ThrowIfNull(handler);
+        var timer = new TimerSource(_timers);
+        timer.Inner = _display.EventLoop.AddTimer(() =>
+        {
+            timer.Deadline = 0;
+            handler();
+        });
+        _timers.Add(timer);
         BasinCounters.Track();
-        return new Source(inner);
+        return timer;
+    }
+
+    public int NextTimerDelayMs
+    {
+        get
+        {
+            _thread.Assert();
+            var soonest = long.MaxValue;
+            foreach (var timer in _timers)
+            {
+                if (timer.Deadline > 0 && timer.Deadline < soonest)
+                {
+                    soonest = timer.Deadline;
+                }
+            }
+
+            return soonest == long.MaxValue
+                ? -1
+                : (int)Math.Clamp(soonest - Environment.TickCount64, 0, int.MaxValue);
+        }
     }
 
     public IEventSource AddSignal(int signalNumber, Action<int> handler)
@@ -135,6 +163,33 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         public void UpdateTimer(int delayMs) => _inner.UpdateTimer(delayMs);
 
         public void UpdateFd(FdReadiness events) => _inner.UpdateFd((WlFdEvents)events);
+    }
+
+    private sealed class TimerSource(List<TimerSource> owner) : IEventSource
+    {
+        public WlEventSource Inner = null!;
+        public long Deadline;
+
+        public bool IsRemoved => Inner.IsRemoved;
+
+        public void Remove()
+        {
+            if (!Inner.IsRemoved)
+            {
+                Inner.Remove();
+                Deadline = 0;
+                owner.Remove(this);
+                BasinCounters.Untrack();
+            }
+        }
+
+        public void UpdateTimer(int delayMs)
+        {
+            Inner.UpdateTimer(delayMs);
+            Deadline = delayMs > 0 ? Environment.TickCount64 + delayMs : 0;
+        }
+
+        public void UpdateFd(FdReadiness events) => Inner.UpdateFd((WlFdEvents)events);
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]

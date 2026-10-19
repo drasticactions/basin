@@ -14,4 +14,8 @@ public enum BasinViewInputKind : byte
     TouchCancel,
     FocusIn,
     FocusOut,
+    PointerRelative,
+    GesturePinchBegin,
+    GesturePinchUpdate,
+    GesturePinchEnd,
 }

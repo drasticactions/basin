@@ -1,4 +1,4 @@
-namespace Basin.Avalonia;
+namespace Basin.Hosted;
 
 internal static class ChannelSelection
 {

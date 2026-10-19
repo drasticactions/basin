@@ -42,7 +42,9 @@ internal sealed class HostedDmabufTexture : ISkiaTexture
     internal static HostedDmabufTexture? TryImport(
         HostedRenderer renderer, HostedEglImport egl, GRContext context, in DmabufAttributes attributes)
     {
-        if (egl.Import(attributes) is not { } native)
+        var imported = egl.Import(attributes);
+        context.ResetContext(GRGlBackendState.TextureBinding);
+        if (imported is not { } native)
         {
             return null;
         }

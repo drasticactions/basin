@@ -43,8 +43,14 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
     internal readonly List<VulkanDeviceImage> ForeignThisFrame = [];
 
     public SkiaVulkanRenderer(string drmNodePath)
+        : this(drmNodePath, [], [])
     {
-        _device = new VulkanDevice(drmNodePath, ["VK_KHR_external_semaphore_fd", "VK_KHR_external_semaphore"]);
+    }
+
+    public SkiaVulkanRenderer(string drmNodePath, string[] instanceExtensions, string[] deviceExtensions)
+    {
+        _device = new VulkanDevice(
+            drmNodePath, ["VK_KHR_external_semaphore_fd", "VK_KHR_external_semaphore", .. deviceExtensions], instanceExtensions);
         _getProc = GetProcedureAddress;
 
         _extensions = SkiaCensus.Track(GRVkExtensions.Create(
@@ -77,6 +83,41 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
     }
 
     public VulkanDevice Device => _device;
+
+    public void AcquireForeignImages()
+    {
+        _thread.Assert();
+        if (ForeignThisFrame.Count == 0)
+        {
+            return;
+        }
+
+        _device.SubmitImmediate(this, static (renderer, commands) =>
+        {
+            foreach (var image in renderer.ForeignThisFrame)
+            {
+                image.RecordForeignAcquire(commands);
+            }
+        });
+    }
+
+    public void ReleaseForeignImages()
+    {
+        _thread.Assert();
+        if (ForeignThisFrame.Count == 0)
+        {
+            return;
+        }
+
+        _device.SubmitImmediate(this, static (renderer, commands) =>
+        {
+            foreach (var image in renderer.ForeignThisFrame)
+            {
+                image.RecordForeignRelease(commands);
+            }
+        });
+        ForeignThisFrame.Clear();
+    }
 
     IRenderDevice? IRenderer.Device => Device;
 

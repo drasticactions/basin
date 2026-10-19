@@ -63,6 +63,23 @@ public sealed class BasinViewOutput : IDisposable
         }
     }
 
+    public void SetRefresh(int refreshMilliHz)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Output.CurrentMode.RefreshMilliHz == refreshMilliHz)
+        {
+            return;
+        }
+
+        if (!Output.SetRefresh(refreshMilliHz))
+        {
+            throw new InvalidOperationException($"the output refused a refresh of {refreshMilliHz} mHz");
+        }
+
+        _host.Screens.NotifyReconfigured(Output);
+        Reconfigured?.Invoke(this);
+    }
+
     public void Dispose()
     {
         if (_disposed)

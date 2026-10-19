@@ -173,6 +173,11 @@ public sealed class TabletManager : ITabletObserver, IDisposable
 
         _toolAxes[toolId] = axes;
         tool.LastTimeMs = timeMs;
+        if (tool.Tablet is null)
+        {
+            return;
+        }
+
         ToolMoved?.Invoke(tool, axes);
         tool.NotifyAxes(axes);
         tool.NotifyFrame(timeMs);

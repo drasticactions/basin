@@ -30,16 +30,26 @@ int main(int argc, char **argv)
 {
     int drag = argc > 1 && strcmp(argv[1], "--drag") == 0;
     int scroll = argc > 1 && strcmp(argv[1], "--scroll") == 0;
-    if ((drag && argc < 8) || (scroll && argc < 7) || (!drag && !scroll && argc < 5)) {
+    int rel = argc > 1 && strcmp(argv[1], "--rel") == 0;
+    if ((drag && argc < 8) || (scroll && argc < 7) || (rel && argc < 9) || (!drag && !scroll && !rel && argc < 5)) {
         fprintf(stderr, "usage: vptr X Y WIDTH HEIGHT [CLICKS] [BUTTON]\n"
                         "       vptr --drag X1 Y1 X2 Y2 WIDTH HEIGHT [BUTTON]\n"
-                        "       vptr --scroll X Y WIDTH HEIGHT STEPS [horizontal]\n");
+                        "       vptr --scroll X Y WIDTH HEIGHT STEPS [horizontal]\n"
+                        "       vptr --rel X Y WIDTH HEIGHT DX DY STEPS\n");
         return 1;
     }
     uint32_t x, y, x2 = 0, y2 = 0, w, h, btn = 0x110;
     int clicks = 1, steps = 0;
     uint32_t axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
-    if (scroll) {
+    double rdx = 0, rdy = 0;
+    if (rel) {
+        /* absolute move to X Y, then STEPS relative motions of DX DY, the
+         * request a locked pointer still turns into relative_motion */
+        x = (uint32_t)atoi(argv[2]); y = (uint32_t)atoi(argv[3]);
+        w = (uint32_t)atoi(argv[4]); h = (uint32_t)atoi(argv[5]);
+        rdx = atof(argv[6]); rdy = atof(argv[7]);
+        steps = atoi(argv[8]);
+    } else if (scroll) {
         x = (uint32_t)atoi(argv[2]); y = (uint32_t)atoi(argv[3]);
         w = (uint32_t)atoi(argv[4]); h = (uint32_t)atoi(argv[5]);
         steps = atoi(argv[6]);
@@ -73,7 +83,15 @@ int main(int argc, char **argv)
     wl_display_roundtrip(display);
     usleep(200000);
 
-    if (scroll) {
+    if (rel) {
+        for (int i = 0; i < steps; i++) {
+            zwlr_virtual_pointer_v1_motion(p, t += 10, wl_fixed_from_double(rdx), wl_fixed_from_double(rdy));
+            zwlr_virtual_pointer_v1_frame(p);
+            wl_display_roundtrip(display);
+            usleep(20000);
+        }
+        fprintf(stderr, "vptr: moved %d step(s) of %.1f,%.1f from %u,%u\n", steps, rdx, rdy, x, y);
+    } else if (scroll) {
         int count = steps < 0 ? -steps : steps;
         double value = steps < 0 ? -10.0 : 10.0;
         for (int i = 0; i < count; i++) {

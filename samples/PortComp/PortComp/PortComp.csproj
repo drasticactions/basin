@@ -16,8 +16,4 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Themes/metacity-theme-1.xml" LogicalName="port-comp-metacity-theme-1.xml" />
-  </ItemGroup>
-
 </Project>

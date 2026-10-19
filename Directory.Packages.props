@@ -41,6 +41,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageVersion Include="SDL3-CS" Version="3.4.18" />
+    <PackageVersion Include="SDL3-CS.Linux" Version="3.4.18" />
+    <PackageVersion Include="SDL3-CS.MacOS" Version="3.4.18" />
+    <PackageVersion Include="SDL3-CS.Windows" Version="3.4.18" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageVersion Include="Silk.NET.OpenGL" Version="2.23.0" />
     <PackageVersion Include="Silk.NET.OpenGLES" Version="2.23.0" />
     <PackageVersion Include="Silk.NET.Vulkan" Version="2.23.0" />

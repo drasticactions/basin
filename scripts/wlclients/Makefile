@@ -22,7 +22,7 @@ LDLIBS += $(shell pkg-config --libs wayland-client)
 all: $(BIN)/locktest $(BIN)/vptr $(BIN)/vpad $(BIN)/vtouch $(BIN)/vkbd $(BIN)/vmouse $(BIN)/gestures $(BIN)/colorinfo \
 	$(BIN)/hyprsurface $(BIN)/focusgrab $(BIN)/locknotify $(BIN)/toplevelexport $(BIN)/ssdwin \
 	$(BIN)/panel $(BIN)/riverrepeat $(BIN)/appmenu $(BIN)/pointerlock $(BIN)/textinput $(BIN)/randremu $(BIN)/x11focus \
-	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win
+	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe
 
 $(BIN):
 	mkdir -p $(BIN)
@@ -38,6 +38,7 @@ $(BIN)/%-protocol.c: | $(BIN)
 XML_ext-session-lock-v1 := $(LOCK_XML)
 XML_wlr-virtual-pointer-unstable-v1 := $(VPTR_XML)
 XML_xdg-shell := $(XDG_XML)
+XML_tablet-v2 := $(WAYLAND_PROTOCOLS)/stable/tablet/tablet-v2.xml
 XML_xdg-dialog-v1 := $(WAYLAND_PROTOCOLS)/staging/xdg-dialog/xdg-dialog-v1.xml
 XML_appmenu := $(ROOT)/external/plasma-wayland-protocols/src/protocols/appmenu.xml
 XML_gtk-shell := $(ROOT)/protocol/gtk-shell.xml
@@ -66,6 +67,13 @@ $(BIN)/locktest: locktest.c $(BIN)/ext-session-lock-v1-protocol.c $(BIN)/ext-ses
 
 $(BIN)/vptr: vptr.c $(BIN)/wlr-virtual-pointer-unstable-v1-protocol.c $(BIN)/wlr-virtual-pointer-unstable-v1-client-protocol.h | $(BIN)
 	$(CC) $(CFLAGS) -o $@ vptr.c $(BIN)/wlr-virtual-pointer-unstable-v1-protocol.c $(LDLIBS)
+
+$(BIN)/vpen: vpen.c | $(BIN)
+	$(CC) $(CFLAGS) -o $@ vpen.c
+
+$(BIN)/tabletprobe: tabletprobe.c $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-protocol.h \
+		$(BIN)/tablet-v2-protocol.c $(BIN)/tablet-v2-client-protocol.h | $(BIN)
+	$(CC) $(CFLAGS) -o $@ tabletprobe.c $(BIN)/xdg-shell-protocol.c $(BIN)/tablet-v2-protocol.c $(LDLIBS)
 
 $(BIN)/randremu: randremu.c | $(BIN)
 	$(CC) -O1 -Wall -Wextra -o $@ randremu.c $(shell pkg-config --cflags --libs xcb xcb-randr)

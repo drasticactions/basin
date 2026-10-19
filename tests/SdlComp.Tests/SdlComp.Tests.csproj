@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>SdlComp.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="SDL3-CS" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../samples/SdlComp/SdlComp.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Hosted/Basin.Hosted.csproj" />
+    <ProjectReference Include="../../src/Basin.Sdl/Basin.Sdl.csproj" />
+    <ProjectReference Include="../../src/Basin.Sdl.View/Basin.Sdl.View.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Nested/Basin.Shell.Nested.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../Basin.Tests/ShmTestClient.cs" Link="Shared/ShmTestClient.cs" />
+    <Compile Include="../Shared/VsockFacts.cs" Link="Shared/VsockFacts.cs" />
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

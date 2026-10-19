@@ -224,6 +224,39 @@ public sealed class HostScreensTests
         System.Linq.Enumerable.First(harness.Host.Services.Require<CompositorGlobal>().Surfaces);
 
     [Fact]
+    public void Several_advertised_outputs_lay_out_side_by_side_and_withdraw_one_at_a_time()
+    {
+        BasinViewOutput? first = null;
+        BasinViewOutput? second = null;
+        var harness = new Harness(host =>
+        {
+            first = host.CreateViewOutput(800, 600, 1.0, "shell");
+            second = host.CreateViewOutput(1200, 800, 2.0, "SDL-2");
+            host.Screens.Advertise(first.Output, new HostScreenInfo("shell", "shell", 0, 0, 800, 600, 1.0, true));
+            host.Screens.Advertise(second.Output, new HostScreenInfo("SDL-2", "SDL-2", 1600, 0, 1200, 800, 2.0, false));
+        });
+        Assert.Equal(2, harness.Client.Outputs.Count);
+        Assert.Equal(["shell", "SDL-2"], harness.Host.Screens.AdvertisedKeys);
+        Assert.Equal(1.0, harness.Host.Screens.DefaultScaling);
+        Assert.Equal(800, harness.Host.Layout.BoxOf(second!.Output).X);
+        Assert.Throws<InvalidOperationException>(() => harness.Host.Screens.Apply([Left]));
+
+        second.SetRefresh(144_000);
+        Assert.Equal(144_000, second.Output.CurrentMode.RefreshMilliHz);
+
+        harness.Host.Screens.Withdraw("SDL-2");
+        harness.Pump();
+        Assert.Equal(["shell"], harness.Host.Screens.AdvertisedKeys);
+        Assert.NotNull(harness.Host.Screens.GlobalFor("shell"));
+        Assert.Null(harness.Host.Screens.GlobalFor("SDL-2"));
+
+        second.Dispose();
+        first!.Dispose();
+        harness.Dispose();
+        LeakTracking.Expect(0, BasinCounters.LiveObjects);
+    }
+
+    [Fact]
     public void An_advertised_output_is_the_only_output_and_apply_is_refused()
     {
         BasinViewOutput? view = null;

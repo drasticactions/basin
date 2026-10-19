@@ -22,6 +22,41 @@ public sealed class HostedRenderer : IRenderer
 
     public event Action<HostedEglImport>? EglAvailable;
 
+    private IRenderer? _dmabufRenderer;
+
+    public IRenderer? DmabufRenderer => _dmabufRenderer;
+
+    public event Action<DrmFormatSet, string>? DmabufAvailable;
+
+    public bool UseDmabufRenderer(IRenderer renderer, string renderNodePath)
+    {
+        _thread.Assert();
+        ArgumentNullException.ThrowIfNull(renderer);
+        ArgumentException.ThrowIfNullOrEmpty(renderNodePath);
+        if (_dmabufRenderer is not null)
+        {
+            return ReferenceEquals(_dmabufRenderer, renderer);
+        }
+
+        if (renderer.DmabufTextureFormats.Count == 0)
+        {
+            return false;
+        }
+
+        _dmabufRenderer = renderer;
+        DmabufAvailable?.Invoke(renderer.DmabufTextureFormats, renderNodePath);
+        return true;
+    }
+
+    public void StopDmabufRenderer(IRenderer renderer)
+    {
+        _thread.Assert();
+        if (ReferenceEquals(_dmabufRenderer, renderer))
+        {
+            _dmabufRenderer = null;
+        }
+    }
+
     internal void ScheduleEglRelease(uint texture, nint image, int generation) =>
         _pendingEglReleases.Add((texture, image, generation));
 
@@ -137,6 +172,13 @@ public sealed class HostedRenderer : IRenderer
 
         if (buffer.TryGetDmabuf(out var attributes))
         {
+            if (_dmabufRenderer is { } delegated)
+            {
+                return delegated.DmabufTextureFormats.Contains(attributes.Format)
+                    ? delegated.ImportTexture(buffer)
+                    : null;
+            }
+
             return _eglImport is { } egl && _lastContext is { } context && egl.Formats.Contains(attributes.Format)
                 ? HostedDmabufTexture.TryImport(this, egl, context, attributes)
                 : null;
@@ -145,7 +187,10 @@ public sealed class HostedRenderer : IRenderer
         return _raster.ImportTexture(buffer);
     }
 
-    public DrmFormatSet DmabufTextureFormats => _eglImport?.Formats ?? DrmFormatSet.Empty;
+    public IReadOnlyList<DrmFormat> ShmTextureFormats => _raster.ShmTextureFormats;
+
+    public DrmFormatSet DmabufTextureFormats =>
+        _dmabufRenderer?.DmabufTextureFormats ?? _eglImport?.Formats ?? DrmFormatSet.Empty;
 
     public ColorTransformCapability ColorTransform => _raster.ColorTransform;
 

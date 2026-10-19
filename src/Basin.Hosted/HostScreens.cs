@@ -20,7 +20,7 @@ public sealed class HostScreens : IDisposable
         public double Effective => Noted ?? Info.Scaling;
     }
 
-    private string? _advertisedKey;
+    private readonly List<string> _advertised = [];
 
     internal HostScreens(BasinCompositorHost host)
     {
@@ -44,19 +44,15 @@ public sealed class HostScreens : IDisposable
         }
     }
 
-    public string? AdvertisedKey => _advertisedKey;
+    public string? AdvertisedKey => _advertised.Count > 0 ? _advertised[0] : null;
+
+    public IReadOnlyList<string> AdvertisedKeys => _advertised;
 
     public void Advertise(Backend.Hosted.HostedOutput output, HostScreenInfo info)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(info);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_advertisedKey is { } current && current != info.Key)
-        {
-            throw new InvalidOperationException(
-                $"the output '{current}' is already advertised; a host advertises one output of its own.");
-        }
-
         if (_rows.TryGetValue(info.Key, out var row))
         {
             if (!ReferenceEquals(row.Output, output))
@@ -86,14 +82,14 @@ public sealed class HostScreens : IDisposable
         var global = new OutputGlobal(_host.Display, output);
         _host.Layout.Add(output, LogicalX(info), LogicalY(info));
         _rows[info.Key] = new Row { Output = output, Global = global, Info = info, Advertised = true };
-        _advertisedKey = info.Key;
+        _host.NotifyOutputAdvertised(global, output);
+        _advertised.Add(info.Key);
         SyncDefaultScale();
     }
 
     internal void NotifyReconfigured(Backend.Hosted.HostedOutput output)
     {
-        if (_disposed || _advertisedKey is not { } key || !_rows.TryGetValue(key, out var row) ||
-            !ReferenceEquals(row.Output, output))
+        if (_disposed || RowOf(output) is not { } row)
         {
             return;
         }
@@ -113,11 +109,11 @@ public sealed class HostScreens : IDisposable
     {
         ArgumentNullException.ThrowIfNull(screens);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_advertisedKey is { } advertised)
+        if (AdvertisedKey is { } advertised)
         {
             throw new InvalidOperationException(
                 $"host screens cannot be applied while the output '{advertised}' is advertised by the consumer; " +
-                "a session shows either the host's monitors or one output of its own, never both.");
+                "a session shows either the host's monitors or outputs of its own, never both.");
         }
 
         if (screens.Count == 0)
@@ -319,6 +315,7 @@ public sealed class HostScreens : IDisposable
         var global = new OutputGlobal(_host.Display, output);
         _host.Layout.Add(output, LogicalX(info), LogicalY(info));
         _rows[info.Key] = new Row { Output = output, Global = global, Info = info };
+        _host.NotifyOutputAdvertised(global, output);
     }
 
     private void Update(Row row, HostScreenInfo info)
@@ -354,15 +351,29 @@ public sealed class HostScreens : IDisposable
 
         _host.Layout.Remove(row.Output);
         var output = row.Output;
+        _host.NotifyOutputWithdrawn(row.Global);
         row.Global.Retire();
         if (row.Advertised)
         {
-            _advertisedKey = null;
+            _advertised.Remove(key);
         }
         else
         {
             output.Destroy();
         }
+    }
+
+    private Row? RowOf(Backend.Hosted.HostedOutput output)
+    {
+        foreach (var key in _advertised)
+        {
+            if (_rows.TryGetValue(key, out var row) && ReferenceEquals(row.Output, output))
+            {
+                return row;
+            }
+        }
+
+        return null;
     }
 
     public void Withdraw(string key)
@@ -401,6 +412,6 @@ public sealed class HostScreens : IDisposable
         }
 
         _rows.Clear();
-        _advertisedKey = null;
+        _advertised.Clear();
     }
 }

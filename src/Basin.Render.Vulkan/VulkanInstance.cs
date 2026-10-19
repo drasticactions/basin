@@ -39,7 +39,7 @@ internal sealed unsafe class VulkanInstance : IDisposable
         }
     }
 
-    public VulkanInstance()
+    public VulkanInstance(string[]? requiredExtensions = null)
     {
         Api = new Vk(new VulkanNativeContext());
         var validate = Environment.GetEnvironmentVariable(ValidationVariable) is not null;
@@ -59,7 +59,12 @@ internal sealed unsafe class VulkanInstance : IDisposable
             ApiVersion = Vk.Version12,
         };
 
-        var extensions = haveDebugUtils ? new[] { DebugUtilsExtension } : [];
+        string[] extensions = haveDebugUtils ? [DebugUtilsExtension] : [];
+        if (requiredExtensions is { Length: > 0 })
+        {
+            extensions = [.. extensions, .. requiredExtensions.Where(e => !extensions.Contains(e))];
+        }
+
         var extensionNames = (byte**)SilkMarshal.StringArrayToPtr(extensions);
         var layers = haveLayer ? new[] { ValidationLayer } : [];
         var layerNames = (byte**)SilkMarshal.StringArrayToPtr(layers);

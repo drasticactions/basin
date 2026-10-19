@@ -65,4 +65,8 @@ public static class InputCodes
     public const uint BtnRight = 0x111;
 
     public const uint BtnMiddle = 0x112;
+
+    public const uint BtnSide = 0x113;
+
+    public const uint BtnExtra = 0x114;
 }

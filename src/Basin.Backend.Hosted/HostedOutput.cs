@@ -45,6 +45,19 @@ public sealed class HostedOutput : OutputBase
         return Commit(state);
     }
 
+    public bool SetRefresh(int refreshMilliHz)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(refreshMilliHz);
+        if (CurrentMode.RefreshMilliHz == refreshMilliHz)
+        {
+            return true;
+        }
+
+        using var state = new OutputState();
+        state.SetMode(CurrentMode with { RefreshMilliHz = refreshMilliHz });
+        return Commit(state);
+    }
+
     public override void RequestFrame()
     {
         if (Enabled)

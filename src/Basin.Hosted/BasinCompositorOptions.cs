@@ -21,4 +21,6 @@ public sealed record BasinCompositorOptions
     public Action<BasinCompositorHost, BasinServices>? ConfigureServices { get; init; }
 
     public bool Dmabuf { get; init; } = true;
+
+    public bool ColorManagement { get; init; }
 }

@@ -40,6 +40,37 @@ public sealed class EventLoopTests : IDisposable
     }
 
     [Fact]
+    public void Next_timer_delay_follows_arming_firing_and_removal()
+    {
+        Assert.Equal(-1, _loop.NextTimerDelayMs);
+        var fired = 0;
+        var near = _loop.AddTimer(() => fired++);
+        var far = _loop.AddTimer(() => { });
+        Assert.Equal(-1, _loop.NextTimerDelayMs);
+
+        far.UpdateTimer(60_000);
+        near.UpdateTimer(20);
+        Assert.InRange(_loop.NextTimerDelayMs, 0, 20);
+
+        near.UpdateTimer(0);
+        Assert.InRange(_loop.NextTimerDelayMs, 59_000, 60_000);
+
+        near.UpdateTimer(5);
+        var deadline = Environment.TickCount64 + 2000;
+        while (fired == 0 && Environment.TickCount64 < deadline)
+        {
+            _loop.Dispatch(10);
+        }
+
+        Assert.Equal(1, fired);
+        Assert.InRange(_loop.NextTimerDelayMs, 57_000, 60_000);
+
+        far.Remove();
+        near.Remove();
+        Assert.Equal(-1, _loop.NextTimerDelayMs);
+    }
+
+    [Fact]
     public void Deferred_destruction_runs_on_the_next_iteration()
     {
         var disposed = false;

@@ -121,6 +121,7 @@ public sealed partial class NestedShell : IDisposable
         _touchPointer = new TouchPointerDriver(host.Seat.Touch, new TouchPointerTarget(this)) { ClaimWithoutSurface = true };
         _gestureGrab = new TouchGestureGrab(this);
         host.Seat.SetCapability(SeatCapability.Touch, true);
+        AttachPointerConstraints();
         host.Shell.NewToplevel += OnNewToplevel;
         host.Shell.NewPopup += OnNewPopup;
         host.Seat.Pointer.CursorRequested += OnCursorRequested;
@@ -1395,6 +1396,7 @@ public sealed partial class NestedShell : IDisposable
         _host.Shell.NewToplevel -= OnNewToplevel;
         _host.Shell.NewPopup -= OnNewPopup;
         _host.Seat.Pointer.CursorRequested -= OnCursorRequested;
+        DetachPointerConstraints();
         foreach (var window in _windows.ToArray())
         {
             window.Unmap();

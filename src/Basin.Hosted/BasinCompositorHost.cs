@@ -46,7 +46,15 @@ public sealed class BasinCompositorHost : IDisposable
             services = services.Use<Capabilities.ITextInputMethod>(textInput);
         }
 
-        services = services.Install(DesktopPack.For(options.AppName)).Without("wp_color_manager_v1");
+        if (options.ColorManagement)
+        {
+            Color = new ColorCapabilityPack(Layout, Renderer);
+            services = services.With(Color).Install(DesktopPack.For(options.AppName));
+        }
+        else
+        {
+            services = services.Install(DesktopPack.For(options.AppName)).Without("wp_color_manager_v1");
+        }
         if (options.ExtraModules is { } extras)
         {
             foreach (var module in extras)
@@ -68,6 +76,12 @@ public sealed class BasinCompositorHost : IDisposable
             Display.Dispose();
             Renderer.Dispose();
             throw;
+        }
+
+        Services.Find<ShmGlobal>()?.Advertise(Renderer.ShmTextureFormats);
+        if (Color is { } color && !color.Attach(Services, Scene))
+        {
+            Log.Info($"color management was asked for and the color manager is absent");
         }
 
         Shell = Services.Require<XdgShell>();
@@ -102,6 +116,7 @@ public sealed class BasinCompositorHost : IDisposable
         if (options.Dmabuf)
         {
             Renderer.EglAvailable += OnEglAvailable;
+            Renderer.DmabufAvailable += AdvertiseDmabuf;
         }
     }
 
@@ -116,7 +131,16 @@ public sealed class BasinCompositorHost : IDisposable
             return;
         }
 
-        var node = import.RenderNodePath ?? "/dev/dri/renderD128";
+        AdvertiseDmabuf(import.Formats, import.RenderNodePath ?? "/dev/dri/renderD128");
+    }
+
+    private void AdvertiseDmabuf(DrmFormatSet formats, string node)
+    {
+        if (_disposed || _dmabuf is not null)
+        {
+            return;
+        }
+
         if (!File.Exists(node))
         {
             Log.Info($"no render node for dmabuf feedback; the global stays withheld");
@@ -126,13 +150,37 @@ public sealed class BasinCompositorHost : IDisposable
         _dmabuf = new LinuxDmabufGlobal(
             Display,
             Services.Require<ClientBufferRegistry>(),
-            import.Formats,
+            formats,
             node,
             compositor: Services.Require<CompositorGlobal>());
-        Log.Info($"dmabuf advertised with {import.Formats.Count} format rows on {node}");
+        Log.Info($"dmabuf advertised with {formats.Count} format rows on {node}");
     }
 
     public HostScreens Screens { get; }
+
+    public ColorCapabilityPack? Color { get; }
+
+    internal void NotifyOutputAdvertised(OutputGlobal global, HostedOutput output)
+    {
+        if (Color is not { } color)
+        {
+            return;
+        }
+
+        Scene.SceneOutput? scene = null;
+        foreach (var view in _views)
+        {
+            if (ReferenceEquals(view.Output, output))
+            {
+                scene = view.SceneOutput;
+                break;
+            }
+        }
+
+        color.AddOutput(global, output, scene);
+    }
+
+    internal void NotifyOutputWithdrawn(OutputGlobal global) => Color?.RemoveOutput(global);
 
     public WlServerDisplay Display { get; }
 
@@ -166,6 +214,30 @@ public sealed class BasinCompositorHost : IDisposable
         Keys.Keymap = Seat.Keyboard.Keymap;
         Keys.Layout = Seat.Keyboard.State?.SerializeLayout(Xkb.XkbStateComponent.LayoutEffective) ?? 0;
         Keys.Type(text, (uint)Environment.TickCount);
+    }
+
+    public event Action<bool>? PointerLockRequested;
+
+    public event Action<double, double>? PointerWarpRequested;
+
+    public bool IsPointerLockRequested { get; private set; }
+
+    public void RequestPointerLock(bool locked)
+    {
+        _thread.Assert();
+        if (IsPointerLockRequested == locked)
+        {
+            return;
+        }
+
+        IsPointerLockRequested = locked;
+        PointerLockRequested?.Invoke(locked);
+    }
+
+    public void RequestPointerWarp(double layoutX, double layoutY)
+    {
+        _thread.Assert();
+        PointerWarpRequested?.Invoke(layoutX, layoutY);
     }
 
     public void CancelTouch()
@@ -267,6 +339,14 @@ public sealed class BasinCompositorHost : IDisposable
     }
 
     private volatile bool _hostKeymapDirty;
+
+    public void NotifyHostKeymapChanged()
+    {
+        if (Seat.Keyboard.KeymapSource is global::Basin.Seat.HostKeymapSource)
+        {
+            _hostKeymapDirty = true;
+        }
+    }
 
     public bool EnterFrame(TimeSpan stamp)
     {

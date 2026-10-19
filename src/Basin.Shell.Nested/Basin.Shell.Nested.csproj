@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Basin.Tests" />
+    <InternalsVisibleTo Include="SdlComp.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +24,10 @@
     <ProjectReference Include="../Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <ProjectReference Include="../Basin.Frames.Metacity/Basin.Frames.Metacity.csproj" />
     <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Themes/metacity-theme-1.xml" LogicalName="basin-nested-metacity-theme-1.xml" />
   </ItemGroup>
 
 </Project>

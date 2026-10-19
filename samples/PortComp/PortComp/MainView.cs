@@ -1,4 +1,5 @@
 using Avalonia;
+using Basin;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Threading;
@@ -23,7 +24,7 @@ public sealed class MainView : UserControl
     private readonly ComboBox _mode;
     private readonly SelectableTextBlock _hint;
     private PortCompSession? _session;
-    private PortCompListenSession? _listening;
+    private WaypipeListenSession? _listening;
     private bool _connecting;
     private bool _shutdown;
 
@@ -125,7 +126,7 @@ public sealed class MainView : UserControl
         set => _mode.SelectedIndex = value ? 1 : 0;
     }
 
-    public PortCompListenSession? ListenSession => _listening;
+    public WaypipeListenSession? ListenSession => _listening;
 
     private void OnModeChanged()
     {
@@ -320,7 +321,16 @@ public sealed class MainView : UserControl
         try
         {
             var vm = PortCompApp.StartupHyperVVm is { Length: > 0 } word ? HyperVVm.Parse(word) : (HyperVVm?)null;
-            var session = await PortCompListenSession.StartAsync(host, _output.Post, endpoint, vm, PortCompShell.ChannelOptions());
+            var session = await WaypipeListenSession.StartAsync(
+                host.Display,
+                host.Services.Require<ClientBufferRegistry>(),
+                host.Services.Require<CompositorGlobal>(),
+                () => host.Dmabuf is not null,
+                host.Loop,
+                _output.Post,
+                endpoint,
+                vm,
+                PortCompShell.ChannelOptions());
             session.Changed += () => Dispatcher.UIThread.Post(() =>
             {
                 if (ReferenceEquals(_listening, session))

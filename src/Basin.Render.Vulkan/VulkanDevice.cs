@@ -35,11 +35,11 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
 
     public VulkanStagingPool Staging { get; private set; } = null!;
 
-    public VulkanDevice(string drmNodePath, string[]? optionalExtensions = null)
+    public VulkanDevice(string drmNodePath, string[]? optionalExtensions = null, string[]? instanceExtensions = null)
     {
         DevicePath = drmNodePath;
         _nodeFd = Libc.Open(drmNodePath, Libc.ORdwr);
-        _instance = new VulkanInstance();
+        _instance = new VulkanInstance(instanceExtensions);
         Api = _instance.Api;
         Instance = _instance.Instance;
 

@@ -15,6 +15,7 @@
     <Project Path="samples/InletWm/InletWm.csproj" />
     <Project Path="samples/MauiComp/MauiComp.csproj" />
     <Project Path="samples/RetroWm/RetroWm.csproj" />
+    <Project Path="samples/SdlComp/SdlComp.csproj" />
     <Project Path="samples/TinyComp/TinyComp.csproj" />
     <Project Path="samples/TinyWl/TinyWl.csproj" />
     <Project Path="samples/DungeonWm/DungeonWm.csproj" />
@@ -67,6 +68,8 @@
     <Project Path="src/Basin.Avalonia/Basin.Avalonia.csproj" />
     <Project Path="src/Basin.Avalonia.View/Basin.Avalonia.View.csproj" />
     <Project Path="src/Basin.Hosted/Basin.Hosted.csproj" />
+    <Project Path="src/Basin.Sdl/Basin.Sdl.csproj" />
+    <Project Path="src/Basin.Sdl.View/Basin.Sdl.View.csproj" />
     <Project Path="src/Basin.Rashader/Basin.Rashader.csproj" />
     <Project Path="src/Basin.Rashader.Gl/Basin.Rashader.Gl.csproj" />
     <Project Path="src/Basin.Rashader.Vulkan/Basin.Rashader.Vulkan.csproj" />
@@ -134,6 +137,7 @@
     <Project Path="tests/BasinMcp.Tests/BasinMcp.Tests.csproj" />
     <Project Path="tests/MauiComp.Tests/MauiComp.Tests.csproj" />
     <Project Path="tests/BasinGreeter.Tests/BasinGreeter.Tests.csproj" />
+    <Project Path="tests/SdlComp.Tests/SdlComp.Tests.csproj" />
     <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
     <Project Path="tests/EightWm.Tests/EightWm.Tests.csproj" />
     <Project Path="tests/System7Wm.Tests/System7Wm.Tests.csproj" />

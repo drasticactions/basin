@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Sdl</PackageId>
+    <RootNamespace>Basin.Sdl</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>SDL3 plumbing for a Basin compositor that an SDL window hosts.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Sdl.View" />
+    <InternalsVisibleTo Include="SdlComp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
+    <ProjectReference Include="../Basin.Hosted/Basin.Hosted.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
+    <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" />
+    <PackageReference Include="SDL3-CS" />
+    <PackageReference Include="SDL3-CS.Linux" />
+    <PackageReference Include="SDL3-CS.MacOS" />
+    <PackageReference Include="SDL3-CS.Windows" />
+  </ItemGroup>
+
+</Project>

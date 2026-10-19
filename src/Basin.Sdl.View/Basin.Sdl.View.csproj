@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <PackageId>Basin.Sdl.View</PackageId>
+    <RootNamespace>Basin.Sdl</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>SDL windows that show the outputs of a Basin compositor.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SdlComp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Backend.Hosted/Basin.Backend.Hosted.csproj" />
+    <ProjectReference Include="../Basin.Hosted/Basin.Hosted.csproj" />
+    <ProjectReference Include="../Basin.Sdl/Basin.Sdl.csproj" />
+    <ProjectReference Include="../Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SDL3-CS" />
+  </ItemGroup>
+
+</Project>

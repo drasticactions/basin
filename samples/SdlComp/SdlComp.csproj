@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>sdl-comp</AssemblyName>
+    <RootNamespace>SdlComp</RootNamespace>
+    <BasinPlatforms>linux;macos;windows</BasinPlatforms>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SdlComp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Hosted/Basin.Hosted.csproj" />
+    <ProjectReference Include="../../src/Basin.Ipc/Basin.Ipc.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Nested/Basin.Shell.Nested.csproj" />
+    <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
+    <ProjectReference Include="../../src/Basin.Sdl/Basin.Sdl.csproj" />
+    <ProjectReference Include="../../src/Basin.Sdl.View/Basin.Sdl.View.csproj" />
+  </ItemGroup>
+
+</Project>

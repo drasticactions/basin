@@ -12,6 +12,8 @@
     <InternalsVisibleTo Include="Basin.Avalonia" />
     <InternalsVisibleTo Include="Basin.Avalonia.View" />
     <InternalsVisibleTo Include="Basin.Shell.Nested" />
+    <InternalsVisibleTo Include="Basin.Sdl" />
+    <InternalsVisibleTo Include="Basin.Sdl.View" />
     <InternalsVisibleTo Include="Basin.Tests" />
     <InternalsVisibleTo Include="Waylonia.Tests" />
     <InternalsVisibleTo Include="Waylonia.Core.Tests" />
