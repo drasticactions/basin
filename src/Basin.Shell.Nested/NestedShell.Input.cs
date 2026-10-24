@@ -1405,5 +1405,7 @@ public sealed partial class NestedShell
         {
             ClientCursorChanged?.Invoke(ShellCursor.Image(surface, hotspotX, hotspotY));
         }
+
+        surface.SendFrameDone((uint)Environment.TickCount);
     }
 }

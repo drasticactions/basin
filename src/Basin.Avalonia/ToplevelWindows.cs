@@ -352,7 +352,9 @@ public sealed class ToplevelWindows : IDisposable
 
     private void ApplyCursorSurface(int id, Surface surface, int hotspotX, int hotspotY)
     {
-        if (AvaloniaCursor.FromSurface(surface, hotspotX, hotspotY) is not { } cursor)
+        var cursor = AvaloniaCursor.FromSurface(surface, hotspotX, hotspotY);
+        surface.SendFrameDone((uint)Environment.TickCount);
+        if (cursor is null)
         {
             return;
         }
