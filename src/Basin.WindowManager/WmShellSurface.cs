@@ -6,7 +6,7 @@ namespace Basin.WindowManager;
 /// <summary>
 /// A surface that the manager owns and draws itself, for example a bar or a menu, with its own node in the render list.
 /// </summary>
-public sealed class WmShellSurface : IDisposable
+public sealed class WmShellSurface : IDisposable, ISyncedSurface
 {
     private readonly RiverWindowManager _wm;
     private readonly RiverShellSurfaceV1 _proxy;
@@ -32,7 +32,7 @@ public sealed class WmShellSurface : IDisposable
     public WmNode Node => _node ??= new WmNode(_wm, _proxy.GetNode());
 
     /// <summary>
-    /// Holds the surface's next commit until render finish. The caller must then call <see cref="Commit"/> before the render sequence ends.
+    /// Holds the surface's next commit until render finish. The caller must then call <see cref="Commit"/> before the render sequence ends. Otherwise the library commits the surface at render finish and throws.
     /// </summary>
     /// <exception cref="InvalidOperationException">No manage or render sequence is in progress.</exception>
     public void SyncNextCommit()

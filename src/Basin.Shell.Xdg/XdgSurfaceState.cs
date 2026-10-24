@@ -239,6 +239,14 @@ public sealed class XdgSurfaceState
             participant.Ready();
         }
 
+        if (_mapped && !Surface.IsMapped)
+        {
+            ReleaseParticipant();
+            _pendingConfigures.Clear();
+            _initialConfigureSent = false;
+            _configureAcked = false;
+        }
+
         SetMapped(Surface.IsMapped);
         (Role as XdgToplevelWindow)?.AdoptCommittedSize();
         Committed?.Invoke();

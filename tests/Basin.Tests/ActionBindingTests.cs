@@ -121,6 +121,39 @@ public sealed class ActionBindingTests
         Assert.Equal(0, registry.Count);
     }
 
+    [Fact]
+    public void Disposing_the_manager_removes_every_armed_shortcut_from_the_registry()
+    {
+        using var host = new CompositorTestHost();
+        var registry = new PreferredTriggerShortcuts();
+        var manager = new ActionBindingManager(host.Display, registry, new FixedPolicy(true));
+        Basin.Hypr.Protocol.GamescopeActionBindingManager? proxy = null;
+        var wlRegistry = host.Client.Display.GetRegistry();
+        wlRegistry.Global += (_, e) =>
+        {
+            if (e.Interface == "gamescope_action_binding_manager")
+            {
+                proxy = wlRegistry.Bind<Basin.Hypr.Protocol.GamescopeActionBindingManager>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(proxy);
+        var binding = proxy!.CreateActionBinding();
+        binding.AddKeyboardTrigger(BitConverter.GetBytes(SuperL).Concat(BitConverter.GetBytes(LowerA)).ToArray());
+        binding.AddKeyboardTrigger(BitConverter.GetBytes(LowerA));
+        binding.Arm(0);
+        host.PumpToServer();
+        Assert.Equal(2, manager.Armed);
+        Assert.Equal(2, registry.Count);
+
+        manager.Dispose();
+
+        Assert.Equal(0, manager.Armed);
+        Assert.Equal(0, registry.Count);
+        binding.Dispose();
+        host.PumpToServer();
+    }
+
     private sealed class FixedPolicy(bool allowed) : IActionBindingPolicy
     {
         public bool Allows(WlClient client) => allowed;

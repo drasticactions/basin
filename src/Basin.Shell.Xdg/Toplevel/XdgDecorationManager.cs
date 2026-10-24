@@ -49,12 +49,14 @@ public sealed class XdgDecorationManager : IDisposable
     public event Action<XdgToplevelWindow, DecorationMode?>? PreferenceChanged;
 
     /// <summary>
-    /// Finds the mode that the decoration object of a toplevel decided.
+    /// Finds the mode that the decoration object of a toplevel decided, or the mode it left behind.
     /// </summary>
     /// <param name="toplevel">The toplevel.</param>
-    /// <returns>The mode, or <see cref="DecorationMode.ClientSide"/> when the toplevel has no decoration object.</returns>
+    /// <returns>The decoration object's mode. With no decoration object, the mode that a destroyed one retained until the next commit, else <see cref="DecorationMode.ClientSide"/>.</returns>
     public DecorationMode ModeOf(XdgToplevelWindow toplevel) =>
-        _decorations.TryGetValue(toplevel, out var decoration) ? decoration.Mode : DecorationMode.ClientSide;
+        _decorations.TryGetValue(toplevel, out var decoration) ? decoration.Mode
+        : _retained.TryGetValue(toplevel, out var retained) ? retained.Mode
+        : DecorationMode.ClientSide;
 
     /// <summary>
     /// Finds the client's preference for a toplevel.

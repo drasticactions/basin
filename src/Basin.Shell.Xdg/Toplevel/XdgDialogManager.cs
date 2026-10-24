@@ -29,7 +29,7 @@ public sealed class XdgDialogManager : IDisposable
     }
 
     /// <summary>
-    /// Occurs when a client sets or unsets the modal hint of a toplevel. The arguments are the toplevel and <see langword="true"/> for modal.
+    /// Occurs when a client sets or unsets the modal hint of a toplevel. The arguments are the toplevel and <see langword="true"/> for modal. It never occurs for a destroyed toplevel, because its dialog object is then inert.
     /// </summary>
     public event Action<XdgToplevelWindow, bool>? ModalChanged;
 
@@ -55,9 +55,36 @@ public sealed class XdgDialogManager : IDisposable
                 return;
             }
 
-            dialog.SetModal += (_, _) => ModalChanged?.Invoke(toplevel, true);
-            dialog.UnsetModal += (_, _) => ModalChanged?.Invoke(toplevel, false);
-            dialog.Destroyed += (_, _) => _dialogs.Remove(toplevel);
+            var inert = false;
+            void OnToplevelDestroyed()
+            {
+                inert = true;
+                _dialogs.Remove(toplevel);
+            }
+
+            toplevel.Destroyed += OnToplevelDestroyed;
+            dialog.SetModal += (_, _) =>
+            {
+                if (!inert)
+                {
+                    ModalChanged?.Invoke(toplevel, true);
+                }
+            };
+            dialog.UnsetModal += (_, _) =>
+            {
+                if (!inert)
+                {
+                    ModalChanged?.Invoke(toplevel, false);
+                }
+            };
+            dialog.Destroyed += (_, _) =>
+            {
+                if (!inert)
+                {
+                    toplevel.Destroyed -= OnToplevelDestroyed;
+                    _dialogs.Remove(toplevel);
+                }
+            };
         };
     }
 }

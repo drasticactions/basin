@@ -119,7 +119,7 @@ public sealed class DecorationSurface : IDisposable
     public void SetOffset(int x, int y) => _decoration.SetOffset(x, y);
 
     /// <summary>
-    /// Holds the next commit until render finish, as <see cref="WmDecoration.SyncNextCommit"/> does. The caller must commit before the sequence ends.
+    /// Holds the next commit until render finish, as <see cref="WmDecoration.SyncNextCommit"/> does. The caller must call <see cref="Commit()"/> or <see cref="Unmap"/> before the sequence ends.
     /// </summary>
     /// <exception cref="InvalidOperationException">No manage or render sequence is in progress.</exception>
     public void SyncNextCommit() => _decoration.SyncNextCommit();
@@ -203,12 +203,12 @@ public sealed class DecorationSurface : IDisposable
     public Span<byte> Bytes => _slots.CurrentBytes();
 
     /// <summary>
-    /// Attaches the prepared buffer, damages all of it and commits. It does nothing before the first <see cref="Prepare"/>.
+    /// Attaches the prepared buffer, damages all of it and commits through <see cref="WmDecoration.Commit"/>, which clears a <see cref="SyncNextCommit"/> obligation. It does nothing before the first <see cref="Prepare"/>.
     /// </summary>
     public void Commit() => Commit([new Rect(0, 0, BufferWidth, BufferHeight)]);
 
     /// <summary>
-    /// Attaches the prepared buffer, damages the given rectangles and commits. It does nothing before the first <see cref="Prepare"/>.
+    /// Attaches the prepared buffer, damages the given rectangles and commits through <see cref="WmDecoration.Commit"/>, which clears a <see cref="SyncNextCommit"/> obligation. It does nothing before the first <see cref="Prepare"/>.
     /// </summary>
     /// <param name="damage">The changed rectangles in buffer pixels.</param>
     public void Commit(ReadOnlySpan<Rect> damage)
@@ -224,18 +224,18 @@ public sealed class DecorationSurface : IDisposable
             _surface.DamageBuffer(rect.X, rect.Y, rect.Width, rect.Height);
         }
 
-        _surface.Commit();
+        _decoration.Commit();
         _slots.MarkAttached();
         Mapped = true;
     }
 
     /// <summary>
-    /// Attaches no buffer and commits, which hides the decoration.
+    /// Attaches no buffer and commits through <see cref="WmDecoration.Commit"/>, which hides the decoration.
     /// </summary>
     public void Unmap()
     {
         _surface.Attach(null, 0, 0);
-        _surface.Commit();
+        _decoration.Commit();
         Mapped = false;
     }
 

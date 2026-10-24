@@ -77,13 +77,14 @@ public sealed class WmBindingTable<TMode>
     /// Binds a keysym name, as <see cref="Bind(WmSeat, uint, Modifiers, Action, TMode?)"/> does.
     /// </summary>
     /// <param name="seat">The seat whose keyboard the binding watches.</param>
-    /// <param name="keysym">The keysym name. An unknown name binds keysym zero and does not throw.</param>
+    /// <param name="keysym">The keysym name.</param>
     /// <param name="modifiers">The modifiers that must be held.</param>
     /// <param name="pressed">The action to run on a press.</param>
     /// <param name="mode">The owning mode, or <see langword="null"/> for the default mode.</param>
     /// <returns>The binding, or <see langword="null"/> when <see cref="Shadowed"/> skipped it.</returns>
+    /// <exception cref="ArgumentException">No keysym has the name.</exception>
     public KeyBinding? Bind(WmSeat seat, string keysym, Modifiers modifiers, Action pressed, TMode? mode = null) =>
-        Bind(seat, Keysym.FromName(keysym), modifiers, pressed, mode);
+        Bind(seat, Keysym.Require(keysym), modifiers, pressed, mode);
 
     /// <summary>
     /// Binds a keysym that runs an action and then asks for a manage sequence. A binding of the live mode is enabled now, so call it in a manage sequence.
@@ -186,7 +187,7 @@ public sealed class WmBindingTable<TMode>
     }
 
     /// <summary>
-    /// Destroys every binding and forgets the armed seats, so the next <see cref="Arm"/> defines all bindings again.
+    /// Destroys every binding and forgets the armed seats, so the next <see cref="Arm"/> defines all bindings again. The destroyed bindings leave the list of <see cref="WmBindings"/>, so a later submap does not touch them.
     /// </summary>
     public void Reset()
     {

@@ -8,17 +8,19 @@ namespace Basin.WindowManager;
 public sealed class WmReloadSignal : IDisposable
 {
     private readonly RiverWindowManager _wm;
-    private readonly PosixSignalRegistration? _registration;
-    private readonly IWmEventSource? _source;
-    private readonly int _readFd = -1;
-    private readonly int _writeFd = -1;
+    private readonly PosixSignalRegistration _registration;
+    private readonly IWmEventSource _source;
+    private readonly int _readFd;
+    private readonly int _writeFd;
     private bool _pending;
+    private bool _disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WmReloadSignal"/> class. It handles SIGHUP in place of the default action. When the pipe cannot be made, the instance does nothing.
+    /// Initializes a new instance of the <see cref="WmReloadSignal"/> class. It handles SIGHUP in place of the default action, which ends the process.
     /// </summary>
     /// <param name="wm">The manager whose loop watches the pipe.</param>
     /// <exception cref="ArgumentNullException"><paramref name="wm"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IOException">The pipe cannot be made. SIGHUP then keeps its default action.</exception>
     public WmReloadSignal(RiverWindowManager wm)
     {
         ArgumentNullException.ThrowIfNull(wm);
@@ -31,7 +33,9 @@ public sealed class WmReloadSignal : IDisposable
             {
                 if (pipe2(pair, 0x80000 | 0x800) != 0)
                 {
-                    return;
+                    var errno = Marshal.GetLastPInvokeError();
+                    throw new IOException(
+                        $"the SIGHUP reload pipe cannot be made: {Marshal.GetPInvokeErrorMessage(errno)} (errno {errno})");
                 }
             }
         }
@@ -87,21 +91,20 @@ public sealed class WmReloadSignal : IDisposable
     }
 
     /// <summary>
-    /// Removes the fd watch, restores the signal's default handling and closes the pipe.
+    /// Removes the fd watch, restores the signal's default handling and closes the pipe. A second call does nothing.
     /// </summary>
     public void Dispose()
     {
-        _source?.Remove();
-        _registration?.Dispose();
-        if (_readFd >= 0)
+        if (_disposed)
         {
-            _ = close(_readFd);
+            return;
         }
 
-        if (_writeFd >= 0)
-        {
-            _ = close(_writeFd);
-        }
+        _disposed = true;
+        _source.Remove();
+        _registration.Dispose();
+        _ = close(_readFd);
+        _ = close(_writeFd);
     }
 
     [DllImport("libc", SetLastError = true)]

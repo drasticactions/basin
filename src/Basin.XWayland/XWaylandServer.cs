@@ -128,7 +128,7 @@ public sealed unsafe class XWaylandServer : IDisposable
     public string DisplayName { get; }
 
     /// <summary>
-    /// Gets the number of times the process exited by itself. A normal exit after the last X client leaves also counts.
+    /// Gets the number of times the process crashed: it ended on a signal or with a non-zero status. A clean exit at the server reset after the last client, the window manager included, does not count.
     /// </summary>
     public int CrashCount { get; private set; }
 
@@ -508,11 +508,19 @@ public sealed unsafe class XWaylandServer : IDisposable
 
     private void OnExited()
     {
-        int status;
-        _ = waitpid(_pid, &status, 1 );
-        Log.Warn($"Xwayland {DisplayName} exited; relaunching on next X client");
+        var status = 0;
+        var reaped = waitpid(_pid, &status, 1) == _pid;
+        if (reaped && (status & 0x7f) == 0 && ((status >> 8) & 0xff) == 0)
+        {
+            Log.Info($"Xwayland {DisplayName} exited after its last client; relaunching on next X client");
+        }
+        else
+        {
+            Log.Warn($"Xwayland {DisplayName} crashed (wait status 0x{status:x}); relaunching on next X client");
+            CrashCount++;
+        }
+
         TearDownProcessState();
-        CrashCount++;
         Exited?.Invoke();
         if (!_disposed)
         {

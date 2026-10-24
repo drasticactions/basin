@@ -24,6 +24,45 @@ public sealed class WmCapabilitiesTests
         Assert.Equal([], CapabilitiesSent(XdgWmCapabilities.None));
     }
 
+    [Fact]
+    public void A_change_after_the_first_configure_is_sent_again_before_a_configure()
+    {
+        using var host = new CompositorTestHost();
+        var client = host.Client;
+        XdgToplevelWindow? server = null;
+        host.Shell.NewToplevel += toplevel => server = toplevel;
+
+        var surface = client.Compositor.CreateSurface();
+        var xdgSurface = client.WmBase!.GetXdgSurface(surface);
+        var toplevelProxy = xdgSurface.GetToplevel();
+        var events = new List<string>();
+        uint serial = 0;
+        toplevelProxy.WmCapabilitiesEvent += (_, e) =>
+            events.Add("caps:" + string.Join(",", MemoryMarshal.Cast<byte, uint>(e.Capabilities).ToArray()));
+        xdgSurface.Configure += (_, e) =>
+        {
+            serial = e.Serial;
+            events.Add("configure");
+        };
+        surface.Commit();
+        host.PumpUntil(() => serial != 0);
+        xdgSurface.AckConfigure(serial);
+        Assert.Equal(["caps:1,2,3,4", "configure"], events);
+
+        events.Clear();
+        server!.WmCapabilities = XdgWmCapabilities.Fullscreen;
+        host.PumpUntil(() => events.Count >= 2);
+        Assert.Equal(["caps:3", "configure"], events);
+
+        events.Clear();
+        server.WmCapabilities = XdgWmCapabilities.Fullscreen;
+        host.PumpToClient();
+        host.PumpToClient();
+        Assert.Empty(events);
+
+        surface.Destroy();
+    }
+
     private static uint[] CapabilitiesSent(XdgWmCapabilities? wanted)
     {
         using var host = new CompositorTestHost();

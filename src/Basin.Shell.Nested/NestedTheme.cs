@@ -10,17 +10,25 @@ public static class NestedTheme
     private const string ResourceName = "basin-nested-metacity-theme-1.xml";
 
     /// <summary>
-    /// The name that <see cref="Load"/> gives to the embedded theme.
+    /// The name that <see cref="Always"/> gives to the embedded theme.
     /// </summary>
     public const string Name = "Nested";
 
     /// <summary>
-    /// Parses the embedded theme as a fallback for <see cref="MetacityFrames.LoadTheme"/>.
-    /// It ignores the requested name and always returns the embedded theme named <see cref="Name"/>.
+    /// Parses the embedded theme as the catch-all fallback for <see cref="MetacityFrames.LoadTheme"/>. It answers every name, so it must be the last fallback.
+    /// It returns the embedded theme named <see cref="Name"/>, and logs at info the name it stands in for.
     /// </summary>
-    /// <param name="name">The requested theme name. The method does not read it.</param>
+    /// <param name="name">The requested theme name, which the log names.</param>
     /// <returns>The embedded theme. The value is never <see langword="null"/>.</returns>
-    public static MetacityTheme? Load(string name) => Create(Name);
+    public static MetacityTheme? Always(string name)
+    {
+        if (name != Name)
+        {
+            NestedLog.Log.Info($"theme '{name}' not found; using the built-in '{Name}' theme");
+        }
+
+        return Create(Name);
+    }
 
     /// <summary>
     /// Parses the embedded theme and gives it a name.

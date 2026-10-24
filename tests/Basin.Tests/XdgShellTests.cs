@@ -7,6 +7,26 @@ namespace Basin.Tests;
 public sealed class XdgShellTests
 {
     [Fact]
+    public void A_toplevel_unmapped_by_a_null_buffer_remaps_through_a_new_initial_configure()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        var first = window.LastConfigureSerial;
+
+        window.Surface.Attach(null, 0, 0);
+        window.Surface.Commit();
+        host.PumpUntil(() => !window.ServerToplevel.IsMapped);
+
+        window.Surface.Commit();
+        host.PumpUntil(() => window.LastConfigureSerial != first);
+
+        window.Surface.Attach(window.Buffer.Proxy, 0, 0);
+        window.Surface.Damage(0, 0, 60, 50);
+        window.Surface.Commit();
+        host.PumpUntil(() => window.ServerToplevel.IsMapped);
+    }
+
+    [Fact]
     public void Toplevel_maps_through_the_configure_contract()
     {
         using var host = new CompositorTestHost();

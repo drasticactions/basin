@@ -66,6 +66,9 @@ public sealed class XdgToplevelDragTests
         dragged.Surface.Commit();
         host.PumpUntil(() => manager.Attachment is null);
 
+        var unmappedSerial = dragged.LastConfigureSerial;
+        dragged.Surface.Commit();
+        host.PumpUntil(() => dragged.LastConfigureSerial != unmappedSerial);
         dragged.Surface.Attach(dragged.Buffer.Proxy, 0, 0);
         dragged.Surface.Commit();
         host.PumpToServer();

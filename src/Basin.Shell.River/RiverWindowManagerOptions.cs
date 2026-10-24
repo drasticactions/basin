@@ -22,10 +22,4 @@ public sealed record RiverWindowManagerOptions
     /// When it is <see langword="false"/>, the compositor only counts and reports the timeout.
     /// </summary>
     public bool DisconnectUnresponsiveManager { get; init; }
-
-    /// <summary>
-    /// Gets a value indicating whether new windows get a size while no window manager is bound.
-    /// No code reads this value at this time.
-    /// </summary>
-    public bool ManageWithoutWindowManager { get; init; } = true;
 }

@@ -486,6 +486,43 @@ public sealed class BellDecorationDialogTests
     }
 
     [Fact]
+    public void A_dialog_of_a_destroyed_toplevel_is_inert()
+    {
+        using var host = new CompositorTestHost();
+        using var dialogs = new XdgDialogManager(host.Display);
+        var window = MappedToplevel.Map(host, host.Client);
+
+        var modal = new List<bool>();
+        dialogs.ModalChanged += (_, isModal) => modal.Add(isModal);
+
+        Basin.Shell.Xdg.Protocol.XdgWmDialogV1? dialogProxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "xdg_wm_dialog_v1")
+            {
+                dialogProxy = registry.Bind<Basin.Shell.Xdg.Protocol.XdgWmDialogV1>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(dialogProxy);
+
+        var dialog = dialogProxy!.GetXdgDialog(window.Toplevel);
+        dialog.SetModal();
+        host.PumpUntil(() => modal.Count == 1);
+
+        window.Toplevel.Destroy();
+        dialog.SetModal();
+        dialog.UnsetModal();
+        host.PumpToServer();
+        host.PumpToServer();
+
+        Assert.Equal([true], modal);
+        dialog.Destroy();
+        host.PumpToServer();
+    }
+
+    [Fact]
     public void Dialog_tag_and_icon_events_reach_the_consumer()
     {
         using var host = new CompositorTestHost();

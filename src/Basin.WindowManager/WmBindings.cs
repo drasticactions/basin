@@ -70,7 +70,10 @@ public sealed class WmBindings : IDisposable
         var bindings = Require();
         var binding = new KeyBinding(
             _wm,
-            bindings.GetXkbBinding(seat.Proxy, keysym, (RiverSeatV1.Modifiers)modifiers));
+            this,
+            bindings.GetXkbBinding(seat.Proxy, keysym, (RiverSeatV1.Modifiers)modifiers),
+            keysym,
+            modifiers);
         if (pressed is not null)
         {
             binding.Pressed += pressed;
@@ -142,7 +145,7 @@ public sealed class WmBindings : IDisposable
     }
 
     /// <summary>
-    /// Enters a submap on a seat. It enables the given bindings, disables every other enabled key binding, withholds the next key, and exits any submap open on the seat.
+    /// Enters a submap on a seat. It enables the given bindings, disables every other enabled key binding that is not destroyed, withholds the next key, and exits any submap open on the seat.
     /// </summary>
     /// <param name="seat">The seat to act on.</param>
     /// <param name="bindings">The submap's bindings. Each must come from this object.</param>
@@ -205,6 +208,10 @@ public sealed class WmBindings : IDisposable
         _seats.Clear();
         _bindings?.Destroy();
     }
+
+    internal IReadOnlyList<KeyBinding> KeyBindings => _keyBindings;
+
+    internal void Forget(KeyBinding binding) => _keyBindings.Remove(binding);
 
     internal void OnSubmapExited(WmSeat seat, WmSubmap submap)
     {

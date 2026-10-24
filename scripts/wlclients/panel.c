@@ -12,7 +12,9 @@
 /* Map one solid layer-shell panel on an edge with an exclusive zone, so a
  * test can see how the compositor lays windows out around a dock or a bar.
  * --blink N unmaps the panel with a null-buffer commit every N seconds and
- * maps it again with a commit without a buffer, on the same layer surface. */
+ * maps it again with a commit without a buffer, on the same layer surface.
+ * "center SIZE" anchors all four edges with a SIZE*2 x SIZE surface and no
+ * exclusive zone; layer-shell says the compositor centers it. */
 
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
@@ -121,18 +123,20 @@ static const struct wl_registry_listener registry_listener = { global_add, globa
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(stderr, "usage: panel top|bottom|left|right SIZE [keyboard] [--blink SECONDS]\n");
+        fprintf(stderr, "usage: panel top|bottom|left|right|center SIZE [keyboard] [--blink SECONDS]\n");
         return 2;
     }
 
     uint32_t edge;
     uint32_t across;
     int horizontal;
-    if (strcmp(argv[1], "top") == 0) { edge = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP; horizontal = 1; }
+    int centered = 0;
+    if (strcmp(argv[1], "center") == 0) { edge = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM; horizontal = 1; centered = 1; }
+    else if (strcmp(argv[1], "top") == 0) { edge = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP; horizontal = 1; }
     else if (strcmp(argv[1], "bottom") == 0) { edge = ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM; horizontal = 1; }
     else if (strcmp(argv[1], "left") == 0) { edge = ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT; horizontal = 0; }
     else if (strcmp(argv[1], "right") == 0) { edge = ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT; horizontal = 0; }
-    else { fprintf(stderr, "panel: %s is not top|bottom|left|right\n", argv[1]); return 2; }
+    else { fprintf(stderr, "panel: %s is not top|bottom|left|right|center\n", argv[1]); return 2; }
     across = horizontal
         ? ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT
         : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
@@ -151,8 +155,12 @@ int main(int argc, char **argv)
         layer_shell, surface, NULL, ZWLR_LAYER_SHELL_V1_LAYER_TOP, "panel");
     zwlr_layer_surface_v1_add_listener(layer, &layer_listener, NULL);
     zwlr_layer_surface_v1_set_anchor(layer, edge | across);
-    zwlr_layer_surface_v1_set_size(layer, horizontal ? 0 : (uint32_t)size, horizontal ? (uint32_t)size : 0);
-    zwlr_layer_surface_v1_set_exclusive_zone(layer, size);
+    if (centered) {
+        zwlr_layer_surface_v1_set_size(layer, (uint32_t)size * 2, (uint32_t)size);
+    } else {
+        zwlr_layer_surface_v1_set_size(layer, horizontal ? 0 : (uint32_t)size, horizontal ? (uint32_t)size : 0);
+        zwlr_layer_surface_v1_set_exclusive_zone(layer, size);
+    }
     int keyboard_wanted = 0;
     int blink = 0;
     for (int i = 3; i < argc; i++) {

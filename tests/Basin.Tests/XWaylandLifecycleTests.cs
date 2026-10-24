@@ -113,4 +113,183 @@ public sealed class XWaylandLifecycleTests
         Assert.False(host.Seat.Keyboard.HasGrab);
     }
 
+    [Fact]
+    public void An_xwayland_crash_unmaps_then_destroys_each_mapped_window()
+    {
+        Assert.SkipUnless(PrivateBus.OnPath("Xwayland") && PrivateBus.OnPath("xeyes"), "Xwayland and xeyes are needed");
+        using var host = new CompositorTestHost(320, 240);
+        using var shell = new XwaylandShellGlobal(host.Display, host.Compositor);
+        using var server = new XWaylandServer(host.Display, host.Loop);
+        XWaylandWm? wm = null;
+        var mapped = new List<XWaylandWindow>();
+        var events = new List<string>();
+        var exited = false;
+        server.Ready += fd =>
+        {
+            wm = new XWaylandWm(fd, host.Loop, shell, host.Seat);
+            wm.WindowMapped += window =>
+            {
+                mapped.Add(window);
+                window.Unmapped += () => events.Add("unmapped");
+                window.Destroyed += () => events.Add("destroyed");
+            };
+            wm.Disposed += _ => events.Add("disposed");
+        };
+        server.Exited += () =>
+        {
+            exited = true;
+            wm?.Dispose();
+        };
+
+        using var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80+10+10");
+        try
+        {
+            XWaylandTestSupport.Pump(host, () => mapped.Count > 0);
+            KillXwayland(server);
+            XWaylandTestSupport.Pump(host, () => exited);
+
+            Assert.Equal(["unmapped", "destroyed", "disposed"], events);
+            Assert.Empty(wm!.Windows);
+        }
+        finally
+        {
+            if (!eyes.HasExited)
+            {
+                eyes.Kill();
+            }
+
+            eyes.WaitForExit(2000);
+            wm?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void An_xwayland_crash_leaves_no_ghost_in_the_river_window_list()
+    {
+        Assert.SkipUnless(PrivateBus.OnPath("Xwayland") && PrivateBus.OnPath("xeyes"), "Xwayland and xeyes are needed");
+        using var fixture = new RiverFixture(320, 240);
+        var host = fixture.Host;
+        using var shell = new XwaylandShellGlobal(host.Display, host.Compositor);
+        using var server = new XWaylandServer(host.Display, host.Loop);
+        XWaylandWm? wm = null;
+        var exited = false;
+        server.Ready += fd =>
+        {
+            wm = new XWaylandWm(fd, host.Loop, shell, host.Seat);
+            fixture.Server.Adopt(wm);
+        };
+        server.Exited += () =>
+        {
+            exited = true;
+            wm?.Dispose();
+        };
+
+        using var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80+10+10");
+        try
+        {
+            Settle(fixture, () => fixture.Windows.Count > 0);
+            KillXwayland(server);
+            Settle(fixture, () => exited);
+            fixture.RequestManageAndSettle();
+
+            Assert.Empty(fixture.Windows);
+        }
+        finally
+        {
+            if (!eyes.HasExited)
+            {
+                eyes.Kill();
+            }
+
+            eyes.WaitForExit(2000);
+            wm?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void A_clean_exit_after_the_last_client_is_not_a_crash_and_a_kill_is()
+    {
+        Assert.SkipUnless(PrivateBus.OnPath("Xwayland") && PrivateBus.OnPath("xeyes"), "Xwayland and xeyes are needed");
+        using var host = new CompositorTestHost(320, 240);
+        using var shell = new XwaylandShellGlobal(host.Display, host.Compositor);
+        using var server = new XWaylandServer(host.Display, host.Loop);
+        XWaylandWm? wm = null;
+        var mapped = 0;
+        var exits = 0;
+        server.Ready += fd =>
+        {
+            wm = new XWaylandWm(fd, host.Loop, shell, host.Seat);
+            wm.WindowMapped += _ => mapped++;
+        };
+        server.Exited += () =>
+        {
+            exits++;
+            wm?.Dispose();
+            wm = null;
+        };
+
+        using (var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80+10+10"))
+        {
+            XWaylandTestSupport.Pump(host, () => mapped == 1);
+            eyes.Kill();
+            eyes.WaitForExit(2000);
+            wm!.Dispose();
+            wm = null;
+            XWaylandTestSupport.Pump(host, () => exits == 1);
+        }
+
+        Assert.Equal(0, server.CrashCount);
+
+        using var again = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80+10+10");
+        try
+        {
+            XWaylandTestSupport.Pump(host, () => mapped == 2);
+            KillXwayland(server);
+            XWaylandTestSupport.Pump(host, () => exits == 2);
+            Assert.Equal(1, server.CrashCount);
+        }
+        finally
+        {
+            if (!again.HasExited)
+            {
+                again.Kill();
+            }
+
+            again.WaitForExit(2000);
+            wm?.Dispose();
+        }
+    }
+
+    private static void KillXwayland(XWaylandServer server)
+    {
+        var pid = 0;
+        foreach (var dir in Directory.EnumerateDirectories("/proc"))
+        {
+            if (int.TryParse(Path.GetFileName(dir), out var candidate)
+                && File.Exists($"{dir}/cmdline")
+                && File.ReadAllText($"{dir}/cmdline").Split('\0') is ["Xwayland", var display, ..]
+                && display == server.DisplayName)
+            {
+                pid = candidate;
+            }
+        }
+
+        Assert.NotEqual(0, pid);
+        Assert.Equal(0, Kill(pid, 9));
+    }
+
+    private static void Settle(RiverFixture fixture, Func<bool> condition)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && clock.Elapsed < TimeSpan.FromSeconds(15))
+        {
+            fixture.Host.Loop.Dispatch(10);
+            fixture.RequestManageAndSettle();
+        }
+
+        Assert.True(condition(), "condition not reached within 15 s");
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "kill", SetLastError = true)]
+    private static extern int Kill(int pid, int signal);
 }

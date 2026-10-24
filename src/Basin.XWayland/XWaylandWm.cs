@@ -375,7 +375,7 @@ public sealed unsafe class XWaylandWm : IDisposable
     }
 
     /// <summary>
-    /// Stops the clipboard bridge, closes the X connection and raises <see cref="Disposed"/>. The windows get no destroyed event. A second call does nothing.
+    /// Stops the clipboard bridge, unmaps and destroys every window, closes the X connection and raises <see cref="Disposed"/>. Each mapped window raises <see cref="XWaylandWindow.Unmapped"/>, then each window raises <see cref="XWaylandWindow.Destroyed"/>. A second call does nothing.
     /// </summary>
     public void Dispose()
     {
@@ -392,6 +392,22 @@ public sealed unsafe class XWaylandWm : IDisposable
 
         _shell.SerialCommitted -= OnSerialCommitted;
         _clipboard?.Dispose();
+        XWaylandWindow[] windows = [.. _windows.Values];
+        _windows.Clear();
+        foreach (var window in windows)
+        {
+            if (window.AnnouncedMapped)
+            {
+                window.AnnouncedMapped = false;
+                window.RaiseUnmapped();
+            }
+        }
+
+        foreach (var window in windows)
+        {
+            window.RaiseDestroyed();
+        }
+
         _source.Remove();
         Libxcb.xcb_disconnect(_conn);
         Disposed?.Invoke(this);

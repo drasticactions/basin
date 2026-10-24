@@ -336,7 +336,7 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public event Action? Mapped;
 
     /// <summary>
-    /// Occurs when a window that raised <see cref="Mapped"/> unmaps, or changes its override-redirect flag.
+    /// Occurs when a window that raised <see cref="Mapped"/> unmaps, changes its override-redirect flag, or loses its X server when <see cref="XWaylandWm.Dispose"/> runs.
     /// </summary>
     public event Action? Unmapped;
 
@@ -376,7 +376,7 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public event Action? SizeHintsChanged;
 
     /// <summary>
-    /// Occurs when the X window is destroyed. The shape regions are disposed after the event.
+    /// Occurs when the X window is destroyed, or when <see cref="XWaylandWm.Dispose"/> runs. The shape regions are disposed after the event.
     /// </summary>
     public event Action? Destroyed;
 

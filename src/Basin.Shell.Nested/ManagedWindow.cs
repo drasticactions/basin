@@ -43,6 +43,8 @@ public sealed class ManagedWindow
     /// </summary>
     public IWindowContent Content { get; }
 
+    internal Action? AdoptedCommitted { get; set; }
+
     /// <summary>
     /// Gets the shell-local window id. It is unique for the life of the shell.
     /// </summary>
@@ -94,29 +96,29 @@ public sealed class ManagedWindow
     public int Y { get; private set; }
 
     /// <summary>
-    /// Gets or sets the zero-based workspace index. Setting it changes no visibility. Use <see cref="NestedShell.MoveToWorkspace"/>.
+    /// Gets the zero-based workspace index. <see cref="NestedShell.MoveToWorkspace"/> changes it.
     /// </summary>
-    public int Workspace { get; set; }
+    public int Workspace { get; internal set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window shows on every workspace. Setting it changes no visibility. Use <see cref="NestedShell.SetSticky"/>.
+    /// Gets a value indicating whether the window shows on every workspace. <see cref="NestedShell.SetSticky"/> changes it.
     /// </summary>
-    public bool Sticky { get; set; }
+    public bool Sticky { get; internal set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window stays in <see cref="ShellLayers.Above"/>. Setting it moves no tree. Use <see cref="NestedShell.SetAbove"/>.
+    /// Gets a value indicating whether the window stays in <see cref="ShellLayers.Above"/>. <see cref="NestedShell.SetAbove"/> changes it.
     /// </summary>
-    public bool Above { get; set; }
+    public bool Above { get; internal set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window is rolled up to its title bar. Setting it hides nothing. Use <see cref="NestedShell.SetShaded"/>.
+    /// Gets a value indicating whether the window is rolled up to its title bar. <see cref="NestedShell.SetShaded"/> changes it.
     /// </summary>
-    public bool Shaded { get; set; }
+    public bool Shaded { get; internal set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window is minimized. Setting it hides nothing. Use <see cref="NestedShell.SetMinimized"/>.
+    /// Gets a value indicating whether the window is minimized. <see cref="NestedShell.SetMinimized"/> changes it.
     /// </summary>
-    public bool Minimized { get; set; }
+    public bool Minimized { get; internal set; }
 
     /// <summary>
     /// Gets a value indicating whether the window has focus, as the last <see cref="SetActive"/> call set it.
@@ -124,25 +126,25 @@ public sealed class ManagedWindow
     public bool Active { get; private set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the window mapped without focus. Activation clears it.
+    /// Gets a value indicating whether the window mapped without focus. Activation clears it.
     /// </summary>
-    public bool DemandsAttention { get; set; }
+    public bool DemandsAttention { get; internal set; }
 
     /// <summary>
-    /// Gets or sets the time of the last focus of the window, in <see cref="Environment.TickCount64"/> milliseconds, or zero when unknown.
+    /// Gets the time of the last focus of the window, in <see cref="Environment.TickCount64"/> milliseconds, or zero when unknown.
     /// The focus-stealing rule compares it.
     /// </summary>
-    public long UserTime { get; set; }
+    public long UserTime { get; internal set; }
 
     /// <summary>
-    /// Gets or sets the edge that the window is tiled against. Use <see cref="NestedShell.SetTile"/> to tile a window.
+    /// Gets the edge that the window is tiled against. <see cref="NestedShell.SetTile"/> changes it.
     /// </summary>
-    public TileEdge Tile { get; set; }
+    public TileEdge Tile { get; internal set; }
 
     /// <summary>
-    /// Gets or sets the frame box that the window goes back to when it leaves the maximized, tiled or fullscreen state, or <see langword="null"/>.
+    /// Gets the frame box that the window goes back to when it leaves the maximized, tiled or fullscreen state, or <see langword="null"/>.
     /// </summary>
-    public Box? Restore { get; set; }
+    public Box? Restore { get; internal set; }
 
     /// <summary>
     /// Gets or sets the icon that the frame and the panel show: the answer of <see cref="NestedShell.ResolveIcon"/>, or <see cref="ClientIcon"/> when no resolver is set.
@@ -155,14 +157,14 @@ public sealed class ManagedWindow
     public string? ClientIcon { get; set; }
 
     /// <summary>
-    /// Gets or sets the counter that the shell increments for each icon request. The shell drops an answer to an older request.
+    /// Gets the counter that the shell increments for each icon request. The shell drops an answer to an older request.
     /// </summary>
-    public int IconGeneration { get; set; }
+    public int IconGeneration { get; internal set; }
 
     /// <summary>
-    /// Gets or sets the frame box that the last <see cref="NestedShell.SnapshotWindows"/> reported.
+    /// Gets the frame box that the last <see cref="NestedShell.SnapshotWindows"/> reported.
     /// </summary>
-    public Box PublishedFrame { get; set; }
+    public Box PublishedFrame { get; internal set; }
 
     /// <summary>
     /// Gets a value indicating whether the window is mapped.

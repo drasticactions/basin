@@ -441,7 +441,7 @@ public sealed class WmWindow : IRenderWindow
     {
         ArgumentNullException.ThrowIfNull(surface);
         WmThreadAffinity.Assert();
-        return new WmDecoration(_wm, _proxy.GetDecorationAbove(surface));
+        return new WmDecoration(_wm, _proxy.GetDecorationAbove(surface), surface);
     }
 
     /// <summary>
@@ -454,7 +454,7 @@ public sealed class WmWindow : IRenderWindow
     {
         ArgumentNullException.ThrowIfNull(surface);
         WmThreadAffinity.Assert();
-        return new WmDecoration(_wm, _proxy.GetDecorationBelow(surface));
+        return new WmDecoration(_wm, _proxy.GetDecorationBelow(surface), surface);
     }
 
     /// <inheritdoc/>

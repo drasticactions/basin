@@ -1404,7 +1404,8 @@ public sealed partial class NestedShell : IDisposable
     {
         ArgumentNullException.ThrowIfNull(content);
         var window = new ManagedWindow(this, content, ++_nextId, null) { ClientIcon = clientIcon };
-        content.Committed += () => OnCommitted(window);
+        window.AdoptedCommitted = () => OnCommitted(window);
+        content.Committed += window.AdoptedCommitted;
         content.TitleChanged += Publish;
         content.AppIdChanged += Publish;
         if (publish)
@@ -1417,13 +1418,21 @@ public sealed partial class NestedShell : IDisposable
     }
 
     /// <summary>
-    /// Unmaps a window that <see cref="Adopt"/> created and removes it from the toplevel model.
+    /// Unmaps a window that <see cref="Adopt"/> created, removes it from the toplevel model, and stops listening to its content.
     /// </summary>
     /// <param name="window">The window.</param>
     /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
     public void Release(ManagedWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
+        if (window.AdoptedCommitted is { } committed)
+        {
+            window.Content.Committed -= committed;
+            window.Content.TitleChanged -= Publish;
+            window.Content.AppIdChanged -= Publish;
+            window.AdoptedCommitted = null;
+        }
+
         OnUnmapped(window);
         _adopted.Remove(window);
     }

@@ -145,10 +145,15 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
     }
 
     /// <summary>
-    /// Unsubscribes from the registry and destroys the global. Shortcuts that bindings registered stay in the registry.
+    /// Disarms every binding, which removes its shortcuts from the registry, then unsubscribes from the registry and destroys the global.
     /// </summary>
     public void Dispose()
     {
+        foreach (var binding in _byShortcut.Values.Distinct().ToArray())
+        {
+            binding.Disarm(except: null);
+        }
+
         _registry?.RemoveObserver(this);
         _global.Dispose();
     }
@@ -236,7 +241,6 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
 
         public void Disarm(string? except)
         {
-            _armed = except is not null && _armed;
             foreach (var id in _registered)
             {
                 if (id != except)

@@ -1,3 +1,4 @@
+using Basin.Config;
 using Basin.WindowManager.Protocol;
 
 namespace Basin.WindowManager;
@@ -8,13 +9,19 @@ namespace Basin.WindowManager;
 public sealed class KeyBinding
 {
     private readonly RiverWindowManager _wm;
+    private readonly WmBindings _owner;
     private readonly RiverXkbBindingV1 _proxy;
+    private readonly uint _keysym;
+    private readonly Modifiers _modifiers;
     private Notifications _notifications;
 
-    internal KeyBinding(RiverWindowManager wm, RiverXkbBindingV1 proxy)
+    internal KeyBinding(RiverWindowManager wm, WmBindings owner, RiverXkbBindingV1 proxy, uint keysym, Modifiers modifiers)
     {
         _wm = wm;
+        _owner = owner;
         _proxy = proxy;
+        _keysym = keysym;
+        _modifiers = modifiers;
 
         proxy.Pressed += (_, _) =>
         {
@@ -46,6 +53,11 @@ public sealed class KeyBinding
     public bool IsEnabled { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether the binding object is destroyed. A destroyed binding is not enabled and cannot be enabled again.
+    /// </summary>
+    public bool IsDestroyed => _proxy.IsDestroyed;
+
+    /// <summary>
     /// Occurs when the press event arrives from the compositor.
     /// </summary>
     public event Action? Pressed;
@@ -64,8 +76,10 @@ public sealed class KeyBinding
     /// Turns the binding on.
     /// </summary>
     /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="ObjectDisposedException">The binding is destroyed.</exception>
     public void Enable()
     {
+        ThrowIfDestroyed(nameof(Enable));
         _wm.EnsureManage(nameof(Enable));
         _proxy.Enable();
         IsEnabled = true;
@@ -75,8 +89,10 @@ public sealed class KeyBinding
     /// Turns the binding off, so the key goes to the focused surface again.
     /// </summary>
     /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="ObjectDisposedException">The binding is destroyed.</exception>
     public void Disable()
     {
+        ThrowIfDestroyed(nameof(Disable));
         _wm.EnsureManage(nameof(Disable));
         _proxy.Disable();
         IsEnabled = false;
@@ -87,18 +103,27 @@ public sealed class KeyBinding
     /// </summary>
     /// <param name="layout">The zero-based layout index of the keyboard that sends the key.</param>
     /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="ObjectDisposedException">The binding is destroyed.</exception>
     public void SetLayoutOverride(uint layout)
     {
+        ThrowIfDestroyed(nameof(SetLayoutOverride));
         _wm.EnsureManage(nameof(SetLayoutOverride));
         _proxy.SetLayoutOverride(layout);
     }
 
     /// <summary>
-    /// Destroys the binding object. A second call does nothing.
+    /// Destroys the binding object and removes it from the bindings of its <see cref="WmBindings"/>, so a later submap does not touch it. A second call does nothing.
     /// </summary>
     public void Destroy()
     {
         WmThreadAffinity.Assert();
+        if (_proxy.IsDestroyed)
+        {
+            return;
+        }
+
+        _owner.Forget(this);
+        IsEnabled = false;
         DestroyProxy();
     }
 
@@ -107,6 +132,16 @@ public sealed class KeyBinding
         if (!_proxy.IsDestroyed)
         {
             _proxy.Destroy();
+        }
+    }
+
+    private void ThrowIfDestroyed(string request)
+    {
+        if (_proxy.IsDestroyed)
+        {
+            throw new ObjectDisposedException(
+                nameof(KeyBinding),
+                $"'{request}' was called on the destroyed key binding for keysym 0x{_keysym:x} with modifiers {_modifiers}");
         }
     }
 

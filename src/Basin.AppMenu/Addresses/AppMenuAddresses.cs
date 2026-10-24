@@ -6,7 +6,7 @@ namespace Basin.AppMenu;
 /// </summary>
 public sealed class AppMenuAddresses
 {
-    private readonly Dictionary<Surface, AppMenuAddress> _addresses = [];
+    private readonly Dictionary<Surface, Entry> _addresses = [];
 
     /// <summary>
     /// Gets or sets a value indicating whether the compositor shows a global menu bar. GTK exports a menu bar only when it is <see langword="true"/>.
@@ -34,7 +34,7 @@ public sealed class AppMenuAddresses
     public AppMenuAddress? AddressOf(Surface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
-        return _addresses.GetValueOrDefault(surface);
+        return _addresses.GetValueOrDefault(surface)?.Address;
     }
 
     /// <summary>
@@ -49,25 +49,38 @@ public sealed class AppMenuAddresses
         ArgumentNullException.ThrowIfNull(surface);
         if (address is null)
         {
-            if (_addresses.Remove(surface))
+            if (_addresses.Remove(surface, out var removed))
             {
+                surface.Destroyed -= removed.OnDestroyed;
                 Changed?.Invoke(surface, null);
             }
 
             return;
         }
 
-        if (_addresses.TryGetValue(surface, out var previous) && previous == address)
+        if (_addresses.TryGetValue(surface, out var entry))
         {
-            return;
+            if (entry.Address == address)
+            {
+                return;
+            }
+
+            entry.Address = address;
+        }
+        else
+        {
+            entry = new Entry(address, () => Set(surface, null));
+            surface.Destroyed += entry.OnDestroyed;
+            _addresses[surface] = entry;
         }
 
-        if (previous is null)
-        {
-            surface.Destroyed += () => Set(surface, null);
-        }
-
-        _addresses[surface] = address;
         Changed?.Invoke(surface, address);
+    }
+
+    private sealed class Entry(AppMenuAddress address, Action onDestroyed)
+    {
+        public AppMenuAddress Address { get; set; } = address;
+
+        public Action OnDestroyed { get; } = onDestroyed;
     }
 }

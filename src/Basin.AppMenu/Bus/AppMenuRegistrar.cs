@@ -28,7 +28,8 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
     private readonly AppMenuBus _bus;
     private readonly Lock _gate = new();
     private readonly Dictionary<uint, AppMenuAddress> _windows = [];
-    private bool _disposed;
+    private volatile bool _disposed;
+    private volatile bool _holdsName;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppMenuRegistrar"/> class and starts to connect and ask for <see cref="BusName"/>.
@@ -89,6 +90,12 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
     ValueTask IPathMethodHandler.HandleMethodAsync(MethodContext context)
     {
         var request = context.Request;
+        if (_disposed)
+        {
+            context.ReplyUnknownMethodError();
+            return default;
+        }
+
         if (context.IsDBusIntrospectRequest)
         {
             context.ReplyIntrospectXml([IntrospectXml], []);
@@ -165,15 +172,23 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
     }
 
     /// <summary>
-    /// Forgets every registration and stops raising <see cref="Changed"/>. It does not release the bus name.
+    /// Forgets every registration, stops raising <see cref="Changed"/>, releases the bus name and stops serving. A second call does nothing.
+    /// The release runs in the background, so a registrar created at once can lose the race for the name.
     /// </summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
         lock (_gate)
         {
             _windows.Clear();
         }
+
+        _ = StopAsync();
     }
 
     private static void ReplyEmpty(MethodContext context)
@@ -206,6 +221,18 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
 
             connection.AddMethodHandler(this);
             var owns = await connection.TryRequestNameAsync(BusName, RequestNameOptions.None).ConfigureAwait(false);
+            _holdsName = owns;
+            if (_disposed)
+            {
+                if (owns)
+                {
+                    _holdsName = false;
+                    await connection.ReleaseNameAsync(BusName).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
             _bus.Post(() =>
             {
                 OwnsName = owns;
@@ -220,6 +247,28 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException)
         {
             Log.Warn($"cannot own {BusName}: {error.Message}");
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        try
+        {
+            if (await _bus.ConnectionAsync().ConfigureAwait(false) is not { } connection)
+            {
+                return;
+            }
+
+            connection.RemoveMethodHandler(ObjectPath);
+            if (_holdsName)
+            {
+                _holdsName = false;
+                await connection.ReleaseNameAsync(BusName).ConfigureAwait(false);
+            }
+        }
+        catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException)
+        {
+            Log.Warn($"cannot release {BusName}: {error.Message}");
         }
     }
 }

@@ -41,7 +41,7 @@ public sealed class WmSubmap
     public event Action? Exited;
 
     /// <summary>
-    /// Disables the submap's bindings and enables again the bindings it suspended. A second call does nothing.
+    /// Disables the submap's bindings, enables again the bindings it suspended, and stops listening to the manager and the bindings. It skips destroyed bindings. A second call does nothing.
     /// </summary>
     /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void Exit()
@@ -53,17 +53,22 @@ public sealed class WmSubmap
         }
 
         _exited = true;
-        _timer?.Remove();
-        _timer = null;
+        Detach();
 
         foreach (var binding in _bindings)
         {
-            binding.Disable();
+            if (!binding.IsDestroyed && binding.IsEnabled)
+            {
+                binding.Disable();
+            }
         }
 
         foreach (var binding in _suspended)
         {
-            binding.Enable();
+            if (!binding.IsDestroyed)
+            {
+                binding.Enable();
+            }
         }
 
         _suspended.Clear();
@@ -110,13 +115,7 @@ public sealed class WmSubmap
     internal void Cancel()
     {
         _exited = true;
-        _timer?.Remove();
-        _timer = null;
-        _wm.Manage -= OnManage;
-        foreach (var binding in _bindings)
-        {
-            binding.Pressed -= OnBindingFired;
-        }
+        Detach();
     }
 
     internal void OnUnboundKey()
@@ -135,12 +134,17 @@ public sealed class WmSubmap
             return;
         }
 
+        Exit();
+    }
+
+    private void Detach()
+    {
+        _timer?.Remove();
+        _timer = null;
         _wm.Manage -= OnManage;
         foreach (var binding in _bindings)
         {
             binding.Pressed -= OnBindingFired;
         }
-
-        Exit();
     }
 }

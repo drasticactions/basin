@@ -22,7 +22,7 @@ LDLIBS += $(shell pkg-config --libs wayland-client)
 all: $(BIN)/locktest $(BIN)/vptr $(BIN)/vpad $(BIN)/vtouch $(BIN)/vkbd $(BIN)/vmouse $(BIN)/gestures $(BIN)/colorinfo \
 	$(BIN)/hyprsurface $(BIN)/focusgrab $(BIN)/locknotify $(BIN)/toplevelexport $(BIN)/ssdwin \
 	$(BIN)/panel $(BIN)/riverrepeat $(BIN)/appmenu $(BIN)/pointerlock $(BIN)/textinput $(BIN)/randremu $(BIN)/x11focus \
-	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe
+	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch
 
 $(BIN):
 	mkdir -p $(BIN)
@@ -59,6 +59,7 @@ XML_text-input-unstable-v3 := $(WAYLAND_PROTOCOLS)/unstable/text-input/text-inpu
 XML_pointer-constraints-unstable-v1 := $(WAYLAND_PROTOCOLS)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml
 XML_relative-pointer-unstable-v1 := $(WAYLAND_PROTOCOLS)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
 XML_river-input-management-v1 := $(ROOT)/external/river/protocol/river-input-management-v1.xml
+XML_river-libinput-config-v1 := $(ROOT)/external/river/protocol/river-libinput-config-v1.xml
 XML_wlr-layer-shell-unstable-v1 := $(WLR_PROTOCOLS)/unstable/wlr-layer-shell-unstable-v1.xml
 XML_wlr-foreign-toplevel-management-unstable-v1 := $(WLR_PROTOCOLS)/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
 
@@ -149,6 +150,10 @@ $(BIN)/ssdwin: ssdwin.c $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-prot
 $(BIN)/panel: panel.c $(BIN)/wlr-layer-shell-unstable-v1-protocol.c $(BIN)/wlr-layer-shell-unstable-v1-client-protocol.h \
 		$(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-protocol.h | $(BIN)
 	$(CC) $(CFLAGS) -o $@ panel.c $(BIN)/wlr-layer-shell-unstable-v1-protocol.c $(BIN)/xdg-shell-protocol.c $(LDLIBS)
+
+$(BIN)/libinputwatch: libinputwatch.c $(BIN)/river-libinput-config-v1-protocol.c $(BIN)/river-libinput-config-v1-client-protocol.h \
+	$(BIN)/river-input-management-v1-protocol.c | $(BIN)
+	$(CC) $(CFLAGS) -o $@ libinputwatch.c $(BIN)/river-libinput-config-v1-protocol.c $(BIN)/river-input-management-v1-protocol.c $(LDLIBS)
 
 $(BIN)/riverrepeat: riverrepeat.c $(BIN)/river-input-management-v1-protocol.c $(BIN)/river-input-management-v1-client-protocol.h | $(BIN)
 	$(CC) $(CFLAGS) -o $@ riverrepeat.c $(BIN)/river-input-management-v1-protocol.c $(LDLIBS)

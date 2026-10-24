@@ -26,7 +26,7 @@ public sealed class RiverWindowManager : IDisposable
     private readonly List<WmWindow> _closedWindows = [];
     private readonly List<WmOutput> _removedOutputs = [];
     private readonly List<WmSeat> _removedSeats = [];
-    private readonly List<WmShellSurface> _syncPending = [];
+    private readonly List<ISyncedSurface> _syncPending = [];
 
     private readonly WlDisplay _display;
     private readonly WlRegistry _registry;
@@ -216,6 +216,8 @@ public sealed class RiverWindowManager : IDisposable
     /// </summary>
     public event Action<ManageContext>? Manage;
 
+    internal int ManageHandlerCount => Manage?.GetInvocationList().Length ?? 0;
+
     /// <summary>
     /// Occurs for each render sequence, after window state is applied. The library finishes the sequence when the handler returns or throws.
     /// </summary>
@@ -237,7 +239,7 @@ public sealed class RiverWindowManager : IDisposable
     public event Action? Unavailable;
 
     /// <summary>
-    /// Dispatches the connection and the loop until the compositor finishes, refuses window management or the connection fails.
+    /// Dispatches the connection and the loop until the compositor finishes, refuses window management or the connection fails. An exception from an event handler leaves the method unwrapped.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The manager is disposed.</exception>
     public void Run()
@@ -257,8 +259,9 @@ public sealed class RiverWindowManager : IDisposable
             {
                 _display.Dispatch();
             }
-            catch (WaylandException)
+            catch (WaylandException e)
             {
+                ThrowIfHandlerFailed(e);
                 _finished = true;
             }
         });
@@ -283,8 +286,9 @@ public sealed class RiverWindowManager : IDisposable
 
                     _display.Flush();
                 }
-                catch (WaylandException)
+                catch (WaylandException e)
                 {
+                    ThrowIfHandlerFailed(e);
                     break;
                 }
 
@@ -313,7 +317,7 @@ public sealed class RiverWindowManager : IDisposable
     }
 
     /// <summary>
-    /// Reads what the socket holds now and dispatches it, without blocking. It is for a manager that shares a thread with its compositor and cannot call <see cref="Run"/>.
+    /// Reads what the socket holds now and dispatches it, without blocking. It is for a manager that shares a thread with its compositor and cannot call <see cref="Run"/>. An exception from an event handler leaves the method unwrapped.
     /// </summary>
     public void DispatchPending()
     {
@@ -329,8 +333,9 @@ public sealed class RiverWindowManager : IDisposable
             {
                 _display.Dispatch();
             }
-            catch (WaylandException)
+            catch (WaylandException e)
             {
+                ThrowIfHandlerFailed(e);
                 _finished = true;
                 return;
             }
@@ -340,9 +345,18 @@ public sealed class RiverWindowManager : IDisposable
         {
             _display.DispatchPending();
         }
-        catch (WaylandException)
+        catch (WaylandException e)
         {
+            ThrowIfHandlerFailed(e);
             _finished = true;
+        }
+    }
+
+    private static void ThrowIfHandlerFailed(WaylandException error)
+    {
+        if (error.InnerException is { } inner and not WaylandException)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(inner);
         }
     }
 
@@ -524,7 +538,7 @@ public sealed class RiverWindowManager : IDisposable
     internal void UnregisterShellSurface(RiverShellSurfaceV1 proxy) =>
         _shellSurfacesByProxy.Remove(proxy);
 
-    internal void TrackSyncNextCommit(WmShellSurface surface)
+    internal void TrackSyncNextCommit(ISyncedSurface surface)
     {
         if (!_syncPending.Contains(surface))
         {
@@ -532,7 +546,7 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
-    internal void ClearSyncNextCommit(WmShellSurface surface) => _syncPending.Remove(surface);
+    internal void ClearSyncNextCommit(ISyncedSurface surface) => _syncPending.Remove(surface);
 
     private void OnUnavailable()
     {
@@ -654,8 +668,9 @@ public sealed class RiverWindowManager : IDisposable
             _renderContext.Kill();
             _sequence = WmSequence.None;
 
+            var owed = CommitOwedSurfaces();
             _wm.RenderFinish();
-            AssertSyncedCommits();
+            ThrowForOwedCommits(owed);
         }
     }
 
@@ -754,17 +769,33 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
-    private void AssertSyncedCommits()
+    private string? CommitOwedSurfaces()
     {
         if (_syncPending.Count == 0)
         {
-            return;
+            return null;
         }
 
         var names = string.Join(", ", _syncPending.Select(static s => s.ToString()));
+        foreach (var surface in _syncPending)
+        {
+            if (!surface.Surface.IsDestroyed)
+            {
+                surface.Surface.Commit();
+            }
+        }
+
         _syncPending.Clear();
-        throw new InvalidOperationException(
-            $"SyncNextCommit was called without a following surface commit before render_finish: {names}. " +
-            "The compositor treats this as a protocol error and would disconnect the window manager.");
+        return names;
+    }
+
+    private static void ThrowForOwedCommits(string? names)
+    {
+        if (names is not null)
+        {
+            throw new InvalidOperationException(
+                $"SyncNextCommit was called without a following surface commit before render_finish: {names}. " +
+                "The library committed the surfaces so that the compositor keeps the window manager connected.");
+        }
     }
 }

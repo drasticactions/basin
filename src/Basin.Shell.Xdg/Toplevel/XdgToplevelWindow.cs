@@ -86,8 +86,10 @@ public sealed class XdgToplevelWindow : IToplevelHandle
         };
         resource.ShowWindowMenu += (_, e) => ShowWindowMenuRequested?.Invoke(e.X, e.Y);
 
+        xdg.Unmapped += OnUnmapped;
         resource.Destroyed += (_, _) =>
         {
+            xdg.Unmapped -= OnUnmapped;
             XdgToplevelRegistry.Remove(resource);
             xdg.Surface.ClearRoleObject();
             xdg.OnRoleDestroyed();
@@ -164,14 +166,31 @@ public sealed class XdgToplevelWindow : IToplevelHandle
     public bool? RequestedMaximized { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the client asked to be minimized at least once. Nothing clears it.
+    /// Gets a value indicating whether the client asked to be minimized since the window last mapped. An unmap clears it.
     /// </summary>
     public bool RequestedMinimized { get; private set; }
 
     /// <summary>
-    /// Gets or sets the actions that the first configure advertises to a client of version 5 or later. Later changes are not sent, so a consumer sets it in <see cref="XdgShell.NewToplevel"/>.
+    /// Gets or sets the actions that configures advertise to a client of version 5 or later. A change after the first configure sends the event again with a new configure. Setting the same value sends nothing.
     /// </summary>
-    public XdgWmCapabilities WmCapabilities { get; set; } = XdgWmCapabilities.All;
+    public XdgWmCapabilities WmCapabilities
+    {
+        get => _wmCapabilities;
+        set
+        {
+            if (value == _wmCapabilities)
+            {
+                return;
+            }
+
+            _wmCapabilities = value;
+            if (_wmCapabilitiesSent)
+            {
+                _wmCapabilitiesSent = false;
+                ScheduleConfigure();
+            }
+        }
+    }
 
     /// <summary>
     /// Occurs when the client sets the title.
@@ -556,6 +575,8 @@ public sealed class XdgToplevelWindow : IToplevelHandle
 
     private bool _wmCapabilitiesSent;
 
+    private XdgWmCapabilities _wmCapabilities = XdgWmCapabilities.All;
+
     private static int MinVersionFor(XdgToplevel.State state) => state switch
     {
         XdgToplevel.State.TiledLeft or XdgToplevel.State.TiledRight
@@ -575,6 +596,8 @@ public sealed class XdgToplevelWindow : IToplevelHandle
             StateChanged?.Invoke();
         }
     }
+
+    private void OnUnmapped() => RequestedMinimized = false;
 
     private void ScheduleConfigure()
     {

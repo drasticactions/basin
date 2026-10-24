@@ -52,6 +52,31 @@ public sealed class AppMenuRegistrarTests
         Assert.False(second.OwnsName);
     }
 
+    [Fact]
+    public void A_disposed_registrar_releases_its_name()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost();
+        using var bus = new AppMenuBus(host.Loop, daemon.Address);
+        var registrar = new AppMenuRegistrar(bus);
+        PortalBusTests.PumpUntil(host, () => registrar.OwnsName);
+
+        registrar.Dispose();
+        registrar.Dispose();
+
+        using var other = new DBusConnection(daemon.Address);
+        PortalBusTests.Await(host, other.ConnectAsync().AsTask());
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var taken = false;
+        while (!taken && clock.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            taken = PortalBusTests.Await(host, other.TryRequestNameAsync(AppMenuRegistrar.BusName, RequestNameOptions.None));
+            host.Loop.Dispatch(10);
+        }
+
+        Assert.True(taken, "another connection could not take the name after dispose");
+    }
+
     private static Task Call(DBusConnection client, string member, uint window, string? path)
     {
         using var writer = client.GetMessageWriter();

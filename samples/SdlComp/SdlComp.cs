@@ -84,7 +84,7 @@ internal sealed partial class SdlComp : IDisposable
             new PanelLayout(0, 0, 0),
             KeyTable.Build(settings.Keys, []),
             _loop.Post,
-            [NestedTheme.Load]);
+            [NestedTheme.Always]);
         _window.InputSink = input => _shell.HandleInput(input);
         _window.ResizeHandler = (width, height, scale) => _shell.Resize(width, height, scale);
         _window.CloseRequested += _ => _loop.RequestQuit();

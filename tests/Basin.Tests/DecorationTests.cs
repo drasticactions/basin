@@ -78,6 +78,30 @@ public sealed class DecorationTests
     }
 
     [Fact]
+    public void ModeOf_reports_the_retained_mode_until_the_next_commit()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+
+        var decoration = host.Client.DecorationManager!.GetToplevelDecoration(window.Toplevel);
+        decoration.SetMode(ZxdgToplevelDecorationV1.Mode.ServerSide);
+        host.PumpUntil(() => host.Decorations.ModeOf(window.ServerToplevel) == DecorationMode.ServerSide);
+
+        var announced = new List<DecorationMode>();
+        host.Decorations.ModeChanged += (_, mode) => announced.Add(mode);
+
+        decoration.Destroy();
+        host.PumpToServer();
+        Assert.Equal(DecorationMode.ServerSide, host.Decorations.ModeOf(window.ServerToplevel));
+        Assert.Empty(announced);
+
+        window.Surface.Commit();
+        host.PumpToServer();
+        Assert.Equal(DecorationMode.ClientSide, host.Decorations.ModeOf(window.ServerToplevel));
+        Assert.Equal([DecorationMode.ClientSide], announced);
+    }
+
+    [Fact]
     public void A_commit_between_decorations_drops_the_retained_mode()
     {
         using var host = new CompositorTestHost();

@@ -89,8 +89,7 @@ public sealed class RiverLibinputConfig : IDisposable
     }
 
     /// <summary>
-    /// Unregisters a device. An unknown id does nothing.
-    /// The window manager does not get a removed event for the device.
+    /// Unregisters a device and sends <c>removed</c> on its object. The object then ignores every request but destroy. An unknown id does nothing.
     /// </summary>
     /// <param name="deviceId">The device id given to <see cref="AddDevice(ulong)"/>.</param>
     public void RemoveDevice(ulong deviceId)
@@ -98,6 +97,12 @@ public sealed class RiverLibinputConfig : IDisposable
         if (_devices.Find(d => d.Id == deviceId) is { } entry)
         {
             _devices.Remove(entry);
+            entry.Removed = true;
+            if (entry.Resource is { IsDestroyed: false } resource)
+            {
+                resource.SendRemoved();
+            }
+
             entry.Resource = null;
         }
     }
@@ -558,11 +563,21 @@ public sealed class RiverLibinputConfig : IDisposable
         var client = resource.Client;
         var version = resource.Version;
 
-        void Simple(uint id, InputSetting kind, uint value) =>
-            Answer(client, version, id, entry.Id, kind, new InputSettingValue(value));
+        void Simple(uint id, InputSetting kind, uint value)
+        {
+            if (!entry.Removed)
+            {
+                Answer(client, version, id, entry.Id, kind, new InputSettingValue(value));
+            }
+        }
 
         void Numeric(uint id, InputSetting kind, in InputSettingValue value)
         {
+            if (entry.Removed)
+            {
+                return;
+            }
+
             if (value.Count == 0)
             {
                 resource.PostError((uint)RiverLibinputDeviceV1.Error.InvalidArg, "invalid array argument");
@@ -597,7 +612,13 @@ public sealed class RiverLibinputConfig : IDisposable
             Numeric(e.Result, InputSetting.CalibrationMatrix, ReadMatrix(e.Matrix));
         resource.SetAccelSpeed += (_, e) =>
             Numeric(e.Result, InputSetting.AccelSpeed, ReadDouble(e.Speed));
-        resource.ApplyAccelConfig += (_, e) => ApplyCurves(client, version, e.Result, entry.Id, e.Config);
+        resource.ApplyAccelConfig += (_, e) =>
+        {
+            if (!entry.Removed)
+            {
+                ApplyCurves(client, version, e.Result, entry.Id, e.Config);
+            }
+        };
 
         resource.DestroyRequest += (_, _) => entry.Resource = null;
     }
@@ -715,5 +736,7 @@ public sealed class RiverLibinputConfig : IDisposable
         public ulong Id { get; } = id;
 
         public RiverLibinputDeviceV1Resource? Resource { get; set; }
+
+        public bool Removed { get; set; }
     }
 }

@@ -486,8 +486,166 @@ public sealed class NestedShellTests
 
     private static void Button(NestedShell shell, uint code, bool pressed) => NestedShellHarness.Button(shell, code, pressed);
 
+    [Fact]
+    public void A_released_window_no_longer_hears_its_content()
+    {
+        using var harness = new NestedShellHarness();
+        var shell = harness.Shell;
+        var content = new EventContent("adopted", "org.basin.adopted");
+        var window = shell.Adopt(content);
+        var published = 0;
+        shell.Changed += () => published++;
+        content.RaiseAll();
+        Assert.True(published > 0, "an adopted window must publish its title changes");
+
+        shell.Release(window);
+        published = 0;
+        content.RaiseAll();
+
+        Assert.Equal(0, published);
+    }
+
+    [Fact]
+    public void The_catch_all_theme_answers_an_unknown_name_with_the_nested_theme()
+    {
+        var theme = MetacityFrames.LoadTheme("NoSuchTheme", [NestedTheme.Always]);
+
+        Assert.Equal(NestedTheme.Name, theme.Name);
+    }
+
     private static void Key(NestedShell shell, uint code, bool pressed) => NestedShellHarness.Key(shell, code, pressed);
 
     private static unsafe uint Pixel(in BufferDataView view, int x, int y) =>
         *(uint*)((byte*)view.Data + (y * view.Stride) + (x * 4));
+
+    private sealed class EventContent(string title, string appId, bool centered = false, Basin.Capabilities.ToplevelInfo? details = null)
+        : IWindowContent, IToplevelDetails
+    {
+        public bool TryGetDetails(out Basin.Capabilities.ToplevelInfo info)
+        {
+            info = details.GetValueOrDefault();
+            return details is not null;
+        }
+
+        private Basin.Scene.SceneTree? _tree;
+
+        public string Title => title;
+
+        public string AppId => appId;
+
+        public Box Geometry { get; private set; } = new(0, 0, 120, 80);
+
+        public int MinWidth => 0;
+
+        public int MinHeight => 0;
+
+        public int MaxWidth => 0;
+
+        public int MaxHeight => 0;
+
+        public IWindowContent? Parent => null;
+
+        public Surface? Surface => null;
+
+        public Basin.Capabilities.IUISurface? UISurface => null;
+
+        public bool Maximized { get; private set; }
+
+        public bool Fullscreen { get; private set; }
+
+        public bool Resizing => false;
+
+        public bool ServerDecorated => false;
+
+        public bool Centered => centered;
+
+        public Basin.Capabilities.FrameCapabilities Capabilities => default;
+
+        public event Action? TitleChanged;
+
+        public event Action? AppIdChanged;
+
+        public event Action? ParentChanged { add { } remove { } }
+
+        public event Action? DecorationsChanged { add { } remove { } }
+
+        public event Action? Committed;
+
+        public Basin.Scene.SceneNode Attach(Basin.Scene.SceneTree tree)
+        {
+            _tree = new Basin.Scene.SceneTree(tree);
+            return _tree;
+        }
+
+        public void Detach()
+        {
+            _tree?.Destroy();
+            _tree = null;
+        }
+
+        public void SetActivated(bool activated)
+        {
+        }
+
+        public void SetMaximized(bool maximized) => Maximized = maximized;
+
+        public void SetFullscreen(bool fullscreen) => Fullscreen = fullscreen;
+
+        public void SetResizing(bool resizing)
+        {
+        }
+
+        public void SetMinimized(bool minimized)
+        {
+        }
+
+        public void Raise()
+        {
+        }
+
+        public void Lower()
+        {
+        }
+
+        public void SetTiled(Basin.Shell.Xdg.ResizeEdges edges)
+        {
+        }
+
+        public void SetSize(int width, int height)
+        {
+            if (width > 0 && height > 0)
+            {
+                Geometry = new Box(0, 0, width, height);
+            }
+        }
+
+        public void SetBounds(int width, int height)
+        {
+        }
+
+        public void SetPosition(int x, int y)
+        {
+        }
+
+        public void OutputScaleChanged(double scale)
+        {
+        }
+
+        public void ReportGeometry(in Box frame, in Box client)
+        {
+        }
+
+        public void Close()
+        {
+        }
+
+        public bool Owns(Surface surface) => false;
+
+        public void RaiseAll()
+        {
+            TitleChanged?.Invoke();
+            AppIdChanged?.Invoke();
+            Committed?.Invoke();
+        }
+    }
 }

@@ -37,6 +37,27 @@ public sealed class LayerLayoutTests
     }
 
     [Fact]
+    public void A_sized_surface_on_all_four_anchors_is_centered()
+    {
+        var all = LayerAnchor.Top | LayerAnchor.Bottom | LayerAnchor.Left | LayerAnchor.Right;
+        var (placements, _) = LayerLayout.Arrange(
+            new Box(0, 0, 1000, 800),
+            [Spec(LayerKind.Overlay, all, 0, 200, 100)]);
+
+        Assert.Equal(new Box(400, 350, 200, 100), placements[0].Box);
+    }
+
+    [Fact]
+    public void A_sized_surface_on_left_and_right_is_centered_and_ignores_the_side_margins()
+    {
+        var spec = new LayerLayout.LayerSpec(
+            LayerKind.Top, LayerAnchor.Left | LayerAnchor.Right | LayerAnchor.Top, 0, (10, 0, 0, 50), 200, 30);
+        var (placements, _) = LayerLayout.Arrange(new Box(0, 0, 1000, 800), [spec]);
+
+        Assert.Equal(new Box(400, 10, 200, 30), placements[0].Box);
+    }
+
+    [Fact]
     public void Unanchored_negative_zone_surface_centers_in_the_full_output()
     {
         var (placements, _) = LayerLayout.Arrange(

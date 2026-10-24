@@ -627,6 +627,40 @@ public class RiverShellTests
     }
 
     [Fact]
+    public void A_minimize_request_is_not_replayed_when_the_window_maps_again()
+    {
+        using var fixture = new RiverFixture();
+        var minimized = 0;
+        fixture.OnManage = context =>
+        {
+            foreach (var window in context.NewWindows)
+            {
+                window.MinimizeRequested += () => minimized++;
+            }
+        };
+
+        var toplevel = fixture.MapToplevel();
+        toplevel.Toplevel.SetMinimized();
+        fixture.RequestManageAndSettle();
+        Assert.Equal(1, minimized);
+
+        toplevel.Surface.Attach(null, 0, 0);
+        toplevel.Surface.Commit();
+        fixture.Settle();
+        Assert.Empty(fixture.Windows);
+
+        var serial = toplevel.LastConfigureSerial;
+        toplevel.Surface.Commit();
+        fixture.Settle();
+        fixture.RequestManageAndSettle();
+        fixture.OnManage = null;
+
+        Assert.NotEqual(serial, toplevel.LastConfigureSerial);
+        Assert.Single(fixture.Windows);
+        Assert.Equal(1, minimized);
+    }
+
+    [Fact]
     public void A_window_that_asks_for_fullscreen_before_it_maps_still_reaches_the_manager()
     {
         using var fixture = new RiverFixture();
@@ -702,7 +736,7 @@ public class RiverShellTests
     }
 
     [Fact]
-    public void A_held_commit_that_never_arrives_is_a_protocol_error()
+    public void A_shell_surface_that_owes_its_held_commit_throws_and_the_manager_stays_connected()
     {
         using var fixture = new RiverFixture();
 
@@ -727,7 +761,9 @@ public class RiverShellTests
         fixture.Settle();
         fixture.OnRender = null;
 
-        Assert.True(fixture.SyncViolations > 0 || escaped is not null || !fixture.Server.HasWindowManager);
+        Assert.Null(escaped);
+        Assert.Equal(1, fixture.SyncViolations);
+        Assert.True(fixture.Server.HasWindowManager);
         GC.KeepAlive(shell);
     }
 
@@ -1608,6 +1644,66 @@ public class RiverShellTests
     }
 
     [Fact]
+    public void A_removed_libinput_device_hears_removed_and_ignores_later_requests()
+    {
+        using var fixture = new RiverFixture();
+        var configuration = new FakeInputDeviceConfiguration();
+        var touchpad = configuration.AddTouchpad();
+        fixture.Server.LibinputConfig.Configuration = configuration;
+
+        var registry = fixture.Client.Display.GetRegistry();
+        uint name = 0;
+        uint version = 0;
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "river_libinput_config_v1")
+            {
+                (name, version) = (e.Name, e.Version);
+            }
+        };
+        fixture.Settle();
+        Assert.NotEqual(0u, name);
+
+        Wm.Protocol.RiverLibinputDeviceV1? device = null;
+        var removed = 0;
+        var config = registry.Bind<Wm.Protocol.RiverLibinputConfigV1>(name, version);
+        config.LibinputDevice += (_, e) =>
+        {
+            device = e.Id;
+            device.Removed += (_, _) => removed++;
+        };
+        fixture.Settle();
+        Assert.NotNull(device);
+
+        var announced = device;
+        var mouse = configuration.AddMouse();
+        fixture.Settle();
+        Assert.NotSame(announced, device);
+        configuration.Remove(mouse);
+        fixture.Settle();
+        Assert.Equal(1, removed);
+        removed = 0;
+        device = announced;
+
+        configuration.Remove(touchpad);
+        fixture.Settle();
+        Assert.Equal(1, removed);
+
+        var writes = configuration.Writes.Count;
+        device!.SetTap(Wm.Protocol.RiverLibinputDeviceV1.TapState.Enabled);
+        fixture.Settle();
+
+        Assert.Equal(writes, configuration.Writes.Count);
+        Assert.True(fixture.Server.HasWindowManager, "a request on a removed device is not a protocol error");
+        Assert.Equal(1, removed);
+
+        device.Dispose();
+        config.Dispose();
+        registry.Dispose();
+        fixture.Settle();
+    }
+
+    [Fact]
     public void A_libinput_device_names_its_input_device_for_the_same_client()
     {
         using var fixture = new RiverFixture();
@@ -1759,7 +1855,7 @@ public class RiverShellTests
             decoration.SyncNextCommit();
             surface.Attach(red.Proxy, 0, 0);
             surface.Damage(0, 0, 30, 10);
-            surface.Commit();
+            decoration.Commit();
 
             fixture.PumpServerOnly();
             fixture.Host.RenderFrame();
@@ -1773,6 +1869,79 @@ public class RiverShellTests
 
         fixture.Host.RenderFrame();
         Assert.Equal(Red, fixture.Host.Pixel(5, 5));
+
+        decoration.Dispose();
+        surface.Destroy();
+        fixture.Settle();
+        GC.KeepAlive(toplevel);
+    }
+
+    [Fact]
+    public void A_decoration_that_owes_its_held_commit_throws_and_the_manager_stays_connected()
+    {
+        using var fixture = new RiverFixture();
+        var toplevel = fixture.MapToplevel();
+        var surface = fixture.Client.Compositor!.CreateSurface();
+        Wm.WmDecoration? decoration = null;
+        var window = Assert.Single(fixture.Windows);
+        fixture.OnManage = _ => decoration ??= window.CreateDecorationAbove(surface);
+        fixture.RequestManageAndSettle();
+        fixture.OnManage = null;
+        Assert.NotNull(decoration);
+
+        var held = false;
+        fixture.OnRender = _ =>
+        {
+            if (!held)
+            {
+                held = true;
+                decoration.SyncNextCommit();
+            }
+        };
+        fixture.RequestManageAndSettle();
+        fixture.OnRender = null;
+
+        Assert.Equal(1, fixture.SyncViolations);
+        Assert.True(fixture.Server.HasWindowManager, "the library committed the owed surface, so the manager stays connected");
+
+        var renders = fixture.RenderSequences;
+        fixture.RequestManageAndSettle();
+        Assert.True(fixture.RenderSequences > renders);
+        Assert.Equal(1, fixture.SyncViolations);
+
+        decoration.Dispose();
+        surface.Destroy();
+        fixture.Settle();
+        GC.KeepAlive(toplevel);
+    }
+
+    [Fact]
+    public void A_decoration_commit_after_its_held_commit_finishes_the_sequence()
+    {
+        using var fixture = new RiverFixture();
+        var toplevel = fixture.MapToplevel();
+        var surface = fixture.Client.Compositor!.CreateSurface();
+        Wm.WmDecoration? decoration = null;
+        var window = Assert.Single(fixture.Windows);
+        fixture.OnManage = _ => decoration ??= window.CreateDecorationBelow(surface);
+        fixture.RequestManageAndSettle();
+        fixture.OnManage = null;
+        Assert.NotNull(decoration);
+        Assert.Same(surface, decoration.Surface);
+
+        var buffer = fixture.CreateManagerBuffer(30, 10, Green);
+        fixture.OnRender = _ =>
+        {
+            decoration.SyncNextCommit();
+            surface.Attach(buffer.Proxy, 0, 0);
+            surface.Damage(0, 0, 30, 10);
+            decoration.Commit();
+        };
+        fixture.RequestManageAndSettle();
+        fixture.OnRender = null;
+
+        Assert.Equal(0, fixture.SyncViolations);
+        Assert.True(fixture.Server.HasWindowManager);
 
         decoration.Dispose();
         surface.Destroy();

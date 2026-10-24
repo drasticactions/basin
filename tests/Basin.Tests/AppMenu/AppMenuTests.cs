@@ -170,6 +170,39 @@ public sealed class AppMenuTests
     }
 
     [Fact]
+    public void Setting_and_clearing_an_address_keeps_one_destroy_handler()
+    {
+        using var host = new CompositorTestHost();
+        var addresses = new AppMenuAddresses();
+        var surface = host.Client.Compositor.CreateSurface();
+        host.PumpToServer();
+        var server = host.Compositor.Surfaces.Single();
+        var field = typeof(Surface).GetField("Destroyed", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        int Handlers() => (field.GetValue(server) as Delegate)?.GetInvocationList().Length ?? 0;
+        var baseline = Handlers();
+
+        var address = AppMenuAddress.DbusMenu(":1.9", "/MenuBar/1");
+        for (var i = 0; i < 10; i++)
+        {
+            addresses.Set(server, address);
+            addresses.Set(server, null);
+        }
+
+        Assert.Equal(baseline, Handlers());
+        addresses.Set(server, address);
+        addresses.Set(server, AppMenuAddress.DbusMenu(":1.9", "/MenuBar/2"));
+        Assert.Equal(baseline + 1, Handlers());
+
+        var changes = new List<AppMenuAddress?>();
+        addresses.Changed += (_, a) => changes.Add(a);
+        surface.Dispose();
+        host.PumpToServer();
+
+        Assert.Equal([null], changes);
+        Assert.Equal(0, addresses.Count);
+    }
+
+    [Fact]
     public void An_import_whose_reader_fails_drops_the_reader_and_keeps_the_address()
     {
         using var daemon = PrivateBus.Start();

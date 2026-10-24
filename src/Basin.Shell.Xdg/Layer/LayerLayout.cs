@@ -16,8 +16,8 @@ public static class LayerLayout
     /// <param name="Anchor">The anchored edges.</param>
     /// <param name="ExclusiveZone">The exclusive zone in logical pixels. A positive value reserves space, 0 avoids reserved space, and a negative value ignores it.</param>
     /// <param name="Margin">The margins in logical pixels.</param>
-    /// <param name="DesiredWidth">The requested width in logical pixels. A value of 0 fills the bounds between the margins.</param>
-    /// <param name="DesiredHeight">The requested height in logical pixels. A value of 0 fills the bounds between the margins.</param>
+    /// <param name="DesiredWidth">The requested width in logical pixels. A value of 0 fills the bounds between the margins. A non-zero width on left and right anchors is centered, and the side margins do not apply.</param>
+    /// <param name="DesiredHeight">The requested height in logical pixels. A value of 0 fills the bounds between the margins. A non-zero height on top and bottom anchors is centered, and the margins on that axis do not apply.</param>
     /// <param name="ExclusiveEdge">The edge that the exclusive zone belongs to, or <see cref="LayerAnchor.None"/> to deduce it from the anchors.</param>
     public readonly record struct LayerSpec(
         LayerKind Layer,
@@ -55,7 +55,7 @@ public static class LayerLayout
     }
 
     /// <summary>
-    /// Arranges surfaces in two passes. Surfaces with a positive exclusive zone go first and reserve their strips, from the overlay layer down. The other surfaces go next in the area that remains.
+    /// Arranges surfaces in two passes. Surfaces with a positive exclusive zone go first and reserve their strips, from the overlay layer down. The other surfaces go next in the area that remains. A sized surface on opposite anchors is centered on that axis, as the protocol says.
     /// </summary>
     /// <param name="outputBox">The output box. Only its size is used.</param>
     /// <param name="specs">The layer state of each surface.</param>
@@ -116,7 +116,7 @@ public static class LayerLayout
         {
             LayerAnchor.Left => bounds.X + marginLeft,
             LayerAnchor.Right => bounds.Right - width - marginRight,
-            LayerAnchor.Left | LayerAnchor.Right => bounds.X + marginLeft,
+            LayerAnchor.Left | LayerAnchor.Right when surface.DesiredWidth == 0 => bounds.X + marginLeft,
             _ => bounds.X + (bounds.Width - width) / 2,
         };
 
@@ -125,7 +125,7 @@ public static class LayerLayout
         {
             LayerAnchor.Top => bounds.Y + marginTop,
             LayerAnchor.Bottom => bounds.Bottom - height - marginBottom,
-            LayerAnchor.Top | LayerAnchor.Bottom => bounds.Y + marginTop,
+            LayerAnchor.Top | LayerAnchor.Bottom when surface.DesiredHeight == 0 => bounds.Y + marginTop,
             _ => bounds.Y + (bounds.Height - height) / 2,
         };
 
