@@ -25,7 +25,7 @@ public sealed class ImageCompareTests
     public void Identical_shifted_tinted_and_resized_references()
     {
         var actual = Image(20, 10, (x, y) => (x < 10 ? (byte)200 : (byte)20, 40, 60));
-        var same = ImageCompare.Compare(actual, 20, 10, actual, 20, 10, channel: 2, out var diff);
+        var same = ImageCompare.Compare(actual, 20, 10, actual, 20, 10, tolerance: 2, out var diff);
         Assert.Equal((true, 0, 0, default(Box)), (same.SameSize, same.Changed, same.MaxDelta, same.ChangedBox));
         Assert.NotNull(diff);
 

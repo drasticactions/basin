@@ -1,5 +1,6 @@
 using Basin.Backend.Headless;
 using Basin.Capabilities;
+using Basin.Capabilities.Defaults;
 using Basin.Desktop;
 using Pixman;
 using Xunit;
@@ -91,17 +92,23 @@ public sealed class CursorControllerTests
         using var denseState = new OutputState();
         Assert.True(dense.Commit(denseState.SetScale(2)));
 
-        using var cursor = new CursorController(layout);
+        var capture = new TestScreenCapture(host);
+        using var cursor = new CursorController(layout) { Capture = capture };
         cursor.AddOutput(dense, null);
         cursor.AddOutput(plain, null);
         cursor.Load(new ShmAllocator(), 64, 64);
         Assert.SkipWhen(cursor.Images?.HasTheme != true, "no xcursor theme installed");
 
         cursor.MoveTo(10, 10);
-        Assert.Equal(48, cursor.Images!.Size);
+        var denseImage = cursor.Images!.Named("left_ptr", new CursorKey(2, null));
+        Assert.NotNull(denseImage);
+        Assert.Same(denseImage.Value.Buffer, capture.CursorImage);
 
         cursor.MoveTo(210, 10);
-        Assert.Equal(24, cursor.Images.Size);
+        var plainImage = cursor.Images.Named("left_ptr", new CursorKey(1, null));
+        Assert.NotNull(plainImage);
+        Assert.Same(plainImage.Value.Buffer, capture.CursorImage);
+        Assert.NotSame(denseImage.Value.Buffer, plainImage.Value.Buffer);
     }
 
     [Fact]
@@ -401,5 +408,56 @@ public sealed class CursorControllerTests
         cursorSurface.Commit();
         host.PumpToServer();
         host.PumpUntil(() => done == 2);
+    }
+
+    [Fact]
+    public unsafe void A_client_cursor_keeps_the_transform_after_a_shape_lookup()
+    {
+        using var host = new CompositorTestHost();
+        using var backend = new HeadlessBackend(host.Loop);
+        var output = Output(backend);
+        var layout = new OutputLayout();
+        layout.Add(output, 0, 0);
+
+        var capture = new TestScreenCapture(host);
+        using var cursor = new CursorController(layout)
+        {
+            Capture = capture,
+            ColorProfiles = new CursorImagesTests.StubProfiles(CursorImagesTests.SwapRedAndBlue()),
+        };
+        cursor.AddOutput(output, null);
+        cursor.Load(new ShmAllocator(), 64, 64);
+        cursor.Describe(output, new ImageDescription { PrimariesNamed = ColorPrimaries.Bt2020 });
+        host.Seat.Pointer.CursorRequested += cursor.HandleCursorRequest;
+        var theme = new CursorImageTheme(cursor.Images);
+        cursor.Define("probe", _ => new XcursorImage { Width = 4, Height = 4, HotspotX = 0, HotspotY = 0, DelayMs = 0, Pixels = new byte[64] });
+
+        var client = host.Client;
+        var window = MappedToplevel.Map(host, client);
+        var pointer = client.Seat!.GetPointer();
+        uint enterSerial = 0;
+        pointer.Enter += (_, e) => enterSerial = e.Serial;
+        host.PumpToClient();
+        host.Seat.Pointer.NotifyEnter(window.ServerSurface, 1, 1);
+        host.PumpUntil(() => enterSerial != 0);
+        cursor.MoveTo(10, 10);
+        cursor.SetHover(window.ServerSurface, overClient: true);
+
+        Assert.True(theme.TryResolve("probe", 1, out _));
+
+        var cursorSurface = client.Compositor.CreateSurface();
+        var buffer = client.CreateBuffer(4, 4, Fill.Solid(4, 4, 0xFFFF0000));
+        pointer.SetCursor(enterSerial, cursorSurface, 0, 0);
+        cursorSurface.Attach(buffer.Proxy, 0, 0);
+        cursorSurface.Damage(0, 0, 4, 4);
+        cursorSurface.Commit();
+        host.PumpToServer();
+
+        Assert.Equal("client", cursor.Showing);
+        Assert.NotNull(capture.CursorImage);
+        Assert.True(capture.CursorImage!.BeginDataAccess(BufferDataAccess.Read, out var view));
+        var pixel = *(uint*)view.Data;
+        capture.CursorImage.EndDataAccess();
+        Assert.Equal(0xFF0000FFu, pixel);
     }
 }

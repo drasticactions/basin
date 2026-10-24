@@ -109,7 +109,7 @@ internal sealed class RoomBaker
                 builder.Add(_kit["torch_mounted"].Mesh, torch * scale);
                 var flame = Vector3.Transform(new Vector3(0, 0.62f, 0.42f), torch * scale);
                 var phase = StableHash.Of(Settings.Seed, wall.Edge.Cell.X, wall.Edge.Cell.Z, (int)wall.Edge.Side) % 628 / 100f;
-                lights.Add(new WorldLight(flame, Settings.Torch, 11, 1.6f, 0.12f, phase));
+                lights.Add(new WorldLight(flame, Settings.Torch, 11, 1.6f, Settings.TorchFlicker, phase));
             }
         }
 

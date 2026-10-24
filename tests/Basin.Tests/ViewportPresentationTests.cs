@@ -120,6 +120,57 @@ public sealed class ViewporterTests
     }
 
     [Fact]
+    public void Set_source_after_the_surface_is_destroyed_is_a_protocol_error()
+    {
+        using var host = new CompositorTestHost();
+        var surface = host.Client.Compositor.CreateSurface();
+        var viewport = host.Client.Viewporter!.GetViewport(surface);
+        host.PumpToServer();
+        surface.Destroy();
+        viewport.SetSource(WlFixed.FromInt(0), WlFixed.FromInt(0), WlFixed.FromInt(2), WlFixed.FromInt(2));
+        host.PumpToServer();
+
+        var error = ExpectError(host);
+        Assert.Equal((int)Basin.Protocol.WpViewport.Error.NoSurface, error.ErrorCode);
+        Assert.Equal("wp_viewport", error.InterfaceName);
+    }
+
+    [Fact]
+    public void A_fractional_source_without_a_destination_is_a_protocol_error()
+    {
+        using var host = new CompositorTestHost();
+        var surface = host.Client.Compositor.CreateSurface();
+        var viewport = host.Client.Viewporter!.GetViewport(surface);
+        var buffer = host.Client.CreateBuffer(20, 20, Fill.Solid(20, 20, 0xFFFF0000));
+        viewport.SetSource(WlFixed.FromInt(0), WlFixed.FromInt(0), WlFixed.FromDouble(10.5), WlFixed.FromInt(10));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+
+        var error = ExpectError(host);
+        Assert.Equal((int)Basin.Protocol.WpViewport.Error.BadSize, error.ErrorCode);
+        Assert.Equal("wp_viewport", error.InterfaceName);
+    }
+
+    [Fact]
+    public void A_fractional_source_with_a_destination_commits()
+    {
+        using var host = new CompositorTestHost();
+        var surface = host.Client.Compositor.CreateSurface();
+        var viewport = host.Client.Viewporter!.GetViewport(surface);
+        var buffer = host.Client.CreateBuffer(20, 20, Fill.Solid(20, 20, 0xFFFF0000));
+        viewport.SetSource(WlFixed.FromInt(0), WlFixed.FromInt(0), WlFixed.FromDouble(10.5), WlFixed.FromInt(10));
+        viewport.SetDestination(21, 20);
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        host.PumpToClient();
+
+        var serverSurface = host.SurfaceScenes[0].Surface;
+        Assert.Equal((21, 20), (serverSurface.Current.Width, serverSurface.Current.Height));
+    }
+
+    [Fact]
     public void Second_viewport_on_a_surface_is_a_protocol_error()
     {
         using var host = new CompositorTestHost();
@@ -135,6 +186,23 @@ public sealed class ViewporterTests
             host.Client.Display.Dispatch();
             host.Client.Display.Roundtrip();
         });
+    }
+
+    private static WaylandProtocolException ExpectError(CompositorTestHost host)
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            try
+            {
+                host.PumpToClient();
+            }
+            catch (WaylandProtocolException error)
+            {
+                return error;
+            }
+        }
+
+        throw new TimeoutException("no protocol error arrived while pumping");
     }
 }
 

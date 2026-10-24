@@ -69,7 +69,7 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
     }
 
     /// <summary>
-    /// Queues a callback for the loop thread. It can be called from any thread. A post after <see cref="Dispose"/> is ignored, and an exception from the callback is logged.
+    /// Queues a callback for the loop thread. It can be called from any thread. The wake byte is written under the queue lock, so a post that races <see cref="Dispose"/> either runs or is ignored and never writes to a closed fd. An exception from the callback is logged.
     /// </summary>
     /// <param name="d">The callback.</param>
     /// <param name="state">The argument for the callback.</param>
@@ -84,12 +84,11 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
             }
 
             _queue.Add((d, state));
-        }
-
-        unsafe
-        {
-            byte one = 1;
-            _ = write(_pipe[1], &one, 1);
+            unsafe
+            {
+                byte one = 1;
+                _ = write(_pipe[1], &one, 1);
+            }
         }
     }
 
@@ -131,16 +130,18 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         {
             _disposed = true;
             _queue.Clear();
+            if (_pipe[1] >= 0)
+            {
+                _ = close(_pipe[1]);
+                _pipe[1] = -1;
+            }
         }
 
         _wake.Remove();
-        for (var i = 0; i < _pipe.Length; i++)
+        if (_pipe[0] >= 0)
         {
-            if (_pipe[i] >= 0)
-            {
-                _ = close(_pipe[i]);
-                _pipe[i] = -1;
-            }
+            _ = close(_pipe[0]);
+            _pipe[0] = -1;
         }
 
         BasinCounters.Untrack();

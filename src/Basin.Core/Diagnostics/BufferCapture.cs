@@ -8,14 +8,17 @@ namespace Basin.Diagnostics;
 public static class BufferCapture
 {
     /// <summary>
-    /// Reads a buffer that has a CPU mapping as RGBA bytes. It throws <see cref="InvalidOperationException"/> when the buffer has no CPU mapping.
+    /// Reads a buffer that has a CPU mapping as RGBA bytes. It throws <see cref="InvalidOperationException"/> when the buffer has no CPU mapping or a format that <see cref="TryReadRgba(IBuffer, out byte[])"/> cannot unpack. Use <see cref="TryReadRgba(IBuffer, IRenderer, out byte[])"/> to read other formats through the renderer copy.
     /// </summary>
     /// <param name="buffer">The buffer to read.</param>
     /// <returns>Tightly packed RGBA bytes, 4 per pixel.</returns>
     public static byte[] ReadRgba(IBuffer buffer) =>
         TryReadRgba(buffer, out var rgba)
             ? rgba
-            : throw new InvalidOperationException("Buffer has no CPU mapping.");
+            : throw new InvalidOperationException(
+                CanUnpack(buffer.Format)
+                    ? "Buffer has no CPU mapping."
+                    : $"Buffer format {buffer.Format} cannot be read directly. Read it through a renderer.");
 
     /// <summary>
     /// Reads a half-float buffer as 16-bit RGB samples. Values are clamped to the range 0 to 1 before the conversion.
@@ -59,22 +62,27 @@ public static class BufferCapture
     }
 
     /// <summary>
-    /// Reads a buffer that has a CPU mapping as RGBA bytes. Each pixel is read as a 32-bit ARGB or XRGB word, whatever the actual format.
+    /// Reads a buffer that has a CPU mapping as RGBA bytes. It unpacks the 8-bit RGB formats in both channel orders, the 10-bit RGB formats, <see cref="DrmFormat.Rgb565"/> and the half-float formats. Half-float values are clamped to the range 0 to 1.
     /// </summary>
     /// <param name="buffer">The buffer to read.</param>
     /// <param name="rgba">Tightly packed RGBA bytes, or <see langword="null"/> on failure.</param>
-    /// <returns><see langword="false"/> when the buffer has no CPU mapping.</returns>
+    /// <returns><see langword="false"/> when the buffer has no CPU mapping, has another format, for example a YUV format, or has a stride too small for its width.</returns>
     public static bool TryReadRgba(IBuffer buffer, [NotNullWhen(true)] out byte[]? rgba)
     {
         ArgumentNullException.ThrowIfNull(buffer);
-        if (!buffer.BeginDataAccess(BufferDataAccess.Read, out var view))
+        rgba = null;
+        if (!CanUnpack(buffer.Format) || !buffer.BeginDataAccess(BufferDataAccess.Read, out var view))
         {
-            rgba = null;
             return false;
         }
 
         try
         {
+            if (!CanUnpack(view.Format) || view.Stride < buffer.Width * view.Format.BytesPerPixel())
+            {
+                return false;
+            }
+
             rgba = Unpack(view, buffer.Width, buffer.Height);
             return true;
         }
@@ -85,12 +93,12 @@ public static class BufferCapture
     }
 
     /// <summary>
-    /// Reads a buffer as RGBA bytes. When the buffer has no CPU mapping, the renderer copies it into a memory buffer first.
+    /// Reads a buffer as RGBA bytes. When the buffer has no CPU mapping, or has a format that <see cref="TryReadRgba(IBuffer, out byte[])"/> cannot unpack, the renderer copies it into a memory buffer first.
     /// </summary>
     /// <param name="buffer">The buffer to read.</param>
     /// <param name="renderer">The renderer that imports the buffer when a direct read is not possible.</param>
     /// <param name="rgba">Tightly packed RGBA bytes, or <see langword="null"/> on failure.</param>
-    /// <returns><see langword="false"/> when no CPU mapping exists and the renderer cannot import the buffer.</returns>
+    /// <returns><see langword="false"/> when the direct read fails and the renderer cannot import the buffer.</returns>
     public static bool TryReadRgba(IBuffer buffer, IRenderer renderer, [NotNullWhen(true)] out byte[]? rgba)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -149,24 +157,81 @@ public static class BufferCapture
         return true;
     }
 
+    private static bool CanUnpack(DrmFormat format) => format is
+        DrmFormat.Argb8888 or DrmFormat.Xrgb8888 or DrmFormat.Abgr8888 or DrmFormat.Xbgr8888 or
+        DrmFormat.Argb2101010 or DrmFormat.Xrgb2101010 or DrmFormat.Abgr2101010 or DrmFormat.Xbgr2101010 or
+        DrmFormat.Rgb565 or DrmFormat.Abgr16161616f or DrmFormat.Xbgr16161616f;
+
     private static unsafe byte[] Unpack(in BufferDataView view, int width, int height)
     {
-        var opaque = !view.Format.HasAlpha();
+        var format = view.Format;
+        var opaque = !format.HasAlpha();
         var rgba = new byte[width * height * 4];
         for (var y = 0; y < height; y++)
         {
-            var row = (uint*)(view.Data + (y * view.Stride));
+            var line = view.Data + (y * view.Stride);
             for (var x = 0; x < width; x++)
             {
-                var pixel = row[x];
                 var i = ((y * width) + x) * 4;
-                rgba[i] = (byte)(pixel >> 16);
-                rgba[i + 1] = (byte)(pixel >> 8);
-                rgba[i + 2] = (byte)pixel;
-                rgba[i + 3] = opaque ? (byte)0xFF : (byte)(pixel >> 24);
+                byte r, g, b, a;
+                switch (format)
+                {
+                    case DrmFormat.Rgb565:
+                        var short565 = ((ushort*)line)[x];
+                        var r5 = (short565 >> 11) & 0x1F;
+                        var g6 = (short565 >> 5) & 0x3F;
+                        var b5 = short565 & 0x1F;
+                        r = (byte)((r5 << 3) | (r5 >> 2));
+                        g = (byte)((g6 << 2) | (g6 >> 4));
+                        b = (byte)((b5 << 3) | (b5 >> 2));
+                        a = 0xFF;
+                        break;
+                    case DrmFormat.Abgr16161616f or DrmFormat.Xbgr16161616f:
+                        var half = (Half*)line + (x * 4);
+                        r = UnitToByte((float)half[0]);
+                        g = UnitToByte((float)half[1]);
+                        b = UnitToByte((float)half[2]);
+                        a = UnitToByte((float)half[3]);
+                        break;
+                    case DrmFormat.Argb2101010 or DrmFormat.Xrgb2101010:
+                        var argb10 = ((uint*)line)[x];
+                        r = (byte)((argb10 >> 22) & 0xFF);
+                        g = (byte)((argb10 >> 12) & 0xFF);
+                        b = (byte)((argb10 >> 2) & 0xFF);
+                        a = (byte)((argb10 >> 30) * 85);
+                        break;
+                    case DrmFormat.Abgr2101010 or DrmFormat.Xbgr2101010:
+                        var abgr10 = ((uint*)line)[x];
+                        r = (byte)((abgr10 >> 2) & 0xFF);
+                        g = (byte)((abgr10 >> 12) & 0xFF);
+                        b = (byte)((abgr10 >> 22) & 0xFF);
+                        a = (byte)((abgr10 >> 30) * 85);
+                        break;
+                    case DrmFormat.Abgr8888 or DrmFormat.Xbgr8888:
+                        var abgr = ((uint*)line)[x];
+                        r = (byte)abgr;
+                        g = (byte)(abgr >> 8);
+                        b = (byte)(abgr >> 16);
+                        a = (byte)(abgr >> 24);
+                        break;
+                    default:
+                        var argb = ((uint*)line)[x];
+                        r = (byte)(argb >> 16);
+                        g = (byte)(argb >> 8);
+                        b = (byte)argb;
+                        a = (byte)(argb >> 24);
+                        break;
+                }
+
+                rgba[i] = r;
+                rgba[i + 1] = g;
+                rgba[i + 2] = b;
+                rgba[i + 3] = opaque ? (byte)0xFF : a;
             }
         }
 
         return rgba;
     }
+
+    private static byte UnitToByte(float value) => (byte)MathF.Round(Math.Clamp(value, 0f, 1f) * 255f);
 }

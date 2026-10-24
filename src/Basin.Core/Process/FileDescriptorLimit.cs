@@ -23,12 +23,12 @@ public static class FileDescriptorLimit
     }
 
     /// <summary>
-    /// Gets a value indicating whether <see cref="Raise"/> changed the limit.
+    /// Gets a value indicating whether <see cref="Raise"/> changed the limit. It is false when the soft limit was already high enough.
     /// </summary>
     public static bool IsRaised => _original is not null;
 
     /// <summary>
-    /// Sets the soft limit on open files to 4096, or to the hard limit when that is lower. A failure is logged and the system limit stays.
+    /// Sets the soft limit on open files to 4096, or to the hard limit when that is lower. A soft limit that is already higher stays. A failure is logged and the system limit stays.
     /// </summary>
     /// <param name="log">The logger for the outcome.</param>
     public static void Raise(BasinLogger log)
@@ -39,8 +39,14 @@ public static class FileDescriptorLimit
             return;
         }
 
-        _original = original;
         var raised = Raised(original);
+        if (raised.Current == original.Current)
+        {
+            log.Debug($"the file descriptor limit of the compositor process stays at {original.Current}");
+            return;
+        }
+
+        _original = original;
         if (setrlimit(ResourceOpenFiles, in raised) != 0)
         {
             log.Error($"setrlimit failed, using the system default file descriptor limit of {original.Current}");
@@ -76,8 +82,11 @@ public static class FileDescriptorLimit
         }
     }
 
+    internal static ulong SoftLimitFor(ulong current, ulong hard) =>
+        Math.Max(current, Math.Min(DesiredOpenFiles, hard));
+
     private static Limit Raised(Limit original) =>
-        new() { Current = Math.Min(DesiredOpenFiles, original.Maximum), Maximum = original.Maximum };
+        new() { Current = SoftLimitFor(original.Current, original.Maximum), Maximum = original.Maximum };
 
     [DllImport("libc", SetLastError = true)]
     private static extern int getrlimit(int resource, out Limit limit);

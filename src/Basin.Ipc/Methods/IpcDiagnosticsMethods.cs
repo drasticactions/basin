@@ -162,7 +162,7 @@ internal static class IpcDiagnosticsMethods
             }
 
             var reference = parameters.GetString("reference");
-            var channel = parameters.TryGetInt("channel", out var givenChannel) ? (int)givenChannel : 2;
+            var tolerance = parameters.TryGetInt("channel", out var givenTolerance) ? (int)givenTolerance : 2;
             var pixels = parameters.TryGetInt("pixels", out var givenPixels) ? (int)givenPixels : 0;
             var diffPath = parameters.TryGetString("diff_path", out var givenDiff) ? givenDiff : null;
             var inline = parameters.TryGetBool("inline", out var givenInline) && givenInline;
@@ -172,7 +172,7 @@ internal static class IpcDiagnosticsMethods
                 return;
             }
 
-            if (channel is < 0 or > 255 || pixels < 0 || timeout < 1)
+            if (tolerance is < 0 or > 255 || pixels < 0 || timeout < 1)
             {
                 reply.Error(IpcErrorCodes.InvalidParams, "'channel' is 0 to 255, 'pixels' is not negative and 'timeout_ms' is at least 1");
                 return;
@@ -203,7 +203,7 @@ internal static class IpcDiagnosticsMethods
                 new RecordRequest(string.Empty, 1) { Follow = follow, Margin = margin, Immediate = true, KeepPixels = true, TimeoutMs = timeout },
                 result =>
                 {
-                    var comparison = Compare(window, result, expected, expectedWidth, expectedHeight, channel, pixels, diffPath, inline);
+                    var comparison = Compare(window, result, expected, expectedWidth, expectedHeight, tolerance, pixels, diffPath, inline);
                     if (pending is null)
                     {
                         early = comparison;
@@ -406,17 +406,17 @@ internal static class IpcDiagnosticsMethods
     }
 
     private static IpcDiagComparison Compare(
-        ulong window, RecordingResult result, byte[] expected, int expectedWidth, int expectedHeight, int channel, int pixels, string? diffPath,
+        ulong window, RecordingResult result, byte[] expected, int expectedWidth, int expectedHeight, int tolerance, int pixels, string? diffPath,
         bool inline)
     {
         if (result.Pixels is not { } actual || result.Frames == 0)
         {
             return new IpcDiagComparison(
-                window, false, false, 0, 0, expectedWidth, expectedHeight, 0, 0, default, channel, pixels, null, TimedOut: true);
+                window, false, false, 0, 0, expectedWidth, expectedHeight, 0, 0, default, tolerance, pixels, null, TimedOut: true);
         }
 
         var comparison = Basin.Diagnostics.ImageCompare.Compare(
-            actual, result.Width, result.Height, expected, expectedWidth, expectedHeight, channel, out var diff);
+            actual, result.Width, result.Height, expected, expectedWidth, expectedHeight, tolerance, out var diff);
         string? written = null;
         byte[]? png = null;
         if ((diffPath is not null || inline) && diff is not null)
@@ -440,7 +440,7 @@ internal static class IpcDiagnosticsMethods
             comparison.Changed,
             comparison.MaxDelta,
             Box(comparison.ChangedBox),
-            channel,
+            tolerance,
             pixels,
             written,
             result.TimedOut,

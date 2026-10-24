@@ -6,7 +6,7 @@ namespace Basin.Diagnostics;
 public static class ImageCompare
 {
     /// <summary>
-    /// Compares two tightly packed images with 4 bytes per pixel. A pixel is changed when one of its four channels differs by more than <paramref name="channel"/>.
+    /// Compares two tightly packed images with 4 bytes per pixel. A pixel is changed when one of its four channels differs by more than <paramref name="tolerance"/>.
     /// </summary>
     /// <param name="actual">The pixels of the image under test.</param>
     /// <param name="width">The width of the image under test.</param>
@@ -14,11 +14,11 @@ public static class ImageCompare
     /// <param name="expected">The pixels of the reference image.</param>
     /// <param name="expectedWidth">The width of the reference image.</param>
     /// <param name="expectedHeight">The height of the reference image.</param>
-    /// <param name="channel">The tolerance for one channel, from 0 to 255. It is not a channel index.</param>
+    /// <param name="tolerance">The largest difference of one channel that counts as unchanged, from 0 to 255.</param>
     /// <param name="diff">A grey copy of the image under test, with byte 0 of each changed pixel set to 255. It is <see langword="null"/> when the sizes differ.</param>
     /// <returns>The counts and bounds of the changed pixels.</returns>
     public static ImageComparison Compare(
-        ReadOnlySpan<byte> actual, int width, int height, ReadOnlySpan<byte> expected, int expectedWidth, int expectedHeight, int channel,
+        ReadOnlySpan<byte> actual, int width, int height, ReadOnlySpan<byte> expected, int expectedWidth, int expectedHeight, int tolerance,
         out byte[]? diff)
     {
         diff = null;
@@ -44,7 +44,7 @@ public static class ImageCompare
 
                 maxDelta = Math.Max(maxDelta, delta);
                 var grey = (byte)(((actual[i] * 54) + (actual[i + 1] * 183) + (actual[i + 2] * 19)) >> 10);
-                if (delta > channel)
+                if (delta > tolerance)
                 {
                     changed++;
                     left = Math.Min(left, x);

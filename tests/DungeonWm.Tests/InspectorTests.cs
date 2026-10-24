@@ -121,7 +121,7 @@ public sealed class InspectorTests
         try
         {
             var file = Path.Combine(directory.FullName, "dungeon-wm.toml");
-            File.WriteAllText(file, "[inspector]\nopen = true\npanels = [\"camera\", \"rooms\"]\n");
+            File.WriteAllText(file, "[world]\ntorch_flicker = 0\n\n[inspector]\nopen = true\npanels = [\"camera\", \"rooms\"]\n");
             using var session = new Session(compositor, row, client, "--config", file);
             Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("HUNG ssdwin", StringComparison.Ordinal)));
             Assert.NotNull(await session.WaitForAsync(line => line == "MODE inspector", poke: "mode"));

@@ -761,8 +761,22 @@ public sealed class Surface
     private void ValidateViewportSource()
     {
         if (ViewportResource is not { IsDestroyed: false } viewport ||
-            Current.Buffer is not { } buffer ||
             Current.ViewportSourceWidth < 0 || Current.ViewportSourceHeight < 0)
+        {
+            return;
+        }
+
+        if (Current.ViewportDestinationWidth < 0 &&
+            (Current.ViewportSourceWidth != Math.Floor(Current.ViewportSourceWidth) ||
+             Current.ViewportSourceHeight != Math.Floor(Current.ViewportSourceHeight)))
+        {
+            viewport.PostError(
+                (uint)Basin.Protocol.WpViewport.Error.BadSize,
+                "viewport source size is not an integer and no destination size is set");
+            return;
+        }
+
+        if (Current.Buffer is not { } buffer)
         {
             return;
         }

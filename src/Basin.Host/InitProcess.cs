@@ -205,7 +205,7 @@ public sealed class InitProcess
     }
 
     /// <summary>
-    /// Sets the soft open-file limit of the process to 4096, or to the hard limit when that is lower. <see cref="Start(string, string, string?, BasinLogger, IReadOnlyDictionary{string, string}?, X11Route?, bool)"/> gives the child the original limit.
+    /// Sets the soft open-file limit of the process to 4096, or to the hard limit when that is lower. A soft limit that is already higher stays. <see cref="Start(string, string, string?, BasinLogger, IReadOnlyDictionary{string, string}?, X11Route?, bool)"/> gives the child the original limit.
     /// </summary>
     /// <param name="log">The log for a failure.</param>
     public static void RaiseFileLimit(BasinLogger log) => FileDescriptorLimit.Raise(log);

@@ -148,7 +148,7 @@ public sealed class CursorImages : IDisposable
     public CursorImage? Named(string name) => Named(name, _current.Key);
 
     /// <summary>
-    /// Gets a cursor from a variant, and makes that variant current without a reacquire. The image stays owned by this object and is cached.
+    /// Gets a cursor from a variant. The current variant does not change. The image stays owned by this object and is cached.
     /// </summary>
     /// <param name="name">The cursor name. Legacy X11 names fall back through <see cref="CursorAliases"/>.</param>
     /// <param name="key">The variant to load from.</param>
@@ -157,7 +157,6 @@ public sealed class CursorImages : IDisposable
     {
         _thread.Assert();
         var entry = Entry(key);
-        _current = entry;
         if (entry.Cache.TryGetValue(name, out var cached))
         {
             return cached;
@@ -266,17 +265,30 @@ public sealed class CursorImages : IDisposable
     }
 
     /// <summary>
-    /// Copies a client cursor surface into the one shared client cursor buffer. Each call overwrites the image from the previous call.
+    /// Copies a client cursor surface into the one shared client cursor buffer, with the color transform of the current variant. Each call overwrites the image from the previous call.
     /// </summary>
     /// <param name="source">The client buffer. It must have a CPU mapping and a stride of 4 bytes per pixel.</param>
     /// <param name="hotspotX">The horizontal hotspot in source pixels.</param>
     /// <param name="hotspotY">The vertical hotspot in source pixels.</param>
     /// <param name="scale">The factor from source pixels to output pixels.</param>
     /// <returns>The image, or <see langword="null"/> when the buffer cannot be read or no cursor buffer is available.</returns>
-    public CursorImage? FromSurface(IBuffer source, int hotspotX, int hotspotY, double scale = 1.0)
+    public CursorImage? FromSurface(IBuffer source, int hotspotX, int hotspotY, double scale = 1.0) =>
+        FromSurface(source, hotspotX, hotspotY, _current.Key, scale);
+
+    /// <summary>
+    /// Copies a client cursor surface into the one shared client cursor buffer, with the color transform of the variant for <paramref name="key"/>. The current variant does not change. Each call overwrites the image from the previous call.
+    /// </summary>
+    /// <param name="source">The client buffer. It must have a CPU mapping and a stride of 4 bytes per pixel.</param>
+    /// <param name="hotspotX">The horizontal hotspot in source pixels.</param>
+    /// <param name="hotspotY">The vertical hotspot in source pixels.</param>
+    /// <param name="key">The variant whose color transform is applied.</param>
+    /// <param name="scale">The factor from source pixels to output pixels.</param>
+    /// <returns>The image, or <see langword="null"/> when the buffer cannot be read or no cursor buffer is available.</returns>
+    public CursorImage? FromSurface(IBuffer source, int hotspotX, int hotspotY, in CursorKey key, double scale = 1.0)
     {
         ArgumentNullException.ThrowIfNull(source);
         _thread.Assert();
+        var lut = Entry(key).Lut;
         if (!source.BeginDataAccess(BufferDataAccess.Read, out var view))
         {
             return null;
@@ -296,8 +308,8 @@ public sealed class CursorImages : IDisposable
             {
                 var pixels = new ReadOnlySpan<byte>((void*)view.Data, view.Stride * source.Height);
                 var uploaded = width == source.Width && height == source.Height
-                    ? Upload(_clientImage, pixels, source.Width, source.Height, _current.Lut)
-                    : UploadScaled(_clientImage, pixels, source.Width, source.Height, width, height, _current.Lut);
+                    ? Upload(_clientImage, pixels, source.Width, source.Height, lut)
+                    : UploadScaled(_clientImage, pixels, source.Width, source.Height, width, height, lut);
                 if (!uploaded)
                 {
                     return null;

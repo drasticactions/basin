@@ -5,7 +5,7 @@ using Wayland.Server;
 namespace Basin;
 
 /// <summary>
-/// Serves <c>wp_viewporter</c>. A viewport writes its source crop and destination size into the pending state of its surface.
+/// Serves <c>wp_viewporter</c>. A viewport writes its source crop and destination size into the pending state of its surface. A request on a viewport whose surface is destroyed raises <c>no_surface</c>.
 /// </summary>
 public sealed class ViewporterGlobal : IDisposable
 {
@@ -62,6 +62,12 @@ public sealed class ViewporterGlobal : IDisposable
         surface.ViewportResource = viewport;
         viewport.SetSource += (_, e) =>
         {
+            if (surface.IsDestroyed)
+            {
+                viewport.PostError((uint)WpViewport.Error.NoSurface, "the surface of the viewport is destroyed");
+                return;
+            }
+
             var x = e.X.ToDouble();
             var y = e.Y.ToDouble();
             var width = e.Width.ToDouble();
@@ -82,6 +88,12 @@ public sealed class ViewporterGlobal : IDisposable
 
         viewport.SetDestination += (_, e) =>
         {
+            if (surface.IsDestroyed)
+            {
+                viewport.PostError((uint)WpViewport.Error.NoSurface, "the surface of the viewport is destroyed");
+                return;
+            }
+
             var unset = e.Width == -1 && e.Height == -1;
             if (!unset && (e.Width <= 0 || e.Height <= 0))
             {

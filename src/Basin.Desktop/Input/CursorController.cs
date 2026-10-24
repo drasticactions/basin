@@ -82,7 +82,7 @@ public sealed class CursorController : IDisposable
     }
 
     /// <summary>
-    /// Gets the theme images. It is <see langword="null"/> before <see cref="Load"/>.
+    /// Gets the theme images. It is <see langword="null"/> before <see cref="Load"/>. Its current variant has the largest output scale and no output description.
     /// </summary>
     public CursorImages? Images => _images;
 
@@ -229,6 +229,7 @@ public sealed class CursorController : IDisposable
             shapes.Scale = MaxScale();
         }
 
+        _images?.ReloadForScale(MaxScale(), static () => { });
         if (_showingName.Length > 0 && _images?.Named(_showingName, KeyAt(_x, _y)) is { } image)
         {
             _showing = image;
@@ -577,6 +578,7 @@ public sealed class CursorController : IDisposable
                 source,
                 (int)Math.Round(_clientHotspot.X * density),
                 (int)Math.Round(_clientHotspot.Y * density),
+                KeyAt(_x, _y),
                 scale)
             : null;
 

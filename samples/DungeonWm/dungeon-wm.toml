@@ -54,6 +54,8 @@ torch_spacing = 2
 # Meters from the floor to a torch.
 torch_height = 2.1
 torch_color = "#ff9e4d"
+# Torch flicker as a share of the light, 0 to 1. 0 holds the light still.
+torch_flicker = 0.12
 # Density of decor in room corners, 0 to 1.
 props = 0.5
 # Barrels, boxes, chairs and stools are bodies you can knock over.

@@ -379,8 +379,46 @@ public sealed class CursorImagesTests
         Assert.Equal(before + 1, cursors.VariantCount);
     }
 
+    [Fact]
+    public void A_lookup_with_a_key_leaves_the_current_variant()
+    {
+        using var allocator = new ShmAllocator();
+        using var cursors = Create(allocator);
+        cursors.Define("probe", Probe);
+        cursors.Use(new CursorKey(1, null), () => { });
+
+        Assert.NotNull(cursors.Named("probe", new CursorKey(2, null)));
+        Assert.Equal(24, cursors.Size);
+    }
+
+    [Fact]
+    public void A_shape_lookup_does_not_strip_the_client_cursor_transform()
+    {
+        using var allocator = new ShmAllocator();
+        using var cursors = Create(allocator);
+        cursors.ColorProfiles = new StubProfiles(SwapRedAndBlue());
+        cursors.Define("probe", Probe);
+        UseDescribed(cursors);
+
+        Assert.NotNull(cursors.Named("probe", new CursorKey(1, null)));
+        var image = UploadClient(cursors, 0xFFFF0000);
+        Assert.Equal(0xFF0000FFu, ReadArgb(image, 0, 0));
+    }
+
+    private static XcursorImage Probe(double scale)
+    {
+        var size = Math.Max(1, (int)(8 * scale));
+        var pixels = new byte[size * size * 4];
+        for (var i = 3; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 0xFF;
+        }
+
+        return new XcursorImage { Width = size, Height = size, HotspotX = 0, HotspotY = 0, DelayMs = 0, Pixels = pixels };
+    }
+
     private static void UseDescribed(CursorImages cursors) =>
-        cursors.Named("left_ptr", new CursorKey(1, new ImageDescription { PrimariesNamed = ColorPrimaries.Bt2020 }));
+        cursors.Use(new CursorKey(1, new ImageDescription { PrimariesNamed = ColorPrimaries.Bt2020 }), () => { });
 
     private static CursorImage UploadClient(CursorImages cursors, uint argb)
     {
@@ -437,7 +475,7 @@ public sealed class CursorImagesTests
         return new ColorLut3D(size, data);
     }
 
-    private static ColorLut3D SwapRedAndBlue(int size = 33)
+    internal static ColorLut3D SwapRedAndBlue(int size = 33)
     {
         var data = new float[size * size * size * 3];
         var index = 0;
@@ -457,7 +495,7 @@ public sealed class CursorImagesTests
         return new ColorLut3D(size, data);
     }
 
-    private sealed class StubProfiles(ColorLut3D lut) : IColorProfileService
+    internal sealed class StubProfiles(ColorLut3D lut) : IColorProfileService
     {
         public ColorFeatures Features => ColorFeatures.Transforms;
 

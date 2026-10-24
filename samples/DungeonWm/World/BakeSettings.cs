@@ -10,7 +10,8 @@ internal sealed record BakeSettings(
     Vector3 TorchColor = default,
     double Props = 0.5,
     bool DynamicProps = true,
-    int Seed = 7)
+    int Seed = 7,
+    float TorchFlicker = 0.12f)
 {
     public Vector3 Torch => TorchColor == default ? new Vector3(1.0f, 0.62f, 0.3f) : TorchColor;
 }

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Basin.Diagnostics;
 using Wayland.Server;
 using Xunit;
@@ -122,4 +123,75 @@ public sealed class CompositorSynchronizationContextTests : IDisposable
         Assert.False(ran);
         LeakTracking.Expect(0, BasinCounters.LiveObjects);
     }
+
+    [Fact]
+    public unsafe void A_post_that_races_dispose_never_writes_into_a_reused_fd()
+    {
+        var fds = stackalloc int[2];
+        var drain = stackalloc byte[16];
+        var fresh = new int[128];
+        for (var iteration = 0; iteration < 300; iteration++)
+        {
+            var context = new CompositorSynchronizationContext(_loop);
+            var stop = 0;
+            var started = new CountdownEvent(4);
+            var posters = new Thread[4];
+            for (var p = 0; p < posters.Length; p++)
+            {
+                posters[p] = new Thread(() =>
+                {
+                    started.Signal();
+                    while (Volatile.Read(ref stop) == 0)
+                    {
+                        context.Post(static _ => { }, null);
+                    }
+                });
+                posters[p].Start();
+            }
+
+            Assert.True(started.Wait(5000, TestContext.Current.CancellationToken));
+            context.Dispose();
+            for (var i = 0; i < fresh.Length; i += 2)
+            {
+                Assert.Equal(0, pipe2(fds, OCloexec | ONonblock));
+                fresh[i] = fds[0];
+                fresh[i + 1] = fds[1];
+            }
+
+            Volatile.Write(ref stop, 1);
+            foreach (var poster in posters)
+            {
+                poster.Join();
+            }
+
+            started.Dispose();
+            var stray = 0;
+            for (var i = 0; i < fresh.Length; i += 2)
+            {
+                if (read(fresh[i], drain, 16) > 0)
+                {
+                    stray++;
+                }
+            }
+
+            foreach (var fd in fresh)
+            {
+                _ = close(fd);
+            }
+
+            Assert.Equal(0, stray);
+        }
+    }
+
+    private const int OCloexec = 0x80000;
+    private const int ONonblock = 0x800;
+
+    [DllImport("libc")]
+    private static extern unsafe int pipe2(int* fds, int flags);
+
+    [DllImport("libc")]
+    private static extern unsafe nint read(int fd, byte* buffer, nuint count);
+
+    [DllImport("libc")]
+    private static extern int close(int fd);
 }

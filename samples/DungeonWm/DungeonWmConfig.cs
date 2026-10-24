@@ -32,6 +32,7 @@ internal static class DungeonWmConfig
         Check("world.torch_spacing", running.Map.TorchSpacing != loaded.Map.TorchSpacing);
         Check("world.torch_height", running.Bake.TorchHeight != loaded.Bake.TorchHeight);
         Check("world.torch_color", running.Bake.Torch != loaded.Bake.Torch);
+        Check("world.torch_flicker", running.Bake.TorchFlicker != loaded.Bake.TorchFlicker);
         Check("world.props", running.Bake.Props != loaded.Bake.Props);
         Check("world.dynamic_props", running.Bake.DynamicProps != loaded.Bake.DynamicProps);
         Check("world.rooms", running.Rooms != loaded.Rooms);
@@ -139,7 +140,8 @@ internal static class DungeonWmConfig
                 Color3(world.Raw("torch_color"), settings.Bake.Torch),
                 Math.Clamp(world.Number("props", settings.Bake.Props), 0, 1),
                 world.Flag("dynamic_props", settings.Bake.DynamicProps),
-                seed);
+                seed,
+                (float)Math.Clamp(world.Number("torch_flicker", (double)settings.Bake.TorchFlicker), 0, 1));
             settings.PixelsPerMeter = (float)Math.Clamp(world.Number("pixels_per_meter", (double)settings.PixelsPerMeter), 100, 10000);
             settings.SkyColor = Color3(world.Raw("sky_color"), settings.SkyColor);
             settings.Rooms = Math.Clamp(world.Number("rooms", settings.Rooms), 1, 32);
