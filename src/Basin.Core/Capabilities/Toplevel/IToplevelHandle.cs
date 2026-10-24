@@ -54,6 +54,16 @@ public interface IToplevelHandle
     void SetFullscreen(bool fullscreen);
 
     /// <summary>
+    /// Sets or clears the fullscreen state and asks for a position and a size in the same configure. The client sees no size between the old state and the new one.
+    /// </summary>
+    /// <param name="fullscreen"><see langword="true"/> to tell the client that it is fullscreen.</param>
+    /// <param name="x">The left edge in layout coordinates.</param>
+    /// <param name="y">The top edge in layout coordinates.</param>
+    /// <param name="width">The width in logical pixels.</param>
+    /// <param name="height">The height in logical pixels.</param>
+    void SetFullscreen(bool fullscreen, int x, int y, int width, int height);
+
+    /// <summary>
     /// Asks the window to take a position and a size. A shell that cannot place its windows, such as xdg-shell, uses only the size.
     /// </summary>
     /// <param name="x">The left edge in layout coordinates.</param>

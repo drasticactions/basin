@@ -269,9 +269,21 @@ internal sealed class RiverWindow : IRiverWindowV1Handler
         }
         else if (XWindow is { } xwindow)
         {
-            var position = _node?.RequestedPosition ?? new Point(xwindow.X, xwindow.Y);
+            var position = _requested.Fullscreen?.Position
+                ?? _node?.RequestedPosition
+                ?? new Point(xwindow.X, xwindow.Y);
             var width = target.Width > 0 ? target.Width : xwindow.Width;
             var height = target.Height > 0 ? target.Height : xwindow.Height;
+            if (xwindow.IsMaximized != _requested.InformMaximized)
+            {
+                xwindow.SetMaximized(_requested.InformMaximized);
+            }
+
+            if (xwindow.IsFullscreen != _requested.InformFullscreen)
+            {
+                xwindow.SetFullscreen(_requested.InformFullscreen);
+            }
+
             if (changed || position.X != xwindow.X || position.Y != xwindow.Y)
             {
                 CaptureSnapshot();
@@ -306,13 +318,16 @@ internal sealed class RiverWindow : IRiverWindowV1Handler
         {
             Tree.SetPosition(output.Position.X, output.Position.Y);
             PopupTree.SetPosition(output.Position.X, output.Position.Y);
-            XWindow?.Configure(output.Position.X, output.Position.Y, output.Width, output.Height);
+            ConfigureXIfMoved(output.Position.X, output.Position.Y, output.Width, output.Height);
         }
         else if (_node?.RequestedPosition is { } position)
         {
             Tree.SetPosition(position.X, position.Y);
             PopupTree.SetPosition(position.X, position.Y);
-            XWindow?.Configure(position.X, position.Y, XWindow.Width, XWindow.Height);
+            if (XWindow is { } xwindow)
+            {
+                ConfigureXIfMoved(position.X, position.Y, xwindow.Width, xwindow.Height);
+            }
         }
 
         var fullscreen = _requested.Fullscreen is not null;
@@ -340,6 +355,15 @@ internal sealed class RiverWindow : IRiverWindowV1Handler
             visible: !fullscreen);
 
         _borders.Tree.RaiseToTop();
+    }
+
+    private void ConfigureXIfMoved(int x, int y, int width, int height)
+    {
+        if (XWindow is { } xwindow
+            && (xwindow.X != x || xwindow.Y != y || xwindow.Width != width || xwindow.Height != height))
+        {
+            xwindow.Configure(x, y, width, height);
+        }
     }
 
     internal void SetFullscreenDisplayed(bool displayed, in Box outputBox)
@@ -587,6 +611,26 @@ internal sealed class RiverWindow : IRiverWindowV1Handler
             _manager.MarkManageDirty();
         };
         xwindow.GeometryChanged += () => _manager.MarkRenderDirty();
+        xwindow.MaximizeRequested += maximized => Request(
+            maximized ? PendingRequest.Maximize : PendingRequest.Unmaximize);
+        xwindow.FullscreenRequested += fullscreen => Request(
+            fullscreen ? PendingRequest.Fullscreen : PendingRequest.ExitFullscreen);
+        xwindow.MinimizeRequested += minimized =>
+        {
+            if (minimized)
+            {
+                Request(PendingRequest.Minimize);
+            }
+        };
+
+        if (xwindow.WantsFullscreen)
+        {
+            Request(PendingRequest.Fullscreen);
+        }
+        else if (xwindow.WantsMaximized)
+        {
+            Request(PendingRequest.Maximize);
+        }
     }
 
     private void RefreshSizeHint(XdgToplevelWindow toplevel) =>

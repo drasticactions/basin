@@ -1958,17 +1958,19 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
         mw.FullscreenOutput = output;
     }
 
-    private static void ExitFullscreen(ManagedWindow mw, bool restore)
+    private void ExitFullscreen(ManagedWindow mw, bool restore)
     {
-        mw.Window.ExitFullscreen();
-        mw.Window.InformFullscreen(false);
         mw.FullscreenOutput = null;
-
         if (restore && mw.PreFullscreen is { Width: > 0, Height: > 0 } saved)
         {
             mw.SetPosition(saved.X, saved.Y);
-            mw.Propose(saved.Width, saved.Height);
+            var minimum = mw.Window.SizeHint.Minimum;
+            _session.ExitFullscreen(mw, new Size(Math.Max(saved.Width, minimum.Width), Math.Max(saved.Height, minimum.Height)));
+            return;
         }
+
+        mw.Window.ExitFullscreen();
+        mw.Window.InformFullscreen(false);
     }
 
     private void ToggleFullscreen()

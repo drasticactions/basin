@@ -18,7 +18,7 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
-    internal sealed class XWindow : IGrabTarget
+    internal sealed class XWindow : ITiledWindow
     {
         private readonly TinyComp _comp;
         private Frame? _frame;
@@ -39,6 +39,7 @@ internal sealed partial class TinyComp
             Tree = comp._xSceneDriver.ParentOf(xwin) ?? scene.Tree.Parent!;
             Tree.SetPosition(xwin.X, xwin.Y);
             SceneSurface = scene;
+            RoundTrip = new Basin.Desktop.FullscreenRoundTrip(xwin);
             Outer = comp._xSceneDriver.OuterOf(xwin) ?? scene.Tree;
             Outer.SetPosition(0, 0);
             comp.RefreshSurfaceLuts();
@@ -271,13 +272,7 @@ internal sealed partial class TinyComp
 
         public void ResizeTo(int x, int y, int width, int height, ResizeEdges edges)
         {
-            _comp._effects.OnResized(
-                Tree,
-                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
-                new Box(0, 0, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1)),
-                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
-                0,
-                0);
+            NotifyResized(width, height);
             var box = new Box(x, y, width, height);
             if (_resizing && _comp._useTransactions)
             {
@@ -296,6 +291,24 @@ internal sealed partial class TinyComp
             DropResizeFlow();
             Place(box);
             XWin.Configure(box.X - OffsetX, box.Y - OffsetY, width, height);
+            Layout();
+        }
+
+        private void NotifyResized(int width, int height) =>
+            _comp._effects.OnResized(
+                Tree,
+                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
+                new Box(0, 0, Math.Max(XWin.Width, 1), Math.Max(XWin.Height, 1)),
+                new Box(0, 0, Math.Max(width, 1), Math.Max(height, 1)),
+                0,
+                0);
+
+        private void LeaveFullscreenTo(Box box)
+        {
+            NotifyResized(box.Width, box.Height);
+            DropResizeFlow();
+            Place(box);
+            RoundTrip.ExitFullscreen(new Box(box.X - OffsetX, box.Y - OffsetY, box.Width, box.Height));
             Layout();
         }
 
@@ -445,6 +458,24 @@ internal sealed partial class TinyComp
             }
 
             _fullscreen = false;
+            if (_comp.TileSlotOf(this) is { } slot)
+            {
+                _restore = RestoreGeometry.None;
+                LeaveFullscreenTo(slot);
+                _comp.RefreshDim();
+                UpdateDecorations();
+                return;
+            }
+
+            if (!_maximized && _restore.TryGet(out var saved))
+            {
+                _restore = RestoreGeometry.None;
+                LeaveFullscreenTo(saved);
+                _comp.RefreshDim();
+                UpdateDecorations();
+                return;
+            }
+
             XWin.SetFullscreen(false);
             _comp.RefreshDim();
             UpdateDecorations();
@@ -452,16 +483,29 @@ internal sealed partial class TinyComp
             {
                 ReapplyPinnedGeometry();
             }
-            else if (_restore.TryGet(out var saved))
-            {
-                _restore = RestoreGeometry.None;
-                ResizeTo(saved.X, saved.Y, saved.Width, saved.Height, ResizeEdges.None);
-            }
             else
             {
                 _comp.PlaceCascade(this);
             }
         }
+
+        public Basin.Desktop.FullscreenRoundTrip RoundTrip { get; }
+
+        public bool IsFullscreen => _fullscreen;
+
+        public string AppId => XWin.Class;
+
+        public void EnterFullscreen() => SetFullscreen(true);
+
+        public void FloatedOutOfFullscreen()
+        {
+            _fullscreen = false;
+            _comp.RefreshDim();
+            UpdateDecorations();
+        }
+
+        public void Tile(Box slot, Transaction? transaction) =>
+            ResizeTo(slot.X, slot.Y, slot.Width, slot.Height, ResizeEdges.None);
 
         private void ReportDecoration() =>
             _comp._xwaylandModule.DisplayOf(XWin)?.Toplevels?.SetDecoration(XWin, noBorder: !WantsFrame, userCanSet: Framable);

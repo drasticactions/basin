@@ -152,6 +152,16 @@ internal sealed class TabWindow
 
     public void Place(Box box)
     {
+        if (X11 is { } x11)
+        {
+            X = box.X;
+            Y = box.Y;
+            Tree.SetPosition(box.X, box.Y);
+            x11.Configure(box.X, box.Y, Math.Max(1, box.Width), Math.Max(1, box.Height));
+            UpdateFrame();
+            return;
+        }
+
         MoveTo(box.X, box.Y);
         Resize(box.Width, box.Height);
     }

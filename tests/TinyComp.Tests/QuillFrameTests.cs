@@ -93,6 +93,14 @@ public sealed class QuillFrameTests
         private readonly List<string> _errors = [];
         private readonly List<string> _clientLines = [];
 
+        public List<string> ClientLines(string prefix)
+        {
+            lock (_gate)
+            {
+                return _clientLines.FindAll(line => line.StartsWith(prefix, StringComparison.Ordinal));
+            }
+        }
+
         public bool ClientPrinted(string fragment)
         {
             lock (_gate)

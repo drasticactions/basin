@@ -241,6 +241,17 @@ internal sealed partial class TinyComp
 
         _report.Register(methods, "tinycomp/tile", "tile", TileWindows);
 
+        _report.Register(methods, "tinycomp/float", "float", ToggleFloat);
+
+        _report.Register(methods, "tinycomp/fullscreen", "fullscreen {state:on|off}", (ref IpcParams p, IpcReply _) =>
+        {
+            var state = p.GetString("state");
+            if (!p.Failed)
+            {
+                RequestFullscreen(state == "on");
+            }
+        });
+
         _report.Register(methods, "tinycomp/canvas", "canvas {state:on|off}", (ref IpcParams p, IpcReply _) =>
         {
             var state = p.GetString("state");

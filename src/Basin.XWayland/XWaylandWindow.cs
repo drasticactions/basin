@@ -559,6 +559,17 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public void SetFullscreen(bool fullscreen) => _wm.SetWindowFullscreen(this, fullscreen);
 
     /// <summary>
+    /// Sets the fullscreen state, writes it to <c>_NET_WM_STATE</c>, and then moves and resizes the X window. <see cref="StateChanged"/> occurs after the configure, so the client sees no geometry between the two.
+    /// </summary>
+    /// <param name="fullscreen"><see langword="true"/> to tell the client that it is fullscreen.</param>
+    /// <param name="x">The left edge in layout coordinates.</param>
+    /// <param name="y">The top edge in layout coordinates.</param>
+    /// <param name="width">The width in logical pixels.</param>
+    /// <param name="height">The height in logical pixels.</param>
+    public void SetFullscreen(bool fullscreen, int x, int y, int width, int height) =>
+        _wm.SetWindowFullscreen(this, fullscreen, x, y, width, height);
+
+    /// <summary>
     /// Sets the minimized state and writes <c>_NET_WM_STATE</c> and <c>WM_STATE</c>. The compositor must hide the window itself.
     /// </summary>
     /// <param name="minimized"><see langword="true"/> for the iconic state.</param>
@@ -575,7 +586,7 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public bool IsMaximized => MaximizedState;
 
     /// <summary>
-    /// Gets a value indicating whether the last <see cref="SetFullscreen"/> call made the window fullscreen.
+    /// Gets a value indicating whether the last <see cref="SetFullscreen(bool)"/> call made the window fullscreen.
     /// </summary>
     public bool IsFullscreen => FullscreenState;
 

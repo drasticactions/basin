@@ -379,7 +379,7 @@ public sealed class SdlToplevelWindows : IDisposable
                 return;
         }
 
-        _ = toplevel.SendConfigure();
+        toplevel.RequestConfigure();
     }
 
     private void BeginDrag(Entry entry, ResizeEdges edges)

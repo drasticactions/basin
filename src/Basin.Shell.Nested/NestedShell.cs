@@ -1136,7 +1136,7 @@ public sealed partial class NestedShell : IDisposable
     }
 
     /// <summary>
-    /// Moves a window to the fullscreen layer over the whole output, or back to its maximized or saved geometry. It raises the window.
+    /// Moves a window to the fullscreen layer over the whole output, or back to its maximized or saved geometry. A window with no saved geometry goes to the middle half of the work area. It raises the window.
     /// It does nothing for a window that is not mapped or already in that state.
     /// </summary>
     /// <param name="window">The window.</param>
@@ -1157,6 +1157,12 @@ public sealed partial class NestedShell : IDisposable
         }
         else
         {
+            if (!window.Maximized)
+            {
+                window.Restore ??= new Box(
+                    WorkArea.X + (WorkArea.Width / 4), WorkArea.Y + (WorkArea.Height / 4), WorkArea.Width / 2, WorkArea.Height / 2);
+            }
+
             window.Content.SetFullscreen(false);
             window.Tree?.Reparent(LayerFor(window));
             if (window.Maximized)
@@ -1182,13 +1188,13 @@ public sealed partial class NestedShell : IDisposable
 
     /// <summary>
     /// Tiles a window to the left or right half of the work area, maximizes it for <see cref="TileEdge.Top"/>, or restores it for <see cref="TileEdge.None"/>.
-    /// It does nothing for a window that is not mapped.
+    /// It does nothing for a window that is not mapped or is fullscreen.
     /// </summary>
     /// <param name="window">The window.</param>
     /// <param name="edge">The tile edge.</param>
     public void SetTile(ManagedWindow window, TileEdge edge)
     {
-        if (!window.IsMapped)
+        if (!window.IsMapped || window.Fullscreen)
         {
             return;
         }

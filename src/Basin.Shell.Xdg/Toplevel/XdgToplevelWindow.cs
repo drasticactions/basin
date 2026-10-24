@@ -281,6 +281,9 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
 
     void IToplevelHandle.Configure(int x, int y, int width, int height) => SetSize(width, height);
 
+    void IToplevelHandle.SetFullscreen(bool fullscreen, int x, int y, int width, int height) =>
+        SetFullscreen(fullscreen, width, height);
+
     /// <summary>
     /// Sets or clears the activated state and schedules a configure when it changes. It does not move keyboard focus.
     /// </summary>
@@ -298,6 +301,18 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
     /// </summary>
     /// <param name="fullscreen"><see langword="true"/> to tell the client that it is fullscreen.</param>
     public void SetFullscreen(bool fullscreen) => SetState(XdgToplevel.State.Fullscreen, fullscreen);
+
+    /// <summary>
+    /// Sets or clears the fullscreen state and sets the size of the same configure. Handlers of <see cref="StateChanged"/> see the new size.
+    /// </summary>
+    /// <param name="fullscreen"><see langword="true"/> to tell the client that it is fullscreen.</param>
+    /// <param name="width">The width in logical pixels. A value of 0 lets the client choose that dimension.</param>
+    /// <param name="height">The height in logical pixels. A value of 0 lets the client choose that dimension.</param>
+    public void SetFullscreen(bool fullscreen, int width, int height)
+    {
+        SetSize(width, height);
+        SetFullscreen(fullscreen);
+    }
 
     /// <summary>
     /// Raises <see cref="MaximizeRequested"/> as if the client asked, so that policy decides. It does not change <see cref="RequestedMaximized"/>.

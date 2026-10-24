@@ -42,7 +42,8 @@ static void usage(void)
         "  moveresizenow  the same message, sent once right after the map\n"
         "  stub        an override-redirect 1x1 window parked off-screen\n"
         "  fixedpopup  WM_NORMAL_HINTS with PPosition, PWinGravity and StaticGravity\n"
-        "  keepstate   _NET_WM_STATE_ABOVE and _NET_WM_STATE_STICKY set before the map\n");
+        "  keepstate   _NET_WM_STATE_ABOVE and _NET_WM_STATE_STICKY set before the map\n"
+        "  fullscreen  _NET_WM_STATE_FULLSCREEN set before the map, as a game asks\n");
     exit(2);
 }
 
@@ -87,7 +88,7 @@ int main(int argc, char **argv)
     int known = !strcmp(mode, "normal") || !strcmp(mode, "orflip") || !strcmp(mode, "tiny") ||
         !strcmp(mode, "noinput") || !strcmp(mode, "disabled") || !strcmp(mode, "noactivate") ||
         !strcmp(mode, "steal") || !strcmp(mode, "moveresize") || !strcmp(mode, "moveresizenow") || !strcmp(mode, "stub") ||
-        !strcmp(mode, "fixedpopup") || !strcmp(mode, "keepstate");
+        !strcmp(mode, "fixedpopup") || !strcmp(mode, "keepstate") || !strcmp(mode, "fullscreen");
     if (!known)
     {
         usage();
@@ -156,6 +157,12 @@ int main(int argc, char **argv)
         }
 
         xcb_change_property(conn, XCB_PROP_MODE_REPLACE, window, atom("_NET_WM_STATE"), XCB_ATOM_ATOM, 32, 2, state);
+    }
+
+    if (!strcmp(mode, "fullscreen"))
+    {
+        xcb_atom_t fullscreen = atom("_NET_WM_STATE_FULLSCREEN");
+        xcb_change_property(conn, XCB_PROP_MODE_REPLACE, window, atom("_NET_WM_STATE"), XCB_ATOM_ATOM, 32, 1, &fullscreen);
     }
 
     if (!strcmp(mode, "fixedpopup"))

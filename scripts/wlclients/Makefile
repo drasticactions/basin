@@ -95,6 +95,11 @@ $(BIN)/kmsretain: kmsretain.c | $(BIN)
 $(BIN)/modeswitch.exe: modeswitch.c | $(BIN)
 	x86_64-w64-mingw32-gcc -O2 -Wall -o $@ modeswitch.c -mwindows -lgdi32
 
+# a Windows program that stands in for a game in borderless fullscreen and logs its
+# size and the mouse, so it needs mingw-w64 and is not part of all
+$(BIN)/fsprobe.exe: fsprobe.c | $(BIN)
+	x86_64-w64-mingw32-gcc -O2 -Wall -o $@ fsprobe.c -mwindows -lgdi32
+
 # a Windows D3D11 program, so it needs mingw-w64 and is not part of all
 $(BIN)/d3dspin.exe: d3dspin.c | $(BIN)
 	x86_64-w64-mingw32-gcc -O2 -Wall -o $@ d3dspin.c -mwindows -ld3d11 -ldxgi -lgdi32 -luser32 -luuid

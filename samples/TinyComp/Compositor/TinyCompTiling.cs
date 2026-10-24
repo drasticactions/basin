@@ -28,6 +28,29 @@ internal sealed partial class TinyComp
     private Transaction? _splitTransaction;
     private readonly List<SceneSnapshot> _splitSnapshots = [];
 
+    internal interface ITiledWindow : IGrabTarget
+    {
+        Workspace? Workspace { get; }
+
+        bool Minimized { get; }
+
+        bool IsFullscreen { get; }
+
+        string AppId { get; }
+
+        SceneTree? Tree { get; }
+
+        SceneSurface? SceneSurface { get; }
+
+        Basin.Desktop.FullscreenRoundTrip RoundTrip { get; }
+
+        void EnterFullscreen();
+
+        void FloatedOutOfFullscreen();
+
+        void Tile(Box slot, Transaction? transaction);
+    }
+
     private static int SplitX(Workspace workspace) =>
         workspace.TileArea.X + (int)(workspace.TileArea.Width * workspace.SplitFraction);
 
@@ -39,7 +62,7 @@ internal sealed partial class TinyComp
         }
 
         workspace.Tiled.Clear();
-        foreach (var window in _windows)
+        foreach (var window in _windows.Cast<ITiledWindow>().Concat(_xwindows.Where(x => x.Framable)))
         {
             if (window.Workspace == workspace && !window.Minimized && workspace.Tiled.Count < 2)
             {
@@ -60,7 +83,7 @@ internal sealed partial class TinyComp
         workspace.TileArea = new Box(origin.X + usable.X, origin.Y + usable.Y, usable.Width, usable.Height);
         workspace.SplitFraction = 0.5;
         ApplySplit(workspace);
-        _report.Line($"TILED {workspace.Tiled[0].Toplevel.AppId} | {workspace.Tiled[1].Toplevel.AppId} transactions={_useTransactions}");
+        _report.Line($"TILED {workspace.Tiled[0].AppId} | {workspace.Tiled[1].AppId} transactions={_useTransactions}");
     }
 
     internal void SetSplit(double fraction)
@@ -111,6 +134,81 @@ internal sealed partial class TinyComp
         }
     }
 
+    internal Box? TileSlotOf(ITiledWindow window)
+    {
+        if (window.Workspace is not { Tiled.Count: 2 } workspace || !workspace.Tiled.Contains(window))
+        {
+            return null;
+        }
+
+        var splitX = SplitX(workspace);
+        var area = workspace.TileArea;
+        return ReferenceEquals(workspace.Tiled[0], window)
+            ? new Box(area.X, area.Y, Math.Max(32, splitX - area.X), area.Height)
+            : new Box(splitX, area.Y, Math.Max(32, area.Right - splitX), area.Height);
+    }
+
+    internal void RequestFullscreen(bool fullscreen)
+    {
+        if (_focused is { } window)
+        {
+            window.Toplevel.RaiseFullscreenRequest(fullscreen);
+        }
+        else if (_focusedX is { } xwindow)
+        {
+            xwindow.SetFullscreen(fullscreen);
+        }
+        else
+        {
+            _report.Line($"FULLSCREEN needs a focused window");
+            return;
+        }
+
+        _report.Line($"FULLSCREEN {(fullscreen ? "on" : "off")}");
+    }
+
+    internal void ToggleFloat()
+    {
+        ITiledWindow? focused = _focused is not null ? _focused : _focusedX is { Framable: true } x ? x : null;
+        if (focused is not { } window || CurrentWorkspace() is not { } workspace)
+        {
+            _report.Line($"FLOAT needs a focused window");
+            return;
+        }
+
+        if (workspace.Tiled.Remove(window))
+        {
+            var (width, height) = window.GeometrySize;
+            var size = window.RoundTrip.Float(window.IsFullscreen, new Box(window.X, window.Y, width, height));
+            if (size == Basin.Desktop.FloatSize.Keep)
+            {
+                window.FloatedOutOfFullscreen();
+            }
+            _report.Line($"FLOATED {window.AppId} size={(size == Basin.Desktop.FloatSize.Keep ? "keep" : "policy")}");
+            return;
+        }
+
+        if (workspace.Tiled.Count >= 2)
+        {
+            _report.Line($"TILE pair is full");
+            return;
+        }
+
+        var refullscreen = window.RoundTrip.Tile(window.IsFullscreen);
+        if (refullscreen)
+        {
+            window.EnterFullscreen();
+        }
+
+        workspace.Tiled.Add(window);
+        if (workspace.Tiled.Count == 2)
+        {
+            ApplySplit(workspace);
+        }
+
+        _report.Line($"RETILED {window.AppId} fullscreen={refullscreen}");
+    }
+
     private void ApplySplit(Workspace workspace)
     {
         if (workspace.Tiled.Count != 2)
@@ -118,18 +216,16 @@ internal sealed partial class TinyComp
             return;
         }
 
-        var left = workspace.Tiled[0];
-        var right = workspace.Tiled[1];
-        var splitX = SplitX(workspace);
-        var leftWidth = Math.Max(32, splitX - workspace.TileArea.X);
-        var rightWidth = Math.Max(32, workspace.TileArea.Right - splitX);
-
         if (!_useTransactions)
         {
-            left.MoveTo(workspace.TileArea.X, workspace.TileArea.Y);
-            left.Toplevel.SetSize(leftWidth, workspace.TileArea.Height);
-            right.MoveTo(splitX, workspace.TileArea.Y);
-            right.Toplevel.SetSize(rightWidth, workspace.TileArea.Height);
+            foreach (var window in workspace.Tiled)
+            {
+                if (!window.IsFullscreen && TileSlotOf(window) is { } slot)
+                {
+                    window.Tile(slot, null);
+                }
+            }
+
             return;
         }
 
@@ -138,16 +234,18 @@ internal sealed partial class TinyComp
         _splitTransaction = transaction;
         _splitWorkspace = workspace;
 
-        FreezeForSplit(left);
-        FreezeForSplit(right);
+        foreach (var window in workspace.Tiled)
+        {
+            if (!window.IsFullscreen && TileSlotOf(window) is { } slot)
+            {
+                if (window is Window)
+                {
+                    FreezeForSplit(window);
+                }
 
-        left.MoveTo(workspace.TileArea.X, workspace.TileArea.Y);
-        left.Toplevel.SetSize(leftWidth, workspace.TileArea.Height);
-        left.Toplevel.SendConfigure(transaction);
-
-        right.MoveTo(splitX, workspace.TileArea.Y);
-        right.Toplevel.SetSize(rightWidth, workspace.TileArea.Height);
-        right.Toplevel.SendConfigure(transaction);
+                window.Tile(slot, transaction);
+            }
+        }
 
         transaction.Completed += () =>
         {
@@ -161,7 +259,7 @@ internal sealed partial class TinyComp
         transaction.Seal();
     }
 
-    private void FreezeForSplit(Window window)
+    private void FreezeForSplit(ITiledWindow window)
     {
         if (window.SceneSurface is not { } scene || window.Tree is null)
         {

@@ -18,7 +18,7 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
-    internal sealed class Window : IGrabTarget
+    internal sealed class Window : ITiledWindow
     {
         private readonly TinyComp _comp;
 
@@ -115,32 +115,78 @@ internal sealed partial class TinyComp
 
                 _filling = filling;
             };
+            RoundTrip = new Basin.Desktop.FullscreenRoundTrip(toplevel);
             toplevel.FullscreenRequested += fullscreen =>
             {
                 toplevel.RequestConfigure();
-                if (fullscreen == toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen))
+                if (!fullscreen)
+                {
+                    RoundTrip.ClientLeftFullscreen();
+                }
+
+                if (fullscreen == IsFullscreen)
                 {
                     return;
                 }
 
-                toplevel.SetFullscreen(fullscreen);
-                comp.RefreshDim();
                 if (fullscreen)
                 {
-                    var output = comp._layout.OutputAt(comp._cursorX, comp._cursorY) ?? comp.Views[0].Output;
-                    var box = comp._layout.BoxOf(output);
-                    _restore = (X, Y);
-                    MoveTo(box.X, box.Y);
-                    toplevel.SetSize(box.Width, box.Height);
+                    EnterFullscreen();
                 }
                 else
                 {
-                    MoveTo(_restore.X, _restore.Y);
-                    toplevel.SetSize(0, 0);
+                    LeaveFullscreen();
                 }
-
-                comp.LayoutCanvasAll();
             };
+        }
+
+        public Basin.Desktop.FullscreenRoundTrip RoundTrip { get; }
+
+        public string AppId => Toplevel.AppId;
+
+        public void FloatedOutOfFullscreen() => _comp.RefreshDim();
+
+        public void Tile(Box slot, Transaction? transaction)
+        {
+            MoveTo(slot.X, slot.Y);
+            Toplevel.SetSize(slot.Width, slot.Height);
+            if (transaction is not null)
+            {
+                Toplevel.SendConfigure(transaction);
+            }
+        }
+
+        public void EnterFullscreen()
+        {
+            var output = _comp._layout.OutputAt(_comp._cursorX, _comp._cursorY) ?? _comp.Views[0].Output;
+            var box = _comp._layout.BoxOf(output);
+            var (width, height) = GeometrySize;
+            _restore = new Box(X, Y, width, height);
+            Toplevel.SetFullscreen(true, box.Width, box.Height);
+            _comp.RefreshDim();
+            MoveTo(box.X, box.Y);
+            _comp.LayoutCanvasAll();
+        }
+
+        public void LeaveFullscreen()
+        {
+            var restored = _comp.TileSlotOf(this) ?? RestoreBox();
+            RoundTrip.ExitFullscreen(restored);
+            _comp.RefreshDim();
+            MoveTo(restored.X, restored.Y);
+            _comp.LayoutCanvasAll();
+        }
+
+        private Box RestoreBox()
+        {
+            if (_restore.Width > 0 && _restore.Height > 0)
+            {
+                return _restore;
+            }
+
+            var output = _comp._layout.OutputAt(X + 1, Y + 1) ?? _comp.Views[0].Output;
+            var box = _comp._layout.BoxOf(output);
+            return new Box(box.X + (box.Width / 4), box.Y + (box.Height / 4), box.Width / 2, box.Height / 2);
         }
 
         public XdgToplevelWindow Toplevel { get; }
@@ -215,7 +261,7 @@ internal sealed partial class TinyComp
 
         public int Y { get; private set; }
 
-        private (int X, int Y) _restore;
+        private Box _restore;
 
         public void MoveTo(int x, int y)
         {

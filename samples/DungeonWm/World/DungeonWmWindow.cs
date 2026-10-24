@@ -97,27 +97,37 @@ internal sealed class DungeonWmWindow
     {
         if (Toplevel is { } toplevel)
         {
-            toplevel.SetFullscreen(fullscreen);
-            if (!fullscreen)
+            if (fullscreen)
+            {
+                var geometry = toplevel.Xdg.EffectiveGeometry;
+                _restore = _restore.Saving(new Box(0, 0, geometry.Width, geometry.Height));
+                toplevel.SetFullscreen(true, area.Width, area.Height);
+            }
+            else
             {
                 toplevel.SetMaximized(false);
+                var restore = _restore.TryGet(out var saved) ? saved : default;
+                _restore = RestoreGeometry.None;
+                toplevel.SetFullscreen(false, restore.Width, restore.Height);
             }
 
-            toplevel.SetSize(fullscreen ? area.Width : 0, fullscreen ? area.Height : 0);
             toplevel.RequestConfigure();
         }
         else if (X is { } x)
         {
-            x.SetFullscreen(fullscreen);
             if (fullscreen)
             {
                 _restore = _restore.Saving(new Box(x.X, x.Y, x.Width, x.Height));
-                x.Configure(area.X, area.Y, area.Width, area.Height);
+                x.SetFullscreen(true, area.X, area.Y, area.Width, area.Height);
             }
             else if (_restore.TryGet(out var restore))
             {
-                x.Configure(restore.X, restore.Y, restore.Width, restore.Height);
                 _restore = RestoreGeometry.None;
+                x.SetFullscreen(false, restore.X, restore.Y, restore.Width, restore.Height);
+            }
+            else
+            {
+                x.SetFullscreen(false);
             }
         }
     }

@@ -865,7 +865,7 @@ internal sealed partial class TinyComp
             state.PreShelfY = window.Y;
             state.PreShelfWorkspace = WorkspaceOf(window);
             var workspace = WorkspaceOf(window);
-            if (workspace is not null && window is Window tiled && workspace.Tiled.Remove(tiled))
+            if (workspace is not null && window is ITiledWindow tiled && workspace.Tiled.Remove(tiled))
             {
                 DissolveSplit(workspace);
             }

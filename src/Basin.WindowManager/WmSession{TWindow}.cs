@@ -1,7 +1,7 @@
 namespace Basin.WindowManager;
 
 /// <summary>
-/// The window table of a manager. It wraps each new window, forgets closed ones, and queues seat interactions and client pointer requests for the manager to drain.
+/// The window table of a manager. It wraps each new window, forgets closed ones, queues seat interactions and client pointer requests for the manager to drain, and keeps fullscreen out of a float and tile round trip.
 /// </summary>
 /// <typeparam name="TWindow">The manager's own window wrapper.</typeparam>
 public sealed class WmSession<TWindow>
@@ -14,6 +14,7 @@ public sealed class WmSession<TWindow>
     private readonly Queue<WmWindow> _interactions = new();
     private readonly Queue<(TWindow Window, WmSeat Seat, Edges? Edges)> _pointerRequests = new();
     private readonly HashSet<WmSeat> _seenSeats = [];
+    private readonly HashSet<TWindow> _refullscreenOnTile = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WmSession{TWindow}"/> class.
@@ -103,6 +104,7 @@ public sealed class WmSession<TWindow>
 
     /// <summary>
     /// Wraps each window in <see cref="ManageContext.NewWindows"/>, adds it to the table, and queues its move and resize requests.
+    /// After <see cref="Adopted"/>, it raises the requests that the client made before the window arrived, such as fullscreen, so the manager handles them in this sequence.
     /// </summary>
     /// <param name="context">The manage sequence in progress.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
@@ -118,8 +120,10 @@ public sealed class WmSession<TWindow>
 
             window.PointerMoveRequested += seat => _pointerRequests.Enqueue((adopted, seat, null));
             window.PointerResizeRequested += (seat, edges) => _pointerRequests.Enqueue((adopted, seat, edges));
+            window.ExitFullscreenRequested += () => _refullscreenOnTile.Remove(adopted);
 
             Adopted?.Invoke(adopted);
+            window.FirePending();
         }
     }
 
@@ -140,9 +144,65 @@ public sealed class WmSession<TWindow>
             }
 
             Forgetting?.Invoke(forgotten);
+            _refullscreenOnTile.Remove(forgotten);
             _windows.Remove(forgotten);
             _focus.Forget(forgotten);
         }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the window was fullscreen when the manager floated it, and the client has not asked to leave fullscreen since.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns><see langword="true"/> when the next <see cref="Tile"/> restores fullscreen.</returns>
+    public bool RefullscreenOnTile(TWindow window) => _refullscreenOnTile.Contains(window);
+
+    /// <summary>
+    /// Ends fullscreen and proposes the restored dimensions in the same manage sequence, so the client gets one configure with both. It also clears the float record.
+    /// </summary>
+    /// <param name="window">The fullscreen window.</param>
+    /// <param name="restored">The dimensions that the window gets back.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
+    public void ExitFullscreen(TWindow window, Size restored)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        _refullscreenOnTile.Remove(window);
+        window.Window.ExitFullscreen();
+        window.Window.InformFullscreen(false);
+        window.Window.ProposeDimensions(restored);
+    }
+
+    /// <summary>
+    /// Records that the manager floats the window. A fullscreen window leaves fullscreen at its current dimensions in this manage sequence, and the next <see cref="Tile"/> restores fullscreen.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <param name="fullscreen"><see langword="true"/> when the window is fullscreen now.</param>
+    /// <returns><see langword="true"/> when the manager must float the window at its current dimensions without a resize.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
+    public bool Float(TWindow window, bool fullscreen)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (!fullscreen)
+        {
+            return false;
+        }
+
+        ExitFullscreen(window, window.Window.Dimensions);
+        _refullscreenOnTile.Add(window);
+        return true;
+    }
+
+    /// <summary>
+    /// Records that the manager tiles the window again and clears the float record.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <param name="fullscreen"><see langword="true"/> when the window is fullscreen now.</param>
+    /// <returns><see langword="true"/> when the manager must make the window fullscreen before it adds the window to the layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
+    public bool Tile(TWindow window, bool fullscreen)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return _refullscreenOnTile.Remove(window) && !fullscreen;
     }
 
     /// <summary>

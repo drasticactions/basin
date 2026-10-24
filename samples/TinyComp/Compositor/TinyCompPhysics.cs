@@ -355,7 +355,7 @@ internal sealed partial class TinyComp
                 }
 
                 workspace = x.Workspace;
-                pinned = x.Maximized || x.XWin.WantsFullscreen;
+                pinned = x.Maximized || x.XWin.WantsFullscreen || workspace.Tiled.Contains(x);
                 break;
             default:
                 return (false, PhysicsBodyKind.Static);

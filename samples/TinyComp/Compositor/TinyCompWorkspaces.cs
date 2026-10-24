@@ -44,7 +44,7 @@ internal sealed partial class TinyComp
 
         public IGrabTarget? LastFocused { get; set; }
 
-        public List<Window> Tiled { get; } = [];
+        public List<ITiledWindow> Tiled { get; } = [];
 
         public double SplitFraction { get; set; } = 0.5;
 
@@ -793,6 +793,11 @@ internal sealed partial class TinyComp
 
             case XWindow x when x.Workspace != target:
                 source = x.Workspace;
+                if (source is not null && source.Tiled.Contains(x))
+                {
+                    DissolveSplit(source);
+                }
+
                 x.Workspace = target;
                 x.Tree.Reparent(target.Tree);
                 moved = x.XWin.Class;

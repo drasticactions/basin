@@ -110,14 +110,23 @@ static void child_configure(void *data, struct xdg_surface *s, uint32_t serial)
 static const struct xdg_surface_listener child_listener = { child_configure };
 
 static int suspended = -1;
+static int trace = 0;
 
 static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w, int32_t h, struct wl_array *states)
 {
     (void)data; (void)t;
     int now = 0;
+    int fullscreen = 0;
     uint32_t *state;
-    wl_array_for_each(state, states)
+    wl_array_for_each(state, states) {
         if (*state == XDG_TOPLEVEL_STATE_SUSPENDED) now = 1;
+        if (*state == XDG_TOPLEVEL_STATE_FULLSCREEN) fullscreen = 1;
+    }
+    /* trace: one line for every configure, with its size and whether it is fullscreen. */
+    if (trace) {
+        printf("TRACE %d %d %d\n", w, h, fullscreen);
+        fflush(stdout);
+    }
     if (now != suspended && (suspended >= 0 || now)) {
         printf("SUSPENDED %d\n", now);
         fflush(stdout);
@@ -304,6 +313,7 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) if (strcmp(argv[i], "fullscreen") == 0) fullscreen = 1;
     for (int i = 1; i < argc; i++) if (strcmp(argv[i], "pixel") == 0) pixel_mode = 1;
     for (int i = 1; i < argc; i++) if (strcmp(argv[i], "move") == 0) move_on_press = 1;
+    for (int i = 1; i < argc; i++) if (strcmp(argv[i], "trace") == 0) trace = 1;
 
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no display\n"); return 1; }

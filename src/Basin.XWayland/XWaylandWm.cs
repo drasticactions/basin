@@ -1612,6 +1612,18 @@ public sealed unsafe class XWaylandWm : IDisposable
         }
     }
 
+    internal void SetWindowFullscreen(XWaylandWindow window, bool fullscreen, int x, int y, int width, int height)
+    {
+        var changed = window.FullscreenState != fullscreen;
+        window.FullscreenState = fullscreen;
+        WriteWindowState(window);
+        ConfigureWindow(window, x, y, width, height);
+        if (changed)
+        {
+            window.RaiseStateChanged();
+        }
+    }
+
     internal void SetWindowMinimized(XWaylandWindow window, bool minimized)
     {
         if (window.Minimized == minimized)

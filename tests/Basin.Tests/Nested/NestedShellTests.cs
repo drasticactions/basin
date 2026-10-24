@@ -472,6 +472,29 @@ public sealed class NestedShellTests
         harness.PumpUntil(() => shell.Windows.Count == 0, "the managed window outlived its toplevel");
     }
 
+    [Fact]
+    public void Tiling_a_fullscreen_window_leaves_it_at_the_output_size_and_the_exit_restores_its_size()
+    {
+        using var harness = new NestedShellHarness();
+        var shell = harness.Shell;
+        var toplevel = harness.MapToplevel(width: 200, height: 150, title: "game");
+        var window = Assert.Single(shell.Windows);
+
+        shell.SetFullscreen(window, true);
+        harness.PumpUntil(() => toplevel.ConfiguredWidth == shell.Output.Width, "the window never went fullscreen");
+        shell.SetTile(window, TileEdge.Left);
+        harness.Pump();
+        Assert.Equal(TileEdge.None, window.Tile);
+        Assert.Equal(shell.Output.Width, toplevel.ConfiguredWidth);
+
+        shell.SetFullscreen(window, false);
+        harness.PumpUntil(() => toplevel.ConfiguredWidth == 200, "the exit never restored the saved size");
+        Assert.Equal(150, toplevel.ConfiguredHeight);
+
+        toplevel.Destroy();
+        harness.PumpUntil(() => shell.Windows.Count == 0, "the managed window outlived its toplevel");
+    }
+
     private static void CommitConfigured(NestedShellHarness harness, HarnessToplevel toplevel, ManagedWindow window)
     {
         var height = window.Geometry.Height;

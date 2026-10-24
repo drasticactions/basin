@@ -20,7 +20,7 @@ internal sealed partial class TinyComp
 {
     private SceneTree ManagedXParent(Basin.XWayland.XWaylandWindow window)
     {
-        if (window.X == 0 && window.Y == 0)
+        if (window.X == 0 && window.Y == 0 && !window.WantsFullscreen)
         {
             var slot = (_windows.Count + _xwindows.Count) % 8;
             window.Configure(60 + slot * 30, 60 + slot * 30, window.Width, window.Height);
@@ -52,7 +52,15 @@ internal sealed partial class TinyComp
             window.DecorationsChanged += xwindow.UpdateDecorations;
             window.MinimizeRequested += minimized => SetMinimized(xwindow, minimized);
             PlaceXByRule(xwindow);
-            window.FullscreenRequested += fullscreen => xwindow.SetFullscreen(fullscreen);
+            window.FullscreenRequested += fullscreen =>
+            {
+                if (!fullscreen)
+                {
+                    xwindow.RoundTrip.ClientLeftFullscreen();
+                }
+
+                xwindow.SetFullscreen(fullscreen);
+            };
             window.MoveRequested += _ => BeginMove(xwindow);
             window.ResizeRequested += (edges, _) => BeginResize(xwindow, (ResizeEdges)(int)edges);
             window.MaximizeRequested += maximized =>
@@ -149,6 +157,11 @@ internal sealed partial class TinyComp
             _mode = DragMode.None;
             _effects.OnGrabEnd();
             _grabWindow = null;
+        }
+
+        if (xwindow.Workspace is { } workspace && workspace.Tiled.Remove(xwindow))
+        {
+            DissolveSplit(workspace);
         }
 
         xwindow.Workspace = null;
