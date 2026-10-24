@@ -4,7 +4,7 @@ namespace Basin.Sdl;
 
 /// <summary>
 /// Draws frames into one SDL window through a Skia canvas.
-/// A frame is one <see cref="Begin"/> followed by one <see cref="Present"/>, on the SDL main thread.
+/// A frame is one <see cref="Begin"/> followed by one <see cref="Present"/> or one <see cref="Discard"/>, on the SDL main thread.
 /// </summary>
 public interface ISdlRenderLease : IDisposable
 {
@@ -14,7 +14,7 @@ public interface ISdlRenderLease : IDisposable
     string Name { get; }
 
     /// <summary>
-    /// Starts a frame. The canvas is in device pixels and stays valid until <see cref="Present"/>.
+    /// Starts a frame. The canvas is in device pixels and stays valid until <see cref="Present"/> or <see cref="Discard"/>.
     /// </summary>
     /// <param name="canvas">The canvas to draw the frame on. It is not valid when the method returns <see langword="false"/>.</param>
     /// <param name="context">The Skia context of the canvas, or <see langword="null"/> for a raster lease.</param>
@@ -26,6 +26,14 @@ public interface ISdlRenderLease : IDisposable
     /// Flushes the frame that <see cref="Begin"/> started and shows it in the window.
     /// </summary>
     void Present();
+
+    /// <summary>
+    /// Ends the frame that <see cref="Begin"/> started without showing it. The window keeps the frame it showed last.
+    /// The default does nothing, for a lease that holds nothing between <see cref="Begin"/> and <see cref="Present"/>.
+    /// </summary>
+    void Discard()
+    {
+    }
 
     /// <summary>
     /// Sets the size of the drawing target. A value below 1 counts as 1.
@@ -50,12 +58,12 @@ public interface ISdlRenderLease : IDisposable
     bool MakeCurrent();
 
     /// <summary>
-    /// Gets the HDR state that the lease presents now. It is <see cref="SdlHdrState.Sdr"/> for a lease that cannot present HDR.
+    /// Gets the HDR state that the next frame presents. It is <see cref="SdlHdrState.Sdr"/> for a lease that cannot present HDR.
     /// </summary>
     SdlHdrState Hdr { get; }
 
     /// <summary>
-    /// Asks the lease to present in HDR or SDR. Read <see cref="Hdr"/> after the call for the state that is in effect.
+    /// Asks the lease to present in HDR or SDR. Read <see cref="Hdr"/> after the call for the state that the next frame presents.
     /// </summary>
     /// <param name="state">The requested state.</param>
     /// <returns><see langword="false"/> when the lease cannot present <paramref name="state"/>.</returns>

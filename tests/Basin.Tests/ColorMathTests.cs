@@ -275,4 +275,39 @@ public sealed class ColorMathTests
         Assert.Equal(ushort.MaxValue, red[255]);
         Assert.True(blue[255] < ushort.MaxValue * 0.7);
     }
+
+    public static TheoryData<ColorPrimaries, double, double, double, double, double, double, double, double> NamedPrimaries => new()
+    {
+        { ColorPrimaries.PalM, 0.67, 0.33, 0.21, 0.71, 0.14, 0.08, 0.3101, 0.3162 },
+        { ColorPrimaries.Pal, 0.64, 0.33, 0.29, 0.60, 0.15, 0.06, 0.3127, 0.3290 },
+        { ColorPrimaries.Ntsc, 0.630, 0.340, 0.310, 0.595, 0.155, 0.070, 0.3127, 0.3290 },
+        { ColorPrimaries.GenericFilm, 0.681, 0.319, 0.243, 0.692, 0.145, 0.049, 0.3101, 0.3162 },
+        { ColorPrimaries.Cie1931Xyz, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0 / 3.0, 1.0 / 3.0 },
+        { ColorPrimaries.AdobeRgb, 0.64, 0.33, 0.21, 0.71, 0.15, 0.06, 0.3127, 0.3290 },
+    };
+
+    [Theory]
+    [MemberData(nameof(NamedPrimaries))]
+    public void Each_named_primaries_set_maps_to_its_own_chromaticities(
+        ColorPrimaries named, double rx, double ry, double gx, double gy, double bx, double by, double wx, double wy)
+    {
+        var c = Chromaticities.From(new ImageDescription { PrimariesNamed = named, TransferNamed = ColorTransferFunction.Gamma22 });
+        Assert.Equal(new Chromaticities(rx, ry, gx, gy, bx, by, wx, wy), c);
+    }
+
+    [Fact]
+    public void An_unknown_named_primaries_value_throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Chromaticities.From(new ImageDescription { PrimariesNamed = (ColorPrimaries)99 }));
+    }
+
+    [Fact]
+    public void PAL_to_sRGB_bakes_a_gamut_matrix_that_is_not_identity()
+    {
+        var pal = new ImageDescription { PrimariesNamed = ColorPrimaries.Pal, TransferNamed = ColorTransferFunction.Srgb };
+        var parameters = ColorTransformParameters.From(pal, ImageDescription.SdrDefault);
+        var m = parameters.Matrix;
+        Assert.True(Math.Abs(m[1]) > 1e-3 || Math.Abs(m[3]) > 1e-3 || Math.Abs(m[0] - 1) > 1e-3, "the PAL gamut is not sRGB");
+    }
 }

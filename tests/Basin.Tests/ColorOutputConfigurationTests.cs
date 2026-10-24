@@ -28,13 +28,39 @@ public sealed class ColorOutputConfigurationTests
 
         var hdr = new TestHdrOutput();
         Assert.Equal(
-            OutputConfigurationFeatures.HighDynamicRange | OutputConfigurationFeatures.WideColorGamut |
-            OutputConfigurationFeatures.IccProfile | OutputConfigurationFeatures.HdrIccProfile |
+            OutputConfigurationFeatures.HighDynamicRange | OutputConfigurationFeatures.IccProfile |
             OutputConfigurationFeatures.BuiltInColor | OutputConfigurationFeatures.Brightness,
             configuration.Supported(hdr));
 
         plain.Destroy();
         hdr.Destroy();
+    }
+
+    [Fact]
+    public void A_property_that_nothing_applies_is_refused_and_records_nothing()
+    {
+        var (configuration, layout) = Compose();
+        var output = new TestHdrOutput();
+        layout.Add(output, 0, 0);
+        var before = configuration.StateOf(output);
+        foreach (var entry in new[]
+        {
+            new OutputConfigurationEntry { Output = output, WideColorGamut = true },
+            new OutputConfigurationEntry { Output = output, HdrColorProfileSource = OutputColorProfileSource.Icc },
+            new OutputConfigurationEntry { Output = output, HdrIccProfilePath = "/nonexistent.icc" },
+        })
+        {
+            Assert.False(configuration.Test([entry]));
+            Assert.False(configuration.Apply([entry]));
+            Assert.Contains("not supported", configuration.LastFailureReason);
+            Assert.Equal(before, configuration.StateOf(output));
+        }
+
+        Assert.True(configuration.TryRead(output, out var read));
+        Assert.Null(read.WideColorGamut);
+        Assert.Null(read.HdrColorProfileSource);
+        Assert.Null(read.HdrIccProfilePath);
+        output.Destroy();
     }
 
     [Fact]

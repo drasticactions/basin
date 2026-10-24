@@ -91,12 +91,22 @@ public sealed class SkiaRenderer : IRenderer
     /// <param name="target">The buffer that the canvas draws into.</param>
     /// <param name="canvas">The canvas to draw with.</param>
     /// <returns>The renderer's single pass object. It is valid until the pass submits.</returns>
-    public IRenderPass BeginCanvasPass(IBuffer target, SKCanvas canvas)
+    public IRenderPass BeginCanvasPass(IBuffer target, SKCanvas canvas) => BeginCanvasPass(target, canvas, null);
+
+    /// <summary>
+    /// Starts a pass that draws into a canvas the caller owns, and converts the colors that the compositor draws through a table.
+    /// The pass does not begin or end data access on the target buffer.
+    /// </summary>
+    /// <param name="target">The buffer that the canvas draws into.</param>
+    /// <param name="canvas">The canvas to draw with.</param>
+    /// <param name="solidColorLut">A table from <see cref="ImportLut"/> for <see cref="RenderPassOptions.SolidColorLut"/>, or <see langword="null"/> to draw those colors as they are.</param>
+    /// <returns>The renderer's single pass object. It is valid until the pass submits.</returns>
+    public IRenderPass BeginCanvasPass(IBuffer target, SKCanvas canvas, IColorLut? solidColorLut)
     {
         _thread.Assert();
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(canvas);
-        _pass.Begin(target, canvas, endsDataAccess: false);
+        _pass.Begin(target, canvas, endsDataAccess: false, (solidColorLut as SkiaColorLut)?.Filter);
         return _pass;
     }
 
@@ -105,7 +115,7 @@ public sealed class SkiaRenderer : IRenderer
     /// renderer caches one surface per buffer until the buffer is destroyed.
     /// </summary>
     /// <param name="target">A buffer with CPU-accessible pixels in a format that <see cref="TryImageInfo"/> maps.</param>
-    /// <param name="options">The pass options. Only the wait fence is read.</param>
+    /// <param name="options">The pass options. The wait fence and <see cref="RenderPassOptions.SolidColorLut"/> are read.</param>
     /// <returns>The renderer's single pass object. It is valid until the pass submits.</returns>
     /// <exception cref="InvalidOperationException">The buffer has no CPU pixels, or Skia rejects its layout.</exception>
     /// <exception cref="NotSupportedException">The buffer's format has no Skia mapping.</exception>
@@ -124,7 +134,7 @@ public sealed class SkiaRenderer : IRenderer
             entry = ImportTarget(target, view);
         }
 
-        _pass.Begin(target, entry.Canvas);
+        _pass.Begin(target, entry.Canvas, endsDataAccess: true, (options.SolidColorLut as SkiaColorLut)?.Filter);
         return _pass;
     }
 

@@ -21,7 +21,9 @@ internal sealed class SkiaRenderPass : IRenderPass
 
     internal void Begin(IBuffer target, SKCanvas canvas) => Begin(target, canvas, endsDataAccess: true);
 
-    internal void Begin(IBuffer target, SKCanvas canvas, bool endsDataAccess)
+    private SKColorFilter? _solid;
+
+    internal void Begin(IBuffer target, SKCanvas canvas, bool endsDataAccess, SKColorFilter? solid = null)
     {
         if (_target is not null)
         {
@@ -31,18 +33,19 @@ internal sealed class SkiaRenderPass : IRenderPass
         _target = target;
         _canvas = canvas;
         _endsDataAccess = endsDataAccess;
+        _solid = solid;
     }
 
     public void Clear(in RenderColor color)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
-        SkiaDraw.Clear(_canvas!, color);
+        SkiaDraw.Clear(_canvas!, _paint, color, _solid);
     }
 
     public void AddRect(in RenderColor color, in Box box, PixmanRegion32? clip = null)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
-        SkiaDraw.Rect(_canvas!, _paint, color, box, clip);
+        SkiaDraw.Rect(_canvas!, _paint, color, box, clip, _solid);
     }
 
     public void AddTexture(ITexture texture, in TextureRenderOptions options)
@@ -54,7 +57,7 @@ internal sealed class SkiaRenderPass : IRenderPass
     public void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
-        SkiaDraw.Mesh(_canvas!, _paint, (ISkiaTexture?)texture, vertices, options);
+        SkiaDraw.Mesh(_canvas!, _paint, (ISkiaTexture?)texture, vertices, options, solid: _solid);
     }
 
     public void AddShader(IPixelShader shader, in ShaderRenderOptions options)
@@ -89,6 +92,7 @@ internal sealed class SkiaRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         var target = _target;
         _target = null;
+        _solid = null;
         _canvas = null;
 
         if (_endsDataAccess)

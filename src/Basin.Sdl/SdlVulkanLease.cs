@@ -30,6 +30,8 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
     private long _frame;
     private uint _index;
     private bool _acquired;
+    private bool _held;
+    private int _age;
     private bool _stale = true;
     private Fence _fence;
     private CommandPool _pool;
@@ -73,14 +75,17 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 
     private SdlHdrState _requested = SdlHdrState.Sdr;
     private bool _hdrActive;
+    private bool _pendingHdr;
 
     /// <summary>
-    /// Gets the HDR state of the current swapchain. A change from <see cref="TrySetHdr"/> takes effect when <see cref="Begin"/> rebuilds the swapchain.
+    /// Gets the HDR state that the next frame presents.
+    /// While the swapchain waits for a rebuild, it is the state that the rebuild will choose from the formats that the surface offers.
     /// </summary>
-    public SdlHdrState Hdr => _hdrActive ? _requested : SdlHdrState.Sdr;
+    public SdlHdrState Hdr => (_stale ? _pendingHdr : _hdrActive) ? _requested : SdlHdrState.Sdr;
 
     /// <summary>
     /// Requests HDR10 or SDR. A change of the enabled flag marks the swapchain for a rebuild at the next <see cref="Begin"/>.
+    /// <see cref="Hdr"/> reports the state of that rebuild at once.
     /// </summary>
     /// <param name="state">The requested state.</param>
     /// <returns><see langword="false"/> when HDR is requested and the surface offers no HDR10 format that Skia can draw.</returns>
@@ -92,7 +97,8 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         }
 
         _requested = state;
-        return !state.Enabled || OffersHdr10();
+        _pendingHdr = state.Enabled && OffersHdr10();
+        return !state.Enabled || _pendingHdr;
     }
 
     private bool OffersHdr10()
@@ -107,6 +113,8 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 
         return false;
     }
+
+    private static ReadOnlySpan<Format> Hdr10Formats => [Format.A2B10G10R10UnormPack32, Format.A2R10G10B10UnormPack32, Format.R16G16B16A16Sfloat];
 
     private static SKColorType? Hdr10ColorType(Format format) => format switch
     {
@@ -166,6 +174,7 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 
     /// <summary>
     /// Acquires the next swapchain image and starts a frame on it. The acquire waits on the CPU for at most one second.
+    /// After <see cref="Discard"/>, it starts the frame on the image that it kept, with the same age, unless the swapchain needs a rebuild.
     /// An out-of-date swapchain is rebuilt once. A device loss abandons the context.
     /// </summary>
     /// <param name="canvas">The canvas over the acquired image, in device pixels.</param>
@@ -188,7 +197,15 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
             return false;
         }
 
-        var api = _device.Api;
+        if (_held)
+        {
+            _held = false;
+            _acquired = true;
+            age = _age;
+            canvas = SurfaceAt(_index, context).Canvas;
+            return true;
+        }
+
         var result = Acquire();
         if (result is Result.ErrorOutOfDateKhr)
         {
@@ -224,6 +241,7 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
             age = (int)Math.Min(int.MaxValue, _frame - _presentedAt[_index] + 1);
         }
 
+        _age = age;
         canvas = SurfaceAt(_index, context).Canvas;
         return true;
     }
@@ -314,6 +332,22 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         }
     }
 
+    /// <summary>
+    /// Ends the frame without a present and keeps the acquired image, so that the next <see cref="Begin"/> starts on it without a new acquire.
+    /// Without an acquired image it does nothing.
+    /// </summary>
+    public void Discard()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_acquired)
+        {
+            return;
+        }
+
+        _acquired = false;
+        _held = true;
+    }
+
     private void Transition(Image image, ImageLayout from, ImageLayout to)
     {
         var api = _device.Api;
@@ -360,6 +394,8 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         var surfaces = _device.Surfaces;
         _ = api.DeviceWaitIdle(_device.Device);
         ReleaseImages();
+        _held = false;
+        _acquired = false;
         SdlVulkanDevice.Check(
             surfaces.GetPhysicalDeviceSurfaceCapabilities(_device.Physical, _surface, out var caps),
             "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
@@ -429,7 +465,7 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _hdrActive = false;
         if (_requested.Enabled)
         {
-            foreach (var wanted in (ReadOnlySpan<Format>)[Format.A2B10G10R10UnormPack32, Format.A2R10G10B10UnormPack32, Format.R16G16B16A16Sfloat])
+            foreach (var wanted in Hdr10Formats)
             {
                 foreach (var offered in formats)
                 {

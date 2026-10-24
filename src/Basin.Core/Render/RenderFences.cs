@@ -291,7 +291,7 @@ public static class RenderFences
                 return false;
             }
 
-            if (Marshal.GetLastPInvokeError() != 4 )
+            if (Marshal.GetLastPInvokeError() != 4)
             {
                 return false;
             }

@@ -64,14 +64,33 @@ public sealed unsafe class GlYuvTexture : ITexture, IRefreshableTexture
     public bool HasAlpha => false;
 
     /// <summary>
-    /// Gets or sets the YUV matrix of the conversion. The default is BT.601. A change takes effect at the next conversion after <see cref="MarkDirty"/>.
+    /// Gets or sets the YUV matrix of the conversion. The default is BT.601. A change runs the conversion again at the next <see cref="Acquire"/>.
     /// </summary>
-    public YuvCoefficients Coefficients { get; set; } = YuvCoefficients.Bt601;
+    public YuvCoefficients Coefficients
+    {
+        get => _coefficients;
+        set
+        {
+            _dirty |= value != _coefficients;
+            _coefficients = value;
+        }
+    }
 
     /// <summary>
-    /// Gets or sets the quantization range of the source. The default is limited range. A change takes effect at the next conversion after <see cref="MarkDirty"/>.
+    /// Gets or sets the quantization range of the source. The default is limited range. A change runs the conversion again at the next <see cref="Acquire"/>.
     /// </summary>
-    public YuvRange Range { get; set; } = YuvRange.Limited;
+    public YuvRange Range
+    {
+        get => _range;
+        set
+        {
+            _dirty |= value != _range;
+            _range = value;
+        }
+    }
+
+    private YuvCoefficients _coefficients = YuvCoefficients.Bt601;
+    private YuvRange _range = YuvRange.Limited;
 
     internal static GlYuvTexture? TryImport(GlDevice device, GlNvProgram program, in DmabufAttributes attributes)
     {

@@ -139,6 +139,23 @@ public sealed class ColorLut3D
     }
 
     /// <summary>
+    /// Converts a premultiplied color. It divides alpha out, looks the color up through the shaper with trilinear interpolation, and multiplies alpha back in.
+    /// </summary>
+    /// <param name="color">The premultiplied color to convert.</param>
+    /// <returns>The converted color, premultiplied. A color with no alpha comes back unchanged.</returns>
+    public RenderColor ApplyPremultiplied(in RenderColor color)
+    {
+        var a = Math.Clamp(color.A, 0f, 1f);
+        if (a <= 0f)
+        {
+            return color;
+        }
+
+        var (r, g, b) = Sample(Shape(color.R / a, ShaperNits), Shape(color.G / a, ShaperNits), Shape(color.B / a, ShaperNits));
+        return new RenderColor(Math.Clamp(r, 0f, 1f) * a, Math.Clamp(g, 0f, 1f) * a, Math.Clamp(b, 0f, 1f) * a, color.A);
+    }
+
+    /// <summary>
     /// Looks up a color with trilinear interpolation. Inputs are clamped to [0, 1].
     /// </summary>
     /// <param name="r">The red grid coordinate.</param>

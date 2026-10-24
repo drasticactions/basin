@@ -139,7 +139,7 @@ public sealed unsafe class GlRenderer : IRenderer
     }
 
     /// <summary>
-    /// Gets the dmabuf formats and modifiers that a pass can draw into. It is the set that EGL can import, which includes formats that GL cannot render.
+    /// Gets the dmabuf formats and modifiers that a pass can draw into: ARGB8888 and XRGB8888 with each modifier that EGL imports as a 2D texture, plus the implicit modifier.
     /// </summary>
     public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
 

@@ -61,9 +61,12 @@ public static class RendererCatalog
     /// Creates a renderer and steps down to GL and then to pixman when it cannot start. It reports each step through <paramref name="report"/>.
     /// </summary>
     /// <param name="name">The requested name. On return it holds the name of the renderer that started.</param>
-    /// <param name="renderNodePath">The render node, or <see langword="null"/> when there is none. A GPU name then goes straight to pixman, whatever the floor.</param>
+    /// <param name="renderNodePath">The render node, or <see langword="null"/> when there is none. A GPU name then goes straight to pixman when the floor allows it.</param>
     /// <param name="report">The callback that receives each fallback, or <see langword="null"/>.</param>
-    /// <param name="floor">The last renderer to try. When it fails, or the next step goes below it, the error propagates.</param>
+    /// <param name="floor">
+    /// The last renderer to try. When it fails, or the next step goes below it, the error propagates.
+    /// A floor above pixman with no render node throws <see cref="InvalidOperationException"/> and reports nothing.
+    /// </param>
     /// <returns>The renderer and its allocator, which the caller disposes.</returns>
     public static RenderStack CreateWithFallback(
         ref string name, string? renderNodePath, Action<RendererFallback>? report = null, string floor = "pixman")
@@ -71,6 +74,11 @@ public static class RendererCatalog
         var path = renderNodePath ?? string.Empty;
         if (path.Length == 0 && NeedsGpu(name))
         {
+            if (floor != "pixman")
+            {
+                throw new InvalidOperationException($"no render node, and the floor is {floor}");
+            }
+
             report?.Invoke(new RendererFallback(name, "pixman", null));
             name = "pixman";
         }

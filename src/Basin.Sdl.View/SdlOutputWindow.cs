@@ -553,12 +553,12 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
     }
 
     /// <summary>
-    /// Gets the HDR state that the lease presents now.
+    /// Gets the HDR state that the next frame of the lease presents.
     /// </summary>
     public SdlHdrState Hdr => Lease.Hdr;
 
     /// <summary>
-    /// Occurs when <see cref="ApplyHdr"/> changes the state that the lease presents.
+    /// Occurs when the state that the lease presents changes, after <see cref="ApplyHdr"/> or after a frame finds that a swapchain rebuild chose another state.
     /// </summary>
     public event Action<SdlOutputWindow>? HdrChanged;
 
@@ -580,18 +580,10 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         }
 
         var now = Lease.Hdr;
-        if (_host.Color is { } color)
+        SeedColor(now);
+        if (state != before)
         {
-            color.Configuration.Seed(View.Output, new Basin.Color.OutputColorState
-            {
-                HighDynamicRange = now.Enabled,
-                SdrBrightnessNits = (uint)Math.Round(now.Enabled ? now.SdrWhiteNits : SdlHdrState.Sdr.SdrWhiteNits),
-                BrightnessOverrides = now.Enabled
-                    ? new Basin.Capabilities.OutputBrightnessOverrides((int)Math.Round(now.PeakNits), -1, -1)
-                    : Basin.Capabilities.OutputBrightnessOverrides.None,
-                Source = Basin.Capabilities.OutputColorProfileSource.Srgb,
-            });
-            color.Outputs?.Refresh();
+            _forceFrame = true;
         }
 
         if (now != before)
@@ -599,6 +591,41 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
             _forceFrame = true;
             HdrChanged?.Invoke(this);
         }
+    }
+
+    private SdlHdrState _seeded;
+
+    private void SeedColor(SdlHdrState state)
+    {
+        _seeded = state;
+        if (_host.Color is not { } color)
+        {
+            return;
+        }
+
+        color.Configuration.Seed(View.Output, new Basin.Color.OutputColorState
+        {
+            HighDynamicRange = state.Enabled,
+            SdrBrightnessNits = (uint)Math.Round(state.Enabled ? state.SdrWhiteNits : SdlHdrState.Sdr.SdrWhiteNits),
+            BrightnessOverrides = state.Enabled
+                ? new Basin.Capabilities.OutputBrightnessOverrides((int)Math.Round(state.PeakNits), -1, -1)
+                : Basin.Capabilities.OutputBrightnessOverrides.None,
+            Source = Basin.Capabilities.OutputColorProfileSource.Srgb,
+        });
+        color.Outputs?.Refresh();
+    }
+
+    private void FollowPresentedHdr()
+    {
+        var presented = Lease.Hdr;
+        if (presented == _seeded)
+        {
+            return;
+        }
+
+        SeedColor(presented);
+        _forceFrame = true;
+        HdrChanged?.Invoke(this);
     }
 
     private void ShareDmabufRenderer()
@@ -626,6 +653,7 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
 
         Lease = _device.CreateLease(Window);
         ShareDmabufRenderer();
+        FollowHdr();
         _forceFrame = true;
         return true;
     }
@@ -647,6 +675,24 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
             }
         }
 
+        var presented = false;
+        try
+        {
+            presented = Compose(canvas, context, age);
+            return presented;
+        }
+        finally
+        {
+            if (!presented)
+            {
+                Lease.Discard();
+            }
+        }
+    }
+
+    private bool Compose(SKCanvas canvas, GRContext? context, int age)
+    {
+        FollowPresentedHdr();
         if (_forceFrame)
         {
             View.SceneOutput.Ring.AddWhole();

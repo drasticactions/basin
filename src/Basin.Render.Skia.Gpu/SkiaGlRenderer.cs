@@ -29,27 +29,37 @@ public sealed class SkiaGlRenderer : IRenderer
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SkiaGlRenderer"/> class. It opens its own GL device
-    /// on the render node.
+    /// on the render node. On an exception, it closes the device that it opened.
     /// </summary>
     /// <param name="devicePath">The DRM render node to open.</param>
     public SkiaGlRenderer(string devicePath = "/dev/dri/renderD128")
     {
         _device = new GlDevice(devicePath);
         _getProc = GetProcAddress;
-        _interface = GRGlInterface.CreateGles(_getProc)
-            ?? throw new InvalidOperationException("Ganesh rejected the GLES interface on this context.");
-        SkiaCensus.Track(_interface);
-        var context = GRContext.CreateGl(_interface);
-        if (context is null)
+        GRGlInterface? glInterface = null;
+        GRContext? context = null;
+        SKPaint? paint = null;
+        try
         {
-            SkiaCensus.Release(_interface);
+            glInterface = SkiaCensus.Track(GRGlInterface.CreateGles(_getProc)
+                ?? throw new InvalidOperationException("Ganesh rejected the GLES interface on this context."));
+            context = SkiaCensus.Track(GRContext.CreateGl(glInterface)
+                ?? throw new InvalidOperationException("Ganesh could not create a GL context."));
+            paint = SkiaCensus.Track(new SKPaint());
+            _pass = new SkiaGlRenderPass(this, paint);
+        }
+        catch
+        {
+            SkiaCensus.Release(paint);
+            SkiaCensus.Release(context);
+            SkiaCensus.Release(glInterface);
             _device.Dispose();
-            throw new InvalidOperationException("Ganesh could not create a GL context.");
+            throw;
         }
 
-        _context = SkiaCensus.Track(context);
-        _paint = SkiaCensus.Track(new SKPaint());
-        _pass = new SkiaGlRenderPass(this, _paint);
+        _interface = glInterface;
+        _context = context;
+        _paint = paint;
         _device.TextureDeleting += ForgetBackdropImage;
     }
 

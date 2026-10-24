@@ -9,7 +9,7 @@ internal static class SkiaDraw
 
     private static readonly SKSamplingOptions NearestSampling = new(SKFilterMode.Nearest);
 
-    public static void Rect(SKCanvas canvas, SKPaint paint, in RenderColor color, in Box box, PixmanRegion32? clip)
+    public static void Rect(SKCanvas canvas, SKPaint paint, in RenderColor color, in Box box, PixmanRegion32? clip, SKColorFilter? solid = null)
     {
         if (box.IsEmpty)
         {
@@ -18,27 +18,50 @@ internal static class SkiaDraw
 
         paint.BlendMode = color.A >= 1f ? SKBlendMode.Src : SKBlendMode.SrcOver;
         SetPaintColor(paint, color);
-        var rect = SKRect.Create(box.X, box.Y, box.Width, box.Height);
-        if (clip is null)
+        paint.ColorFilter = solid;
+        try
         {
-            canvas.DrawRect(rect, paint);
-            return;
-        }
+            var rect = SKRect.Create(box.X, box.Y, box.Width, box.Height);
+            if (clip is null)
+            {
+                canvas.DrawRect(rect, paint);
+                return;
+            }
 
-        foreach (var band in RegionRects.Of(clip))
+            foreach (var band in RegionRects.Of(clip))
+            {
+                canvas.Save();
+                canvas.ClipRect(new SKRect(band.X1, band.Y1, band.X2, band.Y2), SKClipOperation.Intersect, false);
+                canvas.DrawRect(rect, paint);
+                canvas.Restore();
+            }
+        }
+        finally
         {
-            canvas.Save();
-            canvas.ClipRect(new SKRect(band.X1, band.Y1, band.X2, band.Y2), SKClipOperation.Intersect, false);
-            canvas.DrawRect(rect, paint);
-            canvas.Restore();
+            paint.ColorFilter = null;
         }
     }
 
-    public static void Clear(SKCanvas canvas, in RenderColor color)
+    public static void Clear(SKCanvas canvas, in RenderColor color) => Clear(canvas, null, color, null);
+
+    public static void Clear(SKCanvas canvas, SKPaint? paint, in RenderColor color, SKColorFilter? solid)
     {
         canvas.Save();
         canvas.ResetMatrix();
-        canvas.Clear(new SKColorF(color.R, color.G, color.B, color.A));
+        if (solid is null || paint is null)
+        {
+            canvas.Clear(new SKColorF(color.R, color.G, color.B, color.A));
+        }
+        else
+        {
+            paint.BlendMode = SKBlendMode.Src;
+            SetPaintColor(paint, color);
+            paint.ColorFilter = solid;
+            canvas.DrawPaint(paint);
+            paint.ColorFilter = null;
+            paint.BlendMode = SKBlendMode.SrcOver;
+        }
+
         canvas.Restore();
     }
 
@@ -262,7 +285,7 @@ internal static class SkiaDraw
 
     public static void Mesh(
         SKCanvas canvas, SKPaint paint, ISkiaTexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options,
-        SKColorFilter? additive = null)
+        SKColorFilter? additive = null, SKColorFilter? solid = null)
     {
         if (vertices.Length == 0)
         {
@@ -317,6 +340,10 @@ internal static class SkiaDraw
             if (adds && additive is not null)
             {
                 paint.ColorFilter = additive;
+            }
+            else if (!adds && texture is null && solid is not null)
+            {
+                paint.ColorFilter = solid;
             }
 
             paint.SetColor(new SKColorF(1f, 1f, 1f, 1f), null);

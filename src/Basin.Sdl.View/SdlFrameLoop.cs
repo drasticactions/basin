@@ -109,10 +109,10 @@ public sealed class SdlFrameLoop : IDisposable
     public long Pumps { get; private set; }
 
     /// <summary>
-    /// Gets or sets the shortest time between two presents and between two frame-done events.
-    /// A window that is added, removed or moved to another display sets it again from the fastest refresh rate, or 60 Hz.
+    /// Gets the shortest time between two presents and between two frame-done events.
+    /// A window that is added, removed or moved to another display sets it from the fastest refresh rate, or 60 Hz.
     /// </summary>
-    public TimeSpan FrameInterval { get; set; } = TimeSpan.FromSeconds(1.0 / 60.0);
+    public TimeSpan FrameInterval { get; internal set; } = TimeSpan.FromSeconds(1.0 / 60.0);
 
     /// <summary>
     /// Gets or sets a value indicating whether every window repaints once per frame interval, with or without damage.

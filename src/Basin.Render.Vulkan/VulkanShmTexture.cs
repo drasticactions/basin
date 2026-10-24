@@ -31,11 +31,26 @@ internal sealed class VulkanShmTexture : ITexture, IRefreshableTexture, IVulkanR
     {
         _renderer = renderer;
         _upload = new VulkanUploadImage(renderer.Dev, buffer);
-        _allocation = renderer.AllocateTextureSet(_upload.View);
-        if (_upload.SrgbView.Handle != 0)
+        var allocated = false;
+        try
         {
-            _srgbAllocation = renderer.AllocateTextureSet(_upload.SrgbView);
-            _hasSrgbSet = true;
+            _allocation = renderer.AllocateTextureSet(_upload.View);
+            allocated = true;
+            if (_upload.SrgbView.Handle != 0)
+            {
+                _srgbAllocation = renderer.AllocateTextureSet(_upload.SrgbView);
+                _hasSrgbSet = true;
+            }
+        }
+        catch
+        {
+            if (allocated)
+            {
+                renderer.Descriptors.Free(_allocation);
+            }
+
+            _upload.Dispose();
+            throw;
         }
 
         BasinCounters.Track();

@@ -1771,7 +1771,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
 
         var pass = renderer.BeginBufferPass(
-            target, new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = Color.ColorDescription });
+            target,
+            new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = Color.ColorDescription, SolidColorLut = Color.SolidColorLut });
         if (ownsFence)
         {
             _ = CloseFd(waitFence);

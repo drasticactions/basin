@@ -36,7 +36,8 @@ public sealed unsafe class VulkanUploadImage : IDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="VulkanUploadImage"/> class. It throws <see cref="InvalidOperationException"/> when the buffer is not CPU-readable, its format is not uploadable, or it is too large.
+    /// Initializes a new instance of the <see cref="VulkanUploadImage"/> class. It throws <see cref="InvalidOperationException"/> when the buffer is not CPU-readable, its format is not uploadable, it is too large, or a Vulkan step fails.
+    /// On an exception, it frees the views, the image and the memory that it made.
     /// </summary>
     /// <param name="device">The device that owns the image.</param>
     /// <param name="buffer">The buffer to mirror. The whole buffer is marked dirty.</param>
@@ -103,41 +104,49 @@ public sealed unsafe class VulkanUploadImage : IDisposable
             Usage = ImageUsageFlags.SampledBit | ImageUsageFlags.TransferSrcBit | ImageUsageFlags.TransferDstBit,
             InitialLayout = ImageLayout.Undefined,
         };
-        VulkanDevice.Check(vk.CreateImage(device.Device, in imageInfo, null, out var image), "vkCreateImage(upload)");
-        Image = image;
-        vk.GetImageMemoryRequirements(device.Device, Image, out var requirements);
-        var allocateInfo = new MemoryAllocateInfo
+        try
         {
-            SType = StructureType.MemoryAllocateInfo,
-            AllocationSize = requirements.Size,
-            MemoryTypeIndex = device.MemoryTypeFor(requirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit),
-        };
-        VulkanDevice.Check(vk.AllocateMemory(device.Device, in allocateInfo, null, out _imageMemory), "vkAllocateMemory(upload image)");
-        VulkanDevice.Check(vk.BindImageMemory(device.Device, Image, _imageMemory, 0), "vkBindImageMemory");
+            VulkanDevice.Check(vk.CreateImage(device.Device, in imageInfo, null, out var image), "vkCreateImage(upload)");
+            Image = image;
+            vk.GetImageMemoryRequirements(device.Device, Image, out var requirements);
+            var allocateInfo = new MemoryAllocateInfo
+            {
+                SType = StructureType.MemoryAllocateInfo,
+                AllocationSize = requirements.Size,
+                MemoryTypeIndex = device.MemoryTypeFor(requirements.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit),
+            };
+            VulkanDevice.Check(vk.AllocateMemory(device.Device, in allocateInfo, null, out _imageMemory), "vkAllocateMemory(upload image)");
+            VulkanDevice.Check(vk.BindImageMemory(device.Device, Image, _imageMemory, 0), "vkBindImageMemory");
 
-        var viewInfo = new ImageViewCreateInfo
-        {
-            SType = StructureType.ImageViewCreateInfo,
-            Image = Image,
-            ViewType = ImageViewType.Type2D,
-            Format = vkFormat,
-            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
-        };
-        VulkanDevice.Check(vk.CreateImageView(device.Device, in viewInfo, null, out var view), "vkCreateImageView(upload)");
-        View = view;
-
-        if (mutableSrgb)
-        {
-            var srgbViewInfo = new ImageViewCreateInfo
+            var viewInfo = new ImageViewCreateInfo
             {
                 SType = StructureType.ImageViewCreateInfo,
                 Image = Image,
                 ViewType = ImageViewType.Type2D,
-                Format = props.Entry.VkSrgb,
+                Format = vkFormat,
                 SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
             };
-            VulkanDevice.Check(vk.CreateImageView(device.Device, in srgbViewInfo, null, out var srgbView), "vkCreateImageView(upload srgb)");
-            SrgbView = srgbView;
+            VulkanDevice.Check(vk.CreateImageView(device.Device, in viewInfo, null, out var view), "vkCreateImageView(upload)");
+            View = view;
+
+            if (mutableSrgb)
+            {
+                var srgbViewInfo = new ImageViewCreateInfo
+                {
+                    SType = StructureType.ImageViewCreateInfo,
+                    Image = Image,
+                    ViewType = ImageViewType.Type2D,
+                    Format = props.Entry.VkSrgb,
+                    SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1),
+                };
+                VulkanDevice.Check(vk.CreateImageView(device.Device, in srgbViewInfo, null, out var srgbView), "vkCreateImageView(upload srgb)");
+                SrgbView = srgbView;
+            }
+        }
+        catch
+        {
+            Dispose();
+            throw;
         }
 
         NeedsShaderDecode = props.Entry.NeedsShaderDecode(mutableSrgb);

@@ -523,7 +523,8 @@ public sealed partial class Scene
         var waitFence = GatherAcquireFences(_renderList, out var ownsFence);
 
         var pass = renderer.BeginBufferPass(
-            target, new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = options.ColorDescription });
+            target,
+            new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = options.ColorDescription, SolidColorLut = options.Luts?.SolidColorLut });
         if (ownsFence)
         {
             RenderFences.CloseFence(waitFence);

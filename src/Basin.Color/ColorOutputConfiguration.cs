@@ -11,9 +11,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
 {
     private const OutputConfigurationFeatures ColorMask =
         OutputConfigurationFeatures.HighDynamicRange |
-        OutputConfigurationFeatures.WideColorGamut |
         OutputConfigurationFeatures.IccProfile |
-        OutputConfigurationFeatures.HdrIccProfile |
         OutputConfigurationFeatures.BuiltInColor;
 
     private readonly IOutputConfiguration _inner;
@@ -360,7 +358,8 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
     }
 
     /// <summary>
-    /// Checks that every named ICC profile reads and validates, then tests the inner configuration.
+    /// Checks that every named ICC profile reads and validates and that no entry sets a property that nothing applies, then tests the inner configuration.
+    /// Wide color gamut, the HDR color profile source and the HDR ICC profile are such properties.
     /// </summary>
     /// <param name="entries">The configuration to check.</param>
     /// <returns><see langword="true"/> when every entry can commit. <see cref="LastFailureReason"/> tells why one cannot.</returns>
@@ -370,7 +369,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         _failure = null;
         foreach (var entry in entries)
         {
-            if (!ValidateProfiles(entry))
+            if (!Validate(entry))
             {
                 return false;
             }
@@ -391,7 +390,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         _failure = null;
         foreach (var entry in entries)
         {
-            if (!ValidateProfiles(entry))
+            if (!Validate(entry))
             {
                 return false;
             }
@@ -437,31 +436,26 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         ArgumentNullException.ThrowIfNull(output);
         var any = _inner.TryRead(output, out state);
         var color = StateOf(output);
+        if (!any)
         {
-            if (!any)
-            {
-                state = new OutputConfigurationEntry { Output = output, Enabled = output.Enabled };
-            }
-
-            state = state with
-            {
-                HighDynamicRange = color.HighDynamicRange,
-                WideColorGamut = color.WideColorGamut,
-                SdrBrightnessNits = color.SdrBrightnessNits,
-                SdrGamutWideness = color.SdrGamutWideness,
-                ColorProfileSource = color.Source,
-                IccProfilePath = color.IccProfilePath ?? string.Empty,
-                HdrColorProfileSource = color.HdrSource,
-                HdrIccProfilePath = color.HdrIccProfilePath ?? string.Empty,
-                BrightnessOverrides = color.BrightnessOverrides,
-                EdrPolicy = color.EdrPolicy,
-                DdcCiAllowed = color.DdcCiAllowed,
-                ColorPowerTradeoff = color.ColorPowerTradeoff,
-                Brightness = color.Brightness,
-                Dimming = color.Dimming,
-            };
-            return true;
+            state = new OutputConfigurationEntry { Output = output, Enabled = output.Enabled };
         }
+
+        state = state with
+        {
+            HighDynamicRange = color.HighDynamicRange,
+            SdrBrightnessNits = color.SdrBrightnessNits,
+            SdrGamutWideness = color.SdrGamutWideness,
+            ColorProfileSource = color.Source,
+            IccProfilePath = color.IccProfilePath ?? string.Empty,
+            BrightnessOverrides = color.BrightnessOverrides,
+            EdrPolicy = color.EdrPolicy,
+            DdcCiAllowed = color.DdcCiAllowed,
+            ColorPowerTradeoff = color.ColorPowerTradeoff,
+            Brightness = color.Brightness,
+            Dimming = color.Dimming,
+        };
+        return true;
     }
 
     /// <summary>
@@ -725,11 +719,6 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
             next = next with { HighDynamicRange = hdr && (Supported(output) & OutputConfigurationFeatures.HighDynamicRange) != 0 };
         }
 
-        if (entry.WideColorGamut is { } wcg)
-        {
-            next = next with { WideColorGamut = wcg };
-        }
-
         if (entry.SdrBrightnessNits is { } sdr)
         {
             next = next with { SdrBrightnessNits = sdr };
@@ -748,16 +737,6 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         if (entry.IccProfilePath is { } icc)
         {
             next = next with { IccProfilePath = icc.Length > 0 ? icc : null };
-        }
-
-        if (entry.HdrColorProfileSource is { } hdrSource)
-        {
-            next = next with { HdrSource = hdrSource };
-        }
-
-        if (entry.HdrIccProfilePath is { } hdrIcc)
-        {
-            next = next with { HdrIccProfilePath = hdrIcc.Length > 0 ? hdrIcc : null };
         }
 
         if (entry.BrightnessOverrides is { } overrides)
@@ -855,17 +834,21 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         }
     }
 
-    private bool ValidateProfiles(in OutputConfigurationEntry entry)
+    private bool Validate(in OutputConfigurationEntry entry)
     {
-        if (entry.IccProfilePath is { Length: > 0 } path && !TryReadProfile(path, out _))
+        var unapplied = entry.WideColorGamut is not null ? "wide color gamut"
+            : entry.HdrColorProfileSource is not null ? "the hdr color profile source"
+            : entry.HdrIccProfilePath is not null ? "the hdr icc profile"
+            : null;
+        if (unapplied is not null)
         {
-            _failure = $"the icc profile at {path} could not be read";
+            _failure = $"{unapplied} is not supported";
             return false;
         }
 
-        if (entry.HdrIccProfilePath is { Length: > 0 } hdrPath && !TryReadProfile(hdrPath, out _))
+        if (entry.IccProfilePath is { Length: > 0 } path && !TryReadProfile(path, out _))
         {
-            _failure = $"the icc profile at {hdrPath} could not be read";
+            _failure = $"the icc profile at {path} could not be read";
             return false;
         }
 

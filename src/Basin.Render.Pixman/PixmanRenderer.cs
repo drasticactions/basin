@@ -46,7 +46,7 @@ public sealed class PixmanRenderer : IRenderer
             entry = ImportTarget(target, view);
         }
 
-        _pass.Begin(target, entry.Image, view.Data, view.Stride);
+        _pass.Begin(target, entry.Image, view.Data, view.Stride, (options.SolidColorLut as PixmanColorLut)?.Lut);
         return _pass;
     }
 

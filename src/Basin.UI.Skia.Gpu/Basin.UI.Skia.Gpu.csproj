@@ -15,6 +15,7 @@
     <ProjectReference Include="../Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
     <ProjectReference Include="../Basin.UI.Skia/Basin.UI.Skia.csproj" />
     <PackageReference Include="SkiaSharp" />
+    <InternalsVisibleTo Include="Basin.Tests" />
   </ItemGroup>
 
 </Project>

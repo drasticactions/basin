@@ -28,7 +28,7 @@ public enum OutputConfigurationFeatures : uint
     /// </summary>
     HighDynamicRange = 1u << 3,
     /// <summary>
-    /// <see cref="OutputConfigurationEntry.WideColorGamut"/> is available.
+    /// <see cref="OutputConfigurationEntry.WideColorGamut"/> is available. No configuration in basin advertises it, because none applies it.
     /// </summary>
     WideColorGamut = 1u << 4,
     /// <summary>
@@ -72,7 +72,7 @@ public enum OutputConfigurationFeatures : uint
     /// </summary>
     AutoBrightness = 1u << 14,
     /// <summary>
-    /// <see cref="OutputConfigurationEntry.HdrIccProfilePath"/> is available.
+    /// <see cref="OutputConfigurationEntry.HdrIccProfilePath"/> is available. No configuration in basin advertises it, because none applies it.
     /// </summary>
     HdrIccProfile = 1u << 15,
     /// <summary>

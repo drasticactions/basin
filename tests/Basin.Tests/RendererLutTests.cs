@@ -270,6 +270,63 @@ public sealed class RendererLutTests
         content.Destroy();
     }
 
+    [Theory]
+    [MemberData(nameof(Renderers))]
+    public void A_table_row_converts_the_colors_that_the_compositor_draws(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        Assert.SkipWhen(host.Renderer.ColorTransform != ColorTransformCapability.Lut3D, $"the {renderer} row converts rects itself");
+
+        var lut = host.Renderer.ImportLut(InvertingLut());
+        Assert.NotNull(lut);
+        var dark = 0x20 / 255f;
+        var target = SolidBuffer(48, 16, 0xFF000000);
+        var pass = host.Renderer.BeginBufferPass(target, new RenderPassOptions { SolidColorLut = lut });
+        pass.AddRect(new RenderColor(dark, dark, dark, 1f), new Box(0, 0, 8, 8));
+        pass.AddRect(new RenderColor(dark * 0.5f, dark * 0.5f, dark * 0.5f, 0.5f), new Box(16, 0, 8, 8));
+        var color = new RenderColor(dark, dark, dark, 1f);
+        Span<MeshVertex> triangles =
+        [
+            new(32, 0, 0, 0, color), new(40, 0, 0, 0, color), new(32, 8, 0, 0, color),
+            new(40, 0, 0, 0, color), new(40, 8, 0, 0, color), new(32, 8, 0, 0, color),
+        ];
+        pass.AddMesh(null, triangles, new MeshRenderOptions());
+        Assert.True(pass.Submit());
+
+        var (_, r0, g0, b0) = PixelAt(target, 4, 4);
+        AssertNear(0xDF, r0, "opaque rect red");
+        AssertNear(0xDF, g0, "opaque rect green");
+        AssertNear(0xDF, b0, "opaque rect blue");
+        var (_, r1, _, _) = PixelAt(target, 20, 4);
+        AssertNear(0x70, r1, "half-alpha rect over black");
+        var (_, r2, _, _) = PixelAt(target, 36, 4);
+        AssertNear(0xDF, r2, "untextured mesh red");
+
+        lut!.Dispose();
+        target.Destroy();
+    }
+
+    [Fact]
+    public void A_scene_rect_on_a_table_row_renders_through_the_default_table()
+    {
+        using var host = new CompositorTestHost();
+        Assert.Equal(ColorTransformCapability.Lut3D, host.Renderer.ColorTransform);
+        using var sceneOutput = new Basin.Scene.SceneOutput(host.Scene, host.Output);
+        using var swapchain = new Swapchain(new ShmAllocator(), 160, 120, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        var dark = 0x20 / 255f;
+        _ = new Basin.Scene.SceneRect(host.Scene.Root, 160, 120, new RenderColor(dark, dark, dark, 1f));
+        using var table = new FixedTable(host.Renderer.ImportLut(InvertingLut()));
+        sceneOutput.Resolver = table;
+
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+        var (_, r, g, b) = PixelAt(state.Buffer!, 80, 60);
+        AssertNear(0xDF, r, "scene rect red");
+        AssertNear(0xDF, g, "scene rect green");
+        AssertNear(0xDF, b, "scene rect blue");
+    }
+
     internal sealed class FixedTable(IColorLut? lut) : IColorTransformResolver, IDisposable
     {
         public IColorLut? Lut { get; } = lut;

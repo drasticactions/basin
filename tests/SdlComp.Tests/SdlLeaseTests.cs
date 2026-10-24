@@ -90,4 +90,60 @@ public sealed class SdlLeaseTests
         Assert.Equal(1000, window.Presented - presented);
         Assert.Equal(0, allocated);
     }
+
+    [Fact]
+    public void A_frame_that_composites_nothing_is_discarded()
+    {
+        using var rig = new FakeLeaseRig();
+        rig.Tick();
+        var output = rig.Window.View.SceneOutput;
+        var presents = rig.Lease.Presents;
+        Action<Basin.FrameTick> empties = _ => output.Ring.Commit();
+        output.BeforeRepaint += empties;
+        for (var i = 0; i < 10; i++)
+        {
+            output.Ring.Add(new Basin.Box(0, 0, 8, 8));
+            Assert.True(rig.Window.NeedsFrame);
+            rig.Tick();
+        }
+
+        output.BeforeRepaint -= empties;
+        Assert.Equal(10, rig.Lease.Discards);
+
+        Action<Basin.FrameTick> throws = _ => throw new InvalidOperationException("a failed commit");
+        output.BeforeRepaint += throws;
+        for (var i = 0; i < 10; i++)
+        {
+            output.Ring.Add(new Basin.Box(0, 0, 8, 8));
+            rig.Tick();
+        }
+
+        output.BeforeRepaint -= throws;
+        Assert.Equal(20, rig.Lease.Discards);
+        Assert.Equal(presents, rig.Lease.Presents);
+        Assert.Equal(rig.Lease.Begins, rig.Lease.Presents + rig.Lease.Discards);
+    }
+
+    [Fact]
+    public void The_Vulkan_lease_presents_after_many_discarded_frames()
+    {
+        using var harness = new SdlCompHarness(SdlRenderDevices.Vulkan);
+        var window = harness.Comp.Window;
+        var output = window.View.SceneOutput;
+        harness.Pump();
+        var presented = window.Presented;
+        Action<Basin.FrameTick> empties = _ => output.Ring.Commit();
+        output.BeforeRepaint += empties;
+        for (var i = 0; i < 20; i++)
+        {
+            output.Ring.Add(new Basin.Box(0, 0, 8, 8));
+            harness.Comp.Loop.MarkActivity();
+            harness.Step(0);
+        }
+
+        output.BeforeRepaint -= empties;
+        Assert.Equal(presented, window.Presented);
+        window.View.RequestRender?.Invoke();
+        harness.PumpUntil(() => window.Presented > presented, "the Vulkan lease never presented after the discarded frames");
+    }
 }

@@ -277,7 +277,7 @@ public sealed class HostedRenderer : IRenderer
     /// Begins a pass on the bound canvas. It waits on the wait fence on the CPU and scales the canvas by the reciprocal of the target scale.
     /// </summary>
     /// <param name="target">The <see cref="HostedFrameTarget"/> of the frame.</param>
-    /// <param name="options">The pass options. Only the wait fence is read here.</param>
+    /// <param name="options">The pass options. The wait fence and <see cref="RenderPassOptions.SolidColorLut"/> are read here.</param>
     /// <returns>A raster Skia pass over the leased canvas.</returns>
     /// <exception cref="InvalidOperationException">The target is not a <see cref="HostedFrameTarget"/>, or no frame is bound.</exception>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
@@ -300,7 +300,7 @@ public sealed class HostedRenderer : IRenderer
             _canvas.Scale((float)(1.0 / frame.Scale));
         }
 
-        return _raster.BeginCanvasPass(target, _canvas);
+        return _raster.BeginCanvasPass(target, _canvas, options.SolidColorLut);
     }
 
     /// <summary>

@@ -14,12 +14,6 @@ public sealed record OutputColorState
     public bool HighDynamicRange { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether the client asked for the wide color gamut mode. It is recorded
-    /// and reported only.
-    /// </summary>
-    public bool WideColorGamut { get; init; }
-
-    /// <summary>
     /// Gets the luminance in nits of SDR white while HDR is on.
     /// </summary>
     public uint SdrBrightnessNits { get; init; } = 200;
@@ -39,17 +33,6 @@ public sealed record OutputColorState
     /// Gets the SDR ICC profile file, or <see langword="null"/>.
     /// </summary>
     public string? IccProfilePath { get; init; }
-
-    /// <summary>
-    /// Gets where the HDR profile comes from. It is recorded and reported only.
-    /// </summary>
-    public OutputColorProfileSource HdrSource { get; init; } = OutputColorProfileSource.Srgb;
-
-    /// <summary>
-    /// Gets the HDR ICC profile file, or <see langword="null"/>. It is validated, recorded and reported
-    /// only.
-    /// </summary>
-    public string? HdrIccProfilePath { get; init; }
 
     /// <summary>
     /// Gets the luminance limits that replace the EDID values in the HDR description and metadata.

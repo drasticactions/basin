@@ -39,6 +39,31 @@ public sealed class SdlHdrTests
     }
 
     [Fact]
+    public void A_lease_that_switches_in_Begin_is_described_by_what_it_presents()
+    {
+        using var rig = new FakeLeaseRig();
+        var color = rig.Host.Color!.Configuration;
+        var output = rig.Window.View.Output;
+        rig.Tick();
+        Assert.NotEqual(ColorTransferFunction.St2084Pq, color.DescriptionOf(output).TransferNamed);
+
+        var changes = 0;
+        rig.Window.HdrChanged += _ => changes++;
+        rig.Window.ApplyHdr(new SdlHdrState(true, 240f, 4f));
+        Assert.False(rig.Window.Hdr.Enabled);
+        rig.Tick();
+        Assert.True(rig.Lease.Hdr.Enabled);
+        Assert.Equal(ColorTransferFunction.St2084Pq, color.DescriptionOf(output).TransferNamed);
+        Assert.Equal(1, changes);
+
+        rig.Window.ApplyHdr(SdlHdrState.Sdr);
+        rig.Tick();
+        Assert.False(rig.Lease.Hdr.Enabled);
+        Assert.NotEqual(ColorTransferFunction.St2084Pq, color.DescriptionOf(output).TransferNamed);
+        Assert.Equal(2, changes);
+    }
+
+    [Fact]
     public void The_GL_and_raster_leases_stay_SDR_without_a_color_manager()
     {
         using var harness = new SdlCompHarness(SdlRenderDevices.Gl);

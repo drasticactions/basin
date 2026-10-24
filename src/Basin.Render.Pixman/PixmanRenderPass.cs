@@ -10,8 +10,10 @@ internal sealed class PixmanRenderPass : IRenderPass
     private PixmanImage? _image;
     private nint _targetData;
     private int _targetStride;
+    private ColorLut3D? _solid;
+    private MeshVertex[] _solidVertices = [];
 
-    internal void Begin(IBuffer target, PixmanImage image, nint targetData, int targetStride)
+    internal void Begin(IBuffer target, PixmanImage image, nint targetData, int targetStride, ColorLut3D? solid = null)
     {
         if (_target is not null)
         {
@@ -22,7 +24,10 @@ internal sealed class PixmanRenderPass : IRenderPass
         _image = image;
         _targetData = targetData;
         _targetStride = targetStride;
+        _solid = solid;
     }
+
+    private RenderColor Solid(in RenderColor color) => _solid is { } lut ? lut.ApplyPremultiplied(color) : color;
 
     public void AddRect(in RenderColor color, in Box box, PixmanRegion32? clip = null)
     {
@@ -35,7 +40,7 @@ internal sealed class PixmanRenderPass : IRenderPass
 
         Span<PixmanBox32> boxes = [new PixmanBox32(bounded.X, bounded.Y, bounded.Right, bounded.Bottom)];
         ApplyClip(clip);
-        _image!.Fill(color.A >= 1f ? PixmanOp.Src : PixmanOp.Over, ToPixmanColor(color), boxes);
+        _image!.Fill(color.A >= 1f ? PixmanOp.Src : PixmanOp.Over, ToPixmanColor(Solid(color)), boxes);
         ResetClip(clip);
     }
 
@@ -43,7 +48,7 @@ internal sealed class PixmanRenderPass : IRenderPass
     {
         ObjectDisposedException.ThrowIf(_target is null, this);
         Span<PixmanBox32> boxes = [new PixmanBox32(0, 0, _target.Width, _target.Height)];
-        _image!.Fill(PixmanOp.Src, ToPixmanColor(color), boxes);
+        _image!.Fill(PixmanOp.Src, ToPixmanColor(Solid(color)), boxes);
     }
 
     public void AddTexture(ITexture texture, in TextureRenderOptions options)
@@ -297,6 +302,20 @@ internal sealed class PixmanRenderPass : IRenderPass
             sourceWidth = texture.Width;
             sourceHeight = texture.Height;
         }
+        else if (_solid is { } lut && options.Blend != RenderBlend.Additive)
+        {
+            if (_solidVertices.Length < vertices.Length)
+            {
+                _solidVertices = new MeshVertex[vertices.Length];
+            }
+
+            for (var i = 0; i < vertices.Length; i++)
+            {
+                _solidVertices[i] = vertices[i] with { Color = lut.ApplyPremultiplied(vertices[i].Color) };
+            }
+
+            vertices = _solidVertices.AsSpan(0, vertices.Length);
+        }
 
         try
         {
@@ -457,6 +476,7 @@ internal sealed class PixmanRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         var target = _target;
         _target = null;
+        _solid = null;
         _image = null;
         target.EndDataAccess();
         return true;

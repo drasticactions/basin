@@ -124,6 +124,7 @@ public sealed class SdlMetalLease : ISdlRenderLease
 
     /// <summary>
     /// Takes the next drawable of the layer and starts a frame on its texture.
+    /// The frame holds the drawable and an autorelease pool until <see cref="Present"/> or <see cref="Discard"/>.
     /// </summary>
     /// <param name="canvas">The canvas over the drawable texture, in device pixels.</param>
     /// <param name="context">The shared Skia context of the device.</param>
@@ -178,6 +179,15 @@ public sealed class SdlMetalLease : ISdlRenderLease
         var buffer = SdlObjC.Send(_device.Queue, _commandBuffer);
         SdlObjC.Send(buffer, _presentDrawable, _drawable);
         SdlObjC.Send(buffer, _commit);
+        End();
+    }
+
+    /// <summary>
+    /// Ends the frame without a present. It releases the surface and the target, drops the drawable and ends the autorelease pool.
+    /// </summary>
+    public void Discard()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         End();
     }
 

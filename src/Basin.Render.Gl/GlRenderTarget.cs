@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Mesa.Egl;
 using Silk.NET.OpenGLES;
 
@@ -96,11 +97,26 @@ public sealed unsafe class GlRenderTarget
     /// </summary>
     /// <param name="device">The device whose context is current.</param>
     /// <param name="buffer">A dmabuf, or a memory buffer in a 32-bit RGB format or a 16-bit float format.</param>
-    /// <returns>The target, which the caller releases with <see cref="Dispose"/>.</returns>
+    /// <returns>The target, which the caller releases with <see cref="Dispose"/>. On an exception, nothing that the method made stays alive.</returns>
     public static GlRenderTarget Create(GlDevice device, IBuffer buffer)
     {
-        var gl = device.Gl;
         var target = new GlRenderTarget();
+        BasinCounters.Track();
+        try
+        {
+            Build(device, buffer, target);
+            return target;
+        }
+        catch
+        {
+            target.Dispose(device);
+            throw;
+        }
+    }
+
+    private static void Build(GlDevice device, IBuffer buffer, GlRenderTarget target)
+    {
+        var gl = device.Gl;
         target.Framebuffer = gl.GenFramebuffer();
         gl.BindFramebuffer(FramebufferTarget.Framebuffer, target.Framebuffer);
 
@@ -158,7 +174,6 @@ public sealed unsafe class GlRenderTarget
         {
             if (buffer.Format is not (DrmFormat.Argb8888 or DrmFormat.Xrgb8888 or DrmFormat.Abgr8888 or DrmFormat.Xbgr8888))
             {
-                gl.DeleteFramebuffer(target.Framebuffer);
                 throw new NotSupportedException($"{buffer.Format} is not a CPU render target format for the GL renderer.");
             }
 
@@ -209,8 +224,6 @@ public sealed unsafe class GlRenderTarget
         {
             throw new InvalidOperationException("render target framebuffer incomplete");
         }
-
-        return target;
     }
 
     /// <summary>
@@ -276,7 +289,7 @@ public sealed unsafe class GlRenderTarget
     }
 
     /// <summary>
-    /// Deletes the framebuffer, the textures and the EGL image, and raises <see cref="GlDevice.TextureDeleting"/> for each texture that an effect can hold.
+    /// Deletes the framebuffer, the textures and the EGL image of a target, also of one that <see cref="Create"/> built only in part, and raises <see cref="GlDevice.TextureDeleting"/> for each texture that an effect can hold.
     /// </summary>
     /// <param name="device">The device that created the target.</param>
     public void Dispose(GlDevice device)
@@ -297,5 +310,6 @@ public sealed unsafe class GlRenderTarget
         gl.DeleteFramebuffer(Framebuffer);
         gl.DeleteTexture(_textureOrRenderbuffer);
         _image?.Dispose();
+        BasinCounters.Untrack();
     }
 }

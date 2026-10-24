@@ -28,4 +28,10 @@ public readonly record struct RenderPassOptions
     /// Gets the color description of the output, for a renderer that declares <see cref="ColorTransformCapability.Decomposed"/>. Other renderers ignore it.
     /// </summary>
     public Capabilities.ImageDescription? ColorDescription { get; init; } = null;
+
+    /// <summary>
+    /// Gets the table from <see cref="Capabilities.ImageDescription.SdrDefault"/> to the target, for the colors that the compositor draws: rects, clears and untextured meshes.
+    /// A renderer that declares <see cref="ColorTransformCapability.Lut3D"/> applies it. Other renderers ignore it.
+    /// </summary>
+    public IColorLut? SolidColorLut { get; init; } = null;
 }

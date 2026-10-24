@@ -134,6 +134,8 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
         if (_wrap is null || !ReferenceEquals(_wrapped, target))
         {
             _wrap?.Dispose();
+            _wrap = null;
+            _wrapped = null;
             _wrap = _wrapFactory(target);
             _wrapped = target;
             if (_allocator is not null && _wrap.IsCpuReadback)

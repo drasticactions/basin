@@ -271,12 +271,20 @@ public sealed unsafe class SkiaGraphiteTarget : IDisposable
             0, 1, &toHost, 0, null, 0, null);
     }
 
+    private bool _disposed;
+
     /// <summary>
-    /// Waits for the device to idle, then frees the surface, the image and its memory. Call it once
-    /// only.
+    /// Waits for the device to idle, then frees the surface, the image and its memory. A second call
+    /// does nothing.
     /// </summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         var device = _device;
         var vk = device.Api;
         _ = vk.DeviceWaitIdle(device.Device);

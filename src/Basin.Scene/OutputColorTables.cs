@@ -95,6 +95,9 @@ public sealed class OutputColorTables : IColorLutTable, IDisposable
     }
 
     /// <inheritdoc/>
+    public IColorLut? SolidColorLut => _defaultLut;
+
+    /// <inheritdoc/>
     public IColorLut? LutFor(SceneBuffer node)
     {
         ArgumentNullException.ThrowIfNull(node);

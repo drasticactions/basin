@@ -65,6 +65,7 @@ public sealed unsafe class GlShmTexture : ITexture, IRefreshableTexture
         _buffer = buffer;
         Width = buffer.Width;
         Height = buffer.Height;
+        HasAlpha = buffer.Format.HasAlpha();
     }
 
     /// <inheritdoc/>
@@ -74,7 +75,7 @@ public sealed unsafe class GlShmTexture : ITexture, IRefreshableTexture
     public int Height { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the format of the buffer has an alpha channel. It is <see langword="false"/> until the first upload.
+    /// Gets a value indicating whether the format of the buffer has an alpha channel. Each upload reads it again from the buffer's current format.
     /// </summary>
     public bool HasAlpha { get; private set; }
 

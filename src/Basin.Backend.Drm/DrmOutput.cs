@@ -550,12 +550,6 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
 
             features |= Basin.Capabilities.OutputConfigurationFeatures.IccProfile;
-            features |= Basin.Capabilities.OutputConfigurationFeatures.HdrIccProfile;
-            if (_wideColorGamutCapable)
-            {
-                features |= Basin.Capabilities.OutputConfigurationFeatures.WideColorGamut;
-            }
-
             if (_highDynamicRangeCapable)
             {
                 features |= Basin.Capabilities.OutputConfigurationFeatures.HighDynamicRange;

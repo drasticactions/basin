@@ -19,6 +19,23 @@ public sealed class RendererFloorTests
     }
 
     [Fact]
+    public void A_gl_floor_with_no_render_node_throws_and_reports_nothing()
+    {
+        var name = "gl";
+        var falls = new List<RendererFallback>();
+        var error = Assert.Throws<InvalidOperationException>(
+            () => RendererCatalog.CreateWithFallback(ref name, null, falls.Add, floor: "gl"));
+        Assert.Contains("no render node", error.Message);
+        Assert.Empty(falls);
+
+        name = "gl";
+        var stack = RendererCatalog.CreateWithFallback(ref name, null, falls.Add);
+        Assert.Equal("pixman", name);
+        Assert.Equal(new RendererFallback("gl", "pixman", null), Assert.Single(falls));
+        Release(stack);
+    }
+
+    [Fact]
     public void Pixman_has_no_world_renderer()
     {
         var name = "pixman";

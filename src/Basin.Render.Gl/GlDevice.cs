@@ -68,7 +68,7 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
     public int DrmFd => _deviceFd;
 
     /// <summary>
-    /// Gets the dmabuf formats and modifiers that EGL can import as 2D textures. Each format also lists the invalid modifier, for a buffer with an implicit modifier.
+    /// Gets the ARGB8888 and XRGB8888 modifiers that EGL can import as 2D textures. Each format also lists the invalid modifier, for a buffer with an implicit modifier.
     /// </summary>
     public DrmFormatSet SampleableFormats { get; }
 
