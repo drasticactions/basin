@@ -6,12 +6,14 @@ namespace Basin.Hosted;
 
 internal sealed class HostedOffscreenPass : IRenderPass
 {
+    private HostedRenderer? _renderer;
     private IRenderPass? _inner;
     private SKSurface? _surface;
     private IBuffer? _target;
 
-    public IRenderPass Begin(IRenderPass inner, SKSurface surface, IBuffer target)
+    public IRenderPass Begin(HostedRenderer renderer, IRenderPass inner, SKSurface surface, IBuffer target)
     {
+        _renderer = renderer;
         _inner = inner;
         _surface = surface;
         _target = target;
@@ -47,14 +49,23 @@ internal sealed class HostedOffscreenPass : IRenderPass
         var inner = Inner;
         var surface = _surface!;
         var target = _target!;
+        var renderer = _renderer!;
         _inner = null;
         _surface = null;
         _target = null;
-        if (!inner.Submit())
+        _renderer = null;
+        try
         {
-            return false;
+            return inner.Submit() && ReadBack(surface, target);
         }
+        finally
+        {
+            renderer.EndOffscreenPass();
+        }
+    }
 
+    private static bool ReadBack(SKSurface surface, IBuffer target)
+    {
         surface.Flush();
         if (!target.BeginDataAccess(BufferDataAccess.Write, out var view))
         {

@@ -35,6 +35,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
     private bool _reportedNoLease;
     private bool _frameFailing;
     private bool _probedEgl;
+    private nint _earlyEglDisplay;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasinOutputVisual"/> class.
@@ -80,18 +81,18 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         try
         {
             var host = _host!;
+            if (!_probedEgl && context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is { } probeFeature)
+            {
+                _probedEgl = true;
+                using var probeLease = probeFeature.Lease();
+                if (host.Renderer.BindFrame(probeLease))
+                {
+                    host.Renderer.UnbindFrame();
+                }
+            }
+
             if (_view is null)
             {
-                if (!_probedEgl && context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is { } probeFeature)
-                {
-                    _probedEgl = true;
-                    using var probeLease = probeFeature.Lease();
-                    if (host.Renderer.BindFrame(probeLease))
-                    {
-                        host.Renderer.UnbindFrame();
-                    }
-                }
-
                 BasinVisualFrame.Pump(host, CompositionNow);
                 host.InvalidateDirtyViews();
                 KeepPolling(host);
@@ -144,6 +145,12 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         if (ReferenceEquals(message, StartMessage))
         {
             Start();
+            return;
+        }
+
+        if (message is BasinEglDisplayMessage egl)
+        {
+            _earlyEglDisplay = egl.Display;
             return;
         }
 
@@ -278,6 +285,12 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
 
         _host = _createHost();
+        if (_earlyEglDisplay != 0)
+        {
+            _host.Renderer.ToolkitLendsContext = true;
+            _host.Renderer.TryEnableEgl(_earlyEglDisplay);
+        }
+
         if (_createOwnView)
         {
             _view = _host.CreateViewOutput(

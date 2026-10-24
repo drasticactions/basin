@@ -98,6 +98,30 @@ public sealed class DmabufTests
     }
 
     [Fact]
+    public void A_withdrawn_global_is_hidden_from_new_clients_and_still_serves_bound_ones()
+    {
+        Assert.SkipUnless(HasRenderNode, "no render node");
+        using var host = new CompositorTestHost();
+        host.Dmabuf!.Withdraw();
+        host.PumpToClient();
+
+        var late = host.ConnectClient();
+        Assert.Null(late.Dmabuf);
+
+        var feedback = host.Client.Dmabuf!.GetDefaultFeedback();
+        var done = false;
+        var tableFd = -1;
+        feedback.FormatTable += (_, e) => tableFd = e.Fd;
+        feedback.Done += (_, _) => done = true;
+        host.PumpUntil(() => done);
+        Assert.True(done);
+        Assert.True(tableFd >= 0);
+        close(tableFd);
+        feedback.Dispose();
+        host.DisconnectClient(late);
+    }
+
+    [Fact]
     public void Valid_params_create_a_buffer_that_attaches()
     {
         Assert.SkipUnless(HasRenderNode, "no render node");

@@ -1,6 +1,7 @@
 using Basin.Diagnostics;
 using Basin.Render.Skia;
 using SkiaSharp;
+using static Basin.Hosted.HostedLog;
 
 namespace Basin.Hosted;
 
@@ -18,9 +19,15 @@ public sealed class HostedRenderer : IRenderer
     private int _saveCount;
     private bool _lost;
     private HostedEglImport? _eglImport;
-    private readonly List<(uint Texture, nint Image, int Generation)> _pendingEglReleases = [];
+    private readonly List<(uint Texture, nint Image, int Generation, HostedEglImport Import)> _pendingEglReleases = [];
     private readonly HostedOffscreenPass _offscreenPass = new();
     private GRContext? _offscreenContext;
+    private IHostedContextBinding? _offscreenBinding;
+    private int _bindingDepth;
+    private bool _bindingWarned;
+    private bool _passEntered;
+    private SKBitmap? _loadBitmap;
+    private SKPaint? _loadPaint;
     private SKSurface? _offscreenSurface;
     private int _offscreenWidth;
     private int _offscreenHeight;
@@ -36,7 +43,7 @@ public sealed class HostedRenderer : IRenderer
     public HostedEglImport? EglImport => _eglImport;
 
     /// <summary>
-    /// Occurs once, when <see cref="TryEnableEgl"/> creates the EGL import.
+    /// Occurs when <see cref="TryEnableEgl"/> creates an EGL import: the first one, and each one on a new EGL display.
     /// </summary>
     public event Action<HostedEglImport>? EglAvailable;
 
@@ -91,8 +98,12 @@ public sealed class HostedRenderer : IRenderer
         }
     }
 
-    internal void ScheduleEglRelease(uint texture, nint image, int generation) =>
-        _pendingEglReleases.Add((texture, image, generation));
+    internal void ScheduleEglRelease(uint texture, nint image, int generation, HostedEglImport import) =>
+        _pendingEglReleases.Add((texture, image, generation, import));
+
+    internal bool ToolkitLendsContext { get; set; }
+
+    internal GRContext? DrawingGpuContext => _canvas is not null ? _lastContext : _passEntered ? _offscreenContext : null;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HostedRenderer"/> class on the calling thread.
@@ -114,23 +125,41 @@ public sealed class HostedRenderer : IRenderer
 
     /// <summary>
     /// Enables dmabuf import through the host's EGL display and raises <see cref="EglAvailable"/> on success.
+    /// A call with a different display replaces the import. Textures from the previous display then import again on their next draw.
     /// </summary>
     /// <param name="eglDisplay">The native EGL display of the host toolkit.</param>
-    /// <returns><see langword="true"/> when an EGL import is in use, including one from a previous call.</returns>
+    /// <returns><see langword="true"/> when an EGL import on this display is in use, including one from a previous call.</returns>
     public bool TryEnableEgl(nint eglDisplay)
     {
         _thread.Assert();
-        if (_eglImport is not null || !HostedEglImport.IsSupported)
-        {
-            return _eglImport is not null;
-        }
-
-        if (HostedEglImport.TryCreate(eglDisplay) is not { } import)
+        if (!HostedEglImport.IsSupported)
         {
             return false;
         }
 
+        if (_eglImport is { } current && current.DisplayHandle == eglDisplay)
+        {
+            return true;
+        }
+
+        var previous = _eglImport;
+        if (HostedEglImport.TryCreate(eglDisplay) is not { } import)
+        {
+            if (previous is not null)
+            {
+                _eglImport = null;
+                Log.Warn($"dmabuf: no import on the new EGL display 0x{eglDisplay:X}, dmabuf textures are not drawn");
+            }
+
+            return false;
+        }
+
         _eglImport = import;
+        if (previous is not null)
+        {
+            Log.Info($"dmabuf: EGL display changed from 0x{previous.DisplayHandle:X} to 0x{eglDisplay:X}, textures import again");
+        }
+
         EglAvailable?.Invoke(import);
         return true;
     }
@@ -141,26 +170,156 @@ public sealed class HostedRenderer : IRenderer
     public GRContext? OffscreenContext => _offscreenContext;
 
     /// <summary>
+    /// Gets the binding that makes <see cref="OffscreenContext"/> current outside a frame. It is <see langword="null"/> when that context is always current.
+    /// </summary>
+    public IHostedContextBinding? OffscreenBinding => _offscreenBinding;
+
+    /// <summary>
     /// Sets the GPU context that buffer passes outside a frame draw with, and makes it the context of dmabuf imports.
-    /// A pass on that context reads the pixels back into the target buffer. The context must be current on this thread for every later call.
+    /// A pass on that context reads the pixels back into the target buffer.
+    /// Without a binding, the context must be current on this thread for every later call. With a binding, the renderer enters it around each pass, import and release outside a frame.
     /// </summary>
     /// <param name="context">The GPU context, or <see langword="null"/> to draw those passes on the raster row again.</param>
-    public void UseOffscreenContext(GRContext? context)
+    /// <param name="binding">The binding that makes the context current, or <see langword="null"/> when the context stays current.</param>
+    public void UseOffscreenContext(GRContext? context, IHostedContextBinding? binding = null)
     {
         _thread.Assert();
         if (ReferenceEquals(context, _offscreenContext))
         {
+            if (context is not null && _bindingDepth == 0)
+            {
+                _offscreenBinding = binding;
+            }
+
             return;
+        }
+
+        LeaveOpenPass();
+        if (_offscreenSurface is not null && EnterOffscreenContext())
+        {
+            try
+            {
+                DropOffscreenSurface();
+            }
+            finally
+            {
+                ExitOffscreenContext();
+            }
         }
 
         DropOffscreenSurface();
         _offscreenContext = context;
+        _offscreenBinding = context is null ? null : binding;
+        _bindingWarned = false;
         if (context is not null && !ReferenceEquals(context, _lastContext))
         {
             _lastContext = context;
             _lost = false;
             ContextGeneration++;
             ContextReplaced?.Invoke();
+        }
+    }
+
+    private bool EnterOffscreenContext()
+    {
+        if (_offscreenBinding is not { } binding)
+        {
+            return true;
+        }
+
+        if (_bindingDepth > 0)
+        {
+            _bindingDepth++;
+            return true;
+        }
+
+        if (!binding.Enter())
+        {
+            if (!_bindingWarned)
+            {
+                _bindingWarned = true;
+                Log.Warn($"capture: GPU context did not become current, passes outside a frame draw on the raster row");
+            }
+
+            return false;
+        }
+
+        _bindingWarned = false;
+        _bindingDepth = 1;
+        return true;
+    }
+
+    private void ExitOffscreenContext()
+    {
+        if (_bindingDepth == 0)
+        {
+            return;
+        }
+
+        if (--_bindingDepth == 0)
+        {
+            _offscreenBinding?.Exit();
+        }
+    }
+
+    internal void EndOffscreenPass()
+    {
+        if (_passEntered)
+        {
+            _passEntered = false;
+            ExitOffscreenContext();
+        }
+    }
+
+    private void LeaveOpenPass()
+    {
+        EndOffscreenPass();
+        while (_bindingDepth > 0)
+        {
+            ExitOffscreenContext();
+        }
+    }
+
+    private void FlushStaleEglReleases()
+    {
+        for (var i = _pendingEglReleases.Count - 1; i >= 0; i--)
+        {
+            var (_, image, generation, import) = _pendingEglReleases[i];
+            if (generation != ContextGeneration || !ReferenceEquals(import, _eglImport))
+            {
+                import.DestroyImage(image);
+                _pendingEglReleases.RemoveAt(i);
+            }
+        }
+    }
+
+    private void LoadTarget(SKSurface surface, IBuffer target)
+    {
+        var canvas = surface.Canvas;
+        if (!target.BeginDataAccess(BufferDataAccess.Read, out var view))
+        {
+            canvas.Clear(SKColors.Transparent);
+            return;
+        }
+
+        try
+        {
+            _loadBitmap ??= SkiaCensus.Track(new SKBitmap());
+            _loadPaint ??= SkiaCensus.Track(new SKPaint { BlendMode = SKBlendMode.Src });
+            if (!SkiaRenderer.TryImageInfo(target.Width, target.Height, view.Format, out var info) ||
+                !_loadBitmap.InstallPixels(info, view.Data, view.Stride))
+            {
+                canvas.Clear(SKColors.Transparent);
+                return;
+            }
+
+            canvas.DrawBitmap(_loadBitmap, 0, 0, SKSamplingOptions.Default, _loadPaint);
+            surface.Flush();
+        }
+        finally
+        {
+            _loadBitmap?.Reset();
+            target.EndDataAccess();
         }
     }
 
@@ -172,16 +331,20 @@ public sealed class HostedRenderer : IRenderer
 
     private void FlushEglReleases()
     {
-        if (_eglImport is null || _pendingEglReleases.Count == 0)
+        if (_pendingEglReleases.Count == 0)
         {
             return;
         }
 
-        foreach (var (texture, image, generation) in _pendingEglReleases)
+        foreach (var (texture, image, generation, import) in _pendingEglReleases)
         {
-            if (generation == ContextGeneration)
+            if (generation == ContextGeneration && ReferenceEquals(import, _eglImport))
             {
-                _eglImport.Destroy(texture, image);
+                import.Destroy(texture, image);
+            }
+            else
+            {
+                import.DestroyImage(image);
             }
         }
 
@@ -261,7 +424,7 @@ public sealed class HostedRenderer : IRenderer
 
     /// <summary>
     /// Imports a buffer as a texture. A dmabuf goes to <see cref="DmabufRenderer"/>, or to the EGL import while a frame is bound or <see cref="OffscreenContext"/> is set.
-    /// Any other buffer, and a dmabuf outside those times, goes to the raster Skia row.
+    /// With an EGL import and no GPU context, a dmabuf texture waits and imports on its first draw on a GPU context. Any other buffer, and a dmabuf with no EGL import, goes to the raster Skia row.
     /// </summary>
     /// <param name="buffer">The client buffer.</param>
     /// <returns>The texture, or <see langword="null"/> when the context is lost or no import path accepts the dmabuf format.</returns>
@@ -284,12 +447,34 @@ public sealed class HostedRenderer : IRenderer
 
             if (_canvas is null && _offscreenContext is null)
             {
-                return _raster.ImportTexture(buffer);
+                return _eglImport is { } pending && pending.Formats.Contains(attributes.Format)
+                    ? HostedDmabufTexture.Deferred(this, buffer, pending, attributes)
+                    : _raster.ImportTexture(buffer);
             }
 
-            return _eglImport is { } egl && _lastContext is { } context && egl.Formats.Contains(attributes.Format)
-                ? HostedDmabufTexture.TryImport(this, egl, context, attributes)
-                : null;
+            if (_eglImport is not { } egl || _lastContext is not { } context || !egl.Formats.Contains(attributes.Format))
+            {
+                return null;
+            }
+
+            if (_canvas is not null)
+            {
+                return HostedDmabufTexture.TryImport(this, buffer, egl, context, attributes);
+            }
+
+            if (!EnterOffscreenContext())
+            {
+                return HostedDmabufTexture.Deferred(this, buffer, egl, attributes);
+            }
+
+            try
+            {
+                return HostedDmabufTexture.TryImport(this, buffer, egl, context, attributes);
+            }
+            finally
+            {
+                ExitOffscreenContext();
+            }
         }
 
         return _raster.ImportTexture(buffer);
@@ -363,28 +548,50 @@ public sealed class HostedRenderer : IRenderer
             return delegated.BeginBufferPass(target, options);
         }
 
-        if (_offscreenContext is not { } context || context.IsAbandoned)
+        if (_offscreenContext is not { } context)
         {
             return _raster.BeginBufferPass(target, options);
         }
 
-        RenderFences.WaitSyncFile(options.WaitFenceFd);
-        if (_offscreenSurface is not { } surface || _offscreenWidth != target.Width || _offscreenHeight != target.Height)
+        EndOffscreenPass();
+        if (!EnterOffscreenContext())
         {
-            DropOffscreenSurface();
-            var info = new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-            surface = SKSurface.Create(context, false, info)
-                ?? throw new InvalidOperationException($"Skia could not create a {target.Width}x{target.Height} GPU surface. The target is too large for the device.");
-            _offscreenSurface = SkiaCensus.Track(surface);
-            _offscreenWidth = target.Width;
-            _offscreenHeight = target.Height;
+            return _raster.BeginBufferPass(target, options);
         }
 
-        var canvas = surface.Canvas;
-        canvas.RestoreToCount(1);
-        canvas.ResetMatrix();
-        FlushEglReleases();
-        return _offscreenPass.Begin(_raster.BeginCanvasPass(target, canvas, options.SolidColorLut), surface, target);
+        if (context.IsAbandoned)
+        {
+            ExitOffscreenContext();
+            return _raster.BeginBufferPass(target, options);
+        }
+
+        _passEntered = true;
+        try
+        {
+            RenderFences.WaitSyncFile(options.WaitFenceFd);
+            if (_offscreenSurface is not { } surface || _offscreenWidth != target.Width || _offscreenHeight != target.Height)
+            {
+                DropOffscreenSurface();
+                var info = new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+                surface = SKSurface.Create(context, false, info)
+                    ?? throw new InvalidOperationException($"Skia could not create a {target.Width}x{target.Height} GPU surface. The target is too large for the device.");
+                _offscreenSurface = SkiaCensus.Track(surface);
+                _offscreenWidth = target.Width;
+                _offscreenHeight = target.Height;
+            }
+
+            var canvas = surface.Canvas;
+            canvas.RestoreToCount(1);
+            canvas.ResetMatrix();
+            LoadTarget(surface, target);
+            FlushEglReleases();
+            return _offscreenPass.Begin(this, _raster.BeginCanvasPass(target, canvas, options.SolidColorLut), surface, target);
+        }
+        catch
+        {
+            EndOffscreenPass();
+            throw;
+        }
     }
 
     /// <summary>
@@ -394,14 +601,32 @@ public sealed class HostedRenderer : IRenderer
     {
         _thread.Assert();
         UnbindFrame();
-        if (_offscreenContext is not null)
+        LeaveOpenPass();
+        if (_offscreenContext is null)
         {
-            FlushEglReleases();
+            FlushStaleEglReleases();
+        }
+        else if (EnterOffscreenContext())
+        {
+            try
+            {
+                FlushEglReleases();
+                DropOffscreenSurface();
+            }
+            finally
+            {
+                ExitOffscreenContext();
+            }
         }
 
         DropOffscreenSurface();
         _offscreenContext = null;
+        _offscreenBinding = null;
         SkiaCensus.Release(_layerPaint);
+        SkiaCensus.Release(_loadBitmap);
+        SkiaCensus.Release(_loadPaint);
+        _loadBitmap = null;
+        _loadPaint = null;
         _raster.Dispose();
     }
 }

@@ -50,6 +50,13 @@ public sealed record BasinCompositorOptions
     public bool Dmabuf { get; init; } = true;
 
     /// <summary>
+    /// Gets a value indicating whether the host advertises an EGL dmabuf import only when captures outside a frame can draw dmabuf pixels:
+    /// <see cref="HostedRenderer.OffscreenContext"/> is set, or the toolkit view lends its GPU context at its first frame.
+    /// It is <see langword="false"/> by default.
+    /// </summary>
+    public bool DmabufRequiresGpuCapture { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether the host installs a <see cref="ColorCapabilityPack"/>.
     /// When it is <see langword="false"/>, the host removes <c>wp_color_manager_v1</c>.
     /// </summary>

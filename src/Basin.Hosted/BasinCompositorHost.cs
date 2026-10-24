@@ -20,6 +20,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
     /// </summary>
     public ThreadAffinity Affinity => _thread;
     private bool _disposed;
+    private readonly bool _dmabufRequiresGpuCapture;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasinCompositorHost"/> class.
@@ -128,6 +129,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         frames.FrameRequested += Scene.RequestFrame;
         Screens = new HostScreens(this);
         Wake = new HostedWakeSource(Loop);
+        _dmabufRequiresGpuCapture = options.DmabufRequiresGpuCapture;
         if (options.Dmabuf)
         {
             Renderer.EglAvailable += OnEglAvailable;
@@ -136,6 +138,8 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
     }
 
     private LinuxDmabufGlobal? _dmabuf;
+    private string? _dmabufNode;
+    private readonly List<LinuxDmabufGlobal> _withdrawnDmabuf = [];
 
     /// <summary>
     /// Gets the linux-dmabuf global. It is <see langword="null"/> until the renderer reports a dmabuf import path with a render node, and always when <see cref="BasinCompositorOptions.Dmabuf"/> is <see langword="false"/>.
@@ -144,8 +148,29 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
 
     private void OnEglAvailable(HostedEglImport import)
     {
-        if (_disposed || _dmabuf is not null || !HostedEglImport.IsSupported)
+        if (_disposed || !HostedEglImport.IsSupported)
         {
+            return;
+        }
+
+        if (_dmabuf is { } advertised)
+        {
+            var node = import.RenderNodePath ?? "/dev/dri/renderD128";
+            if (node == _dmabufNode)
+            {
+                return;
+            }
+
+            Log.Info($"dmabuf: main device changed from {_dmabufNode} to {node}, linux-dmabuf is advertised again");
+            advertised.Withdraw();
+            _withdrawnDmabuf.Add(advertised);
+            _dmabuf = null;
+            _dmabufNode = null;
+        }
+
+        if (_dmabufRequiresGpuCapture && Renderer.OffscreenContext is null && !Renderer.ToolkitLendsContext)
+        {
+            Log.Info($"dmabuf: captures outside a frame have no GPU context, linux-dmabuf is not advertised");
             return;
         }
 
@@ -171,6 +196,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
             formats,
             node,
             compositor: Services.Require<CompositorGlobal>());
+        _dmabufNode = node;
         Log.Info($"dmabuf: advertised {formats.Count} formats on {node}");
     }
 
@@ -612,6 +638,12 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         Session.Dispose();
         Screens.Dispose();
         _dmabuf?.Dispose();
+        foreach (var withdrawn in _withdrawnDmabuf)
+        {
+            withdrawn.Dispose();
+        }
+
+        _withdrawnDmabuf.Clear();
         Services.Dispose();
         Scene.Root.Destroy();
         Backend.Dispose();

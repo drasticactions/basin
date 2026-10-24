@@ -80,6 +80,11 @@ public sealed unsafe class HostedEglImport
     }
 
     /// <summary>
+    /// Gets the native EGL display that the import creates its images on.
+    /// </summary>
+    public nint DisplayHandle => _display;
+
+    /// <summary>
     /// Gets the formats and modifiers that the display can import. It is never empty.
     /// </summary>
     public DrmFormatSet Formats { get; }
@@ -165,6 +170,12 @@ public sealed unsafe class HostedEglImport
         _deleteTextures(1, &texture);
         _destroyImage(_display, image);
     }
+
+    /// <summary>
+    /// Destroys an image that <see cref="Import"/> created, and keeps its texture. Use it when the GL context of the texture is gone.
+    /// </summary>
+    /// <param name="image">The EGL image.</param>
+    public void DestroyImage(nint image) => _destroyImage(_display, image);
 
     private DrmFormatSet QueryFormats()
     {

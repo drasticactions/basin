@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Basin.Render.Skia;
 using SkiaSharp;
 using static Basin.Hosted.HostedLog;
@@ -15,24 +16,37 @@ internal sealed class HostedDmabufTexture : ISkiaTexture
     private static uint _glFormat = GlBgra8;
 
     private readonly HostedRenderer _renderer;
-    private readonly uint _texture;
-    private readonly nint _image;
-    private readonly GRBackendTexture _backend;
-    private readonly SKImage _skImage;
-    private readonly int _generation;
+    private readonly IBuffer _buffer;
+    private HostedEglImport _import;
+    private uint _texture;
+    private nint _image;
+    private GRBackendTexture? _backend;
+    private SKImage? _skImage;
+    private int _generation;
+    private int _refusedGeneration = -1;
 
-    private HostedDmabufTexture(
-        HostedRenderer renderer, uint texture, nint image, GRBackendTexture backend, SKImage skImage,
-        int width, int height, int generation)
+    private HostedDmabufTexture(HostedRenderer renderer, IBuffer buffer, HostedEglImport import, int width, int height)
     {
         _renderer = renderer;
-        _texture = texture;
-        _image = image;
-        _backend = backend;
-        _skImage = skImage;
+        _buffer = buffer;
+        _import = import;
+        _generation = -1;
         Width = width;
         Height = height;
-        _generation = generation;
+    }
+
+    private HostedDmabufTexture(HostedRenderer renderer, IBuffer buffer, HostedEglImport import, in Imported imported, int width, int height)
+    {
+        _renderer = renderer;
+        _buffer = buffer;
+        _import = import;
+        _texture = imported.Texture;
+        _image = imported.Image;
+        _backend = imported.Backend;
+        _skImage = imported.SkImage;
+        _generation = renderer.ContextGeneration;
+        Width = width;
+        Height = height;
     }
 
     public int Width { get; }
@@ -40,7 +54,92 @@ internal sealed class HostedDmabufTexture : ISkiaTexture
     public int Height { get; }
 
     internal static HostedDmabufTexture? TryImport(
-        HostedRenderer renderer, HostedEglImport egl, GRContext context, in DmabufAttributes attributes)
+        HostedRenderer renderer, IBuffer buffer, HostedEglImport egl, GRContext context, in DmabufAttributes attributes) =>
+        Import(egl, context, attributes) is { } imported
+            ? new HostedDmabufTexture(renderer, buffer, egl, imported, attributes.Width, attributes.Height)
+            : null;
+
+    internal static HostedDmabufTexture Deferred(
+        HostedRenderer renderer, IBuffer buffer, HostedEglImport egl, in DmabufAttributes attributes) =>
+        new(renderer, buffer, egl, attributes.Width, attributes.Height);
+
+    public bool Acquire(out SKImage image)
+    {
+        if ((_generation != _renderer.ContextGeneration || _skImage is null) && !Reimport())
+        {
+            image = null!;
+            return false;
+        }
+
+        image = _skImage!;
+        return true;
+    }
+
+    public void Release()
+    {
+    }
+
+    public SKShader? MeshShader(SKImage image) => _meshShader.For(image);
+
+    public void Dispose()
+    {
+        _meshShader.Drop();
+        DropImported();
+    }
+
+    private void DropImported()
+    {
+        if (_skImage is null)
+        {
+            return;
+        }
+
+        SkiaCensus.Release(_skImage);
+        SkiaCensus.Release(_backend);
+        _renderer.ScheduleEglRelease(_texture, _image, _generation, _import);
+        _skImage = null;
+        _backend = null;
+    }
+
+    private bool Reimport()
+    {
+        var generation = _renderer.ContextGeneration;
+        if (_refusedGeneration == generation ||
+            _renderer.EglImport is not { } egl ||
+            _renderer.DrawingGpuContext is not { } context ||
+            _buffer.IsDestroyed ||
+            !_buffer.TryGetDmabuf(out var attributes) ||
+            !egl.Formats.Contains(attributes.Format))
+        {
+            return false;
+        }
+
+        AllocationScope.Pause();
+        try
+        {
+            if (Import(egl, context, attributes) is not { } imported)
+            {
+                _refusedGeneration = generation;
+                return false;
+            }
+
+            _meshShader.Drop();
+            DropImported();
+            _import = egl;
+            _texture = imported.Texture;
+            _image = imported.Image;
+            _backend = imported.Backend;
+            _skImage = imported.SkImage;
+            _generation = generation;
+            return true;
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
+
+    private static Imported? Import(HostedEglImport egl, GRContext context, in DmabufAttributes attributes)
     {
         var imported = egl.Import(attributes);
         context.ResetContext(GRGlBackendState.TextureBinding);
@@ -77,34 +176,8 @@ internal sealed class HostedDmabufTexture : ISkiaTexture
             return null;
         }
 
-        return new HostedDmabufTexture(
-            renderer, native.Texture, native.Image, backend, SkiaCensus.Track(image),
-            attributes.Width, attributes.Height, renderer.ContextGeneration);
+        return new Imported(native.Texture, native.Image, backend, SkiaCensus.Track(image));
     }
 
-    public bool Acquire(out SKImage image)
-    {
-        if (_generation != _renderer.ContextGeneration)
-        {
-            image = null!;
-            return false;
-        }
-
-        image = _skImage;
-        return true;
-    }
-
-    public void Release()
-    {
-    }
-
-    public SKShader? MeshShader(SKImage image) => _meshShader.For(image);
-
-    public void Dispose()
-    {
-        _meshShader.Drop();
-        SkiaCensus.Release(_skImage);
-        SkiaCensus.Release(_backend);
-        _renderer.ScheduleEglRelease(_texture, _image, _generation);
-    }
+    private readonly record struct Imported(uint Texture, nint Image, GRBackendTexture Backend, SKImage SkImage);
 }

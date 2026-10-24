@@ -16,6 +16,7 @@ public sealed class BasinOutputView : Control
     private readonly bool _createOwnView;
     private CompositionCustomVisual? _visual;
     private BasinOutputVisual? _handler;
+    private List<object>? _held;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasinOutputView"/> class. The host is created on the composition thread on the first render.
@@ -72,6 +73,8 @@ public sealed class BasinOutputView : Control
 
     /// <summary>
     /// Starts the host on a composition visual that is not in the visual tree. A second call does nothing.
+    /// On Linux it first asks the toolkit for its EGL display, so that the host can offer dmabuf before its first client binds.
+    /// Messages that arrive while it waits for the answer go to the host after it starts.
     /// </summary>
     /// <param name="compositor">The Avalonia compositor that runs the host.</param>
     /// <exception cref="InvalidOperationException">The control was made with <c>createOwnView</c> set to <see langword="true"/>.</exception>
@@ -89,8 +92,71 @@ public sealed class BasinOutputView : Control
         }
 
         _handler = new BasinOutputVisual(_createHost, OnHostReady, _createOwnView, OnHostFailed);
-        _visual = compositor.CreateCustomVisual(_handler);
-        _visual.SendHandlerMessage(BasinOutputVisual.StartMessage);
+        var visual = compositor.CreateCustomVisual(_handler);
+        _visual = visual;
+        var probe = ToolkitEglProbe.Request(compositor);
+        if (probe.IsCompleted)
+        {
+            Start(visual, ToolkitEglProbe.DisplayOf(probe.IsCompletedSuccessfully ? probe.Result : null));
+            return;
+        }
+
+        _held = [];
+        _ = WaitForProbeAsync(visual, probe.AsTask());
+    }
+
+    private async Task WaitForProbeAsync(CompositionCustomVisual visual, Task<object?> probe)
+    {
+        object? feature = null;
+        var answered = await Task.WhenAny(probe, Task.Delay(ToolkitEglProbe.Timeout)).ConfigureAwait(false) == probe;
+        if (answered && probe.IsCompletedSuccessfully)
+        {
+            feature = probe.Result;
+        }
+        else if (answered)
+        {
+            ViewLog.Log.Warn(probe.Exception!, $"dmabuf: toolkit GPU probe failed, dmabuf waits for the first frame");
+        }
+        else
+        {
+            ViewLog.Log.Warn($"dmabuf: toolkit GPU probe did not answer in {ToolkitEglProbe.Timeout.TotalSeconds} s, dmabuf waits for the first frame");
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            Start(visual, ToolkitEglProbe.DisplayOf(feature));
+            var held = _held;
+            _held = null;
+            if (held is not null)
+            {
+                foreach (var message in held)
+                {
+                    visual.SendHandlerMessage(message);
+                }
+            }
+        });
+    }
+
+    private static void Start(CompositionCustomVisual visual, nint eglDisplay)
+    {
+        if (eglDisplay != 0)
+        {
+            visual.SendHandlerMessage(new BasinEglDisplayMessage(eglDisplay));
+        }
+
+        visual.SendHandlerMessage(BasinOutputVisual.StartMessage);
+    }
+
+    private void Send(CompositionCustomVisual visual, object message)
+    {
+        if (_held is { } held)
+        {
+            held.Add(message);
+        }
+        else
+        {
+            visual.SendHandlerMessage(message);
+        }
     }
 
     /// <summary>
@@ -100,7 +166,7 @@ public sealed class BasinOutputView : Control
     {
         if (_visual is { } visual)
         {
-            Dispatcher.UIThread.Post(() => visual.SendHandlerMessage(BasinOutputVisual.WakeMessage));
+            Dispatcher.UIThread.Post(() => Send(visual, BasinOutputVisual.WakeMessage));
         }
     }
 
@@ -113,7 +179,7 @@ public sealed class BasinOutputView : Control
         ArgumentNullException.ThrowIfNull(action);
         if (_visual is { } visual)
         {
-            Dispatcher.UIThread.Post(() => visual.SendHandlerMessage(action));
+            Dispatcher.UIThread.Post(() => Send(visual, action));
         }
     }
 
@@ -129,7 +195,7 @@ public sealed class BasinOutputView : Control
         }
 
         var message = new BasinShutdownMessage();
-        Dispatcher.UIThread.Post(() => visual.SendHandlerMessage(message));
+        Dispatcher.UIThread.Post(() => Send(visual, message));
         return message.Completed;
     }
 

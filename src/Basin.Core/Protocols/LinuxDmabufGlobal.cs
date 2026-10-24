@@ -153,6 +153,11 @@ public sealed class LinuxDmabufGlobal : IDisposable
     }
 
     /// <summary>
+    /// Removes the global from the registry, so that no new client binds it. Objects that clients bound before stay usable until <see cref="Dispose"/>.
+    /// </summary>
+    public void Withdraw() => _global.Remove();
+
+    /// <summary>
     /// Destroys the global and the shared memory of the format tables.
     /// </summary>
     public void Dispose()
