@@ -78,6 +78,88 @@ public sealed class QuillFrameGoldenTests
         Assert.Null(renderer.MenuItemAction(9, bare));
     }
 
+    [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    public void The_window_menu_follows_the_color_scheme(string row)
+    {
+        CompositorTestHost.SkipUnlessRunnable(row);
+        using var host = new CompositorTestHost(renderer: row);
+        using var lease = QuillHostTests.QuillLease.Open(host, row);
+        Assert.SkipWhen(lease is null, $"this row builds no {row} quill host");
+
+        var dark = new QuillFrameTheme { Face = QuillFrameFonts.Bundled(), MenuFill = new Prowl.Vector.Color32(0xC0, 0x20, 0x30, 0xFF) };
+        var renderer = new QuillFrameRenderer(new QuillFrameTheme { Face = QuillFrameFonts.Bundled() }) { DarkTheme = dark };
+        var state = new FrameState { Title = "menu", ColorScheme = FrameColorScheme.Dark, Capabilities = FrameCapabilities.Maximize };
+
+        var size = renderer.MeasureMenu(state, 1.0);
+        var surface = (IQuillUISurface)lease!.Host.CreateSurface(new UISurfaceOptions
+        {
+            Target = UITargetKind.Dmabuf,
+            Width = size.Width,
+            Height = size.Height,
+            Scale = 1.0,
+        })!;
+        renderer.DrawMenu(surface, state, -1);
+        Assert.True(surface.TryAcquire(out var frame));
+        var buffer = frame.Buffer!;
+        Assert.True(BufferCapture.TryReadRgba(buffer, host.Renderer, out var rgba));
+        var at = ((buffer.Height / 2 * buffer.Width) + buffer.Width - 6) * 4;
+        Assert.Equal((0xC0, 0x20, 0x30), (rgba![at], rgba[at + 1], rgba[at + 2]));
+
+        frame.Dispose();
+        surface.Dispose();
+    }
+
+    [Theory]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    public void A_dark_theme_face_draws_the_dark_title(string row)
+    {
+        CompositorTestHost.SkipUnlessRunnable(row);
+        const string serif = "/usr/share/fonts/liberation/LiberationSerif-Bold.ttf";
+        Assert.SkipWhen(!File.Exists(serif), $"no {serif}");
+        using var host = new CompositorTestHost(renderer: row);
+        using var lease = QuillHostTests.QuillLease.Open(host, row);
+        Assert.SkipWhen(lease is null, $"this row builds no {row} quill host");
+
+        Prowl.Scribe.FontFile face;
+        using (var stream = File.OpenRead(serif))
+        {
+            face = new Prowl.Scribe.FontFile(stream);
+        }
+
+        var renderer = new QuillFrameRenderer(new QuillFrameTheme { Face = QuillFrameFonts.Bundled() })
+        {
+            DarkTheme = new QuillFrameTheme { Face = face },
+        };
+
+        byte[] Title(FrameColorScheme scheme)
+        {
+            var state = new FrameState { Title = "Quill frame", Active = true, ColorScheme = scheme };
+            var client = new Box(0, 0, 240, 100);
+            var insets = renderer.Measure(state, 1.0);
+            var surface = (IQuillUISurface)lease!.Host.CreateSurface(new UISurfaceOptions
+            {
+                Target = UITargetKind.Dmabuf,
+                Width = client.Width + insets.Left + insets.Right,
+                Height = client.Height + insets.Top + insets.Bottom,
+                Scale = 1.0,
+            })!;
+            renderer.Draw(surface, new Box(insets.Left, insets.Top, client.Width, client.Height), state, default);
+            Assert.True(surface.TryAcquire(out var frame));
+            Assert.True(BufferCapture.TryReadRgba(frame.Buffer!, host.Renderer, out var rgba));
+            frame.Dispose();
+            surface.Dispose();
+            return rgba!;
+        }
+
+        var light = Title(FrameColorScheme.Light);
+        var darkTitle = Title(FrameColorScheme.Dark);
+        Assert.Equal(light.Length, darkTitle.Length);
+        Assert.False(light.AsSpan().SequenceEqual(darkTitle), "the dark title must draw in the dark theme's face");
+    }
+
     private static void AssertGolden(string row, string backend, string golden)
     {
         CompositorTestHost.SkipUnlessRunnable(row);

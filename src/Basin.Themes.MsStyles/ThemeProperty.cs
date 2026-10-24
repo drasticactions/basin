@@ -38,9 +38,9 @@ public enum ThemeProperty
     /// </summary>
     Margins = 205,
     /// <summary>
-    /// The generic property of the <see cref="ThemePrimitive.Filename"/> type, read as an image resource.
+    /// The generic property of the <see cref="ThemePrimitive.Filename"/> type, with the same spelling, read as an image resource.
     /// </summary>
-    FileName = 206,
+    Filename = 206,
     /// <summary>
     /// The generic property of the <see cref="ThemePrimitive.Size"/> type, read as one integer.
     /// </summary>
@@ -62,9 +62,9 @@ public enum ThemeProperty
     /// </summary>
     IntList = 211,
     /// <summary>
-    /// The id that matches <see cref="ThemePrimitive.HBitmap"/>. No reader or renderer in this library uses it.
+    /// The id that matches <see cref="ThemePrimitive.HBitmap"/>, with the same spelling. No reader or renderer in this library uses it.
     /// </summary>
-    Hbitmap = 212,
+    HBitmap = 212,
     /// <summary>
     /// The id that matches <see cref="ThemePrimitive.DiskStream"/>. <see cref="MsStylesClass"/> returns its image when a caller asks for <see cref="AtlasImage"/> and the class has none.
     /// </summary>

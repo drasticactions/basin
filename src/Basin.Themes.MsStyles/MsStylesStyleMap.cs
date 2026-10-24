@@ -156,14 +156,14 @@ public static partial class MsStylesStyleMap
     }
 
     /// <summary>
-    /// Checks whether the table has part and state names for a class. The name must not have an <c>app::</c> prefix.
+    /// Checks whether the table has part and state names for a class. An <c>app::</c> prefix is ignored.
     /// </summary>
     /// <param name="className">The class name, for example <c>WINDOW</c>.</param>
     /// <returns><see langword="true"/> when the table has the class.</returns>
-    public static bool HasClass(string className) => ByClassName.ContainsKey(className);
+    public static bool HasClass(string className) => ByClassName.ContainsKey(BaseName(className));
 
     /// <summary>
-    /// Resolves the part and state names of an INI section. When <paramref name="part"/> is <see langword="null"/>, the state name is searched in every part. The class name must not have an <c>app::</c> prefix.
+    /// Resolves the part and state names of an INI section. When <paramref name="part"/> is <see langword="null"/>, the state name is searched in every part. An <c>app::</c> prefix is ignored.
     /// </summary>
     /// <param name="className">The class name, for example <c>WINDOW</c>.</param>
     /// <param name="part">The part name, or <see langword="null"/> for none.</param>
@@ -175,7 +175,7 @@ public static partial class MsStylesStyleMap
     {
         partId = 0;
         stateId = 0;
-        if (ByClassName.TryGetValue(className, out var map))
+        if (ByClassName.TryGetValue(BaseName(className), out var map))
         {
             if (part is not null)
             {
@@ -207,7 +207,7 @@ public static partial class MsStylesStyleMap
     }
 
     /// <summary>
-    /// Finds the name of a part. An <c>app::</c> prefix on the class name is ignored.
+    /// Finds the name of a part. An <c>app::</c> prefix is ignored.
     /// </summary>
     /// <param name="className">The class name.</param>
     /// <param name="part">The part ID.</param>
@@ -231,7 +231,7 @@ public static partial class MsStylesStyleMap
     }
 
     /// <summary>
-    /// Finds the name of a state. An <c>app::</c> prefix on the class name is ignored.
+    /// Finds the name of a state. An <c>app::</c> prefix is ignored.
     /// </summary>
     /// <param name="className">The class name.</param>
     /// <param name="part">The part ID, or 0 to search the states of every part.</param>

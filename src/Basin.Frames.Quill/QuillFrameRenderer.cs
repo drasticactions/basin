@@ -18,9 +18,8 @@ public sealed class QuillFrameRenderer : IFrameRenderer
     private readonly QuillFrameTheme _base;
     private QuillFrameTheme _theme;
     private readonly QuillFrameGeometry _geometry = new();
-    private readonly QuillFrameMenu _menu;
-    private readonly HashSet<Canvas> _prepared = [];
-    private FontFile? _face;
+    private readonly List<(QuillFrameTheme Theme, QuillFrameMenu Menu)> _menus = [];
+    private readonly HashSet<(Canvas Canvas, FontFile Face)> _prepared = [];
     private bool _laidOut;
     private bool _shaded;
     private double _glintX;
@@ -33,14 +32,13 @@ public sealed class QuillFrameRenderer : IFrameRenderer
     /// <summary>
     /// Initializes a new instance of the <see cref="QuillFrameRenderer"/> class.
     /// </summary>
-    /// <param name="theme">The theme for every color scheme that has no theme of its own. The window menu always uses it.</param>
+    /// <param name="theme">The theme for every color scheme that has no theme of its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="theme"/> is <see langword="null"/>.</exception>
     public QuillFrameRenderer(QuillFrameTheme theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
         _base = theme;
         _theme = theme;
-        _menu = new QuillFrameMenu(theme);
     }
 
     /// <summary>
@@ -55,11 +53,13 @@ public sealed class QuillFrameRenderer : IFrameRenderer
 
     /// <summary>
     /// Gets or sets the theme for a window with the light color scheme. When it is <see langword="null"/>, the window uses <see cref="Theme"/>.
+    /// The frame, the menu, the insets and the hit test all use it, so its geometry can differ from <see cref="Theme"/>.
     /// </summary>
     public QuillFrameTheme? LightTheme { get; set; }
 
     /// <summary>
     /// Gets or sets the theme for a window with the dark color scheme. When it is <see langword="null"/>, the window uses <see cref="Theme"/>.
+    /// The frame, the menu, the insets and the hit test all use it, so its geometry can differ from <see cref="Theme"/>.
     /// </summary>
     public QuillFrameTheme? DarkTheme { get; set; }
 
@@ -69,6 +69,22 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         FrameColorScheme.Dark => DarkTheme ?? _base,
         _ => _base,
     };
+
+    private QuillFrameMenu MenuFor(FrameColorScheme scheme)
+    {
+        var theme = ThemeFor(scheme);
+        foreach (var (owner, menu) in _menus)
+        {
+            if (ReferenceEquals(owner, theme))
+            {
+                return menu;
+            }
+        }
+
+        var created = new QuillFrameMenu(theme);
+        _menus.Add((theme, created));
+        return created;
+    }
 
     /// <summary>
     /// Gets the layout of the last drawn frame. The renderer changes the same instance on each draw.
@@ -157,12 +173,21 @@ public sealed class QuillFrameRenderer : IFrameRenderer
             || !GlintSettled(interaction);
     }
 
-    /// <inheritdoc/>
-    public FrameInsets Measure(in FrameState state, double scale) => new(
-        _theme.Border + _theme.TitleHeight,
-        _theme.Border,
-        state.Shaded ? 0 : _theme.Border,
-        _theme.Border);
+    /// <summary>
+    /// Measures the frame with the theme of the state's color scheme.
+    /// </summary>
+    /// <param name="state">The window state. Its color scheme selects the theme.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The frame insets in logical pixels.</returns>
+    public FrameInsets Measure(in FrameState state, double scale)
+    {
+        var theme = ThemeFor(state.ColorScheme);
+        return new FrameInsets(
+            theme.Border + theme.TitleHeight,
+            theme.Border,
+            state.Shaded ? 0 : theme.Border,
+            theme.Border);
+    }
 
     /// <inheritdoc/>
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
@@ -190,7 +215,14 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Finds the frame part at a point of the last drawn layout. The corner zone comes from the theme of the state's color scheme.
+    /// </summary>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
+    /// <param name="state">The window state. Its color scheme selects the theme.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The part, or <see cref="FramePart.None"/> outside the frame or before the first draw.</returns>
     public FramePart PartAt(double x, double y, in FrameState state, double scale)
     {
         if (!_laidOut)
@@ -206,7 +238,7 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         }
 
         var border = _geometry.Border;
-        var zone = _theme.CornerZone;
+        var zone = ThemeFor(state.ColorScheme).CornerZone;
         var onEdge = x < border || x >= w - border || y < border || y >= h - border;
         if (onEdge)
         {
@@ -284,22 +316,45 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         _ => null,
     };
 
-    /// <inheritdoc/>
-    public UISurfaceSize MeasureMenu(in FrameState state, double scale) => _menu.Measure(state, scale);
+    /// <summary>
+    /// Measures the window menu with the theme of the state's color scheme.
+    /// </summary>
+    /// <param name="state">The window state. It selects the items and the theme.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The menu size in logical pixels at <paramref name="scale"/>.</returns>
+    public UISurfaceSize MeasureMenu(in FrameState state, double scale) => MenuFor(state.ColorScheme).Measure(state, scale);
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Draws the window menu with the theme and the font of the state's color scheme.
+    /// </summary>
+    /// <param name="surface">The menu surface. It must be an <see cref="IQuillUISurface"/>.</param>
+    /// <param name="state">The window state. It selects the items, their labels and the theme.</param>
+    /// <param name="hotItem">The item under the pointer, or -1 for none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public void DrawMenu(IUISurface surface, in FrameState state, int hotItem)
     {
         ArgumentNullException.ThrowIfNull(surface);
         var quill = (IQuillUISurface)surface;
-        _menu.Draw(quill, Face(), state, hotItem);
+        MenuFor(state.ColorScheme).Draw(quill, Face(ThemeFor(state.ColorScheme)), state, hotItem);
     }
 
-    /// <inheritdoc/>
-    public int MenuItemAt(double x, double y, in FrameState state, double scale) => _menu.ItemAt(x, y, state, scale);
+    /// <summary>
+    /// Finds the window menu item at a point with the theme of the state's color scheme.
+    /// </summary>
+    /// <param name="x">The horizontal position in logical pixels.</param>
+    /// <param name="y">The vertical position in logical pixels.</param>
+    /// <param name="state">The window state. It selects the items and the theme.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The item index, or -1 when no item is at the point.</returns>
+    public int MenuItemAt(double x, double y, in FrameState state, double scale) => MenuFor(state.ColorScheme).ItemAt(x, y, state, scale);
 
-    /// <inheritdoc/>
-    public FrameAction? MenuItemAction(int item, in FrameState state) => _menu.ActionOf(item, state);
+    /// <summary>
+    /// Gives the action of a window menu item for the state's color scheme.
+    /// </summary>
+    /// <param name="item">The item index.</param>
+    /// <param name="state">The window state. It selects the items and the theme.</param>
+    /// <returns>The action, or <see langword="null"/> when the index is out of range.</returns>
+    public FrameAction? MenuItemAction(int item, in FrameState state) => MenuFor(state.ColorScheme).ActionOf(item, state);
 
     private void Layout(in Box clientBox, in FrameState state)
     {
@@ -363,15 +418,16 @@ public sealed class QuillFrameRenderer : IFrameRenderer
 
     private void Prepare(Canvas canvas)
     {
-        if (!_prepared.Add(canvas))
+        var face = Face(_theme);
+        if (!_prepared.Add((canvas, face)))
         {
             return;
         }
 
-        QuillFonts.AddFallbacks(canvas, Face());
+        QuillFonts.AddFallbacks(canvas, face);
     }
 
-    private FontFile Face() => _face ??= _theme.Face ?? QuillFrameFonts.Bundled();
+    private static FontFile Face(QuillFrameTheme theme) => theme.Face ?? QuillFrameFonts.Bundled();
 
     private void Paint(Canvas canvas, in FrameState state, in FrameInteraction interaction)
     {
@@ -690,7 +746,7 @@ public sealed class QuillFrameRenderer : IFrameRenderer
             box.Y + box.Height / 2f,
             text,
             _theme.FontSize,
-            Face(),
+            Face(_theme),
             0f,
             new Float2(0f, 0.5f));
         canvas.RestoreState();

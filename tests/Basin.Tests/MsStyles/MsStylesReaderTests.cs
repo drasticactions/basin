@@ -158,6 +158,26 @@ public sealed class MsStylesReaderTests
     }
 
     [Fact]
+    public void TryGetInt_refuses_a_color()
+    {
+        var window = MsStylesTheme.Parse(MsStylesWriter.Plain()).OpenClass("Window")!;
+        Assert.False(window.TryGetInt(Caption, 1, ThemeProperty.TextColor, out var value));
+        Assert.Equal(0, value);
+        Assert.True(window.TryGetColor(Caption, 1, ThemeProperty.TextColor, out _));
+    }
+
+    [Fact]
+    public void The_style_map_ignores_an_app_prefix()
+    {
+        Assert.True(MsStylesStyleMap.HasClass("Explorer::Window"));
+        Assert.True(MsStylesStyleMap.TryLookupPartState("Window", "Caption", "Active", out var part, out var state));
+        Assert.True(MsStylesStyleMap.TryLookupPartState("Explorer::Window", "Caption", "Active", out var prefixedPart, out var prefixedState));
+        Assert.Equal((part, state), (prefixedPart, prefixedState));
+        Assert.NotEqual(0, part);
+        Assert.Equal(MsStylesStyleMap.PartName("Window", part), MsStylesStyleMap.PartName("Explorer::Window", part));
+    }
+
+    [Fact]
     public void OpenClass_follows_uxtheme_list_rules()
     {
         var theme = MsStylesTheme.Parse(MsStylesWriter.Plain());

@@ -11,6 +11,20 @@ namespace Basin.Tests;
 public sealed class InspectorTests
 {
     [Fact]
+    public void Copy_cuts_on_a_character_boundary_and_marks_the_cut()
+    {
+        var text = new InspectorText(256);
+        var source = System.Text.Encoding.UTF8.GetBytes("a" + new string('é', 150));
+        Assert.Equal(301, source.Length);
+
+        var copied = text.Copy(source);
+        Assert.True(copied.Length < 256);
+        Assert.True(copied.EndsWith("..."u8));
+        Assert.True(System.Text.Unicode.Utf8.IsValid(copied));
+        Assert.Equal(source.AsSpan(0, copied.Length - 3).ToArray(), copied[..^3].ToArray());
+    }
+
+    [Fact]
     public void Formatted_text_is_terminated_and_long_text_is_cut_with_an_ellipsis()
     {
         var text = new InspectorText(1024);

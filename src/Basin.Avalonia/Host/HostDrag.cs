@@ -63,10 +63,10 @@ public sealed class HostDrag : IDisposable
     public bool ClientDragActive => _clientDragActive;
 
     /// <summary>
-    /// Gets the text of the current client drag. It does not clear the text. Any thread can call it.
+    /// Gets the text of the current client drag and clears it, so a drag hands off once. Any thread can call it.
     /// </summary>
-    /// <returns>The text, or <see langword="null"/> when the client offered no text type or did not finish the write.</returns>
-    public string? TakeClientDragText() => _clientDragText;
+    /// <returns>The text, or <see langword="null"/> when the client offered no text type, did not finish the write, or the text was taken.</returns>
+    public string? TakeClientDragText() => Interlocked.Exchange(ref _clientDragText, null);
 
     /// <summary>
     /// Starts a compositor drag for data that the host drags onto a surface. An empty payload does nothing.

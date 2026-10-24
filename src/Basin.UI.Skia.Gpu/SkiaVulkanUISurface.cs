@@ -66,7 +66,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
     public void RemoveObserver(IUISurfaceObserver observer) => _observers.Remove(observer);
 
     /// <summary>
-    /// Sets the logical size and the scale for the next frame. A change allocates a new dmabuf or memory buffer, and the frame on screen stays valid until the next <see cref="TryAcquire"/>.
+    /// Sets the logical size and the scale for the next frame. A change allocates a new dmabuf or memory buffer, and the frame on screen stays valid until the next <see cref="TryAcquire"/>. A failed allocation keeps the current buffer and size.
     /// </summary>
     /// <param name="logicalWidth">The width in logical pixels. It must be positive.</param>
     /// <param name="logicalHeight">The height in logical pixels. It must be positive.</param>
@@ -93,11 +93,6 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
             return false;
         }
 
-        if (_target is not null && !ReferenceEquals(_target, _front))
-        {
-            Retire(_target);
-        }
-
         var allocated = _allocator is null
             ? new MemoryBuffer(physical.Width, physical.Height, DrmFormat.Argb8888)
             : _allocator.Allocate(
@@ -106,6 +101,11 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
         if (allocated is null)
         {
             return false;
+        }
+
+        if (_target is not null && !ReferenceEquals(_target, _front))
+        {
+            Retire(_target);
         }
 
         _target = allocated;
@@ -140,7 +140,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
             _wrapped = target;
             if (_allocator is not null && _wrap.IsCpuReadback)
             {
-                Log.Warn($"skia-vulkan ui: the device refused to render into its own dmabuf ({target.Width}x{target.Height}); chrome will not draw");
+                Log.Warn($"skia-vulkan ui: the device cannot render into the buffer ({target.Width}x{target.Height}). Chrome draws through CPU readback");
             }
         }
 
@@ -152,7 +152,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
     }
 
     /// <summary>
-    /// Ends the frame and submits it. A dmabuf frame gets a write fence, or the device waits for idle. A memory frame is read back from the GPU. When the frame went into the buffer that is on screen, the observers get damage for the whole surface.
+    /// Ends the frame and submits it. A dmabuf frame gets a write fence, or the device waits for idle. A frame that the device cannot render into directly is read back into the buffer. When the frame went into the buffer that is on screen, the observers get damage for the whole surface.
     /// </summary>
     /// <exception cref="InvalidOperationException">No draw is in progress.</exception>
     public void EndDraw()
@@ -168,7 +168,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
         _flush();
         if (wrap.IsCpuReadback)
         {
-            wrap.ReadInto((MemoryBuffer)_target!);
+            wrap.ReadInto(_target!);
         }
         else if (!_target!.TryGetDmabuf(out var attributes) || !_device.PublishWriteFence(attributes, wrap.Imported))
         {

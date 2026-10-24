@@ -200,7 +200,7 @@ public sealed unsafe class SkiaGraphiteTarget : IDisposable
     /// Copies the target's pixels into the buffer's memory through a mapped readback buffer. It submits
     /// and waits on the device first. The copy is skipped when the buffer refuses write access.
     /// </summary>
-    /// <param name="buffer">The memory buffer that the target was created for.</param>
+    /// <param name="buffer">The buffer that the target was created for.</param>
     public void ReadInto(IBuffer buffer)
     {
         _device.SubmitImmediate(

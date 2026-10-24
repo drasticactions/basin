@@ -192,6 +192,44 @@ public sealed class AvaloniaPopupTests
     }
 
     [AvaloniaFact]
+    public void A_disposed_manager_takes_no_new_popup()
+    {
+        var harness = new Harness();
+        var client = harness.Client;
+        var (_, xdgSurface, _) = harness.MapToplevel(400, 300);
+        harness.Manager.Dispose();
+
+        var positioner = client.WmBase!.CreatePositioner();
+        positioner.SetSize(100, 50);
+        positioner.SetAnchorRect(10, 10, 10, 10);
+        var popupSurface = client.Compositor.CreateSurface();
+        var popupXdg = client.WmBase.GetXdgSurface(popupSurface);
+        var popupProxy = popupXdg.GetPopup(xdgSurface, positioner);
+        uint popupSerial = 0;
+        popupXdg.Configure += (_, e) => popupSerial = e.Serial;
+        popupSurface.Commit();
+        harness.PumpUntil(() => popupSerial != 0);
+        popupXdg.AckConfigure(popupSerial);
+        var popupBuffer = client.CreateBuffer(100, 50, Fill.Solid(100, 50, 0xFF884422));
+        popupSurface.Attach(popupBuffer.Proxy, 0, 0);
+        popupSurface.Damage(0, 0, 100, 50);
+        popupSurface.Commit();
+        for (var i = 0; i < 10; i++)
+        {
+            harness.Pump();
+        }
+
+        Assert.Empty(harness.Manager.PopupWindows);
+
+        popupProxy.Destroy();
+        popupXdg.Destroy();
+        popupSurface.Destroy();
+        harness.Pump();
+        harness.Dispose();
+        LeakTracking.Expect(0, BasinCounters.LiveObjects);
+    }
+
+    [AvaloniaFact]
     public void A_subsurface_draws_in_the_parent_cell_with_no_extra_window()
     {
         var harness = new Harness();

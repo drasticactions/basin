@@ -28,6 +28,9 @@ public sealed class AvaloniaDragTests
     private static extern unsafe nint read(int fd, byte* buffer, nuint count);
 
     [DllImport("libc")]
+    private static extern unsafe nint write(int fd, byte* buffer, nuint count);
+
+    [DllImport("libc")]
     private static extern int close(int fd);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -284,6 +287,64 @@ public sealed class AvaloniaDragTests
         client.Display.Flush();
         harness.PumpUntil(() => !harness.Drag.ClientDragActive);
 
+        window.MouseUp(new global::Avalonia.Point(50, 40), MouseButton.Left);
+        harness.Pump();
+        pointerProxy.Release();
+        harness.Dispose();
+        LeakTracking.Expect(0, BasinCounters.LiveObjects);
+    }
+
+    [AvaloniaFact]
+    public void Drag_text_hands_off_once()
+    {
+        var harness = new Harness();
+        var client = harness.Client;
+        var (surfaceProxy, _) = harness.MapToplevel();
+        var window = harness.Manager.Windows.First();
+
+        var pointerProxy = client.Seat!.GetPointer();
+        uint pressSerial = 0;
+        pointerProxy.Button += (_, e) =>
+        {
+            if (e.State == WlPointer.ButtonState.Pressed)
+            {
+                pressSerial = e.Serial;
+            }
+        };
+        harness.Pump();
+        window.MouseMove(new global::Avalonia.Point(50, 40));
+        window.MouseDown(new global::Avalonia.Point(50, 40), MouseButton.Left);
+        harness.PumpUntil(() => pressSerial != 0);
+
+        var device = client.DataDeviceManager!.GetDataDevice(client.Seat);
+        var source = client.DataDeviceManager.CreateDataSource();
+        source.Offer("text/plain");
+        source.SetActions(WlDataDeviceManager.DndAction.Copy);
+        source.Send += (_, e) =>
+        {
+            var payload = Encoding.UTF8.GetBytes("dragged from the client");
+            unsafe
+            {
+                fixed (byte* data = payload)
+                {
+                    _ = write(e.Fd, data, (nuint)payload.Length);
+                }
+            }
+
+            close(e.Fd);
+        };
+        device.StartDrag(source, surfaceProxy, null, pressSerial);
+        client.Display.Flush();
+        harness.PumpUntil(() => harness.Drag.ClientDragActive);
+
+        string? first = null;
+        harness.PumpUntil(() => (first ??= harness.Manager.ClientDragHandoffText()) is not null);
+        Assert.Equal("dragged from the client", first);
+        Assert.Null(harness.Manager.ClientDragHandoffText());
+
+        source.Destroy();
+        client.Display.Flush();
+        harness.PumpUntil(() => !harness.Drag.ClientDragActive);
         window.MouseUp(new global::Avalonia.Point(50, 40), MouseButton.Left);
         harness.Pump();
         pointerProxy.Release();

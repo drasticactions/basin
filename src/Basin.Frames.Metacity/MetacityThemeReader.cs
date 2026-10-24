@@ -219,12 +219,45 @@ internal sealed class MetacityThemeReader
 
     private void Leave() => _required.Pop();
 
-    private (bool Satisfied, int Required) CheckVersion(string text)
+    internal static bool RootVersionSatisfied(string path)
     {
+        try
+        {
+            var settings = new XmlReaderSettings
+            {
+                IgnoreComments = true,
+                IgnoreProcessingInstructions = true,
+                IgnoreWhitespace = true,
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+            };
+            using var xml = XmlReader.Create(new StringReader(Repair(File.ReadAllText(path))), settings);
+            if (xml.MoveToContent() != XmlNodeType.Element || xml.GetAttribute("version") is not { } version)
+            {
+                return true;
+            }
+
+            return !TryCheckVersion(version, out var satisfied, out _) || satisfied;
+        }
+        catch (Exception e) when (e is XmlException or IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    private (bool Satisfied, int Required) CheckVersion(string text) =>
+        TryCheckVersion(text, out var satisfied, out var required)
+            ? (satisfied, required)
+            : throw Error($"Bad version specification '{text}'");
+
+    private static bool TryCheckVersion(string text, out bool satisfied, out int required)
+    {
+        satisfied = false;
+        required = 0;
         var s = text.AsSpan().Trim();
         if (s.Length == 0 || s[0] is not ('<' or '>'))
         {
-            throw Error($"Bad version specification '{text}'");
+            return false;
         }
 
         var comparison = s[0];
@@ -236,7 +269,7 @@ internal sealed class MetacityThemeReader
         if (majorText.Length == 0 || !int.TryParse(majorText, NumberStyles.None, CultureInfo.InvariantCulture, out var major) ||
             (dot >= 0 && (minorText.Length == 0 || !int.TryParse(minorText, NumberStyles.None, CultureInfo.InvariantCulture, out _))))
         {
-            throw Error($"Bad version specification '{text}'");
+            return false;
         }
 
         var version = 1000 * major;
@@ -247,10 +280,12 @@ internal sealed class MetacityThemeReader
 
         if (comparison == '<')
         {
-            return (orEqual ? ThemeVersion <= version : ThemeVersion < version, 0);
+            (satisfied, required) = (orEqual ? ThemeVersion <= version : ThemeVersion < version, 0);
+            return true;
         }
 
-        return orEqual ? (ThemeVersion >= version, version) : (ThemeVersion > version, version + 1);
+        (satisfied, required) = orEqual ? (ThemeVersion >= version, version) : (ThemeVersion > version, version + 1);
+        return true;
     }
 
     private delegate void ChildHandler(string element);

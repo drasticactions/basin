@@ -9,7 +9,7 @@ namespace Basin.Frames.Quill;
 public sealed class QuillFrameTheme
 {
     /// <summary>
-    /// Gets or sets the font for the title and the menu. When it is <see langword="null"/>, the renderer uses <see cref="QuillFrameFonts.Bundled"/>.
+    /// Gets or sets the font for the title and the menu. The renderer reads it on each draw. When it is <see langword="null"/>, the renderer uses <see cref="QuillFrameFonts.Bundled"/>.
     /// </summary>
     public FontFile? Face { get; set; }
 

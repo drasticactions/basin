@@ -176,7 +176,7 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
     /// Copies the target's pixels into the buffer's memory. Nothing happens when the buffer refuses
     /// write access.
     /// </summary>
-    /// <param name="buffer">The memory buffer that the target was created for.</param>
+    /// <param name="buffer">The buffer that the target was created for.</param>
     public void ReadInto(IBuffer buffer)
     {
         if (!buffer.BeginDataAccess(BufferDataAccess.Write, out var view))

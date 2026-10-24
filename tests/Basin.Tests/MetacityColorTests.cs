@@ -1,4 +1,7 @@
+using Basin.Capabilities;
+using Basin.Diagnostics;
 using Basin.Frames.Metacity;
+using Basin.UI.Skia;
 using Xunit;
 
 namespace Basin.Tests;
@@ -97,9 +100,50 @@ public sealed class MetacityColorTests
     {
         var palette = MetacityPalette.Light;
         AssertClose(MetacityColor.FromHex(0x00FF00), Resolve("gtk:custom(accent,#00ff00)", palette));
-        palette.Custom["accent"] = MetacityColor.FromHex(0xFF00FF);
+        palette.SetCustom("accent", MetacityColor.FromHex(0xFF00FF));
         AssertClose(MetacityColor.FromHex(0xFF00FF), Resolve("gtk:custom(accent,#00ff00)", palette));
         AssertClose(MetacityColor.FromHex(0x808080), Resolve("gtk:custom(other,shade/#808080/1.0)", palette));
+    }
+
+    [Fact]
+    public void A_custom_color_change_repaints()
+    {
+        var text = MetacityParserTests.Wrap(
+            MetacityParserTests.Geometry + "<draw_ops name=\"empty\"/>"
+            + "<draw_ops name=\"fill\"><rectangle color=\"gtk:custom(accent,#00ff00)\" x=\"0\" y=\"0\" width=\"width\" height=\"height\" filled=\"true\"/></draw_ops>"
+            + MetacityParserTests.MinimalStyle.Replace(
+                "<frame_style name=\"s\" geometry=\"g\">",
+                "<frame_style name=\"s\" geometry=\"g\"><piece position=\"entire_background\" draw_ops=\"fill\"/>",
+                StringComparison.Ordinal));
+        var theme = MetacityParserTests.ParseText(text, 1);
+        var palette = MetacityPalette.Light;
+        using var skia = new TestFrameTheme();
+        using var font = new MetacityFont(skia.Typeface, 14);
+        using var resources = new MetacityResources();
+        var renderer = new MetacityFrameRenderer(theme, palette, MetacityButtonLayout.Parse(string.Empty), font, resources);
+        using var host = new SkiaUIHost();
+        var state = new FrameState { Title = "t", Active = true };
+        var insets = renderer.Measure(state, 1.0);
+        var surface = host.CreateSurface(new UISurfaceOptions { Target = UITargetKind.Memory, Width = 100 + insets.Left + insets.Right, Height = 40 + insets.Top + insets.Bottom, Scale = 1.0 });
+        Assert.NotNull(surface);
+
+        (byte R, byte G, byte B) Paint()
+        {
+            renderer.Draw(surface, new Box(insets.Left, insets.Top, 100, 40), state, default);
+            Assert.True(surface.TryAcquire(out var frame));
+            var buffer = (MemoryBuffer)frame.Buffer!;
+            var pixels = BufferCapture.ReadRgba(buffer);
+            var at = ((1 * buffer.Width) + (buffer.Width / 2)) * 4;
+            frame.Dispose();
+            return (pixels[at], pixels[at + 1], pixels[at + 2]);
+        }
+
+        Assert.Equal(((byte)0x00, (byte)0xFF, (byte)0x00), Paint());
+        palette.SetCustom("accent", MetacityColor.FromHex(0xFF00FF));
+        Assert.Equal(((byte)0xFF, (byte)0x00, (byte)0xFF), Paint());
+        Assert.True(palette.RemoveCustom("accent"));
+        Assert.Equal(((byte)0x00, (byte)0xFF, (byte)0x00), Paint());
+        surface.Dispose();
     }
 
     [Theory]

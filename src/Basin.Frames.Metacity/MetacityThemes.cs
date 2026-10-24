@@ -65,10 +65,11 @@ public static class MetacityThemes
     }
 
     /// <summary>
-    /// Finds the first theme file that exists, highest format first. It does not parse the file, so <see cref="MetacityTheme.Load"/> can skip it for an unsatisfied version.
+    /// Finds the file that <see cref="MetacityTheme.Load"/> loads: the first one that exists, highest format first, whose root <c>version</c> the engine satisfies.
+    /// A file that does not parse counts as satisfied, because the load stops on it with the parse error.
     /// </summary>
     /// <param name="name">The theme name.</param>
-    /// <returns>The file path, or <see langword="null"/> when no file exists.</returns>
+    /// <returns>The file path, or <see langword="null"/> when no file exists or every file needs a newer engine.</returns>
     public static string? Find(string name)
     {
         for (var major = MajorVersion; major > 0; major--)
@@ -76,7 +77,7 @@ public static class MetacityThemes
             foreach (var directory in Directories(name))
             {
                 var path = Path.Combine(directory, FileName(major));
-                if (File.Exists(path))
+                if (File.Exists(path) && MetacityThemeReader.RootVersionSatisfied(path))
                 {
                     return path;
                 }

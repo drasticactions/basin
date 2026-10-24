@@ -54,7 +54,7 @@ public sealed partial class MsStylesFramePainter
     public bool LaidOut { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the chrome of the last paint has no transparent image. It is always false for the glass look.
+    /// Gets a value indicating whether the chrome of the last paint has no transparent image. It is false for the glass look, except for a maximized window.
     /// </summary>
     public bool Opaque { get; private set; }
 

@@ -79,6 +79,9 @@ public sealed class ToplevelWindows : IDisposable
     private Surface? _cursorSurface;
     private Action? _cursorCommitted;
     private Action? _cursorDestroyed;
+    private readonly Action<FrameTick> _beforeDispatch;
+    private readonly Func<XdgToplevelWindow, DecorationMode?, DecorationMode> _chooseMode =
+        (_, preference) => preference ?? DecorationMode.ServerSide;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ToplevelWindows"/> class and starts to watch the shell, the layer shell and the cursor.
@@ -115,7 +118,7 @@ public sealed class ToplevelWindows : IDisposable
         if (_decorations is not null)
         {
             _decorations.DefaultMode = DecorationMode.ServerSide;
-            _decorations.ChooseMode = (_, preference) => preference ?? DecorationMode.ServerSide;
+            _decorations.ChooseMode = _chooseMode;
             _decorations.ModeChanged += OnDecorationModeChanged;
         }
 
@@ -124,7 +127,8 @@ public sealed class ToplevelWindows : IDisposable
         _layerDriver = host.Services.Find<ILayerShellDriver>() as ToplevelLayerShellDriver;
         _layerTarget = OnNewLayerSurface;
         _layerDriver?.Bind(_layerTarget);
-        host.Session.BeforeDispatch += _ => DrainInput();
+        _beforeDispatch = _ => DrainInput();
+        host.Session.BeforeDispatch += _beforeDispatch;
         if (host.Services.Find<Basin.Desktop.CursorShapeManager>() is { } shapes)
         {
             shapes.ShapeRequested += OnShapeRequested;
@@ -1929,7 +1933,7 @@ public sealed class ToplevelWindows : IDisposable
     }
 
     /// <summary>
-    /// Gets a value indicating whether the last <see cref="CaptureInput"/> call asked for capture. It changes on the compositor thread.
+    /// Gets a value indicating whether the last <see cref="CaptureInput(bool)"/> call asked for capture. It changes on the compositor thread.
     /// </summary>
     public bool InputCaptured { get; private set; }
 
@@ -1961,6 +1965,43 @@ public sealed class ToplevelWindows : IDisposable
         });
     }
 
+    internal void CaptureInput(int windowId, bool captured)
+    {
+        _post(() =>
+        {
+            if (!_entries.TryGetValue(windowId, out var entry))
+            {
+                return;
+            }
+
+            var root = entry.Surface;
+            var target = _host.Seat.Pointer.Focus is { } focus && RootOf(focus) == root ? focus : root;
+            if (_constraints?.ConstraintFor(target) is not { } constraint)
+            {
+                return;
+            }
+
+            if (captured)
+            {
+                constraint.Activate();
+            }
+            else
+            {
+                constraint.Deactivate();
+            }
+        });
+    }
+
+    private static Surface RootOf(Surface surface)
+    {
+        while (surface.SubsurfaceRole is { } role)
+        {
+            surface = role.Parent;
+        }
+
+        return surface;
+    }
+
     private int _screenWindowId;
 
     /// <summary>
@@ -1975,7 +2016,8 @@ public sealed class ToplevelWindows : IDisposable
         _windows.TryGetValue(entry.Id, out var window) ? window : null;
 
     /// <summary>
-    /// Releases the cursor surface and stops taking new toplevels, layer surfaces and decoration changes. Open windows stay open. A second call does nothing.
+    /// Releases the cursor surface and stops taking new toplevels, popups, layer surfaces, decoration changes, cursor requests and host input.
+    /// Open windows stay open, and their popups close with them. A second call does nothing.
     /// </summary>
     public void Dispose()
     {
@@ -1987,11 +2029,23 @@ public sealed class ToplevelWindows : IDisposable
         _disposed = true;
         ReleaseCursorSurface();
         _host.Shell.NewToplevel -= OnNewToplevel;
+        _host.Shell.NewPopup -= OnNewPopup;
+        _host.Session.BeforeDispatch -= _beforeDispatch;
+        _host.Seat.Pointer.CursorRequested -= OnCursorRequested;
+        if (_host.Services.Find<Basin.Desktop.CursorShapeManager>() is { } shapes)
+        {
+            shapes.ShapeRequested -= OnShapeRequested;
+        }
+
         _layerDriver?.Unbind(_layerTarget);
 
         if (_decorations is not null)
         {
             _decorations.ModeChanged -= OnDecorationModeChanged;
+            if (ReferenceEquals(_decorations.ChooseMode, _chooseMode))
+            {
+                _decorations.ChooseMode = null;
+            }
         }
     }
 }

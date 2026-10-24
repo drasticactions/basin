@@ -17,11 +17,6 @@ namespace Basin.UI.Avalonia;
 public sealed class BasinPlatformOptions
 {
     /// <summary>
-    /// Gets or sets a default scale. The default is 1. The platform does not read this value now.
-    /// </summary>
-    public double DefaultScale { get; set; } = 1.0;
-
-    /// <summary>
     /// Gets or sets the compositor loop. Clipboard reads need it, and <see cref="AvaloniaUIHost.WakeupRequested"/> is moved onto its thread. Only a started platform reads it.
     /// </summary>
     public ICompositorEventLoop? EventLoop { get; set; }

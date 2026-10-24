@@ -72,18 +72,48 @@ public sealed class MetacityPalette
         }
     }
 
-    /// <summary>
-    /// Gets the named colors for <c>gtk:custom</c> specs. A missing name uses the spec's fallback.
-    /// </summary>
-    /// <remarks>
-    /// A change here does not change <see cref="Version"/>, so a painter that has already painted keeps the old colors until the next <see cref="Set"/> call.
-    /// </remarks>
-    public Dictionary<string, MetacityColor> Custom { get; } = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, MetacityColor> _custom = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Gets a counter that each <see cref="Set"/> call increments. A painter resolves its colors again when it changes.
+    /// Gets the named colors for <c>gtk:custom</c> specs. A missing name uses the spec's fallback. Change them with <see cref="SetCustom"/> and <see cref="RemoveCustom"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, MetacityColor> Custom => _custom;
+
+    /// <summary>
+    /// Gets a counter that each <see cref="Set"/>, <see cref="SetCustom"/> and <see cref="RemoveCustom"/> call increments. A painter resolves its colors again when it changes.
     /// </summary>
     public int Version { get; private set; }
+
+    /// <summary>
+    /// Sets a named color for <c>gtk:custom</c> specs and increments <see cref="Version"/>.
+    /// </summary>
+    /// <param name="name">The color name.</param>
+    /// <param name="color">The color.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public void SetCustom(string name, MetacityColor color)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        _custom[name] = color;
+        Version++;
+    }
+
+    /// <summary>
+    /// Removes a named color, so <c>gtk:custom</c> specs with that name use their fallback. It increments <see cref="Version"/> when the name was set.
+    /// </summary>
+    /// <param name="name">The color name.</param>
+    /// <returns><see langword="true"/> when the name was set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    public bool RemoveCustom(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (!_custom.Remove(name))
+        {
+            return false;
+        }
+
+        Version++;
+        return true;
+    }
 
     /// <summary>
     /// Sets the colors for one state. A <see langword="null"/> argument keeps the current color.

@@ -74,16 +74,28 @@ public sealed unsafe class InspectorText
     }
 
     /// <summary>
-    /// Copies UTF-8 text and adds a NUL byte after it. When the text does not fit, the copy is cut with no marker.
+    /// Copies UTF-8 text and adds a NUL byte after it. When the text does not fit, it is cut on a character boundary and ends in <c>...</c>.
     /// </summary>
     /// <param name="utf8">The UTF-8 bytes to copy.</param>
     /// <returns>The copied bytes without the NUL, valid until the next <see cref="Reset"/>.</returns>
     public ReadOnlySpan<byte> Copy(ReadOnlySpan<byte> utf8)
     {
         var room = Remaining;
-        var length = Math.Min(utf8.Length, room.Length);
+        if (utf8.Length <= room.Length)
+        {
+            utf8.CopyTo(room);
+            return Commit(utf8.Length);
+        }
+
+        var length = Math.Max(0, room.Length - 3);
+        while (length > 0 && (utf8[length] & 0xC0) == 0x80)
+        {
+            length--;
+        }
+
         utf8[..length].CopyTo(room);
-        return Commit(length);
+        "..."u8.CopyTo(room[length..]);
+        return Commit(length + 3);
     }
 
     internal Span<byte> Remaining

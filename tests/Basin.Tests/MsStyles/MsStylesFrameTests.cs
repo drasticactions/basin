@@ -77,6 +77,84 @@ public sealed class MsStylesFrameTests
     }
 
     [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void A_maximized_glass_caption_is_opaque(double scale)
+    {
+        using var rig = new MsStylesRig("Glassy", MsStylesLook.Glass);
+        using var host = new SkiaUIHost();
+        var renderer = rig.Renderer();
+        var state = MsStylesRig.StateFor("maximized");
+        var (insets, outsets) = (renderer.Measure(state, scale), renderer.Outsets(state, scale));
+        Assert.Equal(default, outsets);
+        Assert.Equal((0, 0, 0), (insets.Left, insets.Right, insets.Bottom));
+        var surface = host.CreateSurface(new UISurfaceOptions { Target = UITargetKind.Memory, Width = 200, Height = 40 + insets.Top, Scale = scale })!;
+        renderer.Draw(surface, new Box(0, insets.Top, 200, 40), state, default);
+        Assert.True(renderer.OpaqueChrome);
+        Assert.True(surface.TryAcquire(out var frame));
+        try
+        {
+            var buffer = frame.Buffer!;
+            Assert.True(BufferCapture.TryReadRgba(buffer, out var rgba));
+            AssertStripOpaque(rgba!, buffer.Width, OutputScaling.ToPhysical(new Box(0, 0, 200, insets.Top), scale));
+        }
+        finally
+        {
+            frame.Dispose();
+            surface.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData("gl", 1.0)]
+    [InlineData("gl", 1.5)]
+    [InlineData("vulkan", 1.0)]
+    [InlineData("vulkan", 1.5)]
+    public void A_maximized_quill_glass_caption_is_opaque(string row, double scale)
+    {
+        CompositorTestHost.SkipUnlessRunnable(row);
+        using var host = new CompositorTestHost(renderer: row);
+        using var lease = QuillHostTests.QuillLease.Open(host, row);
+        Assert.SkipWhen(lease is null, $"this row builds no {row} quill host");
+        using var rig = new MsStylesRig("Glassy", MsStylesLook.Glass);
+        using var text = new Basin.Frames.MsStyles.Quill.MsStylesQuillText(rig.Fonts) { Fallback = Basin.Frames.Quill.QuillFrameFonts.Bundled() };
+        var renderer = new Basin.Frames.MsStyles.Quill.MsStylesQuillFrameRenderer(rig.Style, new Basin.Frames.MsStyles.Quill.MsStylesQuillPainter(rig.Style.Images, text));
+        var state = MsStylesRig.StateFor("maximized");
+        var insets = renderer.Measure(state, scale);
+        Assert.Equal(default, renderer.Outsets(state, scale));
+        var surface = lease!.Host.CreateSurface(new UISurfaceOptions { Target = UITargetKind.Dmabuf, Width = 200, Height = 40 + insets.Top, Scale = scale })!;
+        renderer.Draw(surface, new Box(0, insets.Top, 200, 40), state, default);
+        Assert.True(renderer.OpaqueChrome);
+        Assert.True(surface.TryAcquire(out var frame));
+        try
+        {
+            var buffer = frame.Buffer!;
+            Assert.True(BufferCapture.TryReadRgba(buffer, host.Renderer, out var rgba));
+            AssertStripOpaque(rgba!, buffer.Width, OutputScaling.ToPhysical(new Box(0, 0, 200, insets.Top), scale));
+        }
+        finally
+        {
+            frame.Dispose();
+            surface.Dispose();
+        }
+    }
+
+    private static void AssertStripOpaque(byte[] rgba, int width, Box strip)
+    {
+        for (var y = strip.Y; y < strip.Bottom; y++)
+        {
+            for (var x = strip.X; x < strip.Right; x++)
+            {
+                var alpha = rgba[((y * width) + x) * 4 + 3];
+                if (alpha != 255)
+                {
+                    Assert.Fail($"alpha {alpha} at ({x},{y}) in the caption strip {strip}");
+                }
+            }
+        }
+    }
+
+    [Theory]
     [InlineData(FramePart.Close, false, "msstyles-plain-hot-close")]
     [InlineData(FramePart.Minimize, true, "msstyles-plain-pressed-minimize")]
     public void Button_states_match_golden(FramePart part, bool pressed, string golden)

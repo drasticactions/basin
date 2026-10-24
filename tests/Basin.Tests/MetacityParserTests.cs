@@ -93,6 +93,21 @@ public sealed class MetacityParserTests
         File.WriteAllText(Path.Combine(directory, MetacityThemes.FileName(3)), "<metacity_theme version=\">= 99.0\"><bogus/></metacity_theme>");
         var theme = MetacityTheme.Load("eOS");
         Assert.Equal(1000, theme.FormatVersion);
+        Assert.Equal(Path.Combine(directory, MetacityThemes.FileName(1)), MetacityThemes.Find("eOS"));
+    }
+
+    [Fact]
+    public void A_theme_with_only_a_too_new_file_is_not_found()
+    {
+        using var data = new TemporaryDataHome();
+        var directory = Path.Combine(data.Themes, "TooNewOnly", MetacityThemes.SubDirectory);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, MetacityThemes.FileName(3)), "<metacity_theme version=\">= 99.0\"><bogus/></metacity_theme>");
+        Assert.Null(MetacityThemes.Find("TooNewOnly"));
+
+        var fallback = MetacityTheme.Load("eOS");
+        var loaded = Basin.Shell.Nested.MetacityFrames.LoadTheme("TooNewOnly", [name => name == "TooNewOnly" ? fallback : null]);
+        Assert.Same(fallback, loaded);
     }
 
     [Fact]

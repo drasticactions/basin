@@ -623,10 +623,11 @@ public sealed class ToplevelWindow : Window, ICaptureTarget
     public Func<uint, bool, bool>? KeyFilter { get; set; }
 
     /// <summary>
-    /// Activates or deactivates the pointer constraints of every screen toplevel, through <see cref="ToplevelWindows.CaptureInput"/>.
+    /// Activates or deactivates, on the compositor thread, the pointer constraint of the surface in this window that has pointer focus.
+    /// When the focus is not in this window, it acts on the window's own surface.
     /// </summary>
     /// <param name="captured"><see langword="true"/> to lock or confine the pointer, <see langword="false"/> to release it.</param>
-    public void CaptureInput(bool captured) => _manager.CaptureInput(captured);
+    public void CaptureInput(bool captured) => _manager.CaptureInput(Id, captured);
 
     /// <inheritdoc/>
     public void InjectKey(uint code, bool pressed)

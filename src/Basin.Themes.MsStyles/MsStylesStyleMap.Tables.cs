@@ -55,7 +55,7 @@ public static partial class MsStylesStyleMap
         new("EDGEHIGHLIGHTCOLOR", ThemePrimitive.Color, ThemeProperty.EdgeHighlightColor),
         new("EDGELIGHTCOLOR", ThemePrimitive.Color, ThemeProperty.EdgeLightColor),
         new("EDGESHADOWCOLOR", ThemePrimitive.Color, ThemeProperty.EdgeShadowColor),
-        new("FILENAME", ThemePrimitive.Filename, ThemeProperty.FileName),
+        new("FILENAME", ThemePrimitive.Filename, ThemeProperty.Filename),
         new("FILLCOLOR", ThemePrimitive.Color, ThemeProperty.FillColor),
         new("FILLCOLORHINT", ThemePrimitive.Color, ThemeProperty.FillColorHint),
         new("FILLTYPE", ThemePrimitive.Enum, ThemeProperty.FillType),

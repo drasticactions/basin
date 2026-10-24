@@ -215,6 +215,24 @@ public sealed class SkiaPromptTests
     }
 
     [Fact]
+    public void One_text_in_two_fonts_measures_two_widths()
+    {
+        using (var theme = new SkiaPromptTheme())
+        {
+            var small = theme.MeasureText("Window", theme.SmallFont);
+            var title = theme.MeasureText("Window", theme.TitleFont);
+            Assert.True(title > small, $"title {title} must be wider than small {small}");
+        }
+
+        using (var theme = new SkiaPromptTheme())
+        {
+            var title = theme.MeasureText("Window", theme.TitleFont);
+            var small = theme.MeasureText("Window", theme.SmallFont);
+            Assert.True(title > small, $"title {title} must be wider than small {small}");
+        }
+    }
+
+    [Fact]
     public void The_app_line_names_the_requester_three_ways()
     {
         Assert.Equal("An unknown application is asking", SkiaPortalPrompts.AppLine("", ""));

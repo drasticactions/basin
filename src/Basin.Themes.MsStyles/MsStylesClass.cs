@@ -139,17 +139,17 @@ public sealed class MsStylesClass
         Find(part, state, (int)id)?.Primitive ?? ThemePrimitive.None;
 
     /// <summary>
-    /// Reads an integer through the lookup chain. It accepts an integer, size, enumeration, Boolean or color value.
+    /// Reads an integer through the lookup chain. It accepts an integer, size, enumeration or Boolean value, and refuses a color, as uxtheme does.
     /// </summary>
     /// <param name="part">The part ID, or 0 for the class.</param>
     /// <param name="state">The state ID, or 0 for the part.</param>
     /// <param name="id">The property to read.</param>
-    /// <param name="value">The first stored integer, or 0 when the lookup fails. For a color it is the red component.</param>
+    /// <param name="value">The first stored integer, or 0 when the lookup fails.</param>
     /// <returns><see langword="true"/> when a block in the chain sets the property with a matching type.</returns>
     public bool TryGetInt(int part, int state, ThemeProperty id, out int value)
     {
         if (Find(part, state, (int)id) is { Values.Length: > 0 } property &&
-            property.Primitive is ThemePrimitive.Int or ThemePrimitive.Size or ThemePrimitive.Enum or ThemePrimitive.Bool or ThemePrimitive.Color)
+            property.Primitive is ThemePrimitive.Int or ThemePrimitive.Size or ThemePrimitive.Enum or ThemePrimitive.Bool)
         {
             value = property.Values[0];
             return true;

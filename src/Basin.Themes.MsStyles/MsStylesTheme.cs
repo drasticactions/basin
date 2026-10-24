@@ -183,6 +183,43 @@ public sealed class MsStylesTheme
         return theme;
     }
 
+    internal static (IReadOnlyList<string> Colors, IReadOnlyList<string> Sizes) ReadNames(string path)
+    {
+        var resources = PeResources.Read(File.ReadAllBytes(path));
+        if (!resources.TryFind("PACKTHEM_VERSION", 1, out var versionBytes) || versionBytes.Length != 2)
+        {
+            throw new MsStylesFormatException("No PACKTHEM_VERSION resource: not a visual style.");
+        }
+
+        var format = BinaryPrimitives.ReadUInt16LittleEndian(versionBytes.Span);
+        if (format == 3)
+        {
+            var colors = MsStylesIniReader.Names(resources, "COLORNAMES");
+            var sizes = MsStylesIniReader.Names(resources, "SIZENAMES");
+            if (colors.Count == 0 || sizes.Count == 0)
+            {
+                throw new MsStylesFormatException("A PACKTHEM 3 file needs COLORNAMES and SIZENAMES.");
+            }
+
+            return (colors, sizes);
+        }
+
+        if (format != 4)
+        {
+            throw new MsStylesFormatException($"PACKTHEM_VERSION {format} is not supported (3 and 4 are).");
+        }
+
+        if (!resources.TryFind("CMAP", "CMAP", out _) || resources.Names("VARIANT").Count == 0)
+        {
+            throw new MsStylesFormatException("A PACKTHEM 4 file needs CMAP and VARIANT resources.");
+        }
+
+        var variants = MsStylesVariantReader.VariantMap(resources);
+        return (
+            variants.Select(v => v.Color).Where(c => c.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            variants.Select(v => v.Size).Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
     /// <summary>
     /// Finds the language resource file of a theme. It tries the subdirectory named for the current UI culture, then <c>en-US/</c>, then the directory of the theme.
     /// </summary>

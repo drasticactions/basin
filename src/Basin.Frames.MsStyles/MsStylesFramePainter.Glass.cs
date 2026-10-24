@@ -135,7 +135,7 @@ public sealed partial class MsStylesFramePainter
         }
 
         _chromeOps = list.Count;
-        Opaque = false;
+        Opaque = maximized;
 
         if (!geometry.IconRect.IsEmpty)
         {

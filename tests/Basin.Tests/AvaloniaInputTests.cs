@@ -114,6 +114,98 @@ public sealed class AvaloniaInputTests
     }
 
     [AvaloniaFact]
+    public void Capture_acts_on_the_window_it_is_called_on()
+    {
+        var harness = new Harness();
+        var client = harness.Client;
+        var constraintsProxy = client.BindAt<Basin.Desktop.Protocol.ZwpPointerConstraintsV1>("zwp_pointer_constraints_v1", 1);
+        var constraints = harness.Host.Services.Require<Basin.Desktop.PointerConstraintsManager>();
+        var pointerProxy = client.Seat!.GetPointer();
+        var known = new HashSet<Surface>();
+
+        (ToplevelWindow Window, Surface Server) Map()
+        {
+            var surface = client.Compositor.CreateSurface();
+            var xdgSurface = client.WmBase!.GetXdgSurface(surface);
+            _ = xdgSurface.GetToplevel();
+            uint serial = 0;
+            xdgSurface.Configure += (_, e) => serial = e.Serial;
+            surface.Commit();
+            harness.PumpUntil(() => serial != 0);
+            xdgSurface.AckConfigure(serial);
+            var buffer = client.CreateBuffer(200, 150, Fill.Solid(200, 150, 0xFF336699));
+            surface.Attach(buffer.Proxy, 0, 0);
+            surface.Damage(0, 0, 200, 150);
+            surface.Commit();
+            var before = harness.Manager.Windows.Count;
+            harness.PumpUntil(() => harness.Manager.Windows.Count == before + 1);
+            var window = harness.Manager.Windows.First(w => !harness.Manager.Windows.Take(before).Contains(w));
+            var server = harness.Host.Services.Require<CompositorGlobal>().Surfaces.First(known.Add);
+            _ = constraintsProxy.LockPointer(surface, pointerProxy, null, Basin.Desktop.Protocol.ZwpPointerConstraintsV1.Lifetime.Persistent);
+            harness.PumpUntil(() => constraints.ConstraintFor(server) is not null);
+            return (window, server);
+        }
+
+        var (windowA, serverA) = Map();
+        var (_, serverB) = Map();
+
+        windowA.CaptureInput(true);
+        harness.Pump();
+        Assert.True(constraints.ConstraintFor(serverA)!.IsActive, "the window it was called on must lock");
+        Assert.False(constraints.ConstraintFor(serverB)!.IsActive, "another window must stay unlocked");
+
+        windowA.CaptureInput(false);
+        harness.Pump();
+        Assert.False(constraints.ConstraintFor(serverA)!.IsActive);
+
+        pointerProxy.Release();
+        harness.Dispose();
+        LeakTracking.Expect(0, BasinCounters.LiveObjects);
+    }
+
+    [AvaloniaFact]
+    public void Input_queued_after_dispose_reaches_no_surface()
+    {
+        var harness = new Harness();
+        var client = harness.Client;
+        var pointerProxy = client.Seat!.GetPointer();
+        var pointerEntered = false;
+        pointerProxy.Enter += (_, _) => pointerEntered = true;
+
+        var surface = client.Compositor.CreateSurface();
+        var xdgSurface = client.WmBase!.GetXdgSurface(surface);
+        var toplevelProxy = xdgSurface.GetToplevel();
+        uint serial = 0;
+        xdgSurface.Configure += (_, e) => serial = e.Serial;
+        surface.Commit();
+        harness.PumpUntil(() => serial != 0);
+        xdgSurface.AckConfigure(serial);
+        var buffer = client.CreateBuffer(200, 150, Fill.Solid(200, 150, 0xFF336699));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, 200, 150);
+        surface.Commit();
+        harness.PumpUntil(() => harness.Manager.Windows.Count == 1);
+        var window = harness.Manager.Windows.First();
+
+        harness.Manager.Dispose();
+        window.MouseMove(new global::Avalonia.Point(30, 20));
+        for (var i = 0; i < 10; i++)
+        {
+            harness.Pump();
+        }
+
+        Assert.False(pointerEntered, "input queued after Dispose reached the client");
+
+        pointerProxy.Release();
+        toplevelProxy.Destroy();
+        xdgSurface.Destroy();
+        surface.Destroy();
+        harness.Pump();
+        harness.Dispose();
+        LeakTracking.Expect(0, BasinCounters.LiveObjects);
+    }
+
+    [AvaloniaFact]
     public void The_host_keymap_source_still_delivers_shift_to_the_client()
     {
         var harness = new Harness();

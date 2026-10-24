@@ -87,6 +87,29 @@ public sealed class MsStylesThemesTests : IDisposable
         Assert.Equal(MsStylesWriter.PlainSizes, luna.Sizes);
     }
 
+    [Fact]
+    public void Available_names_match_a_full_load()
+    {
+        var paths = new[]
+        {
+            Write(Path.Combine(_root, "data", "msstyles", "Plain"), "Plain.msstyles", MsStylesWriter.Plain()),
+            Write(Path.Combine(_root, "data", "msstyles", "Glassy"), "Glassy.msstyles", MsStylesWriter.Glassy()),
+            Write(Path.Combine(_root, "data", "msstyles", "Variant"), "Variant.msstyles", MsStylesWriter.PlainAsV4()),
+        };
+
+        var available = MsStylesThemes.Available();
+
+        Assert.Equal(paths.Length, available.Count);
+        foreach (var path in paths)
+        {
+            var entry = available.Single(t => Path.GetFullPath(t.Path) == Path.GetFullPath(path));
+            var theme = MsStylesTheme.Load(path);
+            Assert.Equal(theme.ColorSchemes, entry.Colors);
+            Assert.Equal(theme.Sizes, entry.Sizes);
+            Assert.NotEmpty(entry.Colors);
+        }
+    }
+
     public void Dispose()
     {
         foreach (var (name, value) in _saved)

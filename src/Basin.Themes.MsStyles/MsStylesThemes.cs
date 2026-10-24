@@ -96,7 +96,8 @@ public static class MsStylesThemes
     }
 
     /// <summary>
-    /// Lists every installed theme. It loads each file to read its variants, so it reads every theme file in full. A file that does not load is left out.
+    /// Lists every installed theme. It reads each file's resource directory and its color and size names, but parses no class.
+    /// A file that is not a format 3 or 4 visual style is not supported, and the list does not include it.
     /// </summary>
     /// <returns>The themes, sorted by name. When two roots have the same name, the first root wins.</returns>
     public static IReadOnlyList<MsStylesThemeEntry> Available()
@@ -131,8 +132,8 @@ public static class MsStylesThemes
         {
             try
             {
-                var theme = MsStylesTheme.Load(path);
-                entries.Add(new MsStylesThemeEntry(name, path, theme.ColorSchemes, theme.Sizes));
+                var (colors, sizes) = MsStylesTheme.ReadNames(path);
+                entries.Add(new MsStylesThemeEntry(name, path, colors, sizes));
             }
             catch (MsStylesFormatException)
             {
