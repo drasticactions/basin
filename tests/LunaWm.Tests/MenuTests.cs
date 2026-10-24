@@ -90,6 +90,33 @@ public sealed class MenuTests
     }
 
     [Fact]
+    public async Task A_help_desktop_action_runs_from_the_local_menu()
+    {
+        var ssdwin = WlClient("ssdwin");
+        using var bus = PrivateBus.Start();
+        using var system = PrivateBus.Start();
+        using var config = new TempConfig();
+        var marker = Path.Combine(config.Directory, "help-ran");
+        var applications = Path.Combine(config.Directory, "data", "applications");
+        Directory.CreateDirectory(applications);
+        File.WriteAllText(Path.Combine(applications, "ssdwin.desktop"), $"[Desktop Entry]\nType=Application\nName=SSD Window\nExec={ssdwin}\nActions=help;\n\n[Desktop Action help]\nName=Help\nExec=touch {marker}\n");
+        using var session = new LunaSession(LunaSession.Compositor(), config.Path, Buses(config, bus, system), "-c", ssdwin);
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "CARD + 1 ")));
+        await session.SendAsync("appmenu");
+        Assert.NotNull(await session.WaitForAsync(line => line == "APPMENU local titles=3"));
+        await session.SendAsync("appmenu-choose Help");
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "LAUNCH Help pid=")));
+        for (var i = 0; i < 50 && !File.Exists(marker); i++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(File.Exists(marker), "the help action did not run");
+        await session.SendAsync("quit");
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "FRAMES ")));
+    }
+
+    [Fact]
     public async Task Without_status_services_the_indicators_hide_and_the_menus_say_so()
     {
         using var bus = PrivateBus.Start();

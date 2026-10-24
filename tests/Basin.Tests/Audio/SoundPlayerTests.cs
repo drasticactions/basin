@@ -67,6 +67,31 @@ public sealed class SoundPlayerTests(AudioDaemonFixture daemon)
     }
 
     [Fact]
+    public void A_full_player_replaces_the_sound_furthest_through_its_clip()
+    {
+        daemon.SkipIfUnavailable();
+        using var rig = new AudioRig(daemon);
+        using var player = Linked(rig, "basin-test-player-steal", out _);
+        var long1 = Noise(2);
+        var short1 = Noise(0.2, 3);
+        for (var i = 0; i < SoundPlayer.Slots; i++)
+        {
+            Assert.True(i == 7
+                ? player.Play(short1, new SoundPlacement(0, 0, Rate: 0.25f))
+                : player.Play(long1, new SoundPlacement(0, 0)));
+        }
+
+        rig.Pump(TimeSpan.FromMilliseconds(100));
+        Assert.Equal(SoundPlayer.Slots, player.Playing);
+        Assert.Same(short1, player.ClipAt(7));
+
+        var next = Noise(0.5, 5);
+        Assert.True(player.Play(next, new SoundPlacement(0, 0)));
+        Assert.Same(next, player.ClipAt(7));
+        Assert.Same(long1, player.ClipAt(0));
+    }
+
+    [Fact]
     public void Playing_and_mixing_allocate_nothing()
     {
         daemon.SkipIfUnavailable();

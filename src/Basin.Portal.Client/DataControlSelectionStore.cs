@@ -7,16 +7,19 @@ namespace Basin.Portal.Client;
 
 /// <summary>
 /// Implements <see cref="ISelectionStore"/> over <c>ext_data_control_v1</c>, so that a portal client can read and set the clipboard of the compositor.
-/// It supports only <see cref="SelectionKind.Clipboard"/>.
+/// It supports only <see cref="SelectionKind.Clipboard"/>. Primary selection offers are destroyed and never read.
 /// </summary>
 public sealed class DataControlSelectionStore : ISelectionStore, IDisposable
 {
     private readonly ExtDataControlManagerV1 _manager;
-    private readonly List<string> _offerTypes = [];
     private ExtDataControlDeviceV1? _device;
     private DataSource? _ownSource;
     private ExtDataControlSourceV1? _wireSource;
+    private ExtDataControlOfferV1? _pending;
+    private List<string> _pendingTypes = [];
     private ExtDataControlOfferV1? _offer;
+    private List<string> _offerTypes = [];
+    private ExtDataControlOfferV1? _primary;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DataControlSelectionStore"/> class and gets the data control device of the seat.
@@ -30,13 +33,35 @@ public sealed class DataControlSelectionStore : ISelectionStore, IDisposable
         _device = device;
         device.DataOffer += (_, e) =>
         {
-            _offerTypes.Clear();
-            e.Id.Offer += (_, oe) => _offerTypes.Add(oe.MimeType);
-            _offer = e.Id;
+            Destroy(_pending);
+            var types = new List<string>();
+            e.Id.Offer += (_, oe) => types.Add(oe.MimeType);
+            _pending = e.Id;
+            _pendingTypes = types;
         };
         device.Selection += (_, e) =>
         {
+            var id = e.Id;
+            if (!ReferenceEquals(_offer, id))
+            {
+                Destroy(_offer);
+            }
+
+            _offer = id;
+            _offerTypes = id is not null && ReferenceEquals(id, _pending) ? _pendingTypes : [];
+            Take(id);
             SelectionChanged?.Invoke(SelectionKind.Clipboard);
+        };
+        device.PrimarySelection += (_, e) =>
+        {
+            var id = e.Id;
+            if (!ReferenceEquals(_primary, id))
+            {
+                Destroy(_primary);
+            }
+
+            _primary = id;
+            Take(id);
         };
     }
 
@@ -46,7 +71,7 @@ public sealed class DataControlSelectionStore : ISelectionStore, IDisposable
     public event Action<SelectionKind>? SelectionChanged;
 
     /// <summary>
-    /// Copies the MIME types of the last offer that the compositor sent.
+    /// Copies the MIME types of the current clipboard offer. The count is 0 when the clipboard is empty.
     /// </summary>
     /// <param name="kind">The selection to read. Only the clipboard has types.</param>
     /// <param name="types">The span that receives the MIME types.</param>
@@ -126,12 +151,13 @@ public sealed class DataControlSelectionStore : ISelectionStore, IDisposable
     }
 
     /// <summary>
-    /// Asks the owner of the current clipboard offer to write its data in one MIME type into an fd. The call always closes <paramref name="fd"/>.
+    /// Asks the owner of the current clipboard offer to write its data in one MIME type into an fd. It never reads the primary selection.
+    /// The call always closes <paramref name="fd"/>.
     /// </summary>
     /// <param name="kind">The selection to read. Only the clipboard is accepted.</param>
     /// <param name="mimeType">The MIME type to receive.</param>
     /// <param name="fd">The write end of a pipe that receives the data.</param>
-    /// <returns><see langword="false"/> when the kind is not the clipboard or no offer is present.</returns>
+    /// <returns><see langword="false"/> when the kind is not the clipboard or the clipboard is empty.</returns>
     public bool Receive(SelectionKind kind, string mimeType, ClientFd fd)
     {
         if (kind != SelectionKind.Clipboard || _offer is not { IsDestroyed: false } offer)
@@ -146,10 +172,15 @@ public sealed class DataControlSelectionStore : ISelectionStore, IDisposable
     }
 
     /// <summary>
-    /// Destroys the wire source and the data control device. Later calls to <see cref="SetSelection"/> return <see langword="false"/>.
+    /// Destroys the offers, the wire source and the data control device. Later calls to <see cref="SetSelection"/> return <see langword="false"/>.
     /// </summary>
     public void Dispose()
     {
+        Destroy(_pending);
+        Destroy(_offer);
+        Destroy(_primary);
+        _pending = _offer = _primary = null;
+        _offerTypes = [];
         if (_wireSource is { IsDestroyed: false } wire)
         {
             wire.Destroy();
@@ -161,5 +192,22 @@ public sealed class DataControlSelectionStore : ISelectionStore, IDisposable
         }
 
         _device = null;
+    }
+
+    private static void Destroy(ExtDataControlOfferV1? offer)
+    {
+        if (offer is { IsDestroyed: false })
+        {
+            offer.Destroy();
+        }
+    }
+
+    private void Take(ExtDataControlOfferV1? offer)
+    {
+        if (offer is not null && ReferenceEquals(offer, _pending))
+        {
+            _pending = null;
+            _pendingTypes = [];
+        }
     }
 }

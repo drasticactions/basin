@@ -163,6 +163,7 @@ public sealed class ClientSeat : IDisposable
             };
             keyboard.Modifiers += (_, e) =>
             {
+                _keymap.UpdateModifiers(e.ModsDepressed, e.ModsLatched, e.ModsLocked, e.Group);
                 if (_keyboardFocus != 0)
                 {
                     Modifiers?.Invoke(_keyboardFocus, e.ModsDepressed, e.ModsLatched, e.ModsLocked, e.Group);

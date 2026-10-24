@@ -152,6 +152,60 @@ public sealed class ScreenCastPortalTests
     }
 
     [Fact]
+    public void Accepting_the_picker_after_the_session_closed_answers_other()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost(64, 48);
+        var publisher = new TestScreencastPublisher();
+        var prompts = new AutoAnswerPrompts { Hold = true };
+        using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
+        using var services = Services(host, bus, new TestScreenCapture(host), publisher, prompts);
+        PortalBusTests.Await(host, bus.Started);
+        using var frontend = PortalBusTests.Await(host, PortalTestClient.ConnectAsync(daemon.Address, PortalBusTests.BusName, asFrontend: true));
+
+        var session = NewSession(frontend, host);
+        var (response, _) = PortalBusTests.Await(host, frontend.CallSessionImplAsync(Impl, "SelectSources", session, "org.example.App", []));
+        Assert.Equal(0u, response);
+        var pending = frontend.CallSessionImplAsync(Impl, "Start", session, "org.example.App", [], parentWindow: "");
+        PortalBusTests.PumpUntil(host, () => prompts.HeldCount == 1);
+        PortalBusTests.Await(host, frontend.CallAsync(session.ToString(), "org.freedesktop.impl.portal.Session", "Close"));
+        Assert.Equal(1, prompts.HeldCount);
+
+        prompts.Release();
+        (response, var results) = PortalBusTests.Await(host, pending);
+        Assert.Equal(2u, response);
+        Assert.False(results.ContainsKey("streams"));
+        Assert.Empty(publisher.Requests);
+    }
+
+    [Fact]
+    public void Restore_data_with_a_source_kind_of_the_wrong_type_asks_again()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost(64, 48);
+        var publisher = new TestScreencastPublisher();
+        var prompts = new AutoAnswerPrompts();
+        using var bus = new PortalBus(host.Loop, daemon.Address, PortalBusTests.BusName);
+        using var services = Services(host, bus, new TestScreenCapture(host), publisher, prompts);
+        PortalBusTests.Await(host, bus.Started);
+        using var frontend = PortalBusTests.Await(host, PortalTestClient.ConnectAsync(daemon.Address, PortalBusTests.BusName, asFrontend: true));
+
+        var sources = new Array<Struct<string, Dict<string, VariantValue>>>();
+        sources.Add(Struct.Create("1", new Dict<string, VariantValue> { ["output"] = VariantValue.String(host.Output.Name) }));
+        var malformed = Results.Restore("basin", RestoreData.Version, Results.Dict(new Dictionary<string, VariantValue> { ["sources"] = sources.AsVariantValue() }));
+        var session = NewSession(frontend, host);
+        var (response, _) = PortalBusTests.Await(host, frontend.CallSessionImplAsync(Impl, "SelectSources", session, "org.example.App", new Dictionary<string, VariantValue>
+        {
+            ["persist_mode"] = VariantValue.UInt32(2),
+            ["restore_data"] = malformed,
+        }));
+        Assert.Equal(0u, response);
+        (response, _) = PortalBusTests.Await(host, frontend.CallSessionImplAsync(Impl, "Start", session, "org.example.App", [], parentWindow: ""));
+        Assert.Equal(0u, response);
+        Assert.IsType<SourcePrompt>(Assert.Single(prompts.Asked));
+    }
+
+    [Fact]
     public void A_cursor_mode_that_is_not_offered_closes_the_session()
     {
         using var daemon = PrivateBus.Start();

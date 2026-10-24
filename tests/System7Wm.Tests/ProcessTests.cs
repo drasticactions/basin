@@ -496,6 +496,8 @@ public sealed class ProcessTests
             Directory.CreateDirectory(Path.Combine(trash, "info"));
             File.WriteAllText(Path.Combine(trash, "files", "old.txt"), "old");
             File.WriteAllText(Path.Combine(trash, "info", "old.txt.trashinfo"), "[Trash Info]\nPath=/tmp/old.txt\nDeletionDate=2026-09-29T00:00:00\n");
+            File.WriteAllText(Path.Combine(trash, "info", "ghost.txt.trashinfo"), "[Trash Info]\nPath=/tmp/ghost.txt\nDeletionDate=2026-09-29T00:00:00\n");
+            File.WriteAllText(Path.Combine(trash, "files", "stray.txt"), "stray");
 
             Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("TRASH items=1 ", StringComparison.Ordinal), poke: "trash"));
             var chose = session.Mark();
@@ -505,6 +507,8 @@ public sealed class ProcessTests
             await session.SendAsync("alert-choose OK");
             Assert.NotNull(await session.WaitForLineAsync("TRASH emptied"));
             Assert.False(File.Exists(Path.Combine(trash, "files", "old.txt")));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(trash, "files")));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(trash, "info")));
             await session.QuitCleanlyAsync();
         }
     }

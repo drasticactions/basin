@@ -73,7 +73,7 @@ public static class RestoreData
         for (var i = 0; i < sources.Count; i++)
         {
             var item = sources.GetItem(i);
-            if (item.Type != VariantValueType.Struct || item.Count != 2)
+            if (item.Type != VariantValueType.Struct || item.Count != 2 || item.GetItem(0).Type != VariantValueType.UInt32)
             {
                 return null;
             }

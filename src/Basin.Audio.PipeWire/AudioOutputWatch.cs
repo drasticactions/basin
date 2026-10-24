@@ -74,6 +74,7 @@ public sealed class AudioOutputWatch : IDisposable
 
     /// <summary>
     /// Occurs when <see cref="Kind"/>, <see cref="RouteName"/> or <see cref="PortType"/> changes. A change of <see cref="SinkName"/> alone does not raise it.
+    /// A move to a sink of the same kind raises it twice, through <see cref="AudioOutputKind.Unknown"/>, because <see cref="Kind"/> is unknown until the new node sends properties.
     /// </summary>
     public event Action<AudioOutputWatch>? Changed;
 
@@ -161,7 +162,6 @@ public sealed class AudioOutputWatch : IDisposable
         if (name is not null && _session.FindNode(name) is { } global)
         {
             BindSink(global);
-            return;
         }
 
         Recompute();

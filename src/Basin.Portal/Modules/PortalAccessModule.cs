@@ -39,7 +39,7 @@ public sealed class PortalAccessModule : PortalModule, IAccessHandler
     /// <param name="subtitle">The first line of the prompt text.</param>
     /// <param name="body">More prompt text, which can be empty.</param>
     /// <param name="options">The <c>modal</c> option. Other options are ignored.</param>
-    /// <returns><see cref="PortalResponse.Success"/> when the user grants access, otherwise a cancel or other response, with empty results.</returns>
+    /// <returns><see cref="PortalResponse.Success"/> when the user grants access, otherwise a cancel or other response, with empty results. An accepted false answer is response 1.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> AccessDialogAsync(
         ObjectPath handle, string appId, string parentWindow, string title, string subtitle, string body, Dictionary<string, VariantValue> options)
     {
@@ -51,7 +51,7 @@ public sealed class PortalAccessModule : PortalModule, IAccessHandler
             var answer = await _prompts.Confirm(Named(new ConfirmPrompt(appId, parentWindow, modal, title, text)), request.Token).ConfigureAwait(true);
             var response = answer.IsAccepted && answer.Value
                 ? PortalResponse.Success
-                : PortalScreenshotModule.ResponseFor(answer.Response, request);
+                : PortalRefusal.RefusalFor(answer);
             Log.Info($"access dialog for {appId} \"{title}\": {(response == 0 ? "granted" : "denied")}");
             return (response, Results.Empty);
         }

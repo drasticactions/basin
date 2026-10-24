@@ -31,6 +31,11 @@ public sealed record NotificationServerOptions
     public int DefaultExpireMs { get; init; } = DefaultExpireMilliseconds;
 
     /// <summary>
+    /// Gets a value indicating whether a critical notification expires like the other urgencies. When it is <see langword="false"/>, a critical notification stays open until it is closed or dismissed, for -1 and for an explicit timeout.
+    /// </summary>
+    public bool CriticalExpires { get; init; }
+
+    /// <summary>
     /// Gets the server name that <c>GetServerInformation</c> returns.
     /// </summary>
     public string ServerName { get; init; } = "basin";

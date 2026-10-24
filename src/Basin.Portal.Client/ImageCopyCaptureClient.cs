@@ -26,6 +26,16 @@ public sealed class ImageCopyCaptureClient : IScreenCapture, IDisposable
     private readonly Dictionary<string, ImageCopyCaptureStream> _streams = [];
     private DmabufSupport? _dmabuf;
     private bool _dmabufTried;
+    private ClientOutput[] _regionOutputs = [];
+    private Box[] _regionBoxes = [];
+    private double[] _regionScales = [];
+    private RegionPart[] _regionParts = [];
+    private PixmanImage? _targetImage;
+    private nint _targetData;
+    private int _targetWidth;
+    private int _targetHeight;
+    private int _targetStride;
+    private DrmFormat _targetFormat;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageCopyCaptureClient"/> class.
@@ -138,39 +148,65 @@ public sealed class ImageCopyCaptureClient : IScreenCapture, IDisposable
     };
 
     /// <summary>
-    /// Gets the buffer size for a source from a capture session. The format is always XRGB8888.
-    /// A region source describes the whole output that contains the center of the region.
+    /// Gets the buffer size for a source. The format is always XRGB8888.
+    /// A region source is the box in buffer pixels at its scale, or at the largest scale of the outputs that the box touches when its scale is 0.
     /// </summary>
     /// <param name="source">The source to describe.</param>
     /// <param name="format">The buffer size and format, or the default value on failure.</param>
-    /// <returns><see langword="false"/> when no session can open or the size does not arrive within one second.</returns>
+    /// <returns><see langword="false"/> when no session can open, the size does not arrive within one second, or a region touches no output.</returns>
     public bool TryDescribe(in CaptureSource source, out CaptureFormat format)
     {
         format = default;
         if (source.Kind == CaptureSourceKind.Region)
         {
-            return RegionStream(source.LayoutBox) is { } region && region.TryDescribe(source.OverlayCursor, out format);
+            var count = CollectOutputs();
+            var box = source.LayoutBox;
+            if (box.IsEmpty || !Touches(box, count))
+            {
+                return false;
+            }
+
+            var size = RegionCapturePlan.Size(box, RegionCapturePlan.TargetScale(box, _regionBoxes.AsSpan(0, count), _regionScales.AsSpan(0, count), source.Scale));
+            format = new CaptureFormat(size.Width, size.Height, DrmFormat.Xrgb8888);
+            return size.Width > 0 && size.Height > 0;
         }
 
         return Stream(source) is { } stream && stream.TryDescribe(source.OverlayCursor, out format);
     }
 
     /// <summary>
-    /// Captures one frame of a source into a buffer. A dmabuf target receives the frame directly, and other targets receive a copy from shared memory.
-    /// The call ignores <paramref name="region"/>. A region source captures the whole output that contains the center of the region.
+    /// Captures one frame of a source into a buffer. A dmabuf target receives a whole output or toplevel directly, and other targets receive a copy from shared memory.
+    /// A region source captures each output that the box touches and composites the parts at the scale that <see cref="TryDescribe"/> gave. Parts outside every output are transparent black.
     /// </summary>
     /// <param name="source">The source to capture.</param>
-    /// <param name="region">The area to capture. It is ignored.</param>
-    /// <param name="target">The buffer that receives the frame. It must be at least the size that <see cref="TryDescribe"/> gave.</param>
-    /// <returns><see langword="false"/> when the frame fails, times out after one second or does not fit the target.</returns>
+    /// <param name="region">The area to copy in source buffer pixels, or an empty box for the whole source.</param>
+    /// <param name="target">The buffer that receives the frame. It must be at least the size of the region, or of the source when the region is empty.</param>
+    /// <returns><see langword="false"/> when a frame fails, times out after one second or does not fit the target.</returns>
     public bool Capture(in CaptureSource source, in Box region, IBuffer target)
     {
         if (source.Kind == CaptureSourceKind.Region)
         {
-            return CaptureRegion(source.LayoutBox, target);
+            return CaptureRegion(source, region, target);
         }
 
-        return Stream(source) is { } stream && stream.CaptureInto(target);
+        if (Stream(source) is not { } stream)
+        {
+            return false;
+        }
+
+        if (region.IsEmpty)
+        {
+            return stream.CaptureInto(target);
+        }
+
+        if (!stream.CaptureToScratch(source.OverlayCursor) || stream.ScratchImage() is not { } scratch)
+        {
+            return false;
+        }
+
+        var crop = region.Intersect(new Box(0, 0, stream.Width, stream.Height));
+        Span<RegionPart> part = [new RegionPart(0, new Box(0, 0, crop.Width, crop.Height), crop.X, crop.Y, 1)];
+        return Composite(target, region.Width, region.Height, part, scratch);
     }
 
     /// <summary>
@@ -238,6 +274,8 @@ public sealed class ImageCopyCaptureClient : IScreenCapture, IDisposable
         }
 
         _streams.Clear();
+        _targetImage?.Dispose();
+        _targetImage = null;
         _dmabuf?.Dispose();
     }
 
@@ -288,27 +326,158 @@ public sealed class ImageCopyCaptureClient : IScreenCapture, IDisposable
         }
     }
 
-    private bool CaptureRegion(Box box, IBuffer target) =>
-        RegionStream(box) is { } stream && stream.CaptureInto(target);
-
-    private ImageCopyCaptureStream? RegionStream(Box box)
+    private bool CaptureRegion(in CaptureSource source, in Box crop, IBuffer target)
     {
-        if (box.Width <= 0 || box.Height <= 0)
+        var count = CollectOutputs();
+        var box = source.LayoutBox;
+        if (box.IsEmpty || !Touches(box, count))
         {
-            return null;
+            return false;
         }
 
-        var output = _outputs.At(box.X + (box.Width / 2.0), box.Y + (box.Height / 2.0)) ?? First();
-        return output is null ? null : Stream(CaptureSource.Output(output));
+        var boxes = _regionBoxes.AsSpan(0, count);
+        var scales = _regionScales.AsSpan(0, count);
+        var scale = RegionCapturePlan.TargetScale(box, boxes, scales, source.Scale);
+        var size = RegionCapturePlan.Size(box, scale);
+        var width = crop.IsEmpty ? size.Width : crop.Width;
+        var height = crop.IsEmpty ? size.Height : crop.Height;
+        if (_regionParts.Length < count)
+        {
+            _regionParts = new RegionPart[count];
+        }
+
+        var parts = _regionParts.AsSpan(0, RegionCapturePlan.Plan(box, boxes, scales, scale, crop, _regionParts));
+        if (!BeginTarget(target, width, height))
+        {
+            return false;
+        }
+
+        var ok = true;
+        foreach (var part in parts)
+        {
+            if (Stream(CaptureSource.Output(_regionOutputs[part.Output])) is not { } stream ||
+                !stream.CaptureToScratch(source.OverlayCursor) ||
+                stream.ScratchImage() is not { } scratch)
+            {
+                ok = false;
+                break;
+            }
+
+            CompositePart(scratch, part);
+        }
+
+        target.EndDataAccess();
+        return ok;
     }
 
-    private IOutput? First()
+    private bool Composite(IBuffer target, int width, int height, ReadOnlySpan<RegionPart> parts, PixmanImage source)
     {
-        foreach (var (output, _) in _outputs.Layout.Outputs)
+        if (!BeginTarget(target, width, height))
         {
-            return output;
+            return false;
         }
 
-        return null;
+        foreach (var part in parts)
+        {
+            CompositePart(source, part);
+        }
+
+        target.EndDataAccess();
+        return true;
+    }
+
+    private unsafe bool BeginTarget(IBuffer target, int width, int height)
+    {
+        if (target.Width < width || target.Height < height || !target.BeginDataAccess(BufferDataAccess.Write, out var view))
+        {
+            return false;
+        }
+
+        for (var y = 0; y < target.Height; y++)
+        {
+            new Span<byte>((byte*)view.Data + (y * view.Stride), target.Width * 4).Clear();
+        }
+
+        if (_targetImage is null || _targetData != view.Data || _targetWidth != target.Width || _targetHeight != target.Height ||
+            _targetStride != view.Stride || _targetFormat != view.Format)
+        {
+            _targetImage?.Dispose();
+            _targetImage = PixmanImage.CreateBits(
+                view.Format == DrmFormat.Argb8888 ? PixmanFormat.A8R8G8B8 : PixmanFormat.X8R8G8B8, target.Width, target.Height, view.Data, view.Stride);
+            _targetData = view.Data;
+            _targetWidth = target.Width;
+            _targetHeight = target.Height;
+            _targetStride = view.Stride;
+            _targetFormat = view.Format;
+        }
+
+        return true;
+    }
+
+    private void CompositePart(PixmanImage source, in RegionPart part)
+    {
+        var destination = part.Destination;
+        if (part.Ratio == 1 && part.SourceX == Math.Floor(part.SourceX) && part.SourceY == Math.Floor(part.SourceY))
+        {
+            _targetImage!.Composite(PixmanOp.Src, source, null, (int)part.SourceX, (int)part.SourceY, 0, 0, destination.X, destination.Y, destination.Width, destination.Height);
+            return;
+        }
+
+        var translate = PixmanTransform.CreateTranslate(part.SourceX, part.SourceY);
+        var scale = PixmanTransform.CreateScale(part.Ratio, part.Ratio);
+        var transform = PixmanTransform.Multiply(in translate, in scale);
+        source.SetTransform(in transform);
+        source.SetFilter(part.Ratio < 1 ? PixmanFilter.Bilinear : PixmanFilter.Nearest);
+        source.SetRepeat(PixmanRepeat.Pad);
+        _targetImage!.Composite(PixmanOp.Src, source, null, 0, 0, 0, 0, destination.X, destination.Y, destination.Width, destination.Height);
+        source.ClearTransform();
+        source.SetFilter(PixmanFilter.Nearest);
+        source.SetRepeat(PixmanRepeat.None);
+    }
+
+    private int CollectOutputs()
+    {
+        var count = 0;
+        foreach (var (output, _) in _outputs.Layout.Outputs)
+        {
+            if (output is ClientOutput)
+            {
+                count++;
+            }
+        }
+
+        if (_regionOutputs.Length < count)
+        {
+            _regionOutputs = new ClientOutput[count];
+            _regionBoxes = new Box[count];
+            _regionScales = new double[count];
+        }
+
+        var i = 0;
+        foreach (var (output, _) in _outputs.Layout.Outputs)
+        {
+            if (output is ClientOutput client && i < count)
+            {
+                _regionOutputs[i] = client;
+                _regionBoxes[i] = _outputs.Layout.BoxOf(output);
+                _regionScales[i] = output.Scale;
+                i++;
+            }
+        }
+
+        return count;
+    }
+
+    private bool Touches(Box box, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (!_regionBoxes[i].Intersect(box).IsEmpty)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -138,7 +138,7 @@ public sealed unsafe class SoundPlayer : IDisposable
     public long Started => _started;
 
     /// <summary>
-    /// Starts a clip in a free slot. When all slots play, it replaces the sound that has played the most samples. It allocates nothing and activates the stream when it is inactive.
+    /// Starts a clip in a free slot. When all slots play, it replaces the sound that is furthest through its clip. It allocates nothing and activates the stream when it is inactive.
     /// </summary>
     /// <param name="clip">The clip to play.</param>
     /// <param name="placement">The gain, pan, low-pass and speed of this sound.</param>
@@ -163,9 +163,10 @@ public sealed unsafe class SoundPlayer : IDisposable
                 break;
             }
 
-            if (_slots[i].Position > progress)
+            var through = _slots[i].Position / _slots[i].Clip!.Samples.Length;
+            if (through > progress)
             {
-                progress = _slots[i].Position;
+                progress = through;
                 oldest = i;
             }
         }
@@ -220,6 +221,8 @@ public sealed unsafe class SoundPlayer : IDisposable
         _session.RemoveOwnNode(Name);
         BasinCounters.Untrack();
     }
+
+    internal SoundClip? ClipAt(int slot) => _slots[slot].Clip;
 
     private void Mix()
     {

@@ -327,6 +327,98 @@ public sealed class SkiaPromptTests
     }
 
     [Fact]
+    public async Task The_area_picker_paints_a_veil_cut_out_under_the_rubber_band()
+    {
+        using var rig = new Rig(400, 300);
+        var task = rig.Prompts.SelectArea(new AreaPrompt("org.example.App", "", true, null, false), CancellationToken.None);
+        var surface = rig.PromptHost.Current;
+        using var theme = new SkiaPromptTheme();
+        Near(Premultiplied(theme.Veil), Pixel(rig, surface, 4, 296));
+
+        surface.NotifyPointerEnter(100, 100);
+        surface.NotifyPointerMotion(1, 100, 100);
+        surface.NotifyPointerButton(2, InputCodes.BtnLeft, true);
+        surface.NotifyPointerMotion(3, 300, 200);
+        Near(Premultiplied(theme.Veil), Pixel(rig, surface, 4, 296));
+        Near(Premultiplied(theme.Rubber), Pixel(rig, surface, 200, 150));
+
+        surface.NotifyKey(4, InputCodes.KeyEsc, true);
+        Assert.Equal(PromptResponse.Cancelled, (await task).Response);
+    }
+
+    private static void Near(uint expected, uint actual)
+    {
+        for (var shift = 0; shift < 32; shift += 8)
+        {
+            Assert.InRange((int)((actual >> shift) & 0xFF), (int)((expected >> shift) & 0xFF) - 2, (int)((expected >> shift) & 0xFF) + 2);
+        }
+    }
+
+    private static uint Premultiplied(SKColor color) =>
+        (uint)color.Alpha << 24
+        | (uint)((color.Red * color.Alpha + 127) / 255) << 16
+        | (uint)((color.Green * color.Alpha + 127) / 255) << 8
+        | (uint)((color.Blue * color.Alpha + 127) / 255);
+
+    private static unsafe uint Pixel(Rig rig, TestPromptSurface surface, int x, int y)
+    {
+        var shot = rig.Snapshot(surface);
+        try
+        {
+            Assert.True(shot.BeginDataAccess(BufferDataAccess.Read, out var access));
+            var value = *(uint*)((byte*)access.Data + y * access.Stride + x * 4);
+            shot.EndDataAccess();
+            return value;
+        }
+        finally
+        {
+            shot.Destroy();
+        }
+    }
+
+    [Fact]
+    public async Task Disposing_the_prompts_cancels_a_pending_prompt()
+    {
+        var rig = new Rig();
+        try
+        {
+            var task = rig.Prompts.SelectArea(new AreaPrompt("org.example.App", "", true, null, false), CancellationToken.None);
+            var surface = rig.PromptHost.Current;
+            Assert.False(task.IsCompleted);
+            rig.Prompts.Dispose();
+            Assert.True(task.IsCompleted);
+            Assert.Equal(PromptResponse.Cancelled, (await task).Response);
+            Assert.True(surface.IsDisposed);
+            Assert.Equal(0, rig.Prompts.Open);
+        }
+        finally
+        {
+            rig.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task The_shortcut_prompt_records_shift_and_a_digit_as_the_unshifted_keysym()
+    {
+        using var rig = new Rig();
+        rig.Host.Seat.Keyboard.SetKeymap(new KeymapNames(Layout: "us"));
+        Assert.SkipWhen(rig.Host.Seat.Keyboard.Keymap is null, "no xkb keymap could be compiled on this host");
+        rig.Prompts.Keymap = rig.Host.Seat.Keyboard;
+        var task = rig.Prompts.BindShortcuts(new ShortcutPrompt("org.example.App", "", true, [new ShortcutPromptRow("one", "One", "", false, "")]), CancellationToken.None);
+        var surface = rig.PromptHost.Current;
+        rig.Click(surface, SkiaPromptView.Padding + 40, SkiaPromptView.Padding + 48 + 10);
+        rig.Host.Seat.Keyboard.NotifyModifiers((uint)Modifiers.Shift, 0, 0, 0);
+        surface.NotifyModifiers((uint)Modifiers.Shift, 0, 0, 0);
+        surface.NotifyKey(1, 2, true);
+        rig.Host.Seat.Keyboard.NotifyModifiers(0, 0, 0, 0);
+        surface.NotifyModifiers(0, 0, 0, 0);
+        var (x, y) = rig.Button(surface, 0);
+        rig.Click(surface, x, y);
+        var binding = Assert.Single((await task).Value!);
+        Assert.Equal(("one", "SHIFT+1"), (binding.Id, binding.Trigger));
+    }
+
+    [Fact]
     public async Task The_shortcut_prompt_captures_a_chord_from_the_keymap()
     {
         using var rig = new Rig();

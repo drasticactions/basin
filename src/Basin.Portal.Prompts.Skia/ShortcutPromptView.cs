@@ -163,7 +163,7 @@ public sealed class ShortcutPromptView : SkiaPromptView
             return false;
         }
 
-        var keysym = _keymap?.KeysymForKeycode(key) ?? Keysym.NoSymbol;
+        var keysym = _keymap?.RawKeysymForKeycode(key) ?? Keysym.NoSymbol;
         if (keysym == Keysym.NoSymbol)
         {
             return false;

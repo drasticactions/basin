@@ -110,9 +110,9 @@ internal sealed partial class LunaShell
             local.Item("Close", () => CloseCard(card)),
             local.Item("Fullscreen", () => SetFullscreen(card, !card.Fullscreen), check: card.Fullscreen),
         };
-        if (HelpActionFor(card) is { } help)
+        if (HelpActionFor(card) is ({ } entry, { } help))
         {
-            items.Add(local.Item("Help", () => RunDesktopAction(help)));
+            items.Add(local.Item("Help", () => RunDesktopAction(entry, help)));
         }
         else if (HelpUriFor(card) is { } uri)
         {
@@ -123,7 +123,7 @@ internal sealed partial class LunaShell
         return local;
     }
 
-    private DesktopAction? HelpActionFor(Card card)
+    private (DesktopEntry Entry, DesktopAction Action)? HelpActionFor(Card card)
     {
         if (card.AppId.Length == 0 || Desktop.FindForAppId(card.AppId) is not { } entry)
         {
@@ -135,7 +135,7 @@ internal sealed partial class LunaShell
             if (action.Key.Contains("help", StringComparison.OrdinalIgnoreCase) ||
                 action.Name.Contains("help", StringComparison.OrdinalIgnoreCase))
             {
-                return action;
+                return (entry, action);
             }
         }
 
@@ -145,12 +145,15 @@ internal sealed partial class LunaShell
     private string? HelpUriFor(Card card) =>
         card.AppId.Length > 0 && Desktop.FindForAppId(card.AppId) is { } entry ? DocPath.UriFor(entry.Path) : null;
 
-    private void RunDesktopAction(DesktopAction action)
+    private void RunDesktopAction(DesktopEntry entry, DesktopAction action)
     {
-        var argv = action.Argv;
-        if (argv.Length > 0)
+        if (entry.LaunchArgv(action, ExecLine.TerminalFromEnvironment()) is { Length: > 0 } argv)
         {
-            Launch(ExecLine.Join(argv), action.Name, action.Icon);
+            Launch(ExecLine.Join(argv), action.Name, action.Icon ?? entry.Icon, entry.Id);
+        }
+        else
+        {
+            _report.Line($"LAUNCH cannot {entry.Id} {action.Key}");
         }
     }
 

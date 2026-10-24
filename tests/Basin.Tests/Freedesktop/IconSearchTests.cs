@@ -114,6 +114,21 @@ public sealed class IconSearchTests : IDisposable
     }
 
     [Fact]
+    public void A_threshold_directory_measures_from_its_size_and_ignores_min_size()
+    {
+        var threshold = new IconThemeDirectory("odd/48", 48, 1, IconThemeDirectoryType.Threshold, 16, 48, 2, null);
+        Assert.Equal(16, threshold.Distance(32, 1));
+        Assert.Equal(16, threshold.Distance(64, 1));
+        Assert.Equal(0, threshold.Distance(47, 1));
+
+        Write("usr/share/icons/odd/index.theme", "[Icon Theme]\nName=Odd\nDirectories=48,32\n\n[48]\nSize=48\nMinSize=16\nType=Threshold\n\n[32]\nSize=32\nType=Fixed\n");
+        Write("usr/share/icons/odd/48/o.png", "png");
+        Write("usr/share/icons/odd/32/o.png", "png");
+        var search = new IconSearch { DataDirectories = DataDirectories, Theme = "odd", Extensions = [".png"], ReadDesktopEntry = false, Sizes = [30] };
+        Assert.Equal(At("usr/share/icons/odd/32/o.png"), search.Find("o"));
+    }
+
+    [Fact]
     public void Sizes_walk_exact_matches_first_then_the_closest_by_distance()
     {
         var pngs = new IconSearch { DataDirectories = DataDirectories, Theme = "breeze", Extensions = [".png"], ReadDesktopEntry = false };

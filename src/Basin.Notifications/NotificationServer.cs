@@ -179,7 +179,7 @@ public sealed class NotificationServer : IDisposable
     /// Adds a notification that the shell itself makes. It raises <see cref="Added"/> or <see cref="Replaced"/> but sends no D-Bus signal for it.
     /// <see cref="Notification.Id"/>, <see cref="Notification.Sender"/> and <see cref="Notification.ExpiresAfter"/> are set by the server.
     /// </summary>
-    /// <param name="notification">The notification to show. Its <see cref="Notification.ExpireTimeout"/> applies.</param>
+    /// <param name="notification">The notification to show. Its <see cref="Notification.ExpireTimeout"/> applies, except that a critical notification never expires unless <see cref="NotificationServerOptions.CriticalExpires"/> is set.</param>
     /// <param name="replacesId">The id of an open notification to replace, or zero. An id that is not open gets a new id.</param>
     /// <returns>The id of the added or replaced notification.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="notification"/> is <see langword="null"/>.</exception>
@@ -301,7 +301,9 @@ public sealed class NotificationServer : IDisposable
     {
         _thread.Assert();
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var expireMs = notification.ExpireTimeout < 0 ? Options.DefaultExpireMs : notification.ExpireTimeout;
+        var expireMs = notification.Urgency == NotificationUrgency.Critical && !Options.CriticalExpires
+            ? 0
+            : notification.ExpireTimeout < 0 ? Options.DefaultExpireMs : notification.ExpireTimeout;
         TimeSpan? expiresAfter = expireMs > 0 ? TimeSpan.FromMilliseconds(expireMs) : null;
         var index = replacesId == 0 ? -1 : IndexOf(replacesId);
         if (index >= 0)

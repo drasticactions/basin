@@ -165,7 +165,7 @@ public sealed class ScreenshotPortalTests
     }
 
     [Fact]
-    public void PickColor_answers_the_pixel_in_linear_light()
+    public void PickColor_answers_the_pixel_in_srgb()
     {
         using var daemon = PrivateBus.Start();
         using var host = new CompositorTestHost(64, 48);
@@ -182,7 +182,7 @@ public sealed class ScreenshotPortalTests
         Assert.Equal(0u, response);
         var color = results["color"];
         Assert.Equal(VariantValueType.Struct, color.Type);
-        Assert.Equal(PortalScreenshotModule.SrgbToLinear(128), color.GetItem(0).GetDouble(), 0.02);
+        Assert.Equal(128 / 255.0, color.GetItem(0).GetDouble(), 0.005);
         Assert.Equal(0, color.GetItem(1).GetDouble(), 0.001);
         Assert.Equal(0, color.GetItem(2).GetDouble(), 0.001);
         var area = Assert.IsType<AreaPrompt>(Assert.Single(prompts.Asked));

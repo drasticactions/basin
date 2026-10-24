@@ -140,11 +140,12 @@ public abstract class SkiaPromptView : IDisposable
 
     /// <summary>
     /// Paints the panel, the icon, the title, the body and the buttons. It also records the button boxes for hit tests.
+    /// A view that covers an output can override it.
     /// </summary>
     /// <param name="canvas">The canvas to draw on.</param>
     /// <param name="width">The surface width in logical pixels.</param>
     /// <param name="height">The surface height in logical pixels.</param>
-    public void Paint(SKCanvas canvas, int width, int height)
+    public virtual void Paint(SKCanvas canvas, int width, int height)
     {
         canvas.Clear(SKColors.Transparent);
         Theme.Fill.Color = Theme.Panel;

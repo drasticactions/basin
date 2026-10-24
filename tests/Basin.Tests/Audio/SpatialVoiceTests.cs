@@ -283,6 +283,36 @@ public sealed class SpatialVoiceTests(AudioDaemonFixture daemon)
     }
 
     [Fact]
+    public void A_move_between_two_sinks_of_one_kind_reads_unknown_until_the_new_node_reports()
+    {
+        daemon.SkipIfUnavailable();
+        using var rig = new AudioRig(daemon);
+        PipeWire.PipeWireProxy Sink(string name) => rig.Session.Core.CreateObject("adapter", PipeWire.PipeWireInterfaces.Node, 3,
+        [
+            new("factory.name", "support.null-audio-sink"),
+            new("node.name", name),
+            new("media.class", "Audio/Sink"),
+            new("audio.position", "[ FL FR ]"),
+            new("device.form-factor", "headphones"),
+        ]);
+        using var first = Sink("basin-test-headphones-a");
+        using var second = Sink("basin-test-headphones-b");
+        _ = rig.Node("basin-test-headphones-a");
+        _ = rig.Node("basin-test-headphones-b");
+        using var watch = new AudioOutputWatch(rig.Session);
+        rig.Session.DefaultMetadata!.SetProperty(0, "default.audio.sink", "Spa:String:JSON", """{"name":"basin-test-headphones-a"}""");
+        Assert.True(rig.Session.WaitFor(() => watch.Kind == AudioOutputKind.Headphones, 3000));
+
+        var kinds = new List<AudioOutputKind>();
+        watch.Changed += w => kinds.Add(w.Kind);
+        rig.Session.DefaultMetadata.SetProperty(0, "default.audio.sink", "Spa:String:JSON", """{"name":"basin-test-headphones-b"}""");
+        Assert.True(rig.Session.WaitFor(() => watch.SinkName == "basin-test-headphones-b" && watch.Kind == AudioOutputKind.Headphones, 3000));
+        Assert.Equal([AudioOutputKind.Unknown, AudioOutputKind.Headphones], kinds);
+        rig.Session.DefaultMetadata.SetProperty(0, "default.audio.sink", null, null);
+        rig.Session.Roundtrip();
+    }
+
+    [Fact]
     public void A_voice_follows_the_default_sink_route()
     {
         daemon.SkipIfUnavailable();

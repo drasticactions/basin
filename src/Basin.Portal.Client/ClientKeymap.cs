@@ -124,11 +124,18 @@ public sealed unsafe class ClientKeymap : IActiveKeymap, IKeymapLookup, IDisposa
     }
 
     /// <summary>
+    /// Gets the keysym that a key produces in the current keyboard state, with the modifiers and the layout group from <see cref="UpdateModifiers"/>.
+    /// </summary>
+    /// <param name="keycode">The evdev keycode.</param>
+    /// <returns>The keysym, or 0 when no keymap is loaded or the key produces no single keysym.</returns>
+    public uint KeysymForKeycode(uint keycode) => _state is { } state ? state.GetKeyOneSym(keycode + 8).Value : 0;
+
+    /// <summary>
     /// Gets the keysym that a key produces at level 0 of the effective layout. Active modifiers have no effect on the result.
     /// </summary>
     /// <param name="keycode">The evdev keycode.</param>
     /// <returns>The keysym, or 0 when no keymap is loaded or the key has no symbol.</returns>
-    public uint KeysymForKeycode(uint keycode)
+    public uint RawKeysymForKeycode(uint keycode)
     {
         if (_keymap is not { } keymap || _state is not { } state)
         {
@@ -139,6 +146,16 @@ public sealed unsafe class ClientKeymap : IActiveKeymap, IKeymapLookup, IDisposa
         var syms = keymap.GetKeySymsByLevel(keycode + 8, layout, 0);
         return syms.Length > 0 ? (uint)syms[0] : 0;
     }
+
+    /// <summary>
+    /// Applies a <c>wl_keyboard.modifiers</c> event to the keyboard state. It sets the effective layout that the lookups read.
+    /// </summary>
+    /// <param name="depressed">The depressed modifier mask.</param>
+    /// <param name="latched">The latched modifier mask.</param>
+    /// <param name="locked">The locked modifier mask.</param>
+    /// <param name="group">The effective layout group.</param>
+    public void UpdateModifiers(uint depressed, uint latched, uint locked, uint group) =>
+        _state?.UpdateMask(depressed, latched, locked, 0, 0, group);
 
     /// <summary>
     /// Releases the XKB objects and closes the stored keymap fd.

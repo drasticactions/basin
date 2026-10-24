@@ -100,5 +100,25 @@ public sealed class FreedesktopTrashTests : IDisposable
         Directory.CreateDirectory(trash.InfoDirectory);
         File.WriteAllText(Path.Combine(trash.InfoDirectory, "ghost.trashinfo"), "[Trash Info]\nPath=/tmp/ghost\nDeletionDate=2026-01-01T00:00:00\n");
         Assert.Empty(trash.Items());
+        Assert.True(trash.IsEmpty);
+    }
+
+    [Fact]
+    public void Empty_removes_the_orphans_that_items_skips()
+    {
+        var trash = new FreedesktopTrash(Path.Combine(_root, "Trash"));
+        Directory.CreateDirectory(Path.Combine(_root, "home"));
+        File.WriteAllText(Home("kept.txt"), "kept");
+        trash.Trash(Home("kept.txt"));
+        File.WriteAllText(Path.Combine(trash.InfoDirectory, "ghost.trashinfo"), "[Trash Info]\nPath=/tmp/ghost\nDeletionDate=2026-01-01T00:00:00\n");
+        File.WriteAllText(Path.Combine(trash.FilesDirectory, "stray.txt"), "no info");
+        Directory.CreateDirectory(Path.Combine(trash.FilesDirectory, "stray-dir", "inner"));
+        Assert.Single(trash.Items());
+        Assert.False(trash.IsEmpty);
+
+        trash.Empty();
+        Assert.Empty(Directory.EnumerateFileSystemEntries(trash.FilesDirectory));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(trash.InfoDirectory));
+        Assert.True(trash.IsEmpty);
     }
 }

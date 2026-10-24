@@ -9,6 +9,6 @@ public enum NotificationUrgency : byte
     Low = 0,
     /// <summary>Normal urgency. This is the value when the client sends no valid hint.</summary>
     Normal = 1,
-    /// <summary>Critical urgency. The server applies the same expiry rules as to the other urgencies.</summary>
+    /// <summary>Critical urgency. The server never expires it unless <see cref="NotificationServerOptions.CriticalExpires"/> is set.</summary>
     Critical = 2,
 }

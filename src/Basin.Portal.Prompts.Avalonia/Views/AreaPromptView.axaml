@@ -7,7 +7,8 @@
   <UserControl.Styles>
     <StyleInclude Source="avares://Basin.Portal.Prompts.Avalonia/Views/PromptStyles.axaml" />
   </UserControl.Styles>
-  <Panel Name="Veil" Background="#60000000">
+  <Panel Name="Veil" Background="Transparent">
+    <Rectangle Name="Shade" Fill="#60000000" />
     <Border Background="#FF2A2D35" CornerRadius="6" Padding="14,8" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0">
       <TextBlock Classes="basin-prompt-body" Text="{Binding Hint}" />
     </Border>

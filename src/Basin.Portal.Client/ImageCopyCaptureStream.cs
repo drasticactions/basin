@@ -23,6 +23,10 @@ internal sealed class ImageCopyCaptureStream : IDisposable
     private bool _paintCursors;
     private bool _frameOk;
     private bool _disposed;
+    private PixmanImage? _scratchImage;
+    private nint _scratchData;
+    private int _scratchWidth;
+    private int _scratchHeight;
 
     public ImageCopyCaptureStream(ImageCopyCaptureClient owner, WlShm shm, WlDisplay display, ExtImageCaptureSourceV1 source, IOutput? output)
     {
@@ -72,9 +76,42 @@ internal sealed class ImageCopyCaptureStream : IDisposable
         return _shm.Buffer is { } shm && CaptureFrame(shm, copyInto: target);
     }
 
+    public bool CaptureToScratch(bool paintCursors)
+    {
+        Configure(paintCursors);
+        if (!_sizeKnown && !TryDescribe(paintCursors, out _))
+        {
+            return false;
+        }
+
+        return _shm.Buffer is { } shm && CaptureFrame(shm, copyInto: null);
+    }
+
+    public PixmanImage? ScratchImage()
+    {
+        if (_shm.Data == 0)
+        {
+            return null;
+        }
+
+        if (_scratchImage is not null && _scratchData == _shm.Data && _scratchWidth == _shm.Width && _scratchHeight == _shm.Height)
+        {
+            return _scratchImage;
+        }
+
+        _scratchImage?.Dispose();
+        _scratchImage = PixmanImage.CreateBits(PixmanFormat.X8R8G8B8, _shm.Width, _shm.Height, _shm.Data, _shm.Stride);
+        _scratchData = _shm.Data;
+        _scratchWidth = _shm.Width;
+        _scratchHeight = _shm.Height;
+        return _scratchImage;
+    }
+
     public void Dispose()
     {
         _disposed = true;
+        _scratchImage?.Dispose();
+        _scratchImage = null;
         DestroyFrame();
         foreach (var wrap in _dmabufWraps.Values)
         {

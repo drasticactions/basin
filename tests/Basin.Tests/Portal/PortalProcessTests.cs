@@ -1,6 +1,8 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using Basin.Portal;
 using Tmds.DBus.Protocol;
+using Wayland;
 using Xunit;
 
 namespace Basin.Tests;
@@ -103,11 +105,164 @@ public sealed class PortalProcessTests
         }
     }
 
+    [Fact]
+    public async Task The_out_of_process_pick_reads_the_clicked_pixel_of_a_client()
+    {
+        using var session = await Session.StartAsync();
+        var (response, results) = await session.WhileDriving(
+            session.Portal.CallImplAsync("org.freedesktop.impl.portal.Screenshot", "PickColor", "org.example.App", "", []),
+            "move 400 300", "button 272 1", "button 272 0");
+        Assert.Equal(0u, response);
+        var color = results["color"];
+        Assert.Equal(0x33 / 255.0, color.GetItem(0).GetDouble(), 0.005);
+        Assert.Equal(0x66 / 255.0, color.GetItem(1).GetDouble(), 0.005);
+        Assert.Equal(0x99 / 255.0, color.GetItem(2).GetDouble(), 0.005);
+    }
+
+    [Fact]
+    public async Task The_out_of_process_area_screenshot_has_the_size_of_the_area()
+    {
+        using var session = await Session.StartAsync();
+        var (response, results) = await session.WhileDriving(
+            session.Portal.CallScreenshotAsync("org.example.App", "", new Dictionary<string, VariantValue> { ["interactive"] = VariantValue.Bool(true) }),
+            "move 100 100", "button 272 1", "move 200 150", "move 300 200", "button 272 0");
+        Assert.Equal(0u, response);
+        var path = new Uri(results["uri"].GetString()).LocalPath;
+        var header = new byte[24];
+        using (var file = File.OpenRead(path))
+        {
+            file.ReadExactly(header);
+        }
+
+        Assert.Equal((200, 100), (BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(16)), BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(20))));
+    }
+
+    private sealed class Session : IDisposable
+    {
+        private readonly PrivateBus _bus;
+        private readonly Process _compositor;
+        private readonly Process _portalProcess;
+        private readonly string _cache;
+        private readonly ShmTestClient _client;
+
+        private Session(PrivateBus bus, Process compositor, Process portal, string cache, ShmTestClient client, PortalTestClient portalClient)
+        {
+            _bus = bus;
+            _compositor = compositor;
+            _portalProcess = portal;
+            _cache = cache;
+            _client = client;
+            Portal = portalClient;
+        }
+
+        public PortalTestClient Portal { get; }
+
+        public static async Task<Session> StartAsync()
+        {
+            Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+            var compositor = Locate("tinycomp");
+            Assert.SkipWhen(compositor is null, "tinycomp has not been built beside the tests");
+            var portal = Locate("xdg-desktop-portal-basin");
+            Assert.SkipWhen(portal is null, "xdg-desktop-portal-basin has not been built beside the tests");
+
+            var bus = PrivateBus.Start();
+            var compositorProcess = StartCompositor(compositor!, bus.Address, out var socket);
+            Assert.SkipWhen(socket is null, "the compositor printed no socket");
+            var client = Fullscreen(socket!, 0xFF336699);
+            var cache = Directory.CreateTempSubdirectory("basin-portal-cache").FullName;
+            var portalProcess = StartPortal(portal!, bus.Address, socket!, "skia", cache);
+            var portalClient = await PortalTestClient.ConnectAsync(bus.Address, PortalBus.DefaultBusName, asFrontend: false);
+            var owned = false;
+            for (var i = 0; i < 100 && !owned; i++)
+            {
+                owned = await OwnedAsync(portalClient.Connection);
+                if (!owned)
+                {
+                    await Task.Delay(100, TestContext.Current.CancellationToken);
+                }
+            }
+
+            Assert.True(owned, "the portal never owned its name");
+            return new Session(bus, compositorProcess, portalProcess, cache, client, portalClient);
+        }
+
+        public async Task<T> WhileDriving<T>(Task<T> call, params string[] commands)
+        {
+            await Task.Delay(1500, TestContext.Current.CancellationToken);
+            foreach (var command in commands)
+            {
+                _compositor.StandardInput.WriteLine(command);
+                _compositor.StandardInput.Flush();
+                await Task.Delay(200, TestContext.Current.CancellationToken);
+            }
+
+            return await call.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        }
+
+        public void Dispose()
+        {
+            Portal.Dispose();
+            foreach (var process in new[] { _portalProcess, _compositor })
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+
+                process.WaitForExit();
+                process.Dispose();
+            }
+
+            _client.Dispose();
+            _bus.Dispose();
+            Directory.Delete(_cache, recursive: true);
+        }
+
+        private static ShmTestClient Fullscreen(string socket, uint color)
+        {
+            var client = new ShmTestClient(WlDisplay.Connect(socket));
+            client.BindGlobals(() => client.Display.Roundtrip());
+            var surface = client.Compositor.CreateSurface();
+            var xdgSurface = client.WmBase!.GetXdgSurface(surface);
+            var toplevel = xdgSurface.GetToplevel();
+            toplevel.SetAppId("basin-test");
+            toplevel.SetFullscreen(null);
+            var (width, height, serial) = (0, 0, 0u);
+            toplevel.Configure += (_, e) => (width, height) = (e.Width, e.Height);
+            xdgSurface.Configure += (_, e) => serial = e.Serial;
+            surface.Commit();
+            for (var i = 0; i < 50 && (serial == 0 || width == 0); i++)
+            {
+                client.Display.Roundtrip();
+            }
+
+            Assert.True(width > 0 && height > 0, "the client was never configured fullscreen");
+            xdgSurface.AckConfigure(serial);
+            var buffer = client.CreateBuffer(width, height, (data, stride) =>
+            {
+                Fill.Solid(width, height, 0xFF000000)(data, stride);
+                unsafe
+                {
+                    for (var y = height / 4; y < height * 3 / 4; y++)
+                    {
+                        new Span<uint>((uint*)(data + (y * stride)) + (width / 4), width / 2).Fill(color);
+                    }
+                }
+            });
+            surface.Attach(buffer.Proxy, 0, 0);
+            surface.Damage(0, 0, width, height);
+            surface.Commit();
+            client.Display.Roundtrip();
+            return client;
+        }
+    }
+
     private static Process StartCompositor(string path, string busAddress, out string? socket)
     {
         var info = new ProcessStartInfo(path)
         {
             UseShellExecute = false,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
@@ -136,10 +291,12 @@ public sealed class PortalProcessTests
             }
         }
 
+        _ = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null);
+        _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
         return process;
     }
 
-    private static Process StartPortal(string path, string busAddress, string socket, string prompts)
+    private static Process StartPortal(string path, string busAddress, string socket, string prompts, string? cache = null)
     {
         var info = new ProcessStartInfo(path)
         {
@@ -153,6 +310,11 @@ public sealed class PortalProcessTests
         info.ArgumentList.Add(prompts);
         info.Environment["DBUS_SESSION_BUS_ADDRESS"] = busAddress;
         info.Environment["XDG_CURRENT_DESKTOP"] = "basin";
+        if (cache is not null)
+        {
+            info.Environment["XDG_CACHE_HOME"] = cache;
+        }
+
         var process = Process.Start(info)!;
         process.OutputDataReceived += (_, _) => { };
         process.ErrorDataReceived += (_, _) => { };

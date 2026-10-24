@@ -49,27 +49,33 @@ public sealed class AreaPromptView : SkiaPromptView
     public Box Selection { get; private set; }
 
     /// <summary>
-    /// Paints the veil, the hint text and the current selection rectangle.
-    /// This method hides <see cref="SkiaPromptView.Paint"/>, so a call through a <see cref="SkiaPromptView"/> reference paints the base panel instead.
+    /// Paints the veil, the hint text and the current selection. It paints no panel and no buttons.
+    /// The selected area is not veiled.
     /// </summary>
     /// <param name="canvas">The canvas to draw on.</param>
     /// <param name="width">The surface width in logical pixels.</param>
     /// <param name="height">The surface height in logical pixels.</param>
-    public new void Paint(SKCanvas canvas, int width, int height)
+    public override void Paint(SKCanvas canvas, int width, int height)
     {
-        canvas.Clear(Theme.Veil);
+        canvas.Clear(SKColors.Transparent);
+        var selecting = _dragging || (!Selection.IsEmpty && !_pickPoint);
+        var box = _dragging ? Normalize() : Selection;
+        var rect = new SKRect(box.X, box.Y, box.X + box.Width, box.Y + box.Height);
+        canvas.Save();
+        if (selecting)
+        {
+            canvas.ClipRect(rect, SKClipOperation.Difference);
+        }
+
+        canvas.DrawColor(Theme.Veil);
+        canvas.Restore();
         var hint = _pickPoint ? "Click a pixel, Escape cancels" : "Drag to select, Escape cancels, Enter takes everything";
         var hintWidth = Theme.MeasureText(hint, Theme.BodyFont);
         Theme.Fill.Color = Theme.Panel;
         canvas.DrawRoundRect(new SKRect(width / 2f - hintWidth / 2 - 14, 16, width / 2f + hintWidth / 2 + 14, 48), 6, 6, Theme.Fill);
         Theme.DrawText(canvas, hint, Theme.BodyFont, width / 2f - hintWidth / 2, 37, Theme.Foreground);
-        if (_dragging || (!Selection.IsEmpty && !_pickPoint))
+        if (selecting)
         {
-            var box = _dragging ? Normalize() : Selection;
-            var rect = new SKRect(box.X, box.Y, box.X + box.Width, box.Y + box.Height);
-            canvas.Save();
-            canvas.ClipRect(rect, SKClipOperation.Difference);
-            canvas.Restore();
             Theme.Fill.Color = Theme.Rubber;
             canvas.DrawRect(rect, Theme.Fill);
             Theme.Stroke.Color = Theme.ButtonPrimaryHot;

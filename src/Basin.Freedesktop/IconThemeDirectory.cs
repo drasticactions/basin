@@ -45,6 +45,7 @@ public sealed record IconThemeDirectory(
 
     /// <summary>
     /// Computes the distance function of the Icon Theme specification. Lookup uses it to pick the closest directory when none matches.
+    /// A <c>Threshold</c> directory measures from its <c>Size</c>. It ignores <c>MinSize</c> and <c>MaxSize</c>.
     /// </summary>
     /// <param name="size">The requested size, in logical pixels.</param>
     /// <param name="scale">The requested integer scale.</param>
@@ -66,10 +67,10 @@ public sealed record IconThemeDirectory(
             default:
                 if (wanted < (Size - Threshold) * Scale)
                 {
-                    return MinSize * Scale - wanted;
+                    return Size * Scale - wanted;
                 }
 
-                return wanted > (Size + Threshold) * Scale ? wanted - MaxSize * Scale : 0;
+                return wanted > (Size + Threshold) * Scale ? wanted - Size * Scale : 0;
         }
     }
 }

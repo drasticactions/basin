@@ -227,7 +227,7 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
             var answer = await _prompts.SelectSources(prompt, request.Token).ConfigureAwait(true);
             if (!answer.IsAccepted || answer.Value.Sources.Count == 0 || session.IsClosed)
             {
-                return (PortalScreenshotModule.ResponseFor(answer.Response, request), Results.Empty);
+                return (PortalRefusal.RefusalFor(answer.Response), Results.Empty);
             }
 
             chosen = Translate(answer.Value.Sources, state.Multiple);

@@ -58,7 +58,7 @@ public sealed class DesktopEntry
     public string? WorkingDirectory { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether the program must run in a terminal. <see cref="LaunchArgv(IReadOnlyList{string})"/> reads it.
+    /// Gets a value indicating whether the program and its actions must run in a terminal. The <c>LaunchArgv</c> overloads read it.
     /// </summary>
     public bool Terminal { get; init; }
 
@@ -177,9 +177,23 @@ public sealed class DesktopEntry
     /// </summary>
     /// <param name="terminal">The terminal command that takes the program as its remaining arguments, for example <c>xterm -e</c>. It is used only for a <see cref="Terminal"/> entry.</param>
     /// <returns>A new array that the caller owns. It is <see langword="null"/> when <see cref="Argv"/> is empty, or for a <see cref="Terminal"/> entry when <paramref name="terminal"/> is null or empty.</returns>
-    public string[]? LaunchArgv(IReadOnlyList<string>? terminal)
+    public string[]? LaunchArgv(IReadOnlyList<string>? terminal) => Compose(ArgvArray(), terminal);
+
+    /// <summary>
+    /// Makes the argument vector that starts one of the entry's actions. The action runs in a terminal when the entry has <see cref="Terminal"/> set.
+    /// </summary>
+    /// <param name="action">The action to start, normally one of <see cref="Actions"/>.</param>
+    /// <param name="terminal">The terminal command that takes the program as its remaining arguments, for example <c>xterm -e</c>. It is used only for a <see cref="Terminal"/> entry.</param>
+    /// <returns>A new array that the caller owns. It is <see langword="null"/> when the action's <see cref="DesktopAction.Argv"/> is empty, or for a <see cref="Terminal"/> entry when <paramref name="terminal"/> is null or empty.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="action"/> is <see langword="null"/>.</exception>
+    public string[]? LaunchArgv(DesktopAction action, IReadOnlyList<string>? terminal)
     {
-        var argv = ArgvArray();
+        ArgumentNullException.ThrowIfNull(action);
+        return Compose(action.ArgvArray(), terminal);
+    }
+
+    private string[]? Compose(string[] argv, IReadOnlyList<string>? terminal)
+    {
         if (argv.Length == 0)
         {
             return null;

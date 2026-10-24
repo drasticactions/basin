@@ -16,4 +16,9 @@ public interface IKeymapLookup
     /// <param name="keycode">The evdev keycode.</param>
     /// <returns>The keysym, or 0 when the key produces none or no keymap is active.</returns>
     uint KeysymForKeycode(uint keycode);
+
+    /// <summary>Gets the keysym that a key produces at level 0 of the effective layout, as if no modifier were held. A chord trigger matches this keysym.</summary>
+    /// <param name="keycode">The evdev keycode.</param>
+    /// <returns>The keysym, or 0 when the key produces none or no keymap is active. The default implementation returns <see cref="KeysymForKeycode"/>.</returns>
+    uint RawKeysymForKeycode(uint keycode) => KeysymForKeycode(keycode);
 }

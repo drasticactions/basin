@@ -198,7 +198,7 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
                 var answer = await _prompts.Confirm(Named(new ConfirmPrompt(appId, parentWindow, modal, "Allow input capture?", body)), request.Token).ConfigureAwait(true);
                 if (!answer.IsAccepted || !answer.Value || session.IsClosed)
                 {
-                    return (PortalScreenshotModule.ResponseFor(answer.Response, request), Results.Empty);
+                    return (PortalRefusal.RefusalFor(answer), Results.Empty);
                 }
 
                 granted = requested;

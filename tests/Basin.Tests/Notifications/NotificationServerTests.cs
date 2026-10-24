@@ -121,6 +121,50 @@ public sealed class NotificationServerTests
     }
 
     [Fact]
+    public void A_critical_notification_never_expires()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost();
+        using var server = Start(host, daemon, new NotificationServerOptions { DefaultExpireMs = 40 });
+        var closed = new List<NotificationCloseReason>();
+        server.Closed += (_, reason) => closed.Add(reason);
+
+        var defaulted = server.Post(new Notification { Summary = "Battery low", Urgency = NotificationUrgency.Critical });
+        var timed = server.Post(new Notification { Summary = "Battery lower", Urgency = NotificationUrgency.Critical, ExpireTimeout = 40 });
+        var deadline = Environment.TickCount64 + 200;
+        while (Environment.TickCount64 < deadline)
+        {
+            host.Loop.Dispatch(10);
+        }
+
+        Assert.Empty(closed);
+        Assert.Null(server.Find(defaulted)!.ExpiresAfter);
+        Assert.Null(server.Find(timed)!.ExpiresAfter);
+
+        server.Post(new Notification { Summary = "Battery fine", ExpireTimeout = 40 }, timed);
+        Assert.Equal(TimeSpan.FromMilliseconds(40), server.Find(timed)!.ExpiresAfter);
+        PortalBusTests.PumpUntil(host, () => closed.Count == 1);
+        Assert.Equal(NotificationCloseReason.Expired, closed[0]);
+        Assert.NotNull(server.Find(defaulted));
+    }
+
+    [Fact]
+    public void Critical_expires_turns_the_critical_rule_off()
+    {
+        using var daemon = PrivateBus.Start();
+        using var host = new CompositorTestHost();
+        using var server = Start(host, daemon, new NotificationServerOptions { DefaultExpireMs = 40, CriticalExpires = true });
+        var closed = new List<NotificationCloseReason>();
+        server.Closed += (_, reason) => closed.Add(reason);
+
+        server.Post(new Notification { Summary = "Battery low", Urgency = NotificationUrgency.Critical });
+        server.Post(new Notification { Summary = "Battery lower", Urgency = NotificationUrgency.Critical, ExpireTimeout = 40 });
+        PortalBusTests.PumpUntil(host, () => closed.Count == 2);
+        Assert.All(closed, reason => Assert.Equal(NotificationCloseReason.Expired, reason));
+        Assert.Empty(server.Active);
+    }
+
+    [Fact]
     public void Expiry_closes_with_reason_1_after_the_timeout_and_the_server_default()
     {
         using var daemon = PrivateBus.Start();

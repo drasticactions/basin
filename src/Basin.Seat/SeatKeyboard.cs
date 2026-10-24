@@ -567,6 +567,9 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
     /// <inheritdoc/>
     public uint KeysymForKeycode(uint keycode) => KeysymFor(keycode).Value;
 
+    /// <inheritdoc/>
+    public uint RawKeysymForKeycode(uint keycode) => RawKeysymFor(keycode).Value;
+
     /// <summary>
     /// Gets the keysym of a key at level 1 in the effective layout, as if no modifier were held.
     /// </summary>

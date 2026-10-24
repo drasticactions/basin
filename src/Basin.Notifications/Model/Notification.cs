@@ -102,6 +102,7 @@ public sealed record Notification
 
     /// <summary>
     /// Gets the timeout that the server applies, counted from the last add or replace. It is <see langword="null"/> when the notification never expires.
+    /// It is <see langword="null"/> for a critical notification unless <see cref="NotificationServerOptions.CriticalExpires"/> is set.
     /// </summary>
     public TimeSpan? ExpiresAfter { get; init; }
 

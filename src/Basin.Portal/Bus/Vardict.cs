@@ -107,28 +107,6 @@ public static class Vardict
     }
 
     /// <summary>
-    /// Reads an <c>(ii)</c> option.
-    /// </summary>
-    /// <param name="options">The options from the caller.</param>
-    /// <param name="key">The option name.</param>
-    /// <returns>The two integers, or <see langword="null"/> when the key is absent.</returns>
-    /// <exception cref="DBusErrorReplyException">The value is not a struct of two items.</exception>
-    public static (int X, int Y)? IntPair(Dictionary<string, VariantValue> options, string key)
-    {
-        if (!options.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-
-        if (value.Type != VariantValueType.Struct || value.Count != 2)
-        {
-            throw PortalError.Invalid($"option '{key}' must be an (ii), got {value.Type}");
-        }
-
-        return (value.GetItem(0).GetInt32(), value.GetItem(1).GetInt32());
-    }
-
-    /// <summary>
     /// Reads the <c>(suv)</c> restore data that the frontend gives back from an earlier session. The inner variant is unwrapped.
     /// </summary>
     /// <param name="options">The options from the caller.</param>

@@ -200,7 +200,7 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         }
 
         var completion = new TaskCompletionSource<PromptResponse>();
-        var shown = new Shown(view);
+        var shown = new Shown(view, completion);
         _shown.Add(shown);
         view.Completed += response => Finish(shown, completion, response);
         ISkiaPromptSurface? surface;
@@ -247,7 +247,7 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
     }
 
     /// <summary>
-    /// Hides every open prompt and disposes the theme. The pending prompt tasks do not complete.
+    /// Hides every open prompt, completes each pending prompt with a cancelled response, and disposes the theme.
     /// </summary>
     public void Dispose()
     {
@@ -259,28 +259,18 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         _disposed = true;
         foreach (var shown in _shown.ToArray())
         {
-            shown.View.PointerLeave();
-            _shown.Remove(shown);
-            shown.Registration.Dispose();
-            try
-            {
-                shown.Surface?.Dispose();
-            }
-            catch (Exception e)
-            {
-                Log.Warn($"the prompt host failed to hide a portal prompt: {e.Message}");
-            }
-
-            shown.View.Dispose();
+            Finish(shown, shown.Completion, PromptResponse.Cancelled);
         }
 
         _theme?.Dispose();
         _theme = null;
     }
 
-    private sealed class Shown(SkiaPromptView view)
+    private sealed class Shown(SkiaPromptView view, TaskCompletionSource<PromptResponse> completion)
     {
         public SkiaPromptView View { get; } = view;
+
+        public TaskCompletionSource<PromptResponse> Completion { get; } = completion;
 
         public ISkiaPromptSurface? Surface { get; set; }
 

@@ -38,7 +38,7 @@ public interface IPortalPrompts
     ValueTask<PromptOutcome<ShortcutBinding[]>> BindShortcuts(in ShortcutPrompt prompt, CancellationToken cancellation);
 
     /// <summary>
-    /// Asks the user a yes-or-no question.
+    /// Asks the user a yes-or-no question. An accepted false answer is a refusal.
     /// </summary>
     /// <param name="prompt">The title and the text of the question.</param>
     /// <param name="cancellation">A token that the portal frontend cancels when it closes the request.</param>

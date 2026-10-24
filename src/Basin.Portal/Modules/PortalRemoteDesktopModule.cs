@@ -202,7 +202,7 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
                 var answer = await _prompts.SelectDevices(prompt, request.Token).ConfigureAwait(true);
                 if (!answer.IsAccepted || session.IsClosed)
                 {
-                    return (PortalScreenshotModule.ResponseFor(answer.Response, request), Results.Empty);
+                    return (PortalRefusal.RefusalFor(answer.Response), Results.Empty);
                 }
 
                 granted = answer.Value.Devices & session.Requested;

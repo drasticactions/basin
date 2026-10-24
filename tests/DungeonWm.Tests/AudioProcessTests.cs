@@ -125,6 +125,13 @@ public sealed class AudioProcessTests(AudioDaemonFixture daemon) : IClassFixture
         Assert.NotNull(await session.WaitForAsync(line => line == "AUDIO output=headphones graph=hrtf"));
         Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("AUDIO mode=auto voices=1 ", StringComparison.Ordinal) && line.EndsWith(" graph=hrtf output=headphones", StringComparison.Ordinal), poke: "audio", fresh: true));
 
+        Run("pw-cli", "create-node", "adapter", "{ factory.name = support.null-audio-sink node.name = basin-test-headphones-2 media.class = Audio/Sink object.linger = true audio.position = [ FL FR ] device.form-factor = headphones }");
+        var moved = session.Lines.Count;
+        Run("pw-metadata", "0", "default.audio.sink", """{"name":"basin-test-headphones-2"}""", "Spa:String:JSON");
+        await Task.Delay(1000, TestContext.Current.CancellationToken);
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("AUDIO mode=auto voices=1 ", StringComparison.Ordinal) && line.EndsWith(" graph=hrtf output=headphones", StringComparison.Ordinal), poke: "audio", fresh: true));
+        Assert.DoesNotContain(session.Lines.Skip(moved), line => line.StartsWith("AUDIO output=", StringComparison.Ordinal));
+
         Run("pw-metadata", "0", "default.audio.sink", $$"""{"name":"{{AudioDaemonFixture.SinkName}}"}""", "Spa:String:JSON");
         Assert.NotNull(await session.WaitForAsync(line => line == "AUDIO output=speakers graph=pan"));
         await session.Quit();

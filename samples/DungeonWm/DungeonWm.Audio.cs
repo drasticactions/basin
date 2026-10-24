@@ -81,6 +81,11 @@ internal sealed partial class DungeonWm
 
     private void OnOutputChanged(AudioOutputWatch watch)
     {
+        if (watch.Kind == AudioOutputKind.Unknown && watch.SinkName is not null)
+        {
+            return;
+        }
+
         var chosen = ChooseGraph();
         if (chosen == _graphMode)
         {

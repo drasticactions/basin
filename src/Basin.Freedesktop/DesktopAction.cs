@@ -2,16 +2,52 @@ namespace Basin.Freedesktop;
 
 /// <summary>
 /// One <c>[Desktop Action X]</c> group of a desktop entry that the entry's <c>Actions=</c> key names.
+/// <see cref="DesktopEntry.LaunchArgv(DesktopAction, IReadOnlyList{string})"/> starts it.
 /// </summary>
-/// <param name="Key">The action identifier, the <c>X</c> in the group header.</param>
-/// <param name="Name">The localized label of the action.</param>
-/// <param name="Icon">The icon name or absolute icon path, or <see langword="null"/> when the group has none.</param>
-/// <param name="Exec">The raw <c>Exec</c> value, or <see langword="null"/> when the group has none.</param>
-public sealed record DesktopAction(string Key, string Name, string? Icon, string? Exec)
+public sealed class DesktopAction
 {
+    private string[]? _argv;
+
     /// <summary>
-    /// Gets the argument vector of <see cref="Exec"/>, split by <see cref="ExecLine.Split(string)"/> with field codes removed.
-    /// Each read splits again and returns a new array. It is empty when <see cref="Exec"/> is <see langword="null"/>.
+    /// Initializes a new instance of the <see cref="DesktopAction"/> class.
     /// </summary>
-    public string[] Argv => ExecLine.Split(Exec ?? "");
+    /// <param name="key">The action identifier, the <c>X</c> in the group header.</param>
+    /// <param name="name">The localized label of the action.</param>
+    /// <param name="icon">The icon name or absolute icon path, or <see langword="null"/> when the group has none.</param>
+    /// <param name="exec">The raw <c>Exec</c> value, or <see langword="null"/> when the group has none.</param>
+    public DesktopAction(string key, string name, string? icon, string? exec)
+    {
+        Key = key;
+        Name = name;
+        Icon = icon;
+        Exec = exec;
+    }
+
+    /// <summary>
+    /// Gets the action identifier, the <c>X</c> in the group header.
+    /// </summary>
+    public string Key { get; }
+
+    /// <summary>
+    /// Gets the localized label of the action.
+    /// </summary>
+    public string Name { get; }
+
+    /// <summary>
+    /// Gets the icon name or absolute icon path, or <see langword="null"/> when the group has none.
+    /// </summary>
+    public string? Icon { get; }
+
+    /// <summary>
+    /// Gets the raw <c>Exec</c> value, or <see langword="null"/> when the group has none.
+    /// </summary>
+    public string? Exec { get; }
+
+    /// <summary>
+    /// Gets <see cref="Exec"/> split into arguments by <see cref="ExecLine.Split(string)"/>, with field codes removed. It is computed once and held.
+    /// The list is empty when <see cref="Exec"/> is <see langword="null"/>.
+    /// </summary>
+    public IReadOnlyList<string> Argv => ArgvArray();
+
+    internal string[] ArgvArray() => _argv ??= ExecLine.Split(Exec ?? "");
 }

@@ -3,6 +3,7 @@ using AvaloniaPoint = Avalonia.Point;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Media;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
@@ -67,6 +68,7 @@ public sealed partial class AreaPromptView : UserControl
 
         var box = Normalize(_start, end, model.Width, model.Height);
         Rubber.IsVisible = false;
+        Shade.Clip = null;
         if (box.Width >= 2 && box.Height >= 2)
         {
             model.Choose(box);
@@ -85,6 +87,17 @@ public sealed partial class AreaPromptView : UserControl
         rubber.Width = Math.Abs(a.X - b.X);
         rubber.Height = Math.Abs(a.Y - b.Y);
         rubber.IsVisible = DataContext is AreaPromptModel { PickPoint: false };
+        Shade.Clip = rubber.IsVisible
+            ? new GeometryGroup
+            {
+                FillRule = FillRule.EvenOdd,
+                Children =
+                {
+                    new RectangleGeometry(new Rect(0, 0, Math.Max(Bounds.Width, 1), Math.Max(Bounds.Height, 1))),
+                    new RectangleGeometry(new Rect(left, top, rubber.Width, rubber.Height)),
+                },
+            }
+            : null;
     }
 
     internal static Box Normalize(AvaloniaPoint a, AvaloniaPoint b, int width, int height)

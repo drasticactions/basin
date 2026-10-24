@@ -72,9 +72,12 @@ public sealed class DesktopEntryReaderTests : IDisposable
         Assert.Equal(["XFCE"], entry.NotShowIn);
         Assert.Equal(["org.freedesktop.Full"], entry.Implements);
         Assert.Equal(2, entry.Actions.Count);
-        Assert.Equal(new DesktopAction("new-window", "Neues Fenster", "window-new", "full --new-window"), entry.Actions[0]);
-        Assert.Equal(new DesktopAction("private", "Private", null, "full --private %U"), entry.Actions[1]);
+        Assert.Equal(("new-window", "Neues Fenster", "window-new", "full --new-window"), (entry.Actions[0].Key, entry.Actions[0].Name, entry.Actions[0].Icon, entry.Actions[0].Exec));
+        Assert.Equal(("private", "Private", (string?)null, "full --private %U"), (entry.Actions[1].Key, entry.Actions[1].Name, entry.Actions[1].Icon, entry.Actions[1].Exec));
         Assert.Equal(["full", "--private"], entry.Actions[1].Argv);
+        Assert.Same(entry.Actions[1].Argv, entry.Actions[1].Argv);
+        Assert.Equal(["xterm", "-e", "full", "--private"], entry.LaunchArgv(entry.Actions[1], ["xterm", "-e"])!);
+        Assert.Null(entry.LaunchArgv(entry.Actions[1], null));
     }
 
     [Fact]
@@ -87,6 +90,18 @@ public sealed class DesktopEntryReaderTests : IDisposable
         Assert.Null(entry.GenericName);
         Assert.Empty(entry.Actions);
         Assert.False(entry.Terminal);
+    }
+
+    [Fact]
+    public void An_action_of_a_plain_entry_launches_without_a_terminal()
+    {
+        var entry = Parse("plain.desktop", "[Desktop Entry]\nType=Application\nName=Plain\nExec=plain\nActions=help;empty;\n[Desktop Action help]\nName=Help\nExec=plain --help %u\n[Desktop Action empty]\nName=Empty\n", DesktopLocale.None);
+        Assert.Equal(["plain", "--help"], entry.LaunchArgv(entry.Actions[0], ["xterm", "-e"])!);
+        var copy = entry.LaunchArgv(entry.Actions[0], null)!;
+        copy[0] = "changed";
+        Assert.Equal(["plain", "--help"], entry.Actions[0].Argv);
+        Assert.Empty(entry.Actions[1].Argv);
+        Assert.Null(entry.LaunchArgv(entry.Actions[1], null));
     }
 
     [Fact]

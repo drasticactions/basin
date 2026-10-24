@@ -112,7 +112,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
                         request.Token).ConfigureAwait(true);
                     if (!confirm.IsAccepted || !confirm.Value)
                     {
-                        return (ResponseFor(confirm.Response, request), Results.Empty);
+                        return (PortalRefusal.RefusalFor(confirm), Results.Empty);
                     }
                 }
 
@@ -130,7 +130,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
                 var picked = await _prompts.SelectArea(Named(new AreaPrompt(appId, parentWindow, modal, null, false)), request.Token).ConfigureAwait(true);
                 if (!picked.IsAccepted)
                 {
-                    return (ResponseFor(picked.Response, request), Results.Empty);
+                    return (PortalRefusal.RefusalFor(picked.Response), Results.Empty);
                 }
 
                 area = picked.Value.IsEmpty ? null : picked.Value;
@@ -141,7 +141,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
                 var chosen = await _prompts.SelectSources(prompt, request.Token).ConfigureAwait(true);
                 if (!chosen.IsAccepted || chosen.Value.Sources.Count == 0)
                 {
-                    return (ResponseFor(chosen.Response, request), Results.Empty);
+                    return (PortalRefusal.RefusalFor(chosen.Response), Results.Empty);
                 }
 
                 toplevelId = chosen.Value.Sources[0].ToplevelId;
@@ -153,7 +153,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
                     request.Token).ConfigureAwait(true);
                 if (!confirm.IsAccepted || !confirm.Value)
                 {
-                    return (ResponseFor(confirm.Response, request), Results.Empty);
+                    return (PortalRefusal.RefusalFor(confirm), Results.Empty);
                 }
 
                 if (target == TargetActiveWindow)
@@ -220,7 +220,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
     /// <param name="appId">The application that asks.</param>
     /// <param name="parentWindow">The parent window identifier of the application.</param>
     /// <param name="options">The <c>modal</c> option.</param>
-    /// <returns>The <c>color</c> result as linear red, green and blue from 0 to 1, or a cancel or other response.</returns>
+    /// <returns>The <c>color</c> result as sRGB red, green and blue from 0 to 1, or a cancel or other response.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> PickColorAsync(
         ObjectPath handle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {
@@ -231,7 +231,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
             var picked = await _prompts.SelectArea(Named(new AreaPrompt(appId, parentWindow, modal, null, true)), request.Token).ConfigureAwait(true);
             if (!picked.IsAccepted || request.IsClosed)
             {
-                return (ResponseFor(picked.Response, request), Results.Empty);
+                return (PortalRefusal.RefusalFor(picked.Response), Results.Empty);
             }
 
             var point = picked.Value;
@@ -256,9 +256,9 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
 
                 pixel.EndDataAccess();
                 var color = VariantValue.Struct(
-                    VariantValue.Double(SrgbToLinear((byte)(value >> 16))),
-                    VariantValue.Double(SrgbToLinear((byte)(value >> 8))),
-                    VariantValue.Double(SrgbToLinear((byte)value)));
+                    VariantValue.Double(((byte)(value >> 16)) / 255.0),
+                    VariantValue.Double(((byte)(value >> 8)) / 255.0),
+                    VariantValue.Double(((byte)value) / 255.0));
                 return (PortalResponse.Success, Results.With("color", color));
             }
             finally
@@ -271,20 +271,6 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
             ReleaseRequest(request);
         }
     }
-
-    internal static double SrgbToLinear(byte channel)
-    {
-        var c = channel / 255.0;
-        return c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
-    }
-
-    internal static uint ResponseFor(PromptResponse response, PortalRequest request) => response switch
-    {
-        PromptResponse.Denied => PortalResponse.Cancelled,
-        _ when request.IsClosed => PortalResponse.Other,
-        PromptResponse.Cancelled => PortalResponse.Other,
-        _ => PortalResponse.Success,
-    };
 
     private MemoryBuffer? Capture(in CaptureSource source)
     {

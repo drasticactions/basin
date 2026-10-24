@@ -37,10 +37,29 @@ public sealed class FreedesktopTrash
     private string SizesFile => Path.Combine(Root, "directorysizes");
 
     /// <summary>
-    /// Gets a value indicating whether the info directory holds no <c>.trashinfo</c> file. Each read asks the file system.
+    /// Gets a value indicating whether <see cref="Items"/> would be empty. Each read asks the file system and stops at the first item.
     /// </summary>
-    public bool IsEmpty =>
-        !Directory.Exists(InfoDirectory) || !Directory.EnumerateFiles(InfoDirectory, "*" + InfoExtension).Any();
+    public bool IsEmpty
+    {
+        get
+        {
+            if (!Directory.Exists(InfoDirectory))
+            {
+                return true;
+            }
+
+            foreach (var info in Directory.EnumerateFiles(InfoDirectory, "*" + InfoExtension))
+            {
+                var files = Path.Combine(FilesDirectory, Path.GetFileName(info)[..^InfoExtension.Length]);
+                if ((File.Exists(files) || Directory.Exists(files)) && ReadInfo(info) is not null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
 
     /// <summary>
     /// Moves a file or directory into the trash. The info file is created exclusively, so two processes cannot take the same name.
@@ -180,14 +199,32 @@ public sealed class FreedesktopTrash
     }
 
     /// <summary>
-    /// Deletes every item that <see cref="Items"/> lists, with its info file, and deletes the <c>directorysizes</c> file.
+    /// Deletes everything in <c>files</c> and every <c>.trashinfo</c> file in <c>info</c>, including entries that <see cref="Items"/> skips.
+    /// It also deletes the <c>directorysizes</c> file.
     /// </summary>
     public void Empty()
     {
-        foreach (var item in Items())
+        if (Directory.Exists(FilesDirectory))
         {
-            DeletePath(item.FilesPath);
-            File.Delete(item.InfoPath);
+            foreach (var entry in new DirectoryInfo(FilesDirectory).EnumerateFileSystemInfos())
+            {
+                if (entry is DirectoryInfo directory && entry.LinkTarget is null)
+                {
+                    directory.Delete(recursive: true);
+                }
+                else
+                {
+                    entry.Delete();
+                }
+            }
+        }
+
+        if (Directory.Exists(InfoDirectory))
+        {
+            foreach (var info in Directory.EnumerateFiles(InfoDirectory, "*" + InfoExtension))
+            {
+                File.Delete(info);
+            }
         }
 
         if (File.Exists(SizesFile))
