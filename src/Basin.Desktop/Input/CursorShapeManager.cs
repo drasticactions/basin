@@ -6,7 +6,7 @@ using Wayland.Server;
 namespace Basin.Desktop;
 
 /// <summary>
-/// Serves the <c>wp_cursor_shape_manager_v1</c> global. It reports pointer shape requests as events. Shape requests on tablet tool devices are accepted and ignored.
+/// Serves the <c>wp_cursor_shape_manager_v1</c> global. It reports shape requests on pointer devices and on tablet tool devices as events. Drawing the cursor stays with the consumer.
 /// </summary>
 public sealed class CursorShapeManager : IDisposable
 {
@@ -18,18 +18,21 @@ public sealed class CursorShapeManager : IDisposable
     private readonly WlGlobal _global;
     private readonly ICursorTheme? _theme;
     private readonly Basin.Seat.Seat? _seat;
+    private readonly TabletManager? _tablets;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CursorShapeManager"/> class and creates the global.
     /// </summary>
     /// <param name="display">The display to create the global on.</param>
-    /// <param name="theme">The theme that resolves shapes into images. When it is <see langword="null"/>, <see cref="CursorRequested"/> never occurs.</param>
+    /// <param name="theme">The theme that resolves shapes into images. When it is <see langword="null"/>, <see cref="CursorRequested"/> and <see cref="ToolCursorRequested"/> never occur.</param>
     /// <param name="seat">The seat whose enter serial a request must match. When it is <see langword="null"/>, the serial is not checked.</param>
-    public CursorShapeManager(WlServerDisplay display, ICursorTheme? theme, Basin.Seat.Seat? seat = null)
+    /// <param name="tablets">The tablet manager whose tools the tablet tool devices name. When it is <see langword="null"/>, <see cref="ToolShapeRequested"/> never occurs.</param>
+    public CursorShapeManager(WlServerDisplay display, ICursorTheme? theme, Basin.Seat.Seat? seat = null, TabletManager? tablets = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         _theme = theme;
         _seat = seat;
+        _tablets = tablets;
         _global = display.CreateGlobal(WpCursorShapeManagerV1.Interface, Version, OnBind);
     }
 
@@ -49,6 +52,16 @@ public sealed class CursorShapeManager : IDisposable
     public event Action<CursorShape>? ShapeRequested;
 
     /// <summary>
+    /// Occurs when a client sets a shape on a tablet tool device with the latest <c>proximity_in</c> serial of that tool. A request with an old serial is ignored.
+    /// </summary>
+    public event Action<TabletManager.TabletTool, CursorShape>? ToolShapeRequested;
+
+    /// <summary>
+    /// Occurs after <see cref="ToolShapeRequested"/> when the theme resolves the shape into an image.
+    /// </summary>
+    public event Action<TabletManager.TabletTool, CursorImage>? ToolCursorRequested;
+
+    /// <summary>
     /// Removes the global.
     /// </summary>
     public void Dispose() => _global.Dispose();
@@ -61,9 +74,8 @@ public sealed class CursorShapeManager : IDisposable
             var device = new WpCursorShapeDeviceV1Resource(client, manager.Version, e.CursorShapeDevice);
             device.SetShape += (_, se) =>
             {
-                if ((uint)se.Shape == 0 || (uint)se.Shape > HighestShape(device.Version))
+                if (!IsKnownShape(device, se.Shape))
                 {
-                    device.PostError((uint)WpCursorShapeDeviceV1.Error.InvalidShape, "unknown cursor shape");
                     return;
                 }
 
@@ -82,8 +94,39 @@ public sealed class CursorShapeManager : IDisposable
         };
         manager.GetTabletToolV2 += (_, e) =>
         {
-            _ = new WpCursorShapeDeviceV1Resource(client, manager.Version, e.CursorShapeDevice);
+            var device = new WpCursorShapeDeviceV1Resource(client, manager.Version, e.CursorShapeDevice);
+            var toolResource = e.TabletTool;
+            device.SetShape += (_, se) =>
+            {
+                if (!IsKnownShape(device, se.Shape) ||
+                    _tablets is null ||
+                    toolResource is null ||
+                    !_tablets.TryResolveTool(toolResource, out var tool, out var serial) ||
+                    serial == 0 ||
+                    serial != se.Serial)
+                {
+                    return;
+                }
+
+                var shape = (CursorShape)se.Shape;
+                ToolShapeRequested?.Invoke(tool, shape);
+                if (_theme is { } theme && theme.TryResolve(shape, Scale, out var image))
+                {
+                    ToolCursorRequested?.Invoke(tool, image);
+                }
+            };
         };
+    }
+
+    private static bool IsKnownShape(WpCursorShapeDeviceV1Resource device, WpCursorShapeDeviceV1.Shape shape)
+    {
+        if ((uint)shape == 0 || (uint)shape > HighestShape(device.Version))
+        {
+            device.PostError((uint)WpCursorShapeDeviceV1.Error.InvalidShape, "unknown cursor shape");
+            return false;
+        }
+
+        return true;
     }
 
     private static uint HighestShape(uint version) =>

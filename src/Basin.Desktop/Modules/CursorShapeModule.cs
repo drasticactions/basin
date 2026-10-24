@@ -19,5 +19,5 @@ public sealed class CursorShapeModule : DesktopModule<CursorShapeManager>
 
     /// <inheritdoc/>
     protected override CursorShapeManager Create(BasinServices services) =>
-        new(services.Display, services.Find<ICursorTheme>(), services.Find<Seat.Seat>());
+        new(services.Display, services.Find<ICursorTheme>(), services.Find<Seat.Seat>(), services.Find<TabletManager>());
 }

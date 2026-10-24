@@ -3,7 +3,7 @@
  * receives, one line each, so a test can read what a pen did to a client.
  *
  *   TOOL pen|eraser|...   TABLET name   IN tool probe|other   MOTION x y   PRESSURE p
- *   TILT tx ty   DOWN   UP   BUTTON code pressed|released   OUT tool
+ *   TILT tx ty   WHEEL degrees clicks   DOWN   UP   BUTTON code pressed|released   OUT tool
  *
  * Pressure is printed as the 0..65535 the protocol carries. The optional
  * argument is how many seconds to run.
@@ -121,7 +121,11 @@ static void tool_tilt(void *d, struct zwp_tablet_tool_v2 *t, wl_fixed_t x, wl_fi
 }
 static void tool_rotation(void *d, struct zwp_tablet_tool_v2 *t, wl_fixed_t r) { (void)d; (void)t; (void)r; }
 static void tool_slider(void *d, struct zwp_tablet_tool_v2 *t, int32_t s) { (void)d; (void)t; (void)s; }
-static void tool_wheel(void *d, struct zwp_tablet_tool_v2 *t, wl_fixed_t w, int32_t c) { (void)d; (void)t; (void)w; (void)c; }
+static void tool_wheel(void *d, struct zwp_tablet_tool_v2 *t, wl_fixed_t w, int32_t c)
+{
+    (void)d; (void)t;
+    say("WHEEL %.1f %d", wl_fixed_to_double(w), c);
+}
 static void tool_button(void *d, struct zwp_tablet_tool_v2 *t, uint32_t serial, uint32_t button, uint32_t state)
 {
     (void)d; (void)t; (void)serial;

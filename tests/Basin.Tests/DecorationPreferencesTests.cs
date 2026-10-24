@@ -36,4 +36,29 @@ public sealed class DecorationPreferencesTests
         host.PumpToServer();
         Assert.Null(preferences.Preference(surface));
     }
+
+    [Fact]
+    public void A_repeat_of_the_same_value_raises_nothing()
+    {
+        using var host = new CompositorTestHost();
+        var preferences = new DecorationPreferences(host.Decorations);
+        var changes = new List<bool>();
+        preferences.Changed += (_, serverSide) => changes.Add(serverSide);
+        var first = MappedToplevel.Map(host, host.Client);
+
+        preferences.Record(first.ServerSurface, serverSide: true);
+        preferences.Record(first.ServerSurface, serverSide: true);
+        Assert.Equal([true], changes);
+
+        preferences.Record(first.ServerSurface, serverSide: false);
+        Assert.Equal([true, false], changes);
+
+        first.Toplevel.Destroy();
+        first.XdgSurface.Destroy();
+        first.Surface.Dispose();
+        host.PumpToServer();
+        var second = MappedToplevel.Map(host, host.Client);
+        preferences.Record(second.ServerSurface, serverSide: false);
+        Assert.Equal([true, false, false], changes);
+    }
 }

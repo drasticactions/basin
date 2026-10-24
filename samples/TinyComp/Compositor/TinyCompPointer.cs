@@ -149,6 +149,7 @@ internal sealed partial class TinyComp
     private void MoveCursor(double x, double y, uint time)
     {
         _cursorPlaced = true;
+        _toolCursor = false;
         _lastMotionMillis = time;
         var rawDx = x - _lastRawX;
         var rawDy = y - _lastRawY;
@@ -669,6 +670,11 @@ internal sealed partial class TinyComp
 
     private void UpdateHoverCursor(double x, double y)
     {
+        if (_toolCursor)
+        {
+            return;
+        }
+
         var hit = _scene.NodeAt(x, y);
         var surface = hit?.Surface;
 

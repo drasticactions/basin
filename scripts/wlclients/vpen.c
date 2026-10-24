@@ -10,6 +10,12 @@
  *
  * libinput fakes a proximity out when a pen that is not a Wacom sends
  * nothing for 50 ms, so --gap above that cycles proximity between steps.
+ *
+ * --wheel N makes the tool a tablet mouse (BTN_TOOL_MOUSE) instead. It
+ * moves from --from to --to with no tip and turns its wheel N notches
+ * with REL_WHEEL on the first N steps. A negative N turns it the other way.
+ * The device then claims the Wacom vendor id, because libinput disables
+ * the mouse tool on any other tablet.
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -71,7 +77,7 @@ static void usage(void)
 {
     fprintf(stderr,
         "usage: vpen [--settle MS] [--steps N] [--gap MS] [--from FX FY] [--to FX FY]\n"
-        "            [--pressure P] [--tilt TX TY] [--eraser] [--name NAME]\n"
+        "            [--pressure P] [--tilt TX TY] [--eraser] [--wheel N] [--name NAME]\n"
         "  FX FY are fractions of the output (0..1), P is 0..1, TX TY are degrees\n");
     exit(2);
 }
@@ -85,6 +91,7 @@ int main(int argc, char **argv)
     double pressure = 0.5;
     int tilt_x = 20, tilt_y = -10;
     int eraser = 0;
+    int wheel = 0;
     const char *name = "basin virtual pen";
 
     for (int i = 1; i < argc; i++) {
@@ -96,11 +103,12 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--pressure") && i + 1 < argc) pressure = atof(argv[++i]);
         else if (!strcmp(argv[i], "--tilt") && i + 2 < argc) { tilt_x = atoi(argv[++i]); tilt_y = atoi(argv[++i]); }
         else if (!strcmp(argv[i], "--eraser")) eraser = 1;
+        else if (!strcmp(argv[i], "--wheel") && i + 1 < argc) wheel = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--name") && i + 1 < argc) name = argv[++i];
         else usage();
     }
 
-    if (steps < 1) {
+    if (steps < 1 || (wheel != 0 && abs(wheel) > steps)) {
         usage();
     }
 
@@ -110,11 +118,17 @@ int main(int argc, char **argv)
     }
 
     if (ioctl(fd, UI_SET_EVBIT, EV_SYN) < 0 || ioctl(fd, UI_SET_EVBIT, EV_KEY) < 0 ||
-        ioctl(fd, UI_SET_EVBIT, EV_ABS) < 0 || ioctl(fd, UI_SET_EVBIT, EV_MSC) < 0) {
+        ioctl(fd, UI_SET_EVBIT, EV_ABS) < 0 || ioctl(fd, UI_SET_EVBIT, EV_MSC) < 0 ||
+        ioctl(fd, UI_SET_EVBIT, EV_REL) < 0) {
         die("UI_SET_EVBIT");
     }
 
-    int keys[] = { BTN_TOOL_PEN, BTN_TOOL_RUBBER, BTN_TOUCH, BTN_STYLUS, BTN_STYLUS2 };
+    if (ioctl(fd, UI_SET_RELBIT, REL_WHEEL) < 0) {
+        die("UI_SET_RELBIT");
+    }
+
+    int keys[] = { BTN_TOOL_PEN, BTN_TOOL_RUBBER, BTN_TOOL_MOUSE, BTN_TOUCH, BTN_STYLUS, BTN_STYLUS2,
+                   BTN_LEFT, BTN_RIGHT, BTN_MIDDLE };
     for (size_t i = 0; i < sizeof keys / sizeof keys[0]; i++) {
         if (ioctl(fd, UI_SET_KEYBIT, keys[i]) < 0) {
             die("UI_SET_KEYBIT");
@@ -142,7 +156,8 @@ int main(int argc, char **argv)
     struct uinput_setup setup;
     memset(&setup, 0, sizeof setup);
     setup.id.bustype = BUS_USB;
-    setup.id.vendor = 0x1d6b;
+    /* libinput disables the mouse and lens tools on a tablet that is not a Wacom */
+    setup.id.vendor = wheel != 0 ? 0x056a : 0x1d6b;
     setup.id.product = 0x0107;
     setup.id.version = 1;
     snprintf(setup.name, sizeof setup.name, "%s", name);
@@ -155,6 +170,40 @@ int main(int argc, char **argv)
     }
 
     nap(settle);
+    if (wheel != 0) {
+        int x = (int)(from_x * AXIS_MAX);
+        int y = (int)(from_y * AXIS_MAX);
+        emit(fd, EV_ABS, ABS_X, x);
+        emit(fd, EV_ABS, ABS_Y, y);
+        emit(fd, EV_MSC, MSC_SERIAL, 0x5678);
+        emit(fd, EV_KEY, BTN_TOOL_MOUSE, 1);
+        sync_frame(fd);
+        printf("IN %.3f %.3f mouse\n", from_x, from_y);
+        fflush(stdout);
+        nap(gap);
+        int turned = 0;
+        for (int i = 1; i <= steps; i++) {
+            x = (int)((from_x + (to_x - from_x) * i / steps) * AXIS_MAX);
+            y = (int)((from_y + (to_y - from_y) * i / steps) * AXIS_MAX);
+            emit(fd, EV_ABS, ABS_X, x);
+            emit(fd, EV_ABS, ABS_Y, y);
+            if (turned < abs(wheel)) {
+                emit(fd, EV_REL, REL_WHEEL, wheel > 0 ? 1 : -1);
+                turned++;
+            }
+            sync_frame(fd);
+            nap(gap);
+        }
+        emit(fd, EV_KEY, BTN_TOOL_MOUSE, 0);
+        sync_frame(fd);
+        printf("OUT %.3f %.3f wheel %d\n", to_x, to_y, wheel);
+        fflush(stdout);
+        nap(500);
+        ioctl(fd, UI_DEV_DESTROY);
+        close(fd);
+        return 0;
+    }
+
     int tool = eraser ? BTN_TOOL_RUBBER : BTN_TOOL_PEN;
     int x = (int)(from_x * AXIS_MAX);
     int y = (int)(from_y * AXIS_MAX);

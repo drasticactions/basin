@@ -18,11 +18,27 @@ namespace TinyComp;
 
 internal sealed partial class TinyComp
 {
+    private bool _toolCursor;
+
     private void WireTablets()
     {
         var tablets = _services.Require<Basin.Desktop.TabletManager>();
         tablets.ToolProximityIn += (tool, _, axes) => AimTool(tool, axes);
         tablets.ToolMoved += AimTool;
+        tablets.ToolProximityOut += _ =>
+        {
+            _toolCursor = false;
+            RefreshPointer();
+        };
+        _cursorShapes.ToolShapeRequested += (_, shape) =>
+            _report.Line($"TOOL-SHAPE {Basin.Capabilities.CursorShapeNames.NameOf(shape)}");
+        _cursorShapes.ToolCursorRequested += (tool, image) =>
+        {
+            if (tool.Tablet is not null)
+            {
+                _cursor.ShowImage(image);
+            }
+        };
     }
 
     private void AimTool(Basin.Desktop.TabletManager.TabletTool tool, Basin.Capabilities.TabletToolAxes axes)
@@ -33,7 +49,12 @@ internal sealed partial class TinyComp
         }
 
         _idle.NotifyActivity();
-        Basin.Desktop.TabletAiming.AimAt(tool, _scene, _layout, _cursor.CursorOutput ?? Views[0].Output, axes);
+        var output = _cursor.CursorOutput ?? Views[0].Output;
+        Basin.Desktop.TabletAiming.AimAt(tool, _scene, _layout, output, axes);
+        var bounds = _layout.BoxOf(output);
+        _toolCursor = true;
+        _cursor.SetHover(tool.Focus, tool.Focus is not null);
+        _cursor.MoveTo(bounds.X + (axes.X * bounds.Width), bounds.Y + (axes.Y * bounds.Height));
     }
 
     private void WireLibinput(Basin.Backend.Libinput.LibinputBackend input)

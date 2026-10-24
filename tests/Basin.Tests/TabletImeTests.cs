@@ -394,6 +394,61 @@ public sealed class TabletTests
     }
 
     [Fact]
+    public void The_wheel_sends_degrees_and_clicks_only_on_a_turn()
+    {
+        using var host = new CompositorTestHost();
+        var source = host.Backend.CreateTablet();
+        using var manager = new TabletManager(host.Display, source);
+        var window = MappedToplevel.Map(host, host.Client);
+
+        Basin.Desktop.Protocol.ZwpTabletManagerV2? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "zwp_tablet_manager_v2")
+            {
+                proxy = registry.Bind<Basin.Desktop.Protocol.ZwpTabletManagerV2>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+
+        var tabletSeat = proxy!.GetTabletSeat(host.Client.Seat!);
+        Basin.Desktop.Protocol.ZwpTabletToolV2? toolProxy = null;
+        tabletSeat.ToolAdded += (_, e) => toolProxy = e.Id;
+        host.PumpToServer();
+
+        var tabletInfo = source.AddTablet("Wheel Tablet");
+        var toolInfo = source.AddTool(TabletToolType.Mouse, 0x99, TabletToolAxis.Wheel);
+        host.PumpUntil(() => toolProxy is not null);
+
+        var wheels = new List<(double Degrees, int Clicks)>();
+        var frames = 0;
+        toolProxy!.Wheel += (_, e) => wheels.Add((e.Degrees.ToDouble(), e.Clicks));
+        toolProxy.Frame += (_, _) => frames++;
+        var outs = 0;
+        manager.ToolProximityOut += _ => outs++;
+        host.PumpToServer();
+
+        manager.ToolProximityIn += (tool, _, axes) =>
+            tool.SetFocus(window.ServerSurface, axes.X * 60, axes.Y * 50);
+        manager.ToolMoved += (tool, axes) =>
+            tool.SetFocus(window.ServerSurface, axes.X * 60, axes.Y * 50);
+
+        source.InjectProximity(toolInfo.Id, tabletInfo.Id, inProximity: true);
+        source.InjectAxis(toolInfo.Id, 10, new TabletToolAxes(0.5, 0.5, 0, 0, 0, 0, 0, 0, 0));
+        source.InjectAxis(toolInfo.Id, 11, new TabletToolAxes(0.6, 0.5, 0, 0, 0, 0, 0, 0, 15, WheelClicks: 1));
+        source.InjectAxis(toolInfo.Id, 12, new TabletToolAxes(0.7, 0.5, 0, 0, 0, 0, 0, 0, 0));
+        source.InjectProximity(toolInfo.Id, tabletInfo.Id, inProximity: false);
+        host.PumpUntil(() => frames >= 4);
+
+        Assert.Equal([(15.0, 1)], wheels);
+        Assert.Equal(1, outs);
+
+        tabletSeat.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
     public void A_pads_dials_get_their_own_objects_and_deltas_route_to_the_right_one()
     {
         using var host = new CompositorTestHost();

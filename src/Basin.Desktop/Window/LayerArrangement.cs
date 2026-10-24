@@ -13,7 +13,7 @@ public static class LayerArrangement
     /// </summary>
     /// <param name="outputBox">The output box in layout coordinates.</param>
     /// <param name="surfaces">The surfaces with their scene surfaces, or <see langword="null"/> for a surface that is not mapped.</param>
-    /// <returns>The usable area that the exclusive zones leave.</returns>
+    /// <returns>The usable area that the exclusive zones leave, relative to the output's top-left corner.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="surfaces"/> is <see langword="null"/>.</exception>
     public static Box Arrange(Box outputBox, IReadOnlyList<(LayerSurface Layer, SceneSurface? Scene)> surfaces)
     {

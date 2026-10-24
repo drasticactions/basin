@@ -13,7 +13,7 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
     /// <summary>
     /// The highest global version that the manager advertises.
     /// </summary>
-    public const int TextInputVersion = 1;
+    public const int Version = 1;
 
     private readonly WlGlobal _textInputGlobal;
     private readonly Seat.Seat? _seat;
@@ -32,7 +32,7 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
         ArgumentNullException.ThrowIfNull(display);
         _seat = seat;
         _method = method;
-        _textInputGlobal = display.CreateGlobal(ZwpTextInputManagerV3.Interface, TextInputVersion, OnBindTextInput);
+        _textInputGlobal = display.CreateGlobal(ZwpTextInputManagerV3.Interface, Version, OnBindTextInput);
         if (_seat is { } withSeat)
         {
             withSeat.Keyboard.ModifiersChanged += OnModifiersChanged;

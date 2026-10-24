@@ -16,6 +16,8 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _confined = [];
     private readonly List<(LayerSurface Layer, SceneSurface? Scene)> _single = [];
     private readonly PopupPlacer _popups;
+    private readonly Dictionary<IOutput, (Box OutputBox, Box Usable)> _usable = [];
+    private readonly List<IOutput> _gone = [];
     private bool _trackingPopups;
     private bool _arranging;
     private bool _again;
@@ -80,6 +82,7 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         _layout = layout;
         _treeFor = treeFor;
         _popups = new PopupPlacer(layout);
+        layout.Changed += ForgetRemovedOutputs;
     }
 
     /// <summary>
@@ -108,12 +111,12 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     public Func<LayerSurface, IOutput, Box, Box>? ConfinedBox { get; set; }
 
     /// <summary>
-    /// Gets the accepted surfaces in creation order. The scene surface is <see langword="null"/> until the surface maps.
+    /// Gets the accepted surfaces in creation order. The scene surface is <see langword="null"/> until the surface maps. An unmapped surface leaves the list and comes back at its next initial commit.
     /// </summary>
     public IReadOnlyList<(LayerSurface Layer, SceneSurface? Scene)> Surfaces => _surfaces;
 
     /// <summary>
-    /// Occurs when a surface maps and gets its scene surface, after the arrangement.
+    /// Occurs when a surface maps and gets its scene surface, after the arrangement. It occurs again each time the surface maps after an unmap.
     /// </summary>
     public event Action<LayerSurface, SceneSurface>? SceneCreated;
 
@@ -123,12 +126,12 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     public event Action<LayerSurface, XdgPopupWindow, SceneSurface>? PopupSceneCreated;
 
     /// <summary>
-    /// Occurs when a surface unmaps or is destroyed, after its scene surface is destroyed and before the new arrangement.
+    /// Occurs when a surface unmaps or is destroyed, after its scene surface is destroyed and before the new arrangement. It occurs once for each unmap, so it can occur more than once for one surface.
     /// </summary>
     public event Action<LayerSurface>? Removed;
 
     /// <summary>
-    /// Occurs for each output on each arrangement, with the area in layout coordinates that exclusive zones leave. It occurs also when the area did not change.
+    /// Occurs during an arrangement for each output whose usable area or layout box changed, and for each output on its first arrangement. The area is what exclusive zones leave, relative to the output's top-left corner.
     /// </summary>
     public event Action<IOutput, Box>? UsableAreaChanged;
 
@@ -206,6 +209,18 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     }
 
     /// <summary>
+    /// Gets the usable area that the last arrangement gave an output.
+    /// </summary>
+    /// <param name="output">The output to look up.</param>
+    /// <returns>The area relative to the output's top-left corner, or <see langword="null"/> when no arrangement included the output since it joined the layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
+    public Box? UsableAreaOf(IOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return _usable.TryGetValue(output, out var last) ? last.Usable : null;
+    }
+
+    /// <summary>
     /// Finds the scene surface of an accepted surface.
     /// </summary>
     /// <param name="layer">The surface to look up.</param>
@@ -261,7 +276,7 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     }
 
     /// <summary>
-    /// Arranges every surface on every output and raises <see cref="UsableAreaChanged"/> and <see cref="Arranged"/>. A call from inside an arrangement runs one more pass.
+    /// Arranges every surface on every output, raises <see cref="UsableAreaChanged"/> for each output whose area changed, and raises <see cref="Arranged"/>. A call from inside an arrangement runs one more pass.
     /// </summary>
     public void Rearrange()
     {
@@ -321,7 +336,12 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
             first = false;
             var box = _layout.BoxOf(output);
             var usable = LayerArrangement.Arrange(box, _scratch);
-            UsableAreaChanged?.Invoke(output, usable);
+            if (!_usable.TryGetValue(output, out var last) || last.Usable != usable || last.OutputBox != box)
+            {
+                _usable[output] = (box, usable);
+                UsableAreaChanged?.Invoke(output, usable);
+            }
+
             foreach (var entry in _confined)
             {
                 _single.Clear();
@@ -329,6 +349,23 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
                 var area = ConfinedBox is { } boxOf ? boxOf(entry.Layer, output, usable) : box;
                 _ = LayerArrangement.Arrange(area, _single);
             }
+        }
+    }
+
+    private void ForgetRemovedOutputs()
+    {
+        _gone.Clear();
+        foreach (var output in _usable.Keys)
+        {
+            if (!_layout.Contains(output))
+            {
+                _gone.Add(output);
+            }
+        }
+
+        foreach (var output in _gone)
+        {
+            _usable.Remove(output);
         }
     }
 
@@ -344,7 +381,16 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         _surfaces.Add((layer, null));
         layer.PopupAdopted += AttachPopup;
 
-        layer.InitialCommit += Rearrange;
+        layer.InitialCommit += () =>
+        {
+            if (_surfaces.FindIndex(entry => entry.Layer == layer) < 0)
+            {
+                layer.Output ??= DefaultOutput?.Invoke(layer);
+                _surfaces.Add((layer, null));
+            }
+
+            Rearrange();
+        };
         layer.Mapped += () =>
         {
             var index = _surfaces.FindIndex(entry => entry.Layer == layer);

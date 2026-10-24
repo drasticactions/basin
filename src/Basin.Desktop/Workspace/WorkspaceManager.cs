@@ -351,7 +351,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         handle.CreateWorkspace += (_, e) =>
         {
             var name = e.Workspace;
-            binding.Pending.Add(() => group.RaiseCreateRequested(name));
+            if (!group.IsRemoved)
+            {
+                binding.Pending.Add(() => group.RaiseCreateRequested(name));
+            }
         };
 
         handle.SendCapabilities(group.ClientsCanCreateWorkspaces
@@ -390,7 +393,11 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             {
                 if (groupHandle.RawHandle == e.WorkspaceGroupHandle)
                 {
-                    binding.Pending.Add(() => workspace.RaiseAssignRequested(group));
+                    if (!group.IsRemoved)
+                    {
+                        binding.Pending.Add(() => workspace.RaiseAssignRequested(group));
+                    }
+
                     break;
                 }
             }
@@ -457,6 +464,11 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         /// </summary>
         public bool ClientsCanCreateWorkspaces { get; }
 
+        /// <summary>
+        /// Gets a value indicating whether <see cref="Remove"/> removed the group. A removed group takes no workspaces and raises no events.
+        /// </summary>
+        public bool IsRemoved { get; private set; }
+
         internal List<OutputGlobal> Outputs { get; } = [];
 
         /// <summary>
@@ -512,29 +524,71 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         /// <param name="state">The initial state flags.</param>
         /// <param name="coordinates">The position in a grid of workspaces, or <see langword="null"/>.</param>
         /// <returns>The new workspace.</returns>
+        /// <exception cref="InvalidOperationException">The group is removed.</exception>
         public Workspace CreateWorkspace(string name, string? id = null, WorkspaceState state = 0, uint[]? coordinates = null)
         {
+            if (IsRemoved)
+            {
+                throw new InvalidOperationException("the workspace group is removed");
+            }
+
             var workspace = new Workspace(_owner, this, name, id, state, coordinates);
             _owner.OnWorkspaceAdded(workspace);
             return workspace;
         }
 
         /// <summary>
-        /// Removes the group and sends <c>removed</c> to every bound client. Its workspaces keep their group reference.
+        /// Removes the group. Each workspace in it leaves it first and has no group after the call. Every bound client gets the <c>workspace_leave</c> events, then <c>removed</c>, then one <c>done</c>. A second call does nothing.
         /// </summary>
         public void Remove()
         {
+            if (IsRemoved)
+            {
+                return;
+            }
+
+            IsRemoved = true;
             _owner._groups.Remove(this);
+            var orphans = new List<Workspace>();
+            foreach (var workspace in _owner._workspaces)
+            {
+                if (workspace.Group == this)
+                {
+                    workspace.Orphan();
+                    orphans.Add(workspace);
+                }
+            }
+
             _owner.Broadcast(binding =>
             {
-                if (binding.Groups.TryGetValue(this, out var handle))
+                if (!binding.Groups.Remove(this, out var handle))
                 {
-                    handle.SendRemoved();
+                    return;
                 }
+
+                foreach (var workspace in orphans)
+                {
+                    if (binding.Workspaces.TryGetValue(workspace, out var workspaceHandle))
+                    {
+                        handle.SendWorkspaceLeave(workspaceHandle);
+                    }
+                }
+
+                handle.SendRemoved();
             });
+            foreach (var output in Outputs)
+            {
+                _owner.UnwatchOutput(output);
+            }
         }
 
-        internal void RaiseCreateRequested(string name) => CreateWorkspaceRequested?.Invoke(name);
+        internal void RaiseCreateRequested(string name)
+        {
+            if (!IsRemoved)
+            {
+                CreateWorkspaceRequested?.Invoke(name);
+            }
+        }
     }
 
     /// <summary>
@@ -575,7 +629,7 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         }
 
         /// <summary>
-        /// Gets the group that holds the workspace, or <see langword="null"/> after <see cref="Remove"/>.
+        /// Gets the group that holds the workspace. It is <see langword="null"/> after <see cref="Remove"/>, and after <see cref="WorkspaceGroup.Remove"/> removes its group.
         /// </summary>
         public WorkspaceGroup? Group { get; private set; }
 
@@ -676,8 +730,16 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         /// Moves the workspace to another group and sends <c>workspace_leave</c> and <c>workspace_enter</c> to every bound client.
         /// </summary>
         /// <param name="group">The new group.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="group"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="group"/> is removed.</exception>
         public void AssignTo(WorkspaceGroup group)
         {
+            ArgumentNullException.ThrowIfNull(group);
+            if (group.IsRemoved)
+            {
+                throw new InvalidOperationException("the workspace group is removed");
+            }
+
             var previous = Group;
             Group = group;
             _owner.Broadcast(binding =>
@@ -723,12 +785,20 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             });
         }
 
+        internal void Orphan() => Group = null;
+
         internal void RaiseActivateRequested() => ActivateRequested?.Invoke();
 
         internal void RaiseDeactivateRequested() => DeactivateRequested?.Invoke();
 
         internal void RaiseRemoveRequested() => RemoveRequested?.Invoke();
 
-        internal void RaiseAssignRequested(WorkspaceGroup group) => AssignRequested?.Invoke(group);
+        internal void RaiseAssignRequested(WorkspaceGroup group)
+        {
+            if (!group.IsRemoved)
+            {
+                AssignRequested?.Invoke(group);
+            }
+        }
     }
 }

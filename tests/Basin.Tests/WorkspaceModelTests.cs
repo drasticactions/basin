@@ -21,6 +21,7 @@ public sealed class WorkspaceModelTests
         public int GroupsRemoved;
         public int WorkspacesRemoved;
         public int Done;
+        public readonly List<string> Log = [];
     }
 
     private static Bound BindClient(CompositorTestHost host, ShmTestClient? client = null)
@@ -39,8 +40,16 @@ public sealed class WorkspaceModelTests
                     group.OutputEnter += (_, _) => bound.OutputEvents.Add((group, 1));
                     group.OutputLeave += (_, _) => bound.OutputEvents.Add((group, -1));
                     group.WorkspaceEnter += (_, _) => bound.MemberEvents.Add((group, 1));
-                    group.WorkspaceLeave += (_, _) => bound.MemberEvents.Add((group, -1));
-                    group.Removed += (_, _) => bound.GroupsRemoved++;
+                    group.WorkspaceLeave += (_, _) =>
+                    {
+                        bound.MemberEvents.Add((group, -1));
+                        bound.Log.Add("leave");
+                    };
+                    group.Removed += (_, _) =>
+                    {
+                        bound.GroupsRemoved++;
+                        bound.Log.Add("group-removed");
+                    };
                 };
                 bound.Manager.Workspace += (_, we) =>
                 {
@@ -52,7 +61,11 @@ public sealed class WorkspaceModelTests
                         bound.Coordinates.Add(MemoryMarshal.Cast<byte, uint>(ce.Coordinates).ToArray());
                     workspace.Removed += (_, _) => bound.WorkspacesRemoved++;
                 };
-                bound.Manager.Done += (_, _) => bound.Done++;
+                bound.Manager.Done += (_, _) =>
+                {
+                    bound.Done++;
+                    bound.Log.Add("done");
+                };
             }
         };
         host.PumpToClient();
@@ -249,5 +262,77 @@ public sealed class WorkspaceModelTests
 
         host.PumpToServer();
         host.PumpToClient();
+    }
+
+    [Fact]
+    public void Removing_a_group_leaves_each_workspace_before_removed_in_one_done()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new WorkspaceManager(host.Display);
+        var group = manager.CreateGroup(clientsCanCreateWorkspaces: true);
+        var one = group.CreateWorkspace("one");
+        var two = group.CreateWorkspace("two");
+
+        var bound = BindClient(host);
+        host.PumpUntil(() => bound.Done >= 1 && bound.Workspaces.Count == 2);
+        bound.Log.Clear();
+
+        group.Remove();
+        host.PumpUntil(() => bound.GroupsRemoved == 1 && bound.Log[^1] == "done");
+        Assert.Equal(["leave", "leave", "group-removed", "done"], bound.Log);
+        Assert.True(group.IsRemoved);
+        Assert.Null(one.Group);
+        Assert.Null(two.Group);
+    }
+
+    [Fact]
+    public void A_removed_group_handle_ignores_create_and_assign()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new WorkspaceManager(host.Display);
+        var kept = manager.CreateGroup(clientsCanCreateWorkspaces: true);
+        var doomed = manager.CreateGroup(clientsCanCreateWorkspaces: true);
+        var workspace = kept.CreateWorkspace("one");
+        var creates = 0;
+        doomed.CreateWorkspaceRequested += _ => creates++;
+        var assigns = 0;
+        workspace.AssignRequested += _ => assigns++;
+
+        var bound = BindClient(host);
+        host.PumpUntil(() => bound.Done >= 1 && bound.Groups.Count == 2);
+        var doomedHandle = bound.Groups[1];
+
+        doomedHandle.CreateWorkspace("early");
+        bound.Workspaces[0].Assign(doomedHandle);
+        host.PumpToServer();
+        doomed.Remove();
+        bound.Manager.Commit();
+        host.PumpToServer();
+        host.PumpUntil(() => bound.GroupsRemoved == 1);
+
+        doomedHandle.CreateWorkspace("late");
+        bound.Workspaces[0].Assign(doomedHandle);
+        bound.Manager.Commit();
+        host.PumpToServer();
+        host.PumpToClient();
+
+        Assert.Equal(0, creates);
+        Assert.Equal(0, assigns);
+        Assert.Same(kept, workspace.Group);
+    }
+
+    [Fact]
+    public void Assigning_to_a_removed_group_throws()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new WorkspaceManager(host.Display);
+        var kept = manager.CreateGroup();
+        var removed = manager.CreateGroup();
+        var workspace = kept.CreateWorkspace("one");
+        removed.Remove();
+
+        Assert.Throws<InvalidOperationException>(() => workspace.AssignTo(removed));
+        Assert.Throws<InvalidOperationException>(() => removed.CreateWorkspace("two"));
+        Assert.Same(kept, workspace.Group);
     }
 }

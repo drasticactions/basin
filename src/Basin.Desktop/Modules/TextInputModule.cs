@@ -12,7 +12,7 @@ public sealed class TextInputModule : DesktopModule<TextInputManager>
     public override string WireInterface => "zwp_text_input_manager_v3";
 
     /// <inheritdoc/>
-    public override int Version => TextInputManager.TextInputVersion;
+    public override int Version => TextInputManager.Version;
 
     /// <inheritdoc/>
     public override IReadOnlyList<Type> Capabilities => [typeof(ITextInputMethod)];

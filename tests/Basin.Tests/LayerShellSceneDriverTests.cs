@@ -61,6 +61,142 @@ public sealed class LayerShellSceneDriverTests
     }
 
     [Fact]
+    public void A_panel_that_unmaps_maps_again()
+    {
+        using var host = new CompositorTestHost();
+        var layerShell = new LayerShell(host.Display, host.Compositor);
+        var layers = new SceneLayers(host.Scene.Root);
+        var driver = new LayerShellSceneDriver(layerShell, host.Layout, layers);
+        var usableByOutput = new Dictionary<Basin.IOutput, Basin.Box>();
+        driver.UsableAreaChanged += (output, usable) => usableByOutput[output] = usable;
+        var scenes = new List<SceneSurface>();
+        driver.SceneCreated += (_, scene) => scenes.Add(scene);
+        var removedCount = 0;
+        driver.Removed += _ => removedCount++;
+
+        var client = host.Client;
+        var shellProxy = BindLayerShell(host, client);
+        var surface = client.Compositor.CreateSurface();
+        var layerProxy = shellProxy.GetLayerSurface(
+            surface, client.Outputs[0], Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, "panel");
+        layerProxy.SetAnchor(
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Top |
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Left |
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Right);
+        layerProxy.SetSize(0, 30);
+        layerProxy.SetExclusiveZone(30);
+        var configures = 0;
+        var width = 0;
+        layerProxy.Configure += (_, e) =>
+        {
+            configures++;
+            width = (int)e.Width;
+            layerProxy.AckConfigure(e.Serial);
+        };
+
+        void MapOnce()
+        {
+            var before = configures;
+            surface.Commit();
+            host.PumpUntil(() => configures > before);
+            var buffer = client.CreateBuffer(width, 30, Fill.Solid(width, 30, 0xFF285577));
+            surface.Attach(buffer.Proxy, 0, 0);
+            surface.Damage(0, 0, width, 30);
+            surface.Commit();
+            var scenesBefore = scenes.Count;
+            host.PumpUntil(() => scenes.Count > scenesBefore);
+        }
+
+        MapOnce();
+        Assert.Equal(30, usableByOutput[host.Output].Y);
+
+        surface.Attach(null, 0, 0);
+        surface.Commit();
+        host.PumpUntil(() => removedCount == 1);
+        Assert.Empty(driver.Surfaces);
+        Assert.Equal(host.Layout.BoxOf(host.Output), usableByOutput[host.Output]);
+
+        MapOnce();
+        Assert.Equal(2, configures);
+        Assert.Equal(2, scenes.Count);
+        Assert.True(scenes[0].IsDestroyed);
+        Assert.False(scenes[1].IsDestroyed);
+        Assert.Same(layers.Top, scenes[1].Tree.Parent);
+        Assert.Single(driver.Surfaces);
+        Assert.Equal(30, usableByOutput[host.Output].Y);
+
+        layerProxy.Destroy();
+        host.PumpUntil(() => removedCount == 2);
+        Assert.Empty(driver.Surfaces);
+        layerShell.Dispose();
+    }
+
+    [Fact]
+    public void The_usable_area_event_fires_on_a_change_only()
+    {
+        using var host = new CompositorTestHost();
+        var layerShell = new LayerShell(host.Display, host.Compositor);
+        var layers = new SceneLayers(host.Scene.Root);
+        var driver = new LayerShellSceneDriver(layerShell, host.Layout, layers);
+        var events = new List<Basin.Box>();
+        driver.UsableAreaChanged += (_, usable) => events.Add(usable);
+        SceneSurface? created = null;
+        driver.SceneCreated += (_, scene) => created = scene;
+        Assert.Null(driver.UsableAreaOf(host.Output));
+
+        var client = host.Client;
+        var shellProxy = BindLayerShell(host, client);
+        var surface = client.Compositor.CreateSurface();
+        var layerProxy = shellProxy.GetLayerSurface(
+            surface, client.Outputs[0], Basin.Shell.Xdg.Protocol.ZwlrLayerShellV1.Layer.Top, "panel");
+        layerProxy.SetAnchor(
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Top |
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Left |
+            Basin.Shell.Xdg.Protocol.ZwlrLayerSurfaceV1.Anchor.Right);
+        layerProxy.SetSize(0, 30);
+        layerProxy.SetExclusiveZone(30);
+        var width = 0;
+        layerProxy.Configure += (_, e) =>
+        {
+            width = (int)e.Width;
+            layerProxy.AckConfigure(e.Serial);
+        };
+        surface.Commit();
+        host.PumpUntil(() => width != 0);
+        Assert.Equal(30, Assert.Single(events).Y);
+        Assert.Equal(events[0], driver.UsableAreaOf(host.Output));
+
+        var buffer = client.CreateBuffer(width, 30, Fill.Solid(width, 30, 0xFF285577));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, width, 30);
+        surface.Commit();
+        host.PumpUntil(() => created is not null);
+        Assert.Single(events);
+
+        surface.Damage(0, 0, width, 30);
+        surface.Commit();
+        host.PumpToServer();
+        driver.Rearrange();
+        Assert.Single(events);
+
+        layerProxy.SetExclusiveZone(40);
+        surface.Commit();
+        host.PumpUntil(() => events.Count == 2);
+        Assert.Equal(40, events[1].Y);
+        Assert.Equal(events[1], driver.UsableAreaOf(host.Output));
+
+        var box = host.Layout.BoxOf(host.Output);
+        host.Layout.Move(host.Output, box.X + 10, box.Y);
+        driver.Rearrange();
+        Assert.Equal(3, events.Count);
+        Assert.Equal(events[1], events[2]);
+
+        host.Layout.Remove(host.Output);
+        Assert.Null(driver.UsableAreaOf(host.Output));
+        layerShell.Dispose();
+    }
+
+    [Fact]
     public void A_refused_surface_is_closed_not_killed()
     {
         using var host = new CompositorTestHost();

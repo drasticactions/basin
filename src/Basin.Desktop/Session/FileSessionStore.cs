@@ -5,10 +5,11 @@ using Basin.Capabilities;
 namespace Basin.Desktop;
 
 /// <summary>
-/// Keeps toplevel session state in a <c>sessions.tsv</c> file in the application directory under <c>XDG_STATE_HOME</c>. Each change rewrites the whole file at once.
+/// Keeps toplevel session state in a <c>sessions.tsv</c> file in the application directory under <c>XDG_STATE_HOME</c>. Each change writes the whole file to a temporary file and then replaces the old one, so a crash during the write keeps the old file. Each text field is escaped with backslash codes, so a client string cannot split a record.
 /// </summary>
 public sealed class FileSessionStore : ISessionStore
 {
+    private const string Header = "#basin-sessions 2";
     private readonly string _path;
     private readonly Dictionary<string, Dictionary<string, ToplevelSessionState>> _sessions = [];
 
@@ -104,9 +105,19 @@ public sealed class FileSessionStore : ISessionStore
             return;
         }
 
-        foreach (var line in File.ReadAllLines(_path))
+        var lines = File.ReadAllLines(_path);
+        var escaped = lines.Length > 0 && lines[0] == Header;
+        foreach (var line in lines)
         {
             var parts = line.Split('\t');
+            if (escaped)
+            {
+                for (var i = 0; i < parts.Length; i++)
+                {
+                    parts[i] = Unescape(parts[i]);
+                }
+            }
+
             if (parts.Length < 8)
             {
                 continue;
@@ -136,26 +147,83 @@ public sealed class FileSessionStore : ISessionStore
     private void Save()
     {
         var builder = new StringBuilder();
+        builder.Append(Header).Append('\n');
         foreach (var (session, toplevels) in _sessions)
         {
             if (toplevels.Count == 0)
             {
-                builder.Append(session).Append("\t\t0\t0\t0\t0\t0\t\n");
+                AppendEscaped(builder, session);
+                builder.Append("\t\t0\t0\t0\t0\t0\t\n");
                 continue;
             }
 
             foreach (var (name, state) in toplevels)
             {
                 var g = state.Geometry;
-                var workspace = state.WorkspaceName is { } raw
-                    ? raw.Replace('\t', ' ').Replace('\n', ' ')
-                    : string.Empty;
-                builder.Append(CultureInfo.InvariantCulture,
-                    $"{session}\t{name}\t{g.X}\t{g.Y}\t{g.Width}\t{g.Height}\t{(int)state.States}\t{state.OutputLayoutId}\t{workspace}\n");
+                AppendEscaped(builder, session);
+                builder.Append('\t');
+                AppendEscaped(builder, name);
+                builder.Append(CultureInfo.InvariantCulture, $"\t{g.X}\t{g.Y}\t{g.Width}\t{g.Height}\t{(int)state.States}\t");
+                AppendEscaped(builder, state.OutputLayoutId);
+                builder.Append('\t');
+                AppendEscaped(builder, state.WorkspaceName);
+                builder.Append('\n');
             }
         }
 
-        File.WriteAllText(_path, builder.ToString());
+        var temporary = _path + ".tmp";
+        File.WriteAllText(temporary, builder.ToString());
+        File.Move(temporary, _path, overwrite: true);
+    }
+
+    private static void AppendEscaped(StringBuilder builder, string? text)
+    {
+        if (text is null)
+        {
+            return;
+        }
+
+        foreach (var c in text)
+        {
+            _ = c switch
+            {
+                '\\' => builder.Append("\\\\"),
+                '\t' => builder.Append("\\t"),
+                '\n' => builder.Append("\\n"),
+                '\r' => builder.Append("\\r"),
+                _ => builder.Append(c),
+            };
+        }
+    }
+
+    private static string Unescape(string field)
+    {
+        if (!field.Contains('\\', StringComparison.Ordinal))
+        {
+            return field;
+        }
+
+        var builder = new StringBuilder(field.Length);
+        for (var i = 0; i < field.Length; i++)
+        {
+            var c = field[i];
+            if (c != '\\' || i + 1 == field.Length)
+            {
+                builder.Append(c);
+                continue;
+            }
+
+            i++;
+            builder.Append(field[i] switch
+            {
+                't' => '\t',
+                'n' => '\n',
+                'r' => '\r',
+                _ => field[i],
+            });
+        }
+
+        return builder.ToString();
     }
 
     private static int Int(string text) => int.TryParse(text, CultureInfo.InvariantCulture, out var value) ? value : 0;

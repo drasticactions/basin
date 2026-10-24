@@ -3,12 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
+#include <time.h>
 #include <sys/mman.h>
 #include <wayland-client.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 /* Map one solid layer-shell panel on an edge with an exclusive zone, so a
- * test can see how the compositor lays windows out around a dock or a bar. */
+ * test can see how the compositor lays windows out around a dock or a bar.
+ * --blink N unmaps the panel with a null-buffer commit every N seconds and
+ * maps it again with a commit without a buffer, on the same layer surface. */
 
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
@@ -17,6 +21,7 @@ static struct wl_surface *surface;
 static struct wl_seat *seat;
 static int running = 1;
 static uint32_t colour = 0xFF202020;
+static int mapped;
 
 static struct wl_buffer *make_buffer(int w, int h)
 {
@@ -44,6 +49,7 @@ static void layer_configure(void *data, struct zwlr_layer_surface_v1 *layer, uin
     wl_surface_attach(surface, buf, 0, 0);
     wl_surface_damage_buffer(surface, 0, 0, (int)w, (int)h);
     wl_surface_commit(surface);
+    mapped = 1;
     printf("PANEL %ux%u\n", w, h);
     fflush(stdout);
 }
@@ -115,7 +121,7 @@ static const struct wl_registry_listener registry_listener = { global_add, globa
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(stderr, "usage: panel top|bottom|left|right SIZE [keyboard]\n");
+        fprintf(stderr, "usage: panel top|bottom|left|right SIZE [keyboard] [--blink SECONDS]\n");
         return 2;
     }
 
@@ -147,7 +153,14 @@ int main(int argc, char **argv)
     zwlr_layer_surface_v1_set_anchor(layer, edge | across);
     zwlr_layer_surface_v1_set_size(layer, horizontal ? 0 : (uint32_t)size, horizontal ? (uint32_t)size : 0);
     zwlr_layer_surface_v1_set_exclusive_zone(layer, size);
-    if (argc > 3 && strcmp(argv[3], "keyboard") == 0) {
+    int keyboard_wanted = 0;
+    int blink = 0;
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "keyboard") == 0) keyboard_wanted = 1;
+        else if (strcmp(argv[i], "--blink") == 0 && i + 1 < argc) blink = atoi(argv[++i]);
+        else { fprintf(stderr, "panel: unknown argument %s\n", argv[i]); return 2; }
+    }
+    if (keyboard_wanted) {
         zwlr_layer_surface_v1_set_keyboard_interactivity(layer, 1);
         if (seat) {
             struct wl_keyboard *keyboard = wl_seat_get_keyboard(seat);
@@ -156,7 +169,46 @@ int main(int argc, char **argv)
     }
     wl_surface_commit(surface);
 
-    while (running && wl_display_dispatch(display) != -1) {
+    struct timespec next;
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    next.tv_sec += blink;
+    struct pollfd pfd = { .fd = wl_display_get_fd(display), .events = POLLIN };
+    while (running) {
+        while (wl_display_prepare_read(display) != 0)
+            wl_display_dispatch_pending(display);
+        wl_display_flush(display);
+        int timeout = -1;
+        if (blink > 0) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long ms = (next.tv_sec - now.tv_sec) * 1000 + (next.tv_nsec - now.tv_nsec) / 1000000;
+            timeout = ms < 0 ? 0 : (int)ms;
+        }
+        int ready = poll(&pfd, 1, timeout);
+        if (ready > 0) {
+            if (wl_display_read_events(display) < 0) break;
+            if (wl_display_dispatch_pending(display) < 0) break;
+        } else {
+            wl_display_cancel_read(display);
+            if (ready < 0) break;
+        }
+        if (blink > 0) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if (now.tv_sec > next.tv_sec || (now.tv_sec == next.tv_sec && now.tv_nsec >= next.tv_nsec)) {
+                next.tv_sec += blink;
+                if (mapped) {
+                    wl_surface_attach(surface, NULL, 0, 0);
+                    wl_surface_commit(surface);
+                    mapped = 0;
+                    printf("PANEL hidden\n");
+                } else {
+                    wl_surface_commit(surface);
+                    printf("PANEL remap\n");
+                }
+                fflush(stdout);
+            }
+        }
     }
 
     return 0;

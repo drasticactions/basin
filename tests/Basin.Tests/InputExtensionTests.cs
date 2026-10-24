@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Basin.Capabilities;
 using Basin.Desktop;
 using Wayland;
 using Xunit;
@@ -536,6 +537,141 @@ public sealed class CursorShapeTests
         device.SetShape(0, (Basin.Desktop.Protocol.WpCursorShapeDeviceV1.Shape)shape);
 
         AssertKilled(host);
+    }
+
+    [Theory]
+    [InlineData(0u)]
+    [InlineData(37u)]
+    public void Out_of_range_shapes_on_a_tablet_tool_device_are_errors(uint shape)
+    {
+        using var rig = new ToolRig();
+        rig.Device.SetShape(rig.Serials[^1], (Basin.Desktop.Protocol.WpCursorShapeDeviceV1.Shape)shape);
+
+        AssertKilled(rig.Host);
+        Assert.Empty(rig.Shapes);
+    }
+
+    [Fact]
+    public void A_tool_shape_with_the_proximity_serial_names_the_tool()
+    {
+        using var rig = new ToolRig();
+        rig.Device.SetShape(rig.Serials[^1], Basin.Desktop.Protocol.WpCursorShapeDeviceV1.Shape.Text);
+        rig.Host.PumpUntil(() => rig.Shapes.Count == 1);
+
+        var (tool, shape) = Assert.Single(rig.Shapes);
+        Assert.Same(rig.Tool, tool);
+        Assert.Equal(Basin.Capabilities.CursorShape.Text, shape);
+    }
+
+    [Fact]
+    public void A_tool_shape_with_an_old_serial_raises_nothing()
+    {
+        using var rig = new ToolRig();
+        var old = rig.Serials[^1];
+        rig.Cycle();
+
+        rig.Device.SetShape(old, Basin.Desktop.Protocol.WpCursorShapeDeviceV1.Shape.Text);
+        rig.Device.SetShape(rig.Serials[^1], Basin.Desktop.Protocol.WpCursorShapeDeviceV1.Shape.Crosshair);
+        rig.Host.PumpUntil(() => rig.Shapes.Count == 1);
+        rig.Host.PumpToServer();
+
+        Assert.Equal(Basin.Capabilities.CursorShape.Crosshair, Assert.Single(rig.Shapes).Shape);
+    }
+
+    [Fact]
+    public void A_tool_shape_without_a_tablet_manager_is_accepted_and_raises_nothing()
+    {
+        using var rig = new ToolRig(withTablets: false);
+        rig.Device.SetShape(rig.Serials[^1], Basin.Desktop.Protocol.WpCursorShapeDeviceV1.Shape.Text);
+        rig.Host.PumpToServer();
+        rig.Host.PumpToClient();
+
+        Assert.Empty(rig.Shapes);
+        AssertAlive(rig.Host, rig.Host.Client);
+    }
+
+    private sealed class ToolRig : IDisposable
+    {
+        private readonly Basin.Backend.Headless.HeadlessTablet _source;
+        private readonly TabletManager _tablets;
+        private readonly CursorShapeManager _shapes;
+        private readonly Basin.Desktop.Protocol.ZwpTabletSeatV2 _tabletSeat;
+        private readonly ulong _toolId;
+        private readonly ulong _tabletId;
+
+        public ToolRig(bool withTablets = true)
+        {
+            Host = new CompositorTestHost();
+            _source = Host.Backend.CreateTablet();
+            _tablets = new TabletManager(Host.Display, _source);
+            _shapes = new CursorShapeManager(Host.Display, theme: null, tablets: withTablets ? _tablets : null);
+            _shapes.ToolShapeRequested += (tool, shape) => Shapes.Add((tool, shape));
+            var window = MappedToplevel.Map(Host, Host.Client);
+
+            Basin.Desktop.Protocol.ZwpTabletManagerV2? tabletProxy = null;
+            Basin.Desktop.Protocol.WpCursorShapeManagerV1? shapeProxy = null;
+            var registry = Host.Client.Display.GetRegistry();
+            registry.Global += (_, e) =>
+            {
+                if (e.Interface == "zwp_tablet_manager_v2")
+                {
+                    tabletProxy = registry.Bind<Basin.Desktop.Protocol.ZwpTabletManagerV2>(e.Name, 1);
+                }
+                else if (e.Interface == "wp_cursor_shape_manager_v1")
+                {
+                    shapeProxy = registry.Bind<Basin.Desktop.Protocol.WpCursorShapeManagerV1>(e.Name, CursorShapeManager.Version);
+                }
+            };
+            Host.PumpToClient();
+
+            _tabletSeat = tabletProxy!.GetTabletSeat(Host.Client.Seat!);
+            Basin.Desktop.Protocol.ZwpTabletToolV2? toolProxy = null;
+            _tabletSeat.ToolAdded += (_, e) => toolProxy = e.Id;
+            Host.PumpToServer();
+
+            _tabletId = _source.AddTablet("Shape Tablet").Id;
+            _toolId = _source.AddTool(TabletToolType.Pen, 0x42, TabletToolAxis.Pressure).Id;
+            Host.PumpUntil(() => toolProxy is not null);
+            toolProxy!.ProximityIn += (_, e) => Serials.Add(e.Serial);
+            Device = shapeProxy!.GetTabletToolV2(toolProxy);
+
+            _tablets.ToolProximityIn += (tool, _, axes) =>
+            {
+                Tool = tool;
+                tool.SetFocus(window.ServerSurface, axes.X * 60, axes.Y * 50);
+            };
+            Cycle();
+        }
+
+        public CompositorTestHost Host { get; }
+
+        public Basin.Desktop.Protocol.WpCursorShapeDeviceV1 Device { get; }
+
+        public List<uint> Serials { get; } = [];
+
+        public List<(TabletManager.TabletTool Tool, Basin.Capabilities.CursorShape Shape)> Shapes { get; } = [];
+
+        public TabletManager.TabletTool? Tool { get; private set; }
+
+        public void Cycle()
+        {
+            if (Serials.Count > 0)
+            {
+                _source.InjectProximity(_toolId, _tabletId, inProximity: false);
+            }
+
+            var count = Serials.Count;
+            _source.InjectAxis(_toolId, 2, new TabletToolAxes(0.5, 0.5, 0, 0, 0, 0, 0, 0, 0));
+            _source.InjectProximity(_toolId, _tabletId, inProximity: true);
+            Host.PumpUntil(() => Serials.Count > count);
+        }
+
+        public void Dispose()
+        {
+            _shapes.Dispose();
+            _tablets.Dispose();
+            Host.Dispose();
+        }
     }
 
     private static Basin.Desktop.Protocol.WpCursorShapeDeviceV1 Device(CompositorTestHost host, uint version)

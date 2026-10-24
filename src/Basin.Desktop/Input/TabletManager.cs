@@ -21,6 +21,7 @@ public sealed class TabletManager : ITabletObserver, IDisposable
     private readonly List<TabletDevice> _tablets = [];
     private readonly List<TabletTool> _tools = [];
     private readonly List<TabletPad> _pads = [];
+    private readonly Dictionary<ZwpTabletToolV2Resource, (TabletTool Tool, uint Serial)> _toolResources = [];
 
     private readonly ITabletSource? _source;
     private readonly Dictionary<ulong, TabletDevice> _sourceTablets = [];
@@ -176,6 +177,11 @@ public sealed class TabletManager : ITabletObserver, IDisposable
     public event Action<TabletTool, TabletToolAxes>? ToolMoved;
 
     /// <summary>
+    /// Occurs when a source tool leaves proximity, after <c>proximity_out</c> and its frame go to the client.
+    /// </summary>
+    public event Action<TabletTool>? ToolProximityOut;
+
+    /// <summary>
     /// Occurs for each button or dial event of a source pad, before the event goes to the client.
     /// </summary>
     public event Action<TabletPad, TabletPadEvent>? PadActivity;
@@ -193,6 +199,7 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             tool.NotifyProximityOut();
             tool.NotifyFrame(tool.LastTimeMs);
             _toolAxes.Remove(toolId);
+            ToolProximityOut?.Invoke(tool);
             return;
         }
 
@@ -349,6 +356,19 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    internal bool TryResolveTool(ZwpTabletToolV2Resource resource, out TabletTool tool, out uint serial)
+    {
+        if (!resource.IsDestroyed && _toolResources.TryGetValue(resource, out var entry))
+        {
+            (tool, serial) = entry;
+            return true;
+        }
+
+        tool = null!;
+        serial = 0;
+        return false;
+    }
+
     private void OnBind(WlClient client, uint version, uint id)
     {
         var manager = new ZwpTabletManagerV2Resource(client, version, id);
@@ -425,7 +445,12 @@ public sealed class TabletManager : ITabletObserver, IDisposable
 
             resource.SendDone();
             Tools[tool] = resource;
-            resource.Destroyed += (_, _) => Tools.Remove(tool);
+            _owner._toolResources[resource] = (tool, 0);
+            resource.Destroyed += (_, _) =>
+            {
+                Tools.Remove(tool);
+                _owner._toolResources.Remove(resource);
+            };
         }
 
         public void Announce(TabletPad pad)
@@ -671,10 +696,11 @@ public sealed class TabletManager : ITabletObserver, IDisposable
                 ForCurrent((resource, _) => resource.SendSlider(slider));
             }
 
-            if (Capabilities.HasFlag(TabletToolCapabilities.Wheel))
+            if (Capabilities.HasFlag(TabletToolCapabilities.Wheel) && (axes.Wheel != 0 || axes.WheelClicks != 0))
             {
                 var wheel = axes.Wheel;
-                ForCurrent((resource, _) => resource.SendWheel(WlFixed.FromDouble(wheel), (int)wheel));
+                var clicks = axes.WheelClicks;
+                ForCurrent((resource, _) => resource.SendWheel(WlFixed.FromDouble(wheel), clicks));
             }
         }
 
@@ -741,7 +767,9 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             {
                 if (binding.Tablets.TryGetValue(tablet, out var tabletResource))
                 {
-                    resource.SendProximityIn(_owner._display.NextSerial(), tabletResource, surface.Resource);
+                    var serial = _owner._display.NextSerial();
+                    _owner._toolResources[resource] = (this, serial);
+                    resource.SendProximityIn(serial, tabletResource, surface.Resource);
                     resource.SendMotion(WlFixed.FromDouble(x), WlFixed.FromDouble(y));
                 }
             });

@@ -12,6 +12,7 @@ namespace Basin.Capabilities;
 /// <param name="Rotation">The rotation of the tool in degrees, clockwise from its rest position.</param>
 /// <param name="Slider">The position of the tool slider from -1 to 1.</param>
 /// <param name="Wheel">The wheel movement since the last event, in degrees.</param>
+/// <param name="WheelClicks">The wheel movement since the last event, in discrete logical clicks. It is 0 for a turn of less than one click.</param>
 public readonly record struct TabletToolAxes(
     double X,
     double Y,
@@ -21,4 +22,5 @@ public readonly record struct TabletToolAxes(
     double TiltY,
     double Rotation,
     double Slider,
-    double Wheel);
+    double Wheel,
+    int WheelClicks = 0);

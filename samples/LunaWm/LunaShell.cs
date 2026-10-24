@@ -258,6 +258,11 @@ internal sealed partial class LunaShell : IDisposable
     {
         var view = new LunaView(driver, _scene);
         driver.Tag = view;
+        if (_layerDriver?.UsableAreaOf(driver.Output) is { } usable)
+        {
+            view.UsableArea = usable;
+        }
+
         _views.Add(view);
         if (driver.Output is Basin.Backend.Wayland.WaylandOutput nested)
         {

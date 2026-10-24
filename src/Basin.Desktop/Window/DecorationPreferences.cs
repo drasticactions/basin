@@ -42,12 +42,12 @@ public sealed class DecorationPreferences
     }
 
     /// <summary>
-    /// Occurs each time a preference is recorded, also when the value is the same. The argument is <see langword="true"/> for server-side decorations.
+    /// Occurs when a recorded preference is new for the surface or differs from the last one. A repeat of the same value does not raise it. The argument is <see langword="true"/> for server-side decorations.
     /// </summary>
     public event Action<Surface, bool>? Changed;
 
     /// <summary>
-    /// Records a preference for a surface until the surface is destroyed, and raises <see cref="Changed"/>.
+    /// Records a preference for a surface until the surface is destroyed. It raises <see cref="Changed"/> when the surface had no preference or had the other one.
     /// </summary>
     /// <param name="surface">The surface.</param>
     /// <param name="serverSide"><see langword="true"/> when the surface wants server-side decorations.</param>
@@ -58,6 +58,10 @@ public sealed class DecorationPreferences
         if (_serverSide.TryAdd(surface, serverSide))
         {
             surface.Destroyed += () => _serverSide.Remove(surface);
+        }
+        else if (_serverSide[surface] == serverSide)
+        {
+            return;
         }
         else
         {

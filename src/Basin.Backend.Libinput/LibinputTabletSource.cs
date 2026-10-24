@@ -276,7 +276,8 @@ public sealed class LibinputTabletSource : ITabletSource, IDisposable
         ev.TiltY,
         ev.Rotation,
         ev.SliderPosition,
-        ev.WheelDelta);
+        ev.WheelDelta,
+        ev.WheelDeltaDiscrete);
 
     private static nint ToolHandle(LibinputTabletToolEvent ev)
     {

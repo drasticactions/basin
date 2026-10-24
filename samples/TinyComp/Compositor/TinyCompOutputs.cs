@@ -106,6 +106,11 @@ internal sealed partial class TinyComp
     private void OnViewAdded(OutputView view)
     {
         view.Tag = new OutputPolicy();
+        if (_layerDriver?.UsableAreaOf(view.Output) is { } usable)
+        {
+            view.UsableArea = usable;
+        }
+
         _presenceTracker.AddOutput(view.Output, view.Global);
         InitWorkspaces(view);
         ConfigureOverviewTriggers();

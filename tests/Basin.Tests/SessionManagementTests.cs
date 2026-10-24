@@ -405,6 +405,89 @@ public sealed class FileSessionStoreTests
         }
     }
 
+    private static FileSessionStore Reload(string directory)
+    {
+        Environment.SetEnvironmentVariable("XDG_STATE_HOME", directory);
+        try
+        {
+            return new FileSessionStore("basin-tests");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XDG_STATE_HOME", null);
+        }
+    }
+
+    [Theory]
+    [InlineData("tab\there")]
+    [InlineData("line\nbreak")]
+    [InlineData("carriage\rreturn")]
+    [InlineData("back\\slash\\t")]
+    [InlineData("all\t\n\r\\of them")]
+    public void A_name_with_control_characters_round_trips(string name)
+    {
+        var (store, directory) = Fresh();
+        try
+        {
+            var session = store.CreateSessionId()!;
+            store.Save(session, name, new ToplevelSessionState { Geometry = new Box(1, 2, 3, 4) });
+
+            var reloaded = Reload(directory);
+            Assert.True(reloaded.TryRestore(session, name, SessionRestoreReason.SessionRestore, out var state));
+            Assert.Equal(new Box(1, 2, 3, 4), state.Geometry);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_name_that_holds_a_forged_record_creates_no_session()
+    {
+        var (store, directory) = Fresh();
+        try
+        {
+            var session = store.CreateSessionId()!;
+            var forged = "x\nforged-session\tvictim\t0\t0\t9\t9\t0\t\t";
+            store.Save(session, forged, new ToplevelSessionState { Geometry = new Box(7, 8, 9, 10) });
+
+            var reloaded = Reload(directory);
+            Assert.False(reloaded.IsValidSessionId("forged-session"));
+            Assert.True(reloaded.TryRestore(session, forged, SessionRestoreReason.SessionRestore, out var state));
+            Assert.Equal(new Box(7, 8, 9, 10), state.Geometry);
+            Assert.False(File.Exists(Path.Combine(directory, "basin-tests", "sessions.tsv.tmp")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_workspace_name_with_a_tab_round_trips_exactly()
+    {
+        var (store, directory) = Fresh();
+        try
+        {
+            var session = store.CreateSessionId()!;
+            store.Save(session, "main", new ToplevelSessionState
+            {
+                WorkspaceName = "web\tmail",
+                OutputLayoutId = "layout\t2",
+            });
+
+            var reloaded = Reload(directory);
+            Assert.True(reloaded.TryRestore(session, "main", SessionRestoreReason.SessionRestore, out var state));
+            Assert.Equal("web\tmail", state.WorkspaceName);
+            Assert.Equal("layout\t2", state.OutputLayoutId);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void A_pre_workspace_file_restores_with_a_null_workspace()
     {

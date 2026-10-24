@@ -737,16 +737,32 @@ internal sealed partial class TinyComp
                 }
 
                 view.UsableArea = usable;
+                ReapplyPinnedGeometry();
                 LayoutCanvas(view);
-                foreach (var (layer, _) in _layerDriver.Surfaces)
-                {
-                    if (layer.Output?.Output == output)
-                    {
-                        _fractionalScale.AnnounceScale(layer.Surface, view.Output.Scale);
-                    }
-                }
             }
         };
+        _layerDriver.Arranged += AnnounceLayerScales;
+    }
+
+    private void AnnounceLayerScales()
+    {
+        foreach (var view in Views)
+        {
+            if (view.Tag is not OutputPolicy)
+            {
+                continue;
+            }
+
+            var surfaces = _layerDriver.Surfaces;
+            for (var i = 0; i < surfaces.Count; i++)
+            {
+                var layer = surfaces[i].Layer;
+                if (layer.Output?.Output == view.Output)
+                {
+                    _fractionalScale.AnnounceScale(layer.Surface, view.Output.Scale);
+                }
+            }
+        }
     }
 
     private void ArrangeLayerSurfaces() => _layerDriver.Rearrange();

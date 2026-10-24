@@ -167,6 +167,11 @@ internal sealed partial class Shell : IDisposable
         {
             var view = new ShellView(driver, _scene);
             driver.Tag = view;
+            if (_layerDriver?.UsableAreaOf(driver.Output) is { } usable)
+            {
+                view.UsableArea = usable;
+            }
+
             _shellViews.Add(view);
             if (driver.Output is Basin.Backend.Wayland.WaylandOutput nested)
             {
