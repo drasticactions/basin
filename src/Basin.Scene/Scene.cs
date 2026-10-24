@@ -176,6 +176,63 @@ public sealed partial class Scene
     }
 
     /// <summary>
+    /// Releases every texture that a renderer imported for the scene: the shared cache, and the textures of each buffer, mesh and transform under <see cref="Root"/>. The next frame imports them again. The pixel shaders of shader nodes and buffers are cleared, because they belong to the old renderer. Their owners set new ones.
+    /// </summary>
+    /// <param name="renderer">The renderer whose textures to release, for example a lost renderer before it is disposed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> is <see langword="null"/>.</exception>
+    public void ReleaseRenderer(IRenderer renderer)
+    {
+        ArgumentNullException.ThrowIfNull(renderer);
+        ReleaseRendererIn(Root);
+        foreach (var pair in _textures)
+        {
+            if (ReferenceEquals(pair.Value.Renderer, renderer))
+            {
+                _deadTextures.Add(pair.Key);
+            }
+        }
+
+        foreach (var buffer in _deadTextures)
+        {
+            if (_textures.TryGetValue(buffer, out var entry))
+            {
+                DropTexture(buffer, entry);
+            }
+        }
+
+        _deadTextures.Clear();
+    }
+
+    private static void ReleaseRendererIn(SceneNode node)
+    {
+        switch (node)
+        {
+            case SceneBuffer buffer:
+                buffer.ReleaseRendererState();
+                break;
+            case SceneMesh mesh:
+                mesh.ReleaseRendererState();
+                break;
+            case SceneShader shader:
+                shader.Shader = null;
+                break;
+        }
+
+        if (node is SceneTransform transform)
+        {
+            transform.ReleaseRendererState();
+        }
+
+        if (node is SceneTree tree)
+        {
+            foreach (var child in tree.Children)
+            {
+                ReleaseRendererIn(child);
+            }
+        }
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Scene"/> class with an empty <see cref="Root"/> tree.
     /// </summary>
     public Scene()

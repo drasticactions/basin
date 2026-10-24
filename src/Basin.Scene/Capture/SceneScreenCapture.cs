@@ -34,9 +34,23 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
     }
 
     /// <summary>
-    /// Gets or sets the renderer that draws the captures. While it is <see langword="null"/>, no source is supported.
+    /// Gets or sets the renderer that draws the captures. While it is <see langword="null"/>, no source is supported. A new renderer drops the intermediate buffer and texture of YUV captures.
     /// </summary>
-    public IRenderer? Renderer { get; set; }
+    public IRenderer? Renderer
+    {
+        get => _renderer;
+        set
+        {
+            if (!ReferenceEquals(_renderer, value))
+            {
+                DropIntermediate();
+            }
+
+            _renderer = value;
+        }
+    }
+
+    private IRenderer? _renderer;
 
     /// <summary>
     /// Gets or sets the color that fills the parts of a capture where no node draws.

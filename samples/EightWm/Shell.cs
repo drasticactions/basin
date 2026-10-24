@@ -394,7 +394,7 @@ internal sealed partial class Shell : IDisposable
         DisconnectClients();
         hangup.Remove();
         UnwireIpc();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private void OnIterated()

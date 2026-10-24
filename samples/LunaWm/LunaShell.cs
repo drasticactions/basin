@@ -363,7 +363,7 @@ internal sealed partial class LunaShell : IDisposable
         StopNotifications();
         StopLock();
         UnwireIpc();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private void OnIterated()

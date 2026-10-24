@@ -306,7 +306,7 @@ internal sealed partial class Dam : IDisposable
 
         _loop.Frames = _options.Frames;
         _loop.Run();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private void CreateInspector()

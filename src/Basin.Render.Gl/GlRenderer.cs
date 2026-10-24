@@ -287,6 +287,12 @@ public sealed unsafe class GlRenderer : IRenderer
     /// <inheritdoc/>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
+        if (_device.CheckLost())
+        {
+            ReportLost();
+            throw new RendererLostException("The GL context was reset.");
+        }
+
         if (_targets.TryGetValue(target, out var entry) && entry.IsCpuReadback && entry.SeenWrites != target.WriteCount)
         {
             _targets.Remove(target);
@@ -320,6 +326,37 @@ public sealed unsafe class GlRenderer : IRenderer
         }
 
         return entry;
+    }
+
+    private Action? _deviceLost;
+    private bool _lossReported;
+
+    /// <inheritdoc/>
+    public event Action? DeviceLost
+    {
+        add => _deviceLost += value;
+        remove => _deviceLost -= value;
+    }
+
+    /// <inheritdoc/>
+    public RendererLossDetection LossDetection => _device.LossDetection;
+
+    /// <inheritdoc/>
+    public void MakeCurrent() => _device.MakeCurrent();
+
+    internal void SimulateLoss() => _device.SimulateLoss();
+
+    internal void SimulateErrorLoss() => _device.SimulateErrorLoss();
+
+    private void ReportLost()
+    {
+        if (_lossReported)
+        {
+            return;
+        }
+
+        _lossReported = true;
+        _deviceLost?.Invoke();
     }
 
     /// <summary>

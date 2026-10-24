@@ -94,7 +94,7 @@ public sealed class UIDriver : IDisposable
     }
 
     /// <summary>
-    /// Pumps the host now, moves the popups to their surfaces' positions, and sets the timer again. It does nothing after <see cref="Dispose"/>.
+    /// Pumps the host now, moves the popups to their surfaces' positions, and sets the timer again. It does nothing after <see cref="Dispose"/>. When the host draws on a lost device, the pump stops there, and the owner of the host replaces it after the renderer rebuild.
     /// </summary>
     public void Pump()
     {
@@ -103,7 +103,15 @@ public sealed class UIDriver : IDisposable
             return;
         }
 
-        _host.Pump();
+        try
+        {
+            _host.Pump();
+        }
+        catch (RendererLostException)
+        {
+            return;
+        }
+
         SyncPopups();
         Schedule();
         Pumped?.Invoke();

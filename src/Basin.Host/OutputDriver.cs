@@ -15,8 +15,11 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     private readonly BasinHost _host;
     private readonly Scene.Scene _scene;
     private readonly OutputLayout _layout;
-    private readonly IRenderer _renderer;
-    private readonly IAllocator? _deviceAllocator;
+    private IRenderer _renderer;
+    private IAllocator? _deviceAllocator;
+    private bool _recoveryQueued;
+    private bool _rendererFailed;
+    private bool _disposed;
     private readonly List<OutputView> _views = [];
     private IFrameClock? _frames;
     private readonly List<IAllocator> _ownedAllocators = [];
@@ -70,6 +73,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         _layout = layout;
         _renderer = renderer;
         _deviceAllocator = deviceAllocator;
+        _renderer.DeviceLost += OnRendererLost;
         host.AttachDriver(this);
     }
 
@@ -79,9 +83,29 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     public Scene.Scene Scene => _scene;
 
     /// <summary>
-    /// Gets the renderer for every output.
+    /// Gets the renderer for every output. After a lost renderer is replaced, it is the new renderer.
     /// </summary>
     public IRenderer Renderer => _renderer;
+
+    /// <summary>
+    /// Gets the GPU allocator for scanout buffers, or <see langword="null"/> when there is none. After a lost renderer is replaced, it is the allocator of the new renderer.
+    /// </summary>
+    public IAllocator? DeviceAllocator => _deviceAllocator;
+
+    /// <summary>
+    /// Gets or sets the function that makes a new renderer and allocator when the renderer loses its device, or <see langword="null"/>. Without it, a loss stops the compositor through <see cref="RendererRecoveryFailed"/>.
+    /// </summary>
+    public Func<RenderStack>? RendererFactory { get; set; }
+
+    /// <summary>
+    /// Gets the number of times that the driver replaced a lost renderer.
+    /// </summary>
+    public long RendererRebuilds { get; private set; }
+
+    /// <summary>
+    /// Occurs when the renderer lost its device and the driver cannot replace it. The driver stops painting. A <see cref="CompositorRunLoop"/> then stops with a failure.
+    /// </summary>
+    public event Action<Exception>? RendererRecoveryFailed;
 
     /// <summary>
     /// Gets or sets the capture pack that the driver tells about new outputs and presented damage, or <see langword="null"/> for none.
@@ -1222,10 +1246,12 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     }
 
     /// <summary>
-    /// Ends a running retain sequence without calling its done function, tears down every view, and disposes the owned allocators and secondary cards. It does not dispose the host, the scene or the renderer.
+    /// Ends a running retain sequence without calling its done function, cancels a queued renderer rebuild, tears down every view, and disposes the owned allocators and secondary cards. It does not dispose the host, the scene or the renderer.
     /// </summary>
     public void Dispose()
     {
+        _disposed = true;
+        _renderer.DeviceLost -= OnRendererLost;
         if (_retain is { Finished: false } retain)
         {
             retain.Finished = true;
@@ -1590,6 +1616,146 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         return true;
     }
 
+    private void OnRendererLost()
+    {
+        if (_recoveryQueued || _rendererFailed || _disposed)
+        {
+            return;
+        }
+
+        _recoveryQueued = true;
+        AllocationScope.Pause();
+        try
+        {
+            HostLog.Log.Warn($"renderer: {_renderer.GetType().Name} lost its device, a rebuild is queued");
+            _host.Loop.AddIdle(RecoverRenderer);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
+
+    private void RecoverRenderer()
+    {
+        _recoveryQueued = false;
+        if (_disposed || _rendererFailed)
+        {
+            return;
+        }
+
+        var started = MonotonicClock.Nanos;
+        var old = new RenderStack(_renderer, _deviceAllocator);
+        if (RendererFactory is not { } factory)
+        {
+            FailRecovery(new InvalidOperationException("The output driver has no renderer factory, so it cannot replace the lost renderer."));
+            return;
+        }
+
+        RenderStack created;
+        try
+        {
+            created = factory();
+        }
+        catch (Exception error)
+        {
+            old.Renderer.MakeCurrent();
+            FailRecovery(error);
+            return;
+        }
+
+        var replacement = new RendererReplacement(old, created);
+        old.Renderer.DeviceLost -= OnRendererLost;
+        _renderer = created.Renderer;
+        _deviceAllocator = created.DeviceAllocator;
+        _renderer.DeviceLost += OnRendererLost;
+        old.Renderer.MakeCurrent();
+        try
+        {
+            ReleaseOldRenderer(replacement);
+        }
+        catch (Exception error)
+        {
+            FailRecovery(error);
+            return;
+        }
+
+        try
+        {
+            old.DeviceAllocator?.Dispose();
+            old.Renderer.Dispose();
+        }
+        catch (Exception error)
+        {
+            HostLog.Log.Warn(error, $"renderer: the lost {old.Renderer.GetType().Name} did not dispose cleanly");
+        }
+
+        _renderer.MakeCurrent();
+        RendererRebuilds++;
+        _scopedRepaints = 0;
+        try
+        {
+            _host.Services?.NotifyRendererRebuilt(replacement);
+            _host.RaiseRendererRebuilt(replacement);
+        }
+        catch (Exception error)
+        {
+            FailRecovery(error);
+            return;
+        }
+
+        foreach (var view in _views)
+        {
+            view.Color?.RebuildLuts();
+            if (view.Scheduler is { } scheduler)
+            {
+                scheduler.ScheduleRepaint();
+            }
+            else if (FullRepaint)
+            {
+                OracleRepaint(view);
+            }
+        }
+
+        HostLog.Log.Info($"renderer: replaced the lost {old.Renderer.GetType().Name} in {(MonotonicClock.Nanos - started) / 1_000_000.0:F1} ms");
+    }
+
+    private void ReleaseOldRenderer(RendererReplacement replacement)
+    {
+        var old = replacement.Old;
+        foreach (var view in _views)
+        {
+            view.Scene?.ReleaseRenderer(old.Renderer);
+            if (view.Allocator is { } allocator && ReferenceEquals(allocator, old.DeviceAllocator))
+            {
+                view.Swapchain?.Dispose();
+                view.Swapchain = null;
+                view.Allocator = null;
+                ChooseScanout(view);
+            }
+        }
+
+        _scene.ReleaseRenderer(old.Renderer);
+        if (Capture is { } pack)
+        {
+            pack.Capture.Renderer = _renderer;
+            if (ReferenceEquals(pack.Capture.Allocator, old.DeviceAllocator))
+            {
+                pack.Capture.Allocator = _deviceAllocator;
+            }
+        }
+
+        _host.Services?.NotifyRendererReplaced(replacement);
+        _host.RaiseRendererReplaced(replacement);
+    }
+
+    private void FailRecovery(Exception error)
+    {
+        _rendererFailed = true;
+        HostLog.Log.Error(error, $"renderer: {_renderer.GetType().Name} lost its device and cannot be replaced, the compositor stops");
+        RendererRecoveryFailed?.Invoke(error);
+    }
+
     private void EnsureSwapchain(OutputView view, in OutputMode mode)
     {
         if (view.Swapchain is null)
@@ -1617,11 +1783,23 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
     private void Repaint(OutputView view)
     {
-        if (!view.Output.Enabled)
+        if (!view.Output.Enabled || _rendererFailed)
         {
             return;
         }
 
+        try
+        {
+            ScopedRepaint(view);
+        }
+        catch (RendererLostException)
+        {
+            OnRendererLost();
+        }
+    }
+
+    private void ScopedRepaint(OutputView view)
+    {
         if (_scopedRepaints < 30)
         {
             _scopedRepaints++;
@@ -2047,10 +2225,23 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
     private void OracleRepaint(OutputView view)
     {
-        if (!view.Output.Enabled)
+        if (!view.Output.Enabled || _rendererFailed)
         {
             return;
         }
+
+        try
+        {
+            OracleRepaintCore(view);
+        }
+        catch (RendererLostException)
+        {
+            OnRendererLost();
+        }
+    }
+
+    private void OracleRepaintCore(OutputView view)
+    {
 
         BeginAnimationFrame(view);
         Frames?.BeginFrameAtNextRefresh(view.Output);

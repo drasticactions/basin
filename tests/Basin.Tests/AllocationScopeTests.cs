@@ -42,6 +42,28 @@ public sealed class AllocationScopeTests : IDisposable
     }
 
     [Fact]
+    public void A_region_that_an_exception_leaves_lets_that_exception_through()
+    {
+        LeakTracking.Require();
+        Action unwind = () =>
+        {
+            AllocationScope.Begin(region: "unwinding");
+            try
+            {
+                GC.KeepAlive(new byte[64]);
+                throw new RendererLostException("injected");
+            }
+            finally
+            {
+                AllocationScope.End();
+            }
+        };
+
+        var lost = Assert.Throws<RendererLostException>(unwind);
+        Assert.Equal("injected", lost.Message);
+    }
+
+    [Fact]
     public void An_allowance_is_a_ceiling_rather_than_a_licence()
     {
         LeakTracking.Require();

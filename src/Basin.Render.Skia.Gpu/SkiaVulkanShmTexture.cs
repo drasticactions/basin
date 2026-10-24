@@ -43,29 +43,37 @@ internal sealed class SkiaVulkanShmTexture : ISkiaTexture, IRefreshableTexture
 
         if (_image is null)
         {
-            _backend = SkiaCensus.Track(new GRBackendTexture(Width, Height, new GRVkImageInfo
+            Basin.Diagnostics.AllocationScope.Pause();
+            try
             {
-                Image = (ulong)_native.Image.Handle,
-                ImageTiling = SkiaVulkanRenderer.VkImageTilingOptimal,
-                ImageLayout = SkiaVulkanRenderer.VkImageLayoutGeneral,
-                Format = SkiaVulkanRenderer.VkFormatB8G8R8A8Unorm,
-                ImageUsageFlags = SkiaVulkanRenderer.VkUsageTexture,
-                SampleCount = 1,
-                LevelCount = 1,
-                CurrentQueueFamily = _renderer.Device.QueueFamily,
-            }));
-            var wrapped = SKImage.FromTexture(
-                _renderer.Context, _backend, GRSurfaceOrigin.TopLeft, SKColorType.Bgra8888,
-                _native.HasAlpha ? SKAlphaType.Premul : SKAlphaType.Opaque);
-            if (wrapped is null)
-            {
-                SkiaCensus.Release(_backend);
-                _backend = null;
-                image = null!;
-                return false;
-            }
+                _backend = SkiaCensus.Track(new GRBackendTexture(Width, Height, new GRVkImageInfo
+                {
+                    Image = (ulong)_native.Image.Handle,
+                    ImageTiling = SkiaVulkanRenderer.VkImageTilingOptimal,
+                    ImageLayout = SkiaVulkanRenderer.VkImageLayoutGeneral,
+                    Format = SkiaVulkanRenderer.VkFormatB8G8R8A8Unorm,
+                    ImageUsageFlags = SkiaVulkanRenderer.VkUsageTexture,
+                    SampleCount = 1,
+                    LevelCount = 1,
+                    CurrentQueueFamily = _renderer.Device.QueueFamily,
+                }));
+                var wrapped = SKImage.FromTexture(
+                    _renderer.Context, _backend, GRSurfaceOrigin.TopLeft, SKColorType.Bgra8888,
+                    _native.HasAlpha ? SKAlphaType.Premul : SKAlphaType.Opaque);
+                if (wrapped is null)
+                {
+                    SkiaCensus.Release(_backend);
+                    _backend = null;
+                    image = null!;
+                    return false;
+                }
 
-            _image = SkiaCensus.Track(wrapped);
+                _image = SkiaCensus.Track(wrapped);
+            }
+            finally
+            {
+                Basin.Diagnostics.AllocationScope.Resume();
+            }
         }
 
         image = _image;

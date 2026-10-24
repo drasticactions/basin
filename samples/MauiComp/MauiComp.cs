@@ -323,7 +323,7 @@ internal sealed partial class MauiComp : IDisposable
         _settle?.Dispose();
         _ipc = null;
         _clock?.Dispose();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private void ApplyKeymap()

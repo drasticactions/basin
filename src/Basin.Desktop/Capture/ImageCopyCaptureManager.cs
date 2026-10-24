@@ -57,6 +57,11 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         {
             live.AddDamageObserver(this);
         }
+
+        if (_dmabuf is { } constraints)
+        {
+            constraints.Changed += ResendConstraints;
+        }
     }
 
     /// <summary>
@@ -91,6 +96,11 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         if (_capture is { } live)
         {
             live.RemoveDamageObserver(this);
+        }
+
+        if (_dmabuf is { } constraints)
+        {
+            constraints.Changed -= ResendConstraints;
         }
 
         _global.Dispose();
@@ -128,6 +138,25 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         for (var i = _cursorSessions.Count - 1; i >= 0; i--)
         {
             _cursorSessions[i].Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Sends the buffer constraints again to every live session, for example after the render device changed.
+    /// </summary>
+    public void ResendConstraints()
+    {
+        foreach (var session in _sessions)
+        {
+            if (!session.Stopped && !session.Resource.IsDestroyed)
+            {
+                session.SendConstraints();
+            }
+        }
+
+        foreach (var cursorSession in _cursorSessions)
+        {
+            cursorSession.ResendConstraints();
         }
     }
 
@@ -558,6 +587,8 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         }
 
         public ExtImageCopyCaptureCursorSessionV1Resource Resource => _resource;
+
+        public void ResendConstraints() => _capture?.SendConstraints();
 
         void IExtImageCopyCaptureCursorSessionV1Handler.GetCaptureSession(ExtImageCopyCaptureCursorSessionV1Resource resource, in ExtImageCopyCaptureCursorSessionV1Resource.GetCaptureSessionEventArgs args)
         {

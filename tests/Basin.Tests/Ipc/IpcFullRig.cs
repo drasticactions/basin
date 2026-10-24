@@ -39,6 +39,7 @@ internal static class IpcFullRig
                 services.UseDefault<IInputDiagnostics>(new QuietInputDiagnostics());
                 services.UseDefault<ISurfaceDiagnostics>(new SurfaceDiagnostics(host.Compositor));
                 services.UseDefault<IExplicitSyncDiagnostics>(new QuietSyncDiagnostics());
+                services.UseDefault<IRendererDiagnostics>(new QuietRendererDiagnostics());
                 var clock = new DefaultAnimationClock();
                 services.UseDefault<IAnimationClock>(clock);
                 services.UseDefault<IAnimationClockControl>(clock);
@@ -51,6 +52,15 @@ internal static class IpcFullRig
         rig.Server.Approvals = new IpcApprovalBroker();
         register?.Invoke(rig.Server);
         return rig;
+    }
+
+    internal sealed class QuietRendererDiagnostics : IRendererDiagnostics
+    {
+        public string? RendererName => "PixmanRenderer";
+
+        public RendererLossDetection LossDetection => RendererLossDetection.Never;
+
+        public long Rebuilds => 0;
     }
 
     internal sealed class QuietSyncDiagnostics : IExplicitSyncDiagnostics

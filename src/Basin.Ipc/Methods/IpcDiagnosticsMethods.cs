@@ -64,6 +64,14 @@ internal static class IpcDiagnosticsMethods
             });
         }
 
+        if (describe.Find<IRendererDiagnostics>() is { } rendererDiagnostics)
+        {
+            server.Methods.RegisterLibrary(IpcMethodNames.DiagRenderer, (ref IpcParams _, IpcReply reply) =>
+                reply.Write(
+                    new IpcDiagRenderer(rendererDiagnostics.RendererName, LossDetectionName(rendererDiagnostics.LossDetection), rendererDiagnostics.Rebuilds),
+                    IpcJsonContext.Default.IpcDiagRenderer));
+        }
+
         if (describe.Find<IAnimationClockControl>() is { } control && describe.Find<IAnimationClock>() is { } clock)
         {
             RegisterClock(server.Methods, control, clock);
@@ -520,6 +528,14 @@ internal static class IpcDiagnosticsMethods
     }
 
     private static IpcBox Box(in Box box) => new(box.X, box.Y, box.Width, box.Height);
+
+    private static string LossDetectionName(RendererLossDetection detection) => detection switch
+    {
+        RendererLossDetection.ResetNotification => "reset-notification",
+        RendererLossDetection.Errors => "errors",
+        RendererLossDetection.DeviceStatus => "device-status",
+        _ => "never",
+    };
 
     private static void RegisterClock(IpcMethodRegistry methods, IAnimationClockControl control, IAnimationClock clock)
     {

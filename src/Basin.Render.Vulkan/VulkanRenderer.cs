@@ -171,6 +171,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
     public VulkanRenderer(string drmNodePath)
     {
         Dev = new VulkanDevice(drmNodePath, ["VK_KHR_external_semaphore_fd", "VK_KHR_external_semaphore"]);
+        Dev.Lost += ReportLost;
         var vk = Dev.Api;
         var device = Dev.Device;
 
@@ -520,10 +521,43 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
     }
 
+    private Action? _deviceLost;
+    private bool _lossReported;
+    private bool _simulatedLoss;
+
+    /// <inheritdoc/>
+    public event Action? DeviceLost
+    {
+        add => _deviceLost += value;
+        remove => _deviceLost -= value;
+    }
+
+    /// <inheritdoc/>
+    public RendererLossDetection LossDetection => RendererLossDetection.DeviceStatus;
+
+    internal void SimulateLoss() => _simulatedLoss = true;
+
+    private void ReportLost()
+    {
+        if (_lossReported)
+        {
+            return;
+        }
+
+        _lossReported = true;
+        _deviceLost?.Invoke();
+    }
+
     /// <inheritdoc/>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
+        if (Dev.IsLost || _simulatedLoss)
+        {
+            ReportLost();
+            throw new RendererLostException("The Vulkan device is lost.");
+        }
+
         if (_targets.TryGetValue(target, out var entry) && entry.Target.IsCpuReadback && entry.Target.SeenWrites != target.WriteCount)
         {
             _targets.Remove(target);

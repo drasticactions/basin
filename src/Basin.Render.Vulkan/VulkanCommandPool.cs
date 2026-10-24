@@ -35,7 +35,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             Flags = CommandPoolCreateFlags.ResetCommandBufferBit,
             QueueFamilyIndex = device.QueueFamily,
         };
-        VulkanDevice.Check(vk.CreateCommandPool(device.Device, in poolInfo, null, out _pool), "vkCreateCommandPool");
+        _device.CheckResult(vk.CreateCommandPool(device.Device, in poolInfo, null, out _pool), "vkCreateCommandPool");
 
         var buffers = stackalloc CommandBuffer[Slots];
         var allocateInfo = new CommandBufferAllocateInfo
@@ -45,7 +45,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             Level = CommandBufferLevel.Primary,
             CommandBufferCount = Slots,
         };
-        VulkanDevice.Check(vk.AllocateCommandBuffers(device.Device, in allocateInfo, buffers), "vkAllocateCommandBuffers");
+        _device.CheckResult(vk.AllocateCommandBuffers(device.Device, in allocateInfo, buffers), "vkAllocateCommandBuffers");
         for (var i = 0; i < Slots; i++)
         {
             _slots[i].Commands = buffers[i];
@@ -62,7 +62,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             SType = StructureType.SemaphoreCreateInfo,
             PNext = &timelineInfo,
         };
-        VulkanDevice.Check(vk.CreateSemaphore(device.Device, in semaphoreInfo, null, out _timeline), "vkCreateSemaphore(timeline)");
+        _device.CheckResult(vk.CreateSemaphore(device.Device, in semaphoreInfo, null, out _timeline), "vkCreateSemaphore(timeline)");
 
         if (device.EnabledExtensions.Contains("VK_KHR_external_semaphore_fd") &&
             vk.TryGetDeviceExtension(device.Instance, device.Device, out Silk.NET.Vulkan.Extensions.KHR.KhrExternalSemaphoreFd fd))
@@ -80,7 +80,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             };
             for (var i = 0; i < Slots; i++)
             {
-                VulkanDevice.Check(vk.CreateSemaphore(device.Device, in binaryInfo, null, out _slots[i].Binary), "vkCreateSemaphore(binary)");
+                _device.CheckResult(vk.CreateSemaphore(device.Device, in binaryInfo, null, out _slots[i].Binary), "vkCreateSemaphore(binary)");
             }
         }
     }
@@ -176,7 +176,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
     public ulong Submit(CommandBuffer commands, bool exportable = false)
     {
         var vk = _device.Api;
-        VulkanDevice.Check(vk.EndCommandBuffer(commands), "vkEndCommandBuffer");
+        _device.CheckResult(vk.EndCommandBuffer(commands), "vkEndCommandBuffer");
         var point = ++_point;
         SlotOf(commands).Point = point;
         SlotOf(commands).Recording = false;
@@ -217,7 +217,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             SignalSemaphoreInfoCount = signalCount,
             PSignalSemaphoreInfos = signalInfos,
         };
-        VulkanDevice.Check(_device.Synchronization2.QueueSubmit2(_device.Queue, 1, &submit, default), "vkQueueSubmit2");
+        _device.CheckResult(_device.Synchronization2.QueueSubmit2(_device.Queue, 1, &submit, default), "vkQueueSubmit2");
         return point;
     }
 
@@ -228,11 +228,11 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
         var hasStage = stage.Handle != 0;
         if (hasStage)
         {
-            VulkanDevice.Check(vk.EndCommandBuffer(stage), "vkEndCommandBuffer(stage)");
+            _device.CheckResult(vk.EndCommandBuffer(stage), "vkEndCommandBuffer(stage)");
             SlotOf(stage).Recording = false;
         }
 
-        VulkanDevice.Check(vk.EndCommandBuffer(render), "vkEndCommandBuffer(render)");
+        _device.CheckResult(vk.EndCommandBuffer(render), "vkEndCommandBuffer(render)");
         SlotOf(render).Recording = false;
 
         if (_waitInfos.Length < waits.Length)
@@ -316,6 +316,17 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             count++;
 
             var result = _device.Synchronization2.QueueSubmit2(_device.Queue, count, submits, default);
+            if (result == Result.ErrorDeviceLost)
+            {
+                if (hasStage)
+                {
+                    Abandon(stage);
+                }
+
+                Abandon(render);
+                _device.CheckResult(result, "vkQueueSubmit2");
+            }
+
             if (result == Result.Success)
             {
                 if (hasStage)
@@ -355,6 +366,11 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
 
     public void Wait(ulong point)
     {
+        if (_device.LostNow)
+        {
+            return;
+        }
+
         var timeline = _timeline;
         var waitInfo = new SemaphoreWaitInfo
         {
@@ -363,7 +379,14 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             PSemaphores = &timeline,
             PValues = &point,
         };
-        VulkanDevice.Check(_device.Api.WaitSemaphores(_device.Device, in waitInfo, 10_000_000_000), "vkWaitSemaphores");
+        var waited = _device.Api.WaitSemaphores(_device.Device, in waitInfo, 10_000_000_000);
+        if (waited == Result.ErrorDeviceLost)
+        {
+            _device.MarkLost();
+            return;
+        }
+
+        _device.CheckResult(waited, "vkWaitSemaphores");
     }
 
     public ulong CompletedPoint { get; private set; }
@@ -372,8 +395,20 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
 
     private ulong Completed()
     {
+        if (_device.LostNow)
+        {
+            return ulong.MaxValue;
+        }
+
         ulong value;
-        VulkanDevice.Check(_device.Api.GetSemaphoreCounterValue(_device.Device, _timeline, &value), "vkGetSemaphoreCounterValue");
+        var read = _device.Api.GetSemaphoreCounterValue(_device.Device, _timeline, &value);
+        if (read == Result.ErrorDeviceLost)
+        {
+            _device.MarkLost();
+            return ulong.MaxValue;
+        }
+
+        _device.CheckResult(read, "vkGetSemaphoreCounterValue");
         return value;
     }
 
@@ -385,7 +420,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             SType = StructureType.CommandBufferBeginInfo,
             Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
         };
-        VulkanDevice.Check(_device.Api.BeginCommandBuffer(_slots[index].Commands, in beginInfo), "vkBeginCommandBuffer");
+        _device.CheckResult(_device.Api.BeginCommandBuffer(_slots[index].Commands, in beginInfo), "vkBeginCommandBuffer");
         return _slots[index].Commands;
     }
 

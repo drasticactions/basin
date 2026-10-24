@@ -52,7 +52,12 @@ public sealed class CaptureDmabufConstraints : ICaptureDmabufConstraints
     }
 
     /// <summary>
-    /// Replaces the formats and the render device.
+    /// Occurs after <see cref="Offer"/> replaced the formats and the device.
+    /// </summary>
+    public event Action? Changed;
+
+    /// <summary>
+    /// Replaces the formats and the render device, and raises <see cref="Changed"/>.
     /// </summary>
     /// <param name="formats">The formats and modifiers that the renderer can draw into.</param>
     /// <param name="devicePath">The path of the render device node. It must not be empty.</param>
@@ -62,5 +67,6 @@ public sealed class CaptureDmabufConstraints : ICaptureDmabufConstraints
         ArgumentException.ThrowIfNullOrEmpty(devicePath);
         Formats = formats;
         _hasDevice = DrmDevices.TryDeviceId(devicePath, out _device);
+        Changed?.Invoke();
     }
 }

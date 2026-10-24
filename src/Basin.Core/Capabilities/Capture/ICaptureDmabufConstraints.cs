@@ -24,4 +24,18 @@ public interface ICaptureDmabufConstraints
     /// <param name="modifier">The format modifier of the buffer.</param>
     /// <returns><see langword="true"/> when the pair is acceptable. The default accepts only the pairs in <see cref="Formats"/>.</returns>
     bool Wraps(DrmFormat format, ulong modifier) => Formats.Contains(format, modifier);
+
+    /// <summary>
+    /// Occurs after the device or the formats changed, for example after a lost renderer was replaced. A capture protocol then sends its constraints again. The default implementation never raises it.
+    /// </summary>
+    event Action? Changed
+    {
+        add
+        {
+        }
+
+        remove
+        {
+        }
+    }
 }

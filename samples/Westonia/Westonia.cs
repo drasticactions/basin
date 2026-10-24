@@ -547,7 +547,7 @@ internal sealed partial class Westonia : IDisposable
         _access = null;
 
         _clock?.Dispose();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private void SyncPopups() => _uiDriver.SyncPopups();

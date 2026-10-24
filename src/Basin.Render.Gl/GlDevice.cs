@@ -25,6 +25,16 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
 
     internal readonly delegate* unmanaged[Cdecl]<uint, void*, void> ImageTargetTexture;
 
+    private const int ResetNotificationStrategy = 0x3138;
+    private const int LoseContextOnReset = 0x31BF;
+    private const uint ContextLost = 0x0507;
+    private const int EglContextLost = 0x300E;
+
+    private readonly delegate* unmanaged[Cdecl]<uint> _resetStatus;
+    private bool _lost;
+    private bool _simulatedLoss;
+    private uint _injectedError;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GlDevice"/> class and makes its context current. It throws <see cref="InvalidOperationException"/> when the node cannot be opened.
     /// </summary>
@@ -51,11 +61,20 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
             Libegl.EGL_ALPHA_SIZE, 8,
         ];
         var configs = _egl.ChooseConfigs(configAttribs);
-        Span<int> contextAttribs = [Libegl.EGL_CONTEXT_MAJOR_VERSION, 3];
-        _context = _egl.CreateContext(configs[0], null, contextAttribs);
+        _context = CreateContext(configs[0], out var robust);
         _context.MakeCurrent();
 
         _gl = GL.GetApi(new EglProcContext());
+        if (robust && LoadResetStatus() is var resetStatus && resetStatus is not null)
+        {
+            _resetStatus = resetStatus;
+            LossDetection = RendererLossDetection.ResetNotification;
+        }
+        else
+        {
+            LossDetection = RendererLossDetection.Errors;
+        }
+
         ImageTargetTexture = (delegate* unmanaged[Cdecl]<uint, void*, void>)EglProc.Load("glEGLImageTargetTexture2DOES");
         SampleableFormats = QuerySampleableFormats();
         ImportsLinearYuvPlanes = ImportsLinear(DrmFormat.R8) && ImportsLinear(DrmFormat.Gr88);
@@ -198,16 +217,130 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
     }
 
     /// <summary>
-    /// Releases the context, destroys the context, the display and the GBM device, and closes the DRM node fd.
+    /// Gets how the device finds a lost context: from the reset status of a robust context, or from context-lost errors when the driver gives no robust context.
+    /// </summary>
+    public RendererLossDetection LossDetection { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="CheckLost"/> found a lost context.
+    /// </summary>
+    public bool IsLost => _lost;
+
+    /// <summary>
+    /// Reads whether the context is lost, with one GL call. A robust context reads its reset status, and any other context reads <c>GL_CONTEXT_LOST</c> from the error queue. A loss stays reported.
+    /// </summary>
+    /// <returns><see langword="true"/> when the context is lost.</returns>
+    public bool CheckLost()
+    {
+        if (_lost)
+        {
+            return true;
+        }
+
+        DebugHang.Submit(_gl);
+
+        if (_simulatedLoss || DebugLoss.Due())
+        {
+            _lost = true;
+            return true;
+        }
+
+        if (_resetStatus is not null && LossDetection == RendererLossDetection.ResetNotification)
+        {
+            _lost = _resetStatus() != 0;
+            return _lost;
+        }
+
+        var error = _injectedError != 0 ? _injectedError : (uint)_gl.GetError();
+        _injectedError = 0;
+        _lost = error == ContextLost;
+        return _lost;
+    }
+
+    /// <summary>
+    /// Makes the context of the device current on the calling thread. When EGL reports a lost context, it releases the current context instead, so that later GL calls do nothing.
+    /// </summary>
+    public void MakeCurrent()
+    {
+        try
+        {
+            _context.MakeCurrent();
+        }
+        catch (EglException error)
+        {
+            if (Libegl.eglGetError() == EglContextLost || error.Message.Contains("CONTEXT_LOST", StringComparison.Ordinal))
+            {
+                _lost = true;
+            }
+
+            _egl.ReleaseCurrent();
+        }
+    }
+
+    internal void SimulateLoss() => _simulatedLoss = true;
+
+    internal void SimulateErrorLoss()
+    {
+        LossDetection = RendererLossDetection.Errors;
+        _injectedError = ContextLost;
+    }
+
+    /// <summary>
+    /// Releases the context when it is current, destroys the context, the display and the GBM device, and closes the DRM node fd.
     /// </summary>
     public void Dispose()
     {
         _gl.Dispose();
-        _egl.ReleaseCurrent();
+        if (Libegl.eglGetCurrentContext() == (void*)_context.Handle)
+        {
+            _egl.ReleaseCurrent();
+        }
+
         _context.Dispose();
         _egl.Dispose();
         _gbm.Dispose();
         close(_deviceFd);
+    }
+
+    private EglContext CreateContext(EglConfig config, out bool robust)
+    {
+        if (_egl.HasExtension("EGL_EXT_create_context_robustness"))
+        {
+            Span<int> robustAttribs = [Libegl.EGL_CONTEXT_MAJOR_VERSION, 3, ResetNotificationStrategy, LoseContextOnReset];
+            try
+            {
+                robust = true;
+                return _egl.CreateContext(config, null, robustAttribs);
+            }
+            catch (EglException)
+            {
+            }
+        }
+
+        robust = false;
+        Span<int> contextAttribs = [Libegl.EGL_CONTEXT_MAJOR_VERSION, 3];
+        return _egl.CreateContext(config, null, contextAttribs);
+    }
+
+    private delegate* unmanaged[Cdecl]<uint> LoadResetStatus()
+    {
+        var extensions = _gl.GetStringS(StringName.Extensions) ?? string.Empty;
+        var name = extensions.Contains("GL_KHR_robustness", StringComparison.Ordinal) ? "glGetGraphicsResetStatusKHR"
+            : extensions.Contains("GL_EXT_robustness", StringComparison.Ordinal) ? "glGetGraphicsResetStatusEXT"
+            : null;
+        if (name is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return (delegate* unmanaged[Cdecl]<uint>)EglProc.Load(name);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private bool ImportsLinear(DrmFormat format)

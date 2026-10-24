@@ -368,6 +368,11 @@ public static class IpcMethodNames
     public const string DiagSyncobj = "diag/syncobj";
 
     /// <summary>
+    /// Names the method that returns the renderer, how it finds a lost device, and how many lost renderers were replaced.
+    /// </summary>
+    public const string DiagRenderer = "diag/renderer";
+
+    /// <summary>
     /// Names the method that returns the state of the animation clock.
     /// </summary>
     public const string DiagClock = "diag/clock";

@@ -6,13 +6,48 @@ namespace Basin.Backend.Drm;
 /// <summary>
 /// Imports DRM syncobj timelines on one DRM device.
 /// </summary>
-public sealed class DrmSyncDevice : IDrmSyncDevice
+public sealed class DrmSyncDevice : IDrmSyncDevice, IDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="DrmSyncDevice"/> class. It does not take ownership of the fd.
     /// </summary>
     /// <param name="drmFd">The DRM device fd.</param>
     public DrmSyncDevice(int drmFd) => DrmFd = drmFd;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrmSyncDevice"/> class on its own duplicate of a DRM fd. Imported timelines then stay valid after the caller closes its fd.
+    /// </summary>
+    /// <param name="drmFd">The DRM device fd to duplicate. The caller keeps it.</param>
+    /// <returns>The device, which owns the duplicate and closes it at <see cref="Dispose"/>.</returns>
+    /// <exception cref="InvalidOperationException">The fd cannot be duplicated.</exception>
+    public static DrmSyncDevice Duplicate(int drmFd)
+    {
+        var own = fcntl(drmFd, FDupFdCloexec, 3);
+        return own < 0
+            ? throw new InvalidOperationException($"Cannot duplicate DRM fd {drmFd}.")
+            : new DrmSyncDevice(own) { _ownsFd = true };
+    }
+
+    private const int FDupFdCloexec = 1030;
+    private bool _ownsFd;
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int fcntl(int fd, int command, int argument);
+
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern int close(int fd);
+
+    /// <summary>
+    /// Closes the fd when the device owns it, from <see cref="Duplicate"/>. Otherwise it does nothing. A second call does nothing.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_ownsFd)
+        {
+            _ownsFd = false;
+            _ = close(DrmFd);
+        }
+    }
 
     /// <summary>
     /// Tests whether a DRM device supports timeline syncobjs.
@@ -31,7 +66,7 @@ public sealed class DrmSyncDevice : IDrmSyncDevice
     }
 
     /// <summary>
-    /// Gets the DRM device fd. The caller keeps ownership of it.
+    /// Gets the DRM device fd. The caller keeps ownership of it, except for a device from <see cref="Duplicate"/>.
     /// </summary>
     public int DrmFd { get; }
 

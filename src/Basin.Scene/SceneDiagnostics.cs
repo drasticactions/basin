@@ -7,10 +7,10 @@ namespace Basin.Scene;
 /// <summary>
 /// Implements <see cref="ISceneDiagnostics"/> over a <see cref="Scene"/> and, when given, the outputs that a driver presents.
 /// </summary>
-public sealed class SceneDiagnostics : ISceneDiagnostics
+public sealed class SceneDiagnostics : ISceneDiagnostics, IRendererBound
 {
     private readonly Scene _scene;
-    private readonly IRenderer _renderer;
+    private IRenderer _renderer;
     private readonly ICompositorEventLoop _loop;
     private readonly IPresentedOutputs? _outputs;
     private IFrameClock? _clock;
@@ -38,6 +38,16 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         _renderer = renderer;
         _loop = loop;
         _outputs = outputs;
+    }
+
+    /// <summary>
+    /// Takes the new renderer for later screenshots.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        _renderer = replacement.New.Renderer;
     }
 
     /// <summary>

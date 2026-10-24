@@ -16,11 +16,11 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly PixmanRegion32 _wholeDamage = new();
     private readonly List<BufferBase> _retired = [];
-    private readonly VulkanDevice _device;
-    private readonly Func<BufferBase, IVulkanDrawTarget> _wrapFactory;
-    private readonly Action _flush;
-    private readonly IAllocator? _allocator;
-    private readonly ulong[] _modifiers = [];
+    private VulkanDevice _device;
+    private Func<BufferBase, IVulkanDrawTarget> _wrapFactory;
+    private Action _flush;
+    private IAllocator? _allocator;
+    private ulong[] _modifiers = [];
 
     private BufferBase? _target;
     private BufferBase? _front;
@@ -45,6 +45,35 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
         _wrapFactory = wrapFactory;
         _flush = flush;
         _allocator = allocator;
+        _modifiers = modifiers;
+    }
+
+    internal bool IsDisposed => _disposed;
+
+    internal void ReleaseTargets()
+    {
+        if (_drawing)
+        {
+            _wrap?.Canvas.Restore();
+            _drawing = false;
+        }
+
+        _wrap?.Dispose();
+        _wrap = null;
+        _wrapped = null;
+    }
+
+    internal void Rebind(
+        VulkanDevice device,
+        Func<BufferBase, IVulkanDrawTarget> wrapFactory,
+        Action flush,
+        IAllocator? allocator,
+        ulong[] modifiers)
+    {
+        _device = device;
+        _wrapFactory = wrapFactory;
+        _flush = flush;
+        _allocator = _allocator is null ? null : allocator;
         _modifiers = modifiers;
     }
 

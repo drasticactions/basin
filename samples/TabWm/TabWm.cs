@@ -397,7 +397,7 @@ internal sealed partial class TabWm : IDisposable
         _settingsPortal = null;
         _settle?.Dispose();
         _clock?.Dispose();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private async Task StartAccessibilityAsync()

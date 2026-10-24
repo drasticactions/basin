@@ -920,7 +920,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
     private bool TryCreateAcquireTimeline(WpLinuxDrmSyncobjManagerV1 manager, IRenderDevice device)
     {
-        if (DrmSyncobjTimeline.TryCreate(device.DrmFd) is not { } timeline)
+        if (DrmSyncobjTimeline.TryCreate(_backend.SyncFd) is not { } timeline)
         {
             WarnSyncobjOnce($"{device.DevicePath} does not create a syncobj timeline");
             return false;
@@ -942,7 +942,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
     private bool TryCreateReleaseTimeline(WpLinuxDrmSyncobjManagerV1 manager, IRenderDevice device, ImportedBuffer imported)
     {
-        if (DrmSyncobjTimeline.TryCreate(device.DrmFd) is not { } timeline)
+        if (DrmSyncobjTimeline.TryCreate(_backend.SyncFd) is not { } timeline)
         {
             return false;
         }

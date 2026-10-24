@@ -26,6 +26,7 @@ internal static class IpcDiagLines
         Add(methods, IpcMethodNames.DiagCompare, "compare {window} {reference} [{diff_path}]", Comparison);
         Add(methods, IpcMethodNames.DiagCommitTrace, "commit-trace {on:bool} {target}", Plain);
         Add(methods, IpcMethodNames.DiagSyncobj, "syncobj", Syncobj);
+        Add(methods, IpcMethodNames.DiagRenderer, "renderer", Renderer);
         Add(methods, IpcMethodNames.DiagClock, "clock", Clock);
         Add(methods, IpcMethodNames.DiagClockFreeze, "clock-freeze", Clock);
         Add(methods, IpcMethodNames.DiagClockAdvance, "clock-advance {ms:number}", Clock);
@@ -80,6 +81,9 @@ internal static class IpcDiagLines
     public static string? Syncobj(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagSyncobj, static (c, text) =>
         text.Append(CultureInfo.InvariantCulture,
             $"SYNCOBJ managed={c.ManagedCommits} explicit={c.ExplicitCommits} parked={c.ParkedAcquires} unparked={c.UnparkedAcquires} late={c.LateAcquires} unexportable={c.UnexportableAcquires} deferred-releases={c.DeferredReleases} superseded-releases={c.SupersededReleases} discarded-releases={c.DiscardedReleases}\n"));
+
+    public static string? Renderer(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagRenderer, static (r, text) =>
+        text.Append(CultureInfo.InvariantCulture, $"RENDERER name={r.Renderer ?? "none"} loss-detection={r.LossDetection} rebuilds={r.Rebuilds}\n"));
 
     public static string? Clock(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagClock, static (c, text) =>
         text.Append(CultureInfo.InvariantCulture, $"CLOCK frozen={(c.Frozen ? "true" : "false")} nanos={c.Nanos} animating={(c.Animating ? "true" : "false")}\n"));

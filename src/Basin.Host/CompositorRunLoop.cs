@@ -19,7 +19,7 @@ public sealed class CompositorRunLoop
     {
         ArgumentNullException.ThrowIfNull(host);
         _host = host;
-        _outputs = outputs;
+        Outputs = outputs;
     }
 
     /// <summary>
@@ -63,7 +63,36 @@ public sealed class CompositorRunLoop
     public OutputDriver? Outputs
     {
         get => _outputs;
-        set => _outputs = value;
+        set
+        {
+            if (ReferenceEquals(_outputs, value))
+            {
+                return;
+            }
+
+            if (_outputs is { } previous)
+            {
+                previous.RendererRecoveryFailed -= OnRendererRecoveryFailed;
+            }
+
+            _outputs = value;
+            if (value is not null)
+            {
+                value.RendererRecoveryFailed += OnRendererRecoveryFailed;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the exit code that the program returns. It is 0, or 1 after the output driver could not replace a lost renderer.
+    /// </summary>
+    public int ExitCode { get; private set; }
+
+    private void OnRendererRecoveryFailed(Exception error)
+    {
+        ExitCode = 1;
+        Stopping = HandoffStop.Failure;
+        Stop();
     }
 
     /// <summary>

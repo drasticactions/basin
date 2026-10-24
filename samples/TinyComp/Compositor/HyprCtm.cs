@@ -10,6 +10,7 @@ internal sealed class HyprCtm : ICtmControl
 {
     private readonly TinyComp _comp;
     private readonly Dictionary<IOutput, CtmStage> _stages = [];
+    private readonly Dictionary<IOutput, double[]> _matrices = [];
     private IPixelShader? _shader;
     private bool _shaderTried;
 
@@ -41,10 +42,15 @@ internal sealed class HyprCtm : ICtmControl
             stage = new CtmStage(shader);
             _stages[output] = stage;
             scene.AddPostStage(stage);
-            output.Destroyed += () => _stages.Remove(output);
+            output.Destroyed += () =>
+            {
+                _stages.Remove(output);
+                _matrices.Remove(output);
+            };
         }
 
         stage.SetMatrix(rowMajor3x3);
+        _matrices[output] = rowMajor3x3.ToArray();
         view.Scheduler?.ScheduleRepaint();
         return true;
     }
@@ -58,6 +64,7 @@ internal sealed class HyprCtm : ICtmControl
             return drm.Commit(state);
         }
 
+        _matrices.Remove(output);
         if (!_stages.Remove(output, out var stage))
         {
             return true;
@@ -70,6 +77,30 @@ internal sealed class HyprCtm : ICtmControl
         }
 
         return true;
+    }
+
+    public void ReleaseShader()
+    {
+        foreach (var (output, stage) in _stages)
+        {
+            if (ViewFor(output) is { Scene: { } scene })
+            {
+                _ = scene.RemovePostStage(stage);
+            }
+        }
+
+        _stages.Clear();
+        _shader?.Dispose();
+        _shader = null;
+        _shaderTried = false;
+    }
+
+    public void RestoreShader()
+    {
+        foreach (var (output, matrix) in _matrices.ToArray())
+        {
+            _ = SetCtm(output, matrix);
+        }
     }
 
     private OutputView? ViewFor(IOutput output) => _comp.ViewOf(output);

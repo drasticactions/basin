@@ -49,7 +49,7 @@ public sealed class IpcMetadataTests
             "windows/get", "windows/stats", "windows/stack", "windows/wait", "windows/wait-idle", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
             "capture/output", "capture/window", "capture/region", "clipboard/read", "process/list", "process/log",
             "devices/list", "devices/get", "diag/tree", "diag/frames", "diag/parts", "diag/element", "diag/planes-state", "diag/compare", "diag/targets", "diag/syncobj",
-            "diag/clock",
+            "diag/renderer", "diag/clock",
         ];
         foreach (var name in LibraryNames())
         {

@@ -400,7 +400,7 @@ internal sealed partial class DungeonWm : IDisposable
         hangup.Remove();
         startup?.Stop(_log);
         ipc?.Processes.TerminateAll(TimeSpan.FromMilliseconds(500));
-        return 0;
+        return _loop.ExitCode;
     }
 
     private static RenderStack CreateStack(string requested, BasinLogger log, out string name)

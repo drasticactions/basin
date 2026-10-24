@@ -75,10 +75,30 @@ public sealed class WaylandBackend : IDisposable
     public IReadOnlyList<WaylandOutput> Outputs => _outputs;
 
     /// <summary>
-    /// Gets or sets the GPU device that renders the outputs' frames. Set it before <see cref="Start"/>.
-    /// With a device and a parent syncobj manager, outputs synchronize explicitly with the parent.
+    /// Gets or sets the GPU device that renders the outputs' frames. Set it before <see cref="Start"/>, and set it again after a lost renderer is replaced.
+    /// With a device and a parent syncobj manager, outputs synchronize explicitly with the parent. The syncobj timelines live on a duplicate of the first device fd, so they stay valid when the device changes.
     /// </summary>
-    public IRenderDevice? RenderDevice { get; set; }
+    public IRenderDevice? RenderDevice
+    {
+        get => _renderDevice;
+        set
+        {
+            _renderDevice = value;
+            if (value is not null && _syncFd < 0)
+            {
+                _syncFd = fcntl(value.DrmFd, FDupFdCloexec, 3);
+            }
+        }
+    }
+
+    private const int FDupFdCloexec = 1030;
+    private IRenderDevice? _renderDevice;
+    private int _syncFd = -1;
+
+    internal int SyncFd => _syncFd;
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int fcntl(int fd, int command, int argument);
 
     /// <summary>Gets the pointer of the parent seat. It is <see langword="null"/> while the parent seat has no pointer.</summary>
     public WaylandPointerDevice? Pointer { get; private set; }
@@ -436,6 +456,12 @@ public sealed class WaylandBackend : IDisposable
 
             _parent.Dispose();
             _parent = null;
+        }
+
+        if (_syncFd >= 0)
+        {
+            _ = close(_syncFd);
+            _syncFd = -1;
         }
     }
 

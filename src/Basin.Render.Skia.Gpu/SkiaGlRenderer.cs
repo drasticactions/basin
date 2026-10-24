@@ -232,10 +232,40 @@ public sealed class SkiaGlRenderer : IRenderer
         return SkiaColorLut.Create(lut);
     }
 
+    private Action? _deviceLost;
+    private bool _lossReported;
+    private bool _simulatedLoss;
+
+    /// <inheritdoc/>
+    public event Action? DeviceLost
+    {
+        add => _deviceLost += value;
+        remove => _deviceLost -= value;
+    }
+
+    /// <inheritdoc/>
+    public RendererLossDetection LossDetection => _device.LossDetection;
+
+    /// <inheritdoc/>
+    public void MakeCurrent() => _device.MakeCurrent();
+
+    internal void SimulateLoss() => _simulatedLoss = true;
+
+    private void ReportLost()
+    {
+        if (_lossReported)
+        {
+            return;
+        }
+
+        _lossReported = true;
+        _deviceLost?.Invoke();
+    }
+
     /// <summary>
     /// Begins a pass that draws into a dmabuf or a CPU buffer. The renderer caches one Skia surface per
-    /// target until the buffer is destroyed. An abandoned context drops every cached target and throws
-    /// <see cref="InvalidOperationException"/>.
+    /// target until the buffer is destroyed. An abandoned or reset context throws
+    /// <see cref="RendererLostException"/>.
     /// </summary>
     /// <param name="target">A BGRA dmabuf or a 4-byte memory buffer to draw into.</param>
     /// <param name="options">The fences and the output color description of the pass.</param>
@@ -244,10 +274,10 @@ public sealed class SkiaGlRenderer : IRenderer
     {
         _thread.Assert();
 
-        if (_context.IsAbandoned)
+        if (_simulatedLoss || _context.IsAbandoned || _device.CheckLost())
         {
-            DropTargets();
-            throw new InvalidOperationException("The Ganesh context is abandoned. The cached targets were dropped.");
+            ReportLost();
+            throw new RendererLostException("The Ganesh context is abandoned or its GL context was reset.");
         }
 
         if (_targets.TryGetValue(target, out var entry) && entry.Native.IsCpuReadback && entry.Native.SeenWrites != target.WriteCount)

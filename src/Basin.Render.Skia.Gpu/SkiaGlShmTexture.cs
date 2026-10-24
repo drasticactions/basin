@@ -49,21 +49,29 @@ internal sealed class SkiaGlShmTexture : ISkiaTexture, IRefreshableTexture
 
         if (_image is null)
         {
-            _backend = SkiaCensus.Track(new GRBackendTexture(
-                Width, Height, mipmapped: false,
-                new GRGlTextureInfo(SkiaGlRenderer.GlTexture2D, textureId, SkiaGlRenderer.GlBgra8)));
-            var wrapped = SKImage.FromTexture(
-                _renderer.Context, _backend, GRSurfaceOrigin.TopLeft, SKColorType.Bgra8888,
-                _native.HasAlpha ? SKAlphaType.Premul : SKAlphaType.Opaque);
-            if (wrapped is null)
+            Basin.Diagnostics.AllocationScope.Pause();
+            try
             {
-                SkiaCensus.Release(_backend);
-                _backend = null;
-                image = null!;
-                return false;
-            }
+                _backend = SkiaCensus.Track(new GRBackendTexture(
+                    Width, Height, mipmapped: false,
+                    new GRGlTextureInfo(SkiaGlRenderer.GlTexture2D, textureId, SkiaGlRenderer.GlBgra8)));
+                var wrapped = SKImage.FromTexture(
+                    _renderer.Context, _backend, GRSurfaceOrigin.TopLeft, SKColorType.Bgra8888,
+                    _native.HasAlpha ? SKAlphaType.Premul : SKAlphaType.Opaque);
+                if (wrapped is null)
+                {
+                    SkiaCensus.Release(_backend);
+                    _backend = null;
+                    image = null!;
+                    return false;
+                }
 
-            _image = SkiaCensus.Track(wrapped);
+                _image = SkiaCensus.Track(wrapped);
+            }
+            finally
+            {
+                Basin.Diagnostics.AllocationScope.Resume();
+            }
         }
 
         _clean = true;

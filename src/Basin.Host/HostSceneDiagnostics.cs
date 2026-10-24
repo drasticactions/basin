@@ -8,7 +8,7 @@ namespace Basin.Host;
 /// </summary>
 /// <param name="host">The host whose driver is examined.</param>
 /// <param name="services">The services that the diagnostics read.</param>
-public sealed class HostSceneDiagnostics(BasinHost host, BasinServices services) : ISceneDiagnostics
+public sealed class HostSceneDiagnostics(BasinHost host, BasinServices services) : ISceneDiagnostics, IRendererBound
 {
     private SceneDiagnostics? _inner;
 
@@ -16,6 +16,12 @@ public sealed class HostSceneDiagnostics(BasinHost host, BasinServices services)
     /// Gets the number of frame clock sinks. It is -1 when the host has no driver yet or the frame clock is not the default <see cref="Basin.Capabilities.Defaults.FrameClock"/>.
     /// </summary>
     public int ClockSinks => Inner?.ClockSinks ?? -1;
+
+    /// <summary>
+    /// Gives the new renderer to the diagnostics, when they exist.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererReplaced(RendererReplacement replacement) => _inner?.OnRendererReplaced(replacement);
 
     private SceneDiagnostics? Inner =>
         _inner ??= host.Driver is { } driver

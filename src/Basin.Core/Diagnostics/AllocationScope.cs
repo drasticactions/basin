@@ -66,7 +66,7 @@ public static class AllocationScope
     }
 
     /// <summary>
-    /// Closes the innermost region. It throws <see cref="InvalidOperationException"/> when the region allocated more than the allowance, once per outermost scope.
+    /// Closes the innermost region. It throws <see cref="InvalidOperationException"/> when the region allocated more than the allowance, once per outermost scope. It never throws while an exception leaves the region, so that it cannot hide that exception.
     /// </summary>
     /// <param name="allowance">The number of bytes that the region can allocate.</param>
     [Conditional("BASIN_COUNTERS")]
@@ -86,7 +86,7 @@ public static class AllocationScope
         var allocated = GC.GetAllocatedBytesForCurrentThread() - started;
         if (allocated > allowance)
         {
-            if (_thrown)
+            if (_thrown || System.Runtime.InteropServices.Marshal.GetExceptionPointers() != IntPtr.Zero)
             {
                 return;
             }

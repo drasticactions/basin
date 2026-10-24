@@ -7,13 +7,14 @@ namespace Basin;
 /// <summary>
 /// Installs <c>zwp_linux_dmabuf_v1</c> with the formats and devices of the renderer.
 /// </summary>
-public sealed class LinuxDmabufModule : IProtocolModule
+public sealed class LinuxDmabufModule : IProtocolModule, IRendererBound
 {
     private readonly DrmFormatSet _formats;
     private readonly string _mainDevicePath;
     private readonly FdLedger? _ledger;
     private readonly IReadOnlyList<(string DevicePath, DrmFormatSet Formats)>? _extraTranches;
     private readonly DrmFormatSet? _captureFormats;
+    private CaptureDmabufConstraints? _constraints;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LinuxDmabufModule"/> class.
@@ -56,9 +57,26 @@ public sealed class LinuxDmabufModule : IProtocolModule
         ArgumentNullException.ThrowIfNull(services);
         if (_captureFormats is { Count: > 0 } captureFormats)
         {
-            services.UseDefault<ICaptureDmabufConstraints>(
-                new CaptureDmabufConstraints(captureFormats, _mainDevicePath) { Wrappable = _formats });
+            _constraints = new CaptureDmabufConstraints(captureFormats, _mainDevicePath) { Wrappable = _formats };
+            services.UseDefault<ICaptureDmabufConstraints>(_constraints);
         }
+    }
+
+    /// <summary>
+    /// Offers the capture formats of the new renderer again, so that capture sessions send their constraints again.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (_constraints is not { } constraints)
+        {
+            return;
+        }
+
+        var renderer = replacement.New.Renderer;
+        var formats = renderer.DmabufRenderFormats.Count > 0 ? renderer.DmabufRenderFormats : constraints.Formats;
+        constraints.Offer(formats, renderer.Device?.DevicePath ?? _mainDevicePath);
     }
 
     /// <inheritdoc/>

@@ -10,15 +10,16 @@ namespace Basin.UI.Skia;
 /// <summary>
 /// The Skia chrome host on a GL device. It draws <see cref="SkiaGlUISurface"/> instances with Ganesh into dmabufs. Use it on the thread that created it.
 /// </summary>
-public sealed class SkiaGlUIHost : IUIHost
+public sealed class SkiaGlUIHost : IUIHost, IUISurfaceObserver, IRendererBound
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
-    private readonly GlDevice _device;
-    private readonly IAllocator _allocator;
-    private readonly GRContext _context;
-    private readonly bool _ownsContext;
-    private readonly GRGlInterface? _ownInterface;
-    private readonly GRGlGetProcedureAddressDelegate? _getProc;
+    private readonly List<SkiaGlUISurface> _surfaces = [];
+    private GlDevice _device;
+    private IAllocator _allocator;
+    private GRContext? _context;
+    private bool _ownsContext;
+    private GRGlInterface? _ownInterface;
+    private GRGlGetProcedureAddressDelegate? _getProc;
     private bool _disposed;
 
     /// <summary>
@@ -39,14 +40,21 @@ public sealed class SkiaGlUIHost : IUIHost
             return;
         }
 
-        _getProc = GetProcAddress;
+        _ownsContext = true;
+        _context = CreateOwnContext();
+    }
+
+    private GRContext Context => _context ??= CreateOwnContext();
+
+    private GRContext CreateOwnContext()
+    {
+        _getProc ??= GetProcAddress;
         _ownInterface = GRGlInterface.CreateGles(_getProc)
             ?? throw new InvalidOperationException("Ganesh rejected the GLES interface on this context.");
         SkiaCensus.Track(_ownInterface);
-        _context = GRContext.CreateGl(_ownInterface)
+        var context = GRContext.CreateGl(_ownInterface)
             ?? throw new InvalidOperationException("Ganesh refused a context on this device.");
-        SkiaCensus.Track(_context);
-        _ownsContext = true;
+        return SkiaCensus.Track(context);
     }
 
     /// <summary>
@@ -91,13 +99,15 @@ public sealed class SkiaGlUIHost : IUIHost
             return null;
         }
 
-        var surface = new SkiaGlUISurface(_device, _allocator, _context);
+        var surface = new SkiaGlUISurface(_device, _allocator, () => Context);
         if (!surface.Configure(options.Width, options.Height, options.Scale))
         {
             surface.Dispose();
             return null;
         }
 
+        _surfaces.Add(surface);
+        surface.AddObserver(this);
         return surface;
     }
 
@@ -120,12 +130,79 @@ public sealed class SkiaGlUIHost : IUIHost
         }
 
         _disposed = true;
-        if (_ownsContext)
+        _surfaces.Clear();
+        ReleaseOwnContext();
+    }
+
+    /// <inheritdoc/>
+    public void OnSurfaceDamaged(IUISurface surface, PixmanRegion32 damage)
+    {
+    }
+
+    /// <inheritdoc/>
+    public void OnSurfaceDestroyed(IUISurface surface)
+    {
+        if (surface is SkiaGlUISurface glSurface)
         {
-            _context.AbandonContext(releaseResources: true);
-            SkiaCensus.Release(_context);
-            SkiaCensus.Release(_ownInterface);
+            _surfaces.Remove(glSurface);
         }
+    }
+
+    /// <summary>
+    /// Moves the host and its live surfaces to the device of a new GL or Skia GL renderer. The surfaces keep their buffers and drop their GPU targets. An own Ganesh context is made again on the next draw, when the new context is current.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer. The old context must be current.</param>
+    /// <exception cref="InvalidOperationException">The new renderer has no GL device.</exception>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        _thread.Assert();
+        if (_disposed)
+        {
+            return;
+        }
+
+        foreach (var surface in _surfaces)
+        {
+            surface.ReleaseTargets();
+        }
+
+        ReleaseOwnContext();
+        _context = null;
+        switch (replacement.New.Renderer)
+        {
+            case SkiaGlRenderer skiaGl:
+                _device = skiaGl.Device;
+                _context = skiaGl.Context;
+                _ownsContext = false;
+                break;
+            case Basin.Render.Gl.GlRenderer gl:
+                _device = gl.Device;
+                _ownsContext = true;
+                break;
+            default:
+                throw new InvalidOperationException($"A GL chrome host cannot move to a {replacement.New.Renderer.GetType().Name}.");
+        }
+
+        _allocator = _device.CreateAllocator();
+        foreach (var surface in _surfaces)
+        {
+            surface.Rebind(_device, _allocator, () => Context);
+        }
+    }
+
+    private void ReleaseOwnContext()
+    {
+        if (!_ownsContext || _context is null)
+        {
+            return;
+        }
+
+        _context.AbandonContext(releaseResources: true);
+        SkiaCensus.Release(_context);
+        SkiaCensus.Release(_ownInterface);
+        _context = null;
+        _ownInterface = null;
     }
 
     private static nint GetProcAddress(string name)

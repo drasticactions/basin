@@ -6,11 +6,11 @@ namespace Basin.Color;
 /// Resolves conversion tables for one renderer and caches them by description content. Only the
 /// compositor thread can use it.
 /// </summary>
-public sealed class ColorLutCache : IColorTransformResolver, IDisposable
+public sealed class ColorLutCache : IColorTransformResolver, IDisposable, IRendererBound
 {
     private bool _disposed;
 
-    private readonly IRenderer _renderer;
+    private IRenderer _renderer;
     private readonly Dictionary<(ImageDescription Source, ImageDescription Output), IColorLut?> _luts;
 
     /// <summary>
@@ -65,6 +65,22 @@ public sealed class ColorLutCache : IColorTransformResolver, IDisposable
 
         _luts[key] = imported;
         return imported;
+    }
+
+    /// <summary>
+    /// Disposes every cached table and takes the new renderer. Tables are imported again on the next <see cref="Resolve"/>.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        foreach (var lut in _luts.Values)
+        {
+            lut?.Dispose();
+        }
+
+        _luts.Clear();
+        _renderer = replacement.New.Renderer;
     }
 
     /// <summary>

@@ -133,6 +133,8 @@ public sealed class SceneMesh : SceneNode
         _sprite.Dispose();
     }
 
+    internal void ReleaseRendererState() => DropTexture();
+
     private void DropTexture()
     {
         _texture?.Dispose();

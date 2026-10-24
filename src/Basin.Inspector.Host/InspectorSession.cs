@@ -11,7 +11,7 @@ namespace Basin.Inspector;
 /// <summary>
 /// The inspector overlay wired to a compositor: the ImGui host, the library panels, the seat input, the outputs, the settings and the control methods.
 /// </summary>
-public sealed class InspectorSession : IDisposable
+public sealed class InspectorSession : IDisposable, IRendererBound
 {
     private readonly InspectorSessionOptions _options;
     private readonly bool _ownsHost;
@@ -27,6 +27,9 @@ public sealed class InspectorSession : IDisposable
     private ScenePanel? _scene;
     private MemoryPanel? _memory;
     private FrameSettle? _settle;
+    private IRenderer? _renderer;
+    private IAllocator? _allocator;
+    private bool _reopen;
     private bool _disposed;
 
     /// <summary>
@@ -40,6 +43,8 @@ public sealed class InspectorSession : IDisposable
         _options = options;
         _host = options.Host;
         _ownsHost = options.Host is null;
+        _renderer = options.Renderer;
+        _allocator = options.Allocator;
         Settings = options.Settings;
         _settle = options.Settle;
         if (options.Layer is { } layer)
@@ -367,6 +372,64 @@ public sealed class InspectorSession : IDisposable
         _host = null;
     }
 
+    /// <summary>
+    /// Disposes the overlay and the host that the session built on the old renderer, and takes the new renderer. An open overlay opens again after the rebuild.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (_disposed || !_ownsHost)
+        {
+            return;
+        }
+
+        _reopen = IsOpen;
+        _overlay?.Dispose();
+        _overlay = null;
+        _outputs = null;
+        _clients = null;
+        _scene = null;
+        _memory = null;
+        if (_driver is not null)
+        {
+            _settle?.Remove(_driver);
+        }
+
+        _driver?.Dispose();
+        _host?.Dispose();
+        _driver = null;
+        _host = null;
+        _hostDeclined = null;
+        if (ReferenceEquals(_renderer, replacement.Old.Renderer))
+        {
+            _renderer = replacement.New.Renderer;
+        }
+
+        if (_allocator is not null && ReferenceEquals(_allocator, replacement.Old.DeviceAllocator))
+        {
+            _allocator = replacement.New.DeviceAllocator;
+        }
+    }
+
+    /// <summary>
+    /// Builds the overlay again on the new renderer and opens it, when it was open before the replacement.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererRebuilt(RendererReplacement replacement)
+    {
+        if (!_reopen || _disposed)
+        {
+            return;
+        }
+
+        _reopen = false;
+        if (Build() is { } overlay && DefaultView() is { } view)
+        {
+            overlay.Open(view);
+        }
+    }
+
     private ImGuiUIHost? BuildHost()
     {
         if (_host is not null)
@@ -379,14 +442,14 @@ public sealed class InspectorSession : IDisposable
             return null;
         }
 
-        if (_options.Renderer is not { } renderer)
+        if (_renderer is not { } renderer)
         {
             _hostDeclined = "no renderer to draw the inspector on";
             return null;
         }
 
         var host = Renderers.ImGuiHosts.For(
-            renderer, _options.Allocator, _options.RenderNode, out var declined, out var vulkanDeclined,
+            renderer, _allocator, _options.RenderNode, out var declined, out var vulkanDeclined,
             new ImGuiHostOptions { FontSize = (float)Settings.FontSize });
         if (vulkanDeclined is not null)
         {

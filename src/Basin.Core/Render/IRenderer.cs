@@ -20,6 +20,7 @@ public interface IRenderer : IDisposable
     /// <param name="target">The buffer to draw into.</param>
     /// <param name="options">The fences and the output color description of the pass.</param>
     /// <returns>The pass. The caller must call <see cref="IRenderPass.Submit"/> before the next pass begins.</returns>
+    /// <exception cref="RendererLostException">The renderer lost its device. After a loss, every other member can also throw or return <see langword="null"/>.</exception>
     IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options);
 
     /// <summary>
@@ -120,4 +121,30 @@ public interface IRenderer : IDisposable
     /// Gets a value indicating whether <see cref="IRenderPass.AddFrameFilter"/> can run a filter. The default is <see langword="false"/>.
     /// </summary>
     bool SupportsFrameFilters => false;
+
+    /// <summary>
+    /// Occurs at most once, when the renderer finds that its GPU device or context is lost. A handler must only queue work, because the detecting call is still on the stack. The default implementation never raises it.
+    /// </summary>
+    event Action? DeviceLost
+    {
+        add
+        {
+        }
+
+        remove
+        {
+        }
+    }
+
+    /// <summary>
+    /// Gets how the renderer finds a loss of its device. The default is <see cref="RendererLossDetection.Never"/>.
+    /// </summary>
+    RendererLossDetection LossDetection => RendererLossDetection.Never;
+
+    /// <summary>
+    /// Makes the GPU context of the renderer current on the calling thread, so that objects of this renderer can be released. The default does nothing.
+    /// </summary>
+    void MakeCurrent()
+    {
+    }
 }

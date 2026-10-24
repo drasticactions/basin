@@ -44,6 +44,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
         }
 
         _device = new VulkanDevice(drmNodePath, ["VK_KHR_external_semaphore_fd", "VK_KHR_external_semaphore"]);
+        _device.Lost += ReportLost;
         _getProc = GetProcedureAddress;
         _backendContext = new SKGraphiteVkBackendContext
         {
@@ -238,10 +239,37 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
         return SkiaColorLut.Create(lut, _recorder);
     }
 
+    private Action? _deviceLost;
+    private bool _lossReported;
+    private bool _simulatedLoss;
+
+    /// <inheritdoc/>
+    public event Action? DeviceLost
+    {
+        add => _deviceLost += value;
+        remove => _deviceLost -= value;
+    }
+
+    /// <inheritdoc/>
+    public RendererLossDetection LossDetection => RendererLossDetection.DeviceStatus;
+
+    internal void SimulateLoss() => _simulatedLoss = true;
+
+    private void ReportLost()
+    {
+        if (_lossReported)
+        {
+            return;
+        }
+
+        _lossReported = true;
+        _deviceLost?.Invoke();
+    }
+
     /// <summary>
     /// Begins a pass that draws into a dmabuf or a CPU buffer. The renderer caches one Skia surface per
-    /// target until the buffer is destroyed. A lost device drops every cached target and throws <see
-    /// cref="InvalidOperationException"/>.
+    /// target until the buffer is destroyed. A lost device throws <see
+    /// cref="RendererLostException"/>.
     /// </summary>
     /// <param name="target">A BGRA dmabuf or a 4-byte memory buffer to draw into.</param>
     /// <param name="options">The fences and the output color description of the pass.</param>
@@ -249,10 +277,10 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
-        if (_context.IsDeviceLost)
+        if (_simulatedLoss || _context.IsDeviceLost || _device.IsLost)
         {
-            DropTargets();
-            throw new InvalidOperationException("The Graphite context reports device loss. The cached targets were dropped.");
+            ReportLost();
+            throw new RendererLostException("The Graphite context reports device loss.");
         }
 
         _sync.WaitFence(options.WaitFenceFd);

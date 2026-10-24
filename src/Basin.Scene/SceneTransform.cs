@@ -94,6 +94,12 @@ public sealed class SceneTransform : SceneTree
     internal (MemoryBuffer? Buffer, Box Bounds, double Scale) Capture =>
         (_captureValid ? _capture : null, _captureBounds, _captureScale);
 
+    internal void ReleaseRendererState()
+    {
+        DropCaptureTexture();
+        _captureValid = false;
+    }
+
     internal ITexture? GetCaptureTexture(IRenderer renderer)
     {
         if (_capture is null)

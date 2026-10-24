@@ -842,6 +842,13 @@ public sealed class SceneBuffer : SceneNode
         _opaqueRegion = null;
     }
 
+    internal void ReleaseRendererState()
+    {
+        ReleaseTexture();
+        _importFailed = false;
+        TextureShader = null;
+    }
+
     private void ReleaseTexture()
     {
         if (_ownsTexture)

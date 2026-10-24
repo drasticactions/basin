@@ -105,6 +105,7 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
     {
         _device = new VulkanDevice(
             drmNodePath, ["VK_KHR_external_semaphore_fd", "VK_KHR_external_semaphore", .. deviceExtensions], instanceExtensions);
+        _device.Lost += ReportLost;
         _getProc = GetProcedureAddress;
 
         _extensions = SkiaCensus.Track(GRVkExtensions.Create(
@@ -322,10 +323,37 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
         return SkiaColorLut.Create(lut);
     }
 
+    private Action? _deviceLost;
+    private bool _lossReported;
+    private bool _simulatedLoss;
+
+    /// <inheritdoc/>
+    public event Action? DeviceLost
+    {
+        add => _deviceLost += value;
+        remove => _deviceLost -= value;
+    }
+
+    /// <inheritdoc/>
+    public RendererLossDetection LossDetection => RendererLossDetection.DeviceStatus;
+
+    internal void SimulateLoss() => _simulatedLoss = true;
+
+    private void ReportLost()
+    {
+        if (_lossReported)
+        {
+            return;
+        }
+
+        _lossReported = true;
+        _deviceLost?.Invoke();
+    }
+
     /// <summary>
     /// Begins a pass that draws into a dmabuf or a CPU buffer. The renderer caches one Skia surface per
-    /// target until the buffer is destroyed. An abandoned context drops every cached target and throws
-    /// <see cref="InvalidOperationException"/>.
+    /// target until the buffer is destroyed. An abandoned context or a lost device throws
+    /// <see cref="RendererLostException"/>.
     /// </summary>
     /// <param name="target">A BGRA dmabuf or a 4-byte memory buffer to draw into.</param>
     /// <param name="options">The fences and the output color description of the pass.</param>
@@ -333,10 +361,10 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
-        if (_context.IsAbandoned)
+        if (_simulatedLoss || _context.IsAbandoned || _device.IsLost)
         {
-            DropTargets();
-            throw new InvalidOperationException("The Ganesh context is abandoned. The cached targets were dropped.");
+            ReportLost();
+            throw new RendererLostException("The Ganesh context is abandoned or its Vulkan device is lost.");
         }
 
         _sync.WaitFence(options.WaitFenceFd);

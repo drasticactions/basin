@@ -45,8 +45,8 @@ internal sealed partial class TinyComp :
     private readonly CompositorGlobal _compositor;
     private readonly Basin.Seat.Seat _seat;
     private readonly XdgShell _shell;
-    private readonly IRenderer _renderer;
-    private readonly IAllocator? _allocator;
+    private IRenderer _renderer;
+    private IAllocator? _allocator;
     private readonly Basin.Host.OutputDriver _driver;
     private readonly Scene _scene = new();
     private readonly Basin.Scene.SceneCurtain _curtain;
@@ -185,7 +185,7 @@ internal sealed partial class TinyComp :
         }
 
         _glassTried = true;
-        _glassEffect = Basin.Effects.BackdropGlass.For(_renderer);
+        _glassEffect = Basin.Effects.RebindableBackdropGlass.For(_renderer);
         if (_glassEffect is { } glass)
         {
             glass.Options = GlassOptionsOf(_config);
@@ -692,6 +692,7 @@ internal sealed partial class TinyComp :
         _driver.HandoffLayer = _layers.Handoff;
         _runLoop.Outro = new Basin.Host.WindowsFadeOutro(_layers, TimeSpan.FromMilliseconds(300));
         WireOutputDriver();
+        WireRendererRecovery();
 
         _popupPlacer = new Basin.Desktop.PopupPlacer(_layout);
         _rendererName = rendererName;
@@ -787,7 +788,7 @@ internal sealed partial class TinyComp :
             _services.Use(frames);
         }
 
-        if (BackdropBlurs.For(_renderer) is { } blur)
+        if (Basin.Effects.RebindableBackdropBlur.For(_renderer) is { } blur)
         {
             _blurEffect = blur;
             ApplyBlurKernel(config);
@@ -1297,7 +1298,7 @@ internal sealed partial class TinyComp :
         _runLoop.Frames = _frames;
         _runLoop.Run();
         hangup.Remove();
-        return _exitStatus;
+        return _runLoop.ExitCode != 0 ? _runLoop.ExitCode : _exitStatus;
     }
 
     public void Dispose()

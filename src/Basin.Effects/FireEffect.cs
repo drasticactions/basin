@@ -158,7 +158,7 @@ public sealed class FireEffect : IMeshSource
     }
 
     /// <summary>
-    /// Advances the burn. When the timeline ends and the last particle dies, the effect calls <see cref="End"/> itself.
+    /// Advances the burn. When the timeline ends and the last particle dies, the effect calls <see cref="End"/> itself. A shader burn whose node lost its shader, for example after a renderer replacement, ends at once.
     /// </summary>
     /// <param name="stack">The transform stack of the window.</param>
     /// <param name="tick">The frame tick.</param>
@@ -173,7 +173,13 @@ public sealed class FireEffect : IMeshSource
         var progress = _timeline.Progress(tick);
         var reveal = _hiding ? 1.0 - progress : progress;
 
-        if (_shaderNode is { IsDestroyed: false } shaderNode && Shader is { } shader)
+        if (_shaderNode is not null && _flame is null && _shaderNode.Shader is null)
+        {
+            End(stack);
+            return false;
+        }
+
+        if (_shaderNode is { IsDestroyed: false } shaderNode && shaderNode.Shader is { } shader)
         {
             if (_shaderStart < 0)
             {

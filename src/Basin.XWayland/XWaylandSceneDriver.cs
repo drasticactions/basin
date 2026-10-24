@@ -6,7 +6,7 @@ namespace Basin.XWayland;
 /// <summary>
 /// Puts each mapped X11 window into the scene as a <see cref="SceneSurface"/>, follows its geometry and its X Shape, and removes it on unmap. The consumer supplies the parent trees.
 /// </summary>
-public sealed class XWaylandSceneDriver : IDisposable
+public sealed class XWaylandSceneDriver : IDisposable, IRendererBound
 {
     private readonly List<Entry> _entries = [];
     private readonly List<XWaylandWm> _wms = [];
@@ -51,6 +51,49 @@ public sealed class XWaylandSceneDriver : IDisposable
     /// Gets or sets the allocator for the mask buffers. When it is <see langword="null"/>, the masks use memory buffers.
     /// </summary>
     public IAllocator? ShapeAllocator { get; set; }
+
+    /// <summary>
+    /// Disposes every shape mask, which the old renderer drew, and takes the new renderer and allocator when the old ones were set.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        foreach (var entry in _entries)
+        {
+            if (entry.Mask is { } mask)
+            {
+                entry.Scene.SetSubstitute(null);
+                mask.Dispose();
+                entry.Mask = null;
+            }
+        }
+
+        if (ReferenceEquals(ShapeRenderer, replacement.Old.Renderer))
+        {
+            ShapeRenderer = replacement.New.Renderer;
+        }
+
+        if (ShapeAllocator is not null && ReferenceEquals(ShapeAllocator, replacement.Old.DeviceAllocator))
+        {
+            ShapeAllocator = replacement.New.DeviceAllocator;
+        }
+    }
+
+    /// <summary>
+    /// Draws the mask of every shaped window again on the new renderer.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    public void OnRendererRebuilt(RendererReplacement replacement)
+    {
+        foreach (var entry in _entries)
+        {
+            if (entry.Window.BoundingShape is not null)
+            {
+                Reshape(entry, ShapeRenderer, ShapeAllocator);
+            }
+        }
+    }
 
     private static void Reshape(Entry entry, IRenderer? renderer, IAllocator? allocator)
     {

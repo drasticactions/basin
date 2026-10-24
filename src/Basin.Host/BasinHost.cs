@@ -139,6 +139,20 @@ public sealed class BasinHost : IDisposable
     public event Action<HandoffRetention>? HandoffRetained;
 
     /// <summary>
+    /// Occurs on the loop thread, once for each replaced renderer, after the new renderer exists and before the old one is disposed. The old context is current, so a handler releases what it made on the old renderer and makes new objects on next use.
+    /// </summary>
+    public event Action<RendererReplacement>? RendererReplaced;
+
+    internal void RaiseRendererReplaced(RendererReplacement replacement) => RendererReplaced?.Invoke(replacement);
+
+    /// <summary>
+    /// Occurs on the loop thread after <see cref="RendererReplaced"/>, when the old renderer is disposed and the context of the new one is current. A handler makes its new GPU objects here. The old stack in the argument is no longer usable.
+    /// </summary>
+    public event Action<RendererReplacement>? RendererRebuilt;
+
+    internal void RaiseRendererRebuilt(RendererReplacement replacement) => RendererRebuilt?.Invoke(replacement);
+
+    /// <summary>
     /// Gets the nested backend, or <see langword="null"/> when the backend is not nested.
     /// </summary>
     public WaylandBackend? Parent { get; }
@@ -223,7 +237,7 @@ public sealed class BasinHost : IDisposable
     }
 
     /// <summary>
-    /// Creates the service table and seeds the defaults: the frame clock, the animation clock, <see cref="PresentedSets"/>, the client directory and the scene diagnostics. Call it once.
+    /// Creates the service table and seeds the defaults: the frame clock, the animation clock, <see cref="PresentedSets"/>, the client directory, and the scene and renderer diagnostics. Call it once.
     /// </summary>
     /// <param name="frames">The frame clock to register, or <see langword="null"/> for a new default clock.</param>
     /// <returns>The services, also kept in <see cref="Services"/>.</returns>
@@ -254,6 +268,7 @@ public sealed class BasinHost : IDisposable
         if (Services is { IsFrozen: false } services)
         {
             services.SeedDefault<ISceneDiagnostics>(() => new HostSceneDiagnostics(this, services));
+            services.SeedDefault<IRendererDiagnostics>(() => new HostRendererDiagnostics(this));
         }
     }
 

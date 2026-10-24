@@ -825,6 +825,30 @@ public sealed class SceneOutput : IDisposable, IColorLutTable, IZoomable
         _postTextureRenderer = null;
     }
 
+    /// <summary>
+    /// Releases every texture that a renderer imported for this output, removes the frame filter and its allocator, and damages the whole output. The owner of the filter sets a new one. The next commits import again and count as warm-up commits, outside the allocation scope.
+    /// </summary>
+    /// <param name="renderer">The renderer whose textures to release, for example a lost renderer before it is disposed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> is <see langword="null"/>.</exception>
+    public void ReleaseRenderer(IRenderer renderer)
+    {
+        ArgumentNullException.ThrowIfNull(renderer);
+        _softwareCursorTexture?.Dispose();
+        _softwareCursorTexture = null;
+        DropPostTextures();
+        DropFilterScratch();
+        _frameFilter = null;
+        _filterAllocator = null;
+        _commitsEntered = 0;
+        if (_disposed)
+        {
+            return;
+        }
+
+        Ring.AddWhole();
+        DamagePending?.Invoke();
+    }
+
     private void DropPostBuffers()
     {
         DropPostTextures();

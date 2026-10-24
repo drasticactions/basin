@@ -438,7 +438,7 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
     }
 
     /// <summary>
-    /// Blocks until the GPU reaches a timeline point. It throws <see cref="InvalidOperationException"/> after ten seconds.
+    /// Blocks until the GPU reaches a timeline point. It throws <see cref="InvalidOperationException"/> after ten seconds. On a lost device it returns at once.
     /// </summary>
     /// <param name="point">A timeline point from a submit call.</param>
     public void WaitFor(ulong point) => Ring.Wait(point);
@@ -622,12 +622,76 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
     }
 
     /// <summary>
-    /// Throws <see cref="InvalidOperationException"/> with the name of the call when a Vulkan result is not success.
+    /// Gets a value indicating whether a submit, a wait or a timeline read reported <c>VK_ERROR_DEVICE_LOST</c>. On a lost device, waits return at once and every submission counts as complete, so objects can still be disposed.
+    /// </summary>
+    public bool IsLost
+    {
+        get
+        {
+            if (!_lost && DebugLoss.Due())
+            {
+                _lost = true;
+            }
+
+            if (!_lost)
+            {
+                DebugHang.Submit(this);
+            }
+
+            return _lost;
+        }
+    }
+
+    private bool _lost;
+
+    internal bool LostNow => _lost;
+
+    /// <summary>
+    /// Occurs once, when the device is found lost. A handler must only queue work.
+    /// </summary>
+    public event Action? Lost;
+
+    /// <summary>
+    /// Throws like <see cref="Check"/>. A lost device is also marked lost and raises <see cref="Lost"/> first.
+    /// </summary>
+    /// <param name="result">The result of the Vulkan call.</param>
+    /// <param name="what">The name of the call for the message.</param>
+    public void CheckResult(Result result, string what)
+    {
+        if (result == Result.ErrorDeviceLost)
+        {
+            MarkLost();
+        }
+
+        Check(result, what);
+    }
+
+    /// <summary>
+    /// Marks the device lost and raises <see cref="Lost"/> the first time.
+    /// </summary>
+    public void MarkLost()
+    {
+        if (_lost)
+        {
+            return;
+        }
+
+        _lost = true;
+        Lost?.Invoke();
+    }
+
+    /// <summary>
+    /// Throws <see cref="InvalidOperationException"/> with the name of the call when a Vulkan result is not success. A lost device throws <see cref="RendererLostException"/>.
     /// </summary>
     /// <param name="result">The result of the Vulkan call.</param>
     /// <param name="what">The name of the call for the message.</param>
     public static void Check(Result result, string what)
     {
+        if (result == Result.ErrorDeviceLost)
+        {
+            throw new RendererLostException($"{what} failed with {result}.");
+        }
+
         if (result != Result.Success)
         {
             throw new InvalidOperationException($"{what} failed with {result}.");

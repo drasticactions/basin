@@ -215,6 +215,46 @@ public sealed class IpcDiagnosticsTests
             captured.ToString().Trim());
     }
 
+    [Fact]
+    public void Diag_renderer_returns_the_row_its_loss_detection_and_the_rebuilds()
+    {
+        using var rig = new IpcTestRig(services => services.Use<IRendererDiagnostics>(new FixedRenderer()));
+        new IpcLineReport().AddDiagnosticsLines(rig.Server.Methods);
+        rig.Server.Start();
+        var peer = rig.Connect();
+        using (var reply = JsonDocument.Parse(peer.Call("""{"method":"diag/renderer","params":{}}""")))
+        {
+            var result = reply.RootElement.GetProperty("result");
+            Assert.Equal("GlRenderer", result.GetProperty("renderer").GetString());
+            Assert.Equal("reset-notification", result.GetProperty("loss_detection").GetString());
+            Assert.Equal(2, result.GetProperty("rebuilds").GetInt64());
+        }
+
+        rig.Server.StartLineFront(-1);
+        var previous = Console.Out;
+        var captured = new StringWriter();
+        Console.SetOut(captured);
+        try
+        {
+            rig.Server.LineFront!.Execute("renderer");
+        }
+        finally
+        {
+            Console.SetOut(previous);
+        }
+
+        Assert.Equal("RENDERER name=GlRenderer loss-detection=reset-notification rebuilds=2", captured.ToString().Trim());
+    }
+
+    private sealed class FixedRenderer : IRendererDiagnostics
+    {
+        public string? RendererName => "GlRenderer";
+
+        public RendererLossDetection LossDetection => RendererLossDetection.ResetNotification;
+
+        public long Rebuilds => 2;
+    }
+
     private sealed class FixedSyncCounters(ExplicitSyncCounters counters) : IExplicitSyncDiagnostics
     {
         public ExplicitSyncCounters Counters => counters;

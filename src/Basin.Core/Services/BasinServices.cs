@@ -14,6 +14,7 @@ public sealed class BasinServices : IDisposable
     private readonly HashSet<string> _suppressed = [];
     private readonly Dictionary<string, IProtocolModule> _modules = [];
     private readonly List<IDisposable> _installed = [];
+    private readonly List<IDisposable> _owned = [];
     private readonly List<Type> _unresolved = [];
     private readonly WlServerDisplay? _display;
     private bool _disposed;
@@ -296,7 +297,69 @@ public sealed class BasinServices : IDisposable
     }
 
     /// <summary>
-    /// Disposes the installed globals in reverse install order and clears the registry.
+    /// Makes the registry dispose an object at <see cref="Dispose"/>, after the installed globals. Use it for an object that a capability pack creates and no consumer keeps.
+    /// </summary>
+    /// <param name="owned">The object to dispose with the registry.</param>
+    /// <returns>This registry.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="owned"/> is <see langword="null"/>.</exception>
+    public BasinServices Own(IDisposable owned)
+    {
+        ArgumentNullException.ThrowIfNull(owned);
+        _owned.Add(owned);
+        return this;
+    }
+
+    /// <summary>
+    /// Tells each registered implementation, module and installed global that implements <see cref="IRendererBound"/> about a renderer replacement, once per object.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="replacement"/> is <see langword="null"/>.</exception>
+    public void NotifyRendererReplaced(RendererReplacement replacement) => Notify(replacement, rebuilt: false);
+
+    /// <summary>
+    /// Calls <see cref="IRendererBound.OnRendererRebuilt"/> on the same objects as <see cref="NotifyRendererReplaced"/>, once per object.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="replacement"/> is <see langword="null"/>.</exception>
+    public void NotifyRendererRebuilt(RendererReplacement replacement) => Notify(replacement, rebuilt: true);
+
+    private void Notify(RendererReplacement replacement, bool rebuilt)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        var told = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var implementation in _table.Values)
+        {
+            Tell(implementation);
+        }
+
+        foreach (var module in _modules.Values)
+        {
+            Tell(module);
+        }
+
+        foreach (var global in _installed)
+        {
+            Tell(global);
+        }
+
+        void Tell(object candidate)
+        {
+            if (candidate is IRendererBound bound && told.Add(candidate))
+            {
+                if (rebuilt)
+                {
+                    bound.OnRendererRebuilt(replacement);
+                }
+                else
+                {
+                    bound.OnRendererReplaced(replacement);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Disposes the installed globals in reverse install order, then the objects given to <see cref="Own"/>, and clears the registry.
     /// </summary>
     public void Dispose()
     {
@@ -312,6 +375,12 @@ public sealed class BasinServices : IDisposable
         }
 
         _installed.Clear();
+        for (var i = _owned.Count - 1; i >= 0; i--)
+        {
+            _owned[i].Dispose();
+        }
+
+        _owned.Clear();
         _modules.Clear();
         _table.Clear();
     }

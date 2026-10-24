@@ -382,7 +382,7 @@ internal sealed partial class System7Shell : IDisposable
         _watchTimer?.Remove();
         StopClock();
         UnwireIpc();
-        return 0;
+        return _loop.ExitCode;
     }
 
     private void OnWatchTick()

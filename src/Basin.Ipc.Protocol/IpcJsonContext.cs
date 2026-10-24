@@ -54,6 +54,7 @@ namespace Basin.Ipc;
 [JsonSerializable(typeof(IpcDiagTree))]
 [JsonSerializable(typeof(IpcDiagFrames))]
 [JsonSerializable(typeof(IpcDiagSyncobj))]
+[JsonSerializable(typeof(IpcDiagRenderer))]
 [JsonSerializable(typeof(IpcDiagClock))]
 [JsonSerializable(typeof(IpcDiagParts))]
 [JsonSerializable(typeof(IpcDiagElement))]

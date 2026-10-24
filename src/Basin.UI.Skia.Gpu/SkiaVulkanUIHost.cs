@@ -10,15 +10,16 @@ namespace Basin.UI.Skia;
 /// <summary>
 /// The Skia chrome host on a Vulkan device. It draws <see cref="SkiaVulkanUISurface"/> instances with Ganesh. Use it on the thread that created it.
 /// </summary>
-public sealed class SkiaVulkanUIHost : IUIHost
+public sealed class SkiaVulkanUIHost : IUIHost, IUISurfaceObserver, IRendererBound
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
-    private readonly VulkanDevice _device;
-    private readonly IAllocator? _allocator;
-    private readonly GRContext _context;
-    private readonly bool _ownsContext;
-    private readonly GRVkExtensions? _ownExtensions;
-    private readonly GRVkGetProcedureAddressDelegate? _getProc;
+    private readonly List<SkiaVulkanUISurface> _surfaces = [];
+    private VulkanDevice _device;
+    private IAllocator? _allocator;
+    private GRContext _context;
+    private bool _ownsContext;
+    private GRVkExtensions? _ownExtensions;
+    private GRVkGetProcedureAddressDelegate? _getProc;
     private bool _disposed;
 
     /// <summary>
@@ -39,7 +40,13 @@ public sealed class SkiaVulkanUIHost : IUIHost
             return;
         }
 
-        _getProc = GetProcedureAddress;
+        _context = CreateOwnContext(device);
+        _ownsContext = true;
+    }
+
+    private GRContext CreateOwnContext(VulkanDevice device)
+    {
+        _getProc ??= GetProcedureAddress;
         _ownExtensions = SkiaCensus.Track(GRVkExtensions.Create(
             _getProc, device.Instance.Handle, device.Physical.Handle, [], device.EnabledExtensions));
         var backendContext = new GRVkBackendContext
@@ -55,12 +62,10 @@ public sealed class SkiaVulkanUIHost : IUIHost
         };
         using (backendContext)
         {
-            _context = GRContext.CreateVulkan(backendContext)
+            var context = GRContext.CreateVulkan(backendContext)
                 ?? throw new InvalidOperationException("Ganesh refused a context on this device.");
+            return SkiaCensus.Track(context);
         }
-
-        SkiaCensus.Track(_context);
-        _ownsContext = true;
     }
 
     /// <summary>
@@ -110,11 +115,10 @@ public sealed class SkiaVulkanUIHost : IUIHost
             return null;
         }
 
-        var context = _context;
         var surface = new SkiaVulkanUISurface(
             _device,
-            buffer => new GaneshDrawTarget(SkiaVulkanTarget.Create(_device, context, buffer)),
-            () => context.Flush(submit: true, synchronous: false),
+            WrapFactory(),
+            Flusher(),
             options.Target == UITargetKind.Dmabuf ? _allocator : null,
             RenderableModifiers());
         if (!surface.Configure(options.Width, options.Height, options.Scale))
@@ -123,6 +127,8 @@ public sealed class SkiaVulkanUIHost : IUIHost
             return null;
         }
 
+        _surfaces.Add(surface);
+        surface.AddObserver(this);
         return surface;
     }
 
@@ -145,12 +151,93 @@ public sealed class SkiaVulkanUIHost : IUIHost
         }
 
         _disposed = true;
-        if (_ownsContext)
+        _surfaces.Clear();
+        ReleaseOwnContext();
+    }
+
+    /// <inheritdoc/>
+    public void OnSurfaceDamaged(IUISurface surface, PixmanRegion32 damage)
+    {
+    }
+
+    /// <inheritdoc/>
+    public void OnSurfaceDestroyed(IUISurface surface)
+    {
+        if (surface is SkiaVulkanUISurface vulkanSurface)
         {
-            _context.AbandonContext(releaseResources: true);
-            SkiaCensus.Release(_context);
-            SkiaCensus.Release(_ownExtensions);
+            _surfaces.Remove(vulkanSurface);
         }
+    }
+
+    /// <summary>
+    /// Moves the host and its live surfaces to the device of a new Vulkan or Skia Vulkan renderer. The surfaces keep their buffers and drop their GPU targets.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    /// <exception cref="InvalidOperationException">The new renderer has no Vulkan device.</exception>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        _thread.Assert();
+        if (_disposed)
+        {
+            return;
+        }
+
+        foreach (var surface in _surfaces)
+        {
+            surface.ReleaseTargets();
+        }
+
+        ReleaseOwnContext();
+        switch (replacement.New.Renderer)
+        {
+            case SkiaVulkanRenderer skiaVk:
+                _device = skiaVk.Device;
+                _context = skiaVk.Context;
+                _ownsContext = false;
+                break;
+            case Basin.Render.Vulkan.VulkanRenderer vulkan:
+                _device = vulkan.Device;
+                _context = CreateOwnContext(vulkan.Device);
+                _ownsContext = true;
+                break;
+            default:
+                throw new InvalidOperationException($"A Vulkan chrome host cannot move to a {replacement.New.Renderer.GetType().Name}.");
+        }
+
+        _allocator = _allocator is null ? null : _device.CreateAllocator();
+        _modifiers = null;
+        foreach (var surface in _surfaces)
+        {
+            surface.Rebind(_device, WrapFactory(), Flusher(), _allocator, RenderableModifiers());
+        }
+    }
+
+    private Func<BufferBase, IVulkanDrawTarget> WrapFactory()
+    {
+        var device = _device;
+        var context = _context;
+        return buffer => new GaneshDrawTarget(SkiaVulkanTarget.Create(device, context, buffer));
+    }
+
+    private Action Flusher()
+    {
+        var context = _context;
+        return () => context.Flush(submit: true, synchronous: false);
+    }
+
+    private void ReleaseOwnContext()
+    {
+        if (!_ownsContext)
+        {
+            return;
+        }
+
+        _ownsContext = false;
+        _context.AbandonContext(releaseResources: true);
+        SkiaCensus.Release(_context);
+        SkiaCensus.Release(_ownExtensions);
+        _ownExtensions = null;
     }
 
     private nint GetProcedureAddress(string name, nint instance, nint device)

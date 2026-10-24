@@ -500,6 +500,22 @@ internal sealed partial class TinyComp
             SetDecorated(true);
         }
 
+        public bool ReleaseFrame()
+        {
+            if (_frame is null)
+            {
+                return false;
+            }
+
+            _cornerRig?.Dispose();
+            _cornerRig = null;
+            _comp.ForgetFrameBackdrop(_frame);
+            _comp.AccessibleChrome?.Remove(_frame);
+            _frame.Dispose();
+            _frame = null;
+            return true;
+        }
+
         public void SetDecorationFocus(bool active)
         {
             _active = active;

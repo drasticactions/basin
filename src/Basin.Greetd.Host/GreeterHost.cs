@@ -498,7 +498,7 @@ public sealed partial class GreeterHost : IDisposable
         hangup.Remove();
 
         BasinReport.Line($"EXIT {_exit}");
-        return _status;
+        return _loop.ExitCode != 0 ? _loop.ExitCode : _status;
     }
 
     /// <summary>

@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../Basin.Render.Skia/Basin.Render.Skia.csproj" />
     <ProjectReference Include="../Basin.Render.Gl/Basin.Render.Gl.csproj" />

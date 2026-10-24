@@ -34,7 +34,7 @@ public sealed class DrmCapabilityPack : ICapabilityPack
     public Basin.Backend.Drm.DrmOutputPower Power { get; } = new();
 
     /// <summary>
-    /// Registers gamma and power always. It registers leasing only with a DRM backend, and sync objects only when the device supports timelines.
+    /// Registers gamma and power always. It registers leasing only with a DRM backend, and sync objects only when the device supports timelines. The sync object device keeps its own duplicate of the fd, so a replaced renderer can close its own. The services own the duplicate.
     /// </summary>
     /// <param name="services">The registry to add to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
@@ -52,7 +52,8 @@ public sealed class DrmCapabilityPack : ICapabilityPack
         var syncFd = _renderer.Device?.DrmFd ?? _drm?.Device.Fd ?? -1;
         if (Basin.Backend.Drm.DrmSyncDevice.SupportsTimelines(syncFd))
         {
-            services.Use<IDrmSyncDevice>(new Basin.Backend.Drm.DrmSyncDevice(syncFd));
+            var syncDevice = Basin.Backend.Drm.DrmSyncDevice.Duplicate(syncFd);
+            services.Use<IDrmSyncDevice>(syncDevice).Own(syncDevice);
         }
     }
 }

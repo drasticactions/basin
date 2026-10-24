@@ -91,13 +91,15 @@ internal static class Program
         });
     }
 
-    private static RenderStack CreateStack(string rendererName, BasinLogger log)
+    private static RenderStack CreateStack(string rendererName, BasinLogger log, out string started)
     {
         var name = rendererName;
-        return Basin.Renderers.RendererCatalog.CreateWithFallback(
+        var stack = Basin.Renderers.RendererCatalog.CreateWithFallback(
             ref name,
             Basin.Renderers.RendererCatalog.FindRenderNode(),
             fallback => fallback.Log(log));
+        started = name;
+        return stack;
     }
 
     private static int Run(
@@ -176,8 +178,9 @@ internal static class Program
 
         InitProcess.RaiseFileLimit(log);
 
-        var stack = CreateStack(rendererName, log);
-        using var renderer = stack.Renderer;
+        var stack = CreateStack(rendererName, log, out var startedRenderer);
+        using var renderStack = new RenderStackLifetime(stack);
+        var renderer = stack.Renderer;
         var deviceAllocator = stack.DeviceAllocator;
 
         using var host = Basin.Host.BasinHost.Create(
@@ -196,7 +199,7 @@ internal static class Program
 
         var sceneLayers = new SceneLayers(scene.Root);
 
-        using var driver = new OutputDriver(host, scene, layout, renderer, deviceAllocator)
+        using var driver = renderStack.Driver = new OutputDriver(host, scene, layout, renderer, deviceAllocator)
         {
             Background = Background,
             Requested = outputCount,
@@ -249,7 +252,7 @@ internal static class Program
             .With(colorPack)
             .Use<IInputSink>(injectedInput);
 
-        using var blur = Basin.Effects.BackdropBlurs.For(renderer);
+        using var blur = Basin.Effects.RebindableBackdropBlur.For(renderer);
         if (blur is not null)
         {
             services.Use<IBackgroundEffects>(blur);
@@ -938,6 +941,10 @@ internal static class Program
         _ = access.StartAsync(Basin.AccessibilityMode.Auto);
         lineReport.AddInputLines(ipc.Methods);
         inspector.Register(ipc.Methods);
+        host.RendererReplaced += inspector.OnRendererReplaced;
+        host.RendererRebuilt += inspector.OnRendererRebuilt;
+        driver.RendererFactory = () => Basin.Renderers.RendererCatalog.Create(
+            startedRenderer, Basin.Renderers.RendererCatalog.FindRenderNode() ?? string.Empty);
         lineReport.AddSessionLines(ipc.Methods);
         ipc.Start();
         ipc.StartLineFront();
@@ -965,7 +972,7 @@ internal static class Program
             for (var i = 0; i < views.Count; i++)
             {
                 var path = ScreenshotPath(screenshotPath, i);
-                var shot = SceneScreenshot.WritePresented(views[i].Scene?.LastTarget, renderer, path)
+                var shot = SceneScreenshot.WritePresented(views[i].Scene?.LastTarget, driver.Renderer, path)
                     == ScreenshotOutcome.Written;
                 BasinReport.Line(shot
                     ? $"SHOT {path} after {views[i].Rendered} frames"
@@ -985,10 +992,9 @@ internal static class Program
 
         seam?.Dispose();
         cursor.Dispose();
-        deviceAllocator?.Dispose();
         tablets?.Dispose();
         libinput?.Dispose();
-        return 0;
+        return runLoop.ExitCode;
     }
 
     private static string ScreenshotPath(string path, int index)

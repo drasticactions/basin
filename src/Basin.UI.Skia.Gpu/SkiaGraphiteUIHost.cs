@@ -10,13 +10,13 @@ namespace Basin.UI.Skia;
 /// <summary>
 /// The Skia chrome host on the Graphite context of a Skia Graphite renderer. It draws <see cref="SkiaVulkanUISurface"/> instances through the shared recorder. Use it on the thread that created it.
 /// </summary>
-public sealed class SkiaGraphiteUIHost : IUISurfaceObserver, IUIHost
+public sealed class SkiaGraphiteUIHost : IUISurfaceObserver, IUIHost, IRendererBound
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
-    private readonly VulkanDevice _device;
-    private readonly SKGraphiteContext _context;
-    private readonly SKGraphiteRecorder _recorder;
-    private readonly IAllocator? _allocator;
+    private VulkanDevice _device;
+    private SKGraphiteContext _context;
+    private SKGraphiteRecorder _recorder;
+    private IAllocator? _allocator;
     private readonly List<SkiaVulkanUISurface> _surfaces = [];
     private ulong[]? _modifiers;
     private bool _disposed;
@@ -84,7 +84,7 @@ public sealed class SkiaGraphiteUIHost : IUISurfaceObserver, IUIHost
 
         var surface = new SkiaVulkanUISurface(
             _device,
-            buffer => new GraphiteDrawTarget(SkiaGraphiteTarget.Create(_device, _recorder, buffer)),
+            WrapFactory(),
             Flush,
             options.Target == UITargetKind.Dmabuf ? _allocator : null,
             RenderableModifiers());
@@ -118,6 +118,48 @@ public sealed class SkiaGraphiteUIHost : IUISurfaceObserver, IUIHost
         {
             _surfaces.Remove(vulkanSurface);
         }
+    }
+
+    /// <summary>
+    /// Moves the host and its live surfaces to the device, context and recorder of a new Graphite renderer. The surfaces keep their buffers and drop their GPU targets.
+    /// </summary>
+    /// <param name="replacement">The old and the new renderer.</param>
+    /// <exception cref="InvalidOperationException">The new renderer is not a Graphite renderer.</exception>
+    public void OnRendererReplaced(RendererReplacement replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        _thread.Assert();
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (replacement.New.Renderer is not SkiaGraphiteRenderer graphite)
+        {
+            throw new InvalidOperationException($"A Graphite chrome host cannot move to a {replacement.New.Renderer.GetType().Name}.");
+        }
+
+        foreach (var surface in _surfaces)
+        {
+            surface.ReleaseTargets();
+        }
+
+        _device = graphite.Device;
+        _context = graphite.Context;
+        _recorder = graphite.Recorder;
+        _allocator = _allocator is null ? null : _device.CreateAllocator();
+        _modifiers = null;
+        foreach (var surface in _surfaces)
+        {
+            surface.Rebind(_device, WrapFactory(), Flush, _allocator, RenderableModifiers());
+        }
+    }
+
+    private Func<BufferBase, IVulkanDrawTarget> WrapFactory()
+    {
+        var device = _device;
+        var recorder = _recorder;
+        return buffer => new GraphiteDrawTarget(SkiaGraphiteTarget.Create(device, recorder, buffer));
     }
 
     private void Flush()

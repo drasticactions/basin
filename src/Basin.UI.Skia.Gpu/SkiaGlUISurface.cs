@@ -16,9 +16,10 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
     private readonly PixmanRegion32 _wholeDamage = new();
     private readonly List<BufferBase> _retired = [];
     private readonly Dictionary<BufferBase, Entry> _wraps = [];
-    private readonly GlDevice _device;
-    private readonly IAllocator _allocator;
-    private readonly GRContext _context;
+    private GlDevice _device;
+    private IAllocator _allocator;
+    private Func<GRContext> _contextSource;
+    private GRContext? _context;
 
     private BufferBase? _target;
     private BufferBase? _front;
@@ -29,11 +30,39 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
     private bool _produced;
     private bool _disposed;
 
-    internal SkiaGlUISurface(GlDevice device, IAllocator allocator, GRContext context)
+    internal SkiaGlUISurface(GlDevice device, IAllocator allocator, Func<GRContext> context)
     {
         _device = device;
         _allocator = allocator;
-        _context = context;
+        _contextSource = context;
+    }
+
+    private GRContext Context => _context ??= _contextSource();
+
+    internal bool IsDisposed => _disposed;
+
+    internal void ReleaseTargets()
+    {
+        if (_drawing)
+        {
+            _wraps[_target!].Canvas.Restore();
+            _drawing = false;
+        }
+
+        foreach (var entry in _wraps.Values)
+        {
+            ReleaseEntry(entry);
+        }
+
+        _wraps.Clear();
+    }
+
+    internal void Rebind(GlDevice device, IAllocator allocator, Func<GRContext> context)
+    {
+        _device = device;
+        _allocator = allocator;
+        _contextSource = context;
+        _context = null;
     }
 
     /// <inheritdoc/>
@@ -115,7 +144,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
             throw new InvalidOperationException("BeginDraw without EndDraw.");
         }
 
-        if (_context.IsAbandoned)
+        if (Context.IsAbandoned)
         {
             throw new InvalidOperationException("The Ganesh context is abandoned.");
         }
@@ -123,7 +152,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         var target = _target ?? throw new InvalidOperationException("BeginDraw before Configure.");
         var entry = WrapOf(target);
 
-        _context.ResetContext(uint.MaxValue);
+        Context.ResetContext(uint.MaxValue);
         _drawing = true;
         var canvas = entry.Canvas;
         canvas.Save();
@@ -145,7 +174,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
 
         var entry = _wraps[_target!];
         entry.Canvas.Restore();
-        _context.Flush(submit: true, synchronous: false);
+        Context.Flush(submit: true, synchronous: false);
         PublishWriteFence();
         _drawing = false;
         _produced = true;
@@ -330,7 +359,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         var backend = SkiaCensus.Track(new GRBackendRenderTarget(
             buffer.Width, buffer.Height, sampleCount: 0, stencilBits: 0,
             new GRGlFramebufferInfo(native.Framebuffer, 0x93A1)));
-        var surface = SKSurface.Create(_context, backend, GRSurfaceOrigin.TopLeft, SKColorType.Bgra8888);
+        var surface = SKSurface.Create(Context, backend, GRSurfaceOrigin.TopLeft, SKColorType.Bgra8888);
         if (surface is null)
         {
             SkiaCensus.Release(backend);
@@ -370,7 +399,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
     {
         SkiaCensus.Release(entry.Surface);
         SkiaCensus.Release(entry.Backend);
-        if (!_context.IsAbandoned)
+        if (_context is { IsAbandoned: false })
         {
             entry.Native.Dispose(_device);
         }
