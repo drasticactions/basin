@@ -84,6 +84,19 @@ public sealed class ShellUITests
     }
 
     [AvaloniaFact]
+    public void A_launcher_without_a_display_name_is_named_from_its_program()
+    {
+        var model = new PanelModel();
+        model.Launchers.Add(new LauncherModel(null, null, () => { }, "weston-flower"));
+        model.Launchers.Add(new LauncherModel("Terminal", null, () => { }, "weston-terminal"));
+        var panel = Layout(new PanelView { DataContext = model }, 800, 32);
+
+        var names = panel.GetVisualDescendants().OfType<Button>().Select(global::Avalonia.Automation.AutomationProperties.GetName).ToList();
+
+        Assert.Equal(["weston-flower", "Terminal"], names);
+    }
+
+    [AvaloniaFact]
     public void The_frame_reproduces_westons_metrics()
     {
         var model = new FrameModel { Title = "basin" };

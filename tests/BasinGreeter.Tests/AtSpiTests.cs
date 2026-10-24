@@ -21,7 +21,9 @@ public sealed class AtSpiTests
         Assert.Contains(list, node => node.Role == "push button" && node.Name == "Log in");
         Assert.Contains(list, node => node.Role == "push button" && node.Name == "Power");
         Assert.Contains(list, node => node.Role == "combo box" && node.Name == "Session");
-        Assert.Contains(list, node => node.Role == "list box" && node.Name == "Users");
+        var users = list.First(node => node.Role == "list box" && node.Name == "Users");
+        var items = await a11y.ChildrenAsync(users);
+        Assert.True(items.Count > 1 && items.All(node => node.Role == "list item"), string.Join(" | ", items.Select(node => $"{node.Role}:{node.Name}")));
 
         await greeter.SendAsync("select ada");
         await greeter.ExpectAsync("AUTH secret Password: ");

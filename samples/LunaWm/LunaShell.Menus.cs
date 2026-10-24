@@ -100,6 +100,7 @@ internal sealed partial class LunaShell
         PlaceMenu(view, menu);
         menu.Chrome.Enabled = true;
         menu.Chrome.InputEnabled = true;
+        TakeChromeKeyboard(menu.Chrome);
         if (!menu.Open || reopen)
         {
             menu.Open = true;
@@ -120,6 +121,7 @@ internal sealed partial class LunaShell
 
         menu.Open = false;
         menu.Chrome.InputEnabled = false;
+        ReleaseChromeKeyboard(menu.Chrome);
         menu.Fade.Start(LunaMotion.StatusBarMenuFade, menu.Fade.Value, 0, Now, 1);
         view.Scheduler?.ScheduleRepaint();
         _seat.Refresh();

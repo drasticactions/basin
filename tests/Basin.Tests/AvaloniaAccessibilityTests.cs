@@ -115,6 +115,38 @@ public sealed class AvaloniaAccessibilityTests
     }
 
     [AvaloniaFact]
+    public async Task A_chrome_button_is_named_by_its_wrapped_text_and_a_click_raises_invoked()
+    {
+        var bus = await AccessibilityBus.ForProcessAsync();
+        var owner = Basin.Diagnostics.ThreadAffinity.Capture();
+        using var host = BasinPlatform.Attach(new BasinPlatformOptions { Screens = new OneScreen(), CompositorAffinity = owner });
+        var strip = Surface(host, 400, 60);
+        strip.AccessibleName = "Strip";
+        var invoked = 0;
+        var tab = new Border { Width = 120, Height = 30, Child = new UserControl { Content = new TextBlock { Text = "Downloads" } } };
+        ChromeAutomation.SetIsButton(tab, true);
+        ChromeAutomation.AddInvokedHandler(tab, (_, _) => invoked++);
+        strip.Content = new Grid { Children = { tab } };
+
+        Assert.Null(await host.StartAccessibilityAsync());
+        await Settle();
+
+        using var reader = await While(bus.ConnectAsync());
+        var nodes = await While(reader.WhereAsync(found => found.Any(n => n.Name == "Downloads" && n.Role == "push button")));
+        var button = nodes.First(n => n.Name == "Downloads" && n.Role == "push button");
+
+        Assert.True(await While(reader.DoActionAsync(button, "click")));
+        for (var i = 0; i < 50 && invoked == 0; i++)
+        {
+            await Settle(1);
+        }
+
+        Assert.Equal(1, invoked);
+        host.StopAccessibility();
+        await Settle();
+    }
+
+    [AvaloniaFact]
     public async Task A_new_subtree_whose_text_changes_in_the_same_frame_reads_its_text_and_caret()
     {
         var bus = await AccessibilityBus.ForProcessAsync();

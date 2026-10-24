@@ -41,6 +41,22 @@ internal sealed partial class LunaShell
         public bool RaisesKeyboard;
     }
 
+    private void TakeChromeKeyboard(ChromeSurface chrome)
+    {
+        if (chrome.Surface is { } surface)
+        {
+            _seat.Router.SetKeyboardFocus(surface);
+        }
+    }
+
+    private void ReleaseChromeKeyboard(ChromeSurface chrome)
+    {
+        if (chrome.Surface is { } surface && ReferenceEquals(_seat.Router.KeyboardFocus, surface))
+        {
+            _seat.Router.SetKeyboardFocus(null);
+        }
+    }
+
     internal bool HandleKey(uint timeMs, uint key, uint keysym, Modifiers held, bool pressed, bool bareSuper)
     {
         if (!pressed && _consumedKeys.Remove(key))

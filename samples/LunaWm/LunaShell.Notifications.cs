@@ -440,6 +440,14 @@ internal sealed partial class LunaShell
         dashboard.Open = open;
         dashboard.Chrome.Enabled = true;
         dashboard.Chrome.InputEnabled = open;
+        if (open)
+        {
+            TakeChromeKeyboard(dashboard.Chrome);
+        }
+        else
+        {
+            ReleaseChromeKeyboard(dashboard.Chrome);
+        }
         dashboard.Snap.Start(LunaMotion.DashboardSnap, dashboard.Snap.Value, open ? 1 : 0, Now, 1);
         ApplySnap(dashboard);
         view.Scheduler?.ScheduleRepaint();

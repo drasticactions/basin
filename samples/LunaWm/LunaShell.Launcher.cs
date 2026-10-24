@@ -229,6 +229,14 @@ internal sealed partial class LunaShell
         ui.Open = open;
         ui.Chrome.Enabled = true;
         ui.Chrome.InputEnabled = open;
+        if (open)
+        {
+            TakeChromeKeyboard(ui.Chrome);
+        }
+        else
+        {
+            ReleaseChromeKeyboard(ui.Chrome);
+        }
         ui.Fade.Start(LunaMotion.Launcher, ui.Fade.Value, open ? 1 : 0, Now, 1);
         ui.Frame.Alpha = (float)ui.Fade.Value;
         SyncDock(view, animate: true);
@@ -251,6 +259,10 @@ internal sealed partial class LunaShell
         _dockRequested = open;
         dock.Following = open && follow;
         SyncDock(view, animate: !follow);
+        if (open && !follow && dock.Shown)
+        {
+            TakeChromeKeyboard(dock.Chrome);
+        }
         _report.Line($"QUICKLAUNCH {(open ? "on" : "off")}");
     }
 
@@ -270,6 +282,10 @@ internal sealed partial class LunaShell
         dock.Shown = shown;
         dock.Chrome.Enabled = true;
         dock.Chrome.InputEnabled = shown;
+        if (!shown)
+        {
+            ReleaseChromeKeyboard(dock.Chrome);
+        }
         if (dock.Following)
         {
             return;

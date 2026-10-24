@@ -48,7 +48,8 @@ internal sealed class AvaloniaShell : IDisposable
             _launchers.Add(new LauncherModel(
                 launcher.DisplayName,
                 LoadIcon(launcher.Icon, log),
-                () => spawn(path, x11)));
+                () => spawn(path, x11),
+                Path.GetFileName(path.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? path)));
         }
     }
 

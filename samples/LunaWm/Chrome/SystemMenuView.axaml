@@ -37,7 +37,7 @@
             <DataTemplate DataType="luna:SliderRow">
               <StackPanel Margin="0,6,0,8" Spacing="4">
                 <TextBlock Text="{Binding Label}" FontSize="16" Opacity="0.8" />
-                <Slider Minimum="0" Maximum="1" Value="{Binding Value}" />
+                <Slider Minimum="0" Maximum="100" SmallChange="5" LargeChange="10" Value="{Binding Percent}" AutomationProperties.Name="{Binding Label}" />
               </StackPanel>
             </DataTemplate>
             <DataTemplate DataType="luna:PassphraseRow">

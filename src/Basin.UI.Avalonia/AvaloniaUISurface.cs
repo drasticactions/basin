@@ -1,3 +1,5 @@
+using AccessKit.Avalonia;
+using AccessKit.Unix;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Embedding;
@@ -29,7 +31,7 @@ public sealed class AvaloniaUISurface : IUISurface, IAccessibleUISurface
     private readonly int[] _touchIds = new int[TouchCapacity];
     private readonly global::Avalonia.Point[] _touchPoints = new global::Avalonia.Point[TouchCapacity];
     private readonly bool[] _touchLive = new bool[TouchCapacity];
-    private AccessKitPeerTree? _accessKit;
+    private AccessKitTopLevel? _accessKit;
     private bool _accessible = true;
     private RawInputModifiers _modifiers;
     private bool _keyHandled;
@@ -411,18 +413,7 @@ public sealed class AvaloniaUISurface : IUISurface, IAccessibleUISurface
 
     internal bool HasKeyboardFocus { get; private set; }
 
-    internal static string? AccessKitUnavailable()
-    {
-        try
-        {
-            using var probe = new AccessKit.Node(AccessKit.Role.Unknown);
-            return null;
-        }
-        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException or BadImageFormatException)
-        {
-            return $"libaccesskit is not loadable ({error.Message})";
-        }
-    }
+    internal static string? AccessKitUnavailable() => UnixAdapter.UnsupportedReason;
 
     internal void AttachAccessibility()
     {
@@ -434,13 +425,10 @@ public sealed class AvaloniaUISurface : IUISurface, IAccessibleUISurface
                 return;
             }
 
-            try
+            _accessKit = AccessKitChrome.Attach(_root);
+            if (_accessKit.IsInert)
             {
-                _accessKit = new AccessKitPeerTree(_root);
-            }
-            catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException)
-            {
-                BasinLog.For("avalonia").Info($"accessibility: no adapter, {error.Message}");
+                BasinLog.For("avalonia").Info($"accessibility: no adapter, {UnixAdapter.UnsupportedReason}");
                 return;
             }
 
@@ -459,7 +447,7 @@ public sealed class AvaloniaUISurface : IUISurface, IAccessibleUISurface
     {
         var size = _impl.Size;
         var bounds = new AccessKit.Rect(PositionX, PositionY, PositionX + size.Width, PositionY + size.Height);
-        OnUiThread(() => _accessKit?.SetRootWindowBounds(bounds));
+        OnUiThread(() => _accessKit?.SetRootWindowBounds(bounds, bounds));
     }
 
     /// <inheritdoc/>

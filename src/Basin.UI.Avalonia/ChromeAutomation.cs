@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 
 namespace Basin.UI.Avalonia;
@@ -6,6 +7,7 @@ namespace Basin.UI.Avalonia;
 /// <summary>
 /// Attached properties that let a screen reader read and press chrome that pointer gestures drive.
 /// A control with <see cref="IsButtonProperty"/> set reads as a button whatever its type, and the reader's press raises <see cref="InvokedEvent"/> on it.
+/// The control also takes keyboard focus, and Enter or Space raises <see cref="InvokedEvent"/>.
 /// </summary>
 public static class ChromeAutomation
 {
@@ -20,6 +22,11 @@ public static class ChromeAutomation
     /// </summary>
     public static readonly RoutedEvent<RoutedEventArgs> InvokedEvent =
         RoutedEvent.Register<RoutedEventArgs>("Invoked", RoutingStrategies.Bubble, typeof(ChromeAutomation));
+
+    static ChromeAutomation()
+    {
+        IsButtonProperty.Changed.AddClassHandler<InputElement>(OnIsButtonChanged);
+    }
 
     /// <summary>
     /// Gets a value indicating whether a control reads as a button.
@@ -54,4 +61,27 @@ public static class ChromeAutomation
     /// </summary>
     /// <param name="control">The control.</param>
     public static void Invoke(Interactive control) => control.RaiseEvent(new RoutedEventArgs(InvokedEvent, control));
+
+    private static void OnIsButtonChanged(InputElement element, AvaloniaPropertyChangedEventArgs change)
+    {
+        var isButton = change.GetNewValue<bool>();
+        element.Focusable = isButton;
+        element.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+        if (isButton)
+        {
+            element.AddHandler(InputElement.KeyDownEvent, OnKeyDown);
+        }
+    }
+
+    private static void OnKeyDown(object? sender, KeyEventArgs args)
+    {
+        if (args.Handled || sender is not Interactive control || !ReferenceEquals(args.Source, control) || args.KeyModifiers != KeyModifiers.None
+            || args.Key is not (Key.Enter or Key.Space))
+        {
+            return;
+        }
+
+        args.Handled = true;
+        Invoke(control);
+    }
 }

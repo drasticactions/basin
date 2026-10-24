@@ -19,7 +19,7 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="shell:LauncherModel">
-            <Button Classes="weston-launcher" Command="{Binding Launch}" ToolTip.Tip="{Binding DisplayName}" AutomationProperties.Name="{Binding DisplayName}">
+            <Button Classes="weston-launcher" Command="{Binding Launch}" ToolTip.Tip="{Binding DisplayName}" AutomationProperties.Name="{Binding AccessibleName}">
               <Image Source="{Binding Icon}" Width="24" Height="24" />
             </Button>
           </DataTemplate>

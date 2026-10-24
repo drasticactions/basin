@@ -19,6 +19,7 @@
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Skia" />
     <PackageReference Include="accesskit-dotnet" />
+    <PackageReference Include="accesskit-dotnet.avalonia" />
     <PackageReference Include="Tmds.DBus.Protocol" />
     <PackageReference Include="Avalonia.HarfBuzz" />
     <PackageReference Include="SkiaSharp" />

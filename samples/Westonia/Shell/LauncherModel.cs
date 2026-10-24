@@ -11,14 +11,17 @@ namespace Westonia.Shell;
 
 public sealed class LauncherModel
 {
-    public LauncherModel(string? displayName, IImage? icon, Action launch)
+    public LauncherModel(string? displayName, IImage? icon, Action launch, string? programName = null)
     {
         DisplayName = displayName;
+        AccessibleName = string.IsNullOrWhiteSpace(displayName) ? programName : displayName;
         Icon = icon;
         Launch = new RelayCommand(launch);
     }
 
     public string? DisplayName { get; }
+
+    public string? AccessibleName { get; }
 
     public IImage? Icon { get; }
 
