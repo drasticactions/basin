@@ -93,6 +93,18 @@ public sealed class IpcControlTests
     }
 
     [Fact]
+    public void Wait_with_neither_an_app_id_nor_a_title_is_invalid()
+    {
+        var model = new TestToplevelModel();
+        using var rig = new IpcTestRig(services => services.Use<IToplevelModel>(model));
+        var peer = rig.Connect();
+        var error = Parse(peer.Call("""{"method":"windows/wait","params":{"timeout_ms":20}}""")).GetProperty("error");
+        Assert.Equal(IpcErrorCodes.InvalidParams, error.GetProperty("code").GetString());
+        Assert.Equal("name an app_id, a title, or both", error.GetProperty("message").GetString());
+        Assert.Equal(0, model.ObserverCount);
+    }
+
+    [Fact]
     public void Wait_fails_at_its_timeout_and_teardown_releases_a_pending_one()
     {
         var model = new TestToplevelModel();

@@ -49,10 +49,10 @@ public sealed class IpcWaitParams : IIpcParams, IIpcReusable
     public long? TimeoutMs { get; set; }
 
     /// <summary>
-    /// Gets <see langword="null"/> at all times. The handler checks that <see cref="AppId"/> or <see cref="Title"/> is present.
+    /// Gets the error when neither <see cref="AppId"/> nor <see cref="Title"/> is present, or <see langword="null"/> when one of them is.
     /// </summary>
     [JsonIgnore]
-    public string? Missing => null;
+    public string? Missing => AppId is null && Title is null ? "name an app_id, a title, or both" : null;
 
     void IIpcReusable.Reset()
     {

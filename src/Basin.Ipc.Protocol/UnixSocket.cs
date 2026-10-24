@@ -24,6 +24,11 @@ internal static unsafe class UnixSocket
     private const int PathCapacity = 108;
     private const int HeaderBytes = 16;
     private const int FDupfdCloexec = 1030;
+    private const int AtFdCwd = -100;
+    private const int AtSymlinkNoFollow = 0x100;
+    private const uint StatxUid = 0x8;
+    private const int StatxSize = 256;
+    private const int StatxUidOffset = 20;
 
     public static int LastError => Marshal.GetLastPInvokeError();
 
@@ -177,6 +182,19 @@ internal static unsafe class UnixSocket
 
     public static uint EffectiveUid() => geteuid();
 
+    public static uint? OwnerUid(string path)
+    {
+        var bytes = stackalloc byte[Encoding.UTF8.GetByteCount(path) + 1];
+        Terminated(bytes, path);
+        var buffer = stackalloc byte[StatxSize];
+        if (statx(AtFdCwd, bytes, AtSymlinkNoFollow, StatxUid, buffer) != 0 || (*(uint*)buffer & StatxUid) == 0)
+        {
+            return null;
+        }
+
+        return *(uint*)(buffer + StatxUidOffset);
+    }
+
     private static int Address(byte* address, string path)
     {
         if (!FitsPath(path))
@@ -254,6 +272,9 @@ internal static unsafe class UnixSocket
 
     [DllImport("libc")]
     private static extern uint geteuid();
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int statx(int directoryFd, byte* path, int flags, uint mask, byte* buffer);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int fcntl(int fd, int command, int argument);

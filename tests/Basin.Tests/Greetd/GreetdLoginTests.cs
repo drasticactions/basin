@@ -167,6 +167,46 @@ public sealed class GreetdLoginTests
     }
 
     [Fact]
+    public void A_write_failure_in_start_fails_the_login_once()
+    {
+        using var host = new CompositorTestHost();
+        var pair = Pair();
+        pair.Server.Dispose();
+        using var client = GreetdClient.Adopt(host.Loop, pair.Client);
+        using var login = new GreetdLogin(client);
+        var changes = new List<GreetdLoginState>();
+        login.Changed += () => changes.Add(login.State);
+        login.Start("alice");
+        Assert.Equal(GreetdLoginState.Failed, login.State);
+        Assert.StartsWith("write failed", login.FailureDescription);
+        Assert.Equal([GreetdLoginState.Failed], changes);
+        Assert.True(client.IsClosed);
+        Assert.False(client.IsAwaitingResponse);
+        Assert.False(login.CanStart);
+    }
+
+    [Fact]
+    public void A_write_failure_in_answer_fails_the_login_once()
+    {
+        using var host = new CompositorTestHost();
+        using var fake = new FakeGreetd();
+        fake.Respond(new GreetdAuthMessage(GreetdAuthMessageType.Secret, "Password:"));
+        using var client = GreetdClient.Connect(host.Loop, fake.SocketPath);
+        using var login = new GreetdLogin(client);
+        login.Start("alice");
+        Settle(host, login);
+        Assert.Equal(GreetdLoginState.Prompting, login.State);
+        fake.Drop();
+        var changes = new List<GreetdLoginState>();
+        login.Changed += () => changes.Add(login.State);
+        login.Answer("pw"u8);
+        Assert.Equal(GreetdLoginState.Failed, login.State);
+        Assert.StartsWith("write failed", login.FailureDescription);
+        Assert.Equal([GreetdLoginState.Failed], changes);
+        Assert.Null(login.PromptText);
+    }
+
+    [Fact]
     public void An_oversized_frame_closes_the_connection()
     {
         using var host = new CompositorTestHost();

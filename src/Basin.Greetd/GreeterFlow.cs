@@ -214,7 +214,7 @@ public sealed class GreeterFlow : IDisposable
         CurrentDisplayName = null;
         SuggestedUser = _users.FirstOrDefault(user => user.Name == _memory.LastUser)?.Name;
         Step(new GreeterStep(GreeterStepKind.UsersShown, SuggestedUser));
-        SelectSessionCore(SuggestedUser is null ? null : _memory.SessionOf(SuggestedUser));
+        _ = SelectSessionCore(SuggestedUser is null ? null : _memory.SessionOf(SuggestedUser));
         if (SuggestedUser is { } suggested)
         {
             LayoutForUser(suggested);
@@ -337,13 +337,12 @@ public sealed class GreeterFlow : IDisposable
     /// </summary>
     /// <param name="id">The session id, or <see langword="null"/> for the default when <paramref name="byUser"/> is false.</param>
     /// <param name="byUser">Whether the person picked the session.</param>
-    /// <returns><see langword="false"/> when <paramref name="byUser"/> is true and no session has the id. Otherwise <see langword="true"/>.</returns>
+    /// <returns><see langword="false"/> when no session has the id, also when <paramref name="byUser"/> is false. The fallback still selects a session then.</returns>
     public bool SelectSession(string? id, bool byUser)
     {
         if (!byUser)
         {
-            SelectSessionCore(id);
-            return true;
+            return SelectSessionCore(id);
         }
 
         if (id is null || _sessions.All(session => session.Id != id))
@@ -481,7 +480,7 @@ public sealed class GreeterFlow : IDisposable
 
         if (_memory.SessionOf(user) is { } remembered && _sessions.Any(session => session.Id == remembered) && !_sessionPicked)
         {
-            SelectSessionCore(remembered);
+            _ = SelectSessionCore(remembered);
         }
 
         LayoutForUser(user);
@@ -555,17 +554,19 @@ public sealed class GreeterFlow : IDisposable
             EnvironmentsPath = _settings.Environments,
         });
         Step(new GreeterStep(GreeterStepKind.SessionsRead, Count: _sessions.Count));
-        SelectSessionCore(null);
+        _ = SelectSessionCore(null);
     }
 
-    private void SelectSessionCore(string? id)
+    private bool SelectSessionCore(string? id)
     {
-        var wanted = id ?? (_settings.DefaultSession.Length > 0 ? _settings.DefaultSession : null);
-        var entry = _sessions.FirstOrDefault(session => session.Id == wanted)
+        var fallback = _settings.DefaultSession.Length > 0 ? _settings.DefaultSession : null;
+        var entry = (id is null ? null : _sessions.FirstOrDefault(session => session.Id == id))
+            ?? _sessions.FirstOrDefault(session => session.Id == fallback)
             ?? _sessions.FirstOrDefault(session => session.Type == GreetdSessionType.Wayland)
             ?? _sessions.FirstOrDefault();
         SelectedSession = entry?.Id;
         Step(new GreeterStep(GreeterStepKind.SessionSelected, SelectedSession));
+        return entry is not null && (id is null || entry.Id == id);
     }
 
     private void ResetLayouts()

@@ -83,7 +83,7 @@ public sealed class GreetdLogin : IDisposable
     public bool CanStart => State is GreetdLoginState.Idle or GreetdLoginState.Failed && !_client.IsClosed;
 
     /// <summary>
-    /// Sends <c>create_session</c> for <paramref name="user"/> and enters <see cref="GreetdLoginState.Waiting"/>.
+    /// Sends <c>create_session</c> for <paramref name="user"/> and enters <see cref="GreetdLoginState.Waiting"/>, or <see cref="GreetdLoginState.Failed"/> when the write fails.
     /// </summary>
     /// <param name="user">The login name.</param>
     /// <exception cref="ArgumentException"><paramref name="user"/> is null or empty.</exception>
@@ -100,13 +100,17 @@ public sealed class GreetdLogin : IDisposable
         User = user;
         FailureDescription = null;
         PromptText = null;
-        Send(Pending.Create, new GreetdCreateSession(user));
+        if (!Send(Pending.Create, new GreetdCreateSession(user)))
+        {
+            return;
+        }
+
         _sessionOpen = true;
         Enter(GreetdLoginState.Waiting);
     }
 
     /// <summary>
-    /// Answers a visible or secret prompt and enters <see cref="GreetdLoginState.Waiting"/>.
+    /// Answers a visible or secret prompt and enters <see cref="GreetdLoginState.Waiting"/>, or <see cref="GreetdLoginState.Failed"/> when the write fails.
     /// </summary>
     /// <param name="utf8Response">The answer as UTF-8 bytes. The caller keeps ownership and clears it.</param>
     /// <exception cref="InvalidOperationException">No visible or secret prompt is open.</exception>
@@ -119,13 +123,17 @@ public sealed class GreetdLogin : IDisposable
         }
 
         _pending = Pending.Answer;
-        _client.SendAuthResponse(utf8Response);
+        if (!_client.SendAuthResponse(utf8Response))
+        {
+            return;
+        }
+
         PromptText = null;
         Enter(GreetdLoginState.Waiting);
     }
 
     /// <summary>
-    /// Replies to an info or error message with no answer and enters <see cref="GreetdLoginState.Waiting"/>.
+    /// Replies to an info or error message with no answer and enters <see cref="GreetdLoginState.Waiting"/>, or <see cref="GreetdLoginState.Failed"/> when the write fails.
     /// </summary>
     /// <exception cref="InvalidOperationException">No info or error message is open.</exception>
     public void Acknowledge()
@@ -136,13 +144,17 @@ public sealed class GreetdLogin : IDisposable
             throw new InvalidOperationException("Acknowledge needs an info or error message");
         }
 
-        Send(Pending.Answer, new GreetdPostAuthMessageResponse(null));
+        if (!Send(Pending.Answer, new GreetdPostAuthMessageResponse(null)))
+        {
+            return;
+        }
+
         PromptText = null;
         Enter(GreetdLoginState.Waiting);
     }
 
     /// <summary>
-    /// Sends <c>start_session</c> and enters <see cref="GreetdLoginState.Starting"/>. After <see cref="GreetdLoginState.Started"/> the greeter must exit within 5 seconds.
+    /// Sends <c>start_session</c> and enters <see cref="GreetdLoginState.Starting"/>, or <see cref="GreetdLoginState.Failed"/> when the write fails. After <see cref="GreetdLoginState.Started"/> the greeter must exit within 5 seconds.
     /// </summary>
     /// <param name="command">The command and the environment of the session.</param>
     /// <exception cref="InvalidOperationException">The state is not <see cref="GreetdLoginState.Ready"/>.</exception>
@@ -155,7 +167,11 @@ public sealed class GreetdLogin : IDisposable
             throw new InvalidOperationException($"StartSession needs Ready, and this login is {State}");
         }
 
-        Send(Pending.Start, new GreetdStartSession(command.Cmd, command.Env));
+        if (!Send(Pending.Start, new GreetdStartSession(command.Cmd, command.Env)))
+        {
+            return;
+        }
+
         Enter(GreetdLoginState.Starting);
     }
 
@@ -203,17 +219,21 @@ public sealed class GreetdLogin : IDisposable
         _client.Closed -= OnClosed;
     }
 
-    private void Send(Pending pending, GreetdRequest request)
+    private bool Send(Pending pending, GreetdRequest request)
     {
         _pending = pending;
-        _client.Send(request);
+        return _client.Send(request);
     }
 
     private void SendCancel()
     {
         _cancelQueued = false;
         PromptText = null;
-        Send(Pending.Cancel, new GreetdCancelSession());
+        if (!Send(Pending.Cancel, new GreetdCancelSession()))
+        {
+            return;
+        }
+
         Enter(GreetdLoginState.Waiting);
     }
 

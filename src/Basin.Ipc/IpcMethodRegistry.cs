@@ -226,12 +226,12 @@ public sealed class IpcMethodRegistry
         }
     }
 
-        /// <summary>
-        /// Tells whether <see cref="IpcServer.Omit"/> left a library method out, by its name or its group.
-        /// </summary>
-        /// <param name="name">The method name.</param>
-        /// <returns><see langword="true"/> when the method or its group is omitted.</returns>
-        public bool IsOmitted(string name)
+    /// <summary>
+    /// Tells whether <see cref="IpcServer.Omit"/> left a library method out, by its name or its group.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <returns><see langword="true"/> when the method or its group is omitted.</returns>
+    public bool IsOmitted(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
         if (_omitted.Contains(name))

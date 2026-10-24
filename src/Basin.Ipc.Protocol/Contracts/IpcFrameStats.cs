@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Basin.Ipc;
 
 /// <summary>
@@ -15,7 +13,6 @@ namespace Basin.Ipc;
 /// <param name="LatencyP99Ms">The 99th percentile of the commit-to-present latency, in milliseconds.</param>
 /// <param name="Output">The name of the output that presents the window, or <see langword="null"/> when no output presented it.</param>
 /// <param name="RefreshMhz">The refresh rate of that output in millihertz, or 0 with no output.</param>
-/// <param name="Filter">A scale filter name. The library never sets it, so the key is absent from every reply.</param>
 public readonly record struct IpcFrameStats(
     ulong Id,
     int CommitsPerSecond,
@@ -25,5 +22,4 @@ public readonly record struct IpcFrameStats(
     double LatencyMeanMs,
     double LatencyP99Ms,
     string? Output,
-    int RefreshMhz,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Filter = null);
+    int RefreshMhz);

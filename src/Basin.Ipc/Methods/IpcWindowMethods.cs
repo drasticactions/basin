@@ -178,11 +178,6 @@ internal static class IpcWindowMethods
                 }
 
                 var timeout = request.TimeoutMs ?? DefaultWaitMs;
-                if (request.AppId is null && request.Title is null)
-                {
-                    reply.Error(IpcErrorCodes.InvalidParams, "name an app_id, a title, or both");
-                    return;
-                }
 
                 if (timeout <= 0 || timeout > MaxWaitMs)
                 {

@@ -60,6 +60,57 @@ public sealed class ChromeSeatTests
         scene.Root.Destroy();
     }
 
+    [Fact]
+    public void A_disposed_seat_delivers_nothing_and_drops_its_hooks()
+    {
+        using var host = BasinHost.Create(HostOptions.ForBackend("headless"));
+        var layout = new OutputLayout();
+        using var services = host.CreateServices().Use(layout);
+        services.Install(new ProtocolPack([new CompositorModule(), new Basin.Seat.SeatModule()]));
+        services.Freeze();
+        var seatState = services.Require<Basin.Seat.Seat>();
+        seatState.Keyboard.SetKeymap();
+        var scene = new Basin.Scene.Scene();
+        var index = new UISurfaceIndex();
+        using var cursor = new CursorController(layout);
+        var surface = new RecordingUISurface(100, 80);
+        var node = new UISurfaceNode(scene.Root, surface, index);
+        node.SetPosition(10, 20);
+        node.Publish();
+        var hooks = new List<string>();
+        var seat = new ChromeSeat(host, seatState, layout, scene, index, cursor, null, BasinLog.For("test"))
+        {
+            Touched = (x, y) => hooks.Add("touched"),
+            KeyHook = (_, key, pressed) =>
+            {
+                hooks.Add("key");
+                return false;
+            },
+            Pressed = () => hooks.Add("pressed"),
+            TouchFramed = () => hooks.Add("frame"),
+        };
+        seat.Router.SetKeyboardFocus(surface);
+        seat.Dispose();
+
+        seat.Injector.Key(3, 30, pressed: true);
+        seat.Injector.Key(4, 30, pressed: false);
+        Assert.True(seat.Injector.TouchDown(5, 7, 30, 40));
+        Assert.True(seat.Injector.TouchFrame());
+        seat.Injector.Button(272, pressed: true);
+        seat.Injector.Button(272, pressed: false);
+
+        Assert.Empty(hooks);
+        Assert.DoesNotContain(surface.Log, line => line.StartsWith("key", StringComparison.Ordinal) || line.StartsWith("touch", StringComparison.Ordinal) || line.StartsWith("button", StringComparison.Ordinal));
+        Assert.Null(seat.KeyHook);
+        Assert.Null(seat.Touched);
+        Assert.Null(seat.Pressed);
+        Assert.Null(seat.TouchFramed);
+
+        node.Dispose();
+        surface.Dispose();
+        scene.Root.Destroy();
+    }
+
     private sealed class RecordingUISurface : IUISurface
     {
         private readonly UISurfaceObservers _observers = new();

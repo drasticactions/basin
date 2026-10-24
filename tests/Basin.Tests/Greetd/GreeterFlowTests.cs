@@ -271,6 +271,10 @@ public sealed class GreeterFlowTests : IDisposable
         rig.Flow.ShowUsers();
         Assert.Equal("sway", rig.Flow.SelectedSession);
 
+        Assert.True(rig.Flow.SelectSession("river", byUser: false));
+        Assert.Equal("river", rig.Flow.SelectedSession);
+        Assert.False(rig.Flow.SelectSession("nope", byUser: false));
+        Assert.Equal("sway", rig.Flow.SelectedSession);
         Assert.False(rig.Flow.SelectSession("nope", byUser: true));
         Assert.True(rig.Flow.SelectSession("sway", byUser: true));
         rig.Flow.Choose("grace");

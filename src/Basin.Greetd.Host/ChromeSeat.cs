@@ -61,13 +61,13 @@ public sealed class ChromeSeat : IDisposable
         _binder.Key += OnKey;
         _binder.ModifiersChanged += OnModifiers;
         _binder.Button += OnButton;
-        _binder.Axis += (time, axis) => _router.PointerAxis(time, axis);
-        _binder.PointerLeft += _router.PointerLeave;
+        _binder.Axis += OnAxis;
+        _binder.PointerLeft += OnPointerLeft;
         _binder.TouchDown += OnTouchDown;
-        _binder.TouchMotion += (time, id, x, y) => _router.TouchMotion(time, id, x, y);
-        _binder.TouchUp += (time, id) => _router.TouchUp(time, id);
-        _binder.TouchCancelled += () => _router.TouchCancel();
-        _binder.TouchFrame += () => TouchFramed?.Invoke();
+        _binder.TouchMotion += OnTouchMotion;
+        _binder.TouchUp += OnTouchUp;
+        _binder.TouchCancelled += OnTouchCancelled;
+        _binder.TouchFrame += OnTouchFrame;
         if (host.Parent is { } parent)
         {
             _binder.BindParent(parent);
@@ -145,9 +145,18 @@ public sealed class ChromeSeat : IDisposable
     public void Center() => _injector.Center();
 
     /// <summary>
-    /// Stops the pointer motion handling. It does not unbind libinput or the parent, which the host disposes.
+    /// Stops all input delivery and clears the hooks. It does not unbind libinput or the parent, which the host disposes.
     /// </summary>
-    public void Dispose() => _disposed = true;
+    public void Dispose()
+    {
+        _disposed = true;
+        _pressed = null;
+        KeyHook = null;
+        PointerMoved = null;
+        Touched = null;
+        Pressed = null;
+        TouchFramed = null;
+    }
 
     private void Move(uint time)
     {
@@ -166,6 +175,11 @@ public sealed class ChromeSeat : IDisposable
 
     private void OnButton(uint time, uint button, bool pressed)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (pressed)
         {
             Pressed?.Invoke();
@@ -187,6 +201,11 @@ public sealed class ChromeSeat : IDisposable
 
     private void OnKey(uint time, uint key, bool pressed)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (pressed)
         {
             Pressed?.Invoke();
@@ -206,13 +225,71 @@ public sealed class ChromeSeat : IDisposable
 
     private void OnModifiers()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         var (depressed, latched, locked, group) = _seat.Keyboard.ModifierState;
         _router.Modifiers(depressed, latched, locked, group);
     }
 
+    private void OnAxis(uint time, PointerAxis axis)
+    {
+        if (!_disposed)
+        {
+            _router.PointerAxis(time, axis);
+        }
+    }
+
+    private void OnPointerLeft()
+    {
+        if (!_disposed)
+        {
+            _router.PointerLeave();
+        }
+    }
+
     private void OnTouchDown(uint time, int id, double x, double y)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         Touched?.Invoke(x, y);
         _router.TouchDown(time, id, x, y);
+    }
+
+    private void OnTouchMotion(uint time, int id, double x, double y)
+    {
+        if (!_disposed)
+        {
+            _router.TouchMotion(time, id, x, y);
+        }
+    }
+
+    private void OnTouchUp(uint time, int id)
+    {
+        if (!_disposed)
+        {
+            _router.TouchUp(time, id);
+        }
+    }
+
+    private void OnTouchCancelled()
+    {
+        if (!_disposed)
+        {
+            _router.TouchCancel();
+        }
+    }
+
+    private void OnTouchFrame()
+    {
+        if (!_disposed)
+        {
+            TouchFramed?.Invoke();
+        }
     }
 }

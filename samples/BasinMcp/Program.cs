@@ -143,7 +143,7 @@ internal static class Program
                 if (launcher.HasExited)
                 {
                     Console.Error.WriteLine($"basin-mcp: {command[0]} exited with status {launcher.ExitCode} before it made its socket");
-                    return launcher.ExitCode == 0 ? 1 : launcher.ExitCode;
+                    return launcher.ExitCode is { } status and not 0 ? status : 1;
                 }
 
                 if (stop.IsCancellationRequested)
@@ -167,7 +167,7 @@ internal static class Program
             if (first == launcher.Exited)
             {
                 await stop.CancelAsync().ConfigureAwait(false);
-                return launcher.ExitCode;
+                return launcher.ExitCode ?? 1;
             }
 
             if (first == stopped)

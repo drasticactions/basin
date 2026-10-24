@@ -111,27 +111,30 @@ public sealed class GreetdClient : IDisposable
     /// Writes <paramref name="request"/> as one frame. A write failure closes the client and raises <see cref="Closed"/> instead of throwing.
     /// </summary>
     /// <param name="request">The request to send.</param>
+    /// <returns><see langword="true"/> when the whole frame is written. <see langword="false"/> when the write failed and the client closed.</returns>
     /// <exception cref="ObjectDisposedException">The client is disposed.</exception>
     /// <exception cref="InvalidOperationException">The connection is closed, or a response is outstanding.</exception>
-    public void Send(GreetdRequest request)
+    public bool Send(GreetdRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         BeginSend();
         _writer.Write(request);
-        Flush();
+        return Flush();
     }
 
     /// <summary>
     /// Sends a <c>post_auth_message_response</c> with an answer that never becomes a managed string. The frame buffer is cleared after the write.
+    /// A write failure closes the client and raises <see cref="Closed"/> instead of throwing.
     /// </summary>
     /// <param name="utf8Response">The answer as UTF-8 bytes. The caller keeps ownership and clears it.</param>
+    /// <returns><see langword="true"/> when the whole frame is written. <see langword="false"/> when the write failed and the client closed.</returns>
     /// <exception cref="ObjectDisposedException">The client is disposed.</exception>
     /// <exception cref="InvalidOperationException">The connection is closed, or a response is outstanding.</exception>
-    public void SendAuthResponse(ReadOnlySpan<byte> utf8Response)
+    public bool SendAuthResponse(ReadOnlySpan<byte> utf8Response)
     {
         BeginSend();
         _writer.WriteAuthResponse(utf8Response);
-        Flush();
+        return Flush();
     }
 
     /// <summary>
@@ -175,7 +178,7 @@ public sealed class GreetdClient : IDisposable
         }
     }
 
-    private void Flush()
+    private bool Flush()
     {
         try
         {
@@ -192,13 +195,14 @@ public sealed class GreetdClient : IDisposable
                 if (error != SocketError.Success)
                 {
                     Close($"write failed ({error})");
-                    return;
+                    return false;
                 }
 
                 frame = frame[sent..];
             }
 
             IsAwaitingResponse = true;
+            return true;
         }
         finally
         {

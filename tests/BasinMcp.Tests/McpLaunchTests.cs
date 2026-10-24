@@ -150,6 +150,32 @@ public sealed class McpLaunchTests : IDisposable
         Assert.False(IsLive(child));
     }
 
+    [Fact]
+    public void A_child_that_ignores_terminate_is_killed_and_the_bridge_exits_cleanly()
+    {
+        var reported = Path.Combine(_runtime.FullName, "reported");
+        using var process = Start("sh", "-c", $"printf %s \"$BASIN_IPC_PATH\" > {reported}; trap '' TERM; while sleep 0.1; do :; done");
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        var deadline = Environment.TickCount64 + 15_000;
+        while ((!File.Exists(reported) || new FileInfo(reported).Length == 0) && Environment.TickCount64 < deadline)
+        {
+            Thread.Sleep(10);
+        }
+
+        var socket = File.ReadAllText(reported);
+        using var rig = IpcFullRig.Create(socket, listen: true);
+        rig.Server.Start();
+        void Pump() => rig.Host.Loop.Dispatch(5);
+        Thread.Sleep(200);
+        process.StandardInput.Close();
+        _ = Wait(process.WaitForExitAsync(TestContext.Current.CancellationToken).ContinueWith(_ => 0, TaskScheduler.Default), Pump, 20_000);
+        var errors = Wait(stderr);
+        Assert.Equal(0, process.ExitCode);
+        Assert.Contains("ignored SIGTERM for 5 s; killed it", errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", errors, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.GetDirectoryName(socket)));
+    }
+
     private static bool IsLive(string proc) =>
         File.Exists(Path.Combine(proc, "stat")) && !File.ReadAllText(Path.Combine(proc, "stat")).Split(' ')[2].Equals("Z", StringComparison.Ordinal);
 
