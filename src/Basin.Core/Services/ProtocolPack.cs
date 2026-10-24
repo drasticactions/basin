@@ -93,7 +93,7 @@ public sealed class ProtocolPack : IReadOnlyList<IProtocolModule>
             if (existing.WireInterface == module.WireInterface)
             {
                 throw new ArgumentException(
-                    $"two modules claim the wire interface '{module.WireInterface}'", nameof(module));
+                    $"Two modules claim the wire interface '{module.WireInterface}'. Add only one module for each wire interface.", nameof(module));
             }
         }
 

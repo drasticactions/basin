@@ -336,7 +336,7 @@ public sealed unsafe class SkiaVulkanRenderer : IRenderer
         if (_context.IsAbandoned)
         {
             DropTargets();
-            throw new InvalidOperationException("The Ganesh context is abandoned; cached targets were dropped.");
+            throw new InvalidOperationException("The Ganesh context is abandoned. The cached targets were dropped.");
         }
 
         _sync.WaitFence(options.WaitFenceFd);

@@ -58,7 +58,7 @@ public sealed class LauncherStateTests
         var path = Path.Combine(Path.GetTempPath(), $"luna-wm-launcher-{Environment.ProcessId}-{Guid.NewGuid():N}.json");
         try
         {
-            Assert.True(state.Write(path, out var error), error);
+            Assert.True(state.Write(path, out var error), error?.Message);
             var file = LauncherState.Read(path, out error);
             Assert.Null(error);
             var again = LauncherState.Build(Seed, [], Entries.Where(entry => entry.Id != "fav.desktop").ToArray(), file);

@@ -49,7 +49,7 @@ public sealed class IpcX11DensityTests : IDisposable
             Calls.Add((toplevelId, density));
             if (toplevelId == 1)
             {
-                error = "window 1 is not an X11 window";
+                error = "Window 1 is not an X11 window.";
                 return false;
             }
 

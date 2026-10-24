@@ -52,7 +52,7 @@ public sealed class IpcWaitParams : IIpcParams, IIpcReusable
     /// Gets the error when neither <see cref="AppId"/> nor <see cref="Title"/> is present, or <see langword="null"/> when one of them is.
     /// </summary>
     [JsonIgnore]
-    public string? Missing => AppId is null && Title is null ? "name an app_id, a title, or both" : null;
+    public string? Missing => AppId is null && Title is null ? "Give an 'app_id', a 'title', or both." : null;
 
     void IIpcReusable.Reset()
     {

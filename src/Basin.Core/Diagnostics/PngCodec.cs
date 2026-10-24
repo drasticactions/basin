@@ -21,7 +21,7 @@ public static class PngCodec
     {
         if (rgba.Length != width * height * 4)
         {
-            throw new ArgumentException("Expected tightly packed RGBA pixels.");
+            throw new ArgumentException("The pixels are not tightly packed RGBA. Give 4 bytes for each pixel.", nameof(rgba));
         }
 
         using var output = new MemoryStream();
@@ -63,7 +63,7 @@ public static class PngCodec
     {
         if (rgb.Length != width * height * 3)
         {
-            throw new ArgumentException("Expected tightly packed 16-bit RGB samples.");
+            throw new ArgumentException("The samples are not tightly packed 16-bit RGB. Give 3 samples for each pixel.", nameof(rgb));
         }
 
         using var output = new MemoryStream();
@@ -164,7 +164,7 @@ public static class PngCodec
     {
         if (!TryReadChunk(png, "IHDR", out var ihdr) || ihdr[8] != 16 || ihdr[9] != 2 || ihdr[12] != 0)
         {
-            throw new NotSupportedException("Only 16-bit non-interlaced RGB is supported.");
+            throw new NotSupportedException("The PNG is not 16-bit non-interlaced RGB. Only that layout can be read.");
         }
 
         var width = BinaryPrimitives.ReadInt32BigEndian(ihdr);
@@ -218,7 +218,7 @@ public static class PngCodec
     {
         if (!png[..8].SequenceEqual(Signature))
         {
-            throw new InvalidDataException("Not a PNG.");
+            throw new InvalidDataException("The data is not a PNG.");
         }
 
         var width = 0;
@@ -244,7 +244,7 @@ public static class PngCodec
                     };
                     if (data[8] != 8 || channels == 0 || data[12] != 0)
                     {
-                        throw new NotSupportedException("Only 8-bit non-interlaced RGB or RGBA is supported.");
+                        throw new NotSupportedException("The PNG is not 8-bit non-interlaced RGB or RGBA. Only those layouts can be read.");
                     }
 
                     break;
@@ -308,7 +308,7 @@ public static class PngCodec
                 2 => up,
                 3 => (left + up) >> 1,
                 4 => Paeth(left, up, upLeft),
-                _ => throw new InvalidDataException($"Unknown PNG filter {filter}."),
+                _ => throw new InvalidDataException($"The PNG uses the unknown filter {filter}."),
             };
             line[i] = (byte)(source[i] + predictor);
         }

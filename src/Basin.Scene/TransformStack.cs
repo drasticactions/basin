@@ -60,7 +60,7 @@ public sealed class TransformStack
         Prune();
         if (Get(name) is not null)
         {
-            throw new InvalidOperationException($"a transformer named '{name}' is already in the stack");
+            throw new InvalidOperationException($"A transformer named '{name}' is already in the stack.");
         }
 
         var index = 0;

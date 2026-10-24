@@ -28,7 +28,7 @@ public sealed class IpcButtonConverter : JsonConverter<IpcButton>
             return new IpcButton(code);
         }
 
-        throw new JsonException("'button' is left, right, middle, side, extra or an evdev code");
+        throw new JsonException("'button' must be left, right, middle, side, extra or an evdev code.");
     }
 
     /// <inheritdoc/>

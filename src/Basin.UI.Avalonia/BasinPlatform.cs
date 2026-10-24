@@ -89,7 +89,7 @@ public static class BasinPlatform
         if (options.CompositorAffinity is null)
         {
             throw new ArgumentException(
-                "an attached host needs CompositorAffinity, the thread that owns the surfaces' buffers.", nameof(options));
+                "An attached host needs CompositorAffinity, the thread that owns the buffers of the surfaces.", nameof(options));
         }
 
         var screens = new BasinScreens(options.Screens);
@@ -131,9 +131,7 @@ public static class BasinPlatform
         if (_started)
         {
             throw new InvalidOperationException(
-                "The Avalonia platform is already started in this process. " +
-                "Avalonia installs its UI thread dispatcher once per process and BasinPlatform.Host " +
-                "is one host, so a second compositor must run as a second process.");
+                "The Avalonia platform is already started in this process. Run a second compositor as a second process.");
         }
 
         _started = true;

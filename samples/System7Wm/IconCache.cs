@@ -43,6 +43,7 @@ internal sealed class IconCache
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
+            System7Log.Log.Debug(error, $"icons: cannot load {key}");
         }
 
         _cache[(key, appId)] = family;

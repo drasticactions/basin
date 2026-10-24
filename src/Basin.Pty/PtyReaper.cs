@@ -58,7 +58,7 @@ internal static class PtyReaper
         if (Environment.TickCount64 - orphan.Since >= KillAfterMs && !orphan.Killed)
         {
             orphan.Killed = true;
-            Log.Debug($"pid {orphan.Pid} ignored the hangup; killing its group");
+            Log.Debug($"reaper: pid {orphan.Pid} ignored the hangup, its group is killed");
             _ = PtyNative.Kill(-orphan.Pid, PtyNative.SignalKill);
             _ = PtyNative.Kill(orphan.Pid, PtyNative.SignalKill);
         }
@@ -77,7 +77,7 @@ internal static class PtyReaper
         }
         catch (Exception exception)
         {
-            Log.Error($"reaping pid {orphan.Pid} failed: {exception}");
+            Log.Error(exception, $"reaper: reaping pid {orphan.Pid} failed");
         }
 
         orphan.Watch?.Remove();

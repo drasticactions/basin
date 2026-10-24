@@ -229,9 +229,9 @@ internal sealed class AvaloniaShell : IDisposable
         {
             return new Bitmap(path);
         }
-        catch (Exception error)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            log.Warn($"cannot load {path}: {error.Message}");
+            log.Warn(error, $"shell: cannot load the image {path}");
             return null;
         }
     }

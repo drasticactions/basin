@@ -825,7 +825,7 @@ internal sealed partial class LunaShell
 
                 if (index < 0 || index >= _kbModel.Candidates.Count)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "no such candidate");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"Candidate {index} does not exist. Give an index from 0 to {_kbModel.Candidates.Count - 1}.");
                     return;
                 }
 
@@ -839,7 +839,7 @@ internal sealed partial class LunaShell
                 var word = p.GetString("word");
                 if (!p.Failed && !TraceWord(word))
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, _kbView is null ? "the keyboard is not shown" : "trace typing is off here, or the word has a letter the layout lacks");
+                    reply.Error(IpcErrorCodes.InvalidParams, _kbView is null ? "The keyboard is not shown. Show the keyboard first." : "Trace typing is off for this layout, or the word has a letter that the layout does not have.");
                 }
             });
     }

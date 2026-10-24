@@ -112,7 +112,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             catch (LiftoffException e)
             {
                 _liftoffOutput = null;
-                Log.Warn($"{Name}: liftoff output unavailable ({e.Message}); overlay offload disabled");
+                Log.Warn(e, $"{Name}: liftoff output unavailable, overlay offload disabled");
             }
         }
     }
@@ -152,11 +152,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         LoadConnector(connector, edidBytes);
         if (FindNativeMode(CurrentMode) is null && _modes.Count > 0)
         {
-            Log.Info($"{Name}: current mode {CurrentMode.Width}x{CurrentMode.Height} is gone; taking {PreferredMode.Width}x{PreferredMode.Height}");
+            Log.Info($"{Name}: mode {CurrentMode.Width}x{CurrentMode.Height} is gone, preferred mode {PreferredMode.Width}x{PreferredMode.Height} taken");
             ReplaceCurrentMode(PreferredMode);
         }
 
-        Log.Info($"{Name}: EDID or mode list changed; rebuilt in place as {Description}");
+        Log.Info($"{Name}: EDID or mode list changed, output rebuilt as {Description}");
         Inherited = null;
         _needsModeset = true;
         RaiseModesChanged();
@@ -172,7 +172,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             return;
         }
 
-        Log.Warn($"{Name}: link-status is BAD; retraining with a modeset");
+        Log.Warn($"{Name}: link-status is BAD, retraining with a modeset");
         _linkBad = true;
         _needsModeset = true;
         RequestRepaint();
@@ -755,7 +755,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             var native = (_backend.Inherit && !_hardwareLit && Inherited is { } lit && ModeEquals(wanted, lit.Mode)
                     ? lit.Mode
                     : FindNativeMode(wanted))
-                ?? throw new InvalidOperationException($"{Name}: no native mode matches the requested mode");
+                ?? throw new InvalidOperationException($"No native mode of {Name} matches the requested mode.");
             ReplaceModeBlob(native);
             targetMode = native;
         }
@@ -767,7 +767,16 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             fbId = _backend.Framebuffers.GetOrAdd(buffer, true);
             if (fbId == 0)
             {
-                Log.Warn($"{Name}: buffer not scanout-capable; frame dropped");
+                if (_unscannableWarned)
+                {
+                    Log.Debug($"{Name}: buffer cannot scan out, frame dropped");
+                }
+                else
+                {
+                    _unscannableWarned = true;
+                    Log.Warn($"{Name}: buffer cannot scan out, frame dropped");
+                }
+
                 return false;
             }
         }
@@ -1043,7 +1052,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
         catch (DrmException e)
         {
-            Log.Debug($"{Name}: the lit state needs a modeset (errno {e.Errno}); staged properties:\n{builder}");
+            Log.Debug($"{Name}: lit state needs a modeset (errno {e.Errno}), staged properties:\n{builder}");
             return new HandoffInheritance(Name, mode, true, HandoffReason.Refused, e.Errno);
         }
     }
@@ -1081,7 +1090,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
-        Log.Debug($"{Name}: frame queued behind pending flip");
+        Log.Trace($"{Name}: frame queued behind a pending flip");
         _lastFrameCommitTick = Environment.TickCount64;
         _queuedFlush?.UpdateTimer((int)(2 * RefreshMs()));
         ReleaseQueuedFence();
@@ -1392,6 +1401,8 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     private bool _highDynamicRangeCapable;
     private bool _linkBad;
 
+    private bool _unscannableWarned;
+
     private bool VendorAllowsColorspace()
     {
         var name = _backend.Device.GetVersion().Name;
@@ -1626,7 +1637,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if (lut.Red.Length != expectedSize || lut.Green.Length != expectedSize || lut.Blue.Length != expectedSize)
         {
-            Log.Warn($"{Name}: gamma ramps sized {lut.Red.Length}, CRTC takes {expectedSize}; ignored");
+            Log.Warn($"{Name}: gamma ramps of size {lut.Red.Length} ignored, the CRTC takes {expectedSize}");
             return;
         }
 
@@ -1787,11 +1798,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         {
             if (quietRefusal)
             {
-                Log.Debug($"{Name}: {what} rejected by TEST_ONLY ({e.Message})");
+                Log.Debug(e, $"{Name}: {what} rejected by TEST_ONLY");
             }
             else
             {
-                Log.Warn($"{Name}: {what} rejected by TEST_ONLY ({e.Message}); staged properties:\n{builder}");
+                Log.Warn(e, $"{Name}: {what} rejected by TEST_ONLY, staged properties:\n{builder}");
             }
 
             return false;
@@ -1802,7 +1813,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             var t1 = MonotonicClock.Nanos;
             _backend.Device.AtomicCommit(builder.Request, flags, (nint)CrtcId);
             var t2 = MonotonicClock.Nanos;
-            Log.Debug($"{what} issue={t2 / 1_000_000} testMs={(t1 - t0) / 1_000_000.0:F1} ioctlMs={(t2 - t1) / 1_000_000.0:F1}");
+            Log.Trace($"{Name}: {what} issue={t2 / 1_000_000} testMs={(t1 - t0) / 1_000_000.0:F1} ioctlMs={(t2 - t1) / 1_000_000.0:F1}");
             return true;
         }
         catch (DrmException e) when (e.Errno == 16 )
@@ -1811,7 +1822,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
         catch (DrmException e)
         {
-            Log.Warn($"{Name}: {what} failed after TEST_ONLY passed ({e.Message}); requesting a full modeset; staged properties:\n{builder}");
+            Log.Warn(e, $"{Name}: {what} failed after TEST_ONLY passed, full modeset requested, staged properties:\n{builder}");
             _needsModeset = true;
             return false;
         }
@@ -1859,7 +1870,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         var timeNs = seconds * 1_000_000_000ul + microseconds * 1_000ul;
-        Log.Debug($"flip kernel={timeNs / 1_000_000} dispatch={MonotonicClock.Nanos / 1_000_000}");
+        Log.Trace($"{Name}: flip kernel={timeNs / 1_000_000} dispatch={MonotonicClock.Nanos / 1_000_000}");
         PresentedOnScreen?.Invoke(timeNs, RefreshIntervalNs(_committedMode), sequence);
         EmitFrame();
     }
@@ -2229,7 +2240,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
         if (!output.TryApply(builder.Request, DrmAtomicCommitFlags.None, out var errno))
         {
-            Log.Warn($"{Name}: liftoff apply failed (errno {errno}); all layers composited");
+            Log.Warn($"{Name}: liftoff apply failed (errno {errno}), all layers composited");
             return false;
         }
 
@@ -2245,7 +2256,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
-        Log.Debug($"{Name}: liftoff {(ReferenceEquals(builder, _testBuilder) ? "probe" : "commit")} placed {acceptedCount}/{layers.Count} layers");
+        Log.Trace($"{Name}: liftoff {(ReferenceEquals(builder, _testBuilder) ? "probe" : "commit")} placed {acceptedCount}/{layers.Count} layers");
         return true;
     }
 
@@ -2344,7 +2355,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         uint blobId;
         if (Libdrm.drmModeCreatePropertyBlob(_backend.Device.Fd, &native, (nuint)sizeof(_drmModeModeInfo), &blobId) != 0)
         {
-            throw new InvalidOperationException("drmModeCreatePropertyBlob failed");
+            throw new InvalidOperationException("The kernel refused the mode property blob. drmModeCreatePropertyBlob returned an error.");
         }
 
         _modeBlobId = blobId;
@@ -2561,8 +2572,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                 var blob = device.GetPropertyBlob((uint)blobId);
                 return blob.Data.Span.ToArray();
             }
-            catch (DrmException)
+            catch (DrmException e)
             {
+                Log.Debug(e, $"EDID blob {blobId} does not read, connector has no EDID");
             }
         }
 

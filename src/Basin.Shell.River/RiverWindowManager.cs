@@ -1377,7 +1377,7 @@ public sealed class RiverWindowManager : IDisposable
             {
                 resource.PostError(
                     (uint)RiverWindowManagerV1.Error.SequenceOrder,
-                    "manage_finish outside a manage sequence");
+                    "manage_finish came outside a manage sequence.");
                 return;
             }
 
@@ -1389,7 +1389,7 @@ public sealed class RiverWindowManager : IDisposable
             {
                 resource.PostError(
                     (uint)RiverWindowManagerV1.Error.SequenceOrder,
-                    "render_finish outside a render sequence");
+                    "render_finish came outside a render sequence.");
                 return;
             }
 
@@ -1409,7 +1409,7 @@ public sealed class RiverWindowManager : IDisposable
             {
                 resource.PostError(
                     (uint)RiverWindowManagerV1.Error.Role,
-                    "the surface already has a role or a buffer");
+                    "The surface already has a role or a buffer.");
                 return;
             }
 
@@ -1709,7 +1709,7 @@ public sealed class RiverWindowManager : IDisposable
         {
             manager.PostError(
                 (uint)RiverWindowManagerV1.Error.Unresponsive,
-                "the window manager did not finish its sequence in time");
+                "The window manager did not finish its sequence in time.");
             DetachManager();
         }
     }

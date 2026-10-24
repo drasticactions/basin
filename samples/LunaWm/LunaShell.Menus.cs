@@ -249,7 +249,7 @@ internal sealed partial class LunaShell
         _report.Line($"POWER {action.ToString().ToLowerInvariant()}");
         if (Environment.GetEnvironmentVariable("LUNAWM_NO_POWER") == "1" || !LogindActions.Available)
         {
-            _log.Info($"{action} skipped: no logind, or LUNAWM_NO_POWER is set");
+            _log.Info($"power: {action} skipped, no logind or LUNAWM_NO_POWER is set");
             return;
         }
 

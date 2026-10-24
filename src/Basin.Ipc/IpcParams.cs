@@ -63,7 +63,7 @@ public ref struct IpcParams
                 return value;
             }
 
-            _reply.Error(IpcErrorCodes.InvalidParams, "'params' is an object");
+            _reply.Error(IpcErrorCodes.InvalidParams, "'params' must be an object.");
         }
         catch (JsonException exception)
         {
@@ -355,7 +355,7 @@ public ref struct IpcParams
     {
         if (!_reply.IsError)
         {
-            _reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' is required");
+            _reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' is required.");
         }
 
         return fallback;
@@ -363,7 +363,7 @@ public ref struct IpcParams
 
     private readonly bool WrongType(string name, string expected)
     {
-        _reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' must be {expected}");
+        _reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' must be {expected}.");
         return false;
     }
 

@@ -94,7 +94,7 @@ public sealed class GreetdLogin : IDisposable
         _thread.Assert();
         if (!CanStart)
         {
-            throw new InvalidOperationException($"a login can start only from Idle or Failed, and this one is {State}");
+            throw new InvalidOperationException($"The login is in the {State} state. A login can start only from Idle or Failed.");
         }
 
         User = user;
@@ -119,7 +119,7 @@ public sealed class GreetdLogin : IDisposable
         _thread.Assert();
         if (State != GreetdLoginState.Prompting || PromptType is not (GreetdAuthMessageType.Secret or GreetdAuthMessageType.Visible))
         {
-            throw new InvalidOperationException("Answer needs a visible or secret prompt");
+            throw new InvalidOperationException("No visible or secret prompt is open. Call Answer only for a visible or secret prompt.");
         }
 
         _pending = Pending.Answer;
@@ -141,7 +141,7 @@ public sealed class GreetdLogin : IDisposable
         _thread.Assert();
         if (State != GreetdLoginState.Prompting || PromptType is not (GreetdAuthMessageType.Info or GreetdAuthMessageType.Error))
         {
-            throw new InvalidOperationException("Acknowledge needs an info or error message");
+            throw new InvalidOperationException("No info or error message is open. Call Acknowledge only for an info or error message.");
         }
 
         if (!Send(Pending.Answer, new GreetdPostAuthMessageResponse(null)))
@@ -164,7 +164,7 @@ public sealed class GreetdLogin : IDisposable
         _thread.Assert();
         if (State != GreetdLoginState.Ready)
         {
-            throw new InvalidOperationException($"StartSession needs Ready, and this login is {State}");
+            throw new InvalidOperationException($"The login is in the {State} state. StartSession needs the Ready state.");
         }
 
         if (!Send(Pending.Start, new GreetdStartSession(command.Cmd, command.Env)))

@@ -1843,8 +1843,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             {
                 underlay.ForgetSurface(UnderlayKey ?? _underlay);
             }
-            catch
+            catch (Exception e)
             {
+                SceneLog.Log.Warn(e, $"frame: underlay effect failed to forget the frame surface at teardown");
             }
         }
 
@@ -1874,8 +1875,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             {
                 _surface.Dispose();
             }
-            catch
+            catch (Exception e)
             {
+                SceneLog.Log.Warn(e, $"frame: UI surface dispose failed at teardown");
             }
 
             _surface = null;

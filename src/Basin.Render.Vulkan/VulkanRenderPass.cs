@@ -185,12 +185,12 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         if (shader is not VulkanPixelShader vulkanShader)
         {
-            throw new ArgumentException("shader does not belong to this renderer");
+            throw new ArgumentException("The shader does not come from this renderer.", nameof(shader));
         }
 
         if (vulkanShader.SamplesTexture)
         {
-            throw new ArgumentException("shader samples a texture and must draw through AddTexture");
+            throw new ArgumentException("The shader samples a texture. Draw it through AddTexture.", nameof(shader));
         }
 
         if (options.DstBox.IsEmpty)
@@ -284,12 +284,12 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         {
             if (options.Shader is not VulkanPixelShader textureShader)
             {
-                throw new ArgumentException("shader does not belong to this renderer");
+                throw new ArgumentException("The shader does not come from this renderer.", nameof(options));
             }
 
             if (!textureShader.SamplesTexture)
             {
-                throw new ArgumentException("shader does not sample a texture");
+                throw new ArgumentException("The shader does not sample a texture. Draw it through AddShader.", nameof(options));
             }
         }
 
@@ -314,7 +314,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 {
                     if (options.Shader is not null)
                     {
-                        throw new ArgumentException("shader cannot sample a YCbCr texture on this renderer");
+                        throw new ArgumentException("The Vulkan renderer cannot apply a shader to a YCbCr texture.", nameof(options));
                     }
 
                     RecordYcbcr(dmabuf, options);
@@ -341,7 +341,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 forceOpaque = !shm.HasAlpha;
                 break;
             default:
-                throw new ArgumentException("texture does not belong to this renderer");
+                throw new ArgumentException("The texture does not come from this renderer.", nameof(texture));
         }
 
         var src = options.SrcBox.IsEmpty
@@ -396,7 +396,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
 
         if (vertices.Length % 3 != 0)
         {
-            throw new ArgumentException("vertices must be a whole number of triangles", nameof(vertices));
+            throw new ArgumentException("The vertex count must be a multiple of three.", nameof(vertices));
         }
 
         var mode = 0;
@@ -443,7 +443,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 textureHeight = texture.Height;
                 break;
             default:
-                throw new ArgumentException("texture does not belong to this renderer");
+                throw new ArgumentException("The texture does not come from this renderer.", nameof(texture));
         }
 
         var byteSize = (ulong)(vertices.Length * sizeof(MeshVertex));
@@ -600,7 +600,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         var bounds = requested.Intersect(new Box(0, 0, _target.Width, _target.Height));
         if (effect is not IVulkanBackdropEffect vulkanEffect)
         {
-            throw new ArgumentException("effect does not belong to this renderer");
+            throw new ArgumentException("The effect does not come from this renderer.", nameof(effect));
         }
 
         var entry = _entry!;
@@ -704,7 +704,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         if (filter is not IVulkanFilter vulkanFilter)
         {
-            throw new ArgumentException("filter does not belong to this renderer");
+            throw new ArgumentException("The filter does not come from this renderer.", nameof(filter));
         }
 
         var entry = _entry!;
@@ -747,7 +747,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
                 sourceFormat = shm.VkFormat;
                 break;
             default:
-                throw new ArgumentException("texture does not belong to this renderer");
+                throw new ArgumentException("The texture does not come from this renderer.", nameof(source));
         }
 
         var vk = _renderer.Dev.Api;

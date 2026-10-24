@@ -103,20 +103,20 @@ public sealed class WaypipeListener : IWaypipeListener
         if (endpoint is VsockEndPoint && OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException(
-                "a vsock listener on Windows is a Hyper-V socket; bind it with HyperVWaypipeListener.BindAsync or WaypipeListeners.BindAsync");
+                "A vsock listener on Windows is a Hyper-V socket. Bind it with HyperVWaypipeListener.BindAsync or WaypipeListeners.BindAsync.");
         }
 
         if (!PlatformFacts.HasDescriptors)
         {
             throw new PlatformNotSupportedException(
-                "this host binds no listening socket; attach a connected stream with AttachChannel instead");
+                "This host cannot bind a listening socket. Attach a connected stream with AttachChannel instead.");
         }
 
         if (endpoint is VsockEndPoint vsock)
         {
             if (vsock.Port == 0)
             {
-                throw new ArgumentException("a vsock listener needs a port", nameof(endpoint));
+                throw new ArgumentException("The vsock listener has no port. Give it as vsock:PORT.", nameof(endpoint));
             }
 
             return BindVsock(loop, vsock, compression, limits, options);
@@ -126,7 +126,7 @@ public sealed class WaypipeListener : IWaypipeListener
             (ip.Address.Equals(IPAddress.Any) || ip.Address.Equals(IPAddress.IPv6Any)))
         {
             throw new ArgumentException(
-                "a waypipe channel binds an explicit address; loopback, a unix socket, vsock or an ssh-forwarded stream is the posture",
+                "The listener names the wildcard address. Bind loopback, a unix socket or vsock, or forward the stream over ssh.",
                 nameof(endpoint));
         }
 
@@ -170,7 +170,7 @@ public sealed class WaypipeListener : IWaypipeListener
     {
         if (!OperatingSystem.IsLinux())
         {
-            throw new PlatformNotSupportedException("vsock channels are available on Linux only");
+            throw new PlatformNotSupportedException("vsock channels are available only on Linux.");
         }
 
         var fd = VsockNative.OpenListening(endpoint, Backlog);
@@ -217,11 +217,9 @@ public sealed class WaypipeListener : IWaypipeListener
             {
                 File.Delete(_unixPath);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-            }
-            catch (UnauthorizedAccessException)
-            {
+                WaypipeLog.Log.Debug(ex, $"{_unixPath} not deleted");
             }
         }
 
@@ -329,7 +327,7 @@ public sealed class WaypipeListener : IWaypipeListener
                     return false;
                 default:
                     Fail(new IOException(
-                        $"accept4({LocalEndPoint}) failed: {System.Runtime.InteropServices.Marshal.GetPInvokeErrorMessage(errno)} (errno {errno})"));
+                        $"accept4({LocalEndPoint}) failed with errno {errno}: {System.Runtime.InteropServices.Marshal.GetPInvokeErrorMessage(errno)}."));
                     return false;
             }
         }
@@ -360,7 +358,7 @@ public sealed class WaypipeListener : IWaypipeListener
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             stream.Dispose();
-            WaypipeLog.Log.Warn($"channel {index} on {LocalEndPoint} could not start: {ex.Message}");
+            WaypipeLog.Log.Warn(ex, $"channel {index} on {LocalEndPoint} did not start");
             return;
         }
 
@@ -408,7 +406,7 @@ public sealed class WaypipeListener : IWaypipeListener
 
     private void Pause(string reason)
     {
-        WaypipeLog.Log.Warn($"accepting on {LocalEndPoint} paused for {RetryMillis} ms: {reason}");
+        WaypipeLog.Log.Warn($"accept on {LocalEndPoint} paused for {RetryMillis} ms, {reason}");
         _source?.Remove();
         _source = null;
         _retry ??= _loop.AddTimer(Resume);
@@ -427,7 +425,7 @@ public sealed class WaypipeListener : IWaypipeListener
 
     private void Fail(Exception error)
     {
-        WaypipeLog.Log.Error($"accepting on {LocalEndPoint} failed: {error.Message}");
+        WaypipeLog.Log.Error(error, $"accept on {LocalEndPoint} failed, listener stopped");
         _source?.Remove();
         _source = null;
         Failed?.Invoke(error);

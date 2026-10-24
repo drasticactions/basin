@@ -56,7 +56,7 @@ internal sealed partial class System7Shell : IDisposable
             var config = System7Config.Load(options.ConfigPath, options.NoConfig, log, out var fatal);
             if (fatal is not null)
             {
-                log.Error($"{fatal}");
+                log.Error($"config: {fatal}");
                 return 1;
             }
 
@@ -67,7 +67,7 @@ internal sealed partial class System7Shell : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: the shell did not start");
             return 1;
         }
 
@@ -87,7 +87,7 @@ internal sealed partial class System7Shell : IDisposable
         _config = config;
 
         var name = options.Renderer;
-        var stack = RendererCatalog.CreateWithFallback(ref name, RendererCatalog.FindRenderNode(), fallback => log.Warn($"{fallback.Describe()}"));
+        var stack = RendererCatalog.CreateWithFallback(ref name, RendererCatalog.FindRenderNode(), fallback => fallback.Log(log));
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
         BasinReport.Line($"RENDERER {name}");
@@ -127,7 +127,7 @@ internal sealed partial class System7Shell : IDisposable
         else if (Environment.GetEnvironmentVariable("DISPLAY") is { Length: > 0 } inherited)
         {
             Environment.SetEnvironmentVariable("DISPLAY", null);
-            _log.Info($"no XWayland: DISPLAY={inherited} is not passed on, so an X11 client cannot open on the parent's X server");
+            _log.Info($"xwayland: off, DISPLAY={inherited} is not passed on to clients");
         }
 
         if (_renderer.Device is { } renderDevice)
@@ -176,7 +176,7 @@ internal sealed partial class System7Shell : IDisposable
         _outputs.Emptied += Stop;
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
-        _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
+        _outputs.ModesetRefused += card => log.Error($"output: {card.Name} refused a modeset in every mode");
         _outputs.Added += view =>
         {
             if (view.Output is Basin.Backend.Wayland.WaylandOutput nested)
@@ -277,7 +277,7 @@ internal sealed partial class System7Shell : IDisposable
         _outputs.AdoptSecondaryCards();
         if (options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display, then start the shell again.");
         }
 
         Relayout();
@@ -379,7 +379,7 @@ internal sealed partial class System7Shell : IDisposable
         var next = System7Config.Load(_options.ConfigPath ?? System7Config.DefaultPath(), _options.NoConfig, _log, out var fatal);
         if (fatal is not null)
         {
-            _log.Warn($"reload failed, keeping the running config: {fatal}");
+            _log.Warn($"config: reload failed, the running config stays: {fatal}");
             BasinReport.Line("RELOAD failed");
             return;
         }
@@ -416,7 +416,7 @@ internal sealed partial class System7Shell : IDisposable
     {
         if (_processes.Spawn(new ProcessLaunch(["/bin/sh", "-c", command]) { DesktopId = desktopId }, out var error) is null)
         {
-            _log.Error($"cannot start {command}: {error}");
+            _log.Warn($"launch: cannot start {command}, {CliMessage.Text(error ?? string.Empty)}");
         }
     }
 
@@ -430,7 +430,7 @@ internal sealed partial class System7Shell : IDisposable
         _uiDriver.Pump();
         if (SceneScreenshot.Write(_scene, _renderer, view.Output, path))
         {
-            _log.Info($"screenshot written to {path}");
+            _log.Info($"screenshot: written to {path}");
         }
     }
 

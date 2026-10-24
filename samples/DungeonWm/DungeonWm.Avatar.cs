@@ -28,6 +28,7 @@ internal sealed partial class DungeonWm
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException or System.Text.Json.JsonException)
         {
+            _log.Warn(error, $"avatar: cannot load {(path is { Length: > 0 } ? path : "the built-in avatar")}");
             BasinReport.Line($"AVATAR {(path is { Length: > 0 } ? path : "built-in")} failed: {error.Message}");
             return null;
         }

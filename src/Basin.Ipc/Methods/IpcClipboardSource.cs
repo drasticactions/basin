@@ -1,3 +1,5 @@
+using static Basin.Ipc.IpcLog;
+
 namespace Basin.Ipc;
 
 internal static class IpcClipboardSource
@@ -25,6 +27,7 @@ internal static class IpcClipboardSource
             catch (Exception error) when (
                 error is ArgumentException or InvalidOperationException or KeyNotFoundException or ObjectDisposedException)
             {
+                Log.Debug(error, $"clipboard: selection write to the reader failed");
             }
 
             fd.Close();

@@ -133,7 +133,7 @@ public sealed unsafe class EisReceiver : IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"eis dispatch failed: {e.Message}");
+            Log.Warn(e, $"dispatch failed");
         }
     }
 
@@ -391,7 +391,7 @@ public sealed unsafe class EisReceiver : IDisposable
 
         if (!client.IsSender)
         {
-            Log.Warn($"eis receiver client {client.Name ?? "<unnamed>"} refused: a remote desktop only sends");
+            Log.Warn($"receiver client {client.Name ?? "<unnamed>"} refused, a remote desktop only sends");
             client.Disconnect();
             client.Dispose();
             return;
@@ -399,7 +399,7 @@ public sealed unsafe class EisReceiver : IDisposable
 
         if (_client is not null)
         {
-            Log.Warn($"second eis client {client.Name ?? "<unnamed>"} refused");
+            Log.Warn($"second client {client.Name ?? "<unnamed>"} refused");
             client.Disconnect();
             client.Dispose();
             return;
@@ -411,7 +411,7 @@ public sealed unsafe class EisReceiver : IDisposable
         seat.ConfigureCapabilities(SeatCapabilities());
         seat.Add();
         _seat = seat;
-        Log.Info($"eis client {client.Name ?? "<unnamed>"} connected");
+        Log.Info($"client {client.Name ?? "<unnamed>"} connected");
     }
 
     private EiDeviceCapability SeatCapabilities()
@@ -452,7 +452,7 @@ public sealed unsafe class EisReceiver : IDisposable
         ours.Disconnect();
         ours.Dispose();
         _client = null;
-        Log.Info($"eis client disconnected");
+        Log.Info($"client disconnected");
     }
 
     private void OnSeatBind(EisSeatBindEvent bind)
@@ -609,7 +609,7 @@ public sealed unsafe class EisReceiver : IDisposable
             }
             catch (LibeiException e)
             {
-                Log.Warn($"eis keymap rejected: {e.Message}");
+                Log.Warn(e, $"keymap refused");
             }
         }
 

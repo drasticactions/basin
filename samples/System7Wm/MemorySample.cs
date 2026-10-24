@@ -22,6 +22,7 @@ internal static class MemorySample
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            System7Log.Log.Debug(error, $"memory: cannot read /proc/meminfo");
         }
 
         return (total, available);
@@ -74,6 +75,7 @@ internal static class MemorySample
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            System7Log.Log.Debug(error, $"memory: cannot read /proc/{pid}/smaps_rollup");
         }
 
         return (pss, anon);
@@ -103,6 +105,7 @@ internal static class MemorySample
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            System7Log.Log.Debug(error, $"memory: cannot list the children of pid {pid}");
         }
 
         return result;

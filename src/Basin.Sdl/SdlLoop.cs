@@ -55,7 +55,7 @@ public sealed class SdlLoop : IDisposable
 
         if (!SDL.Init(SDL.InitFlags.Video | SDL.InitFlags.Events))
         {
-            throw new InvalidOperationException($"SDL_Init failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_Init failed with \"{SDL.GetError()}\".");
         }
 
         _thread = ThreadAffinity.Capture();
@@ -63,7 +63,7 @@ public sealed class SdlLoop : IDisposable
         if (WakeEventType == 0)
         {
             SDL.Quit();
-            throw new InvalidOperationException($"SDL_RegisterEvents failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_RegisterEvents failed with \"{SDL.GetError()}\".");
         }
 
         VideoDriver = SDL.GetCurrentVideoDriver() ?? string.Empty;
@@ -127,7 +127,7 @@ public sealed class SdlLoop : IDisposable
         _thread.Assert();
         if (_host is not null)
         {
-            throw new InvalidOperationException("the loop already serves a compositor host");
+            throw new InvalidOperationException("The loop already serves a compositor host.");
         }
 
         _host = host;
@@ -220,7 +220,7 @@ public sealed class SdlLoop : IDisposable
         }
         catch (Exception error)
         {
-            Log.Error($"the exposed watch failed: {error}");
+            Log.Error(error, $"events: exposed watch failed");
         }
 
         return true;
@@ -357,7 +357,7 @@ public sealed class SdlLoop : IDisposable
             }
             catch (Exception error)
             {
-                Log.Error($"an SDL event sink threw on event 0x{e.Type:x}: {error}");
+                Log.Error(error, $"events: sink failed on event 0x{e.Type:x}");
             }
         }
     }
@@ -373,7 +373,7 @@ public sealed class SdlLoop : IDisposable
             }
             catch (Exception error)
             {
-                Log.Error($"a posted action failed on the SDL loop: {error}");
+                Log.Error(error, $"loop: posted action failed");
             }
         }
     }

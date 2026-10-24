@@ -83,7 +83,7 @@ public sealed class TomlValue : IEquatable<TomlValue>
         var text = literal.Trim();
         if (text.Length == 0 || text.Contains('\n', StringComparison.Ordinal) || Tomlyn.Toml.Parse("v = " + text).HasErrors)
         {
-            throw new FormatException($"'{literal}' is not a TOML value");
+            throw new FormatException($"'{literal}' is not a TOML value. Quote a string.");
         }
 
         return new(text);

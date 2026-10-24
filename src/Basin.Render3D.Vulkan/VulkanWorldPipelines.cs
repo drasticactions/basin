@@ -168,7 +168,7 @@ internal sealed unsafe class VulkanWorldPipelines : IDisposable
             }
         }
 
-        throw new InvalidOperationException($"{_device.DevicePath} offers no depth and stencil attachment format");
+        throw new InvalidOperationException($"The device at {_device.DevicePath} has no depth and stencil attachment format.");
     }
 
     public void ReplaceSamplers(float anisotropy, out Sampler oldWindow, out Sampler oldAtlas)

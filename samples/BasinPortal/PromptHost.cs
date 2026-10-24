@@ -36,7 +36,7 @@ internal sealed class PromptHost : ISkiaPromptHost, IDisposable
         if (_layerShell is not { } layerShell || _globals.Compositor is not { } compositor ||
             _globals.Shm is not { } shm || output is not ClientOutput portal)
         {
-            _log.Warn($"no layer shell to show a portal prompt");
+            _log.Warn($"prompt: no layer shell, prompt not shown");
             return null;
         }
 

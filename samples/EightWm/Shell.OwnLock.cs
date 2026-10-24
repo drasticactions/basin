@@ -363,7 +363,7 @@ internal sealed partial class Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            _log.Warn($"cannot load {_config.LockPicture}: {error.Message}");
+            _log.Warn(error, $"lock: cannot load the lock picture {_config.LockPicture}");
             return null;
         }
     }
@@ -383,6 +383,7 @@ internal sealed partial class Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            EightWmLog.Log.Debug(error, $"lock: cannot read /etc/passwd, the user name is shown");
         }
 
         return user;
@@ -418,8 +419,8 @@ internal sealed partial class Shell
         if (_pamCheck is null)
         {
             _lockSignIn.Busy = false;
-            _lockSignIn.ShowError("The password can't be checked.");
-            _log.Warn($"unlock check did not start: {error}");
+            _lockSignIn.ShowError("The password can't be checked right now. Try again.");
+            _log.Warn($"lock: unlock check did not start: {error}");
             _report.Line("UNLOCK error");
             return;
         }

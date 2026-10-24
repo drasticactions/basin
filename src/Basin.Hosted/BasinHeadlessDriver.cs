@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using static Basin.Hosted.HostedLog;
 
 namespace Basin.Hosted;
@@ -7,6 +8,7 @@ namespace Basin.Hosted;
 /// <summary>
 /// Runs a <see cref="BasinCompositorHost"/> on a thread of its own with no toolkit. It frames only while a view needs a repaint or a client waits for a frame.
 /// A frame draws no pixels unless a recording or a screenshot asks for them.
+/// With a <see cref="RenderNode"/>, it draws on a GPU context of that node and the host offers linux-dmabuf.
 /// </summary>
 [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
 public sealed class BasinHeadlessDriver : IDisposable
@@ -25,6 +27,7 @@ public sealed class BasinHeadlessDriver : IDisposable
     private long _nextFrame;
     private long _frames;
     private bool _disposed;
+    private HostedGpuContext? _gpu;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasinHeadlessDriver"/> class. Nothing runs until <see cref="Start"/>.
@@ -39,15 +42,27 @@ public sealed class BasinHeadlessDriver : IDisposable
         _interval = interval ?? TimeSpan.FromMilliseconds(16);
         if (_interval <= TimeSpan.Zero)
         {
-            throw new ArgumentOutOfRangeException(nameof(interval), "the frame interval must be positive");
+            throw new ArgumentOutOfRangeException(nameof(interval), interval, "The frame interval must be positive.");
         }
     }
+
+    /// <summary>
+    /// Gets the DRM render node that the driver draws on, for example <c>/dev/dri/renderD128</c>.
+    /// When it is <see langword="null"/>, the driver draws on the raster Skia row and the host offers no linux-dmabuf.
+    /// When the node cannot give a GPU context, the driver logs one warning and draws on the raster row.
+    /// </summary>
+    public string? RenderNode { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the driver draws on the GPU context of <see cref="RenderNode"/>. It is set before <see cref="Start"/> returns.
+    /// </summary>
+    public bool RendersOnGpu => _gpu is not null;
 
     /// <summary>
     /// Gets the host that the factory built. Only the driver thread can use it.
     /// </summary>
     /// <exception cref="InvalidOperationException">The driver has not started.</exception>
-    public BasinCompositorHost Host => _host ?? throw new InvalidOperationException("the driver has not started");
+    public BasinCompositorHost Host => _host ?? throw new InvalidOperationException("The driver has not started. Call Start first.");
 
     /// <summary>
     /// Gets the count of frames that the driver completed. Any thread can read it.
@@ -74,7 +89,7 @@ public sealed class BasinHeadlessDriver : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_thread is not null)
         {
-            throw new InvalidOperationException("the driver starts once");
+            throw new InvalidOperationException("The driver has already started. A driver starts only once.");
         }
 
         _thread = new Thread(Run) { IsBackground = true, Name = "basin-headless" };
@@ -172,10 +187,12 @@ public sealed class BasinHeadlessDriver : IDisposable
         try
         {
             _host = _create();
+            StartGpu(_host);
             _wakeFd = HeadlessNative.EventFd(0, HeadlessNative.EfdCloexec | HeadlessNative.EfdNonblock);
             if (_wakeFd < 0)
             {
-                throw new InvalidOperationException("eventfd failed; the headless driver cannot be woken");
+                throw new InvalidOperationException(
+                    $"The headless driver could not create its wake eventfd (errno {Marshal.GetLastPInvokeError()}).");
             }
 
             _wakeSource = _host.Loop.AddFd(_wakeFd, FdReadiness.Readable, (_, _) => Drain());
@@ -204,7 +221,7 @@ public sealed class BasinHeadlessDriver : IDisposable
             }
             catch (Exception exception)
             {
-                Log.Error($"the headless driver caught {exception}");
+                Log.Error(exception, $"driver: a loop iteration failed");
             }
         }
 
@@ -215,7 +232,7 @@ public sealed class BasinHeadlessDriver : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"the headless driver's teardown failed: {exception}");
+            Log.Error(exception, $"driver: the teardown callback failed");
         }
 
         host.Scene.FrameRequested -= OnFrameRequested;
@@ -223,8 +240,44 @@ public sealed class BasinHeadlessDriver : IDisposable
         _wakeSource?.Remove();
         _wakeSource = null;
         host.Dispose();
+        _gpu?.Dispose();
         _ = HeadlessNative.Close(_wakeFd);
         _wakeFd = -1;
+    }
+
+    private void StartGpu(BasinCompositorHost host)
+    {
+        if (RenderNode is not { } node)
+        {
+            return;
+        }
+
+        if (!OperatingSystem.IsLinux())
+        {
+            Log.Warn($"driver: GPU drawing needs Linux, frames draw on the raster row");
+            return;
+        }
+
+        HostedGpuContext gpu;
+        try
+        {
+            gpu = HostedGpuContext.Create(node);
+        }
+        catch (Exception exception) when (exception is IOException or Mesa.Egl.EglException or Mesa.Gbm.GbmException
+            or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            Log.Warn(exception, $"driver: no GPU context on {node}, frames draw on the raster row");
+            return;
+        }
+
+        _gpu = gpu;
+        host.Renderer.UseOffscreenContext(gpu.Context);
+        if (!host.Renderer.TryEnableEgl(gpu.EglDisplayHandle))
+        {
+            Log.Warn($"driver: {node} imports no dmabuf, linux-dmabuf is not advertised");
+        }
+
+        Log.Info($"driver: frames draw on {node}");
     }
 
     private void OnFrameRequested() => _frameWanted = true;
@@ -282,7 +335,7 @@ public sealed class BasinHeadlessDriver : IDisposable
                 host.Session.MarkPresented(view.SceneOutput);
                 var target = view.Target;
                 host.NotifyPresented(
-                    view.SceneOutput, host.CapturePresented ? HostedViewCapture.Read(host, view, null) : null, target.Width, target.Height);
+                    view.SceneOutput, host.CapturePresented ? HostedViewCapture.Read(host, view, _gpu?.Context) : null, target.Width, target.Height);
             }
 
             Screenshot(host);
@@ -297,7 +350,7 @@ public sealed class BasinHeadlessDriver : IDisposable
         FrameCompleted?.Invoke();
     }
 
-    private static void Screenshot(BasinCompositorHost host)
+    private void Screenshot(BasinCompositorHost host)
     {
         if (!host.TakeScreenshotRequest(out var path, out var done))
         {
@@ -305,7 +358,7 @@ public sealed class BasinHeadlessDriver : IDisposable
         }
 
         var view = host.Views.Count > 0 ? host.Views[0] : null;
-        done(view is not null && HostedViewCapture.Read(host, view, null) is { } pixels &&
+        done(view is not null && HostedViewCapture.Read(host, view, _gpu?.Context) is { } pixels &&
             HostedViewCapture.WritePng(pixels, view.Target.Width, view.Target.Height, path));
     }
 
@@ -319,7 +372,7 @@ public sealed class BasinHeadlessDriver : IDisposable
             }
             catch (Exception exception)
             {
-                Log.Error($"a posted action failed on the headless driver: {exception}");
+                Log.Error(exception, $"driver: a posted action failed");
             }
         }
     }

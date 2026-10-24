@@ -46,7 +46,7 @@ internal sealed class RiverInputDevice
             {
                 resource.PostError(
                     (uint)RiverInputDeviceV1.Error.InvalidRepeatInfo,
-                    "repeat rate and delay must be non-negative");
+                    "The repeat rate and delay must not be negative.");
                 return;
             }
 
@@ -60,7 +60,7 @@ internal sealed class RiverInputDevice
             {
                 resource.PostError(
                     (uint)RiverInputDeviceV1.Error.InvalidScrollFactor,
-                    "the scroll factor must not be negative");
+                    "The scroll factor must not be negative.");
                 return;
             }
 
@@ -78,7 +78,7 @@ internal sealed class RiverInputDevice
             {
                 resource.PostError(
                     (uint)RiverInputDeviceV1.Error.InvalidMapToRectangle,
-                    "the rectangle must have positive width and height");
+                    "The rectangle width and height must be more than zero.");
                 return;
             }
 

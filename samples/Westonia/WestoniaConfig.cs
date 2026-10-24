@@ -83,7 +83,7 @@ internal sealed partial class Westonia
 
             if (section.IccProfile is { Length: > 0 } profile)
             {
-                _log.Info($"weston.ini: [output] {section.Name} icc_profile={profile} is applied through the color manager");
+                _log.Info($"weston.ini: [output] {section.Name} icc_profile={profile} applied through the color manager");
             }
         }
     }
@@ -138,6 +138,6 @@ internal sealed partial class Westonia
 
         var command = _ini.InputMethodArgs is { Length: > 0 } args ? $"{path} {args}" : path;
         Spawn(command);
-        _log.Info($"started the input method: {command}");
+        _log.Info($"input: started the input method {command}");
     }
 }

@@ -71,7 +71,7 @@ internal sealed class HostedDmabufTexture : ISkiaTexture
         if (image is null)
         {
             Log.Debug(
-                $"dmabuf texture rejected by skia: {attributes.Width}x{attributes.Height} fmt={attributes.Format}");
+                $"dmabuf: skia rejected a {attributes.Width}x{attributes.Height} texture, format {attributes.Format}");
             SkiaCensus.Release(backend);
             egl.Destroy(native.Texture, native.Image);
             return null;

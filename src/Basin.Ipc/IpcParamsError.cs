@@ -12,7 +12,8 @@ internal static class IpcParamsError
         var missing = message.IndexOf(Missing, StringComparison.Ordinal);
         if (missing >= 0)
         {
-            return $"{message[(missing + Missing.Length)..].TrimEnd('.')} is required";
+            var keys = message[(missing + Missing.Length)..].TrimEnd('.');
+            return keys.Contains(',', StringComparison.Ordinal) ? $"{keys} are required." : $"{keys} is required.";
         }
 
         var key = exception.Path is { Length: > 2 } path && path.StartsWith("$.", StringComparison.Ordinal) ? path[2..] : null;
@@ -23,6 +24,6 @@ internal static class IpcParamsError
             return cut > 0 ? message[..cut] : message;
         }
 
-        return key is null ? "'params' is not the shape this method takes" : $"'{key}' has the wrong type or is out of range";
+        return key is null ? "'params' does not have the shape that this method takes." : $"'{key}' has the wrong type or is out of range.";
     }
 }

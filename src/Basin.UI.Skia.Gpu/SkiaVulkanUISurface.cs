@@ -32,6 +32,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
     private bool _drawing;
     private bool _produced;
     private bool _disposed;
+    private bool _warnedReadback;
 
     internal SkiaVulkanUISurface(
         VulkanDevice device,
@@ -138,9 +139,10 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
             _wrapped = null;
             _wrap = _wrapFactory(target);
             _wrapped = target;
-            if (_allocator is not null && _wrap.IsCpuReadback)
+            if (_allocator is not null && _wrap.IsCpuReadback && !_warnedReadback)
             {
-                Log.Warn($"skia-vulkan ui: the device cannot render into the buffer ({target.Width}x{target.Height}). Chrome draws through CPU readback");
+                _warnedReadback = true;
+                Log.Warn($"vulkan ui: device cannot render into the {target.Width}x{target.Height} buffer, chrome draws through CPU readback");
             }
         }
 

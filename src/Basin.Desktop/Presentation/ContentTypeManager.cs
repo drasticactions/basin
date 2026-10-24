@@ -113,7 +113,7 @@ public sealed class ContentTypeManager : IDisposable
 
             if (!_claimed.Add(surface))
             {
-                manager.PostError(ErrorAlreadyConstructed, "surface already has a content type object");
+                manager.PostError(ErrorAlreadyConstructed, "The surface already has a content type object.");
                 return;
             }
 

@@ -64,7 +64,7 @@ internal sealed partial class Westonia
             Modifiers.Exactly(ShellModifiers.Ctrl | ShellModifiers.Alt) &&
             key == InputCodes.KeyBackspace)
         {
-            _log.Info($"terminating on the zap binding");
+            _log.Info($"bindings: zap binding pressed, stopping");
             Stop();
             return true;
         }
@@ -168,7 +168,7 @@ internal sealed partial class Westonia
                     _shell.BeginResize(window, EdgeFor(window, pointer.PointerX, pointer.PointerY), pointer.PointerX, pointer.PointerY);
                     return true;
                 case InputCodes.BtnMiddle:
-                    _log.Info($"rotation is not implemented: this compositor has no surface rotation");
+                    _log.Debug($"bindings: rotate binding ignored, surface rotation is not implemented");
                     return true;
             }
         }
@@ -367,5 +367,5 @@ internal sealed partial class Westonia
     }
 
     private void StepBacklight(int direction) =>
-        _log.Info($"backlight {(direction > 0 ? "up" : "down")} is bound and does nothing: basin has no panel-brightness capability");
+        _log.Debug($"bindings: backlight {(direction > 0 ? "up" : "down")} ignored, there is no panel brightness capability");
 }

@@ -79,9 +79,9 @@ public sealed class IpcResizeParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'id' is required"
-        : (_present & 2) == 0 ? "'width' is required"
-        : (_present & 4) == 0 ? "'height' is required"
+        (_present & 1) == 0 ? "'id' is required."
+        : (_present & 2) == 0 ? "'width' is required."
+        : (_present & 4) == 0 ? "'height' is required."
         : null;
 
     void IIpcReusable.Reset()

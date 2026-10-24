@@ -123,7 +123,7 @@ public sealed class XdgDecorationManager : IDisposable
             {
                 resource.PostError(
                     (uint)ZxdgToplevelDecorationV1.Error.Orphaned,
-                    "unknown xdg_toplevel");
+                    "The xdg_toplevel is not known.");
                 return;
             }
 
@@ -131,7 +131,7 @@ public sealed class XdgDecorationManager : IDisposable
             {
                 resource.PostError(
                     (uint)ZxdgToplevelDecorationV1.Error.AlreadyConstructed,
-                    "the toplevel already has a decoration object");
+                    "The toplevel already has a decoration object.");
                 return;
             }
 
@@ -216,7 +216,7 @@ public sealed class XdgDecorationManager : IDisposable
             {
                 if (e.Mode is not (ZxdgToplevelDecorationV1.Mode.ClientSide or ZxdgToplevelDecorationV1.Mode.ServerSide))
                 {
-                    resource.PostError((uint)ZxdgToplevelDecorationV1.Error.InvalidMode, $"invalid decoration mode {(uint)e.Mode}");
+                    resource.PostError((uint)ZxdgToplevelDecorationV1.Error.InvalidMode, $"Decoration mode {(uint)e.Mode} is not a known value.");
                     return;
                 }
 
@@ -282,7 +282,7 @@ public sealed class XdgDecorationManager : IDisposable
             {
                 _resource.PostError(
                     (uint)ZxdgToplevelDecorationV1.Error.Orphaned,
-                    "xdg_toplevel destroyed before its decoration object");
+                    "The xdg_toplevel was destroyed before its decoration object.");
             }
 
             Detach();

@@ -84,7 +84,7 @@ public sealed class IpcAxisParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'value' is required"
+        (_present & 1) == 0 ? "'value' is required."
         : null;
 
     void IIpcReusable.Reset()

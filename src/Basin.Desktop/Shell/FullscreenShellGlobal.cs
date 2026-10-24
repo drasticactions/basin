@@ -110,7 +110,7 @@ public sealed class FullscreenShellGlobal : IDisposable
     {
         if (e.Method > ZwpFullscreenShellV1.PresentMethod.Stretch)
         {
-            shell.PostError((uint)ZwpFullscreenShellV1.Error.InvalidMethod, "unknown present method");
+            shell.PostError((uint)ZwpFullscreenShellV1.Error.InvalidMethod, "The present method is not known.");
             return;
         }
 
@@ -128,7 +128,7 @@ public sealed class FullscreenShellGlobal : IDisposable
 
         if (!surface.TrySetRole(RoleName, this) && surface.RoleObject != this)
         {
-            shell.PostError((uint)ZwpFullscreenShellV1.Error.Role, "surface already has a role");
+            shell.PostError((uint)ZwpFullscreenShellV1.Error.Role, "The surface already has a role.");
             return;
         }
 
@@ -153,7 +153,7 @@ public sealed class FullscreenShellGlobal : IDisposable
 
         if (!surface.TrySetRole(RoleName, this) && surface.RoleObject != this)
         {
-            shell.PostError((uint)ZwpFullscreenShellV1.Error.Role, "surface already has a role");
+            shell.PostError((uint)ZwpFullscreenShellV1.Error.Role, "The surface already has a role.");
             return;
         }
 

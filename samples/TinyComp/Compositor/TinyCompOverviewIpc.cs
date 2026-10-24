@@ -24,7 +24,7 @@ internal sealed partial class TinyComp
                 };
                 if (open is null)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "state is open or close");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'state' must be open or close.");
                     return;
                 }
             }
@@ -35,7 +35,7 @@ internal sealed partial class TinyComp
                 view = Views.FirstOrDefault(v => v.Output.Name == name && v.Tag is OutputPolicy);
                 if (view is null)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no output {name}");
+                    reply.Error(IpcErrorCodes.NotFound, $"No output is named {name}. Use a name from the outputs list.");
                     return;
                 }
             }
@@ -48,7 +48,7 @@ internal sealed partial class TinyComp
             view ??= OverviewTargetView();
             if (ToggleOverview(view, open) is null || view is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "overview refused");
+                reply.Error(IpcErrorCodes.InvalidParams, "Overview can't open on this output now. The OVERVIEW refused line gives the reason.");
                 return;
             }
 
@@ -70,7 +70,7 @@ internal sealed partial class TinyComp
                 side = SideOf(sideName);
                 if (side == CanvasSide.None)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "side is left, right, top or bottom");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'side' must be left, right, top or bottom.");
                     return;
                 }
             }
@@ -85,7 +85,7 @@ internal sealed partial class TinyComp
             var window = hasId ? FindWindowByToplevelId((ulong)id) : ShelveTarget();
             if (window is null)
             {
-                reply.Error(IpcErrorCodes.NotFound, hasId ? $"no window {id}" : "no focused window");
+                reply.Error(IpcErrorCodes.NotFound, hasId ? $"No window has id {id}. Use an id from the windows list." : "No window has focus. Give a window id.");
                 return;
             }
 
@@ -139,13 +139,13 @@ internal sealed partial class TinyComp
 
             if (FindWindowByToplevelId((ulong)id) is not { } window)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no window {id}");
+                reply.Error(IpcErrorCodes.NotFound, $"No window has id {id}. Use an id from the windows list.");
                 return;
             }
 
             if (!IsShelved(window))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "the window is not shelved");
+                reply.Error(IpcErrorCodes.InvalidParams, "The window is not shelved. Shelve it first.");
                 return;
             }
 
@@ -168,7 +168,7 @@ internal sealed partial class TinyComp
                 only = Views.FirstOrDefault(v => v.Output.Name == name && v.Tag is OutputPolicy);
                 if (only is null)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no output {name}");
+                    reply.Error(IpcErrorCodes.NotFound, $"No output is named {name}. Use a name from the outputs list.");
                     return;
                 }
             }

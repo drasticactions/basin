@@ -30,7 +30,7 @@ public sealed class PaperUIHost : IUIHost
         ArgumentNullException.ThrowIfNull(inner);
         if (!typeof(IQuillUISurface).IsAssignableFrom(inner.SurfaceContract))
         {
-            throw new ArgumentException($"a Paper host needs Quill surfaces, and this host makes {inner.SurfaceContract.Name}.", nameof(inner));
+            throw new ArgumentException($"A Paper host needs Quill surfaces. This host makes {inner.SurfaceContract.Name}.", nameof(inner));
         }
 
         _inner = inner;

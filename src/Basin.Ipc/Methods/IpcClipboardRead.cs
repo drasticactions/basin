@@ -58,7 +58,7 @@ internal sealed class IpcClipboardRead : IDisposable
         _data.Dispose();
         if (!_reply.IsDone)
         {
-            _reply.Error(IpcErrorCodes.Failed, "the connection closed before the selection arrived");
+            _reply.Error(IpcErrorCodes.Failed, "The connection closed before the selection arrived.");
             _ = _reply.Complete();
         }
 
@@ -92,7 +92,7 @@ internal sealed class IpcClipboardRead : IDisposable
                     return;
                 }
 
-                Finish(IpcErrorCodes.Failed, $"reading the selection failed (errno {error})");
+                Finish(IpcErrorCodes.Failed, $"The selection could not be read (errno {error}).");
                 return;
             }
 
@@ -105,7 +105,7 @@ internal sealed class IpcClipboardRead : IDisposable
 
             if (_data.Length + read > _maxBytes)
             {
-                Finish(IpcErrorCodes.TooLarge, $"the selection is over {_maxBytes} bytes");
+                Finish(IpcErrorCodes.TooLarge, $"The selection is larger than {_maxBytes} bytes. Ask for a larger 'max_bytes'.");
                 return;
             }
 
@@ -117,7 +117,7 @@ internal sealed class IpcClipboardRead : IDisposable
     {
         if (!_done)
         {
-            Finish(IpcErrorCodes.Failed, "the selection owner did not finish writing in time");
+            Finish(IpcErrorCodes.Failed, "The selection owner did not finish writing in time. Try again, or give a longer 'timeout_ms'.");
         }
     }
 

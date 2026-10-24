@@ -221,6 +221,35 @@ public sealed class TomlDocumentTests
     }
 
     [Fact]
+    public void Save_refuses_a_read_only_file_and_leaves_it_as_it_was()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var directory = Directory.CreateTempSubdirectory("basin-toml-");
+        try
+        {
+            var target = Path.Combine(directory.FullName, "locked.toml");
+            File.WriteAllText(target, "[a]\nb = 1\n");
+            File.SetUnixFileMode(target, UnixFileMode.UserRead);
+
+            var document = TomlDocument.Load(target);
+            document.Set("a", "b", TomlValue.From(2));
+            var error = Assert.Throws<UnauthorizedAccessException>(() => document.Save(target));
+
+            Assert.Contains("read-only", error.Message, StringComparison.Ordinal);
+            Assert.Equal("[a]\nb = 1\n", File.ReadAllText(target));
+            Assert.Equal(["locked.toml"], Directory.GetFiles(directory.FullName).Select(Path.GetFileName));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Keys_and_table_names_list_what_the_file_carries_in_order()
     {
         var document = TomlDocument.Parse("[bindings]\n\"Alt+Tab\" = \"cycle\"\nquit = false\n\n[output.\"DP-1\"]\nscale = 2\n[[rule]]\napp_id = \"x\"\n");

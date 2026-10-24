@@ -32,6 +32,7 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
     private BasinViewOutput? _view;
     private bool _shutdown;
     private bool _drainRegistered;
+    private bool _frameFailing;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasinViewVisual"/> class with no input drain.
@@ -82,10 +83,20 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
             {
                 Invalidate();
             }
+
+            _frameFailing = false;
         }
         catch (Exception error)
         {
-            Log.Error($"frame dropped: {error}");
+            if (_frameFailing)
+            {
+                Log.Debug(error, $"frame: render failed again, frame dropped");
+            }
+            else
+            {
+                _frameFailing = true;
+                Log.Error(error, $"frame: render failed, frame dropped");
+            }
         }
     }
 
@@ -119,7 +130,7 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
             }
             catch (Exception error)
             {
-                Log.Error($"wake dispatch failed: {error}");
+                Log.Error(error, $"dispatch: wake dispatch failed");
             }
 
             return;
@@ -142,7 +153,7 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
             }
             catch (Exception error)
             {
-                Log.Error($"posted work failed: {error}");
+                Log.Error(error, $"dispatch: posted work failed");
             }
 
             return;

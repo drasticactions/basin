@@ -16,7 +16,7 @@ internal static class LeafMenu
             new(string.Empty, Separator: true),
             new("Deskbar preferences", Children: BuildPreferences(manager)),
             new(string.Empty, Separator: true),
-            new("About Deskbar", () => manager.Logger.Info($"deskbar-wm, a BeOS Deskbar on the river seam")),
+            new("About Deskbar", () => manager.Logger.Info($"about: deskbar-wm, a BeOS Deskbar on the river seam")),
             new(string.Empty, Separator: true),
             new("Restart", () => _ = Basin.Session.LogindActions.RunAsync(Basin.Session.LogindAction.Reboot), Enabled: Basin.Session.LogindActions.Available),
             new("Shut down", () => _ = Basin.Session.LogindActions.RunAsync(Basin.Session.LogindAction.PowerOff), Enabled: Basin.Session.LogindActions.Available),

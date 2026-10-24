@@ -102,7 +102,7 @@ public static class CommonOptions
         ArgumentNullException.ThrowIfNull(allowed);
         if (allowed.Length == 0)
         {
-            throw new ArgumentException("a program must allow at least one backend", nameof(allowed));
+            throw new ArgumentException("The list of allowed backends is empty. A program must allow at least one backend.", nameof(allowed));
         }
 
         var spellings = allowed.Select(kind => new BackendChoice(kind).ToString()).ToArray();

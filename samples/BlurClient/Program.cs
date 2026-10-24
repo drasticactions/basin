@@ -76,7 +76,7 @@ internal static class Program
 
         if (effects is null)
         {
-            log.Warn($"ext_background_effect_manager_v1 is not advertised; the window will be plain translucent");
+            log.Warn($"ext_background_effect_manager_v1 not advertised, the window is translucent without blur");
         }
 
         wmBase.Ping += (_, e) => wmBase.Pong(e.Serial);
@@ -164,7 +164,8 @@ internal static class Program
                     var data = slots.Prepare(width, height, width * 4);
                     if (data == 0 || slots.CurrentBuffer is not { } buffer)
                     {
-                        throw new InvalidOperationException("the shm pool could not be made");
+                        log.Error($"shm: pool not created for {width}x{height}");
+                        return 1;
                     }
 
                     Paint(data, width, height, width * 4);
@@ -184,9 +185,9 @@ internal static class Program
                 display.Dispatch();
             }
         }
-        catch (WaylandException)
+        catch (WaylandException error)
         {
-            log.Info($"the compositor closed the connection");
+            log.Info(error, $"connection closed by the compositor");
         }
 
         return 0;

@@ -59,7 +59,7 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
 
         if (Libxcb.xcb_connection_has_error(conn) != 0)
         {
-            Log.Warn($"no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
+            Log.Warn($"grab: no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
             Libxcb.xcb_disconnect(conn);
             return null;
         }
@@ -81,7 +81,7 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
                 Libc.Free(reply);
             }
 
-            Log.Warn($"the X server refused the keyboard grab (status {status})");
+            Log.Warn($"grab: the X server refused the keyboard grab, status {status}");
             Libxcb.xcb_disconnect(conn);
             return null;
         }
@@ -147,7 +147,7 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
             }
             catch (Exception error)
             {
-                Log.Warn($"a grabbed key could not be delivered: {error.Message}");
+                Log.Warn(error, $"grab: a grabbed key was not delivered");
             }
 
             Libc.Free(ev);
@@ -157,7 +157,7 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
         {
             _dead = true;
             _source.Remove();
-            Log.Warn($"the X server connection was lost, the keyboard grab is off");
+            Log.Warn($"grab: X server connection lost, the keyboard grab is off");
         }
     }
 }

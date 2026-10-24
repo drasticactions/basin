@@ -23,7 +23,13 @@ internal static class HostedViewCapture
 
     public static bool Render(BasinCompositorHost host, BasinViewOutput view, SKImageInfo info, nint pixels, GRContext? context)
     {
-        using var surface = (context is not null ? SKSurface.Create(context, false, info) : null) ?? SKSurface.Create(info);
+        var gpu = context is not null ? SKSurface.Create(context, false, info.WithAlphaType(SKAlphaType.Premul)) : null;
+        if (gpu is null)
+        {
+            context = null;
+        }
+
+        using var surface = gpu ?? SKSurface.Create(info);
         if (surface is null)
         {
             return false;
@@ -72,7 +78,7 @@ internal static class HostedViewCapture
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Log.Error($"the screenshot could not be written to {path}: {error.Message}");
+            Log.Warn(error, $"screenshot: could not write {path}");
             return false;
         }
     }

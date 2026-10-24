@@ -47,7 +47,7 @@ public sealed class WestonScreensaverGlobal : IDisposable
         var screensaver = new WestonScreensaverResource(client, version, id);
         if (_bound is { IsDestroyed: false })
         {
-            screensaver.PostError(ErrorInvalidArgument, "weston_screensaver is already bound");
+            screensaver.PostError(ErrorInvalidArgument, "weston_screensaver is already bound.");
             return;
         }
 
@@ -66,7 +66,7 @@ public sealed class WestonScreensaverGlobal : IDisposable
             var surface = _compositor.ResolveSurface(e.Surface);
             if (output is null || surface is null)
             {
-                screensaver.PostError(ErrorInvalidArgument, "unknown output or surface");
+                screensaver.PostError(ErrorInvalidArgument, "The output or the surface is not known.");
                 return;
             }
 

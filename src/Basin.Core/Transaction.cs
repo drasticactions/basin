@@ -88,7 +88,7 @@ public sealed class Transaction : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_sealed)
         {
-            throw new InvalidOperationException("participants cannot join a sealed transaction");
+            throw new InvalidOperationException("The transaction is sealed. Add participants before the transaction is sealed.");
         }
 
         _outstanding++;

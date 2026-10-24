@@ -57,7 +57,7 @@ public sealed class SoundClip
         var bytes = copy.GetBuffer().AsSpan(0, (int)copy.Length);
         if (bytes.Length < 12 || !bytes[..4].SequenceEqual("RIFF"u8) || !bytes[8..12].SequenceEqual("WAVE"u8))
         {
-            throw new InvalidDataException($"{name} is not a WAV file");
+            throw new InvalidDataException($"The file {name} is not a WAV file. The file must have a RIFF WAVE header.");
         }
 
         int format = 0, channels = 0, rate = 0, bits = 0;
@@ -87,14 +87,14 @@ public sealed class SoundClip
             offset = body + Math.Max(0, size) + (size & 1);
         }
 
-        throw new InvalidDataException($"{name} has no data chunk");
+        throw new InvalidDataException($"The WAV file {name} has no data chunk.");
     }
 
     private static float[] Decode(string name, ReadOnlySpan<byte> data, int format, int channels, int rate, int bits)
     {
         if (channels <= 0 || rate <= 0 || !((format == 1 && bits is 8 or 16) || (format == 3 && bits == 32)))
         {
-            throw new InvalidDataException($"{name} is not 8-bit or 16-bit PCM or 32-bit float");
+            throw new InvalidDataException($"The WAV file {name} has a sample format that is not supported. Use 8-bit or 16-bit PCM, or 32-bit float.");
         }
 
         var width = bits / 8;

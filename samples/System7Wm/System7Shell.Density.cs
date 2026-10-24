@@ -1,5 +1,6 @@
 using Basin;
 using Basin.Capabilities;
+using Basin.Cli;
 using Basin.XWayland;
 
 namespace System7Wm;
@@ -26,7 +27,7 @@ internal sealed partial class System7Shell
         var target = _xwaylandModule?.DisplayOf(window)?.Density == X11Density.Low ? X11Density.Native : X11Density.Low;
         if (!_densityControl.TrySet(info.Id, target, ReportDensity, out var error))
         {
-            _log.Warn($"cannot change the X server of {window.Class}: {error}");
+            _log.Warn($"xwayland: {window.Class} kept its X server, {CliMessage.Text(error ?? string.Empty)}");
             _report.Line($"X11DENSITY refused {error}");
         }
     }

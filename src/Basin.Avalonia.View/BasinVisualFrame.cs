@@ -71,7 +71,7 @@ internal static class BasinVisualFrame
         using var surface = (lease.GrContext is { } gr ? SKSurface.Create(gr, false, info) : null) ?? SKSurface.Create(info);
         if (surface is null)
         {
-            Log.Error($"no surface for a {target.Width}x{target.Height} screenshot");
+            Log.Error($"screenshot: no {target.Width}x{target.Height} surface");
             return false;
         }
 
@@ -115,7 +115,7 @@ internal static class BasinVisualFrame
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Log.Error($"the screenshot could not be written to {path}: {error.Message}");
+            Log.Error(error, $"screenshot: {path} not written");
             return false;
         }
 

@@ -27,7 +27,7 @@ internal sealed partial class TinyComp
         {
             if (!p.TryGetRaw("value", out var raw) || raw.IsEmpty)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "value is a number, cycle or config");
+                reply.Error(IpcErrorCodes.InvalidParams, "'value' must be a number, cycle or config.");
                 return;
             }
 
@@ -53,7 +53,7 @@ internal sealed partial class TinyComp
                     SetGravity(null);
                     break;
                 default:
-                    reply.Error(IpcErrorCodes.InvalidParams, "value is a number, cycle or config");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'value' must be a number, cycle or config.");
                     return;
             }
 
@@ -85,13 +85,13 @@ internal sealed partial class TinyComp
             var window = hasId ? FindWindowByToplevelId((ulong)id) : FocusedGrabTarget();
             if (window is null)
             {
-                reply.Error(IpcErrorCodes.NotFound, hasId ? $"no window {id}" : "no focused window");
+                reply.Error(IpcErrorCodes.NotFound, hasId ? $"No window has id {id}. Use an id from the windows list." : "No window has focus. Give a window id.");
                 return;
             }
 
             if (!ThrowWindow(window, vx, vy, spin))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, PhysicsOn ? "the window is not a dynamic body" : "physics is off");
+                reply.Error(IpcErrorCodes.InvalidParams, PhysicsOn ? "The window is not a dynamic body. Pick a window that physics moves." : "Physics is off. Turn it on with [physics] enable.");
             }
         });
 
@@ -149,7 +149,7 @@ internal sealed partial class TinyComp
 
             if (frozen is not { } value)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "state is on or off");
+                reply.Error(IpcErrorCodes.InvalidParams, "'state' must be on or off.");
                 return;
             }
 
@@ -192,7 +192,7 @@ internal sealed partial class TinyComp
         var window = hasId ? FindWindowByToplevelId((ulong)id) : FocusedGrabTarget();
         if (window is null)
         {
-            reply.Error(IpcErrorCodes.NotFound, hasId ? $"no window {id}" : "no focused window");
+            reply.Error(IpcErrorCodes.NotFound, hasId ? $"No window has id {id}. Use an id from the windows list." : "No window has focus. Give a window id.");
         }
 
         return window;

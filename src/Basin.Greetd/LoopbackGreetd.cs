@@ -49,7 +49,7 @@ public sealed partial class LoopbackGreetd : IDisposable
         Span<int> fds = stackalloc int[2];
         if (SocketPair(AfUnix, SockStream | SockCloexec, 0, ref MemoryMarshal.GetReference(fds)) != 0)
         {
-            throw new IOException($"socketpair failed ({Marshal.GetLastPInvokeError()})");
+            throw new IOException($"The socketpair call failed with errno {Marshal.GetLastPInvokeError()}.");
         }
 
         var server = new Socket(new SafeSocketHandle(fds[0], ownsHandle: true));

@@ -101,12 +101,12 @@ public sealed class PointerConstraintsManager : IDisposable
             if (kind == ConstraintKind.Lock)
             {
                 new ZwpLockedPointerV1Resource(client, version, id).PostError(
-                    (uint)ZwpPointerConstraintsV1.Error.AlreadyConstrained, "surface already constrained");
+                    (uint)ZwpPointerConstraintsV1.Error.AlreadyConstrained, "The surface already has a pointer constraint.");
             }
             else
             {
                 new ZwpConfinedPointerV1Resource(client, version, id).PostError(
-                    (uint)ZwpPointerConstraintsV1.Error.AlreadyConstrained, "surface already constrained");
+                    (uint)ZwpPointerConstraintsV1.Error.AlreadyConstrained, "The surface already has a pointer constraint.");
             }
 
             return;

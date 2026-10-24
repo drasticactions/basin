@@ -141,7 +141,7 @@ public sealed class KeyBinding
         {
             throw new ObjectDisposedException(
                 nameof(KeyBinding),
-                $"'{request}' was called on the destroyed key binding for keysym 0x{_keysym:x} with modifiers {_modifiers}");
+                $"'{request}' was called on a destroyed key binding (keysym 0x{_keysym:x}, modifiers {_modifiers}). Make a new binding.");
         }
     }
 

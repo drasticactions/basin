@@ -110,7 +110,7 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
-        var bus = Bus ?? throw new InvalidOperationException("the portal bus is not connected");
+        var bus = Bus ?? throw new InvalidOperationException("The portal bus is not connected.");
         var session = new ScreenCastSession(this, bus, sessionHandle, appId);
         bus.Register(session);
         return ValueTask.FromResult((PortalResponse.Success, Results.With("session_id", VariantValue.String(session.Id))));

@@ -83,7 +83,7 @@ public sealed class RenderContext
         if (!_alive)
         {
             throw new InvalidOperationException(
-                "this RenderContext belongs to a sequence that has already finished");
+                "This RenderContext belongs to a sequence that has finished. Use the context only inside its sequence.");
         }
     }
 }

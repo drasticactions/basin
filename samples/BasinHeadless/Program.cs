@@ -38,7 +38,7 @@ internal static class Program
 
             if (result.GetValue(client) is not null && result.GetValue(channel) is not null)
             {
-                log.Error($"--client spawns a local client and --waypipe-listen waits for a remote one");
+                log.Error($"--client and --waypipe-listen cannot be used together, give only one");
                 return 1;
             }
 
@@ -46,7 +46,7 @@ internal static class Program
                 result.GetValue(transport).Kind == TransportKind.LibWayland &&
                 result.GetResult(transport) is { Implicit: false })
             {
-                log.Error($"--waypipe-listen replays its channel over the managed transport");
+                log.Error($"--waypipe-listen needs the managed transport, remove --transport libwayland");
                 return 1;
             }
 
@@ -102,7 +102,7 @@ internal static class Program
                 video.EndsWith(",hw", StringComparison.Ordinal), out var whyNot);
             if (decoder is null)
             {
-                log.Error($"--video {video} needs a decoder and none is available: {whyNot}");
+                log.Error($"--video {video} needs a decoder, none is available: {whyNot}");
                 renderedFrames = 0;
                 return 1;
             }
@@ -169,7 +169,7 @@ internal static class Program
         }
         else
         {
-            log.Info($"no local socket on this host (800x600@60, software); a client arrives over a channel");
+            log.Info($"no local socket on this host (800x600@60, software), clients arrive over a channel");
         }
 
         using var ipcServices = new BasinServices(loop).Freeze();
@@ -187,7 +187,9 @@ internal static class Program
         var client = clientCommand is null ? null : processes.SpawnShell(clientCommand, out _);
         if (clientCommand is not null && client is null)
         {
-            throw new InvalidOperationException($"failed to start '{clientCommand}'");
+            log.Error($"client: '{clientCommand}' did not start");
+            renderedFrames = 0;
+            return 1;
         }
 
         if (channelEndpoint is not null)
@@ -211,13 +213,23 @@ internal static class Program
             listener.ChannelAccepted += accepted =>
             {
                 var index = listener.Accepted;
-                accepted.Ended += failure => log.Info($"channel {index} ended{(failure is null ? string.Empty : $": {failure.Message}")}");
+                accepted.Ended += failure =>
+                {
+                    if (failure is null)
+                    {
+                        log.Info($"channel {index} ended");
+                    }
+                    else
+                    {
+                        log.Warn(failure, $"channel {index} ended");
+                    }
+                };
                 adoption.Adopt(accepted);
-                log.Info($"channel {index} attached; replaying it as one client");
+                log.Info($"channel {index} attached, replayed as one client");
             };
             listener.Failed += failure =>
             {
-                log.Error($"the channel listener failed: {failure.Message}");
+                log.Error(failure, $"channel listener failed");
                 running = false;
             };
             log.Info($"accepting waypipe channels on {listener.LocalEndPoint}, replayed over the managed transport");
@@ -231,7 +243,7 @@ internal static class Program
             loop.Dispatch(frames == 0 ? -1 : 16);
             if (client is { IsRunning: false })
             {
-                log.Error($"client exited prematurely with code {client.ExitCode}");
+                log.Error($"client exited early with code {client.ExitCode}");
                 renderedFrames = rendered;
                 return 1;
             }

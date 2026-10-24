@@ -238,7 +238,7 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
                 OwnsName = owns;
                 if (!owns)
                 {
-                    Log.Info($"{BusName} is owned by another process; windows register with it instead");
+                    Log.Info($"registrar: {BusName} is owned by another process, windows register with it");
                 }
 
                 Ready?.Invoke();
@@ -246,7 +246,7 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
         }
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException)
         {
-            Log.Warn($"cannot own {BusName}: {error.Message}");
+            Log.Warn(error, $"registrar: cannot own {BusName}");
         }
     }
 
@@ -268,7 +268,7 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
         }
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException)
         {
-            Log.Warn($"cannot release {BusName}: {error.Message}");
+            Log.Warn(error, $"registrar: cannot release {BusName}");
         }
     }
 }

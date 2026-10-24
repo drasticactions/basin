@@ -183,7 +183,7 @@ internal sealed partial class EightGreeter
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            _log.Debug($"{path}: {error.Message}");
+            _log.Debug(error, $"login: cannot load the avatar {path}");
             return null;
         }
     }

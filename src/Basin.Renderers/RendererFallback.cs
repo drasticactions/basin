@@ -1,3 +1,5 @@
+using Basin.Diagnostics;
+
 namespace Basin.Renderers;
 
 /// <summary>
@@ -14,10 +16,30 @@ public readonly record struct RendererFallback(string From, string To, string? R
     public bool NoRenderNode => Reason is null;
 
     /// <summary>
+    /// Gets the exception that the failed renderer threw, or <see langword="null"/> when no render node was given.
+    /// </summary>
+    public Exception? Error { get; init; }
+
+    /// <summary>
     /// Makes a one-line message about the step for a log.
     /// </summary>
     /// <returns>The message.</returns>
     public string Describe() => Reason is null
-        ? $"{From} requested but no render node was found; using software rendering"
-        : $"{From} renderer unavailable ({Reason}); falling back to {To}";
+        ? $"renderer: no render node found, {From} falls back to software rendering"
+        : $"renderer: {From} renderer unavailable, falling back to {To}: {Reason}";
+
+    /// <summary>
+    /// Writes the step to a log as a warning. The line carries the exception of the failed renderer when there is one.
+    /// </summary>
+    /// <param name="log">The log to write to.</param>
+    public void Log(BasinLogger log)
+    {
+        if (Error is { } error)
+        {
+            log.Warn(error, $"renderer: {From} renderer unavailable, falling back to {To}");
+            return;
+        }
+
+        log.Warn($"{Describe()}");
+    }
 }

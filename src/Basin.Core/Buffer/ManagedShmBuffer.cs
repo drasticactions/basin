@@ -19,6 +19,7 @@ internal sealed class ManagedShmBuffer : BufferBase
     private readonly ISharedMemory? _guard;
     private PixmanRegion32? _dirty;
     private nint _shadow;
+    private bool _faultLogged;
 
     internal ManagedShmBuffer(ShmPool pool, int offset, int width, int height, int stride, DrmFormat format, ISharedMemory? guard = null)
         : base(width, height)
@@ -82,7 +83,12 @@ internal sealed class ManagedShmBuffer : BufferBase
                     Address + (nint)rowStart, _stride,
                     (x2 - x1) * bpp, y2 - y1))
             {
-                Log.Warn($"wl_shm: guarded copy faulted (pool truncated?); keeping the previous frame");
+                if (!_faultLogged)
+                {
+                    _faultLogged = true;
+                    Log.Warn($"wl_shm: copy faulted on a truncated pool, previous frame kept");
+                }
+
                 return;
             }
         }

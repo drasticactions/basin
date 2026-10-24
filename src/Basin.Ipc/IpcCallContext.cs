@@ -41,7 +41,7 @@ public sealed unsafe class IpcCallContext
     {
         if (_reply is null)
         {
-            throw new InvalidOperationException("a call is held from inside Before");
+            throw new InvalidOperationException("The call is not in Before. Hold a call from inside Before only.");
         }
 
         return _held ??= new IpcHeldCall(_server, Method, new ReadOnlySpan<byte>(_parameters, _length), Client, FromLineFront, Started);

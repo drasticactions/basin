@@ -133,7 +133,7 @@ public sealed class NotificationServer : IDisposable
         if (string.IsNullOrEmpty(address))
         {
             reason = "this session has no D-Bus session bus: DBUS_SESSION_BUS_ADDRESS is unset";
-            Log.Info($"no notification server: {reason}");
+            Log.Info($"server: not started, {reason}");
             return null;
         }
 
@@ -148,6 +148,7 @@ public sealed class NotificationServer : IDisposable
         }
         catch (AggregateException error)
         {
+            Log.Debug(error, $"server: connect to {address} failed");
             failure = $"the session bus at {address} is not reachable: {error.InnerException?.Message ?? error.Message}";
         }
 
@@ -155,11 +156,11 @@ public sealed class NotificationServer : IDisposable
         {
             server.Dispose();
             reason = failure;
-            Log.Info($"no notification server: {reason}");
+            Log.Info($"server: not started, {reason}");
             return null;
         }
 
-        Log.Info($"{BusName} owned on {address} as {server.UniqueName}");
+        Log.Info($"bus: {BusName} owned on {address} as {server.UniqueName}");
         reason = null;
         return server;
     }
@@ -327,7 +328,7 @@ public sealed class NotificationServer : IDisposable
     {
         if (_disposed)
         {
-            NotificationsObject.TryReplyError(context, "org.freedesktop.DBus.Error.Failed", "the notification server is closing");
+            NotificationsObject.TryReplyError(context, "org.freedesktop.DBus.Error.Failed", "The notification server is closing.");
             return;
         }
 
@@ -338,7 +339,7 @@ public sealed class NotificationServer : IDisposable
             {
                 if (_disposed)
                 {
-                    NotificationsObject.TryReplyError(context, "org.freedesktop.DBus.Error.Failed", "the notification server is closing");
+                    NotificationsObject.TryReplyError(context, "org.freedesktop.DBus.Error.Failed", "The notification server is closing.");
                 }
                 else
                 {
@@ -347,7 +348,7 @@ public sealed class NotificationServer : IDisposable
             }
             catch (Exception error)
             {
-                Log.Warn($"{context.Request.MemberAsString} failed on the loop: {error}");
+                Log.Warn(error, $"{context.Request.MemberAsString} failed on the loop");
                 NotificationsObject.TryReplyError(context, "org.freedesktop.DBus.Error.Failed", error.Message);
             }
             finally
@@ -358,7 +359,7 @@ public sealed class NotificationServer : IDisposable
                 }
                 catch (Exception error) when (error is ObjectDisposedException or InvalidOperationException or DBusExceptionBase)
                 {
-                    Log.Debug($"a method context did not dispose cleanly: {error.Message}");
+                    Log.Debug(error, $"bus: a method context did not dispose cleanly");
                 }
             }
         }, null);
@@ -376,7 +377,7 @@ public sealed class NotificationServer : IDisposable
                 {
                     if (!_disposed)
                     {
-                        Log.Debug($"notification bus: {context.Exception.Message}");
+                        Log.Debug(context.Exception, $"bus: connection failed");
                     }
                 },
             });
@@ -409,6 +410,7 @@ public sealed class NotificationServer : IDisposable
         catch (Exception error)
         {
             connection?.Dispose();
+            Log.Debug(error, $"bus: connect to {address} failed");
             return $"the session bus at {address} is not reachable: {error.Message}";
         }
     }
@@ -459,7 +461,7 @@ public sealed class NotificationServer : IDisposable
         }
 
         OwnsName = false;
-        Log.Info($"{BusName} was taken over by another notification server");
+        Log.Info($"bus: {BusName} was taken over by another notification server");
         NameLost?.Invoke();
     }
 

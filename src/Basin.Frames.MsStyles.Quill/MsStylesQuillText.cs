@@ -79,9 +79,9 @@ public sealed class MsStylesQuillText : IMsStylesTextMetrics, IDisposable
                     {
                         file = new FontFile(standalone);
                     }
-                    catch (InvalidDataException)
+                    catch (InvalidDataException error)
                     {
-                        Log.Warn($"quill cannot read the face {typeface.FamilyName}; the fallback face draws its text");
+                        Log.Warn(error, $"text: quill cannot read the face {typeface.FamilyName}, fallback face draws its text");
                     }
                 }
             }

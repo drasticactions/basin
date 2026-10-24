@@ -16,7 +16,7 @@ public sealed partial class GreeterHost
     /// Gets the login flow.
     /// </summary>
     /// <exception cref="InvalidOperationException"><see cref="StartLogin"/> has not run.</exception>
-    public GreeterFlow Flow => _flow ?? throw new InvalidOperationException("the login has not started");
+    public GreeterFlow Flow => _flow ?? throw new InvalidOperationException("The login has not started. Call StartLogin first.");
 
     /// <summary>
     /// Gets the login flow, or <see langword="null"/> before <see cref="StartLogin"/>.
@@ -74,7 +74,7 @@ public sealed partial class GreeterHost
         _flow.Stepped += OnStep;
         _flow.Closed += reason =>
         {
-            _log.Error($"greetd: {reason}");
+            _log.Error($"greetd: connection closed, {reason}");
             Stop("greetd-closed", 1);
         };
         return _flow;
@@ -87,14 +87,14 @@ public sealed partial class GreeterHost
         {
             if (fromEnvironment is not null)
             {
-                throw new InvalidOperationException($"--demo is refused under greetd ({GreetdClient.SocketVariable} is set)");
+                throw new InvalidOperationException($"The --demo option is not allowed under greetd. Unset {GreetdClient.SocketVariable}, or run without --demo.");
             }
 
             return null;
         }
 
         return options.GreetdSocket ?? fromEnvironment
-            ?? throw new InvalidOperationException($"not under greetd: {GreetdClient.SocketVariable} is not set and --greetd-sock names nothing; --demo runs without greetd");
+            ?? throw new InvalidOperationException($"No greetd socket is set. Set {GreetdClient.SocketVariable}, pass --greetd-sock, or pass --demo to run without greetd.");
     }
 
     private void OnStep(GreeterStep step)

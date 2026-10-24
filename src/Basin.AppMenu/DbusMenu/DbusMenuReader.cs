@@ -139,7 +139,7 @@ public sealed class DbusMenuReader : IAppMenuSource
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"{_busName}{_path}: {error.Message}");
+            Log.Debug(error, $"dbusmenu: {_busName}{_path} subscribe failed");
             _bus.Post(Fail);
         }
     }
@@ -187,7 +187,7 @@ public sealed class DbusMenuReader : IAppMenuSource
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException or IndexOutOfRangeException)
         {
-            Log.Debug($"{_busName}{_path} GetLayout: {error.Message}");
+            Log.Debug(error, $"dbusmenu: {_busName}{_path} GetLayout failed");
             _bus.Post(() =>
             {
                 _fetching = false;
@@ -213,7 +213,7 @@ public sealed class DbusMenuReader : IAppMenuSource
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"{_busName}{_path} AboutToShow {id}: {error.Message}");
+            Log.Debug(error, $"dbusmenu: {_busName}{_path} AboutToShow {id} failed");
         }
     }
 

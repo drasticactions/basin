@@ -59,29 +59,29 @@ public static class WaypipeEndpoint
         {
             throw new ArgumentException(
                 OperatingSystem.IsWindows()
-                    ? $"'{endpoint}' names a CID; a vsock listener takes only the port, as vsock:PORT, and on Windows the VM comes from --hyperv-vm"
-                    : $"'{endpoint}' names a CID; a vsock listener binds every CID and takes only the port, as vsock:PORT",
+                    ? $"'{endpoint}' names a CID. On Windows, a vsock listener takes only the port, as vsock:PORT, and --hyperv-vm selects the VM."
+                    : $"'{endpoint}' names a CID. A vsock listener binds every CID and takes only the port, as vsock:PORT.",
                 nameof(endpoint));
         }
 
         if (port.IsEmpty)
         {
-            throw new ArgumentException($"'{endpoint}' names no port; a vsock listener is vsock:PORT", nameof(endpoint));
+            throw new ArgumentException($"'{endpoint}' names no port. Give the listener as vsock:PORT.", nameof(endpoint));
         }
 
         if (!uint.TryParse(port, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var value))
         {
-            throw new ArgumentException($"'{endpoint}' has a port that is not a decimal number", nameof(endpoint));
+            throw new ArgumentException($"'{endpoint}' has a port that is not a decimal number.", nameof(endpoint));
         }
 
         if (value == 0 || value == VsockEndPoint.AnyPort)
         {
-            throw new ArgumentException($"'{endpoint}' has a port out of range; a vsock port is 1 through 4294967294", nameof(endpoint));
+            throw new ArgumentException($"'{endpoint}' has a port out of range. A vsock port must be 1 through 4294967294.", nameof(endpoint));
         }
 
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("vsock channels are available on Linux, and on Windows as Hyper-V sockets");
+            throw new PlatformNotSupportedException("vsock channels are available only on Linux, and on Windows as Hyper-V sockets.");
         }
 
         return new VsockEndPoint(value);
@@ -110,7 +110,7 @@ public static class WaypipeEndpoint
 #pragma warning restore CA1416
         }
 
-        throw new PlatformNotSupportedException("this host reaches a session over a WebSocket; give a ws:// or wss:// endpoint");
+        throw new PlatformNotSupportedException("This host reaches a session only over a WebSocket. Give a ws:// or wss:// endpoint.");
     }
 
     private static async Task<Stream> OpenWebSocketAsync(string endpoint, CancellationToken cancellation) =>
@@ -122,7 +122,7 @@ public static class WaypipeEndpoint
         var colon = endpoint.LastIndexOf(':');
         if (colon <= 0 || !int.TryParse(endpoint.AsSpan(colon + 1), out var port))
         {
-            throw new ArgumentException("a TCP endpoint is host:port", nameof(endpoint));
+            throw new ArgumentException("The TCP endpoint is not valid. Give it as host:port.", nameof(endpoint));
         }
 
         var client = new TcpClient { NoDelay = true };

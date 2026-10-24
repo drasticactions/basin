@@ -48,14 +48,14 @@ public sealed class LayerShell : IDisposable
             var surface = _compositor.ResolveSurface(e.Surface);
             if (surface is null)
             {
-                resource.PostError((uint)ZwlrLayerShellV1.Error.Role, "unknown wl_surface");
+                resource.PostError((uint)ZwlrLayerShellV1.Error.Role, "The wl_surface is not known.");
                 return;
             }
 
             var layerResource = new ZwlrLayerSurfaceV1Resource(client, resource.Version, e.Id);
             if (!surface.CanSetRole(LayerSurface.RoleName))
             {
-                layerResource.PostError((uint)ZwlrLayerShellV1.Error.Role, "surface already has a role");
+                layerResource.PostError((uint)ZwlrLayerShellV1.Error.Role, "The surface already has a role.");
                 return;
             }
 

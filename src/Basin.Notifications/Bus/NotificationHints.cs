@@ -134,7 +134,7 @@ internal static class NotificationHints
         if (signature != ImageSignature)
         {
             reader.ReadVariantValue();
-            Log.Debug($"an image hint with signature {signature} is not {ImageSignature} and is ignored");
+            Log.Debug($"hints: image hint signature {signature} is not {ImageSignature}, hint ignored");
             return null;
         }
 
@@ -149,7 +149,7 @@ internal static class NotificationHints
         var pixels = reader.ReadArrayOfByte();
         if (!Fits(width, height, stride, bits, channels, pixels.Length))
         {
-            Log.Debug($"an image hint of {width}x{height}, stride {stride}, {channels}x{bits} bits does not fit its {pixels.Length} bytes and is ignored");
+            Log.Debug($"hints: image hint {width}x{height}, stride {stride}, {channels}x{bits} bits does not fit {pixels.Length} bytes, hint ignored");
             return null;
         }
 

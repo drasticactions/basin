@@ -274,7 +274,11 @@ internal sealed unsafe class VulkanYuvConverter : IDisposable
         }
         catch (InvalidOperationException failure)
         {
-            Log.Warn($"NV12 plane import rejected: {failure.Message}");
+            if (VulkanLog.FirstRejection(attributes.Format, attributes.Modifier, shm: false))
+            {
+                Log.Warn(failure, $"NV12 plane import rejected, modifier 0x{attributes.Modifier:X} {attributes.Width}x{attributes.Height}");
+            }
+
             lumaImage?.Destroy(device);
             return null;
         }

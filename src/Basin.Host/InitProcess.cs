@@ -186,17 +186,17 @@ public sealed class InitProcess
             var error = Marshal.GetLastPInvokeError();
             if (error == ErrorAccess && access(path, FileExists) == 0)
             {
-                log.Error($"failed to run init executable {path}: the file is not executable");
+                log.Error($"init: cannot run {path}, the file is not executable");
                 return new InitSearch(null, NotExecutable: true);
             }
 
             if (error is ErrorNoEntry or ErrorNotDirectory)
             {
-                log.Debug($"no init executable at {path}");
+                log.Debug($"init: no executable at {path}");
             }
             else
             {
-                log.Error($"failed to run init executable {path}: {(Marshal.GetPInvokeErrorMessage(error))}");
+                log.Error($"init: cannot run {path}, {(Marshal.GetPInvokeErrorMessage(error))}");
             }
         }
 
@@ -275,7 +275,7 @@ public sealed class InitProcess
             environment = merged;
         }
 
-        log.Info($"running init executable '{command}'");
+        log.Info($"init: running '{command}'");
 
         var attributes = Marshal.AllocHGlobal(AttrBytes);
         var mask = Marshal.AllocHGlobal(SigsetBytes);
@@ -289,7 +289,7 @@ public sealed class InitProcess
         {
             if (posix_spawnattr_init(attributes) != 0)
             {
-                log.Error($"failed to run the init executable: posix_spawnattr_init failed");
+                log.Error($"init: cannot run the init executable, posix_spawnattr_init failed");
                 return null;
             }
 
@@ -315,7 +315,7 @@ public sealed class InitProcess
             var error = posix_spawn(out var pid, program, IntPtr.Zero, attributes, argv, envp);
             if (error != 0)
             {
-                log.Error($"failed to run the init executable: {(Marshal.GetPInvokeErrorMessage(error))}");
+                log.Error($"init: cannot run the init executable, {(Marshal.GetPInvokeErrorMessage(error))}");
                 return null;
             }
 
@@ -349,7 +349,7 @@ public sealed class InitProcess
     {
         if (kill(-_pgid, SignalTerminate) != 0 && Marshal.GetLastPInvokeError() != ErrorNoProcess)
         {
-            log.Error($"failed to stop the init process group: {(Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError()))}");
+            log.Warn($"init: cannot stop the process group, {(Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError()))}");
         }
 
         _exitWatch?.Remove();

@@ -13,7 +13,7 @@ internal static class SequenceGuard
 
         manager?.PostError(
             (uint)RiverWindowManagerV1.Error.SequenceOrder,
-            "window management state may only be modified during a manage sequence");
+            "Window management state can change only during a manage sequence.");
         return false;
     }
 
@@ -26,7 +26,7 @@ internal static class SequenceGuard
 
         manager?.PostError(
             (uint)RiverWindowManagerV1.Error.SequenceOrder,
-            "rendering state may only be modified during a manage or render sequence");
+            "Rendering state can change only during a manage or render sequence.");
         return false;
     }
 }

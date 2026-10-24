@@ -107,7 +107,7 @@ public static class KeyboardLayouts
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or TomlException or FormatException)
                 {
-                    logger.Warn($"{path}: {error.Message}, using the built-in layout");
+                    logger.Warn(error, $"layouts: cannot load {path}, the built-in layout is used");
                 }
             }
         }
@@ -143,7 +143,7 @@ public static class KeyboardLayouts
         var fileId = top.Text("id");
         if (fileId is not null && fileId != id)
         {
-            logger.Warn($"{source}: id '{fileId}' does not match the file name, using '{id}'");
+            logger.Warn($"layouts: {source} id '{fileId}' does not match the file name, '{id}' is used");
         }
 
         var language = top.Text("language") ?? "en";
@@ -162,7 +162,7 @@ public static class KeyboardLayouts
                 {
                     double d => (float)d,
                     long l => l,
-                    _ => throw new FormatException($"{source}: row_heights[{i}] is not a number"),
+                    _ => throw new FormatException($"In {source}, row_heights[{i}] is not a number."),
                 };
             }
         }
@@ -170,7 +170,7 @@ public static class KeyboardLayouts
         var shaped = rowHeights is not null || gridRows != KeyGrid.DefaultRows || gridColumns != KeyGrid.DefaultColumns;
         if (gridRows is < 2 or > KeyGrid.MaxRows || gridColumns is < 1 or > KeyGrid.MaxColumns)
         {
-            throw new FormatException($"{source}: a layout has 2 to {KeyGrid.MaxRows} rows and 1 to {KeyGrid.MaxColumns} columns");
+            throw new FormatException($"In {source}, the grid size is not valid. A layout has 2 to {KeyGrid.MaxRows} rows and 1 to {KeyGrid.MaxColumns} columns.");
         }
 
         if (shaped && rowHeights is null)
@@ -181,41 +181,41 @@ public static class KeyboardLayouts
 
         if (rowHeights is not null && rowHeights.Length != gridRows)
         {
-            throw new FormatException($"{source}: row_heights has {rowHeights.Length} entries, not {gridRows}");
+            throw new FormatException($"In {source}, row_heights has {rowHeights.Length} entries. It must have {gridRows}.");
         }
 
         var bottomTable = top.Section("bottom");
         if (top.Raw("rows") is not TomlArray rowArray ||
             (rowArray.Count != gridRows - 1 && !(shaped && bottomTable is null && rowArray.Count == gridRows)))
         {
-            throw new FormatException($"{source}: rows must be an array of {gridRows - 1} rows");
+            throw new FormatException($"In {source}, rows is not valid. It must be an array of {gridRows - 1} rows.");
         }
 
         var rows = new KeyCell[gridRows - 1][];
         for (var row = 0; row < rows.Length; row++)
         {
-            rows[row] = ParseRow(rowArray[row] as TomlArray, row, gridColumns, logger, $"{source}: rows[{row}]");
+            rows[row] = ParseRow(rowArray[row] as TomlArray, row, gridColumns, logger, $"{source} rows[{row}]");
         }
 
-        var dotCom = ParseCaps(top.Raw("dotcom") as TomlArray, logger, $"{source}: dotcom") ?? [];
+        var dotCom = ParseCaps(top.Raw("dotcom") as TomlArray, logger, $"{source} dotcom") ?? [];
         var bottoms = new KeyCell[3][];
         if (bottomTable is null)
         {
             if (rowArray.Count != gridRows)
             {
-                throw new FormatException($"{source}: [bottom] is missing");
+                throw new FormatException($"In {source}, the [bottom] table is missing.");
             }
 
-            bottoms[0] = bottoms[1] = bottoms[2] = ParseRow(rowArray[gridRows - 1] as TomlArray, gridRows - 1, gridColumns, logger, $"{source}: rows[{gridRows - 1}]");
+            bottoms[0] = bottoms[1] = bottoms[2] = ParseRow(rowArray[gridRows - 1] as TomlArray, gridRows - 1, gridColumns, logger, $"{source} rows[{gridRows - 1}]");
         }
         else
         {
-            bottoms[(int)BottomRow.Default] = ParseRow(bottomTable.Raw("default") as TomlArray, gridRows - 1, gridColumns, logger, $"{source}: bottom.default");
+            bottoms[(int)BottomRow.Default] = ParseRow(bottomTable.Raw("default") as TomlArray, gridRows - 1, gridColumns, logger, $"{source} bottom.default");
             bottoms[(int)BottomRow.Email] = bottomTable.Raw("email") is TomlArray email
-                ? ParseRow(email, gridRows - 1, gridColumns, logger, $"{source}: bottom.email")
+                ? ParseRow(email, gridRows - 1, gridColumns, logger, $"{source} bottom.email")
                 : bottoms[(int)BottomRow.Default];
             bottoms[(int)BottomRow.Url] = bottomTable.Raw("url") is TomlArray url
-                ? ParseRow(url, gridRows - 1, gridColumns, logger, $"{source}: bottom.url")
+                ? ParseRow(url, gridRows - 1, gridColumns, logger, $"{source} bottom.url")
                 : bottoms[(int)BottomRow.Default];
         }
 
@@ -227,18 +227,18 @@ public static class KeyboardLayouts
             {
                 if (pageTable.Section(pageName) is not { } page)
                 {
-                    throw new FormatException($"{source}: pages.{pageName} must be a table");
+                    throw new FormatException($"In {source}, pages.{pageName} must be a table.");
                 }
 
                 if (page.Raw("rows") is not TomlArray pageRows || pageRows.Count != gridRows)
                 {
-                    throw new FormatException($"{source}: pages.{pageName}.rows must be an array of {gridRows} rows");
+                    throw new FormatException($"In {source}, pages.{pageName}.rows must be an array of {gridRows} rows.");
                 }
 
                 var cells = new KeyCell[gridRows][];
                 for (var row = 0; row < gridRows; row++)
                 {
-                    cells[row] = ParseRow(pageRows[row] as TomlArray, row, gridColumns, logger, $"{source}: pages.{pageName}.rows[{row}]");
+                    cells[row] = ParseRow(pageRows[row] as TomlArray, row, gridColumns, logger, $"{source} pages.{pageName}.rows[{row}]");
                 }
 
                 pages[pageName] = cells;
@@ -262,12 +262,12 @@ public static class KeyboardLayouts
     {
         if (array is null)
         {
-            throw new FormatException($"{where}: expected an array of keys");
+            throw new FormatException($"In {where}, the row must be an array of keys.");
         }
 
         if (array.Count > columns)
         {
-            throw new FormatException($"{where}: {array.Count} keys, at most {columns}");
+            throw new FormatException($"In {where}, the row has {array.Count} keys. A row has at most {columns}.");
         }
 
         var cells = new KeyCell[columns];
@@ -276,7 +276,7 @@ public static class KeyboardLayouts
         {
             if (array[column] is not TomlTable table)
             {
-                throw new FormatException($"{where}[{column}]: expected an inline table");
+                throw new FormatException($"In {where}[{column}], the key must be an inline table.");
             }
 
             var reader = new TomlReader(table, log);
@@ -291,7 +291,7 @@ public static class KeyboardLayouts
             if (reader.Flag("spacer", false))
             {
                 reader.ReportUnknown();
-                cells[column] = weight > 0 ? KeyCell.Spacer(weight) : throw new FormatException($"{where}[{column}]: a spacer needs a weight above 0");
+                cells[column] = weight > 0 ? KeyCell.Spacer(weight) : throw new FormatException($"In {where}[{column}], the spacer weight must be more than 0.");
                 continue;
             }
 
@@ -304,7 +304,7 @@ public static class KeyboardLayouts
             var label = reader.Text("label");
             if (!KeyCap.TryParse(plainToken, out var plain) || plain is null)
             {
-                throw new FormatException($"{where}[{column}]: unknown key '{plainToken}'");
+                throw new FormatException($"In {where}[{column}], the key '{plainToken}' is not known.");
             }
 
             if (label is not null)
@@ -317,7 +317,7 @@ public static class KeyboardLayouts
             {
                 if (!KeyCap.TryParse(altToken, out alternate))
                 {
-                    throw new FormatException($"{where}[{column}]: unknown alternate '{altToken}'");
+                    throw new FormatException($"In {where}[{column}], the alternate '{altToken}' is not known.");
                 }
             }
 
@@ -329,7 +329,7 @@ public static class KeyboardLayouts
                 "function" => KeyClass.Function,
                 "number" => KeyClass.NumberRow,
                 null => ClassOf(plain, row),
-                var other => throw new FormatException($"{where}[{column}]: unknown class '{other}'"),
+                var other => throw new FormatException($"In {where}[{column}], the class '{other}' is not known."),
             };
             reader.ReportUnknown();
             cells[column] = new KeyCell(weight, plain, alternate, longPress, keyClass);
@@ -354,7 +354,7 @@ public static class KeyboardLayouts
             }
             else
             {
-                log.Warn($"{where}: '{item}' is not a key, ignored");
+                log.Warn($"layouts: '{item}' in {where} is not a key, it is ignored");
             }
         }
 

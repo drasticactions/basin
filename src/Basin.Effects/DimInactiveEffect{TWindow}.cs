@@ -93,7 +93,7 @@ public sealed class DimInactiveEffect<TWindow>
         _thread.Assert();
         if (_entries.ContainsKey(window))
         {
-            throw new InvalidOperationException("the effect already tracks this window");
+            throw new InvalidOperationException("The effect already tracks this window.");
         }
 
         var entry = new Entry(window, facts) { Fresh = true };

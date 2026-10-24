@@ -134,12 +134,12 @@ internal static class SettingsCatalog
             new(Frames, "frame.msstyles", "font", "Caption font", SettingKind.Text)
             {
                 Default = "\"\"", Group = "Visual style", Visible = static d => Style(d, "msstyles"),
-                Note = "Used when the theme's caption font is not installed.",
+                Note = "Used when the theme's caption font isn't installed.",
             },
             new(Frames, "frame.msstyles", "colorization", "Glass color", SettingKind.Color)
             {
                 Default = "\"#45409efe\"", Alpha = true, Group = "Visual style", Visible = static d => Style(d, "msstyles"),
-                Note = "#aarrggbb: the alpha is the strength of the tint.",
+                Note = "Use #aarrggbb. The alpha sets how strong the tint is.",
             },
             new(Frames, "frame.msstyles", "backdrop_blur", "Backdrop blur", SettingKind.Real)
             {
@@ -192,12 +192,12 @@ internal static class SettingsCatalog
             new(Frames, "frame.glass", "pass", "Pass", SettingKind.Choice)
             {
                 Default = "\"composite\"", Choices = ["composite", "fused"], Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "The blur pyramid then a glass pass, or one downsample then one fused pass.",
+                Note = "Composite blurs first and then draws the glass. Fused does both in one pass.",
             },
             new(Frames, "frame.glass", "tint", "Tint", SettingKind.Color)
             {
                 Default = "\"#60202832\"", Alpha = true, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "#aarrggbb: the alpha is the strength. Without it, the palette chooses.",
+                Note = "Use #aarrggbb. The alpha sets how strong the tint is. With no tint set, the palette picks one.",
             },
             new(Frames, "frame.glass", "saturation", "Saturation", SettingKind.Real)
             {
@@ -210,27 +210,27 @@ internal static class SettingsCatalog
             new(Frames, "frame.glass", "refraction", "Refraction", SettingKind.Real)
             {
                 Default = "0.6", Min = 0, Max = 2, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Lens strength at the rounded edges. 0 is off.",
+                Note = "How much the rounded edges bend what's behind them. 0 turns it off.",
             },
             new(Frames, "frame.glass", "bevel", "Bevel", SettingKind.Real)
             {
                 Default = "10", Min = 0, Max = 40, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Logical pixels of the lens band along the edge.",
+                Note = "The width of the bending band along the edge, in pixels.",
             },
             new(Frames, "frame.glass", "specular", "Specular", SettingKind.Real)
             {
                 Default = "0.5", Min = 0, Max = 2, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "The sheen from the fixed light. 0 is off.",
+                Note = "The shine from a fixed light. 0 turns it off.",
             },
             new(Frames, "frame.glass", "light_angle", "Light angle", SettingKind.Real)
             {
                 Default = "315", Min = 0, Max = 359, Step = 5, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Degrees. 0 is from the right, 90 from below.",
+                Note = "In degrees. 0 lights from the right, and 90 from below.",
             },
             new(Frames, "frame.glass", "glint", "Glint", SettingKind.Real)
             {
                 Default = "0.6", Min = 0, Max = 2, Step = 0.05, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "The highlight that follows the pointer over the chrome. 0 is off.",
+                Note = "The highlight that follows the pointer over the window frame. 0 turns it off.",
             },
             new(Frames, "frame.glass", "glint_radius", "Glint radius", SettingKind.Real)
             {
@@ -239,7 +239,7 @@ internal static class SettingsCatalog
             new(Frames, "frame.glass", "client_glass", "Client glass", SettingKind.Flag)
             {
                 Default = "true", Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Glass behind the translucent pixels of the client.",
+                Note = "Shows glass behind the see-through parts of a window.",
             },
             new(Frames, "frame.glass", "shadow", "Shadow", SettingKind.Flag)
             {
@@ -248,27 +248,27 @@ internal static class SettingsCatalog
             new(Frames, "frame.glass", "glow", "Active glow", SettingKind.Color)
             {
                 Default = "\"#5070a0ff\"", Alpha = true, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "#aarrggbb: alpha 0 is off.",
+                Note = "Use #aarrggbb. An alpha of 0 turns it off.",
             },
             new(Frames, "frame.glass", "animation_ms", "Animation", SettingKind.Real)
             {
                 Default = "150", Min = 1, Max = 1000, Step = 10, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Milliseconds for the hover, press and focus eases.",
+                Note = "How long the hover, press and focus animations take, in milliseconds.",
             },
             new(Frames, "frame.glass", "inset", "Content inset", SettingKind.Real)
             {
                 Default = "6", Min = 0, Max = 40, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Logical pixels of glass between the frame's edge and the content.",
+                Note = "The glass between the frame's edge and the window content, in pixels.",
             },
             new(Frames, "frame.glass", "content_radius", "Content radius", SettingKind.Real)
             {
                 Default = "-1", Min = -1, Max = 32, Step = 1, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "Rounds the content's corners. -1 follows corner_radius minus inset.",
+                Note = "Rounds the corners of the window content. -1 uses corner_radius minus inset.",
             },
             new(Frames, "frame.glass", "content_border", "Content border", SettingKind.Color)
             {
                 Default = "\"#38ffffff\"", Alpha = true, Group = "Glass", Visible = static d => Style(d, "glass"),
-                Note = "#aarrggbb: the line around the content. Alpha 0 is off.",
+                Note = "The line around the window content, as #aarrggbb. An alpha of 0 turns it off.",
             },
             new(Frames, "frame.glass", "content_border_width", "Content border width", SettingKind.Real)
             {
@@ -312,7 +312,7 @@ internal static class SettingsCatalog
             new(Effects, "effects", "blur_kernel", "Client blur", SettingKind.Choice)
             {
                 Default = "\"kawase\"", Choices = ["kawase", "vista", "smol"], Group = "Window appearance",
-                Note = "vista is Aero glass's blur, which has no strength of its own. smol is a Gaussian as wide as the strength.",
+                Note = "The vista blur copies Aero glass and has no strength of its own. The smol blur is a Gaussian blur as wide as the strength.",
             },
             new(Effects, "effects", "post", "Post stages", SettingKind.Names)
             {
@@ -351,7 +351,7 @@ internal static class SettingsCatalog
             new(Effects, "effects", "rotate_release", "Twist release", SettingKind.Choice)
             {
                 Default = "\"exact\"", Choices = ["exact", "spin"], Group = "Rotation",
-                Note = "Exact keeps the angle the fingers left. Spin carries their speed; stop-spin or a grab catches it.",
+                Note = "Exact keeps the angle where your fingers stopped. Spin keeps turning at their speed until stop-spin or a grab stops it.",
             },
 
             new(Canvas, "canvas", "enable", "Canvas", SettingKind.Flag) { Default = "false" },
@@ -400,10 +400,10 @@ internal static class SettingsCatalog
             new(Touch, "touch", "titlebar_twist", "Twist with a finger on the titlebar", SettingKind.Flag) { Default = "true" },
             new(Touch, "touch", "window_twist", "Fingers that twist a window anywhere", SettingKind.Integer)
             {
-                Default = "3", Min = 0, Max = 5, Note = "0 turns it off; 1 and 2 are refused, since apps own them.",
+                Default = "3", Min = 0, Max = 5, Note = "0 turns it off. 1 and 2 are taken by apps, so you can't use them.",
             },
             new(Touch, "touch", "hold_move", "Hold two fingers, then slide, to move", SettingKind.Flag) { Default = "true" },
-            new(Touch, "touch", "hold_ms", "Hold before a move, ms", SettingKind.Integer) { Default = "300", Min = 50, Max = 2000 },
+            new(Touch, "touch", "hold_ms", "Hold before a move (ms)", SettingKind.Integer) { Default = "300", Min = 50, Max = 2000 },
             new(Touch, "touch", "hold_move_turn", "Turn while moving", SettingKind.Flag) { Default = "true" },
             new(Physics, "physics", "enable", "Physics", SettingKind.Flag) { Default = "false" },
             new(Physics, "physics", "engine", "Engine", SettingKind.Choice) { Default = "\"bepu\"", Choices = PhysicsSetting.EngineNames },
@@ -501,7 +501,7 @@ internal static class SettingsCatalog
         new(section, table, "glow_path", "Glow path", SettingKind.Choice)
         {
             Default = "\"auto\"", Choices = ["auto", "shader", "halo", "none"], Group = GridEffectsGroup,
-            Note = "Auto draws the shader glow where the renderer compiles it and the halo elsewhere.",
+            Note = "Auto uses the shader glow when your renderer supports it, and the halo otherwise.",
         },
         new(section, table, "highlight_color", "Highlight color", SettingKind.Color) { Default = "\"#e8ecff\"", Group = GridEffectsGroup },
         new(section, table, "highlight_radius", "Highlight radius", SettingKind.Real)
@@ -539,7 +539,7 @@ internal static class SettingsCatalog
         new(section, table, "pinch", "Pinch", SettingKind.Real)
         {
             Default = "0.0", Min = -0.9, Max = 4, Step = 0.05, Group = GridEffectsGroup,
-            Note = "Extra fan toward a moved or fast window. The step overview takes 0 to 0.7.",
+            Note = "Bends the grid toward a moved or fast window. The step overview uses 0 to 0.7.",
         },
         new(section, table, "pinch_reach", "Pinch reach", SettingKind.Real)
         {

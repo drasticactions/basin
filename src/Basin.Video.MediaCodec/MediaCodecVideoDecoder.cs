@@ -53,6 +53,6 @@ public sealed class MediaCodecVideoDecoder : IVideoDecoder
         VideoCodec.H264 => "video/avc",
         VideoCodec.Vp9 => "video/x-vnd.on2.vp9",
         VideoCodec.Av1 => "video/av01",
-        _ => throw new ArgumentOutOfRangeException(nameof(codec)),
+        _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, "The codec is not supported."),
     };
 }

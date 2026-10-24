@@ -257,7 +257,7 @@ public sealed class OutputState : IDisposable
     {
         if (matrix is { Length: not 9 })
         {
-            throw new ArgumentException("a CTM is 9 row-major coefficients", nameof(matrix));
+            throw new ArgumentException("A CTM must have 9 row-major coefficients.", nameof(matrix));
         }
 
         Ctm = matrix;
@@ -310,7 +310,7 @@ public sealed class OutputState : IDisposable
     {
         if (percent > 100)
         {
-            throw new ArgumentOutOfRangeException(nameof(percent), "overscan is a percentage from 0 to 100");
+            throw new ArgumentOutOfRangeException(nameof(percent), "The overscan must be a percentage from 0 to 100.");
         }
 
         Overscan = percent;
@@ -340,7 +340,7 @@ public sealed class OutputState : IDisposable
     {
         if (sharpness > 10000)
         {
-            throw new ArgumentOutOfRangeException(nameof(sharpness), "sharpness runs from 0 to 10000");
+            throw new ArgumentOutOfRangeException(nameof(sharpness), "The sharpness must be from 0 to 10000.");
         }
 
         Sharpness = sharpness;
@@ -357,7 +357,7 @@ public sealed class OutputState : IDisposable
     {
         if (level > 4)
         {
-            throw new ArgumentOutOfRangeException(nameof(level), "the abm level runs from 0 to 4");
+            throw new ArgumentOutOfRangeException(nameof(level), "The ABM level must be from 0 to 4.");
         }
 
         AbmLevel = level;

@@ -202,7 +202,7 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
 
             if (Trigger(name.AppId, name.Id, pressed: true, now))
             {
-                Log.Info($"global shortcut {name.AppId}:{name.Id} fired");
+                Log.Debug($"global shortcut {name.AppId}:{name.Id} fired");
                 _held = (name.AppId, name.Id, key, info.Flags);
                 return (info.Flags & GlobalShortcutFlags.NoBlock) == 0;
             }
@@ -232,11 +232,11 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
             _bound.Remove(key);
             if (string.IsNullOrEmpty(shortcut.PreferredTrigger))
             {
-                Log.Info($"global shortcut {key.AppId}:{key.Id} registered with no preferred trigger or compositor row and never fires");
+                Log.Info($"global shortcut {key.AppId}:{key.Id} has no preferred trigger and no compositor binding, it stays unbound");
             }
             else
             {
-                Log.Info($"global shortcut {key.AppId}:{key.Id} asked for {shortcut.PreferredTrigger}, which is taken or unparseable, and stays unbound");
+                Log.Info($"global shortcut {key.AppId}:{key.Id} trigger {shortcut.PreferredTrigger} is taken or not valid, it stays unbound");
             }
         }
 

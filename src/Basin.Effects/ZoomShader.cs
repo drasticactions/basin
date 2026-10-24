@@ -66,7 +66,7 @@ public static class ZoomShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(ZoomShader).Assembly.GetManifestResourceStream("zoom.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource zoom.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource zoom.frag.spv is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

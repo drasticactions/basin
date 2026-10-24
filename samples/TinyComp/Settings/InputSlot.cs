@@ -44,7 +44,7 @@ internal sealed class InputSlot(SettingsDraft draft, InputMatch match, InputSett
             if (!InputSettingNames.TryParse(setting, value, out var parsed))
             {
                 var words = InputSettingNames.Words(setting);
-                draft.SetError(path, words.Length > 0 ? $"One of {string.Join(", ", words.ToArray())}." : $"Not a value {_key} takes.");
+                draft.SetError(path, words.Length > 0 ? $"Choose {(words.Length == 1 ? words[0] : $"{string.Join(", ", words[..^1].ToArray())} or {words[^1]}")}." : $"{_key} can't take this value.");
                 return;
             }
 

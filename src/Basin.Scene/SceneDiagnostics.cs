@@ -163,7 +163,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         Collect(_scene.Root, path, found);
         if (found.Count != 1)
         {
-            error = found.Count == 0 ? $"no node at '{path}'" : $"'{path}' names {found.Count} nodes; name one with DebugName";
+            error = found.Count == 0 ? $"No node is at '{path}'." : $"'{path}' names {found.Count} nodes. Give the node you want a unique DebugName.";
             return null;
         }
 
@@ -252,12 +252,12 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         ArgumentNullException.ThrowIfNull(done);
         if (_outputs is null)
         {
-            return "no presented outputs to record from";
+            return "No output has presented a frame yet. Record after the first frame.";
         }
 
         if (request.Frames <= 0)
         {
-            return "the frame count must be at least 1";
+            return "The frame count must be 1 or more.";
         }
 
         SceneOutput? view = null;
@@ -266,7 +266,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         {
             if (follow() is not { } scene || scene.IsEmpty)
             {
-                return "the target has no bounds to record";
+                return "The target has no size, so there is nothing to record.";
             }
 
             var centerX = scene.X + (scene.Width / 2);
@@ -284,7 +284,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
 
             if (view is null)
             {
-                return "the target is on no output";
+                return "The target is not on an output. Show it on an output, then record it.";
             }
 
             region = Physical(view, scene);
@@ -302,7 +302,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
 
             if (view is null)
             {
-                return request.Output is null ? "no output to record" : $"no output '{request.Output}'";
+                return request.Output is null ? "No output is available to record." : $"No output is named '{request.Output}'. Call outputs/list for the names.";
             }
 
             region = request.Region;
@@ -310,7 +310,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
 
         if (region.IsEmpty)
         {
-            return "the region must not be empty";
+            return "The region is empty. Give a region with a width and a height.";
         }
 
         _recording?.Finish(timedOut: true);

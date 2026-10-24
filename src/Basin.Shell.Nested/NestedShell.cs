@@ -543,7 +543,7 @@ public sealed partial class NestedShell : IDisposable
             }
             catch (Exception error) when (error is MetacityThemeException or IOException or FormatException)
             {
-                NestedLog.Log.Error($"the frame theme was not changed: {error.Message}");
+                NestedLog.Log.Warn(error, $"theme: cannot load the frame theme, the previous theme is kept");
             }
         }
 
@@ -1496,7 +1496,7 @@ public sealed partial class NestedShell : IDisposable
     }
 
     internal void OnFrameFaulted(ManagedWindow window, Exception error) =>
-        NestedLog.Log.Error($"the frame of '{window.Title}' failed: {error.Message}");
+        NestedLog.Log.Error(error, $"frame: the frame of '{window.Title}' failed");
 
     /// <summary>
     /// Focuses and raises a window and opens its window menu. It does nothing for a window that is not mapped or has no frame.

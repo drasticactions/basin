@@ -33,7 +33,7 @@ internal sealed class DmabufSupport : IDisposable
         var fd = open(renderNode, ORdwr | OCloexec);
         if (fd < 0)
         {
-            log.Info($"dmabuf capture off: {renderNode} did not open (errno {Marshal.GetLastPInvokeError()})");
+            log.Info($"dmabuf: capture off, {renderNode} did not open (errno {Marshal.GetLastPInvokeError()})");
             return null;
         }
 
@@ -44,7 +44,7 @@ internal sealed class DmabufSupport : IDisposable
         }
         catch (Exception e) when (e is GbmException or DllNotFoundException or EntryPointNotFoundException)
         {
-            log.Info($"dmabuf capture off: no GBM device on {renderNode}: {e.Message}");
+            log.Info(e, $"dmabuf: capture off, no GBM device on {renderNode}");
         }
 
         if (gbm is null)
@@ -54,7 +54,7 @@ internal sealed class DmabufSupport : IDisposable
         }
 
         var allocator = new GbmAllocator(gbm, importable);
-        log.Info($"dmabuf capture on: {renderNode}, {importable.Count} format(s)");
+        log.Info($"dmabuf: capture on, {renderNode}, {importable.Count} format(s)");
         return new DmabufSupport(fd, gbm, allocator);
     }
 

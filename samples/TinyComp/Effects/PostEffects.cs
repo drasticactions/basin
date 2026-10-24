@@ -200,7 +200,7 @@ internal sealed class PostEffects : IDisposable
         if (!_warned)
         {
             _warned = true;
-            _log.Warn($"{_rendererName} compiles no pixel shader dialect; the {name} post stage is ignored");
+            _log.Warn($"effects: {_rendererName} has no pixel shaders, the {name} post stage is ignored");
         }
     }
 }

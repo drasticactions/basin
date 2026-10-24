@@ -185,7 +185,7 @@ public sealed class ColorRepresentationManager : IDisposable
 
             if (!_claimed.Add(surface))
             {
-                manager.PostError(ErrorSurfaceExists, "surface already has a color representation object");
+                manager.PostError(ErrorSurfaceExists, "The surface already has a color representation object.");
                 return;
             }
 
@@ -197,7 +197,7 @@ public sealed class ColorRepresentationManager : IDisposable
             {
                 if (inert)
                 {
-                    resource.PostError(ErrorInert, "the surface this object was created for is gone");
+                    resource.PostError(ErrorInert, "The surface of this object is destroyed.");
                     return null;
                 }
 

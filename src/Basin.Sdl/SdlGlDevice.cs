@@ -32,7 +32,7 @@ public sealed class SdlGlDevice : ISdlRenderDevice
 
         if (!SDL.GLLoadLibrary(null))
         {
-            throw new InvalidOperationException($"SDL_GL_LoadLibrary failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_GL_LoadLibrary failed with \"{SDL.GetError()}\".");
         }
 
         _ = SDL.GLSetAttribute(SDL.GLAttr.RedSize, 8);
@@ -97,7 +97,7 @@ public sealed class SdlGlDevice : ISdlRenderDevice
         _glContext = SDL.GLCreateContext(window.Handle);
         if (_glContext == 0)
         {
-            throw new InvalidOperationException($"SDL_GL_CreateContext failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_GL_CreateContext failed with \"{SDL.GetError()}\".");
         }
 
         _ = SDL.GLMakeCurrent(window.Handle, _glContext);
@@ -124,7 +124,7 @@ public sealed class SdlGlDevice : ISdlRenderDevice
             HasBufferAge = SdlEgl.HasBufferAge(EglDisplay);
         }
 
-        Log.Info($"GL lease on {SDL.GetCurrentVideoDriver()}: egl={(EglDisplay != 0 ? "yes" : "no")} buffer-age={(HasBufferAge ? "yes" : "no")}");
+        Log.Info($"gl: lease on the {SDL.GetCurrentVideoDriver()} driver, egl={(EglDisplay != 0 ? "yes" : "no")} buffer-age={(HasBufferAge ? "yes" : "no")}");
     }
 
     internal bool MakeCurrent(SdlWindow window) => SDL.GLMakeCurrent(window.Handle, _glContext);

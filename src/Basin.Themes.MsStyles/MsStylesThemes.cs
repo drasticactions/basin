@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Basin.Freedesktop;
 
 namespace Basin.Themes.MsStyles;
@@ -7,6 +8,8 @@ namespace Basin.Themes.MsStyles;
 /// </summary>
 public static class MsStylesThemes
 {
+    private static readonly BasinLogger Log = BasinLog.For("msstyles");
+
     /// <summary>
     /// The file name extension of a visual style.
     /// </summary>
@@ -135,14 +138,9 @@ public static class MsStylesThemes
                 var (colors, sizes) = MsStylesTheme.ReadNames(path);
                 entries.Add(new MsStylesThemeEntry(name, path, colors, sizes));
             }
-            catch (MsStylesFormatException)
+            catch (Exception error) when (error is MsStylesFormatException or IOException or UnauthorizedAccessException)
             {
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
+                Log.Debug(error, $"themes: {path} skipped");
             }
         }
 

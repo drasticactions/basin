@@ -17,7 +17,7 @@ internal sealed partial class DungeonWm
         var loaded = DungeonWmConfig.Load(path, none: false, _log, out _, out var fatal);
         if (fatal is not null)
         {
-            _log.Warn($"reload failed, keeping the running config: {fatal}");
+            _log.Warn($"config: reload failed, the running config stays: {fatal}");
             BasinReport.Line("RELOAD failed");
             return;
         }

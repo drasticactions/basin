@@ -177,7 +177,7 @@ internal sealed class LauncherState
         return file;
     }
 
-    public static LauncherFile? Read(string path, out string? error)
+    public static LauncherFile? Read(string path, out Exception? error)
     {
         error = null;
         try
@@ -192,12 +192,12 @@ internal sealed class LauncherState
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
-            error = exception.Message;
+            error = exception;
             return null;
         }
     }
 
-    public bool Write(string path, out string? error)
+    public bool Write(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out Exception? error)
     {
         error = null;
         try
@@ -214,7 +214,7 @@ internal sealed class LauncherState
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            error = exception.Message;
+            error = exception;
             return false;
         }
     }

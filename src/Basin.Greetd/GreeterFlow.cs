@@ -513,7 +513,7 @@ public sealed class GreeterFlow : IDisposable
 
             if (homed.Reason is { } reason)
             {
-                _options.Log.Debug($"{reason}");
+                _options.Log.Debug($"users: no homed users listed, {reason}");
             }
 
             if (homed.Uids.Count > 0)
@@ -599,7 +599,7 @@ public sealed class GreeterFlow : IDisposable
         var names = KeymapNames.Parse(id);
         if (_keyboard is not { } keyboard || !keyboard.KeymapSource.TryCompile(names, out _))
         {
-            _options.Log.Warn($"keyboard layout {id} does not compile; the keymap is unchanged");
+            _options.Log.Warn($"layout: {id} does not compile, the keymap is unchanged");
             Step(new GreeterStep(GreeterStepKind.LayoutFailed, id));
             return false;
         }
@@ -682,6 +682,7 @@ public sealed class GreeterFlow : IDisposable
                 Phase = GreeterPhase.Error;
                 Error = login.FailureDescription ?? "";
                 ErrorNeedsDismiss = true;
+                _options.Log.Warn($"login: greetd failed the login, {Error}");
                 Step(new GreeterStep(GreeterStepKind.Failed, Error));
                 break;
         }

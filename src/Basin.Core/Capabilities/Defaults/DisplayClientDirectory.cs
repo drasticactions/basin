@@ -40,6 +40,7 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         }
         catch (NotSupportedException)
         {
+            CoreLog.Log.Debug($"clients: the transport does not list clients");
         }
 
         try
@@ -48,6 +49,7 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         }
         catch (NotSupportedException)
         {
+            CoreLog.Log.Debug($"clients: the transport does not report new clients");
         }
     }
 
@@ -126,6 +128,7 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         }
         catch (NotSupportedException)
         {
+            CoreLog.Log.Debug($"clients: the transport does not list clients");
         }
 
         _clients.Clear();
@@ -185,7 +188,7 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         }
         catch (Exception error)
         {
-            BasinLog.For("clients").Warn($"walking a client's objects failed: {error.Message}");
+            CoreLog.Log.Error(error, $"clients: object walk failed");
         }
 
         return IteratorContinue;

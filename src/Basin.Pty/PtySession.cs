@@ -140,7 +140,7 @@ public sealed class PtySession : IDisposable
             {
                 if (errno != PtyNative.EAgain)
                 {
-                    Log.Debug($"write to pid {ProcessId}'s terminal failed: errno {errno}");
+                    Log.Debug($"pid {ProcessId}: terminal write failed, errno {errno}");
                     return;
                 }
 
@@ -266,7 +266,7 @@ public sealed class PtySession : IDisposable
         _pidfd = PtyNative.PidfdOpenOf(ProcessId);
         if (_pidfd < 0)
         {
-            Log.Debug($"pidfd_open({ProcessId}) failed; the child is reaped after its terminal closes");
+            Log.Debug($"pid {ProcessId}: pidfd_open failed, the child is reaped after its terminal closes");
             return;
         }
 
@@ -289,7 +289,7 @@ public sealed class PtySession : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"a terminal observer failed: {exception}");
+            Log.Error(exception, $"pid {ProcessId}: a terminal observer failed");
         }
     }
 
@@ -314,7 +314,7 @@ public sealed class PtySession : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"a terminal observer failed: {exception}");
+            Log.Error(exception, $"pid {ProcessId}: a terminal observer failed");
         }
     }
 
@@ -345,7 +345,7 @@ public sealed class PtySession : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"a terminal observer failed: {exception}");
+            Log.Error(exception, $"pid {ProcessId}: a terminal observer failed");
         }
     }
 
@@ -392,7 +392,7 @@ public sealed class PtySession : IDisposable
 
             if (count < 0 && errno != PtyNative.EIo)
             {
-                Log.Debug($"read from pid {ProcessId}'s terminal failed: errno {errno}");
+                Log.Debug($"pid {ProcessId}: terminal read failed, errno {errno}");
             }
 
             OnEof();
@@ -467,7 +467,7 @@ public sealed class PtySession : IDisposable
                     return;
                 }
 
-                Log.Debug($"write to pid {ProcessId}'s terminal failed: errno {errno}");
+                Log.Debug($"pid {ProcessId}: terminal write failed, errno {errno}");
                 _pendingLength = 0;
                 break;
             }

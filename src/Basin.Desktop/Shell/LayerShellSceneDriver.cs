@@ -201,7 +201,7 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         ArgumentNullException.ThrowIfNull(shell);
         if (_trackingPopups)
         {
-            throw new InvalidOperationException("popups are already tracked");
+            throw new InvalidOperationException("Popups are already tracked. Track them one time only.");
         }
 
         _trackingPopups = true;
@@ -451,7 +451,7 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     {
         if (_shell is not null)
         {
-            throw new InvalidOperationException("this layer-shell driver already drives a layer shell");
+            throw new InvalidOperationException("This layer-shell driver already drives a layer shell. Use one driver for each layer shell.");
         }
 
         _shell = shell;

@@ -178,7 +178,7 @@ internal sealed partial class Greeter
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            _log.Debug($"{path}: {error.Message}");
+            _log.Debug(error, $"avatar: cannot load {path}");
             return null;
         }
     }

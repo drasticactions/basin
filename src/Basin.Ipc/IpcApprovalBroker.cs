@@ -55,17 +55,17 @@ public sealed class IpcApprovalBroker : IApprovalBroker
     {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(reason);
-        var server = _server ?? throw new InvalidOperationException("the broker answers once its server starts");
+        var server = _server ?? throw new InvalidOperationException("The broker has no server. Start the server first.");
         var approval = new IpcApproval(++_nextId, call, reason);
         if (!server.Events.HasSubscribers(IpcEventNames.ApprovalRequested) && Requested is null)
         {
-            Finish(approval, IpcApprovalAnswer.NoAnswerer, "no connection is subscribed to approval/requested to answer, so the call is denied");
+            Finish(approval, IpcApprovalAnswer.NoAnswerer, "The call is denied because no connection subscribes to approval/requested. Subscribe a client that can answer.");
             return approval;
         }
 
         _pending[approval.Id] = approval;
         approval.Timer = server.Loop.AddTimer(() => Finish(
-            approval, IpcApprovalAnswer.TimedOut, $"no one answered within {Timeout.TotalSeconds:0.#} s, so the call is denied"));
+            approval, IpcApprovalAnswer.TimedOut, $"The call is denied because no one answered within {Timeout.TotalSeconds:0.#} s."));
         approval.Timer.UpdateTimer((int)Math.Clamp(Timeout.TotalMilliseconds, 1, int.MaxValue));
         server.Events.Emit(
             IpcEventNames.ApprovalRequested,
@@ -77,7 +77,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
         }
         catch (Exception exception)
         {
-            Log.Error($"an approval observer failed: {exception}");
+            Log.Error(exception, $"approval: observer failed");
         }
 
         return approval;
@@ -94,7 +94,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
     {
         if (answer is not (IpcApprovalAnswer.AllowOnce or IpcApprovalAnswer.AllowRun or IpcApprovalAnswer.Deny))
         {
-            throw new ArgumentOutOfRangeException(nameof(answer), "an answer is allow once, allow for the run, or deny");
+            throw new ArgumentOutOfRangeException(nameof(answer), "The answer must be allow once, allow for the run, or deny.");
         }
 
         if (!_pending.TryGetValue(id, out var approval))
@@ -102,7 +102,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
             return false;
         }
 
-        Finish(approval, answer, "a person denied the call");
+        Finish(approval, answer, "A person denied the call.");
         return true;
     }
 
@@ -110,7 +110,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
     {
         if (_server is not null && !ReferenceEquals(_server, server))
         {
-            throw new InvalidOperationException("a broker serves one server");
+            throw new InvalidOperationException("The broker already serves a server. A broker serves one server only.");
         }
 
         _server = server;
@@ -120,7 +120,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
     {
         foreach (var approval in _pending.Values.ToArray())
         {
-            Finish(approval, IpcApprovalAnswer.Deny, "the compositor stopped");
+            Finish(approval, IpcApprovalAnswer.Deny, "The compositor stopped.");
         }
 
         _server = null;
@@ -155,7 +155,7 @@ public sealed class IpcApprovalBroker : IApprovalBroker
         }
         catch (Exception exception)
         {
-            Log.Error($"an approval observer failed: {exception}");
+            Log.Error(exception, $"approval: observer failed");
         }
     }
 }

@@ -65,11 +65,9 @@ internal static class MimeApps
                 }
             }
         }
-        catch (IOException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            Basin.Diagnostics.BasinLog.For("LunaWm").Debug(error, $"mime: cannot read {file}");
         }
 
         return null;

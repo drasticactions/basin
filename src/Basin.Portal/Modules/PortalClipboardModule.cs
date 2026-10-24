@@ -44,7 +44,7 @@ public sealed class PortalClipboardModule : PortalModule, IClipboardHandler, ICl
             return true;
         }
 
-        Log.Info($"{WireInterface} not offered: neither RemoteDesktop nor InputCapture installed, and the clipboard rides on their sessions");
+        Log.Info($"{WireInterface} not offered, neither RemoteDesktop nor InputCapture is installed");
         return false;
     }
 
@@ -71,7 +71,7 @@ public sealed class PortalClipboardModule : PortalModule, IClipboardHandler, ICl
 
         if (carrier.IsStarted)
         {
-            Log.Info($"clipboard requested on session {carrier.Session.Id} after it started; ignored");
+            Log.Info($"clipboard: requested on session {carrier.Session.Id} after it started, ignored");
             return default;
         }
 
@@ -93,7 +93,7 @@ public sealed class PortalClipboardModule : PortalModule, IClipboardHandler, ICl
         var mimeTypes = Vardict.Strings(options, "mime_types");
         if (!clipboard.SetSelection(mimeTypes))
         {
-            throw PortalError.Denied("the selection was refused");
+            throw PortalError.Denied("The selection was refused.");
         }
 
         return default;
@@ -142,7 +142,7 @@ public sealed class PortalClipboardModule : PortalModule, IClipboardHandler, ICl
 
         if (!carrier.IsStarted || !carrier.Clipboard.Enabled)
         {
-            throw PortalError.Denied("clipboard access was not given to this session");
+            throw PortalError.Denied("This session has no clipboard access.");
         }
 
         carrier.Clipboard.Attach(_store);

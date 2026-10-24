@@ -31,4 +31,8 @@ internal sealed record SdlCompOptions
     public string? HyperVVm { get; init; }
 
     public bool Toplevels { get; init; }
+
+    public bool Headless { get; init; }
+
+    public string? RenderNode { get; init; }
 }

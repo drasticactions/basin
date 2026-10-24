@@ -147,7 +147,7 @@ public sealed class OutputScheduler : IDisposable
 
         if (_commitInFlight || _timerArmed || _idleQueued)
         {
-            Log.Debug($"scheduler: repaint queued (inFlight={_commitInFlight} timer={_timerArmed})");
+            Log.Trace($"scheduler: repaint queued (inFlight={_commitInFlight} timer={_timerArmed})");
             return;
         }
 
@@ -425,17 +425,17 @@ public sealed class OutputScheduler : IDisposable
                 var gapNanos = skipped ? _lastFrameNanos - previousFrame : 0;
                 if (_fireLateNanos > LateFireNanos)
                 {
-                    Log.Debug($"scheduler: missed vblank; the repaint fired {_fireLateNanos / 1_000_000} ms late, lead kept");
+                    Log.Debug($"scheduler: vblank missed, repaint {_fireLateNanos / 1_000_000} ms late, lead kept");
                 }
                 else if (flipNanos > interval * 3 || gapNanos > interval * 3)
                 {
-                    Log.Debug($"scheduler: missed vblank; the flip came {Math.Max(flipNanos, gapNanos) / 1_000_000} ms late, lead kept");
+                    Log.Debug($"scheduler: vblank missed, flip {Math.Max(flipNanos, gapNanos) / 1_000_000} ms late, lead kept");
                 }
                 else
                 {
                     _leadBoostNanos = Math.Min(Math.Min(_leadBoostNanos, interval) + 3_000_000, interval);
                     _everMissed = true;
-                    Log.Debug($"scheduler: missed vblank; lead boost {_leadBoostNanos / 1_000_000} ms");
+                    Log.Debug($"scheduler: vblank missed, lead boost {_leadBoostNanos / 1_000_000} ms");
                 }
             }
             else if (_leadBoostNanos > 0 && ++_onTimeStreak >= (_everMissed ? 600 : 120))
@@ -453,7 +453,7 @@ public sealed class OutputScheduler : IDisposable
         }
         else if (_repaintQueued && !_disposed && !_timerArmed && !_idleQueued)
         {
-            Log.Debug($"scheduler: flip; deadline armed");
+            Log.Trace($"scheduler: flip, deadline armed");
             if (!TryArmDeadline())
             {
                 QueueIdle();
@@ -479,7 +479,7 @@ public sealed class OutputScheduler : IDisposable
 
     private void OnTimer()
     {
-        Log.Debug($"scheduler: timer fired (queued={_repaintQueued})");
+        Log.Trace($"scheduler: timer fired (queued={_repaintQueued})");
         _timerArmed = false;
         if (_scopedFires < 10)
         {

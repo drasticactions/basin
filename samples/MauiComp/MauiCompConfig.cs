@@ -52,7 +52,7 @@ internal sealed class MauiCompConfig
 
     private static Stream TemplateStream() =>
         typeof(MauiCompConfig).Assembly.GetManifestResourceStream("maui-comp.toml")
-            ?? throw new InvalidOperationException("maui-comp.toml is not embedded");
+            ?? throw new InvalidOperationException("The maui-comp.toml template is not embedded in the program.");
 
     private void Apply(TomlReader reader)
     {
@@ -74,7 +74,7 @@ internal sealed class MauiCompConfig
             BlurStrength = Math.Clamp(strength, 1, Basin.Effects.BlurStrength.Steps);
             if (strength != BlurStrength)
             {
-                reader.Log.Warn($"[blur] strength is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {strength} reads as {BlurStrength}");
+                reader.Log.Warn($"[blur] strength {strength} is outside 1 to {Basin.Effects.BlurStrength.Steps}, {BlurStrength} is used");
             }
 
             BlurTaskbar = blur.Flag("taskbar", BlurTaskbar);

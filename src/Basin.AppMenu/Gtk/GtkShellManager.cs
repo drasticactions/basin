@@ -142,7 +142,7 @@ public sealed class GtkShellManager : IDisposable
         {
             if ((uint)e.Gesture is < 1 or > 3)
             {
-                gtk.PostError((uint)GtkSurface1.Error.InvalidGesture, "unknown titlebar gesture");
+                gtk.PostError((uint)GtkSurface1.Error.InvalidGesture, "The titlebar gesture is not known.");
                 return;
             }
 

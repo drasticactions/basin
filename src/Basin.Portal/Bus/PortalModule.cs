@@ -62,7 +62,7 @@ public abstract class PortalModule : IProtocolModule, IDisposable
             return true;
         }
 
-        Log.Info($"{WireInterface} not offered: this session has no D-Bus session bus (DBUS_SESSION_BUS_ADDRESS is unset)");
+        Log.Info($"{WireInterface} not offered, DBUS_SESSION_BUS_ADDRESS is unset");
         return false;
     }
 
@@ -190,7 +190,7 @@ public abstract class PortalModule : IProtocolModule, IDisposable
     /// </summary>
     /// <exception cref="InvalidOperationException">The module is not installed or the bus is not connected.</exception>
     protected DBusConnection Connection =>
-        _bus?.Connection ?? throw new InvalidOperationException("the portal bus is not connected");
+        _bus?.Connection ?? throw new InvalidOperationException("The portal bus is not connected.");
 
     /// <summary>
     /// Registers a request object on the bus. The caller must give it back to <see cref="ReleaseRequest"/> when the method replies.
@@ -199,7 +199,7 @@ public abstract class PortalModule : IProtocolModule, IDisposable
     /// <returns>The request whose token the frontend can cancel.</returns>
     /// <exception cref="InvalidOperationException">The module is not installed.</exception>
     protected PortalRequest TrackRequest(ObjectPath handle) =>
-        _bus?.Track(handle) ?? throw new InvalidOperationException("the portal bus is not connected");
+        _bus?.Track(handle) ?? throw new InvalidOperationException("The portal bus is not connected.");
 
     /// <summary>
     /// Removes and disposes a request from <see cref="TrackRequest"/>. It does nothing when the module is not installed.

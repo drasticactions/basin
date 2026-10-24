@@ -572,11 +572,11 @@ internal sealed partial class LunaShell
         var pid = card.X11 is not null ? 0 : card.Pid;
         if (pid <= 0 || pid == Environment.ProcessId)
         {
-            _log.Debug($"no pid for {card.AppId}; it is not killed");
+            _log.Debug($"windows: no pid for {card.AppId}, not killed");
             return;
         }
 
-        _log.Info($"{card.AppId} did not close in {_config.CloseTimeoutMs}ms; killing pid {pid}");
+        _log.Info($"windows: {card.AppId} did not close in {_config.CloseTimeoutMs} ms, killing pid {pid}");
         try
         {
             System.Diagnostics.Process.GetProcessById(pid).Kill(entireProcessTree: false);
@@ -584,7 +584,7 @@ internal sealed partial class LunaShell
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
         {
-            _log.Debug($"pid {pid} was gone already");
+            _log.Debug(error, $"windows: pid {pid} was gone already");
         }
     }
 
@@ -700,6 +700,6 @@ internal sealed partial class LunaShell
             return;
         }
 
-        _log.Warn($"cannot start '{command}': {error}");
+        _log.Warn($"launch: cannot start '{command}': {error}");
     }
 }

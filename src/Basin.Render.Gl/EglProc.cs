@@ -16,7 +16,7 @@ internal static unsafe class EglProc
             var proc = Libegl.eglGetProcAddress((sbyte*)bytesPtr);
             if (proc is null)
             {
-                throw new InvalidOperationException($"{name} unavailable");
+                throw new InvalidOperationException($"EGL has no entry point {name}.");
             }
 
             return proc;

@@ -21,10 +21,10 @@ internal sealed class FrameTheme : IDisposable
     {
         FontSize = fontSize;
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("NotoSansCJK-Regular.ttc")
-            ?? throw new InvalidOperationException("embedded frame font missing");
+            ?? throw new InvalidOperationException("The embedded frame font is missing.");
         using var data = SKData.Create(stream);
         Typeface = SkiaTypefaces.FromCollection(data, "Noto Sans CJK JP")
-            ?? throw new InvalidOperationException("embedded font has no 'Noto Sans CJK JP' face");
+            ?? throw new InvalidOperationException("The embedded font has no 'Noto Sans CJK JP' face.");
         TitleFont = SkiaCensus.Track(new SKFont(Typeface, fontSize) { Subpixel = true });
         BadgeFont = SkiaCensus.Track(new SKFont(Typeface, MathF.Round(fontSize * 11 / 14)) { Subpixel = true });
         TabFont = SkiaCensus.Track(new SKFont(Typeface, MathF.Round(fontSize * 12 / 14)) { Subpixel = true, Embolden = true });

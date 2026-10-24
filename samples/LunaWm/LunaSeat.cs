@@ -274,7 +274,7 @@ internal sealed class LunaSeat :
     {
         if (!_seat.Keyboard.TryKeycodeForKeysym(keysym, out var keycode, out _))
         {
-            _log.Debug($"no key in the keymap makes keysym 0x{keysym:x}");
+            _log.Debug($"keyboard: no key in the keymap makes keysym 0x{keysym:x}");
             return;
         }
 

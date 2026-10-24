@@ -580,7 +580,7 @@ public sealed class RiverLibinputConfig : IDisposable
 
             if (value.Count == 0)
             {
-                resource.PostError((uint)RiverLibinputDeviceV1.Error.InvalidArg, "invalid array argument");
+                resource.PostError((uint)RiverLibinputDeviceV1.Error.InvalidArg, "The array argument is not valid.");
                 return;
             }
 
@@ -639,7 +639,7 @@ public sealed class RiverLibinputConfig : IDisposable
                 var values = ReadDoubles(points.Points);
                 if (step.Count == 0 || values is null || (uint)points.Type > (uint)InputAccelCurveType.Scroll)
                 {
-                    curve.PostError((uint)RiverLibinputAccelConfigV1.Error.InvalidArg, "invalid set_points argument");
+                    curve.PostError((uint)RiverLibinputAccelConfigV1.Error.InvalidArg, "The set_points argument is not valid.");
                     return;
                 }
 

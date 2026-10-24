@@ -254,7 +254,7 @@ internal sealed class RiverBindings : IDisposable
             {
                 resource.PostError(
                     (uint)RiverXkbBindingsV1.Error.ObjectAlreadyCreated,
-                    "this seat already has a river_xkb_bindings_seat_v1");
+                    "This seat already has a river_xkb_bindings_seat_v1.");
                 return;
             }
 

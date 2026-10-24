@@ -62,7 +62,7 @@ internal static class Program
         scalerOption.AcceptOnlyFromAmong("fit", "integer", "fill", "stretch");
         var filterOption = cli.Add(new Option<string?>("--filter")
         {
-            Description = "beyond cage: how a scaled window is sampled; pixel is vulkan and gl only",
+            Description = "beyond cage: how a scaled window is sampled (pixel is vulkan and gl only)",
             HelpName = "linear|nearest|pixel",
         });
         filterOption.AcceptOnlyFromAmong("linear", "nearest", "pixel");
@@ -95,7 +95,7 @@ internal static class Program
         vrrOption.AcceptOnlyFromAmong("fullscreen", "always", "never");
         var inspectorOption = cli.Add(new Option<bool>("--inspector")
         {
-            Description = "beyond cage: open the inspector overlay at start; Super+F12 and the inspector/* methods drive it",
+            Description = "beyond cage: open the inspector overlay at start (Super+F12 and the inspector/* methods drive it)",
         });
         var subreaperOption = cli.Add(CommonOptions.Subreaper(defaultOn: true));
         subreaperOption.Description = "run the application under a reaper that adopts every orphan and ends the whole tree when the application exits";

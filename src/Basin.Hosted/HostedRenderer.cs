@@ -5,8 +5,8 @@ using SkiaSharp;
 namespace Basin.Hosted;
 
 /// <summary>
-/// A renderer that draws into a Skia canvas that the host view lends for each frame. It uses the raster Skia row for every draw.
-/// Only the thread that constructed it can use it.
+/// A renderer that draws into a Skia canvas that the host view lends for each frame, through the raster Skia row.
+/// Outside a frame it also draws into other buffers, for example capture targets. Only the thread that constructed it can use it.
 /// </summary>
 public sealed class HostedRenderer : IRenderer
 {
@@ -19,6 +19,11 @@ public sealed class HostedRenderer : IRenderer
     private bool _lost;
     private HostedEglImport? _eglImport;
     private readonly List<(uint Texture, nint Image, int Generation)> _pendingEglReleases = [];
+    private readonly HostedOffscreenPass _offscreenPass = new();
+    private GRContext? _offscreenContext;
+    private SKSurface? _offscreenSurface;
+    private int _offscreenWidth;
+    private int _offscreenHeight;
 
     /// <summary>
     /// Gets the count of times that <see cref="BindFrame"/> received a different <see cref="GRContext"/>.
@@ -130,6 +135,41 @@ public sealed class HostedRenderer : IRenderer
         return true;
     }
 
+    /// <summary>
+    /// Gets the GPU context that buffer passes outside a frame draw with. It is <see langword="null"/> until <see cref="UseOffscreenContext"/> sets one.
+    /// </summary>
+    public GRContext? OffscreenContext => _offscreenContext;
+
+    /// <summary>
+    /// Sets the GPU context that buffer passes outside a frame draw with, and makes it the context of dmabuf imports.
+    /// A pass on that context reads the pixels back into the target buffer. The context must be current on this thread for every later call.
+    /// </summary>
+    /// <param name="context">The GPU context, or <see langword="null"/> to draw those passes on the raster row again.</param>
+    public void UseOffscreenContext(GRContext? context)
+    {
+        _thread.Assert();
+        if (ReferenceEquals(context, _offscreenContext))
+        {
+            return;
+        }
+
+        DropOffscreenSurface();
+        _offscreenContext = context;
+        if (context is not null && !ReferenceEquals(context, _lastContext))
+        {
+            _lastContext = context;
+            _lost = false;
+            ContextGeneration++;
+            ContextReplaced?.Invoke();
+        }
+    }
+
+    private void DropOffscreenSurface()
+    {
+        SkiaCensus.Release(_offscreenSurface);
+        _offscreenSurface = null;
+    }
+
     private void FlushEglReleases()
     {
         if (_eglImport is null || _pendingEglReleases.Count == 0)
@@ -162,7 +202,7 @@ public sealed class HostedRenderer : IRenderer
         ArgumentNullException.ThrowIfNull(canvas);
         if (_canvas is not null)
         {
-            throw new InvalidOperationException("The previous frame was not unbound.");
+            throw new InvalidOperationException("The previous frame is still bound. Call UnbindFrame before binding a new frame.");
         }
 
         if (context is not null && context.IsAbandoned)
@@ -220,7 +260,8 @@ public sealed class HostedRenderer : IRenderer
     }
 
     /// <summary>
-    /// Imports a buffer as a texture. A dmabuf goes to <see cref="DmabufRenderer"/> or to the EGL import. Any other buffer goes to the raster Skia row.
+    /// Imports a buffer as a texture. A dmabuf goes to <see cref="DmabufRenderer"/>, or to the EGL import while a frame is bound or <see cref="OffscreenContext"/> is set.
+    /// Any other buffer, and a dmabuf outside those times, goes to the raster Skia row.
     /// </summary>
     /// <param name="buffer">The client buffer.</param>
     /// <returns>The texture, or <see langword="null"/> when the context is lost or no import path accepts the dmabuf format.</returns>
@@ -239,6 +280,11 @@ public sealed class HostedRenderer : IRenderer
                 return delegated.DmabufTextureFormats.Contains(attributes.Format)
                     ? delegated.ImportTexture(buffer)
                     : null;
+            }
+
+            if (_canvas is null && _offscreenContext is null)
+            {
+                return _raster.ImportTexture(buffer);
             }
 
             return _eglImport is { } egl && _lastContext is { } context && egl.Formats.Contains(attributes.Format)
@@ -262,6 +308,11 @@ public sealed class HostedRenderer : IRenderer
     public ColorTransformCapability ColorTransform => _raster.ColorTransform;
 
     /// <summary>
+    /// Gets a value indicating whether a pass outside a frame can draw into a half-float buffer. It follows the renderer that takes those passes.
+    /// </summary>
+    public bool RendersHalfFloat => _dmabufRenderer?.RendersHalfFloat ?? _raster.RendersHalfFloat;
+
+    /// <summary>
     /// Gets <see cref="RenderFencePrecision.None"/>, because the host owns the submission and the renderer exports no fence.
     /// </summary>
     public RenderFencePrecision FencePrecision => RenderFencePrecision.None;
@@ -274,23 +325,25 @@ public sealed class HostedRenderer : IRenderer
     public IColorLut? ImportLut(ColorLut3D lut) => _raster.ImportLut(lut);
 
     /// <summary>
-    /// Begins a pass on the bound canvas. It waits on the wait fence on the CPU and scales the canvas by the reciprocal of the target scale.
+    /// Begins a pass on the bound canvas, or into another buffer. It waits on the wait fence on the CPU.
+    /// A frame pass scales the canvas by the reciprocal of the target scale.
+    /// A pass into another buffer goes to <see cref="DmabufRenderer"/>, else to <see cref="OffscreenContext"/>, else to the raster Skia row.
     /// </summary>
-    /// <param name="target">The <see cref="HostedFrameTarget"/> of the frame.</param>
+    /// <param name="target">The <see cref="HostedFrameTarget"/> of the frame, or a buffer with CPU pixels.</param>
     /// <param name="options">The pass options. The wait fence and <see cref="RenderPassOptions.SolidColorLut"/> are read here.</param>
-    /// <returns>A raster Skia pass over the leased canvas.</returns>
-    /// <exception cref="InvalidOperationException">The target is not a <see cref="HostedFrameTarget"/>, or no frame is bound.</exception>
+    /// <returns>A raster Skia pass over the leased canvas, or a pass into the buffer.</returns>
+    /// <exception cref="InvalidOperationException">The target is a <see cref="HostedFrameTarget"/> and no frame is bound, or the target has no CPU pixels.</exception>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
         if (target is not HostedFrameTarget frame)
         {
-            throw new InvalidOperationException("This renderer draws into the bound lease; only an HostedFrameTarget names a frame.");
+            return BeginOffscreenPass(target, options);
         }
 
         if (_canvas is null)
         {
-            throw new InvalidOperationException("No lease is bound; call BindFrame before rendering.");
+            throw new InvalidOperationException("No lease is bound. Call BindFrame before rendering.");
         }
 
         RenderFences.WaitSyncFile(options.WaitFenceFd);
@@ -303,6 +356,37 @@ public sealed class HostedRenderer : IRenderer
         return _raster.BeginCanvasPass(target, _canvas, options.SolidColorLut);
     }
 
+    private IRenderPass BeginOffscreenPass(IBuffer target, in RenderPassOptions options)
+    {
+        if (_dmabufRenderer is { } delegated)
+        {
+            return delegated.BeginBufferPass(target, options);
+        }
+
+        if (_offscreenContext is not { } context || context.IsAbandoned)
+        {
+            return _raster.BeginBufferPass(target, options);
+        }
+
+        RenderFences.WaitSyncFile(options.WaitFenceFd);
+        if (_offscreenSurface is not { } surface || _offscreenWidth != target.Width || _offscreenHeight != target.Height)
+        {
+            DropOffscreenSurface();
+            var info = new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+            surface = SKSurface.Create(context, false, info)
+                ?? throw new InvalidOperationException($"Skia could not create a {target.Width}x{target.Height} GPU surface. The target is too large for the device.");
+            _offscreenSurface = SkiaCensus.Track(surface);
+            _offscreenWidth = target.Width;
+            _offscreenHeight = target.Height;
+        }
+
+        var canvas = surface.Canvas;
+        canvas.RestoreToCount(1);
+        canvas.ResetMatrix();
+        FlushEglReleases();
+        return _offscreenPass.Begin(_raster.BeginCanvasPass(target, canvas, options.SolidColorLut), surface, target);
+    }
+
     /// <summary>
     /// Unbinds a bound frame and releases the Skia resources of the renderer.
     /// </summary>
@@ -310,6 +394,13 @@ public sealed class HostedRenderer : IRenderer
     {
         _thread.Assert();
         UnbindFrame();
+        if (_offscreenContext is not null)
+        {
+            FlushEglReleases();
+        }
+
+        DropOffscreenSurface();
+        _offscreenContext = null;
         SkiaCensus.Release(_layerPaint);
         _raster.Dispose();
     }

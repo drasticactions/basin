@@ -116,7 +116,7 @@ public sealed unsafe class EisSender : IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"eis dispatch failed: {e.Message}");
+            Log.Warn(e, $"dispatch failed");
         }
     }
 
@@ -325,7 +325,7 @@ public sealed unsafe class EisSender : IDisposable
 
         if (client.IsSender)
         {
-            Log.Warn($"eis sender client {client.Name ?? "<unnamed>"} refused: a capture session only receives");
+            Log.Warn($"sender client {client.Name ?? "<unnamed>"} refused, a capture session only receives");
             client.Disconnect();
             client.Dispose();
             return;
@@ -333,7 +333,7 @@ public sealed unsafe class EisSender : IDisposable
 
         if (_client is not null)
         {
-            Log.Warn($"second eis client {client.Name ?? "<unnamed>"} refused");
+            Log.Warn($"second client {client.Name ?? "<unnamed>"} refused");
             client.Disconnect();
             client.Dispose();
             return;
@@ -347,7 +347,7 @@ public sealed unsafe class EisSender : IDisposable
             EiDeviceCapability.Keyboard);
         seat.Add();
         _seat = seat;
-        Log.Info($"eis client {client.Name ?? "<unnamed>"} connected");
+        Log.Info($"client {client.Name ?? "<unnamed>"} connected");
     }
 
     private void OnClientDisconnect(EisEvent @event)
@@ -365,7 +365,7 @@ public sealed unsafe class EisSender : IDisposable
         ours.Disconnect();
         ours.Dispose();
         _client = null;
-        Log.Info($"eis client disconnected");
+        Log.Info($"client disconnected");
     }
 
     private void OnSeatBind(EisSeatBindEvent bind)
@@ -469,7 +469,7 @@ public sealed unsafe class EisSender : IDisposable
             }
             catch (LibeiException e)
             {
-                Log.Warn($"eis keymap rejected: {e.Message}");
+                Log.Warn(e, $"keymap refused");
             }
         }
 

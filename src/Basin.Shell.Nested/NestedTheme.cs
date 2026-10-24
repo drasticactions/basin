@@ -24,7 +24,7 @@ public static class NestedTheme
     {
         if (name != Name)
         {
-            NestedLog.Log.Info($"theme '{name}' not found; using the built-in '{Name}' theme");
+            NestedLog.Log.Info($"theme: '{name}' not found, the built-in '{Name}' theme is used");
         }
 
         return Create(Name);
@@ -41,7 +41,7 @@ public static class NestedTheme
     {
         ArgumentException.ThrowIfNullOrEmpty(themeName);
         using var stream = typeof(NestedTheme).Assembly.GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"the embedded theme '{ResourceName}' is missing");
+            ?? throw new InvalidOperationException($"The embedded theme '{ResourceName}' is missing from the assembly.");
         return MetacityTheme.Parse(stream, directory: ".", majorVersion: 1, name: themeName);
     }
 }

@@ -55,7 +55,7 @@ public static class SoftKeyboardSessionIpc
                 var key = p.GetString("key");
                 if (!p.Failed && !(hooks.IsShown() && typer.TapCell(typer.Find(key), 100)))
                 {
-                    reply.Error(IpcErrorCodes.NotFound, hooks.IsShown() ? $"no key {key}" : "the keyboard is not shown");
+                    reply.Error(IpcErrorCodes.NotFound, hooks.IsShown() ? $"No key has the cap '{key}'. Use a letter, shift, space, backspace, return, sym, hide, lang, tab or .com." : "The keyboard is not shown. Show the keyboard first.");
                 }
             });
 
@@ -71,7 +71,7 @@ public static class SoftKeyboardSessionIpc
 
                 if (!hooks.IsShown())
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "the keyboard is not shown");
+                    reply.Error(IpcErrorCodes.InvalidParams, "The keyboard is not shown. Show the keyboard first.");
                     return;
                 }
 
@@ -81,7 +81,7 @@ public static class SoftKeyboardSessionIpc
                     var element = elements.GetTextElement();
                     if (!typer.TypeText(element))
                     {
-                        reply.Error(IpcErrorCodes.NotFound, $"no key types '{element}'");
+                        reply.Error(IpcErrorCodes.NotFound, $"No key on this layout types '{element}'.");
                         return;
                     }
                 }
@@ -101,7 +101,7 @@ public static class SoftKeyboardSessionIpc
                 var cell = typer.Find(key);
                 if (cell < 0 || !hooks.IsShown())
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no key {key}");
+                    reply.Error(IpcErrorCodes.NotFound, $"No key has the cap '{key}', or the keyboard is not shown.");
                     return;
                 }
 
@@ -124,7 +124,7 @@ public static class SoftKeyboardSessionIpc
 
                 if (!engine.IsLongPressOpen || index < 0 || index >= engine.LongPressEntries!.Count)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "no such long-press entry");
+                    reply.Error(IpcErrorCodes.InvalidParams, "No long-press list is open, or the index is out of range. Open a list with keyboard-hold first.");
                     return;
                 }
 
@@ -150,7 +150,7 @@ public static class SoftKeyboardSessionIpc
                 var id = p.GetString("id");
                 if (!p.Failed && !session.SelectLayout(id))
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no layout {id} in [keyboard] layouts");
+                    reply.Error(IpcErrorCodes.NotFound, $"Layout '{id}' is not in [keyboard] layouts. Add it to the config first.");
                 }
             });
     }

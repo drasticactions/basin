@@ -125,7 +125,7 @@ internal sealed unsafe class ImGuiGlProgram : IDisposable
                 var log = gl.GetShaderInfoLog(shader);
                 gl.DeleteShader(shader);
                 gl.DeleteProgram(program);
-                throw new InvalidOperationException($"ImGui {type}: {log}");
+                throw new InvalidOperationException($"The ImGui {type} shader did not compile. {log.Trim()}");
             }
 
             gl.AttachShader(program, shader);
@@ -138,7 +138,7 @@ internal sealed unsafe class ImGuiGlProgram : IDisposable
         {
             var log = gl.GetProgramInfoLog(program);
             gl.DeleteProgram(program);
-            throw new InvalidOperationException($"ImGui link: {log}");
+            throw new InvalidOperationException($"The ImGui program did not link. {log.Trim()}");
         }
 
         return program;

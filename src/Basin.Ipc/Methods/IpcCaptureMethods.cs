@@ -28,7 +28,7 @@ internal static class IpcCaptureMethods
                 output = describe.OutputNamed(name);
                 if (output is null)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no output '{name}'");
+                    reply.Error(IpcErrorCodes.NotFound, $"No output has the name '{name}'. Call outputs/list for the outputs.");
                     return;
                 }
             }
@@ -37,7 +37,7 @@ internal static class IpcCaptureMethods
                 output = describe.PointerOutput() ?? (describe.AllOutputs() is { Count: > 0 } all ? all[0] : null);
                 if (output is null)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, "this session has no output");
+                    reply.Error(IpcErrorCodes.NotFound, "This session has no output.");
                     return;
                 }
             }
@@ -54,7 +54,7 @@ internal static class IpcCaptureMethods
 
             if (describe.Toplevels is { } model && !model.TryGet(request.Id, out _))
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no window {request.Id}");
+                reply.Error(IpcErrorCodes.NotFound, $"No window has the id {request.Id}. Call windows/list for the windows.");
                 return;
             }
 
@@ -77,7 +77,7 @@ internal static class IpcCaptureMethods
 
             if (request.Width <= 0 || request.Height <= 0 || request.Width > 32768 || request.Height > 32768)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "width and height are between 1 and 32768");
+                reply.Error(IpcErrorCodes.InvalidParams, "'width' and 'height' must be between 1 and 32768.");
                 return;
             }
 
@@ -97,50 +97,50 @@ internal static class IpcCaptureMethods
         };
         if (wide is not { } sixteen)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, $"'format' is png or png16, not '{imageFormat}'");
+            reply.Error(IpcErrorCodes.InvalidParams, $"'format' must be png or png16, not '{imageFormat}'.");
             return;
         }
 
         if (to.Kind == IpcCaptureKind.Path && !Path.IsPathRooted(to.Path))
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "'path' is absolute; the compositor's working directory is not yours");
+            reply.Error(IpcErrorCodes.InvalidParams, "'path' must be absolute. The compositor does not share your working directory.");
             return;
         }
 
         var scale = requestedScale ?? 1.0;
         if (scale <= 0 || scale > 1)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "'scale' is above 0 and at most 1");
+            reply.Error(IpcErrorCodes.InvalidParams, "'scale' must be above 0 and at most 1.");
             return;
         }
 
         if (maxDimension is < 1)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "'max_dimension' is at least 1");
+            reply.Error(IpcErrorCodes.InvalidParams, "'max_dimension' must be at least 1.");
             return;
         }
 
         if (requestedScale is not null && maxDimension is not null)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "name 'scale' or 'max_dimension', not both");
+            reply.Error(IpcErrorCodes.InvalidParams, "Give 'scale' or 'max_dimension', not both.");
             return;
         }
 
         if (!capture.Supports(source))
         {
-            reply.Error(IpcErrorCodes.Unavailable, "the compositor cannot capture that source");
+            reply.Error(IpcErrorCodes.Unavailable, "The compositor cannot capture that source.");
             return;
         }
 
         if (!capture.TryDescribe(source, out var format) || format.Width <= 0 || format.Height <= 0)
         {
-            reply.Error(IpcErrorCodes.Failed, "the source has nothing to capture");
+            reply.Error(IpcErrorCodes.Failed, "The source has nothing to capture.");
             return;
         }
 
         if (sixteen && !capture.CanCaptureHalfFloat)
         {
-            reply.Error(IpcErrorCodes.Unavailable, $"png16 needs a 16-bit render target, and {capture.RendererName ?? "this compositor's renderer"} cannot render one");
+            reply.Error(IpcErrorCodes.Unavailable, $"The png16 format needs a 16-bit render target, and {capture.RendererName ?? "this compositor's renderer"} cannot render one. Ask for png instead.");
             return;
         }
 
@@ -149,7 +149,7 @@ internal static class IpcCaptureMethods
         {
             if (!capture.Capture(source, new Box(0, 0, format.Width, format.Height), buffer))
             {
-                reply.Error(IpcErrorCodes.Failed, "the capture did not complete");
+                reply.Error(IpcErrorCodes.Failed, "The capture did not complete.");
                 return;
             }
 
@@ -185,7 +185,7 @@ internal static class IpcCaptureMethods
     {
         if (!buffer.BeginDataAccess(BufferDataAccess.Read, out var view))
         {
-            reply.Error(IpcErrorCodes.Failed, "the capture buffer has no CPU mapping");
+            reply.Error(IpcErrorCodes.Failed, "The capture buffer has no CPU mapping.");
             return;
         }
 
@@ -201,7 +201,7 @@ internal static class IpcCaptureMethods
 
         if (fd < 0)
         {
-            reply.Error(IpcErrorCodes.Failed, $"memfd_create failed (errno {UnixSocket.LastError})");
+            reply.Error(IpcErrorCodes.Failed, $"The compositor could not make a memfd (errno {UnixSocket.LastError}).");
             return;
         }
 
@@ -232,7 +232,7 @@ internal static class IpcCaptureMethods
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            reply.Error(IpcErrorCodes.Failed, exception.Message);
+            reply.Error(IpcErrorCodes.Failed, $"The PNG cannot be written to '{path}'. {exception.Message}");
             return;
         }
 
@@ -245,7 +245,7 @@ internal static class IpcCaptureMethods
         var (png, width, height) = Encode(buffer, size, sixteen, chunks);
         if (((png.Length + 2) / 3 * 4) + InlineHeadroom > IpcProtocol.MaxMessageBytes)
         {
-            reply.Error(IpcErrorCodes.TooLarge, $"a {png.Length}-byte PNG does not fit in a frame; ask for a path or an fd");
+            reply.Error(IpcErrorCodes.TooLarge, $"The {png.Length}-byte PNG is too large for one reply. Ask for a path or an fd instead.");
             return;
         }
 

@@ -79,7 +79,7 @@ public sealed class HyprlandCtmControlManager : IDisposable
             {
                 if (!double.IsFinite(component) || component < 0.0)
                 {
-                    manager.PostError((uint)HyprlandCtmControlManagerV1.Error.InvalidMatrix, "a matrix component was invalid");
+                    manager.PostError((uint)HyprlandCtmControlManagerV1.Error.InvalidMatrix, "A matrix component is not valid.");
                     return;
                 }
             }

@@ -456,7 +456,7 @@ internal sealed partial class Shell
 
             if (process.ExitCode != 0 || output.Length == 0)
             {
-                _log.Debug($"tile {tile.Name} poll gave nothing");
+                _log.Debug($"tiles: {tile.Name} poll gave no output");
                 process.Dispose();
                 continue;
             }
@@ -514,7 +514,7 @@ internal sealed partial class Shell
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            _log.Debug($"tile {tile.Name} cannot run '{command}': {error.Message}");
+            _log.Debug(error, $"tiles: {tile.Name} cannot run '{command}'");
         }
     }
 
@@ -531,6 +531,7 @@ internal sealed partial class Shell
             }
             catch (Exception error) when (error is InvalidOperationException or NotSupportedException)
             {
+                _log.Debug(error, $"tiles: poll process already gone");
             }
 
             process.Dispose();

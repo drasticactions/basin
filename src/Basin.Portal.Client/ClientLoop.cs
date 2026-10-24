@@ -1,4 +1,5 @@
 using Basin;
+using Basin.Diagnostics;
 using Wayland;
 
 namespace Basin.Portal.Client;
@@ -9,6 +10,7 @@ namespace Basin.Portal.Client;
 /// </summary>
 public sealed class ClientLoop : IDisposable
 {
+    private static readonly BasinLogger Log = BasinLog.For("portal-client");
     private readonly WlDisplay _display;
     private readonly EpollEventLoop _loop;
     private IEventSource? _displaySource;
@@ -43,8 +45,9 @@ public sealed class ClientLoop : IDisposable
         {
             _display.Flush();
         }
-        catch (WaylandException)
+        catch (WaylandException error)
         {
+            Log.Debug(error, $"loop: flush failed, Run stops on the next dispatch");
         }
     }
 

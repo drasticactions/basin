@@ -33,6 +33,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
     private bool _shutdown;
     private bool _failed;
     private bool _reportedNoLease;
+    private bool _frameFailing;
     private bool _probedEgl;
 
     /// <summary>
@@ -70,7 +71,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         catch (Exception error)
         {
             _failed = true;
-            Log.Error($"the compositor host could not start: {error}");
+            Log.Error(error, $"host: compositor host did not start");
             _hostFailed?.Invoke(error);
             return;
         }
@@ -102,7 +103,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             if (feature is null && !_reportedNoLease)
             {
                 _reportedNoLease = true;
-                Log.Error($"no Skia lease on this backend; nothing is composited");
+                Log.Error($"view: backend has no Skia lease, nothing is composited");
             }
 
             BasinVisualFrame.Commit(host, _view, feature, CompositionNow);
@@ -113,10 +114,19 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             }
 
             KeepPolling(host);
+            _frameFailing = false;
         }
         catch (Exception error)
         {
-            Log.Error($"frame dropped: {error}");
+            if (_frameFailing)
+            {
+                Log.Debug(error, $"frame: render failed again, frame dropped");
+            }
+            else
+            {
+                _frameFailing = true;
+                Log.Error(error, $"frame: render failed, frame dropped");
+            }
         }
     }
 
@@ -158,7 +168,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             }
             catch (Exception error)
             {
-                Log.Error($"wake dispatch failed: {error}");
+                Log.Error(error, $"dispatch: wake dispatch failed");
             }
 
             return;
@@ -183,7 +193,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
             }
             catch (Exception error)
             {
-                Log.Error($"posted work failed: {error}");
+                Log.Error(error, $"dispatch: posted work failed");
             }
 
             return;
@@ -224,7 +234,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
         catch (Exception error)
         {
-            Log.Error($"idle dispatch failed: {error}");
+            Log.Error(error, $"dispatch: idle dispatch failed");
         }
     }
 
@@ -242,7 +252,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         catch (Exception error)
         {
             _failed = true;
-            Log.Error($"the compositor host could not start: {error}");
+            Log.Error(error, $"host: compositor host did not start");
             _hostFailed?.Invoke(error);
             return;
         }
@@ -256,7 +266,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
         catch (Exception error)
         {
-            Log.Error($"first dispatch failed: {error}");
+            Log.Error(error, $"dispatch: first dispatch failed");
         }
     }
 

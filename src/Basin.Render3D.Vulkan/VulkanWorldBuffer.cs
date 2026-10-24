@@ -40,7 +40,7 @@ internal sealed unsafe class VulkanWorldBuffer
                 out var type))
         {
             vk.DestroyBuffer(device.Device, buffer, null);
-            throw new InvalidOperationException("no host-visible coherent memory for a world buffer");
+            throw new InvalidOperationException("The device has no host-visible coherent memory for a world buffer.");
         }
 
         var allocate = new MemoryAllocateInfo

@@ -24,7 +24,7 @@ public static class WmThreadAffinity
         if (owner != 0 && owner != Environment.CurrentManagedThreadId)
         {
             throw new InvalidOperationException(
-                $"window manager state touched from thread {Environment.CurrentManagedThreadId}; it belongs to thread {owner}");
+                $"Thread {Environment.CurrentManagedThreadId} touched window manager state. Only thread {owner} can touch it.");
         }
     }
 }

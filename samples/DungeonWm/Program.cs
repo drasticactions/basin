@@ -37,7 +37,7 @@ internal static class Program
             var settings = DungeonWmConfig.Load(noConfig ? null : configValue, noConfig, log, out var configPath, out var fatal);
             if (fatal is not null)
             {
-                log.Error($"{fatal}");
+                log.Error($"config: {fatal}");
                 return 1;
             }
 

@@ -41,7 +41,7 @@ internal static class IpcSessionMethods
                 var timeout = request.TimeoutMs ?? DefaultSettleMs;
                 if (timeout <= 0 || timeout > MaxSettleMs)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"timeout_ms is between 1 and {MaxSettleMs}");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"'timeout_ms' must be between 1 and {MaxSettleMs}.");
                     return;
                 }
 

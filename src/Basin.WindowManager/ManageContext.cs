@@ -107,7 +107,7 @@ public sealed class ManageContext
         if (!_alive)
         {
             throw new InvalidOperationException(
-                "this ManageContext belongs to a manage sequence that has already finished");
+                "This ManageContext belongs to a manage sequence that has finished. Use the context only inside its sequence.");
         }
     }
 }

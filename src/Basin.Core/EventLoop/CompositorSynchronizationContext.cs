@@ -31,7 +31,7 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
                 var created = PlatformFacts.HasLinuxSyscalls ? pipe2(fds, OCloexec | ONonblock) : pipe(fds);
                 if (created != 0)
                 {
-                    throw new InvalidOperationException("the compositor wake pipe could not be created");
+                    throw new InvalidOperationException("The compositor wake pipe could not be created.");
                 }
 
                 if (!PlatformFacts.HasLinuxSyscalls)
@@ -103,7 +103,7 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         if (!IsOnLoopThread)
         {
             throw new InvalidOperationException(
-                "Send from a foreign thread would block it on the compositor; Post instead");
+                "Send from another thread would block that thread on the compositor. Use Post instead.");
         }
 
         Run(d, state);
@@ -186,7 +186,7 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         }
         catch (Exception e)
         {
-            BasinLog.Error($"a callback posted to the compositor loop threw: {e}");
+            CoreLog.Log.Error(e, $"loop: a posted callback failed");
         }
         finally
         {

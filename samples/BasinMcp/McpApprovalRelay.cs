@@ -66,7 +66,7 @@ internal sealed class McpApprovalRelay : IAsyncDisposable
             }
             catch (Exception exception) when (McpBridge.IsConnectionFailure(exception))
             {
-                Log.Debug($"the approval relay could not connect: {exception.Message}");
+                Log.Debug(exception, $"approval: relay cannot connect");
                 return;
             }
 
@@ -77,7 +77,7 @@ internal sealed class McpApprovalRelay : IAsyncDisposable
             var finished = await Task.WhenAny(subscribed.Task, _loop).ConfigureAwait(false);
             if (finished == subscribed.Task)
             {
-                Log.Info($"relaying approval requests to the MCP client as elicitations");
+                Log.Info($"approval: requests relayed to the MCP client as elicitations");
             }
         }
         finally
@@ -103,6 +103,7 @@ internal sealed class McpApprovalRelay : IAsyncDisposable
             }
             catch (Exception exception) when (exception is OperationCanceledException || McpBridge.IsConnectionFailure(exception))
             {
+                Log.Debug(exception, $"approval: relay loop ended on dispose");
             }
         }
 
@@ -122,7 +123,7 @@ internal sealed class McpApprovalRelay : IAsyncDisposable
         }
         catch (Exception exception) when (exception is OperationCanceledException || McpBridge.IsConnectionFailure(exception))
         {
-            Log.Debug($"the approval relay stopped: {exception.Message}");
+            Log.Debug(exception, $"approval: relay stopped");
         }
     }
 
@@ -144,7 +145,7 @@ internal sealed class McpApprovalRelay : IAsyncDisposable
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            Log.Info($"the elicitation for approval {request.Id} failed, so it is denied: {exception.Message}");
+            Log.Warn(exception, $"approval: elicitation for {request.Id} failed, call denied");
         }
 
         try
@@ -157,7 +158,7 @@ internal sealed class McpApprovalRelay : IAsyncDisposable
         }
         catch (Exception exception) when (exception is IpcCallException || McpBridge.IsConnectionFailure(exception) || exception is OperationCanceledException)
         {
-            Log.Debug($"approval {request.Id} was not answered: {exception.Message}");
+            Log.Debug(exception, $"approval: answer for {request.Id} not sent");
         }
     }
 

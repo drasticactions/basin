@@ -1,5 +1,4 @@
 using Basin.Capabilities;
-using Basin.Render.Skia;
 using Basin.Scene;
 using Basin.Shell.Xdg;
 
@@ -13,7 +12,7 @@ public sealed partial class NestedShell
     private readonly IToplevelModel? _model;
     private readonly NestedToplevelSource _adopted;
     private SceneCapturePack? _capture;
-    private SkiaRenderer? _captureRenderer;
+    private bool _lentRenderer;
     private XdgToplevelRequestHandler? _xdgHandler;
 
     /// <summary>
@@ -28,7 +27,7 @@ public sealed partial class NestedShell
 
     /// <summary>
     /// Feeds a capture pack from the shell: the toplevel model, the window trees, the stacking order and the keyboard focus exclusion.
-    /// When the pack has no renderer, the shell gives it a raster renderer and disposes it with the shell.
+    /// When the pack has no renderer, the shell lends it the host renderer, so a capture imports each buffer through the renderer that draws the frames.
     /// </summary>
     /// <param name="pack">The capture pack.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pack"/> is <see langword="null"/>.</exception>
@@ -40,7 +39,7 @@ public sealed partial class NestedShell
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_capture is not null)
         {
-            throw new InvalidOperationException("the shell feeds one capture pack");
+            throw new InvalidOperationException("The shell already feeds a capture pack. The shell feeds one capture pack only.");
         }
 
         _capture = pack;
@@ -52,8 +51,8 @@ public sealed partial class NestedShell
 
         if (pack.Capture.Renderer is null)
         {
-            _captureRenderer = new SkiaRenderer();
-            pack.Capture.Renderer = _captureRenderer;
+            pack.Capture.Renderer = _host.Renderer;
+            _lentRenderer = true;
         }
 
         pack.Exclusion.KeyboardFocusExcluded ??= IsKeyboardFocusExcluded;
@@ -240,15 +239,14 @@ public sealed partial class NestedShell
             source.RequestHandler = null;
         }
 
-        if (_captureRenderer is { } renderer)
+        if (_lentRenderer)
         {
-            if (_capture is { } pack && ReferenceEquals(pack.Capture.Renderer, renderer))
+            if (_capture is { } pack && ReferenceEquals(pack.Capture.Renderer, _host.Renderer))
             {
                 pack.Capture.Renderer = null;
             }
 
-            renderer.Dispose();
-            _captureRenderer = null;
+            _lentRenderer = false;
         }
     }
 }

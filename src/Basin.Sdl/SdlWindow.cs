@@ -23,7 +23,7 @@ public sealed class SdlWindow : IDisposable
         Handle = SDL.CreateWindow(title, width, height, flags | SDL.WindowFlags.HighPixelDensity);
         if (Handle == 0)
         {
-            throw new InvalidOperationException($"SDL_CreateWindow failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_CreateWindow failed with \"{SDL.GetError()}\".");
         }
 
         Id = SDL.GetWindowID(Handle);
@@ -46,7 +46,7 @@ public sealed class SdlWindow : IDisposable
             parent.Handle, offsetX, offsetY, Math.Max(1, width), Math.Max(1, height), flags | SDL.WindowFlags.HighPixelDensity);
         if (Handle == 0)
         {
-            throw new InvalidOperationException($"SDL_CreatePopupWindow failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_CreatePopupWindow failed with \"{SDL.GetError()}\".");
         }
 
         Id = SDL.GetWindowID(Handle);

@@ -39,7 +39,7 @@ internal static class IpcDeviceMethods
 
             if (Find(configuration, request.Device) is not { } device)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no input device {request.Device.ToString(CultureInfo.InvariantCulture)}");
+                reply.Error(IpcErrorCodes.NotFound, $"No input device has the id {request.Device.ToString(CultureInfo.InvariantCulture)}. Call devices/list for the devices.");
                 return;
             }
 
@@ -58,7 +58,7 @@ internal static class IpcDeviceMethods
             {
                 if (Find(configuration, id) is not { } device)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no input device {id.ToString(CultureInfo.InvariantCulture)}");
+                    reply.Error(IpcErrorCodes.NotFound, $"No input device has the id {id.ToString(CultureInfo.InvariantCulture)}. Call devices/list for the devices.");
                     return;
                 }
 
@@ -66,7 +66,7 @@ internal static class IpcDeviceMethods
             }
             else if (!InputSettingNames.TryParseType(request.Type!, out var type))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"unknown device type '{request.Type}'");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{request.Type}' is not a device type.");
                 return;
             }
             else
@@ -110,7 +110,7 @@ internal static class IpcDeviceMethods
 
             if (Find(configuration, request.Device) is not { } device)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no input device {request.Device.ToString(CultureInfo.InvariantCulture)}");
+                reply.Error(IpcErrorCodes.NotFound, $"No input device has the id {request.Device.ToString(CultureInfo.InvariantCulture)}. Call devices/list for the devices.");
                 return;
             }
 

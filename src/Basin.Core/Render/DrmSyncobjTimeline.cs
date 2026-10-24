@@ -44,7 +44,7 @@ public sealed unsafe class DrmSyncobjTimeline
         uint handle;
         var rc = Libdrm.drmSyncobjCreate(drmFd, 0, &handle);
         return rc != 0
-            ? throw new InvalidOperationException($"drmSyncobjCreate failed ({rc}).")
+            ? throw new InvalidOperationException($"drmSyncobjCreate failed with {rc}.")
             : new DrmSyncobjTimeline(drmFd, handle);
     }
 
@@ -82,7 +82,7 @@ public sealed unsafe class DrmSyncobjTimeline
         uint handle;
         var rc = Libdrm.drmSyncobjFDToHandle(drmFd, syncobjFd, &handle);
         return rc != 0
-            ? throw new InvalidOperationException($"drmSyncobjFDToHandle failed ({rc}).")
+            ? throw new InvalidOperationException($"drmSyncobjFDToHandle failed with {rc}.")
             : new DrmSyncobjTimeline(drmFd, handle);
     }
 
@@ -94,7 +94,7 @@ public sealed unsafe class DrmSyncobjTimeline
     {
         int fd;
         var rc = Libdrm.drmSyncobjHandleToFD(_drmFd, _handle, &fd);
-        return rc != 0 ? throw new InvalidOperationException($"drmSyncobjHandleToFD failed ({rc}).") : fd;
+        return rc != 0 ? throw new InvalidOperationException($"drmSyncobjHandleToFD failed with {rc}.") : fd;
     }
 
     /// <summary>

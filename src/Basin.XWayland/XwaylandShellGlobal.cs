@@ -93,7 +93,7 @@ public sealed class XwaylandShellGlobal : IDisposable
         var shell = new XwaylandShellV1Resource(client, version, id);
         if (_isXwayland is { } check && !check(client))
         {
-            shell.PostError(0 , "only Xwayland may bind xwayland_shell_v1");
+            shell.PostError(0 , "Only Xwayland can bind xwayland_shell_v1.");
             return;
         }
 

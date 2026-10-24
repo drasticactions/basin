@@ -150,7 +150,7 @@ public sealed class GreeterFlowTests : IDisposable
         rig.PumpUntilStep(GreeterStepKind.Prompt, failed - 1);
 
         Assert.Equal(GreeterPhase.Conversation, rig.Flow.Phase);
-        Assert.Equal("Login incorrect", rig.Flow.Error);
+        Assert.Equal(new GreeterFlowOptions().LoginIncorrect, rig.Flow.Error);
         Assert.False(rig.Flow.ErrorNeedsDismiss);
         Assert.Equal("grace", rig.Flow.CurrentUser);
         Assert.Equal("Password: ", rig.Flow.PromptText);

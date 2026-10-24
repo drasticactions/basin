@@ -35,7 +35,7 @@ internal static class Program
         });
         var ipc = cli.Add(new Option<string?>("--ipc")
         {
-            Description = "bind the control socket at this path; a login screen binds none by default",
+            Description = "bind the control socket at this path (a login screen binds none by default)",
             HelpName = "PATH",
         });
         var screenshot = cli.Add(CommonOptions.Screenshot());

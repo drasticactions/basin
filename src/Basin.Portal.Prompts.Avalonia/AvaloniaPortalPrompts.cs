@@ -215,7 +215,7 @@ public sealed class AvaloniaPortalPrompts : IPortalPrompts, IDisposable
         var output = _promptHost.OutputFor(parentWindow) ?? FirstOutput();
         if (output is null)
         {
-            Log.Warn($"a portal prompt was asked with no output to show it on");
+            Log.Warn($"prompt: no output to show it on, the prompt is cancelled");
             model.Dispose();
             return Task.FromResult(PromptResponse.Cancelled);
         }
@@ -233,7 +233,7 @@ public sealed class AvaloniaPortalPrompts : IPortalPrompts, IDisposable
 
         if (Host is not { } host)
         {
-            Log.Warn($"a portal prompt was asked before the toolkit host came up");
+            Log.Warn($"prompt: asked before the toolkit host came up, the prompt is cancelled");
             model.Dispose();
             return Task.FromResult(PromptResponse.Cancelled);
         }
@@ -248,7 +248,7 @@ public sealed class AvaloniaPortalPrompts : IPortalPrompts, IDisposable
         if (created is not AvaloniaUISurface surface)
         {
             created?.Dispose();
-            Log.Warn($"the UI host produced no Avalonia surface for a portal prompt");
+            Log.Warn($"prompt: the UI host made no Avalonia surface, the prompt is cancelled");
             model.Dispose();
             return Task.FromResult(PromptResponse.Cancelled);
         }
@@ -265,7 +265,7 @@ public sealed class AvaloniaPortalPrompts : IPortalPrompts, IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"the prompt host refused a portal prompt: {e.Message}");
+            Log.Warn(e, $"prompt: the prompt host refused it, the prompt is cancelled");
             Finish(shown, PromptResponse.Cancelled);
         }
 
@@ -286,7 +286,7 @@ public sealed class AvaloniaPortalPrompts : IPortalPrompts, IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"the prompt host failed to hide a portal prompt: {e.Message}");
+            Log.Warn(e, $"prompt: the prompt host did not hide it");
         }
 
         shown.Surface.Content = null;

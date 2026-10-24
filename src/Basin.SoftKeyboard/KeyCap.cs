@@ -279,7 +279,7 @@ public sealed class KeyCap
     public static KeyCap FunctionKeyCap(int number) =>
         number is >= 1 and <= 12
             ? FunctionKeys[number - 1]
-            : throw new ArgumentOutOfRangeException(nameof(number), number, "function keys are F1 to F12");
+            : throw new ArgumentOutOfRangeException(nameof(number), number, "The function key number must be from 1 to 12.");
 
     /// <summary>
     /// Makes a cap that shows a named page, <c>{page:NAME}</c>.

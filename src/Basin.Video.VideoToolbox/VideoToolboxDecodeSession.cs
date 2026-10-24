@@ -46,7 +46,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
     {
         if (!PixelRows.IsSupported(format))
         {
-            throw new NotSupportedException($"VideoToolbox frames are not packed into {format}");
+            throw new NotSupportedException($"VideoToolbox frames cannot be packed into {format}.");
         }
 
         _codec = codec;
@@ -122,7 +122,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
 
         if (_payloadLength == 0)
         {
-            Log.Warn($"a video packet carried no picture data");
+            Log.Debug($"decode: packet has no picture data");
             return false;
         }
 
@@ -136,7 +136,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
             0, _payload, _payloadCapacity, AllocatorNull, 0, 0, _payloadLength, 0, &block);
         if (status != 0 || block == 0)
         {
-            Log.Warn($"CMBlockBufferCreateWithMemoryBlock failed: {status}");
+            Log.Debug($"decode: CMBlockBufferCreateWithMemoryBlock failed with status {status}");
             return false;
         }
 
@@ -153,7 +153,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         CFRelease(block);
         if (status != 0 || sample == 0)
         {
-            Log.Warn($"CMSampleBufferCreateReady failed: {status}");
+            Log.Debug($"decode: CMSampleBufferCreateReady failed with status {status}");
             return false;
         }
 
@@ -174,7 +174,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         {
             var frequency = (double)System.Diagnostics.Stopwatch.Frequency / 1000;
             Log.Debug(
-                $"{_width}x{_height} {_format} (simd {System.Runtime.Intrinsics.Vector128.IsHardwareAccelerated}): {_timed} frames, packet interval {_intervalTicks / frequency / (_timed - 1):0.0} ms mean {_intervalMax / frequency:0.0} ms max, " +
+                $"timing: {_width}x{_height} {_format} (simd {System.Runtime.Intrinsics.Vector128.IsHardwareAccelerated}): {_timed} frames, packet interval {_intervalTicks / frequency / (_timed - 1):0.0} ms mean {_intervalMax / frequency:0.0} ms max, " +
                 $"decode {_decodeTicks / frequency / _timed:0.00} ms mean {_decodeMax / frequency:0.00} ms max (copy {_copyTicks / frequency / _timed:0.00} ms mean {_copyMax / frequency:0.00} ms max)");
             _timed = 0;
             _intervalTicks = 0;
@@ -187,24 +187,24 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
 
         if (status != 0)
         {
-            Log.Warn($"VTDecompressionSessionDecodeFrame refused a frame: {status}");
+            Log.Debug($"decode: VTDecompressionSessionDecodeFrame refused a frame with status {status}");
             return false;
         }
 
         if (waited != 0)
         {
-            Log.Warn($"VTDecompressionSessionWaitForAsynchronousFrames failed: {waited}");
+            Log.Debug($"decode: VTDecompressionSessionWaitForAsynchronousFrames failed with status {waited}");
         }
 
         if (!_produced)
         {
             if (_callbackStatus != 0)
             {
-                Log.Warn($"VideoToolbox produced no frame: {_callbackStatus}");
+                Log.Debug($"decode: no frame, status {_callbackStatus}");
             }
             else
             {
-                Log.Warn($"VideoToolbox produced no frame for a packet, and the peer encodes with delay 0");
+                Log.Debug($"decode: packet produced no frame");
             }
 
             return false;
@@ -262,7 +262,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         {
             if (_spsLength < 4 || _ppsLength == 0)
             {
-                Log.Warn($"an H.264 packet arrived before any SPS and PPS");
+                Log.Debug($"h264: packet arrived before the SPS and PPS");
                 return false;
             }
 
@@ -312,7 +312,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         Span<byte> record = stackalloc byte[12];
         if (!Vp9CodecConfiguration.TryBuild(frame, record, out var written))
         {
-            Log.Warn($"a VP9 stream did not open on a key frame this session can describe");
+            Log.Debug($"vp9: stream did not open on a key frame that the session can describe");
             return false;
         }
 
@@ -324,7 +324,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         var record = new byte[4 + temporalUnit.Length];
         if (!Av1CodecConfiguration.TryBuild(temporalUnit, record, out var written))
         {
-            Log.Warn($"an AV1 stream did not open on a temporal unit carrying its sequence header");
+            Log.Debug($"av1: stream did not open on a temporal unit with a sequence header");
             return false;
         }
 
@@ -369,7 +369,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         CFRelease(atomKey);
         if (status != 0 || description == 0)
         {
-            Log.Warn($"CMVideoFormatDescriptionCreate failed for {atom}: {status}");
+            Log.Debug($"decode: CMVideoFormatDescriptionCreate failed for {atom} with status {status}");
             return false;
         }
 
@@ -417,7 +417,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         CFRelease(formatKey);
         if (status != 0 || session == 0)
         {
-            Log.Warn($"VTDecompressionSessionCreate failed: {status}");
+            Log.Debug($"decode: VTDecompressionSessionCreate failed with status {status}");
             return false;
         }
 
@@ -458,8 +458,9 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
 
             session.Land(status, imageBuffer);
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log.Error(e, $"decode: the output callback failed");
         }
     }
 
@@ -480,7 +481,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         if (pixelFormat != PixelFormat32Bgra)
         {
             _callbackStatus = -1;
-            Log.Warn($"VideoToolbox produced pixel format 0x{pixelFormat:x8} rather than BGRA");
+            Log.Debug($"decode: pixel format 0x{pixelFormat:x8} is not BGRA");
             return;
         }
 
@@ -489,7 +490,7 @@ internal sealed unsafe class VideoToolboxDecodeSession : IVideoDecodeSession
         if (frameWidth < _width || frameHeight < _height)
         {
             _callbackStatus = -1;
-            Log.Warn($"a {frameWidth}x{frameHeight} frame cannot fill a {_width}x{_height} buffer");
+            Log.Debug($"decode: a {frameWidth}x{frameHeight} frame cannot fill a {_width}x{_height} buffer");
             return;
         }
 

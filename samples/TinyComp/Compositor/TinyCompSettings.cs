@@ -27,14 +27,14 @@ internal sealed partial class TinyComp
         var loaded = Config.Load(_configPath ?? Config.DefaultPath(), _log, out var fatal);
         if (fatal is not null)
         {
-            _log.Warn($"reload failed, keeping the running config: {fatal}");
+            _log.Warn($"reload: running config kept, {fatal}");
             _report.Line("RELOAD failed");
             return;
         }
 
         if (loaded.Shaders.Count > 0 && !Basin.Rashader.RashaderLibrary.IsAvailable(out var shaderWhy))
         {
-            _log.Error($"reload failed, keeping the running config: [effects] shader: {shaderWhy}");
+            _log.Warn($"reload: running config kept, [effects] shader: {shaderWhy}");
             _report.Line("RELOAD failed");
             return;
         }
@@ -266,7 +266,7 @@ internal sealed partial class TinyComp
         }
         catch (Basin.Frames.Metacity.MetacityThemeException e)
         {
-            _log.Error($"reload keeps the running metacity theme: {e.Message}");
+            _log.Warn(e, $"reload: running metacity theme kept");
             return e.Message;
         }
 
@@ -312,7 +312,7 @@ internal sealed partial class TinyComp
         }
         catch (MsStylesFrameException e)
         {
-            _log.Error($"reload keeps the running msstyles theme: {e.Message}");
+            _log.Warn(e, $"reload: running msstyles theme kept");
             return e.Message;
         }
 
@@ -357,7 +357,7 @@ internal sealed partial class TinyComp
             catch (Basin.Frames.Metacity.MetacityThemeException e)
             {
                 theme.Dispose();
-                _log.Error($"reload keeps the running font size and metacity theme: {e.Message}");
+                _log.Warn(e, $"reload: running font size and metacity theme kept");
                 return e.Message;
             }
         }

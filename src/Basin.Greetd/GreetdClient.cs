@@ -169,12 +169,12 @@ public sealed class GreetdClient : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsClosed)
         {
-            throw new InvalidOperationException("the greetd connection is closed");
+            throw new InvalidOperationException("The greetd connection is closed.");
         }
 
         if (IsAwaitingResponse)
         {
-            throw new InvalidOperationException("greetd answers one request at a time, and one is outstanding");
+            throw new InvalidOperationException("A request to greetd is still waiting for its response. Send the next request after the response.");
         }
     }
 
@@ -218,8 +218,8 @@ public sealed class GreetdClient : IDisposable
         }
         catch (Exception error)
         {
-            Log.Error($"greetd read failed: {error.Message}");
-            Close($"read failed ({error.Message})");
+            Log.Error(error, $"connection: read failed");
+            Close("read failed");
         }
     }
 
@@ -331,7 +331,7 @@ public sealed class GreetdClient : IDisposable
             _source.Remove();
         }
 
-        Log.Info($"greetd connection closed: {reason}");
+        Log.Info($"connection: closed, {reason}");
         Closed?.Invoke(reason);
     }
 }

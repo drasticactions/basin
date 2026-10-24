@@ -19,7 +19,7 @@ internal sealed class McpGlob
         var slash = pattern.IndexOf('/', StringComparison.Ordinal);
         if (slash <= 0 || slash == pattern.Length - 1 || pattern.IndexOf('/', slash + 1) >= 0)
         {
-            throw new FormatException($"'{pattern}' is not namespace/verb; '*' matches within one part, for example outputs/*");
+            throw new FormatException($"'{pattern}' is not a namespace/verb pattern. '*' matches within one part, for example outputs/*.");
         }
 
         return new McpGlob(pattern, pattern[..slash], pattern[(slash + 1)..]);

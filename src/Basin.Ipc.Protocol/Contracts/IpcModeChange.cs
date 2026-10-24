@@ -70,8 +70,8 @@ public sealed class IpcModeChange : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'width' is required"
-        : (_present & 2) == 0 ? "'height' is required"
+        (_present & 1) == 0 ? "'width' is required."
+        : (_present & 2) == 0 ? "'height' is required."
         : null;
 
     void IIpcReusable.Reset()

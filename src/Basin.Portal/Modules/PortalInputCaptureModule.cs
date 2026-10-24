@@ -78,7 +78,7 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
             return true;
         }
 
-        Log.Info($"{WireInterface} not offered: {whyNot}");
+        Log.Info($"{WireInterface} not offered, {whyNot}");
         return false;
     }
 
@@ -160,13 +160,13 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         {
             if (!Vardict.Has(options, "capabilities"))
             {
-                throw PortalError.Invalid("Start needs a capabilities option");
+                throw PortalError.Invalid("Start needs a capabilities option.");
             }
 
             var requested = ToCapability(Vardict.UInt32(options, "capabilities")) & ToCapability(SupportedCapabilities);
             if (requested == 0)
             {
-                throw PortalError.Invalid("no supported capability was requested");
+                throw PortalError.Invalid("No supported capability was requested.");
             }
 
             session.Requested = requested;
@@ -193,8 +193,8 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
             else
             {
                 var body = session.Clipboard.Requested
-                    ? $"{Describe(appId)} wants to capture input when the pointer leaves the screen, and share the clipboard"
-                    : $"{Describe(appId)} wants to capture input when the pointer leaves the screen";
+                    ? $"{Describe(appId)} wants to capture input when the pointer leaves the screen, and to share the clipboard."
+                    : $"{Describe(appId)} wants to capture input when the pointer leaves the screen.";
                 var answer = await _prompts.Confirm(Named(new ConfirmPrompt(appId, parentWindow, modal, "Allow input capture?", body)), request.Token).ConfigureAwait(true);
                 if (!answer.IsAccepted || !answer.Value || session.IsClosed)
                 {
@@ -386,13 +386,13 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is not InputCaptureSession { Engine: { } engine })
         {
-            throw PortalError.Denied("the session has not started");
+            throw PortalError.Denied("The session has not started.");
         }
 
         var fd = engine.TakeEisFd();
         if (fd < 0)
         {
-            throw PortalError.Unsupported("the compositor handed out no EIS connection for this session");
+            throw PortalError.Unsupported("The compositor gave no EIS connection to this session.");
         }
 
         Log.Info($"input capture for {appId}: eis client connected");
@@ -408,7 +408,7 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
 
     private InputCaptureSession Create(ObjectPath sessionHandle, string appId)
     {
-        var bus = Bus ?? throw new InvalidOperationException("the portal bus is not connected");
+        var bus = Bus ?? throw new InvalidOperationException("The portal bus is not connected.");
         var session = new InputCaptureSession(this, bus, sessionHandle, appId);
         bus.Register(session);
         return session;

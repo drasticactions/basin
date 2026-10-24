@@ -58,7 +58,7 @@ public sealed class IpcLookParams : IIpcParams, IIpcReusable
 
     /// <inheritdoc/>
     [JsonIgnore]
-    public string? Missing => (_present & 1) == 0 ? "'output' is required" : null;
+    public string? Missing => (_present & 1) == 0 ? "'output' is required." : null;
 
     void IIpcReusable.Reset()
     {

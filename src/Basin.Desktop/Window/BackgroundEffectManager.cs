@@ -65,7 +65,7 @@ public sealed class BackgroundEffectManager : IDisposable
 
             if (!_claimed.Add(surface))
             {
-                manager.PostError(ErrorBackgroundEffectExists, "surface already has a background effect object");
+                manager.PostError(ErrorBackgroundEffectExists, "The surface already has a background effect object.");
                 return;
             }
 
@@ -74,7 +74,7 @@ public sealed class BackgroundEffectManager : IDisposable
             {
                 if (!alive)
                 {
-                    resource.PostError(ErrorSurfaceDestroyed, "the wl_surface has been destroyed");
+                    resource.PostError(ErrorSurfaceDestroyed, "The wl_surface is destroyed.");
                     return;
                 }
 

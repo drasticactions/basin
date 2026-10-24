@@ -46,7 +46,7 @@ internal static unsafe class PixelRows
                     break;
 
                 default:
-                    throw new NotSupportedException($"VideoToolbox frames are not packed into {format}");
+                    throw new NotSupportedException($"VideoToolbox frames cannot be packed into {format}.");
             }
         }
     }

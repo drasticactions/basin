@@ -275,7 +275,7 @@ public sealed class AvaloniaUIHost : IUIHost
         }
         catch (Exception error) when (error is MissingMemberException or TypeLoadException)
         {
-            BasinLog.For("avalonia").Debug($"AT-SPI focus announcement unavailable: {error.Message}");
+            BasinLog.For("avalonia").Debug(error, $"at-spi: focus announcement unavailable");
         }
     }
 
@@ -371,7 +371,7 @@ public sealed class AvaloniaUIHost : IUIHost
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
-            BasinLog.For("avalonia").Debug($"AT-SPI server dispose: {error.Message}");
+            BasinLog.For("avalonia").Debug(error, $"at-spi: server dispose failed");
         }
     }
 

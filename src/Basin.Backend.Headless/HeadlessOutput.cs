@@ -48,7 +48,7 @@ public sealed class HeadlessOutput : OutputBase, IPresentingOutput
     {
         if (!_manualFrameClock)
         {
-            throw new InvalidOperationException("StepFrame requires the manual frame clock.");
+            throw new InvalidOperationException("The output does not use the manual frame clock. StepFrame works only with the manual frame clock.");
         }
 
         Present();

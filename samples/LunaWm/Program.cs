@@ -30,7 +30,7 @@ internal static class Program
         var command = cli.Add(CommonOptions.Command());
         var pamHelper = cli.Add(new Option<string?>("--pam-helper-command")
         {
-            Description = "run `sh -c <command>` to check an unlock entry instead of the PAM helper; it reads one line and prints 1 or 0",
+            Description = "run `sh -c <command>` to check an unlock entry instead of the PAM helper. It reads one line and prints 1 or 0",
             HelpName = "COMMAND",
         });
         var greeter = cli.Add(new Option<bool>("--greeter")
@@ -94,7 +94,7 @@ internal static class Program
             var settings = LunaConfig.Load(noConfig ? null : configValue, noConfig, log, out var fatal);
             if (fatal is not null)
             {
-                log.Error($"{fatal}");
+                log.Error($"config: {fatal}");
                 return 1;
             }
 

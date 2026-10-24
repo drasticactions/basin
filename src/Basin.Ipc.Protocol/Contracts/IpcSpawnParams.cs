@@ -98,7 +98,7 @@ public sealed class IpcSpawnParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'argv' is required"
+        (_present & 1) == 0 ? "'argv' is required."
         : null;
 
     void IIpcReusable.Reset()

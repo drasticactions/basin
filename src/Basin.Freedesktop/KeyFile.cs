@@ -15,7 +15,7 @@ internal static class KeyFile
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Log.Debug($"{path}: unreadable ({error.Message})");
+            Log.Debug(error, $"{path}: not read");
             return null;
         }
 

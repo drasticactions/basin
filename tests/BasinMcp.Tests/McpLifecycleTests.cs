@@ -80,7 +80,8 @@ public sealed class McpLifecycleTests
 
         var unavailable = harness.Call("windows_list");
         Assert.True(unavailable.IsError);
-        Assert.StartsWith("unavailable: no compositor: ", Text(unavailable), StringComparison.Ordinal);
+        Assert.StartsWith("unavailable: ", Text(unavailable), StringComparison.Ordinal);
+        Assert.Contains("No compositor", Text(unavailable), StringComparison.Ordinal);
 
         var rig = IpcFullRig.Create(harness.SocketPath, listen: true);
         rig.Server.Start();

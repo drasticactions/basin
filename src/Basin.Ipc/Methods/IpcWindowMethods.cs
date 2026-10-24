@@ -46,13 +46,13 @@ internal static class IpcWindowMethods
 
                 if (request.Fps is < 0 or > 1000)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "fps is between 0 (no limit) and 1000");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'fps' must be between 0 (no limit) and 1000.");
                     return;
                 }
 
                 if (describe.FrameLimits is not { } limits || info.Surface is not { } surface)
                 {
-                    reply.Error(IpcErrorCodes.Unavailable, "this compositor has no frame limiter");
+                    reply.Error(IpcErrorCodes.Unavailable, "This compositor has no frame limiter.");
                     return;
                 }
 
@@ -97,7 +97,7 @@ internal static class IpcWindowMethods
 
                 if (count == 0)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "name at least one of maximized, minimized, fullscreen, no_border");
+                    reply.Error(IpcErrorCodes.InvalidParams, "Give at least one of maximized, minimized, fullscreen or no_border.");
                     return;
                 }
 
@@ -133,7 +133,7 @@ internal static class IpcWindowMethods
 
                 if (request.Width <= 0 || request.Height <= 0 || request.Width > 65535 || request.Height > 65535)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "width and height are between 1 and 65535");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'width' and 'height' must be between 1 and 65535.");
                     return;
                 }
 
@@ -150,7 +150,7 @@ internal static class IpcWindowMethods
 
                 if (describe.OutputNamed(request.Output) is not { } output)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no output '{request.Output}'");
+                    reply.Error(IpcErrorCodes.NotFound, $"No output has the name '{request.Output}'. Call outputs/list for the outputs.");
                     return;
                 }
 
@@ -181,7 +181,7 @@ internal static class IpcWindowMethods
 
                 if (timeout <= 0 || timeout > MaxWaitMs)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"timeout_ms is between 1 and {MaxWaitMs}");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"'timeout_ms' must be between 1 and {MaxWaitMs}.");
                     return;
                 }
 
@@ -216,14 +216,14 @@ internal static class IpcWindowMethods
                             target = X11Density.Low;
                             break;
                         default:
-                            reply.Error(IpcErrorCodes.InvalidParams, $"'density' is native or low, not '{request.Density}'");
+                            reply.Error(IpcErrorCodes.InvalidParams, $"'density' must be native or low, not '{request.Density}'.");
                             return;
                     }
 
                     var pending = reply.Defer();
                     if (!density.TrySet(request.Id, target, result => Answer(pending, result), out var error))
                     {
-                        pending.Error(IpcErrorCodes.Refused, error ?? "the window cannot change its X server");
+                        pending.Error(IpcErrorCodes.Refused, error ?? "The window cannot change its X server.");
                         _ = pending.Complete();
                     }
                 });
@@ -241,13 +241,13 @@ internal static class IpcWindowMethods
                 var timeout = request.TimeoutMs ?? DefaultWaitMs;
                 if (quiet <= 0 || quiet > MaxWaitMs || timeout <= 0 || timeout > MaxWaitMs)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"quiet_ms and timeout_ms are between 1 and {MaxWaitMs}");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"'quiet_ms' and 'timeout_ms' must be between 1 and {MaxWaitMs}.");
                     return;
                 }
 
                 if (ignore < 0 || ignore > 65535)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "ignore_below is between 0 and 65535");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'ignore_below' must be between 0 and 65535.");
                     return;
                 }
 
@@ -261,7 +261,7 @@ internal static class IpcWindowMethods
 
                     if (!model.ReportsCommits(target))
                     {
-                        reply.Error(IpcErrorCodes.Refused, $"the compositor does not report the commits of window {target}");
+                        reply.Error(IpcErrorCodes.Refused, $"The compositor does not report the commits of window {target}.");
                         return;
                     }
                 }
@@ -304,7 +304,7 @@ internal static class IpcWindowMethods
             return true;
         }
 
-        reply.Error(IpcErrorCodes.NotFound, $"no window {id}");
+        reply.Error(IpcErrorCodes.NotFound, $"No window has the id {id}. Call windows/list for the windows.");
         return false;
     }
 
@@ -312,7 +312,7 @@ internal static class IpcWindowMethods
     {
         if (!accepted)
         {
-            reply.Error(IpcErrorCodes.Refused, "the compositor declined the request");
+            reply.Error(IpcErrorCodes.Refused, "The compositor declined the request.");
             return;
         }
 
@@ -325,8 +325,8 @@ internal static class IpcWindowMethods
             : (state & ToplevelState.Maximized) != 0 ? "maximized"
             : null;
         reply.Error(IpcErrorCodes.Refused, reason is null
-            ? $"the compositor declined {kind}"
-            : $"the compositor declined {kind}: window {id} is {reason}, and only a floating window moves or resizes");
+            ? $"The compositor declined {kind}."
+            : $"The compositor declined {kind} because window {id} is {reason}. Only a floating window can move or resize.");
     }
 
     private static void Send(

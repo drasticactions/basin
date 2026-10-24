@@ -107,7 +107,7 @@ public static class GreetdSessions
         {
             if (error is not FileNotFoundException and not DirectoryNotFoundException)
             {
-                Log.Info($"{path}: not read ({error.Message})");
+                Log.Warn(error, $"{path}: not read, the session is not offered");
             }
 
             return;

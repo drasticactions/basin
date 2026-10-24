@@ -47,7 +47,7 @@ internal sealed unsafe class FFmpegHardware : IDisposable
             var made = FFmpegNative.av_hwdevice_ctx_create(&device, type, null, 0, 0);
             if (made < 0)
             {
-                Log.Debug($"no {typeName} device opens here: {FFmpegNative.DescribeError(made)}");
+                Log.Debug($"{typeName}: no device opens, {FFmpegNative.DescribeError(made)}");
                 continue;
             }
 

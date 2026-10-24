@@ -226,6 +226,7 @@ public sealed class SystemStatusTests
         {
             Assert.False(reader.IsAvailable);
             Assert.Equal($"{reader.Service} is not on the system bus", reader.Reason);
+            Assert.True(reader.ServiceMissing);
         }
 
         Assert.False(battery.IsPresent);
@@ -254,6 +255,7 @@ public sealed class SystemStatusTests
             ["State"] = VariantValue.UInt32(4),
         });
         PortalBusTests.PumpUntil(host, () => battery.IsAvailable);
+        Assert.False(battery.ServiceMissing);
         Assert.Equal(BatteryState.Full, battery.State);
     }
 
@@ -271,6 +273,7 @@ public sealed class SystemStatusTests
         Assert.True(battery.IsReady);
         Assert.False(battery.IsAvailable);
         Assert.StartsWith("the system bus is not reachable", battery.Reason);
+        Assert.False(battery.ServiceMissing);
         battery.Dispose();
         bus.Dispose();
 
@@ -413,7 +416,7 @@ public sealed class SystemStatusTests
         refuse = false;
         var wrong = PortalBusTests.Await(host, network.ActivateSecured(home, Encoding.UTF8.GetBytes("pw")));
         Assert.False(wrong.Succeeded);
-        Assert.Equal("the passphrase was not accepted", wrong.Error);
+        Assert.Contains("password wasn't accepted", wrong.Error, StringComparison.Ordinal);
         var forgotten = Assert.Single(nm.Calls(), call => call.Member == "Delete");
         Assert.Equal(("/org/freedesktop/NetworkManager/Settings/9", "org.freedesktop.NetworkManager.Settings.Connection"), (forgotten.Path, forgotten.Interface));
     }

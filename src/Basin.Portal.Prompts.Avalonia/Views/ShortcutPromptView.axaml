@@ -28,7 +28,7 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <TextBlock Classes="basin-prompt-muted" Text="Click a row and press the chord to bind it; Backspace clears it." />
+      <TextBlock Classes="basin-prompt-muted" Text="Click a row, then press the keys you want. Press Backspace to clear it." />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
         <Button Classes="basin-prompt-secondary" Name="DenyButton" Content="{Binding DenyLabel}" Command="{Binding Deny}" />
         <Button Classes="basin-prompt-primary" Name="AcceptButton" Content="{Binding AcceptLabel}" Command="{Binding Accept}" IsDefault="True" />

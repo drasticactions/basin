@@ -16,7 +16,7 @@ internal sealed partial class LunaShell
     private string? _shotPath;
     private IpcPendingReply? _shotReply;
 
-    private LunaView CommandView => _views.Count > 0 ? PlacementView() : throw new InvalidOperationException("no output");
+    private LunaView CommandView => _views.Count > 0 ? PlacementView() : throw new InvalidOperationException("The shell has no output.");
 
     private void WireIpc()
     {
@@ -98,7 +98,7 @@ internal sealed partial class LunaShell
 
                 if (!LunaBindings.IsAction(action))
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"unknown action {action}");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"Gesture action '{action}' does not exist. Give card_view, launcher, home or another action that the method lists.");
                     return;
                 }
 
@@ -160,7 +160,7 @@ internal sealed partial class LunaShell
 
             if (!view.InCardView)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "flick needs the card view");
+                reply.Error(IpcErrorCodes.InvalidParams, "Flick works only in the card view. Open the card view first.");
                 return;
             }
 
@@ -215,7 +215,7 @@ internal sealed partial class LunaShell
                 }
             }
 
-            reply.Error(IpcErrorCodes.NotFound, $"no other output {output}");
+            reply.Error(IpcErrorCodes.NotFound, $"Output '{output}' does not exist or already holds the card. Give the name of a different output.");
         });
 
         _report.Register(methods, "lunawm/stack", "stack {id:int} {state}", (ref IpcParams p, IpcReply reply) =>
@@ -318,7 +318,7 @@ internal sealed partial class LunaShell
             }
             else
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no launcher icon {name}");
+                reply.Error(IpcErrorCodes.NotFound, $"The launcher has no icon '{name}'.");
             }
         });
 
@@ -500,7 +500,7 @@ internal sealed partial class LunaShell
             }
         }
 
-        reply.Error(IpcErrorCodes.NotFound, $"no card {id}");
+        reply.Error(IpcErrorCodes.NotFound, $"Card {id} does not exist. Run where to see the cards.");
         return null;
     }
 

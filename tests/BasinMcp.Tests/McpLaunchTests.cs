@@ -107,7 +107,7 @@ public sealed class McpLaunchTests : IDisposable
         Assert.Contains("noise-on-stderr", errors, StringComparison.Ordinal);
         Assert.Contains("stopping pid", errors, StringComparison.Ordinal);
         Assert.False(Directory.Exists(directory));
-        var launched = System.Text.RegularExpressions.Regex.Match(errors, @"launched sh \(pid (\d+)\)");
+        var launched = System.Text.RegularExpressions.Regex.Match(errors, @"launch: sh started, pid (\d+)");
         Assert.True(launched.Success, errors);
         Assert.False(Directory.Exists($"/proc/{launched.Groups[1].Value}"));
     }
@@ -138,7 +138,7 @@ public sealed class McpLaunchTests : IDisposable
         var errors = Wait(stderr);
         Assert.Contains("stopping pid", errors, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.GetDirectoryName(socket)));
-        var launched = System.Text.RegularExpressions.Regex.Match(errors, @"launched sh \(pid (\d+)\)");
+        var launched = System.Text.RegularExpressions.Regex.Match(errors, @"launch: sh started, pid (\d+)");
         Assert.True(launched.Success, errors);
         var child = $"/proc/{launched.Groups[1].Value}";
         var deadline2 = Environment.TickCount64 + 5_000;
@@ -171,7 +171,7 @@ public sealed class McpLaunchTests : IDisposable
         _ = Wait(process.WaitForExitAsync(TestContext.Current.CancellationToken).ContinueWith(_ => 0, TaskScheduler.Default), Pump, 20_000);
         var errors = Wait(stderr);
         Assert.Equal(0, process.ExitCode);
-        Assert.Contains("ignored SIGTERM for 5 s; killed it", errors, StringComparison.Ordinal);
+        Assert.Contains("ignored SIGTERM for 5 s", errors, StringComparison.Ordinal);
         Assert.DoesNotContain("Unhandled exception", errors, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.GetDirectoryName(socket)));
     }

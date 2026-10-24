@@ -65,7 +65,7 @@ internal sealed partial class TinyComp
 
             if (hdr && !_renderer.RendersHalfFloat)
             {
-                reply.Error(IpcErrorCodes.Unavailable, $"an hdr shot needs a 16-bit render target, and {_renderer.GetType().Name} cannot render one");
+                reply.Error(IpcErrorCodes.Unavailable, $"An HDR shot needs a 16-bit render target, and {_renderer.GetType().Name} cannot render one. Take the shot without hdr, or use a GPU renderer.");
                 return;
             }
 
@@ -125,7 +125,7 @@ internal sealed partial class TinyComp
 
             if (!InputSettingNames.TryParseKey(key, out var setting) || !InputSettingNames.TryParse(setting, text, out var value))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'{key} {text}' is not an input setting and a value it takes");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{key} {text}' is not an input setting with a value it takes. Give a setting name, then one of its values.");
                 return;
             }
 
@@ -134,7 +134,7 @@ internal sealed partial class TinyComp
             {
                 if (!InputSettingNames.TryParseType(typeWord, out var parsed))
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"unknown device type '{typeWord}'");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"'{typeWord}' is not a device type. Use keyboard, pointer, touchpad, touch, tablet_tool, tablet_pad or switch.");
                     return;
                 }
 
@@ -226,7 +226,7 @@ internal sealed partial class TinyComp
 
             if (index < 0 || index >= _windows.Count)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no window {index}");
+                reply.Error(IpcErrorCodes.NotFound, $"No window has index {index}. Use an index from the windows list.");
                 return;
             }
 
@@ -266,7 +266,7 @@ internal sealed partial class TinyComp
 
             if (side == CanvasSide.None)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "side is left, right, up or down");
+                reply.Error(IpcErrorCodes.InvalidParams, "'side' must be left, right, up or down.");
                 return;
             }
 
@@ -309,19 +309,19 @@ internal sealed partial class TinyComp
 
             if (side == CanvasSide.None)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "side is left, right, top or bottom");
+                reply.Error(IpcErrorCodes.InvalidParams, "'side' must be left, right, top or bottom.");
                 return;
             }
 
             if (step is not (null or "smaller" or "larger" or "reset"))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "step is smaller, larger or reset");
+                reply.Error(IpcErrorCodes.InvalidParams, "'step' must be smaller, larger or reset.");
                 return;
             }
 
             if (scale is { } asked && !double.IsFinite(asked))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "scale is a number");
+                reply.Error(IpcErrorCodes.InvalidParams, "'scale' must be a finite number.");
                 return;
             }
 
@@ -355,7 +355,7 @@ internal sealed partial class TinyComp
                 };
                 if (mode is null)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "mode is warp, scale or terrace");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'mode' must be warp, scale or terrace.");
                     return;
                 }
             }
@@ -434,7 +434,7 @@ internal sealed partial class TinyComp
 
             if (FindWindowByToplevelId((ulong)id) is not { } window)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no window {id}");
+                reply.Error(IpcErrorCodes.NotFound, $"No window has id {id}. Use an id from the windows list.");
                 return;
             }
 
@@ -465,7 +465,7 @@ internal sealed partial class TinyComp
 
             if (!double.TryParse(kelvin, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'kelvin' is off or a temperature, not '{kelvin}'");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'kelvin' must be off or a temperature, not '{kelvin}'.");
                 return;
             }
 
@@ -495,7 +495,7 @@ internal sealed partial class TinyComp
 
             if (index < 0 || index >= _xwindows.Count)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no X window {index}");
+                reply.Error(IpcErrorCodes.NotFound, $"No X window has index {index}. Use an index from the X windows list.");
                 return;
             }
 
@@ -559,7 +559,7 @@ internal sealed partial class TinyComp
         }
 
         view = null!;
-        reply.Error(IpcErrorCodes.NotFound, $"no output {index}");
+        reply.Error(IpcErrorCodes.NotFound, $"No output has index {index}. Use an index from the outputs list.");
         return false;
     }
 

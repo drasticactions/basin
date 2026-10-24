@@ -127,7 +127,7 @@ public sealed class WordList
     {
         if (data.Length < 12 || !data[..8].SequenceEqual(FscdMagic))
         {
-            throw new FormatException($"{source} is not an FSCD word list");
+            throw new FormatException($"{source} is not an FSCD word list.");
         }
 
         var count = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(8, 4));
@@ -141,7 +141,7 @@ public sealed class WordList
             var end = data[position..].IndexOf((byte)0);
             if (end < 0)
             {
-                throw new FormatException($"{source} ends inside a word");
+                throw new FormatException($"{source} ends inside a word. The file is truncated.");
             }
 
             words.Add(Encoding.UTF8.GetString(data.Slice(position, end)));

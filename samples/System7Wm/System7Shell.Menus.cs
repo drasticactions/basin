@@ -531,10 +531,12 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"cannot write the alert sound to {path}: {error.Message}");
+            _log.Warn(error, $"sound: cannot write the alert sound to {path}");
             return null;
         }
     }
+
+    private bool _noPlayerLogged;
 
     private static bool Muted => Environment.GetEnvironmentVariable("BASIN_MUTE") is { Length: > 0 } and not "0";
 
@@ -548,7 +550,12 @@ internal sealed partial class System7Shell
 
         if ((string[])["pw-play", "paplay", "aplay"] is var players && players.FirstOrDefault(OnPath) is not { } player)
         {
-            _log.Warn($"no pw-play, paplay or aplay on PATH; the alert sound cannot play");
+            if (!_noPlayerLogged)
+            {
+                _noPlayerLogged = true;
+                _log.Warn($"sound: no pw-play, paplay or aplay on PATH, alert sounds do not play");
+            }
+
             return;
         }
 

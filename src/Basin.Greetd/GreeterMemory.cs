@@ -63,7 +63,7 @@ public sealed class GreeterMemory
 
         if (TomlConfig.Read(path, out var failure) is not { } table)
         {
-            log.Warn($"{path}: {failure}; nothing is remembered from it");
+            log.Warn($"{path}: {failure}, nothing is remembered from it");
             return memory;
         }
 
@@ -127,7 +127,7 @@ public sealed class GreeterMemory
         ArgumentException.ThrowIfNullOrEmpty(key);
         if (key is "session" or "layout")
         {
-            throw new ArgumentException("session and layout are remembered through Remember", nameof(key));
+            throw new ArgumentException("The session and layout keys are set only through Remember.", nameof(key));
         }
 
         _values[(user, key)] = value;
@@ -177,7 +177,7 @@ public sealed class GreeterMemory
             if (!_warned)
             {
                 _warned = true;
-                _log.Warn($"{Path}: not written ({error.Message}); the greeter runs without memory");
+                _log.Warn(error, $"{Path}: not written, the greeter runs without memory");
             }
 
             return false;

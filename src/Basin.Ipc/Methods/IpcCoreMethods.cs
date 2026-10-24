@@ -38,13 +38,13 @@ internal static class IpcCoreMethods
 
             if (request.Events is not { } events)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'events' is required");
+                reply.Error(IpcErrorCodes.InvalidParams, "'events' is required.");
                 return;
             }
 
             if (reply.Sink is not IIpcEventSubscriber subscriber)
             {
-                reply.Error(IpcErrorCodes.Unavailable, "this front delivers no events");
+                reply.Error(IpcErrorCodes.Unavailable, "This front delivers no events. Subscribe through the control socket.");
                 return;
             }
 
@@ -69,7 +69,7 @@ internal static class IpcCoreMethods
         {
             if (reply.Sink is not IIpcEventSubscriber subscriber)
             {
-                reply.Error(IpcErrorCodes.Unavailable, "this front delivers no events");
+                reply.Error(IpcErrorCodes.Unavailable, "This front delivers no events. Subscribe through the control socket.");
                 return;
             }
 

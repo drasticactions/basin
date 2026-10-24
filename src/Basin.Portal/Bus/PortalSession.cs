@@ -81,7 +81,7 @@ public abstract class PortalSession : IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"session {Id}: close failed: {e.Message}");
+            Log.Warn(e, $"session {Id}: close failed");
         }
 
         Bus.Forget(this);
@@ -93,7 +93,7 @@ public abstract class PortalSession : IDisposable
             }
             catch (Exception e) when (e is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
             {
-                Log.Debug($"session {Id}: Closed not sent: {e.Message}");
+                Log.Debug(e, $"session {Id}: Closed not sent");
             }
         }
 

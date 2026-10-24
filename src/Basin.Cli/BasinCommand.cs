@@ -144,7 +144,7 @@ public sealed class BasinCommand
     /// </summary>
     /// <param name="args">The program arguments.</param>
     /// <param name="body">The program body. It runs after the <see cref="Prepare"/> steps and the <c>OPTIONS</c> line.</param>
-    /// <returns>The exit status of the body, or the parser's status when parsing fails or <c>--help</c> is given.</returns>
+    /// <returns>The exit status of the body, the parser's status when parsing fails or <c>--help</c> is given, or 1 when the body throws. The message of an exception goes to standard error as one <c>prog: message</c> line.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="args"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
     public int Run(string[] args, Func<ParseResult, int> body)
     {
@@ -174,7 +174,7 @@ public sealed class BasinCommand
             return body(result);
         });
 
-        var status = Command.Parse(args).Invoke();
+        var status = Invoke(args);
         if (wanted)
         {
             BasinReport.Line(baseline.Since(_frames));
@@ -224,6 +224,20 @@ public sealed class BasinCommand
         ArgumentNullException.ThrowIfNull(result);
         _ = new HelpAction().Invoke(result);
         return 1;
+    }
+
+    private int Invoke(string[] args)
+    {
+        try
+        {
+            return Command.Parse(args).Invoke(new InvocationConfiguration { EnableDefaultExceptionHandler = false });
+        }
+        catch (Exception e)
+        {
+            BasinLog.Debug(e, $"{Command.Name}: the program stopped on an exception");
+            Console.Error.WriteLine(CliMessage.Line(Command.Name, e));
+            return 1;
+        }
     }
 
     private static string Format(object? value) => value switch

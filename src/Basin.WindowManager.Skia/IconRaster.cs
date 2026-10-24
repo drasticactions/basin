@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Basin.Icons.Skia;
 using Basin.Render.Skia;
 using SkiaSharp;
@@ -9,6 +10,7 @@ namespace Basin.WindowManager.Skia;
 /// </summary>
 public sealed class IconRaster : IDisposable
 {
+    private static readonly BasinLogger Log = BasinLog.For("icons");
     private readonly Func<string, string?> _resolve;
     private readonly Dictionary<(string Key, int SizePx), SKImage?> _cache = [];
 
@@ -44,6 +46,7 @@ public sealed class IconRaster : IDisposable
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            Log.Debug(error, $"raster: cannot read the icon for '{key}', it counts as a miss");
         }
 
         _cache[cacheKey] = image;

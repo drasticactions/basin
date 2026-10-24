@@ -10,14 +10,14 @@ public sealed class WmIpcLoop(IWmEventLoop loop) : ICompositorEventLoop
     /// Gets nothing. This loop has no fd of its own.
     /// </summary>
     /// <exception cref="NotSupportedException">Always.</exception>
-    public int Fd => throw new NotSupportedException("a window manager's loop has no fd of its own");
+    public int Fd => throw new NotSupportedException("The window manager loop has no fd of its own.");
 
     /// <summary>
     /// Does not dispatch. The window manager runs its own loop.
     /// </summary>
     /// <param name="timeoutMs">Not used.</param>
     /// <exception cref="NotSupportedException">Always.</exception>
-    public void Dispatch(int timeoutMs) => throw new NotSupportedException("the window manager runs its own loop");
+    public void Dispatch(int timeoutMs) => throw new NotSupportedException("The window manager runs its own loop. Do not dispatch it from here.");
 
     /// <inheritdoc/>
     public IEventSource AddFd(int fd, FdReadiness events, Action<int, FdReadiness> handler)
@@ -41,7 +41,7 @@ public sealed class WmIpcLoop(IWmEventLoop loop) : ICompositorEventLoop
     /// <returns>Nothing. The method always throws.</returns>
     /// <exception cref="NotSupportedException">Always.</exception>
     public IEventSource AddSignal(int signalNumber, Action<int> handler) =>
-        throw new NotSupportedException("a window manager's loop has no signal sources");
+        throw new NotSupportedException("The window manager loop has no signal sources.");
 
     /// <inheritdoc/>
     public void AddIdle(Action handler) => loop.AddIdle(handler);

@@ -34,25 +34,25 @@ internal static class IpcClipboardMethods
             SelectionKind? kind = kindName switch { "clipboard" => SelectionKind.Clipboard, "primary" => SelectionKind.Primary, _ => null };
             if (kind is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'kind' is clipboard or primary");
+                reply.Error(IpcErrorCodes.InvalidParams, "'kind' must be clipboard or primary.");
                 return;
             }
 
             if (timeout <= 0 || timeout > MaxTimeoutMs)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'timeout_ms' is between 1 and {MaxTimeoutMs}");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'timeout_ms' must be between 1 and {MaxTimeoutMs}.");
                 return;
             }
 
             if (maxBytes <= 0 || maxBytes > MaxBytesCap)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'max_bytes' is between 1 and {MaxBytesCap}");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'max_bytes' must be between 1 and {MaxBytesCap}.");
                 return;
             }
 
             if (mime is not null && !IsText(mime))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'{mime}' is not a text type; only text is read");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{mime}' is not a text type. Ask for a text type, because only text can be read.");
                 return;
             }
 
@@ -72,20 +72,20 @@ internal static class IpcClipboardMethods
 
             if (Array.IndexOf(types, chosen) < 0)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"the selection does not offer '{chosen}'");
+                reply.Error(IpcErrorCodes.NotFound, $"The selection does not offer '{chosen}'.");
                 return;
             }
 
             if (!IpcNative.TryPipe(out var readFd, out var writeFd))
             {
-                reply.Error(IpcErrorCodes.Failed, $"pipe2 failed (errno {UnixSocket.LastError})");
+                reply.Error(IpcErrorCodes.Failed, $"The compositor could not make a pipe (errno {UnixSocket.LastError}).");
                 return;
             }
 
             if (!store.Receive(kind.Value, chosen, new ClientFd(writeFd, null)))
             {
                 _ = UnixSocket.Close(readFd);
-                reply.Error(IpcErrorCodes.Failed, "the selection went away before it could be read");
+                reply.Error(IpcErrorCodes.Failed, "The selection went away before it could be read.");
                 return;
             }
 
@@ -110,13 +110,13 @@ internal static class IpcClipboardMethods
             };
             if (kind is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'kind' is clipboard or primary");
+                reply.Error(IpcErrorCodes.InvalidParams, "'kind' must be clipboard or primary.");
                 return;
             }
 
             if (request.Text.Length > MaxBytesCap)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'text' is at most {MaxBytesCap} characters");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'text' must be at most {MaxBytesCap} characters.");
                 return;
             }
 

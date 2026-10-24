@@ -202,7 +202,7 @@ public sealed class KeyboardState
         var slot = Slot(function);
         if (slot < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(function), function, "a sticky modifier is Control, Alt or Super");
+            throw new ArgumentOutOfRangeException(nameof(function), function, "The function is not a sticky modifier. A sticky modifier is Control, Alt or Super.");
         }
 
         var mode = _modifiers[slot];

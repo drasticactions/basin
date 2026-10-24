@@ -93,7 +93,7 @@ public sealed class InputCaptureSession : IDisposable
         _status = Status.Activated;
         Eis.StartEmulating(_activationId);
         _front.Activated(_activationId, x, y, barrierId);
-        Log.Info($"session {Handle} captured input, activation {_activationId}, barrier {barrierId}");
+        Log.Info($"capture: session {Handle} captured input, activation {_activationId}, barrier {barrierId}");
         return true;
     }
 
@@ -112,7 +112,7 @@ public sealed class InputCaptureSession : IDisposable
         Eis.StopEmulating();
         _owner.Released(this);
         _front.Deactivated(_activationId);
-        Log.Info($"session {Handle} released input");
+        Log.Info($"capture: session {Handle} released input");
     }
 
     /// <summary>
@@ -195,7 +195,7 @@ public sealed class InputCaptureSession : IDisposable
 
         if (!InputCaptureBarriers.IsValid(in barrier, _owner.Layout))
         {
-            Log.Info($"session {Handle} barrier {barrier.Id} [{barrier.X1},{barrier.Y1}]-[{barrier.X2},{barrier.Y2}] is invalid");
+            Log.Debug($"capture: session {Handle} barrier {barrier.Id} [{barrier.X1},{barrier.Y1}]-[{barrier.X2},{barrier.Y2}] is invalid");
             if (_owner.EnforceBarriers)
             {
                 return false;

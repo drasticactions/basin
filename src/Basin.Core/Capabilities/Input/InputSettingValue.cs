@@ -117,7 +117,7 @@ public readonly struct InputSettingValue : IEquatable<InputSettingValue>
     {
         if (six.Length != MaxNumbers)
         {
-            throw new ArgumentException("a calibration matrix has six numbers", nameof(six));
+            throw new ArgumentException("A calibration matrix must have six numbers.", nameof(six));
         }
 
         return new InputSettingValue(0, six, null);

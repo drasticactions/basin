@@ -292,9 +292,9 @@ public sealed class WaylandBackend : IDisposable
         };
         _parent.Roundtrip();
 
-        ParentCompositor = compositor ?? throw new InvalidOperationException("parent compositor lacks wl_compositor");
-        ParentShm = shm ?? throw new InvalidOperationException("parent compositor lacks wl_shm");
-        ParentWmBase = wmBase ?? throw new InvalidOperationException("parent compositor lacks xdg_wm_base");
+        ParentCompositor = compositor ?? throw new InvalidOperationException("The parent compositor has no wl_compositor. The Wayland backend needs a parent with wl_compositor, wl_shm and xdg_wm_base.");
+        ParentShm = shm ?? throw new InvalidOperationException("The parent compositor has no wl_shm. The Wayland backend needs a parent with wl_compositor, wl_shm and xdg_wm_base.");
+        ParentWmBase = wmBase ?? throw new InvalidOperationException("The parent compositor has no xdg_wm_base. The Wayland backend needs a parent with wl_compositor, wl_shm and xdg_wm_base.");
         ParentSubcompositor = subcompositor;
         ParentSeat = seat;
         ParentDmabuf = dmabuf;
@@ -340,9 +340,9 @@ public sealed class WaylandBackend : IDisposable
             {
                 _parent.Dispatch();
             }
-            catch (WaylandException)
+            catch (WaylandException e)
             {
-                OnParentGone();
+                OnParentGone(e);
             }
         });
     }
@@ -376,9 +376,9 @@ public sealed class WaylandBackend : IDisposable
         {
             _parent.Flush();
         }
-        catch (WaylandException)
+        catch (WaylandException e)
         {
-            OnParentGone();
+            OnParentGone(e);
         }
     }
 
@@ -428,8 +428,9 @@ public sealed class WaylandBackend : IDisposable
                 {
                     _parent.Flush();
                 }
-                catch (WaylandException)
+                catch (WaylandException e)
                 {
+                    Log.Debug(e, $"parent: final flush failed at dispose");
                 }
             }
 
@@ -446,9 +447,9 @@ public sealed class WaylandBackend : IDisposable
             {
                 _parent.Roundtrip();
             }
-            catch (WaylandException)
+            catch (WaylandException e)
             {
-                OnParentGone();
+                OnParentGone(e);
             }
         }
     }
@@ -635,61 +636,61 @@ public sealed class WaylandBackend : IDisposable
         if (ParentSeat is null)
         {
             Log.Info(
-                $"wayland backend: parent has no wl_seat; guests keep their own clipboard and take no host input");
+                $"parent: no wl_seat, guests keep their own clipboard and take no host input");
             return;
         }
 
         if (ParentDataDeviceManager is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks wl_data_device_manager; guests share a clipboard with each other only");
+                $"parent: no wl_data_device_manager, guests share a clipboard only with each other");
         }
         else if (ParentDataDeviceManager.Version < 3)
         {
             Log.Info(
-                $"wayland backend: parent wl_data_device_manager is version {ParentDataDeviceManager.Version}; drag actions fall back to copy");
+                $"parent: wl_data_device_manager is version {ParentDataDeviceManager.Version}, drag actions fall back to copy");
         }
 
         if (ParentPrimarySelectionManager is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks zwp_primary_selection_device_manager_v1; middle-click paste works among guests only");
+                $"parent: no zwp_primary_selection_device_manager_v1, middle-click paste works only among guests");
         }
 
         if (ParentPointerConstraints is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks zwp_pointer_constraints_v1; a guest pointer lock cannot confine the host cursor");
+                $"parent: no zwp_pointer_constraints_v1, a guest pointer lock cannot confine the host cursor");
         }
 
         if (ParentRelativePointer is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks zwp_relative_pointer_manager_v1; a locked pointer gets deltas from absolute motion");
+                $"parent: no zwp_relative_pointer_manager_v1, a locked pointer gets deltas from absolute motion");
         }
 
         if (ParentTextInputManager is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks zwp_text_input_manager_v3; guests type without composition from the host's input method");
+                $"parent: no zwp_text_input_manager_v3, guests get no composition from the host input method");
         }
 
         if (ParentPresentation is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks wp_presentation; guest presentation timestamps stay synthesized");
+                $"parent: no wp_presentation, guest presentation timestamps stay synthesized");
         }
 
         if (ParentIdleInhibit is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks zwp_idle_inhibit_manager_v1; the host may blank while a guest plays video");
+                $"parent: no zwp_idle_inhibit_manager_v1, the host can blank while a guest plays video");
         }
 
         if (ParentActivation is null)
         {
             Log.Info(
-                $"wayland backend: parent lacks xdg_activation_v1; a guest cannot raise the nested window");
+                $"parent: no xdg_activation_v1, a guest cannot raise the nested window");
         }
     }
 
@@ -699,7 +700,7 @@ public sealed class WaylandBackend : IDisposable
         if (!ParentPresentationClockMatches)
         {
             Log.Warn(
-                $"wayland backend: parent presents on clock {clockId} rather than CLOCK_MONOTONIC; guest presentation timestamps stay synthesized");
+                $"parent: presents on clock {clockId}, not CLOCK_MONOTONIC, guest presentation timestamps stay synthesized");
         }
     }
 
@@ -719,11 +720,20 @@ public sealed class WaylandBackend : IDisposable
         }
     }
 
-    private void OnParentGone()
+    private void OnParentGone(Exception? cause = null)
     {
         if (!_gone)
         {
             _gone = true;
+            if (cause is null)
+            {
+                Log.Info($"parent: connection closed");
+            }
+            else
+            {
+                Log.Error(cause, $"parent: connection lost");
+            }
+
             ParentGone?.Invoke();
         }
     }

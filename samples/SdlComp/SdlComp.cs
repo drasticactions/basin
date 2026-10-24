@@ -204,13 +204,13 @@ internal sealed partial class SdlComp : IDisposable
 
     public long Frames => _frames.Frames;
 
-    public NestedShell Shell => _shell ?? throw new InvalidOperationException("sdl-comp runs one window per toplevel");
+    public NestedShell Shell => _shell ?? throw new InvalidOperationException("The compositor runs one window per toplevel. This member needs --windows nested.");
 
     public SdlToplevelWindows? Toplevels => _toplevels;
 
     public BasinCompositorHost Host => _host;
 
-    public SdlOutputWindow Window => _window ?? throw new InvalidOperationException("sdl-comp runs one window per toplevel");
+    public SdlOutputWindow Window => _window ?? throw new InvalidOperationException("The compositor runs one window per toplevel. This member needs --windows nested.");
 
     public SdlFrameLoop FrameLoop => _frames;
 
@@ -218,7 +218,7 @@ internal sealed partial class SdlComp : IDisposable
 
     public SdlClipboard Clipboard => _clipboard;
 
-    public SdlDrop Drop => _drop ?? throw new InvalidOperationException("sdl-comp runs one window per toplevel");
+    public SdlDrop Drop => _drop ?? throw new InvalidOperationException("The compositor runs one window per toplevel. This member needs --windows nested.");
 
     private Basin.Surface? _cursorSurface;
     private Action? _cursorCommitted;

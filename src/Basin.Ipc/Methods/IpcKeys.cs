@@ -22,7 +22,7 @@ internal static class IpcKeys
         var tokens = chord.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (tokens.Length == 0)
         {
-            error = "the chord names no key";
+            error = "The chord has no key. Give a chord such as super+Return.";
             return false;
         }
 
@@ -34,7 +34,7 @@ internal static class IpcKeys
             modifiers = Modifiers.None;
             if (rest.Length > 0 && !HotkeyParser.TryParseChord(rest + "+a", IpcLog.Log, out _, out modifiers))
             {
-                error = $"'{chord}' is not a chord";
+                error = $"'{chord}' is not a chord. Give modifiers and one key joined by '+', for example super+Return.";
                 return false;
             }
 
@@ -42,7 +42,7 @@ internal static class IpcKeys
         }
         else if (!HotkeyParser.TryParseChord(chord, IpcLog.Log, out keysym, out modifiers))
         {
-            error = $"'{chord}' is not a chord";
+            error = $"'{chord}' is not a chord. Give modifiers and one key joined by '+', for example super+Return.";
             return false;
         }
 
@@ -59,7 +59,7 @@ internal static class IpcKeys
 
             if (!lookup.TryKeycodeForKeysym(KeysymOfModifier(name), out var modifierCode, out _))
             {
-                error = $"the keymap has no {name} key";
+                error = $"The keymap has no {name} key.";
                 return false;
             }
 
@@ -68,13 +68,13 @@ internal static class IpcKeys
 
         if ((modifiers & Modifiers.Mod3) != 0)
         {
-            error = "mod3 has no key to press";
+            error = "The keymap has no key for mod3.";
             return false;
         }
 
         if (!lookup.TryKeycodeForKeysym(keysym, out var code, out _))
         {
-            error = $"the keymap cannot produce the key of '{chord}'";
+            error = $"The keymap cannot produce the key of '{chord}'.";
             return false;
         }
 

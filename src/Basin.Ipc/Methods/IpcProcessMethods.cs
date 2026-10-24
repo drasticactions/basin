@@ -35,31 +35,31 @@ internal static class IpcProcessMethods
             };
             if (request.X11Density is { } density && launch.X11 is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'x11_density' is native or low, not '{density}'");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'x11_density' must be native or low, not '{density}'.");
                 return;
             }
 
             if (request.Argv.Count == 0 || request.Argv[0].Length == 0)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'argv' names at least a program");
+                reply.Error(IpcErrorCodes.InvalidParams, "'argv' is empty. Give at least the program to start.");
                 return;
             }
 
             if (request.Cwd is { } cwd && !Path.IsPathRooted(cwd))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'cwd' is absolute");
+                reply.Error(IpcErrorCodes.InvalidParams, "'cwd' must be an absolute path.");
                 return;
             }
 
             if (request.Log is { } log && !Path.IsPathRooted(log))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'log' is absolute");
+                reply.Error(IpcErrorCodes.InvalidParams, "'log' must be an absolute path.");
                 return;
             }
 
             if (tracker.Spawn(launch, out var error) is not { } process)
             {
-                reply.Error(IpcErrorCodes.Failed, error ?? "the process did not start");
+                reply.Error(IpcErrorCodes.Failed, error ?? "The process did not start.");
                 return;
             }
 
@@ -87,19 +87,19 @@ internal static class IpcProcessMethods
             var grace = request.GraceMs ?? DefaultGraceMs;
             if (grace < 0 || grace > MaxGraceMs)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'grace_ms' is between 0 and {MaxGraceMs}");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'grace_ms' must be between 0 and {MaxGraceMs}.");
                 return;
             }
 
             if (tracker.Find(request.LaunchId) is null)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no launch {request.LaunchId}");
+                reply.Error(IpcErrorCodes.NotFound, $"No launch has the id {request.LaunchId}. Call process/list for the launches.");
                 return;
             }
 
             if (!tracker.Kill(request.LaunchId, (int)grace))
             {
-                reply.Error(IpcErrorCodes.Refused, $"launch {request.LaunchId} has no process left to signal");
+                reply.Error(IpcErrorCodes.Refused, $"Launch {request.LaunchId} has no process left to signal.");
                 return;
             }
 
@@ -116,19 +116,19 @@ internal static class IpcProcessMethods
             var count = request.Lines ?? DefaultLines;
             if (count <= 0 || count > MaxLines)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'lines' is between 1 and {MaxLines}");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'lines' must be between 1 and {MaxLines}.");
                 return;
             }
 
             if (tracker.Find(request.LaunchId) is not { } process)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no launch {request.LaunchId}");
+                reply.Error(IpcErrorCodes.NotFound, $"No launch has the id {request.LaunchId}. Call process/list for the launches.");
                 return;
             }
 
             if (process.LogPath is not { } path)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"launch {request.LaunchId} has no log");
+                reply.Error(IpcErrorCodes.NotFound, $"Launch {request.LaunchId} has no log. Give 'log' to process/spawn to keep one.");
                 return;
             }
 
@@ -139,7 +139,7 @@ internal static class IpcProcessMethods
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                reply.Error(IpcErrorCodes.Failed, $"cannot read '{path}': {exception.Message}");
+                reply.Error(IpcErrorCodes.Failed, $"The log '{path}' cannot be read. {exception.Message}");
                 return;
             }
 

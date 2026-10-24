@@ -35,7 +35,7 @@ internal sealed class MetacityFrames : IDisposable
 
     public static MetacityFrames Load(Config config, FrameTheme frameTheme)
     {
-        var name = config.MetacityTheme ?? throw new MetacityThemeException("[frame.metacity] theme is not set");
+        var name = config.MetacityTheme ?? throw new MetacityThemeException("[frame.metacity] theme is not set. Set it to an installed Metacity theme.");
         return new MetacityFrames(config, frameTheme, MetacityTheme.Load(name));
     }
 

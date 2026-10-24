@@ -101,8 +101,9 @@ public sealed class BasinHost : IDisposable
                 var endpoint = new System.Net.Sockets.UnixDomainSocketEndPoint(path[0] == '@' ? "\0" + path[1..] : path);
                 socket.SendTo(message.AsSpan(0, message.Length - 1), endpoint);
             }
-            catch (System.Net.Sockets.SocketException)
+            catch (System.Net.Sockets.SocketException e)
             {
+                HostLog.Log.Warn(e, $"sd_notify: READY=1 not sent to {path}");
             }
         }
     }

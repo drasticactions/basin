@@ -29,7 +29,7 @@ internal sealed partial class EightGreeter
             _battery = BatteryStatus.TryCreate(_statusBus, out var reason);
             if (_battery is null)
             {
-                _log.Info($"no battery status: {reason}");
+                _log.Info($"status: no battery status, {reason}");
             }
             else
             {
@@ -42,7 +42,7 @@ internal sealed partial class EightGreeter
             _networkStatus = NetworkStatus.TryCreate(_statusBus, out var reason);
             if (_networkStatus is null)
             {
-                _log.Info($"no network status: {reason}");
+                _log.Info($"status: no network status, {reason}");
             }
             else
             {
@@ -222,7 +222,7 @@ internal sealed partial class EightGreeter
         bool suspend, reboot, off;
         if (!LogindActions.Available)
         {
-            _log.Info($"no power menu: logind is not running");
+            _log.Info($"power: no power menu, logind is not running");
             _context?.Post(_ => _signIn.PowerAvailable = false, null);
             return;
         }
@@ -259,7 +259,7 @@ internal sealed partial class EightGreeter
         if (NoPower || !LogindActions.Available)
         {
             BasinReport.Line($"POWER {action} skipped");
-            _log.Info($"{action} skipped: no logind, or BASIN_GREETER_NO_POWER is set");
+            _log.Info($"power: {action} skipped, no logind or BASIN_GREETER_NO_POWER is set");
             return;
         }
 

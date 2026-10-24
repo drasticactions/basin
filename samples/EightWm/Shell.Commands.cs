@@ -342,7 +342,7 @@ internal sealed partial class Shell
 
             if (index < 0 || index >= Views.Count)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no output {index}");
+                reply.Error(IpcErrorCodes.NotFound, $"Output {index} does not exist. Give an index from 0 to {Views.Count - 1}.");
                 return;
             }
 

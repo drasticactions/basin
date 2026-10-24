@@ -93,13 +93,13 @@ internal sealed class Config
             {
                 "light" => false,
                 "dark" or null => true,
-                var other => Warn(log, $"[shell] theme '{other}' is neither dark nor light; dark is used", true),
+                var other => Warn(log, $"[shell] theme '{other}' is neither dark nor light, dark is used", true),
             };
             config.Accent = TomlColor.Argb(shell.Text("accent"), config.Accent) | 0xff000000;
             var scale = shell.Raw("xwayland_scale");
             config.XWaylandScale = Basin.XWayland.XWaylandScale.TryParse(scale, out var parsed)
                 ? parsed
-                : Warn(log, $"[shell] xwayland_scale {scale} is not \"auto\" or a number of at least 1; auto is used", Basin.XWayland.XWaylandScale.Auto);
+                : Warn(log, $"[shell] xwayland_scale {scale} is not \"auto\" or a number of at least 1, auto is used", Basin.XWayland.XWaylandScale.Auto);
             if (shell.Numbers("xwayland_dpi_buckets") is { } buckets)
             {
                 config.XWaylandDpiBuckets = [.. buckets.Where(static b => b > 0).Select(static b => (int)Math.Round(b))];
@@ -204,7 +204,7 @@ internal sealed class Config
         {
             if (desktop.Find(desktopId) is not { } entry)
             {
-                log.Debug($"no desktop entry named {desktopId}; the tile is dropped");
+                log.Debug($"config: no desktop entry named {desktopId}, tile dropped");
                 return null;
             }
 
@@ -215,7 +215,7 @@ internal sealed class Config
 
         if (name is not { Length: > 0 } || exec is not { Length: > 0 })
         {
-            log.Warn($"a [[tile]] with no name and no exec is dropped");
+            log.Warn($"config: a [[tile]] with no name and no exec is dropped");
             return null;
         }
 

@@ -46,7 +46,7 @@ public sealed class SdlMetalDevice : ISdlRenderDevice
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!OperatingSystem.IsMacOS())
         {
-            throw new PlatformNotSupportedException("the Metal lease runs on macOS only");
+            throw new PlatformNotSupportedException("The Metal lease runs on macOS only.");
         }
 
         if (_context is null)
@@ -62,7 +62,7 @@ public sealed class SdlMetalDevice : ISdlRenderDevice
         _device = SdlObjC.MTLCreateSystemDefaultDevice();
         if (_device == 0)
         {
-            throw new InvalidOperationException("MTLCreateSystemDefaultDevice returned no device");
+            throw new InvalidOperationException("MTLCreateSystemDefaultDevice returned no device.");
         }
 
         _queue = SdlObjC.Send(_device, SdlObjC.Selector("newCommandQueue"));
@@ -70,7 +70,7 @@ public sealed class SdlMetalDevice : ISdlRenderDevice
         _context = GRContext.CreateMetal(_backend) ??
             throw new InvalidOperationException("Ganesh could not create a Metal context.");
         SkiaCensus.Track(_context);
-        Log.Info($"Metal lease on the system default device");
+        Log.Info($"metal: lease on the system default device");
     }
 
     /// <inheritdoc/>

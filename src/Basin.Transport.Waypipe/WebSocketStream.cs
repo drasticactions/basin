@@ -110,7 +110,7 @@ public sealed class WebSocketStream : Stream
     {
         if (!PlatformFacts.HasThreads)
         {
-            throw new PlatformNotSupportedException("a WebSocket in the browser is read asynchronously; attach it with the Async pump");
+            throw new PlatformNotSupportedException("A browser WebSocket can only be read asynchronously. Attach it with the Async pump.");
         }
 
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -158,11 +158,11 @@ public sealed class WebSocketStream : Stream
             {
                 var slice = buffer.Length > ReceiveChunk ? buffer[..ReceiveChunk] : buffer;
                 result = await _socket.ReceiveAsync(slice, cancellationToken).ConfigureAwait(false);
-                WaypipeLog.Log.Debug($"web socket {_id}: received {result.Count} of {slice.Length} asked, end of message {result.EndOfMessage}, {result.MessageType}");
+                WaypipeLog.Log.Debug($"websocket {_id}: received {result.Count} of {slice.Length} bytes, end of message {result.EndOfMessage}, {result.MessageType}");
             }
             catch (WebSocketException ex)
             {
-                throw new IOException("the WebSocket ended", ex);
+                throw new IOException("The WebSocket ended.", ex);
             }
 
             if (result.MessageType == WebSocketMessageType.Close)
@@ -218,7 +218,7 @@ public sealed class WebSocketStream : Stream
         }
         catch (WebSocketException ex)
         {
-            throw new IOException("the WebSocket ended", ex);
+            throw new IOException("The WebSocket ended.", ex);
         }
     }
 

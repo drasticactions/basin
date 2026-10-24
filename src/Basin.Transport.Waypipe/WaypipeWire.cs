@@ -66,29 +66,28 @@ public static class WaypipeWire
         if (bytes.Length < ConnectionHeaderLength)
         {
             throw new WaypipeException(
-                $"the connection header is {ConnectionHeaderLength} bytes and {bytes.Length} arrived");
+                $"The connection header must be {ConnectionHeaderLength} bytes, but {bytes.Length} bytes arrived.");
         }
 
         var lead = BinaryPrimitives.ReadUInt32LittleEndian(bytes);
         if ((lead & FixedBit) == 0 && (lead & UnsetBit) != 0)
         {
             throw new WaypipeException(
-                $"connection header 0x{lead:x8} has the fixed bit clear, which is a byte-order mismatch");
+                $"Connection header 0x{lead:x8} has the fixed bit clear. The peer uses a different byte order.");
         }
 
         var version = (((lead >> 16) & 0xff) << 4) | ((lead >> 3) & 0xf);
         if (version < MinimumProtocolVersion)
         {
             throw new WaypipeException(
-                $"the peer asked for wire version {version}, below the {MinimumProtocolVersion} this transport speaks");
+                $"The peer asked for wire version {version}. This transport needs version {MinimumProtocolVersion} or later.");
         }
 
         var compression = (WaypipeCompression)((lead & CompressionMask) >> 8);
         if (compression != expected)
         {
             throw new WaypipeException(
-                $"the peer compresses with {compression} and this channel was configured for {expected}; "
-                + "compression is a hard match rather than a negotiation");
+                $"The peer uses {compression} compression, but this channel uses {expected}. Start both sides with the same compression.");
         }
 
         var video = (lead & VideoMask) >> 11;
@@ -98,7 +97,7 @@ public static class WaypipeWire
             2 => WaypipeVideoCodec.Vp9,
             3 => WaypipeVideoCodec.H264,
             4 => WaypipeVideoCodec.Av1,
-            _ => throw new WaypipeException($"the peer offers video mode {video}, which names no codec"),
+            _ => throw new WaypipeException($"The peer offers video mode {video}, which is not a known codec."),
         };
 
         return new WaypipeConnectionHeader(
@@ -123,7 +122,7 @@ public static class WaypipeWire
     {
         if (bytes.Length < ConnectionHeaderLength)
         {
-            throw new ArgumentException("the connection header needs 16 bytes", nameof(bytes));
+            throw new ArgumentException("The connection header needs 16 bytes.", nameof(bytes));
         }
 
         bytes[..ConnectionHeaderLength].Clear();

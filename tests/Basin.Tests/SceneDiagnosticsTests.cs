@@ -120,7 +120,7 @@ public sealed class SceneDiagnosticsTests
         using var host = new CompositorTestHost();
         var diagnostics = new SceneDiagnostics(host.Scene, host.Renderer, host.Loop, outputs: null);
         Assert.Equal(
-            "no presented outputs to record from",
+            "No output has presented a frame yet. Record after the first frame.",
             diagnostics.Record(new RecordRequest("/tmp/never.png", 2) { Region = new Box(0, 0, 4, 4) }, _ => { }));
     }
 
@@ -315,7 +315,7 @@ public sealed class SceneDiagnosticsTests
         using var frozenFirst = BasinHost.Create(HostOptions.ForBackend("headless"));
         var frozen = frozenFirst.CreateServices().Freeze();
         var deferred = Assert.IsType<HostSceneDiagnostics>(frozen.Find<ISceneDiagnostics>());
-        Assert.Equal("the compositor has no output driver yet", deferred.Record(new RecordRequest(string.Empty, 1), _ => { }));
+        Assert.Equal("The compositor has no output driver yet. Try again after startup.", deferred.Record(new RecordRequest(string.Empty, 1), _ => { }));
         var afterScene = new Scene.Scene();
         using (var after = new OutputDriver(frozenFirst, afterScene, new OutputLayout(), renderer, null))
         {

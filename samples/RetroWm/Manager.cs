@@ -951,7 +951,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
     {
         _config = Config.Load(_noConfig, _log);
         WarnWithoutBlur();
-        _log.Info($"configuration reloaded");
+        _log.Info($"config: reloaded");
 
         _table.Reset();
 
@@ -2365,7 +2365,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
     {
         if (WmSpawn.Run(argv) is { } failure)
         {
-            _log.Error($"could not spawn '{(argv[0])}': {failure}");
+            _log.Warn($"launch: cannot start '{argv[0]}': {failure}");
         }
     }
 

@@ -17,7 +17,7 @@ public sealed class PortalPromptTests
     [AvaloniaFact]
     public void The_confirm_prompt_accepts_on_Enter_and_cancels_on_Escape()
     {
-        var model = new ConfirmPromptModel(new ConfirmPrompt("org.example.App", "", true, "Take a screenshot?", "org.example.App wants to take a screenshot"));
+        var model = new ConfirmPromptModel(new ConfirmPrompt("org.example.App", "", true, "Take a screenshot?", "org.example.App wants to take a screenshot."));
         var responses = new List<PromptResponse>();
         model.Completed += responses.Add;
         var window = Show(new ConfirmPromptView { DataContext = model }, AvaloniaPortalPrompts.DialogWidth, AvaloniaPortalPrompts.ConfirmHeight);
@@ -132,7 +132,7 @@ public sealed class PortalPromptTests
         var window = Show(new ShortcutPromptView { DataContext = model }, AvaloniaPortalPrompts.DialogWidth, AvaloniaPortalPrompts.ShortcutHeight);
 
         Assert.Equal(["", "CTRL+ALT+s"], model.Rows.Select(r => r.Trigger).ToArray());
-        Assert.NotNull(Find<TextBlock>(window, t => t.Text == "taken"));
+        Assert.NotNull(Find<TextBlock>(window, t => t.Text == "in use"));
 
         model.ToggleCapture(model.Rows[1]);
         Assert.Same(model.Rows[1], model.Capturing);

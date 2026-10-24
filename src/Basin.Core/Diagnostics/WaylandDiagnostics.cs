@@ -13,7 +13,7 @@ public static class WaylandDiagnostics
     private static bool _routed;
 
     /// <summary>
-    /// Sends the server and client log output of libwayland to the <c>wayland</c> category as warnings. Only the first call has an effect, and a missing native entry point is ignored.
+    /// Sends the server and client log output of libwayland to the <c>wayland</c> category as warnings. A locked socket name, which libwayland meets when it looks for a free name, logs at debug. Only the first call has an effect, and a missing native entry point is ignored.
     /// </summary>
     public static void RouteToBasinLog()
     {
@@ -25,14 +25,12 @@ public static class WaylandDiagnostics
         _routed = true;
         try
         {
-            WaylandLog.SetHandler(WaylandLogSide.Server, static message => Log.Warn($"libwayland: {message}"));
-            WaylandLog.SetHandler(WaylandLogSide.Client, static message => Log.Warn($"libwayland-client: {message}"));
+            WaylandLog.SetHandler(WaylandLogSide.Server, static message => Server(message.AsSpan().TrimEnd('\n')));
+            WaylandLog.SetHandler(WaylandLogSide.Client, static message => Log.Warn($"libwayland-client: {message.AsSpan().TrimEnd('\n')}"));
         }
-        catch (DllNotFoundException)
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
-        }
-        catch (EntryPointNotFoundException)
-        {
+            Log.Debug($"libwayland: no log handler entry point, its log stays on stderr");
         }
     }
 
@@ -53,6 +51,17 @@ public static class WaylandDiagnostics
             }
         });
         return new ProtocolTrace(logger);
+    }
+
+    private static void Server(ReadOnlySpan<char> message)
+    {
+        if (message.StartsWith("unable to lock lockfile", StringComparison.Ordinal))
+        {
+            Log.Debug($"libwayland: {message}");
+            return;
+        }
+
+        Log.Warn($"libwayland: {message}");
     }
 
     private sealed class ProtocolTrace : IDisposable

@@ -38,7 +38,7 @@ public sealed class GreetdFrameWriter : IBufferWriter<byte>, IDisposable
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         if (_written + count > _buffer.Length)
         {
-            throw new InvalidOperationException("advanced past the buffer");
+            throw new InvalidOperationException("The writer advanced past the end of its buffer.");
         }
 
         _written += count;
@@ -142,7 +142,7 @@ public sealed class GreetdFrameWriter : IBufferWriter<byte>, IDisposable
         if (length > GreetdFrame.MaxLength)
         {
             Clear();
-            throw new InvalidOperationException($"a greetd frame is limited to {GreetdFrame.MaxLength} bytes");
+            throw new InvalidOperationException($"The request is too large for one greetd frame. A frame can hold at most {GreetdFrame.MaxLength} bytes.");
         }
 
         GreetdFrame.WriteHeader(_buffer, length);

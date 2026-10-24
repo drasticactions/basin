@@ -17,7 +17,7 @@ public sealed class KeyCell
     /// <returns>A new spacer cell.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="weight"/> is 0 or less.</exception>
     public static KeyCell Spacer(float weight) =>
-        weight > 0 ? new(weight, null, null, null, KeyClass.Function) : throw new ArgumentOutOfRangeException(nameof(weight), weight, "a spacer takes width");
+        weight > 0 ? new(weight, null, null, null, KeyClass.Function) : throw new ArgumentOutOfRangeException(nameof(weight), weight, "A spacer weight must be more than 0.");
 
     /// <summary>
     /// Initializes a new instance of the <see cref="KeyCell"/> class.

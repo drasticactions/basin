@@ -101,7 +101,7 @@ internal sealed class Config
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException)
         {
-            log.Warn($"could not save {what} to {path}: {error.Message}");
+            log.Warn(error, $"config: cannot save {what} to {path}");
         }
     }
 
@@ -268,5 +268,5 @@ internal sealed class Config
 
     private static Stream TemplateStream() =>
         typeof(Config).Assembly.GetManifestResourceStream("deskbar-wm.toml")
-            ?? throw new InvalidOperationException("deskbar-wm.toml is not embedded");
+            ?? throw new InvalidOperationException("The deskbar-wm.toml template is not embedded in the program.");
 }

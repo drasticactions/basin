@@ -74,7 +74,7 @@ public sealed record HostOptions
                 "drm" => HostBackend.Drm,
                 "nested" => HostBackend.Nested,
                 "headless" => HostBackend.Headless,
-                _ => throw new ArgumentException($"unknown backend '{backendName}'", nameof(name)),
+                _ => throw new ArgumentException($"The backend '{backendName}' is unknown. Use drm, nested or headless.", nameof(name)),
             },
             SocketFd = socketFd,
         };

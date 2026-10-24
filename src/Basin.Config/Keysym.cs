@@ -36,7 +36,7 @@ public static class Keysym
         var symbol = FromName(name);
         return symbol != NoSymbol
             ? symbol
-            : throw new ArgumentException($"unknown keysym name '{name}'", nameof(name));
+            : throw new ArgumentException($"The keysym name '{name}' is unknown.", nameof(name));
     }
 
 }

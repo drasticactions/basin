@@ -179,12 +179,21 @@ public sealed class HostedRendererTests
     }
 
     [Fact]
-    public void A_foreign_target_is_refused()
+    public void A_memory_target_draws_on_the_raster_row_outside_a_frame()
     {
         BasinCounters.Reset();
         var renderer = new HostedRenderer();
         var target = new MemoryBuffer(8, 8, DrmFormat.Xrgb8888);
-        Assert.Throws<InvalidOperationException>(() => renderer.BeginBufferPass(target, new RenderPassOptions()));
+        var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
+        pass.AddRect(new RenderColor(0f, 1f, 0f, 1f), new Box(0, 0, 8, 8));
+        Assert.True(pass.Submit());
+        Assert.True(target.BeginDataAccess(BufferDataAccess.Read, out var view));
+        unsafe
+        {
+            Assert.Equal(0xFF00FF00u, *(uint*)view.Data);
+        }
+
+        target.EndDataAccess();
         renderer.Dispose();
         target.Destroy();
         LeakTracking.Expect(0, BasinCounters.LiveObjects);

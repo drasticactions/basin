@@ -79,11 +79,9 @@ internal static unsafe class MacZoomButton
                 _original(self, selector, sender);
             }
         }
-        catch (DllNotFoundException)
+        catch (Exception error)
         {
-        }
-        catch (EntryPointNotFoundException)
-        {
+            AvaloniaLog.Log.Error(error, $"zoom: full-screen button callback failed");
         }
     }
 

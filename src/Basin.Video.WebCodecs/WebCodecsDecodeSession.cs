@@ -31,7 +31,7 @@ internal sealed class WebCodecsDecodeSession : IAsyncVideoDecodeSession
             DrmFormat.Xrgb8888 or DrmFormat.Argb8888 => true,
             DrmFormat.Xbgr8888 or DrmFormat.Abgr8888 => false,
             DrmFormat.Xrgb2101010 or DrmFormat.Xbgr2101010 => true,
-            _ => throw new NotSupportedException($"WebCodecs frames are not packed into {format}"),
+            _ => throw new NotSupportedException($"WebCodecs frames cannot be packed into {format}."),
         };
         _codec = codec;
         _width = width;
@@ -57,7 +57,7 @@ internal sealed class WebCodecsDecodeSession : IAsyncVideoDecodeSession
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_pending.Count >= MaxPending)
         {
-            Log.Warn($"the WebCodecs decoder has {MaxPending} frames in flight; a packet was refused");
+            Log.Debug($"decode: {MaxPending} frames in flight, packet refused");
             return false;
         }
 
@@ -102,7 +102,7 @@ internal sealed class WebCodecsDecodeSession : IAsyncVideoDecodeSession
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
-            Log.Warn($"a frame completion threw: {error.Message}");
+            Log.Error(error, $"decode: the frame completion handler failed");
         }
     }
 

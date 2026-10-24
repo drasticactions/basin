@@ -31,7 +31,7 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         ArgumentNullException.ThrowIfNull(source);
         if (_sources.Count >= 255)
         {
-            throw new InvalidOperationException("a session cannot hold more than 255 window sources");
+            throw new InvalidOperationException("A session can hold at most 255 window sources.");
         }
 
         var index = (ulong)_sources.Count + 1;

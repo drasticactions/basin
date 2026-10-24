@@ -40,7 +40,7 @@ public sealed class GlassFrameTests
     {
         using var session = QuillFrameTests.QuillSession.Start("pixman", Config);
         Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
-        Assert.True(session!.Logged("style = \"glass\" cannot run"), $"pixman fell back without naming why: {session.Errors()}");
+        Assert.True(session!.Logged("style = \"glass\" is unavailable"), $"pixman fell back without naming why: {session.Errors()}");
         var shot = session.Shot("fallback");
         var (x, y) = session.WindowPosition();
         Assert.NotEqual(Pixel(shot, 5, 5), Pixel(shot, x + 60, y - 20));

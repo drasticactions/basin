@@ -35,7 +35,7 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         _deviceFd = open(devicePath, 2 );
         if (_deviceFd < 0)
         {
-            throw new InvalidOperationException($"cannot open {devicePath}");
+            throw new InvalidOperationException($"Cannot open {devicePath}: {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}.");
         }
 
         _gbm = GbmDevice.Create(_deviceFd);

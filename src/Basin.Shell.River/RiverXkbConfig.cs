@@ -124,7 +124,7 @@ public sealed class RiverXkbConfig : IDisposable
             var text = ReadKeymap(e.Fd, out var readError);
             if (text is null)
             {
-                keymapResource.SendFailure(readError ?? "the keymap fd could not be read");
+                keymapResource.SendFailure(readError ?? "The keymap fd cannot be read.");
                 return;
             }
 
@@ -168,7 +168,7 @@ public sealed class RiverXkbConfig : IDisposable
         error = null;
         if (fd < 0)
         {
-            error = "no keymap fd was provided";
+            error = "The request has no keymap fd.";
             return null;
         }
 
@@ -176,14 +176,14 @@ public sealed class RiverXkbConfig : IDisposable
         {
             if (fstat_size(fd) is not { } size || size <= 0 || size > MaxKeymapBytes)
             {
-                error = "the keymap fd is empty or implausibly large";
+                error = "The keymap fd is empty or too large.";
                 return null;
             }
 
             var data = mmap(nint.Zero, (nuint)size, ProtRead, MapPrivate, fd, 0);
             if (data == FailedMap || data == nint.Zero)
             {
-                error = "the keymap fd could not be mapped";
+                error = "The keymap fd cannot be mapped.";
                 return null;
             }
 

@@ -40,7 +40,7 @@ internal sealed unsafe class QuillVulkanBuffer
                 out var type))
         {
             vk.DestroyBuffer(device.Device, buffer, null);
-            throw new InvalidOperationException("no host-visible coherent memory for a quill buffer");
+            throw new InvalidOperationException("No host-visible coherent memory is available for a quill buffer.");
         }
 
         var allocate = new MemoryAllocateInfo

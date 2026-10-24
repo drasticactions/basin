@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Threading;
 using Basin.Avalonia;
+using Basin.Diagnostics;
 using Basin.Hosted;
 using Basin.Transport.Waypipe;
 
@@ -11,6 +12,7 @@ namespace PortComp;
 
 public sealed class MainView : UserControl
 {
+    private static readonly BasinLogger Log = BasinLog.For("portcomp");
     private readonly BasinOutputView _output;
     private readonly Panel _stage = new();
     private readonly TextBox _endpoint;
@@ -33,7 +35,11 @@ public sealed class MainView : UserControl
         _textInput = new AvaloniaTextInput(action => _output!.Post(action));
         _output = new BasinOutputView(CreateHost, createOwnView: false) { IsHitTestVisible = false };
         _output.HostReady += OnHostReady;
-        _output.HostFailed += error => Status($"the compositor could not start: {error.Message}");
+        _output.HostFailed += error =>
+        {
+            Log.Error(error, $"compositor start failed");
+            Status("The compositor couldn't start.");
+        };
 
         _endpoint = new TextBox { Text = PortCompLink.DefaultEndpoint, PlaceholderText = "host:port or ws://…", MinWidth = 240 };
         _connect = new Button { Content = "Connect", IsEnabled = false };
@@ -198,7 +204,7 @@ public sealed class MainView : UserControl
         _textInput.AttachView(_shellView);
         _shellView.Focus();
         _connect.IsEnabled = true;
-        Status("ready");
+        Status("Ready");
         if (PortCompApp.StartupListen)
         {
             Listening = true;
@@ -241,7 +247,7 @@ public sealed class MainView : UserControl
             _session = null;
             open.Dispose();
             _connect.Content = "Connect";
-            Status("disconnected");
+            Status("Disconnected");
             return;
         }
 
@@ -252,7 +258,7 @@ public sealed class MainView : UserControl
             _connect.Content = "Listen";
             _mode.IsEnabled = PortCompLink.CanListen;
             _hint.IsVisible = false;
-            Status("stopped listening");
+            Status("Stopped listening");
             return;
         }
 
@@ -265,7 +271,7 @@ public sealed class MainView : UserControl
         _connecting = true;
         _connect.IsEnabled = false;
         var endpoint = _endpoint.Text ?? string.Empty;
-        Status($"connecting to {endpoint}");
+        Status($"Connecting to {endpoint}…");
         try
         {
             var session = new PortCompSession(host, _output.Post, token => WaypipeEndpoint.OpenAsync(endpoint, token), PortCompShell.ChannelOptions());
@@ -277,13 +283,18 @@ public sealed class MainView : UserControl
                     _connect.Content = "Connect";
                 }
 
-                Status(failure is null ? "the session ended" : $"the session ended: {failure.Message}");
+                if (failure is not null)
+                {
+                    Log.Warn(failure, $"session to {endpoint} ended");
+                }
+
+                Status(failure is null ? "The session ended." : "The connection closed unexpectedly.");
             });
             session.Changed += () => Dispatcher.UIThread.Post(() =>
             {
                 if (ReferenceEquals(_session, session))
                 {
-                    Status($"connected to {endpoint}, {session.Clients} client(s)");
+                    Status($"Connected to {endpoint}, {session.Clients} client(s)");
                 }
             });
             _session = session;
@@ -299,11 +310,12 @@ public sealed class MainView : UserControl
             }
 
             _connect.Content = "Disconnect";
-            Status($"connected to {endpoint}");
+            Status($"Connected to {endpoint}");
         }
         catch (Exception error)
         {
-            Status($"could not connect: {error.Message}");
+            Log.Warn(error, $"connect to {endpoint} failed");
+            Status($"Couldn't connect to {endpoint}. Check the address and that waypipe is running there.");
         }
         finally
         {
@@ -318,7 +330,7 @@ public sealed class MainView : UserControl
         _connect.IsEnabled = false;
         _mode.IsEnabled = false;
         var endpoint = (_endpoint.Text ?? string.Empty).Trim();
-        Status($"binding {endpoint}");
+        Status($"Starting to listen on {endpoint}…");
         try
         {
             var vm = PortCompApp.StartupHyperVVm is { Length: > 0 } word ? HyperVVm.Parse(word) : (HyperVVm?)null;
@@ -336,14 +348,14 @@ public sealed class MainView : UserControl
             {
                 if (ReferenceEquals(_listening, session))
                 {
-                    Status($"{endpoint}, {session.Clients} client(s)");
+                    Status($"Listening on {endpoint}, {session.Clients} client(s)");
                 }
             });
             session.Rebound += id => Dispatcher.UIThread.Post(() =>
             {
                 if (ReferenceEquals(_listening, session))
                 {
-                    Status($"rebound on WSL VM {id}");
+                    Status($"Listening again on WSL VM {id}");
                 }
             });
             session.Ended += failure => Dispatcher.UIThread.Post(() =>
@@ -357,11 +369,16 @@ public sealed class MainView : UserControl
                     _hint.IsVisible = false;
                 }
 
-                Status(failure is null ? "the listener stopped" : $"the listener stopped: {failure.Message}");
+                if (failure is not null)
+                {
+                    Log.Warn(failure, $"listener on {endpoint} ended");
+                }
+
+                Status(failure is null ? "Stopped listening" : "Listening stopped unexpectedly.");
             });
             _listening = session;
             _connect.Content = "Stop";
-            Status(session.VmLabel is { } label ? $"listening on {endpoint} ({label})" : $"listening on {session.Listener.LocalEndPoint}");
+            Status(session.VmLabel is { } label ? $"Listening on {endpoint} ({label})" : $"Listening on {session.Listener.LocalEndPoint}");
             if (PortCompLink.GuestCommand(endpoint) is { } command)
             {
                 _hint.Text = command;
@@ -371,7 +388,8 @@ public sealed class MainView : UserControl
         catch (Exception error)
         {
             _mode.IsEnabled = PortCompLink.CanListen;
-            Status(error.Message);
+            Log.Warn(error, $"listen on {endpoint} failed");
+            Status($"Couldn't listen on {endpoint}. Check the address and port.");
         }
         finally
         {

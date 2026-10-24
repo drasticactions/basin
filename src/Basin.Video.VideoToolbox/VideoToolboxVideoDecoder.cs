@@ -53,7 +53,7 @@ public sealed class VideoToolboxVideoDecoder : IVideoDecoder
     {
         if (!Supports(codec))
         {
-            throw new NotSupportedException($"VideoToolbox on this host decodes no {codec}");
+            throw new NotSupportedException($"VideoToolbox on this host does not decode {codec}.");
         }
 
         return new VideoToolboxDecodeSession(codec, width, height, format);

@@ -101,7 +101,7 @@ internal sealed partial class MauiComp
 
             if (count is < 0 or > 1_000_000)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'count' is between 0 and 1000000");
+                reply.Error(IpcErrorCodes.InvalidParams, "'count' must be between 0 and 1000000.");
                 return;
             }
 

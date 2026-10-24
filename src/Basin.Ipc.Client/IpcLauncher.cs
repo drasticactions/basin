@@ -91,20 +91,20 @@ public sealed class IpcLauncher : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(output);
         if (command.Count == 0 || command[0].Length == 0)
         {
-            error = "the launch needs a command";
+            error = "The launch has no command. Give the compositor to start.";
             return null;
         }
 
         var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
         if (string.IsNullOrEmpty(runtime) || !Path.IsPathRooted(runtime))
         {
-            error = "the launch needs XDG_RUNTIME_DIR for its private socket directory";
+            error = "XDG_RUNTIME_DIR is not set. The launch needs it for its private socket directory.";
             return null;
         }
 
         if (directoryName is "." or ".." || directoryName.Contains('/', StringComparison.Ordinal) || directoryName.Contains('\0', StringComparison.Ordinal))
         {
-            error = $"'{directoryName}' is not one path segment";
+            error = $"'{directoryName}' must be one path segment.";
             return null;
         }
 
@@ -120,7 +120,7 @@ public sealed class IpcLauncher : IAsyncDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            error = $"cannot make '{directory}': {exception.Message}";
+            error = $"The directory '{directory}' cannot be made. {exception.Message}";
             return null;
         }
 
@@ -142,12 +142,12 @@ public sealed class IpcLauncher : IAsyncDisposable
         Process process;
         try
         {
-            process = Process.Start(start) ?? throw new InvalidOperationException("the process did not start");
+            process = Process.Start(start) ?? throw new InvalidOperationException("The process did not start.");
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             TryRemove(directory);
-            error = $"{command[0]}: {exception.Message}";
+            error = $"'{command[0]}' did not start. {exception.Message}";
             return null;
         }
 
@@ -254,13 +254,13 @@ public sealed class IpcLauncher : IAsyncDisposable
 
         if ((attributes & FileAttributes.ReparsePoint) != 0 || (attributes & FileAttributes.Directory) == 0)
         {
-            error = $"'{directory}' exists and is not a directory";
+            error = $"'{directory}' exists and is not a directory. Remove it, or use another name.";
             return false;
         }
 
         if (UnixSocket.OwnerUid(directory) != UnixSocket.EffectiveUid())
         {
-            error = $"'{directory}' exists and another user owns it";
+            error = $"'{directory}' exists and another user owns it. Use another name.";
             return false;
         }
 
@@ -269,7 +269,7 @@ public sealed class IpcLauncher : IAsyncDisposable
         {
             if (entry != socket || (File.GetAttributes(entry) & FileAttributes.Directory) != 0)
             {
-                error = $"'{directory}' exists and holds more than a stale {SocketName}";
+                error = $"'{directory}' exists and holds more than a stale {SocketName}. Remove it, or use another name.";
                 return false;
             }
         }

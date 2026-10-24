@@ -56,7 +56,7 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
-        var bus = Bus ?? throw new InvalidOperationException("the portal bus is not connected");
+        var bus = Bus ?? throw new InvalidOperationException("The portal bus is not connected.");
         var session = new GlobalShortcutsSession(this, bus, sessionHandle, appId);
         bus.Register(session);
         _registry.AddObserver(session);
@@ -180,7 +180,7 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
         }
         catch (Exception e) when (e is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"shortcut session {session.Id}: ShortcutsChanged not sent: {e.Message}");
+            Log.Debug(e, $"shortcut session {session.Id}: ShortcutsChanged not sent");
         }
     }
 

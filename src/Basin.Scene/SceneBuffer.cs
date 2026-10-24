@@ -742,8 +742,8 @@ public sealed class SceneBuffer : SceneNode
                     ForgetTextureWhenBufferDies(conversion.Buffer);
                     if (buffer.TryGetDmabuf(out var foreign))
                     {
-                        Log.Info(
-                            $"cross-device conversion: {buffer.Width}x{buffer.Height} modifier 0x{foreign.Modifier:X} now renders via a linear copy");
+                        Log.Debug(
+                            $"cross-device conversion: {buffer.Width}x{buffer.Height} modifier 0x{foreign.Modifier:X} renders through a linear copy");
                     }
 
                     return texture;
@@ -822,7 +822,7 @@ public sealed class SceneBuffer : SceneNode
 
         _importFailed = true;
         Log.Warn(
-            $"buffer {buffer.Width}x{buffer.Height} is not importable by the renderer; content dropped");
+            $"buffer {buffer.Width}x{buffer.Height} not importable by the renderer, content dropped");
     }
 
     private ITexture? CurrentTexture =>

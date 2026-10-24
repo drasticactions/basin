@@ -81,7 +81,7 @@ public sealed class ColorCapabilityPack : ICapabilityPack
         ArgumentNullException.ThrowIfNull(scene);
         if (Manager is not null)
         {
-            throw new InvalidOperationException("the color drivers are already attached");
+            throw new InvalidOperationException("The color drivers are already attached. Attach them one time only.");
         }
 
         if (services.Find<ColorManager>() is not { } color)

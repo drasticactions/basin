@@ -165,7 +165,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
 
         if (oldest < 0)
         {
-            throw new InvalidOperationException("every command buffer slot is recording");
+            throw new InvalidOperationException("Every command buffer slot is recording. Submit a recording before you begin another.");
         }
 
         Wait(_slots[oldest].Point);
@@ -399,7 +399,7 @@ internal sealed unsafe class VulkanCommandPool : IDisposable
             }
         }
 
-        throw new InvalidOperationException("command buffer does not belong to this pool");
+        throw new InvalidOperationException("The command buffer does not come from this pool.");
     }
 
     public void ReleaseAllRetired()

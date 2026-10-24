@@ -59,7 +59,7 @@ internal sealed partial class Dam : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"kiosk stopped");
             return 1;
         }
 
@@ -216,7 +216,7 @@ internal sealed partial class Dam : IDisposable
         WireColor();
         if (_options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display and start dam again.");
         }
 
         if (_host.Parent is { } parent)
@@ -325,7 +325,7 @@ internal sealed partial class Dam : IDisposable
         return RendererCatalog.CreateWithFallback(
             ref name,
             renderNode,
-            fallback => log.Warn($"{(fallback.Describe())}"));
+            fallback => fallback.Log(log));
     }
 
     public void Dispose()

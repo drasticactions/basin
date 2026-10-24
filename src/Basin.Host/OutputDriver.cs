@@ -650,7 +650,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         run.FrameHandlers.Clear();
         if (timedOut)
         {
-            HostLog.Log.Info($"the exit sequence ran out of time with {run.Presented.Count} of {PrimaryViews()} outputs flattened; retaining what is lit");
+            HostLog.Log.Info($"handoff: exit sequence timed out with {run.Presented.Count} of {PrimaryViews()} outputs flattened, lit outputs kept");
         }
 
         if (_host.Drm is { } drm)
@@ -815,7 +815,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
 
         var reason = inherited.CpuReadable ? "copy-failed" : $"format {inherited.Format} modifier 0x{inherited.Modifier:x}";
-        HostLog.Log.Info($"{view.Output.Name}: no handoff transition ({reason}); the first frame is a cut");
+        HostLog.Log.Info($"{view.Output.Name}: no handoff transition ({reason}), the first frame is a cut");
         HandoffSkipped?.Invoke(view, reason);
         inherited.Dispose();
     }
@@ -866,6 +866,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         catch (Exception e) when (e is InvalidOperationException or IOException)
         {
             backend?.Dispose();
+            HostLog.Log.Debug(e, $"{device.CardPath}: secondary card refused");
             CardRefused?.Invoke(device, e.Message);
             return;
         }
@@ -1066,8 +1067,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
                 }
             }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            HostLog.Log.Debug(e, $"lid: switch probe failed, no lid assumed");
         }
 
         return false;
@@ -1330,7 +1332,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
         else if (wanted)
         {
-            HostLog.Log.Info($"{view.Output.Name}: no handoff transition ({refusal}); the first frame is a cut");
+            HostLog.Log.Info($"{view.Output.Name}: no handoff transition ({refusal}), the first frame is a cut");
             HandoffSkipped?.Invoke(view, refusal);
         }
     }

@@ -23,7 +23,7 @@ internal sealed class DrmPropertyMap
     public uint IdOf(string name) =>
         _byName.TryGetValue(name, out var entry)
             ? entry.Id
-            : throw new InvalidOperationException($"{_type} {ObjectId} has no property '{name}'");
+            : throw new InvalidOperationException($"{_type} {ObjectId} has no property '{name}'.");
 
     public ulong ValueOf(string name) => _byName[name].Value;
 

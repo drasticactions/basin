@@ -40,7 +40,7 @@
               <MenuFlyout Placement="TopEdgeAlignedRight">
                 <MenuItem Header="Suspend" Command="{Binding Bar.Suspend}" IsVisible="{Binding Bar.CanSuspend}" />
                 <MenuItem Header="Restart" Command="{Binding Bar.Restart}" IsVisible="{Binding Bar.CanRestart}" />
-                <MenuItem Header="Shut Down" Command="{Binding Bar.ShutDown}" IsVisible="{Binding Bar.CanShutDown}" />
+                <MenuItem Header="Shut down" Command="{Binding Bar.ShutDown}" IsVisible="{Binding Bar.CanShutDown}" />
               </MenuFlyout>
             </Button.Flyout>
           </Button>
@@ -204,7 +204,7 @@
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button Content="Back" Command="{Binding Cancel}" IsVisible="{Binding ShowConversation}" />
             <Button Content="OK" Command="{Binding Dismiss}" IsVisible="{Binding NeedsDismiss}" />
-            <Button Content="Log In" Command="{Binding Submit}" Classes="accent" IsEnabled="{Binding CanSubmit}" />
+            <Button Content="Log in" Command="{Binding Submit}" Classes="accent" IsEnabled="{Binding CanSubmit}" />
           </StackPanel>
         </StackPanel>
         </Panel>

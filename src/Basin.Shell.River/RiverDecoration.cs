@@ -65,7 +65,7 @@ internal sealed class RiverDecoration
 
     internal void PostMissingCommit() => _resource.PostError(
         (uint)RiverDecorationV1.Error.NoCommit,
-        "sync_next_commit was not followed by a wl_surface.commit before render_finish");
+        "No wl_surface.commit came between sync_next_commit and render_finish.");
 
     internal void Destroy()
     {

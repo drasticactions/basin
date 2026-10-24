@@ -338,7 +338,7 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
             }
             catch (InvalidOperationException e)
             {
-                Log.Warn($"screencopy frame refused its buffer: {e.Message}");
+                Log.Debug(e, $"screencopy: frame refused the client buffer");
                 return false;
             }
         }

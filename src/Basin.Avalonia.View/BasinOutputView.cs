@@ -85,7 +85,7 @@ public sealed class BasinOutputView : Control
 
         if (_createOwnView)
         {
-            throw new InvalidOperationException("a detached output view has no size to give its own view output; pass createOwnView: false");
+            throw new InvalidOperationException("A detached output view has no size for its own view output. Pass createOwnView: false.");
         }
 
         _handler = new BasinOutputVisual(_createHost, OnHostReady, _createOwnView, OnHostFailed);

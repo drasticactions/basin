@@ -54,7 +54,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
                 formatProps.Entry.Vk != Format.B8G8R8A8Unorm)
             {
                 BasinCounters.Untrack();
-                throw new InvalidOperationException($"{attributes.Format} is not renderable here; targets are B8G8R8A8 until per-format render setups exist");
+                throw new InvalidOperationException($"The Vulkan renderer cannot render into {attributes.Format}. A render target must be B8G8R8A8.");
             }
 
             formatEntry = formatProps.Entry;
@@ -80,7 +80,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
             if (!buffer.BeginDataAccess(BufferDataAccess.Read, out var data))
             {
                 BasinCounters.Untrack();
-                throw new InvalidOperationException("target buffer is not CPU-readable");
+                throw new InvalidOperationException("The target buffer is not CPU-readable.");
             }
 
             DrmFormat cpuFormat;
@@ -99,7 +99,7 @@ internal sealed unsafe class RenderTarget : IVulkanRetired
                 cpuProps.Entry.Vk != Format.B8G8R8A8Unorm)
             {
                 BasinCounters.Untrack();
-                throw new InvalidOperationException($"{cpuFormat} is not renderable here; targets are B8G8R8A8 until per-format render setups exist");
+                throw new InvalidOperationException($"The Vulkan renderer cannot render into {cpuFormat}. A render target must be B8G8R8A8.");
             }
 
             formatEntry = cpuProps.Entry;

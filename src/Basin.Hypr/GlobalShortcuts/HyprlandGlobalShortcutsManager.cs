@@ -124,7 +124,7 @@ public sealed class HyprlandGlobalShortcutsManager : IGlobalShortcutObserver, ID
             {
                 manager.PostError(
                     (uint)HyprlandGlobalShortcutsManagerV1.Error.AlreadyTaken,
-                    "the app_id and id combination is already registered");
+                    "This app_id and id pair is already registered.");
                 return;
             }
 

@@ -11,7 +11,7 @@ internal sealed class IpcInputGuard(ICaptureExclusion? exclusion, Func<(double X
             return true;
         }
 
-        reply.Error(IpcErrorCodes.Refused, "the point is on a surface that is excluded from capture and from synthetic input");
+        reply.Error(IpcErrorCodes.Refused, "The point is on a surface that is excluded from capture and synthetic input.");
         return false;
     }
 
@@ -32,7 +32,7 @@ internal sealed class IpcInputGuard(ICaptureExclusion? exclusion, Func<(double X
             return true;
         }
 
-        reply.Error(IpcErrorCodes.Refused, "keyboard focus is on a surface that is excluded from capture and from synthetic input");
+        reply.Error(IpcErrorCodes.Refused, "The keyboard focus is on a surface that is excluded from capture and synthetic input.");
         return false;
     }
 }

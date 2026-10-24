@@ -107,7 +107,7 @@ public sealed class InputCaptureSession : PortalSession, IInputCaptureFront, ICl
         }
         catch (Exception e) when (e is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"input capture session {Id}: signal not sent: {e.Message}");
+            Log.Debug(e, $"input capture session {Id}: signal not sent");
         }
     }
 }

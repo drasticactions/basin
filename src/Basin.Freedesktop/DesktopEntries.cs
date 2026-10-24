@@ -255,7 +255,7 @@ public sealed class DesktopEntries
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                Log.Debug($"{root}: walk stopped early ({error.Message})");
+                Log.Debug(error, $"{root}: walk stopped early");
             }
 
             foreach (var file in files)
@@ -305,7 +305,7 @@ public sealed class DesktopEntries
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                Log.Debug($"{root}: watch walk stopped early ({error.Message})");
+                Log.Debug(error, $"{root}: watch walk stopped early");
             }
         }
     }

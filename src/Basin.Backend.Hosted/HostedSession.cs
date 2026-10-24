@@ -155,7 +155,7 @@ public sealed class HostedSession : IDisposable
         ArgumentNullException.ThrowIfNull(output);
         if (_outputs.Contains(output))
         {
-            throw new InvalidOperationException("The output is already registered.");
+            throw new InvalidOperationException("The output is already registered. Register each output once.");
         }
 
         _outputs.Add(output);
@@ -183,7 +183,7 @@ public sealed class HostedSession : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_inFrame)
         {
-            throw new InvalidOperationException("The previous frame was not ended.");
+            throw new InvalidOperationException("The previous frame did not end. Call EndFrame before BeginFrame.");
         }
 
         _inFrame = true;
@@ -262,7 +262,7 @@ public sealed class HostedSession : IDisposable
         ArgumentNullException.ThrowIfNull(output);
         if (!_inFrame)
         {
-            throw new InvalidOperationException("MarkPresented outside a frame.");
+            throw new InvalidOperationException("No frame is in progress. Call MarkPresented between BeginFrame and EndFrame.");
         }
 
         output.Ring.Commit();
@@ -282,7 +282,7 @@ public sealed class HostedSession : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_inFrame)
         {
-            throw new InvalidOperationException("EndFrame without a matching BeginFrame.");
+            throw new InvalidOperationException("No frame is in progress. Call BeginFrame before EndFrame.");
         }
 
         _inFrame = false;

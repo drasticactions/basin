@@ -177,13 +177,13 @@ internal sealed unsafe class ParentCursorSurface : IDisposable
         _mappingFd = memfd_create("basin-wl-cursor", 1 );
         if (_mappingFd < 0 || ftruncate(_mappingFd, _mappingSize) != 0)
         {
-            throw new InvalidOperationException("cursor shm creation failed");
+            throw new InvalidOperationException("The shared memory for the cursor was not created.");
         }
 
         var map = mmap(null, (nuint)_mappingSize, ProtReadWrite, MapShared, _mappingFd, 0);
         if ((nint)map == -1)
         {
-            throw new InvalidOperationException("cursor shm mmap failed");
+            throw new InvalidOperationException("The shared memory for the cursor was not mapped.");
         }
 
         _mapping = (nint)map;

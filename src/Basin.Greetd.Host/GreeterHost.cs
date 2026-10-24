@@ -57,7 +57,7 @@ public sealed partial class GreeterHost : IDisposable
         _greetdPath = GreetdPath(options);
 
         var name = options.Renderer;
-        var stack = RendererCatalog.CreateWithFallback(ref name, RendererCatalog.FindRenderNode(), fallback => log.Warn($"{fallback.Describe()}"));
+        var stack = RendererCatalog.CreateWithFallback(ref name, RendererCatalog.FindRenderNode(), fallback => fallback.Log(log));
         _rendererName = name;
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
@@ -109,7 +109,7 @@ public sealed partial class GreeterHost : IDisposable
         _loop = new CompositorRunLoop(_host, _outputs) { OutroBudget = TimeSpan.FromMilliseconds(750) };
         _outputs.Emptied += () => Stop("outputs");
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
-        _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
+        _outputs.ModesetRefused += card => log.Error($"drm: {card.Name} refused a modeset in every mode");
         _outputs.Added += view => BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
         _outputs.Added += view => _cursor.AddOutput(view.Output, view.Scene);
         _outputs.Removed += view => _cursor.RemoveOutput(view.Output);
@@ -216,7 +216,7 @@ public sealed partial class GreeterHost : IDisposable
     /// Gets the Avalonia UI host.
     /// </summary>
     /// <exception cref="InvalidOperationException">The host does not run Avalonia. Use <see cref="UIHost"/> then.</exception>
-    public AvaloniaUIHost Ui => _ui as AvaloniaUIHost ?? throw new InvalidOperationException("this greeter host does not run Avalonia; use UIHost");
+    public AvaloniaUIHost Ui => _ui as AvaloniaUIHost ?? throw new InvalidOperationException("This greeter host does not run Avalonia. Use UIHost instead.");
 
     /// <summary>
     /// Gets the UI host for any toolkit.
@@ -247,7 +247,7 @@ public sealed partial class GreeterHost : IDisposable
     /// Gets the seat.
     /// </summary>
     /// <exception cref="InvalidOperationException"><see cref="Start"/> has not run.</exception>
-    public ChromeSeat Seat => _seat ?? throw new InvalidOperationException("the greeter host has not started");
+    public ChromeSeat Seat => _seat ?? throw new InvalidOperationException("The greeter host has not started.");
 
     /// <summary>
     /// Gets the tracker of child processes. Only their clients see the Wayland globals.
@@ -380,7 +380,7 @@ public sealed partial class GreeterHost : IDisposable
 
         if (_options.IsDrm && _outputs.Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a monitor, then start the greeter again.");
         }
 
         if (_host.Parent is { } parent)
@@ -430,7 +430,7 @@ public sealed partial class GreeterHost : IDisposable
         _uiDriver.Pump();
         if (SceneScreenshot.Write(_scene, _renderer, view.Output, path))
         {
-            _log.Info($"screenshot written to {path}");
+            _log.Info($"screenshot: written to {path}");
         }
     }
 
@@ -534,7 +534,7 @@ public sealed partial class GreeterHost : IDisposable
             return;
         }
 
-        _log.Info($"no accessibility tree: {reason}");
+        _log.Info($"accessibility: no tree, {reason}");
         BasinReport.Line("A11Y off");
         _reader?.AccessibilityStarted(false);
     }

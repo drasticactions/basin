@@ -110,7 +110,7 @@ internal static class Program
         using var processes = new ProcessTracker(loop, () => ProcessTracker.SessionEnvironment(socket, null, ipc.Path));
         if (clientCommand is not null && processes.Spawn(new ProcessLaunch(clientCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries)), out var spawnError) is null)
         {
-            BasinLog.For("BasinSwap").Error($"cannot start '{clientCommand}': {spawnError}");
+            BasinLog.For("BasinSwap").Error($"cannot start '{clientCommand}', {CliMessage.Text(spawnError ?? string.Empty)}");
         }
 
         while (running)

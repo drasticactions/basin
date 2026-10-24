@@ -38,7 +38,7 @@ internal static unsafe class ProcessSpawn
             _ = posix_spawnattr_setflags(attributes, (short)(SpawnSetSid | SpawnSetSigMask | SpawnSetSigDefault));
             if (cwd is not null && posix_spawn_file_actions_addchdir_np(actions, cwd) != 0)
             {
-                error = $"cannot change to '{cwd}'";
+                error = $"'{cwd}' cannot be the working directory of the process.";
                 return -1;
             }
 
@@ -46,7 +46,7 @@ internal static unsafe class ProcessSpawn
                 && (posix_spawn_file_actions_addopen(actions, 1, log, OWrite | OCreate | OAppend, Convert.ToUInt32("644", 8)) != 0
                     || posix_spawn_file_actions_adddup2(actions, 1, 2) != 0))
             {
-                error = $"cannot send output to '{log}'";
+                error = $"'{log}' cannot receive the output of the process.";
                 return -1;
             }
 
@@ -60,7 +60,7 @@ internal static unsafe class ProcessSpawn
 
             if (result != 0)
             {
-                error = $"{argv[0]}: {Marshal.GetPInvokeErrorMessage(result)}";
+                error = $"'{argv[0]}' did not start. {Marshal.GetPInvokeErrorMessage(result)}.";
                 return -1;
             }
 
@@ -156,7 +156,7 @@ internal static unsafe class ProcessSpawn
         catch (EntryPointNotFoundException)
         {
             _noCloseFrom = true;
-            Diagnostics.CoreLog.Log.Debug($"posix_spawn_file_actions_addclosefrom_np is missing; a spawned process inherits every descriptor without close-on-exec");
+            Diagnostics.CoreLog.Log.Debug($"process: no posix_spawn_file_actions_addclosefrom_np, a child inherits each fd without close-on-exec");
         }
     }
 

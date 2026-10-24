@@ -552,7 +552,7 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
 
         if (!buffer.TryGetDmabuf(out var attributes))
         {
-            throw new InvalidOperationException("a Quill Vulkan surface draws only into a dmabuf.");
+            throw new InvalidOperationException("A Quill Vulkan surface draws only into a dmabuf.");
         }
 
         var image = VulkanDeviceImage.TryImport(_device, attributes, ImageUsageFlags.ColorAttachmentBit)

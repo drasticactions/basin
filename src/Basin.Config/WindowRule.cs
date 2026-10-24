@@ -335,7 +335,7 @@ public class WindowRule
             }
             catch (ArgumentException error)
             {
-                log.Warn($"rule pattern '{pattern}' is invalid: {error.Message}");
+                log.Warn(error, $"rule pattern '{pattern}' is invalid, ignored");
             }
         }
 

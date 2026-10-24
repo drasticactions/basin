@@ -18,7 +18,7 @@ internal static class McpCallMapper
         var text = Encoding.UTF8.GetString(json);
         if (dropped > 0)
         {
-            text += $"\n{dropped} descriptor{(dropped == 1 ? " was" : "s were")} dropped: the bridge cannot pass descriptors";
+            text += $"\n{dropped} descriptor{(dropped == 1 ? " was" : "s were")} dropped, because the bridge cannot pass descriptors.";
         }
 
         var structured = McpJson.Parse(json);
@@ -31,5 +31,5 @@ internal static class McpCallMapper
 
     public static CallToolResult Error(IpcCallException exception) => McpJson.Error($"{exception.Code}: {exception.Reason}");
 
-    public static CallToolResult Unavailable(string why) => McpJson.Error($"{IpcErrorCodes.Unavailable}: no compositor: {why}");
+    public static CallToolResult Unavailable(string why) => McpJson.Error($"{IpcErrorCodes.Unavailable}: No compositor is connected. {why}");
 }

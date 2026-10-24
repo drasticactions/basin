@@ -516,7 +516,7 @@ public static class GridGlowShader
     {
         if (into.Length < UniformCount)
         {
-            throw new ArgumentException("the uniform span is shorter than the glow's uniform list", nameof(into));
+            throw new ArgumentException("The uniform span is shorter than the uniform list of the glow.", nameof(into));
         }
 
         Warp(grid.Left, into, 0);
@@ -548,7 +548,7 @@ public static class GridGlowShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(GridGlowShader).Assembly.GetManifestResourceStream("grid_glow.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource grid_glow.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource grid_glow.frag.spv is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

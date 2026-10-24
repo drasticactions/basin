@@ -46,7 +46,7 @@ public sealed class ShmGlobal : IDisposable
         if (buffers is null)
         {
             throw new InvalidOperationException(
-                "managed wl_shm needs the ClientBufferRegistry the compositor resolves attaches through.");
+                "Managed wl_shm needs a ClientBufferRegistry. Register the registry that the compositor resolves attaches through.");
         }
 
         var effectivePolicy = policy

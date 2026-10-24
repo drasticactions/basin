@@ -80,7 +80,7 @@ internal sealed partial class DungeonWm : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: the compositor did not start");
             return 1;
         }
 
@@ -103,7 +103,7 @@ internal sealed partial class DungeonWm : IDisposable
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
         _worldRenderer = WorldRenderers.For(_renderer, out var worldDeclined)
-            ?? throw new InvalidOperationException($"the {rendererName} renderer cannot draw the world: {worldDeclined}");
+            ?? throw new InvalidOperationException($"The {rendererName} renderer cannot draw the world: {worldDeclined}");
         RendererName = rendererName;
 
         _host = BasinHost.Create(HostOptions.ForBackend(options.Backend.ToString().ToLowerInvariant()) with
@@ -194,7 +194,7 @@ internal sealed partial class DungeonWm : IDisposable
         _outputs.Emptied += Stop;
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
-        _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name}");
+        _outputs.ModesetRefused += card => log.Error($"output: {card.Name} refused a modeset in every mode");
 
         _seat = _services.Require<Basin.Seat.Seat>();
         _shell = _services.Require<XdgShell>();
@@ -269,7 +269,7 @@ internal sealed partial class DungeonWm : IDisposable
         _outputs.CreateInitialOutputs();
         if (options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display, then start the compositor again.");
         }
 
         if (_host.Parent is { } parent)
@@ -387,13 +387,13 @@ internal sealed partial class DungeonWm : IDisposable
         if (requested is not ("vulkan" or "gl"))
         {
             throw new InvalidOperationException(
-                $"the {requested} renderer cannot draw the world: its textures are not GL or Vulkan textures, so the 3D pass cannot open them. Use vulkan or gl.");
+                $"The {requested} renderer cannot draw the world. Use the vulkan or gl renderer.");
         }
 
-        var node = Basin.Renderers.RendererCatalog.FindRenderNode() ?? throw new InvalidOperationException("no render node: the world needs a GPU renderer");
+        var node = Basin.Renderers.RendererCatalog.FindRenderNode() ?? throw new InvalidOperationException("No GPU render node is available. The world needs a GPU renderer.");
         name = requested;
         return Basin.Renderers.RendererCatalog.CreateWithFallback(
-            ref name, node, fallback => log.Warn($"{fallback.Describe()}"), floor: "gl");
+            ref name, node, fallback => fallback.Log(log), floor: "gl");
     }
 
     private void SetLocked(bool locked)
@@ -416,7 +416,7 @@ internal sealed partial class DungeonWm : IDisposable
 
     private void OnOutputAdded(OutputView view)
     {
-        var allocator = _deviceAllocator ?? view.Allocator ?? throw new InvalidOperationException("no allocator for the world buffers");
+        var allocator = _deviceAllocator ?? view.Allocator ?? throw new InvalidOperationException("No allocator is available for the world buffers.");
         _worldOutputs[view] = new WorldSceneOutput(_worldLayer, allocator);
         _presence.AddOutput(view.Output, view.Global);
         _cursor.AddOutput(view.Output, view.Scene);

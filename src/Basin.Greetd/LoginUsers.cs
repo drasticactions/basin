@@ -30,7 +30,7 @@ public static class LoginUsers
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Log.Warn($"{options.PasswdPath}: not read ({error.Message}); no user is listed");
+            Log.Warn(error, $"{options.PasswdPath}: not read, no user is listed");
             return users;
         }
 
@@ -107,7 +107,7 @@ public static class LoginUsers
         {
             if (error is not FileNotFoundException and not DirectoryNotFoundException)
             {
-                Log.Info($"{options.LoginDefsPath}: not read ({error.Message}); UID range {min}-{max}");
+                Log.Info(error, $"{options.LoginDefsPath}: not read, UID range {min}-{max} applies");
             }
         }
 

@@ -105,13 +105,13 @@ public sealed class PortalClipboard
     {
         if (!_parked.TryGetValue(serial, out var fd))
         {
-            throw PortalError.Invalid($"serial {serial} names no pending transfer");
+            throw PortalError.Invalid($"Serial {serial} names no pending transfer.");
         }
 
         var duplicate = dup(fd.Value);
         if (duplicate < 0)
         {
-            throw PortalError.Invalid($"the transfer fd for serial {serial} could not be duplicated");
+            throw PortalError.Invalid($"The transfer fd for serial {serial} cannot be duplicated.");
         }
 
         return new SafeFileHandle(duplicate, ownsHandle: true);
@@ -145,7 +145,7 @@ public sealed class PortalClipboard
             var fds = stackalloc int[2];
             if (pipe2(fds, OCloexec) != 0)
             {
-                throw PortalError.Invalid("the read pipe could not be created");
+                throw PortalError.Invalid("The read pipe cannot be created.");
             }
 
             readEnd = fds[0];
@@ -154,7 +154,7 @@ public sealed class PortalClipboard
 
         if (_store is not { } store || !store.Receive(SelectionKind.Clipboard, mimeType, new ClientFd(writeEnd, null)))
         {
-            Log.Debug($"clipboard read of {mimeType} for session {_session.Id}: no owner");
+            Log.Debug($"clipboard: read of {mimeType} for session {_session.Id} has no owner");
         }
 
         return new SafeFileHandle(readEnd, ownsHandle: true);
@@ -164,7 +164,7 @@ public sealed class PortalClipboard
     {
         if (fd.Owner?.FdSlots is not null)
         {
-            Log.Warn($"clipboard transfer for session {_session.Id} refused: the reader's fd is a slot, not a descriptor");
+            Log.Warn($"clipboard: transfer for session {_session.Id} refused, the reader's fd is a slot, not a descriptor");
             fd.Close();
             return;
         }
@@ -177,7 +177,7 @@ public sealed class PortalClipboard
         }
         catch (Exception e) when (e is Tmds.DBus.Protocol.DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Warn($"clipboard transfer for session {_session.Id} not announced: {e.Message}");
+            Log.Warn(e, $"clipboard: transfer for session {_session.Id} not announced");
             _parked.Remove(serial);
             fd.Close();
         }
@@ -213,7 +213,7 @@ public sealed class PortalClipboard
         }
         catch (Exception e) when (e is Tmds.DBus.Protocol.DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"clipboard owner change for session {_session.Id} not announced: {e.Message}");
+            Log.Debug(e, $"clipboard: owner change for session {_session.Id} not announced");
         }
     }
 

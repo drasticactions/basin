@@ -30,7 +30,7 @@ public sealed class ClientScales
         ArgumentNullException.ThrowIfNull(client);
         if (!double.IsFinite(scale) || scale <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(scale), scale, "a server scale must be positive and finite");
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "The scale must be positive and finite.");
         }
 
         var previous = ScaleOf(client);

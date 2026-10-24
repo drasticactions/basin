@@ -41,7 +41,7 @@ internal sealed unsafe class VulkanDescriptorPools : IDisposable
         _pools.Add(fresh);
         return TryAllocate(fresh, layout, out var freshSet)
             ? new DescriptorAllocation(freshSet, fresh)
-            : throw new InvalidOperationException("a fresh descriptor pool refused its first allocation");
+            : throw new InvalidOperationException("A new descriptor pool refused its first allocation.");
     }
 
     public void Free(in DescriptorAllocation allocation)
@@ -64,7 +64,7 @@ internal sealed unsafe class VulkanDescriptorPools : IDisposable
         {
             Result.Success => true,
             Result.ErrorFragmentedPool or Result.ErrorOutOfPoolMemory => false,
-            _ => throw new InvalidOperationException($"vkAllocateDescriptorSets failed: {result}"),
+            _ => throw new InvalidOperationException($"vkAllocateDescriptorSets failed with {result}."),
         };
     }
 

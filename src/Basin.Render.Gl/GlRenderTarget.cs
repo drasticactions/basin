@@ -124,7 +124,7 @@ public sealed unsafe class GlRenderTarget
         {
             target.Attributes = attributes;
             target._image = device.ImportDmabufImage(attributes)
-                ?? throw new InvalidOperationException("render target dmabuf rejected by EGL");
+                ?? throw new InvalidOperationException("EGL rejected the dmabuf of the render target.");
             target._textureOrRenderbuffer = gl.GenTexture();
             gl.BindTexture(TextureTarget.Texture2D, target._textureOrRenderbuffer);
             device.BindImageToTexture2D(target._image);
@@ -222,7 +222,7 @@ public sealed unsafe class GlRenderTarget
 
         if (gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != GLEnum.FramebufferComplete)
         {
-            throw new InvalidOperationException("render target framebuffer incomplete");
+            throw new InvalidOperationException("The render target framebuffer is incomplete.");
         }
     }
 

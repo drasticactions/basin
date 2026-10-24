@@ -39,7 +39,7 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         }
         catch (Exception exception)
         {
-            Log.Debug($"fd {fd} cannot be watched, so it takes no commands: {exception.Message}");
+            Log.Debug(exception, $"line: fd {fd} cannot be watched, no commands read");
         }
     }
 
@@ -189,7 +189,7 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         }
         catch (Exception exception)
         {
-            Log.Error($"the line reply for {reply.Method} threw: {exception}");
+            Log.Error(exception, $"line: reply formatter for {reply.Method} failed");
             text = $"ERR {IpcErrorCodes.Internal} {exception.Message}";
         }
 
@@ -251,7 +251,7 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         }
         catch (Exception exception)
         {
-            Log.Error($"the line for event {name} threw: {exception}");
+            Log.Error(exception, $"line: event formatter for {name} failed");
             return;
         }
 
@@ -282,7 +282,7 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         var json = Encoding.UTF8.GetBytes(line[start..].Trim());
         if (json.Length > 0 && !IsObject(json))
         {
-            Report($"ERR {IpcErrorCodes.ParseError} the params are not a JSON object");
+            Report($"ERR {IpcErrorCodes.ParseError} The params must be a JSON object.");
             return;
         }
 
@@ -351,7 +351,7 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
             }
             catch (Exception exception)
             {
-                Log.Error($"line '{line}' failed: {exception}");
+                Log.Error(exception, $"line: '{line}' failed");
                 Report($"ERR {IpcErrorCodes.Internal} {exception.Message}");
             }
 

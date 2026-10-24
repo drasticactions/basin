@@ -172,13 +172,13 @@ public sealed class NetworkStatus : SystemStatusReader
         if (Connection is not { } connection || _wirelessDevice is not { } device)
         {
             passphrase.Clear();
-            return Task.FromResult(NetworkActivation.Failed("there is no wireless device"));
+            return Task.FromResult(NetworkActivation.Failed("This computer has no wireless device."));
         }
 
         if (accessPoint.Security is not (AccessPointSecurity.Wpa or AccessPointSecurity.Wpa3))
         {
             passphrase.Clear();
-            return Task.FromResult(NetworkActivation.Failed("this network is not WPA personal"));
+            return Task.FromResult(NetworkActivation.Failed("This network isn't WPA personal, so you can't join it here."));
         }
 
         MessageBuffer message;
@@ -237,9 +237,14 @@ public sealed class NetworkStatus : SystemStatusReader
                 await ForgetAsync(connection, settings).ConfigureAwait(false);
             }
         }
+        catch (DBusErrorReplyException error)
+        {
+            result = NetworkActivation.Failed($"NetworkManager refused the connection. {error.ErrorMessage}");
+        }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            result = NetworkActivation.Failed(error.Message);
+            Log.Warn(error, $"network: {Service} AddAndActivateConnection failed");
+            result = NetworkActivation.Failed("Couldn't connect to the network. Try again.");
         }
         finally
         {
@@ -248,7 +253,7 @@ public sealed class NetworkStatus : SystemStatusReader
 
         if (!result.Succeeded)
         {
-            Log.Warn($"{Service} AddAndActivateConnection: {result.Error}");
+            Log.Warn($"network: {Service} AddAndActivateConnection failed, {result.Error}");
         }
 
         if (Bus.IsDisposed)
@@ -272,7 +277,7 @@ public sealed class NetworkStatus : SystemStatusReader
         }
         catch (DBusErrorReplyException error)
         {
-            Log.Warn($"{ServiceName} could not remove the failed connection {settings}: {error.Message}");
+            Log.Warn(error, $"network: {ServiceName} did not remove the failed connection {settings}");
         }
     }
 
@@ -320,13 +325,14 @@ public sealed class NetworkStatus : SystemStatusReader
             if (state is Deactivating or Deactivated || failure.Reason != 0)
             {
                 var reason = failure.Reason != 0 ? failure.Reason : await ReasonAsync(connection, device).ConfigureAwait(false);
+                Log.Info($"network: NetworkManager stopped the connection, reason {reason}");
                 return NetworkActivation.Failed(Describe(reason));
             }
 
             await Task.Delay(250).ConfigureAwait(false);
         }
 
-        return NetworkActivation.Failed("the network did not connect in time");
+        return NetworkActivation.Failed("The network didn't connect in time. Try again.");
     }
 
     private sealed class FailureReason
@@ -345,8 +351,9 @@ public sealed class NetworkStatus : SystemStatusReader
                 reason = DBusProperties.UInt(value.GetItem(1));
             }
         }
-        catch (DBusErrorReplyException)
+        catch (DBusErrorReplyException error)
         {
+            Log.Debug(error, $"network: {device} StateReason not read");
         }
 
         return reason;
@@ -354,10 +361,10 @@ public sealed class NetworkStatus : SystemStatusReader
 
     private static string Describe(uint reason) => reason switch
     {
-        7 => "the passphrase was not accepted",
-        8 or 9 or 10 => "the network refused the connection",
-        11 => "the network did not answer",
-        _ => $"NetworkManager stopped the connection (reason {reason})",
+        7 => "The password wasn't accepted. Check it and try again.",
+        8 or 9 or 10 => "The network refused the connection.",
+        11 => "The network didn't answer. Try again.",
+        _ => "Couldn't connect to the network. Try again.",
     };
 
     internal static AccessPointSecurity SecurityOf(uint flags, uint wpaFlags, uint rsnFlags)
@@ -540,8 +547,9 @@ public sealed class NetworkStatus : SystemStatusReader
                     saved.Add(entry);
                 }
             }
-            catch (DBusErrorReplyException)
+            catch (DBusErrorReplyException error)
             {
+                Log.Debug(error, $"network: saved connection {path} not read");
             }
         }
 

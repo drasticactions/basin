@@ -92,7 +92,7 @@ public sealed class MetacityFrames : IDisposable
         }
 
         throw new MetacityThemeException(
-            $"no metacity theme is named '{name}' ([shell] theme); the installed ones are {Installed()}");
+            $"No Metacity theme is named '{name}' ([shell] theme). The installed themes are {Installed()}.");
     }
 
     /// <summary>

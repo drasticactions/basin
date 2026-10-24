@@ -21,14 +21,19 @@ internal static class Program
         var hyperVVm = cli.Add(CommonOptions.HyperVVm());
         var windows = cli.Add(new System.CommandLine.Option<string>("--windows")
         {
-            Description = "nested: one window holds the shell; toplevel: one SDL window per client toplevel",
+            Description = "nested: one window holds the shell, toplevel: one SDL window per client toplevel, headless: the shell with no window",
             HelpName = "MODE",
             DefaultValueFactory = _ => "nested",
         });
-        windows.AcceptOnlyFromAmong("nested", "toplevel");
+        windows.AcceptOnlyFromAmong("nested", "toplevel", "headless");
         var grabKeyboard = cli.Add(new System.CommandLine.Option<bool>("--grab-keyboard")
         {
             Description = "take every key while the window has focus, the host's own shortcuts included",
+        });
+        var renderNode = cli.Add(new System.CommandLine.Option<string?>("--render-node")
+        {
+            Description = "with --windows headless, draw on this DRM render node and offer linux-dmabuf",
+            HelpName = "PATH",
         });
         _ = IpcCli.AddOption(cli);
 
@@ -50,11 +55,22 @@ internal static class Program
                 Outputs = Math.Max(1, result.GetValue(outputs)),
                 WaypipeListen = result.GetValue(waypipeListen),
                 Toplevels = result.GetValue(windows) == "toplevel",
+                Headless = result.GetValue(windows) == "headless",
+                RenderNode = result.GetValue(renderNode),
                 HyperVVm = result.GetResult(hyperVVm) is { Implicit: false } ? result.GetValue(hyperVVm) : null,
             };
 
             try
             {
+                if (options.Headless)
+                {
+                    using var headless = new HeadlessComp(options, log);
+                    var ran = headless.Run();
+                    cli.ReportFrames(headless.Frames);
+                    BasinReport.Line(CompositorLines.Frames(headless.Frames));
+                    return ran;
+                }
+
                 using var comp = new SdlComp(options, log);
                 var status = comp.Run();
                 cli.ReportFrames(comp.Frames);
@@ -63,7 +79,7 @@ internal static class Program
             }
             catch (Exception error) when (error is InvalidOperationException or DllNotFoundException)
             {
-                log.Error($"{error.Message}");
+                log.Error(error, $"compositor stopped");
                 return 1;
             }
         });

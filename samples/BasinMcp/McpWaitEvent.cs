@@ -66,7 +66,7 @@ internal static class McpWaitEvent
         try
         {
             request = McpJson.Deserialize<McpWaitEventRequest>(McpJson.Object(arguments))
-                ?? throw new JsonException("the arguments are an object");
+                ?? throw new JsonException("The arguments must be an object.");
         }
         catch (JsonException exception)
         {
@@ -76,7 +76,7 @@ internal static class McpWaitEvent
         var events = request.Events;
         if (events.Count == 0)
         {
-            return McpJson.Error($"{IpcErrorCodes.InvalidParams}: name at least one event");
+            return McpJson.Error($"{IpcErrorCodes.InvalidParams}: Give at least one event.");
         }
 
         var match = request.Match is { ValueKind: JsonValueKind.Object } wanted ? wanted : (JsonElement?)null;
@@ -84,7 +84,7 @@ internal static class McpWaitEvent
         var collect = request.CollectMs ?? 0;
         if (timeout is < 1 or > MaxTimeoutMs || collect < 0)
         {
-            return McpJson.Error($"{IpcErrorCodes.InvalidParams}: 'timeout_ms' is between 1 and {MaxTimeoutMs}, and 'collect_ms' is at least 0");
+            return McpJson.Error($"{IpcErrorCodes.InvalidParams}: 'timeout_ms' must be between 1 and {MaxTimeoutMs}, and 'collect_ms' must be at least 0.");
         }
 
         McpToolEntry? thenEntry = null;
@@ -93,7 +93,7 @@ internal static class McpWaitEvent
         {
             if (!bridge.Table.TryGetMethod(then.Method, out var entry) && !bridge.Table.TryGet(then.Method, out entry))
             {
-                return McpJson.Error($"{IpcErrorCodes.UnknownMethod}: 'then' names '{then.Method}', which is not a tool of this bridge");
+                return McpJson.Error($"{IpcErrorCodes.UnknownMethod}: 'then' names '{then.Method}', but this bridge has no such tool.");
             }
 
             thenEntry = entry;
@@ -163,7 +163,7 @@ internal static class McpWaitEvent
         {
             return new CallToolResult
             {
-                Content = [new TextContentBlock { Text = $"timeout: no matching event in {timeout} ms\n{Encoding.UTF8.GetString(json)}" }],
+                Content = [new TextContentBlock { Text = $"timeout: No matching event arrived in {timeout} ms.\n{Encoding.UTF8.GetString(json)}" }],
                 IsError = true,
             };
         }

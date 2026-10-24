@@ -93,7 +93,7 @@ public sealed class IpcApprovalTests
         Assert.Null(Code(Parse(first.Call($$$"""{"id":5,"method":"approval/answer","params":{"id":{{{id}}},"answer":"deny"}}"""))));
         var denied = Reply(agent, 4);
         Assert.Equal(IpcErrorCodes.Refused, Code(denied));
-        Assert.Equal("a person denied the call", denied.GetProperty("error").GetProperty("message").GetString());
+        Assert.Contains("person denied the call", denied.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
 
         agent.Send("""{"id":6,"method":"process/spawn","params":{"argv":["true"]}}""");
         id = Event(first).GetProperty("id").GetInt64();

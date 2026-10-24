@@ -84,10 +84,10 @@ internal static unsafe class VideoToolboxNative
         }
         catch (EntryPointNotFoundException missing)
         {
-            return $"the CoreFoundation on this host misses a symbol: {missing.Message}";
+            return $"the CoreFoundation on this host lacks a symbol ({missing.Message})";
         }
 
-        Log.Debug($"decode over VideoToolbox.framework");
+        Log.Debug($"decoding over VideoToolbox.framework");
         return null;
     }
 
@@ -111,6 +111,7 @@ internal static unsafe class VideoToolboxNative
         }
         catch (EntryPointNotFoundException)
         {
+            Log.Debug($"supplemental decoders are not available on this host");
         }
     }
 

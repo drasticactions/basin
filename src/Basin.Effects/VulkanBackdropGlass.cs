@@ -578,7 +578,7 @@ public sealed unsafe class VulkanBackdropGlass : IVulkanBackdropEffect, IBackdro
     private ShaderModule CreateShaderModule(string resourceName)
     {
         using var stream = typeof(VulkanBackdropGlass).Assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"missing shader resource {resourceName}");
+            ?? throw new InvalidOperationException($"The shader resource {resourceName} is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         fixed (byte* codePtr = code)

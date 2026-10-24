@@ -41,7 +41,7 @@ internal sealed partial class LunaShell
         if (_fcitx is null)
         {
             _fcitxReason = reason ?? "fcitx5 is not reachable";
-            _log.Info($"keyboard: no fcitx5 prediction: {_fcitxReason}");
+            _log.Info($"keyboard: no fcitx5 prediction, {_fcitxReason}");
             return;
         }
 
@@ -51,7 +51,7 @@ internal sealed partial class LunaShell
         _fcitx.CandidatesChanged += OnFcitx5Candidates;
         _fcitx.PreeditChanged += OnFcitx5Preedit;
         _fcitx.InputMethodChanged += name => _report.Line($"FCITX5 im={name ?? "-"}");
-        _fcitx.ShowRequested += show => _log.Debug($"keyboard: fcitx5 asks to {(show ? "show" : "hide")} the keyboard; LunaWm's own rule decides");
+        _fcitx.ShowRequested += show => _log.Debug($"keyboard: fcitx5 asks to {(show ? "show" : "hide")} the keyboard, LunaWm's own rule decides");
         SyncFcitx5Field();
     }
 

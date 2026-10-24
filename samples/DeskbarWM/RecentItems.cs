@@ -27,6 +27,7 @@ internal sealed class RecentItems
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            _log.Warn(error, $"recent: cannot read the recent applications from {RecentAppsPath}");
         }
     }
 
@@ -48,7 +49,7 @@ internal sealed class RecentItems
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"could not save the recent applications: {error.Message}");
+            _log.Warn(error, $"recent: cannot save the recent applications to {RecentAppsPath}");
         }
     }
 
@@ -82,7 +83,7 @@ internal sealed class RecentItems
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Xml.XmlException)
         {
-            _log.Warn($"could not read recently-used.xbel: {error.Message}");
+            _log.Warn(error, $"recent: cannot read recently-used.xbel");
         }
 
         return (documents, folders);

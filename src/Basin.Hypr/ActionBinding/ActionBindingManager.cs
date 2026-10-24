@@ -212,7 +212,7 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
 
             if (!TryChord(keysyms, out var keysym, out var modifiers))
             {
-                Log.Warn($"action binding {number}: a trigger with more than one non-modifier key is not supported and never fires");
+                Log.Warn($"action binding {number}: trigger has more than one non-modifier key, the binding never fires");
                 return;
             }
 

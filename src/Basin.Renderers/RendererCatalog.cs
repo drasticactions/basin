@@ -54,7 +54,7 @@ public static class RendererCatalog
         "skia-gl" => Basin.Render.Skia.SkiaGlRenderer.CreateStack(renderNodePath),
         "skia-vulkan" => Basin.Render.Skia.SkiaVulkanRenderer.CreateStack(renderNodePath),
         "skia-graphite" => Basin.Render.Skia.SkiaGraphiteRenderer.CreateStack(renderNodePath),
-        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "not a renderer basin ships"),
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "No basin renderer has this name."),
     };
 
     /// <summary>
@@ -76,7 +76,7 @@ public static class RendererCatalog
         {
             if (floor != "pixman")
             {
-                throw new InvalidOperationException($"no render node, and the floor is {floor}");
+                throw new InvalidOperationException($"No render node was found. The {floor} renderer floor needs a render node.");
             }
 
             report?.Invoke(new RendererFallback(name, "pixman", null));
@@ -102,7 +102,7 @@ public static class RendererCatalog
                     throw;
                 }
 
-                report?.Invoke(new RendererFallback(name, next, error.Message));
+                report?.Invoke(new RendererFallback(name, next, error.Message) { Error = error });
                 name = next;
             }
         }

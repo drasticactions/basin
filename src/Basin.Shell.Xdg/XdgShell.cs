@@ -120,13 +120,13 @@ public sealed class XdgShell : IDisposable
             var surface = Compositor.ResolveSurface(e.Surface);
             if (surface is null)
             {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, "unknown wl_surface");
+                wmBase.PostError((uint)XdgWmBase.Error.Role, "The wl_surface is not known.");
                 return;
             }
 
             if (surface.Current.Buffer is not null || surface.Pending.Buffer is not null)
             {
-                wmBase.PostError((uint)XdgWmBase.Error.InvalidSurfaceState, "surface already has a buffer at xdg_surface creation");
+                wmBase.PostError((uint)XdgWmBase.Error.InvalidSurfaceState, "The surface already has a buffer. Make the xdg_surface before you attach a buffer.");
                 return;
             }
 
@@ -145,7 +145,7 @@ public sealed class XdgShell : IDisposable
         {
             if (e.Width <= 0 || e.Height <= 0)
             {
-                resource.PostError((uint)XdgPositioner.Error.InvalidInput, "positioner size must be positive");
+                resource.PostError((uint)XdgPositioner.Error.InvalidInput, "The positioner size must be more than zero.");
                 return;
             }
 
@@ -159,7 +159,7 @@ public sealed class XdgShell : IDisposable
         {
             if (e.Width < 0 || e.Height < 0)
             {
-                resource.PostError((uint)XdgPositioner.Error.InvalidInput, "anchor rect size must be non-negative");
+                resource.PostError((uint)XdgPositioner.Error.InvalidInput, "The anchor rectangle size must not be negative.");
                 return;
             }
 

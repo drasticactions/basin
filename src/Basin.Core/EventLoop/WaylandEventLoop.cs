@@ -247,7 +247,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
                 if (pipe2(fds, ONonblock | OCloexec) != 0)
                 {
                     throw new InvalidOperationException(
-                        $"pipe2 failed for signal {signalNumber}: errno {Marshal.GetLastPInvokeError()}");
+                        $"pipe2 failed for signal {signalNumber} with errno {Marshal.GetLastPInvokeError()}.");
                 }
             }
             else
@@ -255,7 +255,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
                 if (pipe(fds) != 0)
                 {
                     throw new InvalidOperationException(
-                        $"pipe failed for signal {signalNumber}: errno {Marshal.GetLastPInvokeError()}");
+                        $"pipe failed for signal {signalNumber} with errno {Marshal.GetLastPInvokeError()}.");
                 }
 
                 for (var i = 0; i < 2; i++)
@@ -315,10 +315,10 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         }
 
         public void UpdateTimer(int delayMs) =>
-            throw new InvalidOperationException("a signal source has no timer");
+            throw new InvalidOperationException("A signal source has no timer.");
 
         public void UpdateFd(FdReadiness events) =>
-            throw new InvalidOperationException("a signal source watches its own fd");
+            throw new InvalidOperationException("A signal source watches its own fd. Its fd cannot change.");
 
         private static unsafe void WriteByte(int fd)
         {

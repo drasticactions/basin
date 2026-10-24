@@ -21,7 +21,7 @@ public sealed class GlbReaderTests
     {
         var document = GlbDocument.Parse(Glb(mode: 1, extensions: null));
         var error = Assert.Throws<NotSupportedException>(() => GlbMeshes.Flatten(document, [], null));
-        Assert.Contains("not triangles", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Only triangles", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

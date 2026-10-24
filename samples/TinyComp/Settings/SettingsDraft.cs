@@ -1,5 +1,6 @@
 using System.Globalization;
 using Basin.Config;
+using Basin.Diagnostics;
 using Tomlyn;
 using Tomlyn.Model;
 
@@ -7,6 +8,13 @@ namespace TinyComp;
 
 internal sealed class SettingsDraft
 {
+    private const int UnixDiskFull = 28;
+    private const int UnixReadOnlyDisk = 30;
+    private const int UnixQuotaFull = 122;
+    private const int WindowsDiskFull = unchecked((int)0x80070070);
+    private const int WindowsHandleDiskFull = unchecked((int)0x80070027);
+    private const int WindowsWriteProtect = unchecked((int)0x80070013);
+
     private static readonly Dictionary<string, string[]> TableSegments = new(StringComparer.Ordinal);
 
     private readonly HashSet<string> _dirty = new(StringComparer.Ordinal);
@@ -19,8 +27,11 @@ internal sealed class SettingsDraft
     private long _fileLength;
     private DateTime _fileWrite;
 
-    private SettingsDraft(string? path, TomlDocument file, string? refusal)
+    private readonly BasinLogger? _log;
+
+    private SettingsDraft(string? path, TomlDocument file, string? refusal, BasinLogger? log)
     {
+        _log = log;
         FilePath = path;
         Refusal = refusal;
         _file = file;
@@ -35,7 +46,7 @@ internal sealed class SettingsDraft
     public string? Refusal { get; private set; }
 
     public string? SaveBlocked => FilePath is null
-        ? "--config false reads no file, so there is nothing to save"
+        ? "TinyComp is running with --config false, so there's no file to save to."
         : Refusal;
 
     public TomlDocument Document => _draft;
@@ -48,7 +59,9 @@ internal sealed class SettingsDraft
 
     public IReadOnlyCollection<string> DirtyPaths => _dirty;
 
-    public string Status { get; set; } = string.Empty;
+    public string Status { get; private set; } = string.Empty;
+
+    public string ReportStatus { get; private set; } = string.Empty;
 
     public bool Conflict { get; private set; }
 
@@ -58,26 +71,44 @@ internal sealed class SettingsDraft
 
     public event Action? Changed;
 
-    public static SettingsDraft Open(string? path)
+    public static SettingsDraft Open(string? path, BasinLogger? log = null)
     {
         if (path is null)
         {
-            return new SettingsDraft(null, TomlDocument.Parse(string.Empty), null);
+            return new SettingsDraft(null, TomlDocument.Parse(string.Empty), null, log);
         }
 
         if (!File.Exists(path))
         {
-            return new SettingsDraft(path, TomlDocument.Parse(string.Empty), null);
+            return new SettingsDraft(path, TomlDocument.Parse(string.Empty), null, log);
         }
 
         try
         {
-            return new SettingsDraft(path, TomlDocument.Load(path), null);
+            return new SettingsDraft(path, TomlDocument.Load(path), null, log);
         }
         catch (Exception error) when (error is FormatException or IOException or UnauthorizedAccessException)
         {
-            return new SettingsDraft(path, TomlDocument.Parse(string.Empty), $"{path} does not read: {error.Message}");
+            log?.Warn(error, $"settings: {path} not read, the panel starts empty");
+            return new SettingsDraft(path, TomlDocument.Parse(string.Empty), ReadRefusal(path), log);
         }
+    }
+
+    public static string ReadRefusal(string path) => $"Couldn't read {path}. Fix the file, or revert to start fresh.";
+
+    public static string SaveFailure(Exception error) => error switch
+    {
+        UnauthorizedAccessException => "Couldn't save your settings. You don't have permission to write this file.",
+        DirectoryNotFoundException => "Couldn't save your settings. The folder for this file doesn't exist.",
+        IOException { HResult: UnixDiskFull or UnixQuotaFull or WindowsDiskFull or WindowsHandleDiskFull } => "Couldn't save your settings. Your disk is full.",
+        IOException { HResult: UnixReadOnlyDisk or WindowsWriteProtect } => "Couldn't save your settings. The disk is read-only.",
+        _ => "Couldn't save your settings. The log has the details.",
+    };
+
+    public void ShowFailure(string status, string report)
+    {
+        SetStatus(status, report);
+        Changed?.Invoke();
     }
 
     public object? Get(string table, string key) => Lookup(_draftModel, table, key);
@@ -213,7 +244,13 @@ internal sealed class SettingsDraft
 
     public TomlTable? Table(string table) => Navigate(_draftModel, SegmentsOf(table));
 
-    public void Revert(string status)
+    public void SetStatus(string status, string report)
+    {
+        Status = status;
+        ReportStatus = report;
+    }
+
+    public void Revert(string status, string report)
     {
         if (FilePath is { } path && File.Exists(path))
         {
@@ -224,7 +261,8 @@ internal sealed class SettingsDraft
             }
             catch (Exception error) when (error is FormatException or IOException or UnauthorizedAccessException)
             {
-                Refusal = $"{path} does not read: {error.Message}";
+                _log?.Warn(error, $"settings: {path} not read, the panel starts empty");
+                Refusal = ReadRefusal(path);
                 _file = TomlDocument.Parse(string.Empty);
             }
         }
@@ -235,7 +273,7 @@ internal sealed class SettingsDraft
         Conflict = false;
         _errors.Clear();
         _hints.Clear();
-        Status = status;
+        SetStatus(status, report);
         Touch(null);
     }
 
@@ -250,27 +288,17 @@ internal sealed class SettingsDraft
         if (!overwrite && ChangedOnDisk())
         {
             Conflict = true;
-            Status = "the file changed on disk";
+            SetStatus("Your settings file changed on disk. Revert to load it.", "the file changed on disk");
             Changed?.Invoke();
             return Status;
         }
 
-        try
-        {
-            _draft.Save(path);
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            Status = $"save failed: {error.Message}";
-            Changed?.Invoke();
-            return Status;
-        }
-
+        _draft.Save(path);
         _file = TomlDocument.Parse(_draft.ToString());
         _fileModel = Toml.ToModel(_file.ToString());
         Stamp();
         Conflict = false;
-        Status = "saved";
+        SetStatus("Saved", "saved");
         Touch(null);
         return null;
     }

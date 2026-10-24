@@ -59,7 +59,7 @@ public sealed class IpcEventBus : IDisposable
         {
             if (IpcProtocol.NamespaceOf(name).SequenceEqual(reserved))
             {
-                throw new ArgumentException($"'{name}' is in an event namespace the library owns", nameof(name));
+                throw new ArgumentException($"The library owns the event namespace of '{name}'. Declare the event in another namespace.", nameof(name));
             }
         }
 
@@ -103,7 +103,7 @@ public sealed class IpcEventBus : IDisposable
     /// <param name="options">The subscription's options, or <see langword="null"/>.</param>
     /// <returns>The text of the refusal, or <see langword="null"/> when the subscription is valid.</returns>
     public string? Validate(string name, JsonElement? options) =>
-        !_topics.TryGetValue(name, out var topic) ? $"no event '{name}' in this session" : topic.Source?.Validate(name, options);
+        !_topics.TryGetValue(name, out var topic) ? $"This session has no event '{name}'. Call ipc/events for the list." : topic.Source?.Validate(name, options);
 
     /// <summary>
     /// Subscribes to an event. A second subscription by the same subscriber replaces its options and keeps its place in the order.
@@ -219,12 +219,12 @@ public sealed class IpcEventBus : IDisposable
     {
         if (_emitting is not null)
         {
-            throw new InvalidOperationException($"'{_emitting}' is still being written");
+            throw new InvalidOperationException($"The event '{_emitting}' is still being written. Finish it before the next one.");
         }
 
         if (!_topics.ContainsKey(name))
         {
-            throw new ArgumentException($"'{name}' is not a declared event", nameof(name));
+            throw new ArgumentException($"'{name}' is not a declared event. Declare it before you emit it.", nameof(name));
         }
 
         _emitting = name;
@@ -260,7 +260,7 @@ public sealed class IpcEventBus : IDisposable
     /// <exception cref="InvalidOperationException">No event is being written.</exception>
     public void EndEvent()
     {
-        var name = _emitting ?? throw new InvalidOperationException("no event is being written");
+        var name = _emitting ?? throw new InvalidOperationException("No event is being written. Begin an event first.");
         _emitting = null;
         _dataWriter!.Flush();
         Emit(name, _data!.Length == 0 ? "{}"u8 : _data.Written);
@@ -364,12 +364,12 @@ public sealed class IpcEventBus : IDisposable
     {
         if (!IpcProtocol.IsValidName(name))
         {
-            throw new ArgumentException($"'{name}' is not namespace/verb in [a-z0-9-]", nameof(name));
+            throw new ArgumentException($"'{name}' is not a namespace/verb name. Use only a-z, 0-9 and '-' in each part.", nameof(name));
         }
 
         if (!_topics.TryAdd(name, new Topic(source)))
         {
-            throw new InvalidOperationException($"'{name}' is already declared");
+            throw new InvalidOperationException($"'{name}' is already declared.");
         }
 
         _sorted = null;

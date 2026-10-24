@@ -34,7 +34,7 @@ internal sealed unsafe class ImGuiDemo : IImGuiContent, IDisposable
             InputFromSurface = true,
             PreciseDamage = true,
         };
-        _node.Faulted += error => log.Error($"imgui demo: {error.Message}");
+        _node.Faulted += error => log.Error(error, $"imgui demo: surface faulted");
         _linkStart[0] = 2;
         _linkEnd[0] = 103;
         _links = 1;
@@ -62,7 +62,7 @@ internal sealed unsafe class ImGuiDemo : IImGuiContent, IDisposable
         if (!ReferenceEquals(had, surface))
         {
             surface.Content = this;
-            surface.Faulted += error => _log.Error($"imgui demo: the content threw: {error}");
+            surface.Faulted += error => _log.Error(error, $"imgui demo: the content threw");
             SurfaceCreated?.Invoke(surface);
         }
 

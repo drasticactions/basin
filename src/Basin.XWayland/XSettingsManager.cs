@@ -46,7 +46,7 @@ public sealed unsafe class XSettingsManager
         if (owner != 0)
         {
             ExistingOwner = owner;
-            Log.Info($"_XSETTINGS_S0 is owned by window 0x{owner:x}, so basin publishes no XSETTINGS");
+            Log.Info($"xsettings: window 0x{owner:x} owns _XSETTINGS_S0, basin publishes no XSETTINGS");
             return;
         }
 

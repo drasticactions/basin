@@ -622,13 +622,13 @@ public sealed class WaylandHostFrame : IDisposable
         _mappingFd = memfd_create("basin-wl-hostframe", 1 );
         if (_mappingFd < 0 || ftruncate(_mappingFd, _mappingSize) != 0)
         {
-            throw new InvalidOperationException("host frame shm creation failed");
+            throw new InvalidOperationException("The shared memory for the host frame was not created.");
         }
 
         var map = mmap(null, (nuint)_mappingSize, ProtReadWrite, MapShared, _mappingFd, 0);
         if ((nint)map == -1)
         {
-            throw new InvalidOperationException("host frame shm mmap failed");
+            throw new InvalidOperationException("The shared memory for the host frame was not mapped.");
         }
 
         _mapping = (nint)map;

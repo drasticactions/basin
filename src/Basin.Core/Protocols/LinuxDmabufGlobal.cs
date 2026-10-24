@@ -422,7 +422,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
     private static ulong DeviceId(string devicePath) =>
         DrmDevices.TryDeviceId(devicePath, out var devT)
             ? devT
-            : throw new InvalidOperationException($"no dev_t for '{devicePath}'");
+            : throw new InvalidOperationException($"The device '{devicePath}' has no dev_t. Give the path of a DRM device node.");
 
     private sealed class BufferParams
     {
@@ -702,7 +702,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
             }
             else
             {
-                Log.Warn($"dmabuf create rejected: {message}");
+                Log.Debug($"dmabuf: create refused, {message}");
                 _resource.SendFailed();
             }
         }

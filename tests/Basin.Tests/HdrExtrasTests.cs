@@ -173,7 +173,7 @@ public sealed class HdrExtrasTests
 
     [Theory]
     [InlineData("LUT_1D_SIZE 4\n0 0 0\n", "1D LUT")]
-    [InlineData("LUT_3D_SIZE 2\n0 0 0\n1 1 1\n", "2 rows")]
+    [InlineData("LUT_3D_SIZE 2\n0 0 0\n1 1 1\n", "2 data rows")]
     [InlineData("LUT_3D_SIZE 1\n", "LUT_3D_SIZE")]
     [InlineData("0 0 0\n", "before LUT_3D_SIZE")]
     [InlineData("LUT_3D_SIZE 2\n0 0 x\n", "not a number")]

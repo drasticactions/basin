@@ -46,7 +46,7 @@ internal sealed class ShellXWayland : IDisposable
     private void OnAdopted(XWaylandWindow window, SceneSurface scene, bool managed)
     {
         Changed?.Invoke();
-        _log.Info($"mapped X window {window.WindowId} \"{window.Title}\"");
+        _log.Debug($"xwayland: mapped X window {window.WindowId} \"{window.Title}\"");
         if (managed)
         {
             Activate(window);

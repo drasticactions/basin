@@ -12,7 +12,7 @@ internal readonly record struct DeskbarPlacement(
     {
         if (Orientation == BarOrientation.Horizontal && State == DeskbarState.Full)
         {
-            warning = "the Deskbar has no horizontal full state; using horizontal expando";
+            warning = "[deskbar] there is no horizontal full state, horizontal expando is used";
             return this with { State = DeskbarState.Expando };
         }
 

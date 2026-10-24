@@ -235,7 +235,7 @@ public sealed class LibinputBackend : IDisposable
         if (_suspended && _libinput is not null)
         {
             _suspended = false;
-            Log.Debug($"session enabled: reopening {_deferred.Count} input devices off the loop");
+            Log.Debug($"session: enabled, reopening {_deferred.Count} input devices off the loop");
             foreach (var devnode in _deferred)
             {
                 BeginOpen(devnode);
@@ -338,7 +338,15 @@ public sealed class LibinputBackend : IDisposable
         if (opened is null)
         {
             _known.Remove(devnode);
-            Log.Debug($"{devnode}: open failed: {task.Exception?.InnerException?.Message}");
+            if (task.Exception?.InnerException is { } error)
+            {
+                Log.Debug(error, $"{devnode}: open failed");
+            }
+            else
+            {
+                Log.Debug($"{devnode}: open was canceled");
+            }
+
             return;
         }
 
@@ -366,7 +374,7 @@ public sealed class LibinputBackend : IDisposable
         catch (LibinputException e)
         {
             _known.Remove(devnode);
-            Log.Debug($"{devnode}: {e.Message}");
+            Log.Debug(e, $"{devnode}: libinput refused the device");
         }
     }
 

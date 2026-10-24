@@ -1,4 +1,5 @@
 using Basin.Capabilities;
+using Basin.Diagnostics;
 
 namespace Basin.Color;
 
@@ -19,6 +20,8 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
     private readonly Dictionary<IOutput, Action> _cleanup = [];
     private readonly Dictionary<IOutput, double[]> _routedCtm = [];
     private readonly Dictionary<IOutput, OutputGammaRamps> _routedGamma = [];
+    private static readonly BasinLogger Log = BasinLog.For("color");
+
     private string? _failure;
 
     /// <summary>
@@ -202,7 +205,7 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
     /// </summary>
     /// <param name="output">The output.</param>
     /// <param name="path">The file path, or <see langword="null"/> to remove the look.</param>
-    /// <param name="error">The path and the reason when the file does not load, otherwise <see langword="null"/>.</param>
+    /// <param name="error">A sentence that names the path and the reason when the file does not load, otherwise <see langword="null"/>.</param>
     /// <returns><see langword="false"/> when the file cannot be read or parsed.</returns>
     public bool SetLook(IOutput output, string? path, out string? error)
     {
@@ -222,7 +225,14 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
         {
-            error = $"{path}: {exception.Message}";
+            Log.Warn(exception, $"look: {path} did not load, the current look stays");
+            error = exception switch
+            {
+                FileNotFoundException or DirectoryNotFoundException => $"The look file {path} does not exist. Give the path of a .cube file.",
+                UnauthorizedAccessException => $"The compositor cannot read the look file {path}. Check the permissions of the file.",
+                FormatException => $"The look file {path} is not a valid .cube file. {exception.Message}",
+                _ => $"The compositor cannot read the look file {path}. {exception.Message}",
+            };
             return false;
         }
 
@@ -836,19 +846,19 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
 
     private bool Validate(in OutputConfigurationEntry entry)
     {
-        var unapplied = entry.WideColorGamut is not null ? "wide color gamut"
-            : entry.HdrColorProfileSource is not null ? "the hdr color profile source"
-            : entry.HdrIccProfilePath is not null ? "the hdr icc profile"
+        var unapplied = entry.WideColorGamut is not null ? "Wide color gamut"
+            : entry.HdrColorProfileSource is not null ? "The HDR color profile source"
+            : entry.HdrIccProfilePath is not null ? "The HDR ICC profile"
             : null;
         if (unapplied is not null)
         {
-            _failure = $"{unapplied} is not supported";
+            _failure = $"{unapplied} is not supported. Remove it from the output configuration.";
             return false;
         }
 
         if (entry.IccProfilePath is { Length: > 0 } path && !TryReadProfile(path, out _))
         {
-            _failure = $"the icc profile at {path} could not be read";
+            _failure = $"The ICC profile at {path} cannot be read. Give a readable ICC profile.";
             return false;
         }
 

@@ -114,7 +114,7 @@ public static class ColorBlindnessShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(ColorBlindnessShader).Assembly.GetManifestResourceStream("colorblind.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource colorblind.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource colorblind.frag.spv is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

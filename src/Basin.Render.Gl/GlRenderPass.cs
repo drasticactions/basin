@@ -73,7 +73,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         var bounds = requested.Intersect(new Box(0, 0, _target.Width, _target.Height));
         if (effect is not IGlBackdropEffect glEffect)
         {
-            throw new ArgumentException("effect does not belong to this renderer");
+            throw new ArgumentException("The effect does not come from this renderer.", nameof(effect));
         }
 
         if (bounds.IsEmpty)
@@ -129,7 +129,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         if (filter is not IGlFilter glFilter)
         {
-            throw new ArgumentException("filter does not belong to this renderer");
+            throw new ArgumentException("The filter does not come from this renderer.", nameof(filter));
         }
 
         if (!glFilter.IsSupported)
@@ -160,7 +160,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
 
                 break;
             default:
-                throw new ArgumentException("texture does not belong to this renderer");
+                throw new ArgumentException("The texture does not come from this renderer.", nameof(source));
         }
 
         _gl.ActiveTexture(TextureUnit.Texture0);
@@ -259,7 +259,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
                 forceOpaque = !shm.HasAlpha;
                 break;
             default:
-                throw new ArgumentException("texture does not belong to this renderer");
+                throw new ArgumentException("The texture does not come from this renderer.", nameof(texture));
         }
 
         var src = options.SrcBox.IsEmpty
@@ -275,14 +275,14 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             case GlPixelShader glShader:
                 if (!glShader.SamplesTexture)
                 {
-                    throw new ArgumentException("shader does not sample a texture");
+                    throw new ArgumentException("The shader does not sample a texture. Draw it through AddShader.", nameof(options));
                 }
 
                 custom = glShader;
                 program = glShader.Program;
                 break;
             default:
-                throw new ArgumentException("shader does not belong to this renderer");
+                throw new ArgumentException("The shader does not come from this renderer.", nameof(options));
         }
 
         if (options.Lut is GlColorLut lut)
@@ -357,12 +357,12 @@ internal sealed unsafe class GlRenderPass : IRenderPass
         ObjectDisposedException.ThrowIf(_target is null, this);
         if (shader is not GlPixelShader glShader)
         {
-            throw new ArgumentException("shader does not belong to this renderer");
+            throw new ArgumentException("The shader does not come from this renderer.", nameof(shader));
         }
 
         if (glShader.SamplesTexture)
         {
-            throw new ArgumentException("shader samples a texture and must draw through AddTexture");
+            throw new ArgumentException("The shader samples a texture. Draw it through AddTexture.", nameof(shader));
         }
 
         if (options.DstBox.IsEmpty)
@@ -391,7 +391,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
 
         if (vertices.Length % 3 != 0)
         {
-            throw new ArgumentException("vertices must be a whole number of triangles", nameof(vertices));
+            throw new ArgumentException("The vertex count must be a multiple of three.", nameof(vertices));
         }
 
         uint textureId = 0;
@@ -427,7 +427,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
                 forceOpaque = !shm.HasAlpha;
                 break;
             default:
-                throw new ArgumentException("texture does not belong to this renderer");
+                throw new ArgumentException("The texture does not come from this renderer.", nameof(texture));
         }
 
         var program = _renderer.MeshProgram;

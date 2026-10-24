@@ -36,13 +36,13 @@ internal sealed class LunaGreeterConfig
 
         if (!File.Exists(path))
         {
-            log.Info($"{path} does not exist; every key is at its default");
+            log.Info($"config: {path} does not exist, every key is at its default");
             return config;
         }
 
         if (TomlConfig.Read(path, out var failure) is not { } table)
         {
-            log.Warn($"{path}: {failure}; every key is at its default");
+            log.Warn($"config: {path} not read, {failure}, defaults used");
             config.Failed = true;
             return config;
         }

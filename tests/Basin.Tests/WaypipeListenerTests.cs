@@ -148,14 +148,17 @@ public sealed class WaypipeListenerTests
     }
 
     [Theory]
-    [InlineData(false, "inside WSL2: a client in this VM reaches vsock:9800 over CID 1, which needs 'sudo modprobe vsock_loopback'; Windows reaches it as VmId=<this VM> ServiceId=00002648-facb-11e6-bd58-64006a7986d3")]
-    [InlineData(true, "inside WSL2: a client in this VM reaches vsock:9800 over CID 1; Windows reaches it as VmId=<this VM> ServiceId=00002648-facb-11e6-bd58-64006a7986d3")]
-    public void The_WSL_hint_leaves_out_the_modprobe_clause_once_vsock_loopback_is_loaded(bool loaded, string expected)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_WSL_hint_leaves_out_the_modprobe_clause_once_vsock_loopback_is_loaded(bool loaded)
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(), "the hint is logged by the Linux listener");
         if (OperatingSystem.IsLinux())
         {
-            Assert.Equal(expected, WslHint.Text(new VsockEndPoint(9800), loaded));
+            var hint = WslHint.Text(new VsockEndPoint(9800), loaded);
+            Assert.Contains("vsock:9800 over CID 1", hint, StringComparison.Ordinal);
+            Assert.Contains("ServiceId=00002648-facb-11e6-bd58-64006a7986d3", hint, StringComparison.Ordinal);
+            Assert.Equal(!loaded, hint.Contains("modprobe vsock_loopback", StringComparison.Ordinal));
         }
     }
 

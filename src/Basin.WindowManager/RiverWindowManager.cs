@@ -122,7 +122,7 @@ public sealed class RiverWindowManager : IDisposable
         }
 
         _wm = wm ?? throw new InvalidOperationException(
-            "the compositor does not implement river_window_manager_v1");
+            "The compositor does not offer river_window_manager_v1.");
         Version = _wm.Version;
         Compositor = compositor;
         Shm = shm;
@@ -239,7 +239,7 @@ public sealed class RiverWindowManager : IDisposable
     public event Action? Unavailable;
 
     /// <summary>
-    /// Dispatches the connection and the loop until the compositor finishes, refuses window management or the connection fails. An exception from an event handler leaves the method unwrapped.
+    /// Dispatches the connection and the loop until the compositor finishes, refuses window management or the connection fails. The first <c>SIGINT</c> or <c>SIGTERM</c> calls <see cref="Stop"/>, and a second one ends the method at once. An exception from an event handler leaves the method unwrapped.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The manager is disposed.</exception>
     public void Run()
@@ -266,6 +266,16 @@ public sealed class RiverWindowManager : IDisposable
             }
         });
 
+        var signals = WmStopSignals.TryCreate(_loop, count =>
+        {
+            if (count > 1)
+            {
+                _finished = true;
+                return;
+            }
+
+            Stop();
+        });
         try
         {
             while (!_finished && !_unavailable)
@@ -297,6 +307,7 @@ public sealed class RiverWindowManager : IDisposable
         }
         finally
         {
+            signals?.Dispose();
             source.Remove();
         }
     }
@@ -497,7 +508,7 @@ public sealed class RiverWindowManager : IDisposable
         if (_sequence != WmSequence.Manage)
         {
             throw new InvalidOperationException(
-                $"'{request}' modifies window management state and is only legal inside a manage sequence; current sequence is {_sequence}");
+                $"'{request}' changes window management state outside a manage sequence. The current sequence is {_sequence}.");
         }
     }
 
@@ -507,7 +518,7 @@ public sealed class RiverWindowManager : IDisposable
         if (_sequence == WmSequence.None)
         {
             throw new InvalidOperationException(
-                $"'{request}' modifies rendering state and is only legal inside a manage or render sequence");
+                $"'{request}' changes rendering state outside a manage or render sequence. Call it inside a sequence.");
         }
     }
 
@@ -516,7 +527,7 @@ public sealed class RiverWindowManager : IDisposable
         if (Version < since)
         {
             throw new NotSupportedException(
-                $"'{request}' requires river_window_management_v1 version {since}; the compositor bound version {Version}");
+                $"'{request}' needs river_window_manager_v1 version {since}. The compositor bound version {Version}.");
         }
     }
 
@@ -794,8 +805,8 @@ public sealed class RiverWindowManager : IDisposable
         if (names is not null)
         {
             throw new InvalidOperationException(
-                $"SyncNextCommit was called without a following surface commit before render_finish: {names}. " +
-                "The library committed the surfaces so that the compositor keeps the window manager connected.");
+                $"SyncNextCommit had no surface commit before render_finish for {names}. " +
+                "The library committed the surfaces, so the compositor keeps the window manager connected.");
         }
     }
 }

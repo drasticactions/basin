@@ -185,7 +185,7 @@ internal sealed partial class Greeter
     private async Task Report(string ssid, Task<bool> pending)
     {
         var done = await pending.ConfigureAwait(true);
-        _model.Bar.Network.Message = done ? GreeterText.Connected : GreeterText.NotSupported;
+        _model.Bar.Network.Message = done ? GreeterText.Connected : GreeterText.ConnectFailed;
         BasinReport.Line($"NETWORK {ssid} {(done ? "ok" : "failed")}");
     }
 

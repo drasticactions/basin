@@ -82,7 +82,7 @@ internal sealed class MauiCompSeat : IDisposable
             input.DeviceAdded += device => BasinReport.Line($"INPUT + {device.Name}");
             input.DeviceRemoved += device => BasinReport.Line($"INPUT - {device.Name}");
             _binder.BindLibinput(input);
-            _log.Info($"libinput started on seat {(host.Session?.SeatName ?? "seat0")}");
+            _log.Info($"input: libinput started on seat {(host.Session?.SeatName ?? "seat0")}");
         }
     }
 

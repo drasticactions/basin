@@ -139,7 +139,7 @@ public sealed class WallTextureTests
         using var session = CanvasSession.Start(TexturedStep("shelf_texture = \"floor.png\"\n"), SsdWin());
         Assert.SkipWhen(session is null, "tinycomp or ssdwin is not available beside the tests");
         Assert.Equal("none", OpenTextured(session!)["shelf-texture"]);
-        Assert.Contains(session!.ErrorLines(), line => line.Contains("shelf_texture", StringComparison.Ordinal) && line.Contains("NOT FOUND", StringComparison.Ordinal));
+        Assert.Contains(session!.ErrorLines(), line => line.Contains("shelf_texture", StringComparison.Ordinal) && line.Contains("not found", StringComparison.Ordinal));
 
         var rgba = new byte[16 * 16 * 4];
         rgba.AsSpan().Fill(200);
@@ -176,7 +176,7 @@ public sealed class WallTextureTests
                 var overview = OpenTextured(session!);
                 Assert.Equal("file", overview["shelf-texture"]);
                 Assert.Equal("none", overview["wall-texture"]);
-                Assert.Single(session!.ErrorLines(), line => line.Contains("wall_texture", StringComparison.Ordinal) && line.Contains("NOT AN IMAGE, drawing flat", StringComparison.Ordinal));
+                Assert.Single(session!.ErrorLines(), line => line.Contains("wall_texture", StringComparison.Ordinal) && line.Contains("not an image, drawing flat", StringComparison.Ordinal));
             }
 
             using (var missing = CanvasSession.Start(TexturedStep("wall_texture = \"stnoe\"\n"), SsdWin()))
@@ -185,7 +185,7 @@ public sealed class WallTextureTests
                 var overview = OpenTextured(missing!);
                 Assert.Equal("none", overview["wall-texture"]);
                 var warning = Assert.Single(missing!.ErrorLines(), line => line.Contains("wall_texture", StringComparison.Ordinal));
-                Assert.Contains("stnoe\": NOT FOUND (presets: stone, brick, wood, noise), drawing flat", warning, StringComparison.Ordinal);
+                Assert.Contains("stnoe\": not found (presets: stone, brick, wood, noise), drawing flat", warning, StringComparison.Ordinal);
             }
         }
         finally

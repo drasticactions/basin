@@ -62,7 +62,7 @@ public sealed class ProcessTests
         await session.SendAsync("submit");
         await session.ExpectAsync("LOGIN failed auth_error");
         var mark = session.Mark();
-        await session.ExpectAsync(line => line.StartsWith("VIEW conversation user=Charles Babbage prompt=\"Password:\" error=\"Login incorrect\"", StringComparison.Ordinal), "the error under a fresh prompt", poke: "where", since: mark);
+        await session.ExpectAsync(line => line.StartsWith("VIEW conversation user=Charles Babbage prompt=\"Password:\" error=\"", StringComparison.Ordinal) && line.Contains("incorrect", StringComparison.Ordinal), "the error under a fresh prompt", poke: "where", since: mark);
         await session.SendAsync("type right");
         await session.SendAsync("submit");
         await session.ExpectAsync("START session=sway");
@@ -221,7 +221,7 @@ public sealed class ProcessTests
         {
             Assert.True(refused.WaitForExit(10000));
             Assert.Equal(1, refused.Process.ExitCode);
-            Assert.Contains(refused.Errors, line => line.Contains("--demo is refused under greetd", StringComparison.Ordinal));
+            Assert.Contains(refused.Errors, line => line.Contains("--demo option is not allowed under greetd", StringComparison.Ordinal));
         }
 
         using var demo = new GreeterSession(GreeterSession.Headless("pixman", fixture.ConfigPath, "--demo"), fixture.Environment);
@@ -243,7 +243,7 @@ public sealed class ProcessTests
         using var session = new GreeterSession(GreeterSession.Headless("pixman", fixture.ConfigPath), fixture.Environment);
         Assert.True(session.WaitForExit(10000));
         Assert.Equal(1, session.Process.ExitCode);
-        Assert.Contains(session.Errors, line => line.Contains("not under greetd", StringComparison.Ordinal));
+        Assert.Contains(session.Errors, line => line.Contains("No greetd socket is set", StringComparison.Ordinal));
         await Task.CompletedTask;
     }
 

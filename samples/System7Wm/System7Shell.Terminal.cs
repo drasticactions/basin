@@ -179,7 +179,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"cannot save the terminal window to {TerminalState.FileOf()}: {error.Message}");
+            _log.Warn(error, $"terminal: cannot save the window to {TerminalState.FileOf()}");
         }
     }
 
@@ -193,7 +193,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"cannot save the terminal font to {TerminalState.FileOf()}: {error.Message}");
+            _log.Warn(error, $"terminal: cannot save the font to {TerminalState.FileOf()}");
         }
     }
 

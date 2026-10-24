@@ -191,8 +191,7 @@ public sealed class CursorImages : IDisposable
                 if (UploadScaled(scaled, frame.Pixels, frame.Width, frame.Height, width, height, entry.Lut))
                 {
                     Log.Debug(
-                        $"cursor {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale} " +
-                        $"and the buffer is {scaled.Width}x{scaled.Height}, so it is scaled to fit the cursor plane");
+                        $"cursor: {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale}, scaled to the {scaled.Width}x{scaled.Height} plane buffer");
 
                     image = new CursorImage(
                         scaled,
@@ -214,8 +213,7 @@ public sealed class CursorImages : IDisposable
                     if (oversized)
                     {
                         Log.Debug(
-                            $"cursor {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale} " +
-                            $"and the buffer is {buffer.Width}x{buffer.Height}, so it cannot go on a cursor plane");
+                            $"cursor: {name} is {frame.Width}x{frame.Height} at scale {entry.Key.Scale}, too large for the {buffer.Width}x{buffer.Height} plane buffer");
                     }
 
                     image = new CursorImage(

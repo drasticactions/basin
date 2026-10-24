@@ -357,7 +357,7 @@ public sealed class FifoManager : IDisposable, IFrameSink
 
             if (_owners.ContainsKey(surface))
             {
-                manager.PostError((uint)WpFifoManagerV1.Error.AlreadyExists, "surface already has a fifo object");
+                manager.PostError((uint)WpFifoManagerV1.Error.AlreadyExists, "The surface already has a fifo object.");
                 return;
             }
 
@@ -402,7 +402,7 @@ public sealed class FifoManager : IDisposable, IFrameSink
             return true;
         }
 
-        resource.PostError((uint)WpFifoV1.Error.SurfaceDestroyed, "the fifo object's surface is gone");
+        resource.PostError((uint)WpFifoV1.Error.SurfaceDestroyed, "The surface of the fifo object is destroyed.");
         return false;
     }
 }

@@ -81,7 +81,7 @@ internal sealed class LunaStatus : IDisposable
             _audio = AudioSession.TryCreate(_loop, out var audioReason, clientName: _clientName);
             if (_audio is null)
             {
-                _log.Info($"status: no volume indicator: {audioReason}");
+                _log.Info($"status: no volume indicator, {audioReason}");
             }
             else
             {
@@ -264,7 +264,7 @@ internal sealed class LunaStatus : IDisposable
         if (_network is not { IsAvailable: true, HasWirelessDevice: true } network)
         {
             rows.Add(new HeaderRow { Label = "Wi-Fi" });
-            rows.Add(new NoteRow { Label = _network?.Reason ?? "No Wi-Fi device" });
+            rows.Add(new NoteRow { Label = Unavailable(_network, "NetworkManager isn't running, so Wi-Fi can't be shown.", "No Wi-Fi device") });
             return;
         }
 
@@ -332,7 +332,7 @@ internal sealed class LunaStatus : IDisposable
     private async Task ReportJoin(string ssid, Task<NetworkActivation> pending)
     {
         var result = await pending.ConfigureAwait(true);
-        _wifiMessage = result.Succeeded ? $"Joined {ssid}" : $"{ssid}: {result.Error}";
+        _wifiMessage = result.Succeeded ? $"Joined {ssid}" : result.Error ?? $"Couldn't join {ssid}.";
         _report.Line(result.Succeeded ? $"WIFI {ssid} ok" : $"WIFI {ssid} failed {result.Error}");
         WifiMenusChanged?.Invoke();
     }
@@ -370,12 +370,19 @@ internal sealed class LunaStatus : IDisposable
         _report.Line($"WIFI join {point.Ssid} needs-settings");
     }
 
+    private static string Unavailable(SystemStatusReader? reader, string serviceMissing, string noDevice) => reader switch
+    {
+        { IsAvailable: false, ServiceMissing: true } => serviceMissing,
+        { IsAvailable: false } => "This status isn't available right now.",
+        _ => noDevice,
+    };
+
     private void FillBluetooth(ObservableCollection<MenuRow> rows)
     {
         if (_bluetooth is not { IsAvailable: true, HasAdapter: true } bluetooth)
         {
             rows.Add(new HeaderRow { Label = "Bluetooth" });
-            rows.Add(new NoteRow { Label = _bluetooth?.Reason ?? "No Bluetooth adapter" });
+            rows.Add(new NoteRow { Label = Unavailable(_bluetooth, "The Bluetooth service isn't running.", "No Bluetooth adapter") });
             return;
         }
 

@@ -47,7 +47,7 @@ public sealed class VsockEndPoint : EndPoint
     {
         if (port == 0 || port == AnyPort)
         {
-            throw new ArgumentOutOfRangeException(nameof(port), port, "a vsock port is 1 through 4294967294");
+            throw new ArgumentOutOfRangeException(nameof(port), port, "The port is out of range. A vsock port must be 1 through 4294967294.");
         }
     }
 
@@ -100,7 +100,7 @@ public sealed class VsockEndPoint : EndPoint
         ArgumentNullException.ThrowIfNull(socketAddress);
         if (socketAddress.Size < SockaddrLength)
         {
-            throw new ArgumentException("a sockaddr_vm is 16 bytes", nameof(socketAddress));
+            throw new ArgumentException("The address is not 16 bytes. A sockaddr_vm is 16 bytes.", nameof(socketAddress));
         }
 
         Span<byte> bytes = stackalloc byte[SockaddrLength];
@@ -139,7 +139,7 @@ public sealed class VsockEndPoint : EndPoint
     {
         if (BinaryPrimitives.ReadUInt16LittleEndian(sockaddr) != (ushort)VsockFamily)
         {
-            throw new ArgumentException("the address is not AF_VSOCK", nameof(sockaddr));
+            throw new ArgumentException("The address is not AF_VSOCK.", nameof(sockaddr));
         }
 
         return new VsockEndPoint(

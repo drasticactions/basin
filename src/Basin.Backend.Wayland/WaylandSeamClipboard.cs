@@ -249,7 +249,7 @@ internal sealed class WaylandSeamClipboard : WaylandSeamSelectionBridge
             {
                 _localOnlyWarned = true;
                 Log.Info(
-                    $"wayland backend: a guest drag began with the pointer outside every window; it stays inside this compositor");
+                    $"drag: a guest drag began with the pointer outside every window, the drag stays inside this compositor");
             }
 
             return;
@@ -261,7 +261,7 @@ internal sealed class WaylandSeamClipboard : WaylandSeamSelectionBridge
             {
                 _serialWarned = true;
                 Log.Info(
-                    $"wayland backend: a guest drag stays inside this window; the parent issued no button serial to start one with");
+                    $"drag: a guest drag stays inside this window, the parent sent no button serial to start a host drag");
             }
 
             return;

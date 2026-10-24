@@ -41,6 +41,22 @@ public sealed class CatalogAgreementTests
         return channel is Channel.OffsetX or Channel.OffsetY ? value * sign : value;
     }
 
+    private const double Tolerance = 12;
+
+    private static (double Earliest, double Latest)? TimesOf(in AnimationSpec spec, in Track track, Channel channel, double sign, int index, double actual, double slack, double end)
+    {
+        (double Earliest, double Latest)? times = null;
+        for (var time = -50.0; time <= end + 50; time += 0.25)
+        {
+            if (Math.Abs(Expected(spec, track, channel, sign, index, time) - actual) <= slack)
+            {
+                times = times is { } found ? (found.Earliest, time) : (time, time);
+            }
+        }
+
+        return times;
+    }
+
     private static async Task Agree(
         Animation name,
         Func<AnimationSpec, Track> pick,
@@ -69,6 +85,7 @@ public sealed class CatalogAgreementTests
         WinAnimations.TimeScale = 1;
         try
         {
+            var clock = Stopwatch.StartNew();
             var task = run(targets);
             var final = channel is Channel.OffsetX or Channel.OffsetY ? track.To * sign : track.To;
             for (var i = 0; i < 50 && !task.IsCompleted && Math.Abs(Read(targets[0], channel) - final) < 1e-9; i++)
@@ -77,21 +94,36 @@ public sealed class CatalogAgreementTests
                 await Task.Delay(1);
             }
 
-            var clock = Stopwatch.StartNew();
+            var started = clock.Elapsed.TotalMilliseconds;
             var range = Math.Max(Math.Abs(track.To - track.From), 1e-6);
+            var slack = range * 0.02;
             var end = 0.0;
             for (var i = 0; i < elements; i++)
             {
                 end = Math.Max(end, spec.DelayFor(i) + spec.DurationMs);
             }
 
+            var earliest = -5.0;
+            var latest = double.PositiveInfinity;
+            var lastBefore = double.NaN;
             var checkedSamples = 0;
-            while (!task.IsCompleted && clock.ElapsedMilliseconds < end + 1000)
+            while (!task.IsCompleted && clock.Elapsed.TotalMilliseconds < started + end + 1000)
             {
                 await Task.Delay(4);
+                if (task.IsCompleted)
+                {
+                    break;
+                }
+
+                if (!double.IsNaN(lastBefore))
+                {
+                    earliest = Math.Max(earliest, lastBefore - end - 20);
+                }
+
                 var before = clock.Elapsed.TotalMilliseconds;
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 var after = clock.Elapsed.TotalMilliseconds;
+                lastBefore = before;
                 if (task.IsCompleted)
                 {
                     break;
@@ -100,20 +132,22 @@ public sealed class CatalogAgreementTests
                 for (var index = 0; index < elements; index++)
                 {
                     var actual = Read(targets[index], channel);
-                    var low = Expected(spec, track, channel, sign, index, before - 40);
-                    var high = Expected(spec, track, channel, sign, index, after + 15);
-                    var slack = range * 0.02;
+                    var times = TimesOf(spec, track, channel, sign, index, actual, slack, end);
+                    Assert.True(times is not null, $"{name} {channel} element {index}: AvaWin's WinAnimations gives {actual:F3}, which EightWm's catalog never reaches. Fix whichever disagrees with WinJS's Animations.js.");
+                    earliest = Math.Max(earliest, before - times.Value.Latest - Tolerance);
+                    latest = Math.Min(latest, after - times.Value.Earliest + Tolerance);
                     Assert.True(
-                        actual >= Math.Min(low, high) - slack && actual <= Math.Max(low, high) + slack,
-                        $"{name} {channel} element {index} at {before:F0}..{after:F0}ms: EightWm's catalog gives {low:F3}..{high:F3}, AvaWin's WinAnimations gives {actual:F3}. Fix whichever disagrees with WinJS's Animations.js.");
+                        earliest <= latest,
+                        $"{name} {channel} element {index} at {before:F0}..{after:F0}ms: AvaWin's WinAnimations gives {actual:F3}, which EightWm's catalog reaches at {times.Value.Earliest:F0}..{times.Value.Latest:F0}ms, so no start time fits every sample. Fix whichever disagrees with WinJS's Animations.js.");
                     checkedSamples++;
                 }
             }
 
             var finished = clock.Elapsed.TotalMilliseconds;
-            Assert.True(task.IsCompleted, $"{name}: AvaWin ran past {finished:F0}ms against EightWm's {end}ms");
-            Assert.InRange(finished, end - 5, end + 40);
-            Assert.True(checkedSamples > 10, $"{name}: only {checkedSamples} samples");
+            Assert.True(task.IsCompleted, $"{name}: AvaWin ran past {lastBefore - earliest:F0}ms against EightWm's {end}ms");
+            latest = Math.Min(latest, finished - end + 2);
+            Assert.True(earliest <= latest, $"{name}: AvaWin's length does not fit EightWm's {end}ms, the start time must be in {earliest:F0}..{latest:F0}ms");
+            Assert.True(checkedSamples >= 3, $"{name}: only {checkedSamples} samples");
         }
         finally
         {

@@ -196,7 +196,7 @@ public sealed class WaypipeChannel : IDisposable
         ArgumentNullException.ThrowIfNull(stream);
         if (pump == WaypipePump.Thread && !PlatformFacts.HasThreads)
         {
-            throw new PlatformNotSupportedException("this host owns no reader thread; attach with the Async pump");
+            throw new PlatformNotSupportedException("This host has no reader thread. Attach the channel with the Async pump.");
         }
 
         var channel = new WaypipeChannel(stream, shutdownPeer, ownedPeer, compression, limits, options, pump);
@@ -354,14 +354,14 @@ public sealed class WaypipeChannel : IDisposable
             var first = await _stream.ReadAsync(header).ConfigureAwait(true);
             if (first <= 0)
             {
-                WaypipeLog.Log.Debug($"async pump {_channelId}: the stream ended before a connection header");
+                WaypipeLog.Log.Debug($"async pump {_channelId}: stream ended before a connection header");
                 Finish(null);
                 return;
             }
 
             if (!await TryReadExactlyAsync(header.AsMemory(first)).ConfigureAwait(true))
             {
-                throw new WaypipeException("the channel ended inside a frame");
+                throw new WaypipeException("The peer closed the channel inside a frame.");
             }
 
             AnswerConnectionHeader(header);
@@ -387,7 +387,7 @@ public sealed class WaypipeChannel : IDisposable
 
                 if (!await TryReadExactlyAsync(body.AsMemory(0, payload)).ConfigureAwait(true))
                 {
-                    throw new WaypipeException("the channel ended inside a frame");
+                    throw new WaypipeException("The peer closed the channel inside a frame.");
                 }
 
                 if (type == WaypipeMessageType.OpenFile && length >= 12)
@@ -395,15 +395,7 @@ public sealed class WaypipeChannel : IDisposable
                     WaypipeLog.Log.Debug($"async pump {_channelId}: OpenFile remote id {BinaryPrimitives.ReadInt32LittleEndian(body)} size {BinaryPrimitives.ReadInt32LittleEndian(body.AsSpan(4))}");
                 }
 
-                try
-                {
-                    _engine.Apply(type, body.AsSpan(0, length - 4));
-                }
-                catch (Exception ex)
-                {
-                    WaypipeLog.Log.Warn($"async pump {_channelId}: applying a {type} frame of {length} bytes failed: {ex}");
-                    throw;
-                }
+                _engine.Apply(type, body.AsSpan(0, length - 4));
 
                 if (_engine.Closed)
                 {
@@ -411,7 +403,7 @@ public sealed class WaypipeChannel : IDisposable
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             failure = _stopping ? null : ex;
         }
@@ -423,7 +415,7 @@ public sealed class WaypipeChannel : IDisposable
     {
         if (failure is not null)
         {
-            WaypipeLog.Log.Debug($"the channel ended: {failure.Message}");
+            WaypipeLog.Log.Debug(failure, $"channel {_channelId}: ended");
         }
 
         _stopping = true;
@@ -454,13 +446,13 @@ public sealed class WaypipeChannel : IDisposable
         var (length, type) = WaypipeWire.ParseHeader(BinaryPrimitives.ReadUInt32LittleEndian(frame));
         if (length < 4)
         {
-            throw new WaypipeException($"a {type} frame declares {length} bytes, below its own header");
+            throw new WaypipeException($"A {type} frame declares {length} bytes, which is shorter than its own header.");
         }
 
         if (length > _limits.MaxFrameBytes)
         {
             throw new WaypipeException(
-                $"a {type} frame declares {length} bytes, over the {_limits.MaxFrameBytes} this channel reads");
+                $"A {type} frame declares {length} bytes. The channel limit is {_limits.MaxFrameBytes} bytes.");
         }
 
         return (length, type, WaypipeWire.Padded(length) - 4);
@@ -476,8 +468,7 @@ public sealed class WaypipeChannel : IDisposable
         if (!Options.AcceptsVideo || Options.VideoDecoder is null)
         {
             throw new WaypipeException(
-                $"the peer will send {codec} and this channel has no decoder registered; "
-                + "start the session with --video and install libavcodec");
+                $"The peer will send {codec} video, but the channel has no decoder. Start the session with --video and install libavcodec.");
         }
 
         var wanted = codec switch
@@ -492,7 +483,7 @@ public sealed class WaypipeChannel : IDisposable
                 ", ",
                 Enum.GetValues<Basin.Capabilities.VideoCodec>().Where(Options.VideoDecoder.Supports));
             throw new WaypipeException(
-                $"the peer will send {codec} and the decoder handles [{handled}]");
+                $"The peer will send {codec} video, but the decoder handles only [{handled}].");
         }
 
         _engine.ExpectedVideoCodec = wanted;
@@ -522,6 +513,7 @@ public sealed class WaypipeChannel : IDisposable
                 }
                 catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException or NotSupportedException)
                 {
+                    WaypipeLog.Log.Debug(ex, $"channel {_channelId}: close not sent to the peer");
                 }
             }
 
@@ -538,6 +530,7 @@ public sealed class WaypipeChannel : IDisposable
             }
             catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
             {
+                WaypipeLog.Log.Debug(ex, $"channel {_channelId}: peer shutdown failed");
             }
         }
     }
@@ -602,7 +595,7 @@ public sealed class WaypipeChannel : IDisposable
 
         if (payload is not SharedMemoryRegion region)
         {
-            throw new WaypipeException($"fd slot {slot} carries a {payload.GetType().Name}, which no channel message names");
+            throw new WaypipeException($"Fd slot {slot} carries a {payload.GetType().Name}, which the channel cannot send.");
         }
 
         var remoteId = _nextRemoteId--;
@@ -791,7 +784,6 @@ public sealed class WaypipeChannel : IDisposable
         {
             if (!_stopping)
             {
-                WaypipeLog.Log.Warn($"the channel's writer failed: {ex}");
                 Finish(ex);
             }
         }
@@ -805,7 +797,7 @@ public sealed class WaypipeChannel : IDisposable
     {
         if (!TryReadExactly(buffer))
         {
-            throw new WaypipeException("the channel ended inside a frame");
+            throw new WaypipeException("The peer closed the channel inside a frame.");
         }
     }
 

@@ -144,7 +144,7 @@ public static class HotkeyParser
 
     private static HotkeyScope Warn(BasinLogger log, string chord, object? scope)
     {
-        log.Warn($"binding '{chord}' when = \"{scope}\" is not always, windowed or fullscreen; always is used");
+        log.Warn($"binding '{chord}' when = \"{scope}\" is not always, windowed or fullscreen, keeping always");
         return HotkeyScope.Always;
     }
 

@@ -46,7 +46,7 @@ public sealed class IpcTokenParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'token' is required"
+        (_present & 1) == 0 ? "'token' is required."
         : null;
 
     void IIpcReusable.Reset()

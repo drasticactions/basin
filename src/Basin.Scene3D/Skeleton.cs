@@ -35,12 +35,12 @@ public sealed class Skeleton
         var count = names.Length;
         if (parents.Length != count || translations.Length != count || rotations.Length != count || scales.Length != count)
         {
-            throw new ArgumentException("Every node array must have one entry per node.");
+            throw new ArgumentException("Every node array must have one entry per node.", nameof(parents));
         }
 
         if (joints.Length != inverseBinds.Length)
         {
-            throw new ArgumentException("Every joint needs an inverse bind matrix.");
+            throw new ArgumentException("Every joint needs an inverse bind matrix.", nameof(inverseBinds));
         }
 
         Names = names;
@@ -124,7 +124,7 @@ public sealed class Skeleton
 
             if (!progressed)
             {
-                throw new ArgumentException("The node hierarchy has a cycle.");
+                throw new ArgumentException("The node hierarchy has a cycle.", nameof(parents));
             }
         }
 

@@ -37,20 +37,20 @@ public static class WslVm
             said.Contains("wslinfo", StringComparison.OrdinalIgnoreCase))
         {
             throw new WslVmException(
-                "WSL 2.6.1 or later is needed for `wslinfo --vm-id`; pass --hyperv-vm GUID from `hcsdiag list` (admin) instead"
-                + (said.Length > 0 ? $" (wsl.exe said: {said})" : string.Empty));
+                "WSL 2.6.1 or later is needed for `wslinfo --vm-id`. Upgrade WSL, or pass --hyperv-vm GUID from `hcsdiag list` (admin)."
+                + (said.Length > 0 ? $" wsl.exe said: {said}" : string.Empty));
         }
 
         if (said.Contains("set-default", StringComparison.OrdinalIgnoreCase) ||
             said.Contains("no installed distributions", StringComparison.OrdinalIgnoreCase) ||
             said.Contains("WSL_E_DEFAULT_DISTRO_NOT_FOUND", StringComparison.OrdinalIgnoreCase))
         {
-            throw new WslVmException($"WSL has no default distribution; install one or choose one with `wsl --set-default NAME` (wsl.exe said: {said})");
+            throw new WslVmException($"WSL has no default distribution. Install one, or choose one with `wsl --set-default NAME`. wsl.exe said: {said}");
         }
 
         throw new WslVmException(exit == 0
-            ? $"`wsl.exe -- wslinfo --vm-id` printed no VM id: {said}"
-            : $"`wsl.exe -- wslinfo --vm-id` exited {exit}: {said}");
+            ? $"`wsl.exe -- wslinfo --vm-id` printed no VM id. It said: {said}"
+            : $"`wsl.exe -- wslinfo --vm-id` exited with code {exit}. It said: {said}");
     }
 
     /// <summary>
@@ -132,11 +132,11 @@ public static class WslVm
         Process process;
         try
         {
-            process = Process.Start(start) ?? throw new WslVmException("WSL is not installed: wsl.exe did not start");
+            process = Process.Start(start) ?? throw new WslVmException("WSL is not installed. wsl.exe did not start.");
         }
         catch (Win32Exception ex)
         {
-            throw new WslVmException($"WSL is not installed: {Executable} could not be started ({ex.Message})", ex);
+            throw new WslVmException($"WSL is not installed. {Executable} did not start.", ex);
         }
 
         using (process)
@@ -154,7 +154,7 @@ public static class WslVm
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
             {
                 Kill(process);
-                throw new WslVmException($"`{Executable} {string.Join(' ', arguments)}` did not answer within {Timeout.TotalSeconds:0} s");
+                throw new WslVmException($"`{Executable} {string.Join(' ', arguments)}` did not answer within {Timeout.TotalSeconds:0} s.");
             }
             catch (OperationCanceledException)
             {
@@ -170,11 +170,9 @@ public static class WslVm
         {
             process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {
-        }
-        catch (Win32Exception)
-        {
+            WaypipeLog.Log.Debug(ex, $"wsl: {Executable} not killed");
         }
     }
 }

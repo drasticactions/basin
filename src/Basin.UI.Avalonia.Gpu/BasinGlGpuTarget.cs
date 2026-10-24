@@ -239,7 +239,7 @@ internal sealed class BasinGlGpuTarget : IAvaloniaGpuTarget
             {
                 _warnedStarved = true;
                 Log.Warn(
-                    $"{_width}x{_height} chrome redraws into a buffer the compositor still holds; {_slots.Count} in flight");
+                    $"chrome: {_width}x{_height} redraws into a buffer the compositor still holds, {_slots.Count} in flight");
             }
         }
 

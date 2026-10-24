@@ -47,6 +47,6 @@ public static class SdlRenderDevices
         Gl => new SdlGlDevice(),
         Vulkan when !OperatingSystem.IsMacOS() => new SdlVulkanDevice(),
         Metal when OperatingSystem.IsMacOS() => new SdlMetalDevice(),
-        _ => throw new ArgumentException($"unknown SDL render lease '{name}' (expected {string.Join(", ", Names)})", nameof(name)),
+        _ => throw new ArgumentException($"The SDL render lease '{name}' is unknown. Use one of {string.Join(", ", Names)}.", nameof(name)),
     };
 }

@@ -99,7 +99,11 @@ public sealed class PhysicsThrowTests
 
         session!.Send("throw 200 0 3");
         session.WaitForLine("THROW ");
-        Thread.Sleep(120);
+        for (var attempt = 0; attempt < 80 && Math.Abs(Number(Body(session), "angle")) <= 0.05; attempt++)
+        {
+            Thread.Sleep(25);
+        }
+
         session.Send("freeze on");
         Assert.Equal("PHYSICS frozen=yes", session.WaitForLine("PHYSICS "));
         var body = Body(session);

@@ -78,7 +78,7 @@ public sealed class ChromeSeat : IDisposable
             input.DeviceAdded += device => BasinReport.Line($"INPUT + {device.Name}");
             input.DeviceRemoved += device => BasinReport.Line($"INPUT - {device.Name}");
             _binder.BindLibinput(input);
-            log.Info($"libinput started on seat {host.Session?.SeatName ?? "seat0"}");
+            log.Info($"input: libinput started on seat {host.Session?.SeatName ?? "seat0"}");
         }
     }
 

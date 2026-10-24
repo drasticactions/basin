@@ -53,7 +53,7 @@ internal sealed partial class LunaShell
                     _decoders[language] = loaded;
                     if (loaded is null)
                     {
-                        _log.Info($"keyboard: no trace typing for '{language}': {reason}");
+                        _log.Info($"keyboard: no trace typing for '{language}', {reason}");
                     }
                     else
                     {

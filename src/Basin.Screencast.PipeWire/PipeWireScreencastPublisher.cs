@@ -74,7 +74,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         ArgumentNullException.ThrowIfNull(layout);
         if (!PipeWireLibraryProbe.IsAvailable(out var whyNot))
         {
-            Log.Info($"screencast unavailable: {whyNot}");
+            Log.Info($"publisher: unavailable, {whyNot}");
             return null;
         }
 
@@ -96,7 +96,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         {
             context?.Dispose();
             pwLoop?.Dispose();
-            Log.Warn($"screencast unavailable: {error.Message}");
+            Log.Warn(error, $"publisher: unavailable, PipeWire did not start");
             return null;
         }
     }
@@ -173,6 +173,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
         catch (PipeWireException error)
         {
+            Log.Warn(error, $"stream {request.StreamId}: the PipeWire stream was not created");
             info = new ScreencastStreamInfo { NodeId = 0, FailureReason = error.Message };
             return false;
         }
@@ -205,6 +206,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
         catch (PipeWireException error)
         {
+            Log.Warn(error, $"stream {request.StreamId}: the PipeWire stream did not connect");
             entry.Dispose();
             info = new ScreencastStreamInfo { NodeId = 0, FailureReason = error.Message };
             return false;
@@ -477,7 +479,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         {
             var modifiers = CommonModifiers(DmabufModifiersFor(entry.Format.Format), ConsumerModifiers(e.Param));
             var chosen = ChooseModifier(entry, modifiers);
-            Log.Debug($"stream {entry.Id}: the consumer asks for a modifier from {modifiers.Length} shared; chose {(chosen is { } picked ? picked.ToString("x") : "none")}");
+            Log.Debug($"stream {entry.Id}: the consumer asks for a modifier from {modifiers.Length} shared, chose {(chosen is { } picked ? picked.ToString("x") : "none")}");
             if (chosen is { } modifier)
             {
                 entry.NegotiatedModifier = modifier;
@@ -799,7 +801,15 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         catch (Exception error)
         {
             AllocationScope.Pause();
-            Log.Warn($"stream {entry.Id}: frame dropped: {error.Message}");
+            if (entry.DropLogged)
+            {
+                Log.Debug(error, $"stream {entry.Id}: frame dropped");
+            }
+            else
+            {
+                entry.DropLogged = true;
+                Log.Warn(error, $"stream {entry.Id}: frame dropped, later drops log at Debug");
+            }
             AllocationScope.Resume();
             buffer[0].SetChunk(0, 0, entry.Format.Stride);
         }
@@ -1072,6 +1082,8 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         public uint WrittenCursorSerial { get; set; }
 
+        public bool DropLogged { get; set; }
+
         public void MarkDamaged(in Box damage)
         {
             Dirty = true;
@@ -1109,8 +1121,9 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
                 {
                     stream.Disconnect();
                 }
-                catch (PipeWireException)
+                catch (PipeWireException error)
                 {
+                    Log.Debug(error, $"stream {Id}: disconnect failed");
                 }
 
                 stream.Dispose();

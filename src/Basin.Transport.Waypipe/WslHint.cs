@@ -16,7 +16,7 @@ internal static class WslHint
         var modprobe = loopbackLoaded ? string.Empty : ", which needs 'sudo modprobe vsock_loopback'";
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"inside WSL2: a client in this VM reaches vsock:{local.Port} over CID 1{modprobe}; Windows reaches it as VmId=<this VM> ServiceId={HyperVEndPoint.VsockServiceId(local.Port)}");
+            $"wsl: clients in this VM reach vsock:{local.Port} over CID 1{modprobe}, Windows reaches it as VmId=<this VM> ServiceId={HyperVEndPoint.VsockServiceId(local.Port)}");
     }
 
     internal static void Log(VsockEndPoint local)

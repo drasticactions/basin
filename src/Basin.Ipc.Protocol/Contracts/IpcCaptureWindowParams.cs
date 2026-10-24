@@ -107,8 +107,8 @@ public sealed class IpcCaptureWindowParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'id' is required"
-        : (_present & 2) == 0 ? "'to' is required"
+        (_present & 1) == 0 ? "'id' is required."
+        : (_present & 2) == 0 ? "'to' is required."
         : null;
 
     void IIpcReusable.Reset()

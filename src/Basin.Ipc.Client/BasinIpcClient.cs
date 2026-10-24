@@ -76,7 +76,7 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
-    /// Lists the <c>basin-*.sock</c> files in a runtime directory.
+    /// Lists the <c>basin-*.sock</c> files in a runtime directory that a compositor listens on. A file that refuses a connection is left out, because its compositor stopped without removing it.
     /// </summary>
     /// <param name="runtimeDirectory">The directory, or <see langword="null"/> for <c>XDG_RUNTIME_DIR</c>.</param>
     /// <returns>The paths in ordinal order, or an empty array when the directory does not exist.</returns>
@@ -88,7 +88,9 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
             return [];
         }
 
-        var candidates = Directory.GetFiles(runtimeDirectory, IpcProtocol.SocketPrefix + "*" + IpcProtocol.SocketSuffix);
+        var candidates = Array.FindAll(
+            Directory.GetFiles(runtimeDirectory, IpcProtocol.SocketPrefix + "*" + IpcProtocol.SocketSuffix),
+            static candidate => !Refuses(candidate));
         Array.Sort(candidates, StringComparer.Ordinal);
         return candidates;
     }
@@ -105,19 +107,19 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         var resolved = ResolvePath(path)
             ?? throw new IOException(Candidates() is { Length: > 1 } several
-                ? $"several control sockets and no choice: {string.Join(", ", several)}; set {IpcProtocol.SocketVariable} or pass a path"
-                : $"no control socket: set {IpcProtocol.SocketVariable}, pass a path, or run exactly one basin compositor");
+                ? $"There are several control sockets: {string.Join(", ", several)}. Set {IpcProtocol.SocketVariable} or give a path."
+                : $"No control socket is found. Set {IpcProtocol.SocketVariable}, give a path, or run exactly one basin compositor.");
         var fd = UnixSocket.Create();
         if (fd < 0)
         {
-            throw new IOException($"socket() failed with errno {UnixSocket.LastError}");
+            throw new IOException($"The client could not make a socket (errno {UnixSocket.LastError}).");
         }
 
         if (UnixSocket.Connect(fd, resolved) != 0)
         {
             var error = UnixSocket.LastError;
             _ = UnixSocket.Close(fd);
-            throw new IOException($"cannot connect to '{resolved}' (errno {error})");
+            throw new IOException($"No compositor answers on '{resolved}' (errno {error}). Check that the compositor runs.");
         }
 
         var socket = new Socket(new SafeSocketHandle(fd, ownsHandle: true));
@@ -141,7 +143,7 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         ObjectDisposedException.ThrowIf(_closing.IsCancellationRequested, this);
         if (_failure is { } failure)
         {
-            throw new IOException("the connection to the compositor failed", failure);
+            throw new IOException($"The connection to the compositor failed. {failure.Message}", failure);
         }
 
         var id = Interlocked.Increment(ref _nextId);
@@ -301,6 +303,19 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         return ValueTask.CompletedTask;
     }
 
+    private static bool Refuses(string path)
+    {
+        var fd = UnixSocket.Create();
+        if (fd < 0)
+        {
+            return false;
+        }
+
+        var refused = UnixSocket.Connect(fd, path) != 0 && UnixSocket.LastError == UnixSocket.EConnRefused;
+        _ = UnixSocket.Close(fd);
+        return refused;
+    }
+
     private static bool Contains(IReadOnlyList<string> names, string name)
     {
         foreach (var candidate in names)
@@ -336,7 +351,7 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         var length = frame.Length - IpcProtocol.HeaderBytes;
         if (length > IpcProtocol.MaxRequestBytes)
         {
-            throw new ArgumentException($"a {length}-byte request is over the {IpcProtocol.MaxRequestBytes}-byte limit");
+            throw new ArgumentException($"The {length}-byte request is larger than the {IpcProtocol.MaxRequestBytes}-byte limit.");
         }
 
         IpcProtocol.WriteLength(frame, length);
@@ -397,12 +412,12 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
                             break;
                         }
 
-                        throw new IOException($"recvmsg failed with errno {error}");
+                        throw new IOException($"The read from the control socket failed (errno {error}).");
                     }
 
                     if (read == 0)
                     {
-                        throw new IOException("the compositor closed the control connection");
+                        throw new IOException("The compositor closed the control connection.");
                     }
 
                     length += (int)read;
@@ -436,7 +451,7 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
             var size = IpcProtocol.ReadLength(buffer.AsSpan(offset));
             if (size > IpcProtocol.MaxMessageBytes)
             {
-                throw new IOException($"the compositor sent a {size}-byte frame, over the limit");
+                throw new IOException($"The compositor sent a {size}-byte frame, which is larger than the limit.");
             }
 
             if (length - offset - IpcProtocol.HeaderBytes < (int)size)
@@ -519,7 +534,7 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         _failure ??= failure;
         foreach (var pending in _pending.Values)
         {
-            pending.Completion.TrySetException(new IOException("the connection to the compositor failed", failure));
+            pending.Completion.TrySetException(new IOException($"The connection to the compositor failed. {failure.Message}", failure));
         }
 
         lock (_subscriberGate)

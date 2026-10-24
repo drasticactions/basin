@@ -707,7 +707,7 @@ internal sealed class RiverWindow
 
             if (e.Width < 0 || e.Height < 0)
             {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "dimensions must be non-negative");
+                resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "The dimensions must not be negative.");
                 return;
             }
 
@@ -725,7 +725,7 @@ internal sealed class RiverWindow
 
             if (e.MaxWidth < 0 || e.MaxHeight < 0)
             {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "bounds must be non-negative");
+                resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "The bounds must not be negative.");
                 return;
             }
 
@@ -804,7 +804,7 @@ internal sealed class RiverWindow
 
             if (e.Width < 0)
             {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidBorder, "border width must be non-negative");
+                resource.PostError((uint)RiverWindowV1.Error.InvalidBorder, "The border width must not be negative.");
                 return;
             }
 
@@ -821,7 +821,7 @@ internal sealed class RiverWindow
 
             if (e.Width < 0 || e.Height < 0)
             {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "clip box size must be non-negative");
+                resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "The clip box size must not be negative.");
                 return;
             }
 
@@ -836,7 +836,7 @@ internal sealed class RiverWindow
 
             if (e.Width < 0 || e.Height < 0)
             {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "clip box size must be non-negative");
+                resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "The clip box size must not be negative.");
                 return;
             }
 
@@ -850,7 +850,7 @@ internal sealed class RiverWindow
         {
             if (HasNode)
             {
-                resource.PostError((uint)RiverWindowV1.Error.NodeExists, "the window already has a node");
+                resource.PostError((uint)RiverWindowV1.Error.NodeExists, "The window already has a node.");
                 return;
             }
 
@@ -873,7 +873,7 @@ internal sealed class RiverWindow
         {
             resource.PostError(
                 (uint)Protocol.RiverWindowManagerV1.Error.Role,
-                "the surface already has a role or a buffer");
+                "The surface already has a role or a buffer.");
             return;
         }
 

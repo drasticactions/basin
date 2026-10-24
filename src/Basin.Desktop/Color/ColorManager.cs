@@ -390,21 +390,21 @@ public sealed class ColorManager : IDisposable
             }
             else
             {
-                manager.PostError(ManagerErrorUnsupportedFeature, "ICC image descriptions are not offered");
+                manager.PostError(ManagerErrorUnsupportedFeature, "ICC image descriptions are not supported.");
             }
         };
         manager.CreateWindowsScrgb += (_, e) =>
         {
             if (!OffersScrgb)
             {
-                manager.PostError(ManagerErrorUnsupportedFeature, "windows_scrgb is not offered");
+                manager.PostError(ManagerErrorUnsupportedFeature, "windows_scrgb is not supported.");
                 return;
             }
 
             DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, e.ImageDescription), ImageDescription.WindowsScrgb(), allowInformation: false);
         };
         manager.CreateWindowsBt2100 += (_, e) =>
-            manager.PostError(ManagerErrorUnsupportedFeature, "windows_bt2100 is not offered");
+            manager.PostError(ManagerErrorUnsupportedFeature, "windows_bt2100 is not supported.");
 
         manager.CreateParametricCreator += (_, e) =>
             _ = new ParametricCreator(new WpImageDescriptionCreatorParamsV1Resource(client, manager.Version, e.Obj), this);
@@ -451,7 +451,7 @@ public sealed class ColorManager : IDisposable
 
             if (!_claimed.Add(surface))
             {
-                manager.PostError(ManagerErrorSurfaceExists, "surface already has a color management object");
+                manager.PostError(ManagerErrorSurfaceExists, "The surface already has a color management object.");
                 return;
             }
 
@@ -463,7 +463,7 @@ public sealed class ColorManager : IDisposable
             {
                 if (inert)
                 {
-                    resource.PostError(SurfaceErrorInert, "the surface this object was created for is gone");
+                    resource.PostError(SurfaceErrorInert, "The surface of this object is destroyed.");
                     return;
                 }
 
@@ -481,7 +481,7 @@ public sealed class ColorManager : IDisposable
             {
                 if (inert)
                 {
-                    resource.PostError(SurfaceErrorInert, "the surface this object was created for is gone");
+                    resource.PostError(SurfaceErrorInert, "The surface of this object is destroyed.");
                     return;
                 }
 
@@ -573,7 +573,7 @@ public sealed class ColorManager : IDisposable
         {
             resource.GetInformation += (_, _) => resource.PostError(
                 (uint)WpImageDescriptionV1.Error.NoInformation,
-                "this image description carries no information");
+                "This image description has no information.");
             SendReady(resource, description);
             return;
         }
@@ -711,13 +711,13 @@ public sealed class ColorManager : IDisposable
             using var handle = new Microsoft.Win32.SafeHandles.SafeFileHandle(fd, ownsHandle: true);
             if (_data is not null || _readFailed)
             {
-                _resource.PostError(ErrorAlreadySet, "ICC file already set");
+                _resource.PostError(ErrorAlreadySet, "The ICC file is already set.");
                 return;
             }
 
             if (length == 0 || length > MaxIccSize)
             {
-                _resource.PostError(ErrorBadSize, "ICC length must be within (0, 32MB]");
+                _resource.PostError(ErrorBadSize, "The ICC length must be more than 0 and not more than 32 MB.");
                 return;
             }
 
@@ -728,13 +728,13 @@ public sealed class ColorManager : IDisposable
             }
             catch (IOException)
             {
-                _resource.PostError(ErrorBadFd, "ICC fd is not seekable");
+                _resource.PostError(ErrorBadFd, "The ICC fd is not seekable.");
                 return;
             }
 
             if (offset + (long)length > fileSize)
             {
-                _resource.PostError(ErrorOutOfFile, "offset + length exceeds the file");
+                _resource.PostError(ErrorOutOfFile, "The offset plus the length is more than the file size.");
                 return;
             }
 
@@ -778,7 +778,7 @@ public sealed class ColorManager : IDisposable
 
             if (_data is not { } data)
             {
-                _resource.PostError(CreatorErrorIncompleteSet, "an ICC file is required");
+                _resource.PostError(CreatorErrorIncompleteSet, "The image description needs an ICC file.");
                 return;
             }
 
@@ -791,7 +791,7 @@ public sealed class ColorManager : IDisposable
             var description = parsed with { IccData = data };
             DescriptionRegistry.Register(target, description);
             target.GetInformation += (_, _) =>
-                target.PostError((uint)WpImageDescriptionV1.Error.NoInformation, "ICC-created descriptions carry no information");
+                target.PostError((uint)WpImageDescriptionV1.Error.NoInformation, "An image description made from an ICC file has no information.");
 
             SendReady(target, description);
         }
@@ -818,7 +818,7 @@ public sealed class ColorManager : IDisposable
                 if (!manager.SupportedPrimaries.Contains((ColorPrimaries)e.Primaries) ||
                     IsDeprecatedAt((ColorPrimaries)e.Primaries, resource.Version))
                 {
-                    resource.PostError(CreatorErrorInvalidPrimariesNamed, "primaries are not offered");
+                    resource.PostError(CreatorErrorInvalidPrimariesNamed, "These primaries are not supported.");
                     return;
                 }
 
@@ -830,7 +830,7 @@ public sealed class ColorManager : IDisposable
                 if (!manager.SupportedTransferFunctions.Contains((ColorTransferFunction)e.Tf) ||
                     IsDeprecatedAt((ColorTransferFunction)e.Tf, resource.Version))
                 {
-                    resource.PostError(CreatorErrorInvalidTf, "transfer function is not offered");
+                    resource.PostError(CreatorErrorInvalidTf, "This transfer function is not supported.");
                     return;
                 }
 
@@ -847,7 +847,7 @@ public sealed class ColorManager : IDisposable
                 var target = new WpImageDescriptionV1Resource(resource.Client, resource.Version, e.ImageDescription);
                 if ((_primariesNamed is null && _primariesCustom is null) || (_tfNamed is null && _tfPower is null))
                 {
-                    resource.PostError(CreatorErrorIncompleteSet, "primaries and transfer function are required");
+                    resource.PostError(CreatorErrorIncompleteSet, "The image description needs primaries and a transfer function.");
                     return;
                 }
 
@@ -872,7 +872,7 @@ public sealed class ColorManager : IDisposable
         {
             if (slot is not null)
             {
-                _resource.PostError(CreatorErrorAlreadySet, "property already set");
+                _resource.PostError(CreatorErrorAlreadySet, "This property is already set.");
                 return;
             }
 

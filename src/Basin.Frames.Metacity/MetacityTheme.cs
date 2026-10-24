@@ -1,3 +1,5 @@
+using Basin.Diagnostics;
+
 namespace Basin.Frames.Metacity;
 
 /// <summary>
@@ -5,6 +7,8 @@ namespace Basin.Frames.Metacity;
 /// </summary>
 public sealed class MetacityTheme
 {
+    private static readonly BasinLogger Log = BasinLog.For("metacity");
+
     private readonly Dictionary<string, int> _intConstants = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _floatConstants = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _colorConstants = new(StringComparer.Ordinal);
@@ -90,6 +94,7 @@ public sealed class MetacityTheme
                 }
                 catch (MetacityThemeException e) when (e.TooOld)
                 {
+                    Log.Debug(e, $"theme: {path} needs a newer version, an older file is tried");
                 }
             }
         }
@@ -253,7 +258,7 @@ public sealed class MetacityTheme
     {
         if (name.Length == 0 || !char.IsAsciiLetterUpper(name[0]))
         {
-            return $"User-defined constants must begin with a capital letter; \"{name}\" does not";
+            return $"User-defined constants must begin with a capital letter. \"{name}\" does not";
         }
 
         if (!table.TryAdd(name, value))

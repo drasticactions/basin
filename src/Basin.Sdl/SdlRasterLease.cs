@@ -35,7 +35,7 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         _renderer = SDL.CreateRenderer(window.Handle, null);
         if (_renderer == 0)
         {
-            throw new InvalidOperationException($"SDL_CreateRenderer failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_CreateRenderer failed with \"{SDL.GetError()}\".");
         }
 
         _ = SDL.SetRenderVSync(_renderer, 1);
@@ -78,12 +78,12 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         _pixels = NativeMemory.AllocZeroed((nuint)(_stride * pixelHeight));
         var info = new SKImageInfo(pixelWidth, pixelHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
         _surface = SkiaCensus.Track(SKSurface.Create(info, (nint)_pixels, _stride)
-            ?? throw new InvalidOperationException($"no raster surface for {pixelWidth}x{pixelHeight}"));
+            ?? throw new InvalidOperationException($"Skia has no raster surface for {pixelWidth}x{pixelHeight}."));
         _canvas = _surface.Canvas;
         _texture = SDL.CreateTexture(_renderer, SDL.PixelFormat.ARGB8888, SDL.TextureAccess.Streaming, pixelWidth, pixelHeight);
         if (_texture == 0)
         {
-            throw new InvalidOperationException($"SDL_CreateTexture failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_CreateTexture failed with \"{SDL.GetError()}\".");
         }
 
         _drawn = false;

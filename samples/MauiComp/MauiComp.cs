@@ -57,7 +57,7 @@ internal sealed partial class MauiComp : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: the compositor did not start");
             return 1;
         }
 
@@ -80,7 +80,7 @@ internal sealed partial class MauiComp : IDisposable
         var stack = RendererCatalog.CreateWithFallback(
             ref rendererName,
             RendererCatalog.FindRenderNode(),
-            fallback => log.Warn($"{fallback.Describe()}"));
+            fallback => fallback.Log(log));
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
         RendererName = rendererName;
@@ -136,7 +136,7 @@ internal sealed partial class MauiComp : IDisposable
         _outputs.Emptied += Stop;
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
-        _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
+        _outputs.ModesetRefused += card => log.Error($"output: {card.Name} refused a modeset in every mode");
         _outputs.Added += view =>
             BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
         _outputs.Added += OnOutputAdded;
@@ -226,7 +226,7 @@ internal sealed partial class MauiComp : IDisposable
 
         if (options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display, then start the compositor again.");
         }
 
         if (_host.Parent is { } parent)
@@ -266,7 +266,7 @@ internal sealed partial class MauiComp : IDisposable
 
         if (SceneScreenshot.Write(_scene, _renderer, view.Output, path))
         {
-            _log.Info($"screenshot written to {path}");
+            _log.Info($"screenshot: written to {path}");
         }
     }
 
@@ -335,7 +335,7 @@ internal sealed partial class MauiComp : IDisposable
     {
         if (_processes.SpawnShell(command, out var error) is null)
         {
-            _log.Error($"cannot start {command}: {error}");
+            _log.Warn($"launch: cannot start {command}, {CliMessage.Text(error ?? string.Empty)}");
         }
     }
 

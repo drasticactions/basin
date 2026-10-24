@@ -87,13 +87,13 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         var shell = new WestonDesktopShellResource(client, version, id);
         if (!IsAllowed(client))
         {
-            shell.PostError(ErrorInvalidArgument, "weston_desktop_shell is reserved for the compositor's own shell client");
+            shell.PostError(ErrorInvalidArgument, "Only the shell client of the compositor can bind weston_desktop_shell.");
             return;
         }
 
         if (_bound is { IsDestroyed: false })
         {
-            shell.PostError(ErrorInvalidArgument, "weston_desktop_shell is already bound");
+            shell.PostError(ErrorInvalidArgument, "weston_desktop_shell is already bound.");
             return;
         }
 
@@ -126,7 +126,7 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         {
             if (e.Position > (uint)ShellPanelPosition.Right)
             {
-                shell.PostError(ErrorInvalidArgument, "unknown panel position");
+                shell.PostError(ErrorInvalidArgument, "The panel position is not known.");
                 return;
             }
 
@@ -172,7 +172,7 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         var surface = _compositor.ResolveSurface(surfaceResource);
         if (output is null || surface is null)
         {
-            shell.PostError(ErrorInvalidArgument, "unknown output or surface");
+            shell.PostError(ErrorInvalidArgument, "The output or the surface is not known.");
             return null;
         }
 
@@ -184,7 +184,7 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         var surface = _compositor.ResolveSurface(surfaceResource);
         if (surface is null)
         {
-            shell.PostError(ErrorInvalidArgument, "unknown surface");
+            shell.PostError(ErrorInvalidArgument, "The surface is not known.");
         }
 
         return surface;

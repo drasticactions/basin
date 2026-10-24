@@ -16,9 +16,9 @@ public sealed class AtSpiTests
         await greeter.ExpectAsync("A11Y on");
         using var a11y = await bus.ConnectAsync();
 
-        var list = await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Name == "Log In"));
+        var list = await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Name == "Log in"));
         Assert.True(list.Any(node => node.Role == "list item" && node.Name == "Ada Lovelace"), string.Join(" | ", list.Select(node => $"{node.Role}:{node.Name}")));
-        Assert.Contains(list, node => node.Role == "push button" && node.Name == "Log In");
+        Assert.Contains(list, node => node.Role == "push button" && node.Name == "Log in");
         Assert.Contains(list, node => node.Role == "push button" && node.Name == "Power");
         Assert.Contains(list, node => node.Role == "combo box" && node.Name == "Session");
         Assert.Contains(list, node => node.Role == "list" && node.Name == "Users");

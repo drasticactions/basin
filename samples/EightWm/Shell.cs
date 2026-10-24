@@ -68,7 +68,7 @@ internal sealed partial class Shell : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: the shell did not start");
             return 1;
         }
 
@@ -198,7 +198,7 @@ internal sealed partial class Shell : IDisposable
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModesetRefused += card =>
-            log.Error($"modeset refused by {card.Name} in every mode");
+            log.Error($"output: {card.Name} refused a modeset in every mode");
         _outputs.ModeChanged += driver => _report.Line($"MODE {driver.Output.Name} {driver.Width}x{driver.Height}");
         _outputs.ScanoutChanged += (driver, choice) =>
             _report.Line(CompositorLines.Scanout(driver.Output.Name, choice, driver.SwapModifiers.Length));
@@ -265,7 +265,7 @@ internal sealed partial class Shell : IDisposable
         _outputs.CreateInitialOutputs();
         if (_options.Backend == BackendKind.Drm && Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display, then start the shell again.");
         }
 
         if (Views.Count > 0)
@@ -414,7 +414,7 @@ internal sealed partial class Shell : IDisposable
     {
         if (_processes.Spawn(new ProcessLaunch(["/bin/sh", "-c", command]) { DesktopId = desktopId }, out var error) is null)
         {
-            _log.Warn($"cannot start '{command}': {error}");
+            _log.Warn($"launch: cannot start '{command}', {CliMessage.Text(error ?? string.Empty)}");
         }
     }
 
@@ -424,7 +424,7 @@ internal sealed partial class Shell : IDisposable
         var stack = RendererCatalog.CreateWithFallback(
             ref name,
             RendererCatalog.FindRenderNode(),
-            fallback => log.Warn($"{(fallback.Describe())}"));
+            fallback => fallback.Log(log));
         Basin.Diagnostics.BasinReport.Line($"RENDERER {name}");
         return stack;
     }

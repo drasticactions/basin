@@ -223,14 +223,14 @@ public sealed class WmBindings : IDisposable
 
     private RiverXkbBindingsV1 Require() =>
         _bindings ?? throw new NotSupportedException(
-            "the compositor does not offer river_xkb_bindings_v1, so keyboard bindings are unavailable");
+            "The compositor does not offer river_xkb_bindings_v1, so keyboard bindings are not available.");
 
     private void RequireVersion(uint since, string request)
     {
         if (Version < since)
         {
             throw new NotSupportedException(
-                $"'{request}' requires river_xkb_bindings_v1 version {since}; the compositor bound version {Version}");
+                $"'{request}' needs river_xkb_bindings_v1 version {since}. The compositor bound version {Version}.");
         }
     }
 

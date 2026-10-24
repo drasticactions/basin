@@ -260,8 +260,8 @@ internal sealed partial class LunaShell
         if (_pamCheck is null)
         {
             model.Busy = false;
-            model.Message = "Cannot check the password";
-            _log.Warn($"unlock check did not start: {error}");
+            model.Message = "Couldn't check your password. Try again.";
+            _log.Warn($"lock: unlock check did not start: {error}");
             _report.Line("UNLOCK error");
             return;
         }

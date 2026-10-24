@@ -95,7 +95,7 @@ public sealed class MsStylesFonts : IDisposable
                     typeface = Match(alias, style);
                     if (typeface is not null)
                     {
-                        Once(face, $"{face} is not installed; drawing its titles in {alias}");
+                        Once(face, $"font: {face} not installed, titles use {alias}");
                         break;
                     }
                 }
@@ -107,14 +107,14 @@ public sealed class MsStylesFonts : IDisposable
             typeface = Fallback;
             if (UseSystemFonts)
             {
-                Once(face, $"{face} is not installed and has no installed alias; using the consumer font {Fallback.FamilyName}");
+                Once(face, $"font: {face} and its aliases not installed, titles use the consumer font {Fallback.FamilyName}");
             }
         }
 
         if (typeface is null)
         {
             typeface = Track(_manager.MatchFamily("sans-serif", style)) ?? SKTypeface.Default;
-            Once(face, $"{face} is not installed; using the default sans {typeface.FamilyName}");
+            Once(face, $"font: {face} not installed, titles use the default sans {typeface.FamilyName}");
         }
 
         _resolved[key] = typeface;

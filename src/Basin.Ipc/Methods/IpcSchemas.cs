@@ -50,7 +50,7 @@ internal static class IpcSchemas
     public static IpcMethodInfo Of(string name) =>
         Table.TryGetValue(name, out var info)
             ? info
-            : throw new InvalidOperationException($"the library method '{name}' has no schema");
+            : throw new InvalidOperationException($"The library method '{name}' has no schema.");
 
     public static IEnumerable<string> Names => Table.Keys;
 

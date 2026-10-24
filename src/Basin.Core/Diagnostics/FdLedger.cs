@@ -37,7 +37,7 @@ public sealed class FdLedger
         {
             if (!_open.TryAdd(fd, tag))
             {
-                throw new InvalidOperationException($"fd {fd} acquired twice ('{_open[fd]}', now '{tag}').");
+                throw new InvalidOperationException($"The fd {fd} was acquired twice, first as '{_open[fd]}' and now as '{tag}'.");
             }
         }
     }
@@ -69,7 +69,7 @@ public sealed class FdLedger
             if (_clientOwned.Contains(fd))
             {
                 throw new InvalidOperationException(
-                    $"fd {fd} came from a client and must be released through WlClient.CloseFd, not close(2).");
+                    $"The fd {fd} came from a client. Release it through WlClient.CloseFd, not close(2).");
             }
         }
     }
@@ -99,7 +99,7 @@ public sealed class FdLedger
             if (_open.Count > 0)
             {
                 var leaks = string.Join(", ", _open.Select(p => $"{p.Key} ({p.Value})"));
-                throw new InvalidOperationException($"fd ledger not balanced: {leaks}");
+                throw new InvalidOperationException($"The fd ledger is not balanced. These fds are still open: {leaks}.");
             }
         }
     }
@@ -110,7 +110,7 @@ public sealed class FdLedger
         {
             if (!_open.Remove(fd))
             {
-                throw new InvalidOperationException($"fd {fd} {how} but was never acquired.");
+                throw new InvalidOperationException($"The fd {fd} was {how}, but it was never acquired.");
             }
         }
 

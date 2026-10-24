@@ -38,7 +38,7 @@ public sealed class SdlMetalLease : ISdlRenderLease
         _view = SDL.MetalCreateView(window.Handle);
         if (_view == 0)
         {
-            throw new InvalidOperationException($"SDL_Metal_CreateView failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_Metal_CreateView failed with \"{SDL.GetError()}\".");
         }
 
         _layer = SDL.MetalGetLayer(_view);

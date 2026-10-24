@@ -72,7 +72,7 @@ internal sealed class PortalApp : IDisposable
     {
         var keymap = new ClientKeymap();
         _owned.Add(keymap);
-        var seat = _globals.Seat ?? throw new InvalidOperationException("the compositor exposes no wl_seat");
+        var seat = _globals.Seat ?? throw new InvalidOperationException("The compositor has no wl_seat. The portal needs a seat for its prompts.");
         _seat = new ClientSeat(seat, _globals.SeatCapabilities, keymap);
         _globals.SeatCapabilitiesChanged += _seat.SetCapabilities;
         _owned.Add(_seat);
@@ -155,7 +155,7 @@ internal sealed class PortalApp : IDisposable
 
     private IPortalPrompts StartAvaloniaPrompts()
     {
-        _avaloniaHost = new AvaloniaPromptHost(_globals, _layerShell, _outputs, _loop, _log);
+        _avaloniaHost = new AvaloniaPromptHost(_globals, _layerShell, _outputs, _loop);
         _owned.Add(_avaloniaHost);
         var ui = BasinPlatform.Start<PromptApp>(new BasinPlatformOptions
         {

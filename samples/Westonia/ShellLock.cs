@@ -57,7 +57,7 @@ internal sealed class ShellLock : IDisposable
         {
             if (_shellHoldsLock && !ClientLocked)
             {
-                _log.Warn($"a session lock client arrived while the shell already holds the lock");
+                _log.Warn($"lock: a session lock client arrived while the shell holds the lock");
             }
 
             _shellHoldsLock = false;
@@ -74,7 +74,7 @@ internal sealed class ShellLock : IDisposable
 
         driver.Abandoned += () =>
         {
-            _log.Warn($"the session lock client died; the screen stays locked");
+            _log.Warn($"lock: the session lock client died, the screen stays locked");
             _layers.SetLocked(true);
             Changed?.Invoke();
         };
@@ -96,7 +96,7 @@ internal sealed class ShellLock : IDisposable
         if (_shell.Client is { } client)
         {
             client.PrepareLockSurface();
-            _log.Info($"asked the shell client for a lock surface");
+            _log.Info($"lock: asked the shell client for a lock surface");
             Changed?.Invoke();
             return;
         }

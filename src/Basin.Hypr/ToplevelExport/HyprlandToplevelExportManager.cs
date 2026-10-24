@@ -281,7 +281,7 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         {
             if (_used)
             {
-                _resource.PostError((uint)HyprlandToplevelExportFrameV1.Error.AlreadyUsed, "the frame has already been used to copy a buffer");
+                _resource.PostError((uint)HyprlandToplevelExportFrameV1.Error.AlreadyUsed, "The frame already copied a buffer. Use a new frame for each copy.");
                 return;
             }
 
@@ -290,7 +290,7 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
             if (buffer is null || buffer.Width != _format.Width || buffer.Height != _format.Height ||
                 !Matches(buffer) || !_owner.Accepts(buffer))
             {
-                _resource.PostError((uint)HyprlandToplevelExportFrameV1.Error.InvalidBuffer, "buffer attributes do not match the announced parameters");
+                _resource.PostError((uint)HyprlandToplevelExportFrameV1.Error.InvalidBuffer, "The buffer attributes do not match the announced parameters.");
                 return;
             }
 
@@ -343,7 +343,7 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
             }
             catch (InvalidOperationException e)
             {
-                Log.Warn($"toplevel export frame refused its buffer: {e.Message}");
+                Log.Debug(e, $"toplevel-export: frame refused the client buffer");
                 captured = false;
             }
 

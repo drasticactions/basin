@@ -78,8 +78,8 @@ public sealed class IpcPointerMoveParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'x' is required"
-        : (_present & 2) == 0 ? "'y' is required"
+        (_present & 1) == 0 ? "'x' is required."
+        : (_present & 2) == 0 ? "'y' is required."
         : null;
 
     void IIpcReusable.Reset()

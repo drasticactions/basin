@@ -55,8 +55,8 @@ public sealed class IpcDeviceSetParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        _settings is null ? "'settings' is required"
-        : Device is null && Type is null ? "'device' or 'type' is required"
+        _settings is null ? "'settings' is required."
+        : Device is null && Type is null ? "'device' or 'type' is required."
         : null;
 
     void IIpcReusable.Reset()

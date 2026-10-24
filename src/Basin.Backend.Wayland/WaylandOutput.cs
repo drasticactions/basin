@@ -130,7 +130,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
                 {
                     declineLogged = true;
                     Log.Info(
-                        $"{Name}: parent kept client-side decorations; the window is framed only if the consumer draws one");
+                        $"{Name}: parent kept client-side decorations, the window has a frame only if the consumer draws one");
                 }
             };
         }
@@ -451,7 +451,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
                 _hostFrameWarned = true;
                 var missing = _backend.ParentSubcompositor is null ? "wl_subcompositor" : "wp_viewporter";
                 Log.Info(
-                    $"{Name}: parent draws no decorations and lacks {missing}; the window stays bare");
+                    $"{Name}: parent draws no decorations and has no {missing}, the window has no frame");
             }
 
             return;
@@ -610,7 +610,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         {
             _scaleWarned = true;
             Log.Warn(
-                $"{Name}: parent lacks wp_viewporter; fractional scale {Scale} presents 1:1 (window grows)");
+                $"{Name}: parent has no wp_viewporter, fractional scale {Scale} presents 1:1 and the window grows");
         }
 
         _presentationScale = 1;
@@ -874,7 +874,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         var acquire = ++_acquirePoint;
         if (!_acquireTimeline!.ImportSyncFileAt(acquire, state.InFenceFd))
         {
-            WarnSyncobjOnce("the render's fence would not go onto a timeline point");
+            WarnSyncobjOnce("the render fence does not go onto a timeline point");
             return false;
         }
 
@@ -883,7 +883,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         {
             if (!imported.ReleaseTimeline!.Rearm(waiter, release))
             {
-                WarnSyncobjOnce("a syncobj timeline waiter would not rearm");
+                WarnSyncobjOnce("a syncobj timeline waiter does not rearm");
                 return false;
             }
         }
@@ -892,7 +892,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
             imported.ReleaseWaiter = CreateReleaseWaiter(buffer, imported, release);
             if (imported.ReleaseWaiter is null)
             {
-                WarnSyncobjOnce("syncobj timeline points cannot be waited on (kernel or libdrm too old)");
+                WarnSyncobjOnce("the kernel or libdrm cannot wait on syncobj timeline points");
                 return false;
             }
         }
@@ -913,7 +913,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
     {
         if (DrmSyncobjTimeline.TryCreate(device.DrmFd) is not { } timeline)
         {
-            WarnSyncobjOnce($"{device.DevicePath} will not create a syncobj timeline");
+            WarnSyncobjOnce($"{device.DevicePath} does not create a syncobj timeline");
             return false;
         }
 
@@ -921,7 +921,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         if (fd < 0)
         {
             timeline.Release();
-            WarnSyncobjOnce("a syncobj timeline would not export");
+            WarnSyncobjOnce("a syncobj timeline does not export");
             return false;
         }
 
@@ -987,7 +987,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
 
         _syncobjWarned = true;
         Log.Warn(
-            $"wayland backend: presenting without explicit sync — {reason}. Each frame still waits for its render to finish before the parent sees it, but on a driver that does not keep a dmabuf's implicit fences the parent can still be reading a buffer when it is drawn into again.");
+            $"{Name}: presenting without explicit sync, {reason}");
     }
 
     private ImportedBuffer? TryImportDmabuf(IBuffer buffer)
@@ -1226,13 +1226,13 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _mappingFd = memfd_create("basin-wl-output", 1 );
         if (_mappingFd < 0 || ftruncate(_mappingFd, _mappingSize) != 0)
         {
-            throw new InvalidOperationException("output shm creation failed");
+            throw new InvalidOperationException("The shared memory for the output was not created.");
         }
 
         var map = mmap(null, (nuint)_mappingSize, ProtReadWrite, MapShared, _mappingFd, 0);
         if ((nint)map == -1)
         {
-            throw new InvalidOperationException("output shm mmap failed");
+            throw new InvalidOperationException("The shared memory for the output was not mapped.");
         }
 
         _mapping = (nint)map;

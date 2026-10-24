@@ -93,12 +93,12 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_attached)
         {
-            throw new InvalidOperationException("the input configurator is already attached");
+            throw new InvalidOperationException("The input configurator is already attached. Attach it once.");
         }
 
         if (ReferenceEquals(backend, this))
         {
-            throw new ArgumentException("the configurator cannot sit on itself", nameof(backend));
+            throw new ArgumentException("The configurator cannot be its own backend.", nameof(backend));
         }
 
         _attached = true;

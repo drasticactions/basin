@@ -63,12 +63,12 @@ public sealed class KeyGrid
         ArgumentNullException.ThrowIfNull(cells);
         if (rows is < 1 or > MaxRows)
         {
-            throw new ArgumentOutOfRangeException(nameof(rows), rows, $"a key grid has 1 to {MaxRows} rows");
+            throw new ArgumentOutOfRangeException(nameof(rows), rows, $"A key grid has 1 to {MaxRows} rows.");
         }
 
         if (columns is < 1 or > MaxColumns)
         {
-            throw new ArgumentOutOfRangeException(nameof(columns), columns, $"a key grid has 1 to {MaxColumns} columns");
+            throw new ArgumentOutOfRangeException(nameof(columns), columns, $"A key grid has 1 to {MaxColumns} columns.");
         }
 
         Rows = rows;
@@ -76,7 +76,7 @@ public sealed class KeyGrid
         CellCount = rows * columns;
         if (cells.Count != CellCount)
         {
-            throw new ArgumentException($"a {rows} x {columns} key grid has {CellCount} cells, not {cells.Count}", nameof(cells));
+            throw new ArgumentException($"The cell count is {cells.Count}. A {rows} x {columns} key grid has {CellCount} cells.", nameof(cells));
         }
 
         _cells = [.. cells];
@@ -92,7 +92,7 @@ public sealed class KeyGrid
 
         if (_rowHeights.Length != Rows)
         {
-            throw new ArgumentException($"a key grid has {Rows} row heights", nameof(rowHeights));
+            throw new ArgumentException($"The row height count is not correct. This key grid has {Rows} row heights.", nameof(rowHeights));
         }
 
         WidthUnits = widthUnits;
@@ -198,7 +198,7 @@ public sealed class KeyGrid
     {
         if (rects.Length < CellCount)
         {
-            throw new ArgumentException($"the span needs {CellCount} rects", nameof(rects));
+            throw new ArgumentException($"The span is too short. It must hold {CellCount} rectangles.", nameof(rects));
         }
 
         Span<float> rowBottoms = stackalloc float[MaxRows];

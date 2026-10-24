@@ -43,7 +43,7 @@ internal static class CardShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(CardShader).Assembly.GetManifestResourceStream("card.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource card.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource card.frag.spv is not embedded in the program.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

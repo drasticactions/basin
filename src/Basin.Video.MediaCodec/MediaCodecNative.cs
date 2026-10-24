@@ -52,7 +52,7 @@ internal static unsafe class MediaCodecNative
             return "the libmediandk.so on this host exports no AMediaCodec_createDecoderByType";
         }
 
-        Log.Debug($"decode over libmediandk.so");
+        Log.Debug($"decoding over libmediandk.so");
         return null;
     }
 

@@ -74,7 +74,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
             return;
         }
 
-        var target = Back() ?? throw new InvalidOperationException("the imgui chrome could not allocate a buffer.");
+        var target = Back() ?? throw new InvalidOperationException("The imgui chrome could not allocate a buffer.");
         var wrap = WrapOf(target);
         var frame = AcquireFrame();
         WaitForReaders(target);
@@ -389,7 +389,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
 
         if (!buffer.TryGetDmabuf(out var attributes))
         {
-            throw new InvalidOperationException("an ImGui Vulkan surface draws only into a dmabuf.");
+            throw new InvalidOperationException("An ImGui Vulkan surface draws only into a dmabuf.");
         }
 
         var image = VulkanDeviceImage.TryImport(_device, attributes, ImageUsageFlags.ColorAttachmentBit)

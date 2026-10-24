@@ -29,7 +29,7 @@ internal static unsafe class Libc
     {
         Architecture.X64 => 40,
         Architecture.Arm64 => 32,
-        var arch => throw new PlatformNotSupportedException($"struct stat layout unknown on {arch}"),
+        var arch => throw new PlatformNotSupportedException($"The struct stat layout is not known on {arch}."),
     };
 
     public static ulong RdevOf(string path)
@@ -37,7 +37,7 @@ internal static unsafe class Libc
         var buf = stackalloc byte[StatSize];
         if (stat(path, buf) != 0)
         {
-            throw new InvalidOperationException($"stat({path}) failed");
+            throw new InvalidOperationException($"Cannot stat {path}: {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}.");
         }
 
         return *(ulong*)(buf + RdevOffset);

@@ -9,7 +9,7 @@ internal sealed partial class Westonia
     {
         if (!_colorPack.Attach(_services, _scene))
         {
-            _log.Info($"no color manager: this compositor offers no color management");
+            _log.Info($"color: no color manager, color management is off");
             return;
         }
 

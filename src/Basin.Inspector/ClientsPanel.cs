@@ -77,7 +77,7 @@ public sealed class ClientsPanel : IInspectorPanel
 
         if (!_directory.CanListObjects)
         {
-            ImGuiApi.TextUnformatted("this transport cannot list a client's objects"u8);
+            ImGuiApi.TextUnformatted("Object lists aren't available over this connection."u8);
             return;
         }
 

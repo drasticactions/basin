@@ -90,7 +90,7 @@ public sealed class TearingControlManager : IDisposable
 
             if (!_claimed.Add(surface))
             {
-                manager.PostError(ErrorExists, "surface already has a tearing control");
+                manager.PostError(ErrorExists, "The surface already has a tearing control object.");
                 return;
             }
 

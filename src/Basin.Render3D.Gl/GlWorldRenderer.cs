@@ -872,12 +872,12 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
         AllocationScope.Pause();
         try
         {
-            if (GlWorldTarget.TryCreate(_device, target, out var reason) is not { } created)
+            if (GlWorldTarget.TryCreate(_device, target, out var error) is not { } created)
             {
                 if (!ReferenceEquals(_failedTarget, target))
                 {
                     _failedTarget = target;
-                    GlWorldLog.Log.Warn($"world frame not drawn: {reason}");
+                    GlWorldLog.Log.Warn(error!, $"world frame not drawn");
                 }
 
                 return null;

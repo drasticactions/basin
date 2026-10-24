@@ -154,7 +154,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         if (endpoint.Cid != VsockEndPoint.AnyCid)
         {
             throw new ArgumentException(
-                $"'{endpoint}' names a CID; on Windows a listener takes vsock:PORT and the VM comes from --hyperv-vm",
+                $"'{endpoint}' names a CID. On Windows, a listener takes vsock:PORT and --hyperv-vm selects the VM.",
                 nameof(endpoint));
         }
 
@@ -197,6 +197,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
             catch (IOException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse } &&
                 attempt + 1 < AnyPortAttempts)
             {
+                WaypipeLog.Log.Debug(ex, $"hyper-v: port {local.VsockPort} taken, trying another");
             }
         }
     }
@@ -289,7 +290,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         }
         catch (SocketException ex) when (ex.SocketErrorCode is SocketError.AddressFamilyNotSupported or SocketError.ProtocolNotSupported)
         {
-            throw new IOException("Hyper-V sockets need Windows 10 1607 or later with the Hyper-V or WSL platform present", ex);
+            throw new IOException("Hyper-V sockets are not available. They need Windows 10 1607 or later with the Hyper-V or WSL platform.", ex);
         }
 
         try
@@ -302,17 +303,17 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
             socket.Dispose();
             throw ex.SocketErrorCode switch
             {
-                SocketError.AddressAlreadyInUse => new IOException($"{local} is already taken on VmId {local.VmId}", ex),
+                SocketError.AddressAlreadyInUse => new IOException($"{local} is already taken on VmId {local.VmId}. Choose a different port.", ex),
                 SocketError.AccessDenied => new IOException(
-                    $"binding {local} on VmId {local.VmId} was refused: that VM accepts no listener for a service with no GuestCommunicationServices key, "
-                    + $"elevated or not; run scripts/hyperv-register-service.ps1 -Port {local.VsockPort} elevated{BracedNote(local.ServiceId)}",
+                    $"VmId {local.VmId} refused {local} because the service has no GuestCommunicationServices key. "
+                    + $"Run scripts/hyperv-register-service.ps1 -Port {local.VsockPort} elevated{BracedNote(local.ServiceId)}.",
                     ex),
                 SocketError.AddressNotAvailable => new IOException(
-                    $"VmId {local.VmId} names no running VM, so {local} cannot be bound on it; start the VM, or for WSL let the listener query the id again",
+                    $"VmId {local.VmId} names no running VM, so {local} cannot bind. Start the VM, or for WSL let the listener query the id again.",
                     ex),
                 SocketError.AddressFamilyNotSupported => new IOException(
-                    "Hyper-V sockets need Windows 10 1607 or later with the Hyper-V or WSL platform present", ex),
-                _ => new IOException($"binding {local} on VmId {local.VmId} failed: {ex.Message}", ex),
+                    "Hyper-V sockets are not available. They need Windows 10 1607 or later with the Hyper-V or WSL platform.", ex),
+                _ => new IOException($"{local} did not bind on VmId {local.VmId} ({ex.SocketErrorCode}).", ex),
             };
         }
 
@@ -322,8 +323,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
             !HyperVRegistry.IsRegistered(local.ServiceId))
         {
             WaypipeLog.Log.Warn(
-                $"{local} on VmId {vm} has no GuestCommunicationServices key, so a full Hyper-V guest cannot reach it; "
-                + $"run scripts/hyperv-register-service.ps1 -Port {local.VsockPort} elevated{BracedNote(local.ServiceId)}. A WSL2 guest reaches only a bind on its own VM; use --hyperv-vm wsl");
+                $"hyper-v: {local} on VmId {vm} has no GuestCommunicationServices key, run scripts/hyperv-register-service.ps1 -Port {local.VsockPort} elevated{BracedNote(local.ServiceId)}");
         }
 
         return socket;
@@ -331,7 +331,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
 
     private static string BracedNote(Guid serviceId) =>
         HyperVRegistry.IsRegisteredWithBraces(serviceId)
-            ? $"; the key {{{serviceId}}} exists, but Hyper-V matches only the name without braces"
+            ? $", and rename the key {{{serviceId}}} without braces, because Hyper-V matches only that name"
             : string.Empty;
 
     private Socket? Current
@@ -372,7 +372,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
             }
             catch (SocketException ex) when (ex.SocketErrorCode is SocketError.TooManyOpenSockets or SocketError.NoBufferSpaceAvailable)
             {
-                WaypipeLog.Log.Warn($"accepting on {LocalEndPoint} paused for {RetryMillis} ms: {ex.Message}");
+                WaypipeLog.Log.Warn(ex, $"accept on {LocalEndPoint} paused for {RetryMillis} ms");
                 try
                 {
                     await Task.Delay(RetryMillis, _stop.Token).ConfigureAwait(false);
@@ -388,7 +388,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
             {
                 if (_vm.Kind == HyperVVmKind.Wsl)
                 {
-                    WaypipeLog.Log.Warn($"accepting on {LocalEndPoint} VmId={LocalEndPoint.VmId} failed ({ex.SocketErrorCode}); rebinding");
+                    WaypipeLog.Log.Warn($"accept on {LocalEndPoint} VmId={LocalEndPoint.VmId} failed ({ex.SocketErrorCode}), rebinding");
                     _ = RebindInBackgroundAsync();
                 }
                 else
@@ -419,11 +419,9 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
                     {
                         accepted.Shutdown(SocketShutdown.Both);
                     }
-                    catch (SocketException)
+                    catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
                     {
-                    }
-                    catch (ObjectDisposedException)
-                    {
+                        WaypipeLog.Log.Debug(ex, $"channel {index}: peer shutdown failed");
                     }
                 },
                 _compression,
@@ -442,7 +440,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             stream.Dispose();
-            WaypipeLog.Log.Warn($"channel {index} on {LocalEndPoint} could not start: {ex.Message}");
+            WaypipeLog.Log.Warn(ex, $"channel {index} on {LocalEndPoint} did not start");
             return;
         }
 
@@ -523,7 +521,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
             if (!await WslVm.IsRunningAsync(_stop.Token).ConfigureAwait(false))
             {
                 _vmStopped = true;
-                WaypipeLog.Log.Info($"the WSL VM behind {LocalEndPoint} stopped; rebinding once it runs again");
+                WaypipeLog.Log.Info($"wsl: VM behind {LocalEndPoint} stopped, rebind waits for it to run again");
                 return;
             }
 
@@ -539,14 +537,15 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
                 catch (Exception ex) when (ex is IOException or WslVmException or SocketException)
                 {
                     last = ex;
-                    WaypipeLog.Log.Warn($"rebinding {LocalEndPoint} failed: {ex.Message}");
+                    WaypipeLog.Log.Warn(ex, $"rebind of {LocalEndPoint} failed");
                 }
             }
 
             Fail(last!);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            WaypipeLog.Log.Debug(ex, $"rebind of {LocalEndPoint} canceled");
         }
         catch (WslVmException ex)
         {
@@ -564,8 +563,9 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         {
             _rebinding.Release();
         }
-        catch (ObjectDisposedException)
+        catch (ObjectDisposedException ex)
         {
+            WaypipeLog.Log.Debug(ex, $"rebind gate of {LocalEndPoint} already disposed");
         }
     }
 
@@ -594,7 +594,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         }
 
         _vmStopped = false;
-        WaypipeLog.Log.Info($"rebound {local} on WSL VM {old.VmId} -> {local.VmId}");
+        WaypipeLog.Log.Info($"wsl: {local} rebound from VM {old.VmId} to {local.VmId}");
         _ = AcceptLoopAsync(socket);
         _post(() =>
         {
@@ -621,7 +621,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
                 }
                 catch (WslVmException ex)
                 {
-                    WaypipeLog.Log.Debug($"watching the WSL VM: {ex.Message}");
+                    WaypipeLog.Log.Debug(ex, $"wsl: VM watch query failed");
                     continue;
                 }
 
@@ -635,7 +635,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
                     if (!_vmStopped)
                     {
                         _vmStopped = true;
-                        WaypipeLog.Log.Info($"the WSL VM behind {LocalEndPoint} stopped; watching for it to run again");
+                        WaypipeLog.Log.Info($"wsl: VM behind {LocalEndPoint} stopped, watching for it to run again");
                     }
 
                     continue;
@@ -649,7 +649,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
                 }
                 catch (WslVmException ex)
                 {
-                    WaypipeLog.Log.Debug($"watching the WSL VM: {ex.Message}");
+                    WaypipeLog.Log.Debug(ex, $"wsl: VM watch query failed");
                     continue;
                 }
 
@@ -661,8 +661,9 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            WaypipeLog.Log.Debug(ex, $"wsl: VM watch for {LocalEndPoint} stopped");
         }
     }
 
@@ -671,7 +672,7 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
 
     private void Fail(Exception error)
     {
-        WaypipeLog.Log.Error($"accepting on {LocalEndPoint} failed: {error.Message}");
+        WaypipeLog.Log.Error(error, $"accept on {LocalEndPoint} failed, listener stopped");
         lock (_gate)
         {
             _socket?.Dispose();

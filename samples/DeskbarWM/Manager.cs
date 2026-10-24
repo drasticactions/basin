@@ -125,7 +125,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
 
         _deskbars = new PerOutput<DeskbarSurface>(_surfaces, (output, proxy) =>
             new DeskbarSurface(_surfaces!, proxy, output, _wm) { AutoHidden = _config.AutoHide });
-        _wallpapers = new PerOutput<WallpaperSurface>(_surfaces, (output, proxy) => new WallpaperSurface(_surfaces!, proxy, output, _wm));
+        _wallpapers = new PerOutput<WallpaperSurface>(_surfaces, (output, proxy) => new WallpaperSurface(_surfaces!, proxy, output, _wm, _log));
 
         _pointerInput = new PointerInput(wm);
         _pointerInput.SurfaceEntered += OnDecorEntered;
@@ -214,7 +214,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
                     applets.Add(_workspacesApplet);
                     break;
                 default:
-                    _log.Warn($"unknown tray applet '{name}'");
+                    _log.Warn($"[deskbar] unknown tray applet '{name}', ignored");
                     break;
             }
         }
@@ -2504,7 +2504,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
     {
         if (WmSpawn.Run(command) is { } failure)
         {
-            _log.Error($"spawn failed: {failure}");
+            _log.Warn($"launch: cannot start {command[0]}: {failure}");
         }
     }
 
@@ -2523,7 +2523,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
     {
         _config = Config.Load(_noConfig, _log);
         WarnWithoutBlur();
-        _log.Info($"configuration reloaded");
+        _log.Info($"config: reloaded");
 
         _table.Reset();
         _font?.Dispose();
@@ -2569,7 +2569,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
     {
         if (app.LaunchArgv(_config.TerminalCommand.Length == 0 ? null : [.. _config.TerminalCommand, "-e"]) is not { } argv)
         {
-            _log.Debug($"{app.Id} wants a terminal and none is configured; not launched");
+            _log.Debug($"launch: {app.Id} needs a terminal and none is configured, not launched");
             return;
         }
 

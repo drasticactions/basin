@@ -73,7 +73,7 @@ public sealed class IpcTouchParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'kind' is required"
+        (_present & 1) == 0 ? "'kind' is required."
         : null;
 
     void IIpcReusable.Reset()

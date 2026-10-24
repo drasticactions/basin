@@ -45,7 +45,7 @@ internal sealed class PortalHandler : DBusHandler,
         if (!_bus.AcceptSender(sender))
         {
             Log.Warn($"{sender} called {context.Request.InterfaceAsString}.{context.Request.MemberAsString} and is not the portal frontend");
-            context.ReplyError(PortalError.AccessDenied, "only the portal frontend may call this backend");
+            context.ReplyError(PortalError.AccessDenied, "Only the portal frontend can call this backend.");
             return;
         }
 
@@ -57,13 +57,13 @@ internal sealed class PortalHandler : DBusHandler,
     {
         if (ex is OperationCanceledException)
         {
-            context.ReplyError("org.freedesktop.portal.Error.Cancelled", "the request was closed");
+            context.ReplyError("org.freedesktop.portal.Error.Cancelled", "The request was closed.");
             return;
         }
 
         if (ex is not DBusErrorReplyException)
         {
-            Log.Warn($"{context.Request.InterfaceAsString}.{context.Request.MemberAsString} failed: {ex}");
+            Log.Warn(ex, $"{context.Request.InterfaceAsString}.{context.Request.MemberAsString} failed");
         }
 
         base.HandleException(context, ex);
@@ -133,7 +133,7 @@ internal sealed class PortalHandler : DBusHandler,
     }
 
     private static void NoInterface(MethodContext context, string name) =>
-        context.ReplyError(PortalError.UnknownInterface, $"{name} is not installed on this compositor");
+        context.ReplyError(PortalError.UnknownInterface, $"{name} is not installed on this compositor.");
 
     ValueTask IScreenCastHandler.HandleGetPropertyAsync(IScreenCastHandler.GetPropertyContext context)
     {

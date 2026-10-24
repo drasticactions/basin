@@ -53,7 +53,7 @@ public static class EmojiPages
                 var icon = entry.TryGetValue("icon", out var iconValue) ? iconValue as string : null;
                 if (id is null || icon is null || !entry.TryGetValue("emoji", out var list) || list is not TomlArray emoji)
                 {
-                    logger.Warn($"{source}: an emoji category needs id, icon and emoji, ignored");
+                    logger.Warn($"emoji: {source} has a category without id, icon or emoji, it is ignored");
                     continue;
                 }
 

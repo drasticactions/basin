@@ -310,7 +310,7 @@ public sealed class InspectorSession : IDisposable
         ArgumentNullException.ThrowIfNull(methods);
         if (_options.Report is not { } report)
         {
-            throw new InvalidOperationException("an inspector session registers its methods only with a Report");
+            throw new InvalidOperationException("An inspector session registers its methods only with a Report.");
         }
 
         InspectorIpc.Register(methods, report, new InspectorIpcOptions
@@ -390,7 +390,7 @@ public sealed class InspectorSession : IDisposable
             new ImGuiHostOptions { FontSize = (float)Settings.FontSize });
         if (vulkanDeclined is not null)
         {
-            InspectorLog.Log.Warn($"imgui cannot draw on the renderer's VulkanDevice: {vulkanDeclined}");
+            InspectorLog.Log.Warn($"session: imgui cannot draw on the Vulkan device of the renderer, {vulkanDeclined}");
         }
 
         if (host is null)
@@ -399,7 +399,7 @@ public sealed class InspectorSession : IDisposable
             return null;
         }
 
-        InspectorLog.Log.Info($"the inspector draws on the {host.Name} host");
+        InspectorLog.Log.Info($"session: inspector draws on the {host.Name} host");
         _host = host;
         _driver = new UIDriver(host, _options.Loop);
         _driver.Start();

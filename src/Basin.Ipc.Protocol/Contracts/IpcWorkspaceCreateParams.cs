@@ -64,8 +64,8 @@ public sealed class IpcWorkspaceCreateParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'group' is required"
-        : (_present & 2) == 0 ? "'name' is required"
+        (_present & 1) == 0 ? "'group' is required."
+        : (_present & 2) == 0 ? "'name' is required."
         : null;
 
     void IIpcReusable.Reset()

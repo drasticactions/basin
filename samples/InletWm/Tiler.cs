@@ -63,7 +63,7 @@ internal sealed class Tiler
         foreach (var tile in _tiles)
         {
             var window = tile.Window;
-            _log.Debug($"  {(ReferenceEquals(window, _focused) ? '*' : ' ')} '{(window.AppId ?? "?")}' proposed {tile.Frame.Width}x{tile.Frame.Height} at {tile.Frame.X},{tile.Frame.Y}; window reports {window.Dimensions.Width}x{window.Dimensions.Height}");
+            _log.Debug($"  {(ReferenceEquals(window, _focused) ? '*' : ' ')} '{(window.AppId ?? "?")}' proposed {tile.Frame.Width}x{tile.Frame.Height} at {tile.Frame.X},{tile.Frame.Y}, window reports {window.Dimensions.Width}x{window.Dimensions.Height}");
         }
     }
 
@@ -368,14 +368,14 @@ internal sealed class Tiler
 
         return context.Outputs.Count > 0
             ? context.Outputs[0]
-            : throw new InvalidOperationException("a window appeared before any output did");
+            : throw new InvalidOperationException("A window appeared before any output. The tiler needs an output to place a window.");
     }
 
     private void Spawn()
     {
         if (WmSpawn.Run(_terminal) is { } failure)
         {
-            _log.Error($"could not spawn '{_terminal}': {failure}");
+            _log.Warn($"spawn: '{_terminal}' not started: {failure}");
         }
     }
 

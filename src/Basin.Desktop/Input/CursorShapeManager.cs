@@ -122,7 +122,7 @@ public sealed class CursorShapeManager : IDisposable
     {
         if ((uint)shape == 0 || (uint)shape > HighestShape(device.Version))
         {
-            device.PostError((uint)WpCursorShapeDeviceV1.Error.InvalidShape, "unknown cursor shape");
+            device.PostError((uint)WpCursorShapeDeviceV1.Error.InvalidShape, "The cursor shape is not known.");
             return false;
         }
 

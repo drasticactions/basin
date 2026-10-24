@@ -40,9 +40,8 @@ public static class HomedUsers
         }
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException or System.Net.Sockets.SocketException)
         {
-            var reason = $"systemd-homed is not reachable ({error.Message})";
-            Log.Debug($"{reason}");
-            return new HomedUids(new HashSet<uint>(), reason);
+            Log.Debug(error, $"homed: not reachable");
+            return new HomedUids(new HashSet<uint>(), $"systemd-homed is not reachable ({error.Message})");
         }
     }
 

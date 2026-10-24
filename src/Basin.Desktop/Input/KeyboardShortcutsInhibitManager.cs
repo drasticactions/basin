@@ -147,7 +147,7 @@ public sealed class KeyboardShortcutsInhibitManager : IDisposable
 
             if (_inhibitors.ContainsKey(surface))
             {
-                manager.PostError(ErrorAlreadyInhibited, "surface already has a shortcuts inhibitor");
+                manager.PostError(ErrorAlreadyInhibited, "The surface already has a shortcuts inhibitor.");
                 return;
             }
 

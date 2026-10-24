@@ -368,7 +368,7 @@ public sealed unsafe class InspectorOverlay : IImGuiContent, IDisposable
                 InputFromSurface = true,
                 PreciseDamage = true,
             };
-            _node.Faulted += error => InspectorLog.Log.Error($"the inspector surface faulted: {error.Message}");
+            _node.Faulted += error => InspectorLog.Log.Error(error, $"overlay: surface faulted");
         }
 
         var box = view.Box;
@@ -389,7 +389,7 @@ public sealed unsafe class InspectorOverlay : IImGuiContent, IDisposable
         if (!ReferenceEquals(had, surface))
         {
             surface.Content = this;
-            surface.Faulted += error => InspectorLog.Log.Error($"an inspector panel threw: {error}");
+            surface.Faulted += error => InspectorLog.Log.Error(error, $"panel: draw failed");
             SurfaceCreated?.Invoke(surface);
         }
 

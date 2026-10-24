@@ -72,7 +72,7 @@ internal static class MsStylesIniReader
             }
         }
 
-        throw new ArgumentException($"The theme has no {what} '{wanted}'; it has {string.Join(", ", names)}.");
+        throw new ArgumentException($"The theme has no {what} '{wanted}'. It has {string.Join(", ", names)}.", nameof(wanted));
     }
 
     public static bool TryParseSectionName(string section, out string app, out string className, out string? part, out string? state)

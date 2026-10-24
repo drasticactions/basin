@@ -43,7 +43,7 @@ public sealed class IpcChordParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'chord' is required"
+        (_present & 1) == 0 ? "'chord' is required."
         : null;
 
     void IIpcReusable.Reset()

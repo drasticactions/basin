@@ -81,7 +81,7 @@ public static class CtmShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(CtmShader).Assembly.GetManifestResourceStream("ctm.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource ctm.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource ctm.frag.spv is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using Basin.Capabilities;
 using Basin.Ipc;
 using Basin.Scene;
@@ -27,6 +28,29 @@ public sealed class IpcClientTests
     {
         var directory = System.IO.Directory.CreateTempSubdirectory("basin-ipc-client-");
         return (directory, System.IO.Path.Combine(directory.FullName, "basin-client.sock"));
+    }
+
+    [Fact]
+    public void Discovery_leaves_out_a_socket_file_that_no_compositor_listens_on()
+    {
+        var directory = System.IO.Directory.CreateTempSubdirectory("basin-ipc-client-");
+        try
+        {
+            var dead = System.IO.Path.Combine(directory.FullName, "basin-dead.sock");
+            var live = System.IO.Path.Combine(directory.FullName, "basin-live.sock");
+            using var stale = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            stale.Bind(new UnixDomainSocketEndPoint(dead));
+            using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            listener.Bind(new UnixDomainSocketEndPoint(live));
+            listener.Listen(1);
+
+            Assert.True(File.Exists(dead));
+            Assert.Equal([live], BasinIpcClient.Candidates(directory.FullName));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
     }
 
     [Fact]

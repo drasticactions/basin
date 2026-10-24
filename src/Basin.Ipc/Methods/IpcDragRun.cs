@@ -56,7 +56,7 @@ internal sealed class IpcDragRun : IFrameSink, IDisposable
         _server.Own(this);
         if (!_input.PointerMotionAbsolute(Now, _fromX, _fromY))
         {
-            Fail("the pointer did not move to the start");
+            Fail("The pointer did not move to the start point.");
             return;
         }
 
@@ -92,7 +92,7 @@ internal sealed class IpcDragRun : IFrameSink, IDisposable
         _settle?.Dispose();
         if (!_reply.IsDone)
         {
-            _reply.Error(IpcErrorCodes.Failed, "the compositor stopped before the drag ended");
+            _reply.Error(IpcErrorCodes.Failed, "The compositor stopped before the drag ended.");
             _ = _reply.Complete();
         }
     }
@@ -114,7 +114,7 @@ internal sealed class IpcDragRun : IFrameSink, IDisposable
         {
             if (!_input.PointerButton(Now, LeftButton, true))
             {
-                Fail("the button press was refused");
+                Fail("The compositor refused the button press.");
                 return;
             }
 

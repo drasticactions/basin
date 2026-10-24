@@ -451,7 +451,7 @@ internal sealed class PixmanRenderPass : IRenderPass
 
         if (vertices.Length % 3 != 0)
         {
-            throw new ArgumentException("vertices must be a whole number of triangles", nameof(vertices));
+            throw new ArgumentException("The vertex count must be a multiple of three.", nameof(vertices));
         }
 
         nint sourceData = 0;

@@ -209,7 +209,7 @@ internal sealed partial class System7Shell
         var status = new TextBlock();
         var available = Muted || sink is { IsAvailable: true };
         slider.IsEnabled = available;
-        status.Text = available ? "" : "PipeWire has no default sink; the volume cannot be set.";
+        status.Text = available ? "" : "There's no sound output, so you can't change the volume.";
         _volumeSlider = slider;
         slider.PropertyChanged += (_, e) =>
         {
@@ -297,14 +297,14 @@ internal sealed partial class System7Shell
             _audio = AudioSession.TryCreate(_host.Loop, out var reason, clientName: "system7-wm");
             if (_audio is null)
             {
-                _log.Warn($"the volume cannot be set: {reason}");
+                _log.Warn($"sound: the volume cannot be set, {reason}");
                 return null;
             }
 
             _sinkVolume = new SinkVolume(_audio);
             if (!_audio.WaitFor(() => _sinkVolume.IsAvailable, 1000))
             {
-                _log.Warn($"PipeWire at {_audio.Remote} has no default sink with a volume");
+                _log.Warn($"sound: PipeWire at {_audio.Remote} has no default sink with a volume");
             }
         }
 

@@ -65,13 +65,13 @@ internal static class Program
             }
             catch (FormatException exception)
             {
-                Console.Error.WriteLine($"basin-mcp: {exception.Message}");
+                Console.Error.WriteLine(CliMessage.Line("basin-mcp", exception));
                 return 1;
             }
 
             if (result.GetValue(maxDimension) < 0)
             {
-                Console.Error.WriteLine("basin-mcp: --max-dimension is 0 or more");
+                Console.Error.WriteLine("basin-mcp: --max-dimension must be 0 or more");
                 return 1;
             }
 
@@ -80,7 +80,7 @@ internal static class Program
             {
                 if (words.Length > 0)
                 {
-                    Console.Error.WriteLine("basin-mcp: a command is only taken with --launch");
+                    Console.Error.WriteLine("basin-mcp: a command needs --launch. Put --launch before the command");
                     return 1;
                 }
 
@@ -94,7 +94,7 @@ internal static class Program
 
             if (result.GetValue(socket) is not null)
             {
-                Console.Error.WriteLine("basin-mcp: --launch makes its own socket, so --socket does not go with it");
+                Console.Error.WriteLine("basin-mcp: --socket does not go with --launch, because --launch makes its own socket");
                 return 1;
             }
 
@@ -129,11 +129,11 @@ internal static class Program
 
         if (IpcLauncher.Start(command, $"basin-mcp-{Environment.ProcessId}", Console.OpenStandardError(), out var error) is not { } launcher)
         {
-            Console.Error.WriteLine($"basin-mcp: {error}");
+            Console.Error.WriteLine(CliMessage.Line("basin-mcp", error ?? "the launch failed"));
             return 1;
         }
 
-        McpLog.Log.Info($"launched {command[0]} (pid {launcher.Pid}) with its control socket at {launcher.SocketPath}");
+        McpLog.Log.Info($"launch: {command[0]} started, pid {launcher.Pid}, control socket {launcher.SocketPath}");
 
         McpBridge? bridge = null;
         try
@@ -151,7 +151,7 @@ internal static class Program
                     return 0;
                 }
 
-                Console.Error.WriteLine($"basin-mcp: no socket at {launcher.SocketPath} after 30 s; serving anyway");
+                Console.Error.WriteLine($"basin-mcp: no socket at {launcher.SocketPath} after 30 s, the bridge serves without it");
             }
 
             bridge = new McpBridge(new McpBridgeOptions
@@ -188,12 +188,12 @@ internal static class Program
         {
             if (!launcher.HasExited)
             {
-                McpLog.Log.Info($"stopping pid {launcher.Pid}");
+                McpLog.Log.Info($"launch: stopping pid {launcher.Pid}");
             }
 
             if (await launcher.StopAsync().ConfigureAwait(false))
             {
-                McpLog.Log.Warn($"pid {launcher.Pid} ignored SIGTERM for {IpcLauncher.StopGrace.TotalSeconds:0} s; killed it");
+                McpLog.Log.Warn($"launch: pid {launcher.Pid} ignored SIGTERM for {IpcLauncher.StopGrace.TotalSeconds:0} s, killed");
             }
 
             if (bridge is not null)

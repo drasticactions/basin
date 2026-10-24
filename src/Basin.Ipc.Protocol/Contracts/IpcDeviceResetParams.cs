@@ -52,7 +52,7 @@ public sealed class IpcDeviceResetParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'device' is required"
+        (_present & 1) == 0 ? "'device' is required."
         : null;
 
     void IIpcReusable.Reset()

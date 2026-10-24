@@ -137,7 +137,7 @@ public sealed class CursorController : IDisposable
 
         if (!_images.HasTheme)
         {
-            Log.Warn($"no cursor theme found. XCURSOR_PATH, ~/.local/share/icons, ~/.icons, /usr/share/icons and /usr/share/pixmaps hold none, so no cursor can be drawn");
+            Log.Warn($"cursor: no cursor theme in XCURSOR_PATH, ~/.local/share/icons, ~/.icons, /usr/share/icons or /usr/share/pixmaps, no cursor drawn");
             return;
         }
 
@@ -145,7 +145,7 @@ public sealed class CursorController : IDisposable
         ShowNamed("left_ptr");
         if (_images.Named("left_ptr") is null)
         {
-            Log.Warn($"the cursor theme has no left_ptr or default at {_images.Size}px, or its buffer could not be allocated at {bufferWidth}x{bufferHeight}");
+            Log.Warn($"cursor: no left_ptr or default cursor at {_images.Size}px, or no {bufferWidth}x{bufferHeight} buffer for it");
         }
     }
 

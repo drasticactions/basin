@@ -105,7 +105,7 @@ public sealed class IpcOutputChange : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'name' is required"
+        (_present & 1) == 0 ? "'name' is required."
         : null;
 
     void IIpcReusable.Reset()

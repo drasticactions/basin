@@ -44,7 +44,7 @@ public sealed class HostedWakeSource : IDisposable
             {
                 if (pipe(fds) != 0)
                 {
-                    throw new InvalidOperationException("the wake pipe could not be created");
+                    throw new InvalidOperationException($"The wake pipe could not be created (errno {Marshal.GetLastPInvokeError()}).");
                 }
             }
         }

@@ -184,7 +184,7 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         var output = _host.OutputFor(parentWindow) ?? FirstOutput();
         if (output is null)
         {
-            Log.Warn($"a portal prompt was asked with no output to show it on");
+            Log.Warn($"prompt: no output to show it on, the prompt is cancelled");
             return Task.FromResult(PromptResponse.Cancelled);
         }
 
@@ -210,7 +210,7 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"the prompt host refused a portal prompt: {e.Message}");
+            Log.Warn(e, $"prompt: the prompt host refused it, the prompt is cancelled");
             surface = null;
         }
 
@@ -239,7 +239,7 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         }
         catch (Exception e)
         {
-            Log.Warn($"the prompt host failed to hide a portal prompt: {e.Message}");
+            Log.Warn(e, $"prompt: the prompt host did not hide it");
         }
 
         shown.View.Dispose();

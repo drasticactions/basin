@@ -51,7 +51,7 @@ public sealed unsafe class VulkanUploadImage : IDisposable
 
         if (!buffer.BeginDataAccess(BufferDataAccess.Read, out var data))
         {
-            throw new InvalidOperationException("buffer is not CPU-readable");
+            throw new InvalidOperationException("The buffer is not CPU-readable.");
         }
 
         DrmFormat format;
@@ -66,13 +66,13 @@ public sealed unsafe class VulkanUploadImage : IDisposable
 
         if (!device.FormatTable.TryGet(format, out var props) || !props.ShmSupported)
         {
-            throw new InvalidOperationException($"{format} is not uploadable on this device");
+            throw new InvalidOperationException($"The device cannot upload {format}.");
         }
 
         if ((uint)Width > props.ShmMaxWidth || (uint)Height > props.ShmMaxHeight)
         {
             throw new InvalidOperationException(
-                $"{Width}x{Height} exceeds the device's {props.ShmMaxWidth}x{props.ShmMaxHeight} limit for {format}");
+                $"The buffer is {Width}x{Height}. The device allows at most {props.ShmMaxWidth}x{props.ShmMaxHeight} for {format}.");
         }
 
         _format = format;

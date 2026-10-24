@@ -15,7 +15,7 @@ internal sealed class GlWorldProgram
         {
             var log = gl.GetProgramInfoLog(Program);
             gl.DeleteProgram(Program);
-            throw new InvalidOperationException($"world program link: {log}");
+            throw new InvalidOperationException($"The world shader program did not link: {log}");
         }
 
         Mvp = gl.GetUniformLocation(Program, "u_mvp");
@@ -88,7 +88,7 @@ internal sealed class GlWorldProgram
         {
             var log = gl.GetShaderInfoLog(shader);
             gl.DeleteShader(shader);
-            throw new InvalidOperationException($"world {type}: {log}");
+            throw new InvalidOperationException($"The world {type} did not compile: {log}");
         }
 
         gl.AttachShader(Program, shader);

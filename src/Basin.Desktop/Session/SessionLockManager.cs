@@ -139,7 +139,7 @@ public sealed class SessionLockManager : IDisposable
 
                 if (!surface.CanSetRole(LockSurface.RoleName))
                 {
-                    lockResource.PostError((uint)ExtSessionLockV1.Error.Role, "surface already has a role");
+                    lockResource.PostError((uint)ExtSessionLockV1.Error.Role, "The surface already has a role.");
                     return;
                 }
 

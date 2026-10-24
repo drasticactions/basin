@@ -17,6 +17,8 @@ public sealed class SettingsMessagesTests
         { "unknown keysym 'Enterr' in binding 'Super+Enterr', skipping", "\"Enterr\" isn't a key name.", true },
         { "[canvas] edge_scale 0.9 must stay below zone / extension = 0.240, clamping it to 0.228", "Too high for this zone and extension, so 0.228 is used.", false },
         { "[canvas] min_scale 0.1 is below edge_scale 0.200 and has no effect", "This has no effect with the current edge scale.", false },
+        { "[hypr.shortcuts] is deprecated, rename the table to [shortcuts]", "Rename the hypr.shortcuts table to shortcuts in the file.", false },
+        { "[inspector] panels \"bogus\" is not outputs|windows|scene, ignored", "Choose outputs, windows or scene.", true },
     };
 
     public static TheoryData<string> Every => new()
@@ -31,8 +33,8 @@ public sealed class SettingsMessagesTests
         "[output.\"DP-1\"] mode \"big\" is not WIDTHxHEIGHT or WIDTHxHEIGHT@HZ, ignored",
         "[output.\"DP-1\"] transform \"sideways\" is not normal|90|180|270|flipped|flipped-90|flipped-180|flipped-270, ignored",
         "[output.\"DP-1\"] zone: unknown key or wrong type, ignored",
-        "[frame] style = \"metacity\" names no theme in [frame.metacity] theme; installed themes: Atlanta, Menta",
-        "[frame.metacity] theme = \"Nope\": no such theme; installed themes: Atlanta, Menta",
+        "[frame] style = \"metacity\" names no theme in [frame.metacity] theme, installed themes: Atlanta, Menta",
+        "[frame.metacity] theme = \"Nope\": no such theme, installed themes: Atlanta, Menta",
         "[color] source = \"icc\" names no profile in [color] icc, describing the outputs from their EDID",
         "effects.post: unknown stage 'blur', ignored",
         "effects.shader: an entry names no path, ignored",
@@ -48,8 +50,10 @@ public sealed class SettingsMessagesTests
         "[overview] is on and so is [canvas] enable: overview is off on every output with the canvas enabled",
         "[canvas] corner_radius 0.5 overrides corner",
         "[canvas] shelf_min_scale 0.5 is at or above shelf_scale on left: the fit shrink is off there",
-        "effects.shader_params is ignored with [[effects.shader]]; put params on each entry",
+        "effects.shader_params is ignored with [[effects.shader]], put params on each entry",
         "[frame] font_size must be at least 1, keeping 14",
+        "[hypr.shortcuts] is deprecated, rename the table to [shortcuts]",
+        "[inspector] panels \"bogus\" is not outputs|windows|clients|scene|memory|effects|transform, ignored",
         "something new that no rule knows about, ignored",
     };
 

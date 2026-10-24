@@ -90,7 +90,7 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
 
             if (!_surfaces.Add(surface))
             {
-                manager.PostError((uint)WpCommitTimingManagerV1.Error.CommitTimerExists, "surface already has a commit timer");
+                manager.PostError((uint)WpCommitTimingManagerV1.Error.CommitTimerExists, "The surface already has a commit timer.");
                 return;
             }
 
@@ -104,19 +104,19 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
     {
         if (surface.IsDestroyed)
         {
-            resource.PostError((uint)WpCommitTimerV1.Error.SurfaceDestroyed, "the commit timer's surface is gone");
+            resource.PostError((uint)WpCommitTimerV1.Error.SurfaceDestroyed, "The surface of the commit timer is destroyed.");
             return;
         }
 
         if (e.TvNsec >= 1_000_000_000)
         {
-            resource.PostError((uint)WpCommitTimerV1.Error.InvalidTimestamp, $"tv_nsec {e.TvNsec} is not below one second");
+            resource.PostError((uint)WpCommitTimerV1.Error.InvalidTimestamp, $"tv_nsec {e.TvNsec} is not less than one second.");
             return;
         }
 
         if (surface.HasPendingCommitTime)
         {
-            resource.PostError((uint)WpCommitTimerV1.Error.TimestampExists, "this content update already carries a timestamp");
+            resource.PostError((uint)WpCommitTimerV1.Error.TimestampExists, "This content update already has a timestamp.");
             return;
         }
 

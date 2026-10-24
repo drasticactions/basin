@@ -294,7 +294,7 @@ public sealed class SkiaPromptTests
     public async Task The_confirmation_answers_deny_and_allow_and_a_closed_request_cancels()
     {
         using var rig = new Rig();
-        var prompt = new ConfirmPrompt("org.example.App", "", true, "Take a screenshot?", "org.example.App wants to take a screenshot");
+        var prompt = new ConfirmPrompt("org.example.App", "", true, "Take a screenshot?", "org.example.App wants to take a screenshot.");
         var task = rig.Prompts.Confirm(prompt, CancellationToken.None);
         var surface = rig.PromptHost.Current;
         Golden(rig, surface, "prompt-confirm");

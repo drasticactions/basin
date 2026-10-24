@@ -57,7 +57,7 @@ internal sealed class SkiaPixelShader : IPixelShader
     {
         var sksl = BuildSksl(source.Sksl!, uniforms, source.SamplesTexture);
         var effect = SKRuntimeEffect.CreateShader(sksl, out var errors)
-            ?? throw new InvalidOperationException($"pixel shader failed to compile: {errors}");
+            ?? throw new InvalidOperationException($"The pixel shader did not compile: {errors}");
         SkiaCensus.Track(effect);
         return new SkiaPixelShader(effect, uniforms, source.SamplesTexture);
     }
@@ -73,7 +73,7 @@ internal sealed class SkiaPixelShader : IPixelShader
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (values.Length != _types.Length)
         {
-            throw new ArgumentException("value count must match the declared uniform count", nameof(values));
+            throw new ArgumentException("The value count must match the declared uniform count.", nameof(values));
         }
 
         for (var i = 0; i < values.Length; i++)
@@ -156,7 +156,7 @@ internal sealed class SkiaPixelShader : IPixelShader
             }
         }
 
-        return shader != 0 ? shader : throw new InvalidOperationException("pixel shader rejected its uniforms or children");
+        return shader != 0 ? shader : throw new InvalidOperationException("The pixel shader rejected its uniforms or children.");
     }
 
     private static void Write(Span<byte> at, float x) => MemoryMarshal.Write(at, in x);
@@ -180,7 +180,7 @@ internal sealed class SkiaPixelShader : IPixelShader
             }
         }
 
-        throw new InvalidOperationException($"pixel shader declares no uniform {name}");
+        throw new InvalidOperationException($"The pixel shader declares no uniform named {name}.");
     }
 
     public void Dispose()

@@ -86,7 +86,7 @@ public sealed class KeySynthesizer
         var typed = _typer.Type(text, timeMs, _target, out var error);
         if (error is not null)
         {
-            Log.Warn($"{error}; the character is dropped");
+            Log.Warn($"keyboard: {error}, the character is dropped");
         }
 
         return typed;

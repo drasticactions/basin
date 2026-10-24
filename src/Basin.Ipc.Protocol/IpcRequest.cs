@@ -48,7 +48,7 @@ public readonly ref struct IpcRequest
             var reader = new Utf8JsonReader(frame, new JsonReaderOptions { MaxDepth = 64 });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
             {
-                error = "a request is a JSON object";
+                error = "The request must be a JSON object.";
                 request = default;
                 return false;
             }
@@ -64,7 +64,7 @@ public readonly ref struct IpcRequest
                     }
                     else if (reader.TokenType != JsonTokenType.Null)
                     {
-                        error ??= "'id' is a number or a string";
+                        error ??= "'id' must be a number or a string.";
                         reader.Skip();
                     }
                 }
@@ -77,7 +77,7 @@ public readonly ref struct IpcRequest
                     }
                     else
                     {
-                        error ??= "'method' is a string";
+                        error ??= "'method' must be a string.";
                         reader.Skip();
                     }
                 }
@@ -90,7 +90,7 @@ public readonly ref struct IpcRequest
                     }
                     else if (reader.TokenType != JsonTokenType.Null)
                     {
-                        error ??= "'params' is an object";
+                        error ??= "'params' must be an object.";
                         reader.Skip();
                     }
                 }
@@ -107,12 +107,12 @@ public readonly ref struct IpcRequest
         }
         catch (JsonException exception)
         {
-            error = $"the frame is not JSON: {exception.Message}";
+            error = $"The frame is not valid JSON. {exception.Message}";
         }
 
         if (error is null && method is null)
         {
-            error = "a request names a 'method'";
+            error = "The request has no 'method'. Give the method to call.";
         }
 
         request = new IpcRequest(id, method, parameters);

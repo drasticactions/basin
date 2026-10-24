@@ -81,7 +81,7 @@ public sealed class HostSceneDiagnostics(BasinHost host, BasinServices services)
             return inner.LocateNode(path, margin, out error);
         }
 
-        error = "the compositor has no output driver yet";
+        error = "The compositor has no output driver yet. Try again after startup.";
         return null;
     }
 
@@ -92,7 +92,7 @@ public sealed class HostSceneDiagnostics(BasinHost host, BasinServices services)
     /// <param name="done">The function that gets the result when the recording ends.</param>
     /// <returns><see langword="null"/> when the recording started, otherwise the reason that it did not.</returns>
     public string? Record(RecordRequest request, Action<RecordingResult> done) =>
-        Inner is { } inner ? inner.Record(request, done) : "the compositor has no output driver yet";
+        Inner is { } inner ? inner.Record(request, done) : "The compositor has no output driver yet. Try again after startup.";
 
     /// <summary>
     /// Reports the frame parts of a surface's window and their boxes.
@@ -123,5 +123,5 @@ public sealed class HostSceneDiagnostics(BasinHost host, BasinServices services)
     public IDisposable WatchPlanes(Action<PlaneReport> sink) => Require().WatchPlanes(sink);
 
     private SceneDiagnostics Require() =>
-        Inner ?? throw new InvalidOperationException("the compositor has no output driver yet");
+        Inner ?? throw new InvalidOperationException("The compositor has no output driver yet.");
 }

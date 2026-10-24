@@ -74,13 +74,13 @@ public sealed class ShortcutPromptView : SkiaPromptView
 
             var label = string.IsNullOrEmpty(row.Description) ? row.Id : row.Description;
             Theme.DrawText(canvas, label, Theme.BodyFont, Padding + 10, y + 21, Theme.Foreground, width / 2 - Padding);
-            var trigger = _capturing == i ? "press a chord…" : string.IsNullOrEmpty(row.Trigger) ? (row.PreferredTaken ? "taken" : "unbound") : Describe(row.Trigger);
+            var trigger = _capturing == i ? "press keys…" : string.IsNullOrEmpty(row.Trigger) ? (row.PreferredTaken ? "in use" : "not set") : Describe(row.Trigger);
             var color = _capturing == i ? Theme.Accent : string.IsNullOrEmpty(row.Trigger) ? Theme.Muted : Theme.Foreground;
             Theme.DrawText(canvas, trigger, Theme.BodyFont, width / 2 + 10, y + 21, color, width / 2 - Padding - 10);
             y += RowHeight;
         }
 
-        Theme.DrawText(canvas, "Click a row and press the chord to bind it; Backspace clears it.", Theme.SmallFont, Padding, y + 18, Theme.Muted, width - 2 * Padding);
+        Theme.DrawText(canvas, "Click a row, then press the keys you want. Press Backspace to clear it.", Theme.SmallFont, Padding, y + 18, Theme.Muted, width - 2 * Padding);
     }
 
     private static string Describe(string trigger) =>

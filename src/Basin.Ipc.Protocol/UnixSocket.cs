@@ -139,7 +139,7 @@ internal static unsafe class UnixSocket
     {
         if (fds.Length > MaxFds)
         {
-            throw new ArgumentOutOfRangeException(nameof(fds), $"at most {MaxFds} descriptors go on one message");
+            throw new ArgumentOutOfRangeException(nameof(fds), $"The message has too many descriptors. At most {MaxFds} can go on one message.");
         }
 
         var control = stackalloc byte[HeaderBytes + (MaxFds * sizeof(int))];
@@ -199,7 +199,7 @@ internal static unsafe class UnixSocket
     {
         if (!FitsPath(path))
         {
-            throw new ArgumentException($"'{path}' is longer than a Unix socket path can be", nameof(path));
+            throw new ArgumentException($"'{path}' is too long for a Unix socket path.", nameof(path));
         }
 
         new Span<byte>(address, 2 + PathCapacity).Clear();

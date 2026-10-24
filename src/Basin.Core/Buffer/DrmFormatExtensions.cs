@@ -57,7 +57,7 @@ public static class DrmFormatExtensions
         DrmFormat.Rgb565 => 2,
         DrmFormat.R8 => 1,
         DrmFormat.Gr88 => 2,
-        _ => throw new NotSupportedException($"No pixel size known for format 0x{(uint)format:X8}."),
+        _ => throw new NotSupportedException($"The format 0x{(uint)format:X8} has no known pixel size."),
     };
 
     /// <summary>

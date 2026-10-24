@@ -277,7 +277,7 @@ public sealed class OutputManagementManager : IDisposable
                     {
                         configurationHead.PostError(
                             (uint)ZwlrOutputConfigurationHeadV1.Error.InvalidAdaptiveSyncState,
-                            $"invalid adaptive sync state {(uint)ae.State}");
+                            $"Adaptive sync state {(uint)ae.State} is not a known value.");
                         return;
                     }
 

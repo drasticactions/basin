@@ -132,7 +132,7 @@ public sealed class SessionLockSceneDriver : ISessionLockDriver
     {
         if (_manager is not null)
         {
-            throw new InvalidOperationException("this session-lock driver already drives a lock manager");
+            throw new InvalidOperationException("This session-lock driver already drives a lock manager. Use one driver for each lock manager.");
         }
 
         _manager = manager;

@@ -137,7 +137,7 @@ public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
         {
             if (RashaderError.Consume(RashaderNative.libra_vk_filter_chain_set_param(&chain, namePtr, value)) is { } message)
             {
-                Log.Warn($"set {name}: {message}");
+                Log.Warn($"parameter {name} not set: {message}");
                 return false;
             }
         }
@@ -202,7 +202,7 @@ public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
             &frameOptions);
         if (RashaderError.Consume(error) is { } message)
         {
-            Log.Error($"frame failed, the filter is dropped: {message}");
+            Log.Error($"frame failed, filter dropped: {message}");
             DropChain();
             return false;
         }

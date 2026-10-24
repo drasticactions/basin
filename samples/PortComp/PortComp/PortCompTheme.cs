@@ -14,7 +14,7 @@ public static class PortCompTheme
     {
         if (name != Name)
         {
-            Log.Info($"theme '{name}' not found; using the built-in '{Name}' theme");
+            Log.Warn($"theme: {name} not found, built-in {Name} theme used");
         }
 
         return NestedTheme.Create(Name);

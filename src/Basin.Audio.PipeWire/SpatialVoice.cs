@@ -75,6 +75,7 @@ public sealed unsafe class SpatialVoice : IDisposable
     private bool _hrtfPending;
     private bool _timerArmed;
     private bool _disposed;
+    private bool _paramFailureLogged;
 
     private SpatialVoice(AudioSession session, VoiceGraph graph, string name, PipeWireModule module, PipeWireNode node, uint nodeId, ulong serial)
     {
@@ -482,9 +483,10 @@ public sealed unsafe class SpatialVoice : IDisposable
         fixed (byte* pod = _builder.WrittenSpan)
         {
             var result = methods->set_param(data, (uint)spa_param_type.SPA_PARAM_Props, 0, (spa_pod*)pod);
-            if (result < 0)
+            if (result < 0 && !_paramFailureLogged)
             {
-                Log.Warn($"voice {Name}: set_param failed ({result})");
+                _paramFailureLogged = true;
+                Log.Warn($"voice {Name}: set_param failed ({result}), the voice keeps its previous controls");
             }
         }
 

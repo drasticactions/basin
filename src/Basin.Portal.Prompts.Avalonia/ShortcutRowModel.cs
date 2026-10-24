@@ -75,11 +75,11 @@ public sealed class ShortcutRowModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gets the text for the trigger column: a capture hint, <c>taken</c>, <c>unbound</c> or the readable form of the trigger.
+    /// Gets the text for the trigger column: a capture hint, <c>in use</c>, <c>not set</c> or the readable form of the trigger.
     /// </summary>
     public string Display => Capturing
-        ? "press a chord…"
+        ? "press keys…"
         : string.IsNullOrEmpty(Trigger)
-            ? (PreferredTaken ? "taken" : "unbound")
+            ? (PreferredTaken ? "in use" : "not set")
             : TriggerSyntax.TryParse(Trigger, out var keysym, out var modifiers) ? TriggerSyntax.Describe(keysym, modifiers) : Trigger;
 }

@@ -204,7 +204,7 @@ public sealed class DrmBackend : IDisposable
         if (DevicePath.Length == 0)
         {
             DevicePath = PickPrimaryDevice() ?? throw new InvalidOperationException(
-                "No KMS-capable DRM device found. Is a GPU driver loaded (/dev/dri/card*)?");
+                "No DRM device with modesetting support is present. Load a GPU driver that provides /dev/dri/card*.");
         }
 
         _device = _session.OpenDevice(DevicePath);
@@ -217,8 +217,7 @@ public sealed class DrmBackend : IDisposable
         catch (DrmException e)
         {
             throw new InvalidOperationException(
-                $"{DevicePath} does not support atomic modesetting (driver too old or " +
-                $"nomodeset in effect): {e.Message}", e);
+                $"{DevicePath} does not support atomic modesetting. Use a newer driver, and remove nomodeset from the kernel command line.", e);
         }
 
         if (Device.TryGetCapability(DrmCapability.CursorWidth, out var cursorWidth) &&
@@ -237,7 +236,7 @@ public sealed class DrmBackend : IDisposable
         DriverName = ReadDriverName();
         CursorRidesWithFrame = DriverName is "nvidia-drm" or "nvidia";
         Log.Debug(
-            $"{DevicePath}: driver {DriverName ?? "unknown"}; cursor plane " +
+            $"{DevicePath}: driver {DriverName ?? "unknown"}, cursor plane " +
             $"{(CursorRidesWithFrame ? "rides with a frame commit while a layer scans out" : "commits on its own")}");
 
         SupportsAtomicAsync = Device.TryGetCapability(DrmCapability.AtomicAsyncPageFlip, out var atomicAsync) && atomicAsync != 0;
@@ -340,8 +339,9 @@ public sealed class DrmBackend : IDisposable
                 {
                     mask |= Device.GetEncoder(encoderId).PossibleCrtcs;
                 }
-                catch (DrmException)
+                catch (DrmException e)
                 {
+                    Log.Debug(e, $"{connector.Name}: encoder {encoderId} does not read, skipped");
                 }
             }
 
@@ -390,11 +390,11 @@ public sealed class DrmBackend : IDisposable
 
                 if (still < 0)
                 {
-                    Log.Debug($"{output.Name}: connector is no longer connected; removing the output");
+                    Log.Debug($"{output.Name}: connector disconnected, output removed");
                 }
                 else
                 {
-                    Log.Debug($"{output.Name}: CRTC changed from {connected[still].CurrentIndex} to {assignment[still]}; rebuilding the output");
+                    Log.Debug($"{output.Name}: CRTC changed from {connected[still].CurrentIndex} to {assignment[still]}, output rebuilt");
                 }
 
                 _outputs.Remove(output);
@@ -428,7 +428,7 @@ public sealed class DrmBackend : IDisposable
             var primary = FindPlane(crtcIndex, 1 );
             if (primary is null)
             {
-                Log.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}; connector stays dark");
+                Log.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}, connector stays dark");
                 continue;
             }
 
@@ -476,8 +476,9 @@ public sealed class DrmBackend : IDisposable
                 }
             }
         }
-        catch (DrmException)
+        catch (DrmException e)
         {
+            Log.Debug(e, $"{connector.Name}: lit CRTC does not read, nothing to inherit");
         }
 
         return -1;
@@ -527,8 +528,9 @@ public sealed class DrmBackend : IDisposable
                     var data = Device.GetPropertyBlob((uint)hdrBlob).Data.Span;
                     eotf = data.Length > 4 ? data[4] : (byte)0;
                 }
-                catch (DrmException)
+                catch (DrmException e)
                 {
+                    Log.Debug(e, $"{connector.Name}: HDR metadata blob does not read, EOTF taken as SDR");
                 }
             }
 
@@ -575,7 +577,7 @@ public sealed class DrmBackend : IDisposable
             var primary = FindPlane(crtcIndex, 1 );
             if (primary is null)
             {
-                Log.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}; not offered for leasing");
+                Log.Warn($"{connector.Name}: no primary plane reaches CRTC {crtcId}, connector not offered for leasing");
                 continue;
             }
 
@@ -610,14 +612,14 @@ public sealed class DrmBackend : IDisposable
         {
             Liftoff?.Dispose();
             Liftoff = null;
-            Log.Info($"libliftoff not available; overlay plane offload disabled");
+            Log.Info($"liftoff: libliftoff not found, overlay plane offload disabled");
             return;
         }
         catch (LiftoffException e)
         {
             Liftoff?.Dispose();
             Liftoff = null;
-            Log.Warn($"{DevicePath}: liftoff device creation failed ({e.Message}); overlay plane offload disabled");
+            Log.Warn(e, $"{DevicePath}: liftoff device creation failed, overlay plane offload disabled");
             return;
         }
 
@@ -655,7 +657,7 @@ public sealed class DrmBackend : IDisposable
             }
             catch (LiftoffException e)
             {
-                Log.Warn($"plane {planeId}: liftoff registration failed ({e.Message})");
+                Log.Warn(e, $"{DevicePath}: liftoff registration failed for plane {planeId}");
             }
         }
 
@@ -663,7 +665,7 @@ public sealed class DrmBackend : IDisposable
         {
             Liftoff.Dispose();
             Liftoff = null;
-            Log.Info($"{DevicePath}: no overlay planes; plane offload disabled");
+            Log.Info($"{DevicePath}: no overlay planes, plane offload disabled");
             return;
         }
 
@@ -728,8 +730,9 @@ public sealed class DrmBackend : IDisposable
         {
             Device.SetMaster();
         }
-        catch (DrmException)
+        catch (DrmException e)
         {
+            Log.Debug(e, $"{DevicePath}: SET_MASTER refused, the session keeps master");
         }
 
         UnlinkForeignPlanes();
@@ -798,10 +801,11 @@ public sealed class DrmBackend : IDisposable
         }
         catch (DrmException e) when (e.Errno == 13)
         {
+            Log.Debug($"{DevicePath}: foreign planes not unlinked, the device is not DRM master (EACCES)");
         }
         catch (DrmException e)
         {
-            Log.Warn($"{DevicePath}: unlinking foreign planes failed ({e.Message}); staged properties:\n{request}");
+            Log.Warn(e, $"{DevicePath}: unlinking foreign planes failed, staged properties:\n{request}");
         }
     }
 
@@ -826,7 +830,7 @@ public sealed class DrmBackend : IDisposable
         }
         catch (UdevException e)
         {
-            Log.Warn($"udev monitor unavailable ({e.Message}); connector hotplug disabled");
+            Log.Warn(e, $"{DevicePath}: udev monitor unavailable, connector hotplug disabled");
         }
     }
 
@@ -932,8 +936,9 @@ public sealed class DrmBackend : IDisposable
                     _savedCrtcs.Add((crtc.CrtcId, crtc.BufferId, crtc.Mode, crtc.X, crtc.Y, connectorId));
                 }
             }
-            catch (DrmException)
+            catch (DrmException e)
             {
+                Log.Debug(e, $"{DevicePath}: console state of connector {connectorId} does not read, not restored at exit");
             }
         }
     }
@@ -951,7 +956,7 @@ public sealed class DrmBackend : IDisposable
             {
                 if (Framebuffers.Owns(bufferId) || !FramebufferExists(bufferId))
                 {
-                    Log.Debug($"console restore for CRTC {crtcId}: framebuffer {bufferId} is gone or its id is ours now; leaving the CRTC off");
+                    Log.Debug($"{DevicePath}: console framebuffer {bufferId} for CRTC {crtcId} is gone or reused, CRTC left off");
                     Device.SetCrtc(crtcId, 0, 0, 0, [], null);
                 }
                 else if (mode is { } m)
@@ -961,7 +966,7 @@ public sealed class DrmBackend : IDisposable
             }
             catch (DrmException e)
             {
-                Log.Warn($"console restore for CRTC {crtcId} failed ({e.Message}); a VT switch will repaint it");
+                Log.Warn(e, $"{DevicePath}: console restore for CRTC {crtcId} failed, a VT switch repaints it");
             }
         }
     }

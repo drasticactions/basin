@@ -169,8 +169,8 @@ internal sealed class TerminalWindow : IDisposable
         Session = PtySession.TryStart(_loop, start, out var failure);
         if (Session is null)
         {
-            Failure = failure ?? "the terminal could not start";
-            Feed(Encoding.UTF8.GetBytes($"[{Failure}]\r\n"));
+            Failure = failure ?? "no reason given";
+            Feed(Encoding.UTF8.GetBytes($"[The shell couldn't start: {Failure}]\r\n"));
             FailedToStart?.Invoke(Failure);
             return;
         }

@@ -232,7 +232,7 @@ public sealed class InputCaptureEngine : IDisposable
     private void OnLayoutChanged()
     {
         _zoneSet++;
-        Log.Debug($"layout changed, zone set {_zoneSet}");
+        Log.Debug($"capture: layout changed, zone set {_zoneSet}");
         foreach (var session in _sessions.ToArray())
         {
             session.LayoutChanged();

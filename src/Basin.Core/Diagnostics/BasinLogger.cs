@@ -57,6 +57,41 @@ public readonly struct BasinLogger : IEquatable<BasinLogger>
     public void Error(ref LogHandler<LevelError> message) => Emit(BasinLogLevel.Error, ref message);
 
     /// <summary>
+    /// Writes a trace message that ends with the type and text of an exception and of each inner exception. The stack trace follows when debug is enabled.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when trace is enabled.</param>
+    public void Trace(Exception exception, ref LogHandler<LevelTrace> message) => Emit(BasinLogLevel.Trace, exception, ref message);
+
+    /// <summary>
+    /// Writes a debug message that ends with the type and text of an exception and of each inner exception. The stack trace follows when debug is enabled.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when debug is enabled.</param>
+    public void Debug(Exception exception, ref LogHandler<LevelDebug> message) => Emit(BasinLogLevel.Debug, exception, ref message);
+
+    /// <summary>
+    /// Writes an info message that ends with the type and text of an exception and of each inner exception. The stack trace follows when debug is enabled.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when info is enabled.</param>
+    public void Info(Exception exception, ref LogHandler<LevelInfo> message) => Emit(BasinLogLevel.Info, exception, ref message);
+
+    /// <summary>
+    /// Writes a warning that ends with the type and text of an exception and of each inner exception. The stack trace follows when debug is enabled.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when warnings are enabled.</param>
+    public void Warn(Exception exception, ref LogHandler<LevelWarn> message) => Emit(BasinLogLevel.Warn, exception, ref message);
+
+    /// <summary>
+    /// Writes an error that ends with the type and text of an exception and of each inner exception. The stack trace follows when debug is enabled.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when errors are enabled.</param>
+    public void Error(Exception exception, ref LogHandler<LevelError> message) => Emit(BasinLogLevel.Error, exception, ref message);
+
+    /// <summary>
     /// Compares the categories of two loggers with ordinal rules.
     /// </summary>
     /// <param name="other">The logger to compare with.</param>
@@ -94,6 +129,19 @@ public readonly struct BasinLogger : IEquatable<BasinLogger>
         }
 
         BasinLog.Sink?.Write(level, Category, message.Text);
+        message.Clear();
+    }
+
+    private void Emit<T>(BasinLogLevel level, Exception exception, ref LogHandler<T> message)
+        where T : struct, ILogLevelTag
+    {
+        if (!message.Enabled)
+        {
+            return;
+        }
+
+        var text = LogFormat.WithException(message.Text, exception, BasinLog.IsEnabled(BasinLogLevel.Debug));
+        BasinLog.Sink?.Write(level, Category, text);
         message.Clear();
     }
 }

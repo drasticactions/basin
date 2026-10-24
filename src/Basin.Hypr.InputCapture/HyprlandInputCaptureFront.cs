@@ -71,13 +71,13 @@ internal sealed class HyprlandInputCaptureFront : IInputCaptureFront, IDisposabl
         var barrier = InputCaptureBarriers.FromWire(id, x1, y1, x2, y2);
         if (Session.HasBarrier(id))
         {
-            _resource.PostError((uint)HyprlandInputCaptureV1.Error.InvalidBarrierId, $"barrier {id} already exists");
+            _resource.PostError((uint)HyprlandInputCaptureV1.Error.InvalidBarrierId, $"Barrier {id} already exists.");
             return;
         }
 
         if (!Session.TryAddBarrier(in barrier))
         {
-            _resource.PostError((uint)HyprlandInputCaptureV1.Error.InvalidBarrier, $"barrier {id} is not an output edge");
+            _resource.PostError((uint)HyprlandInputCaptureV1.Error.InvalidBarrier, $"Barrier {id} is not on an output edge.");
         }
     }
 
@@ -87,7 +87,7 @@ internal sealed class HyprlandInputCaptureFront : IInputCaptureFront, IDisposabl
         {
             _resource.PostError(
                 (uint)HyprlandInputCaptureV1.Error.InvalidActivationId,
-                $"activation id {activationId} is not the current {Session.ActivationId}");
+                $"Activation id {activationId} is not the current activation id {Session.ActivationId}.");
         }
     }
 }

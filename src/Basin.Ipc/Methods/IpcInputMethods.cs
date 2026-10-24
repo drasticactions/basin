@@ -35,7 +35,7 @@ internal static class IpcInputMethods
         atY = y ?? 0;
         if (x is null != y is null)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "'x' and 'y' go together");
+            reply.Error(IpcErrorCodes.InvalidParams, "Give 'x' and 'y' together, or neither.");
             return false;
         }
 
@@ -43,7 +43,7 @@ internal static class IpcInputMethods
         {
             if (x is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'window' needs 'x' and 'y' in the window's client area");
+                reply.Error(IpcErrorCodes.InvalidParams, "'window' needs 'x' and 'y'. Give a point in the window's client area.");
                 return false;
             }
 
@@ -111,7 +111,7 @@ internal static class IpcInputMethods
             uint? source = (request.Source ?? "wheel") switch { "wheel" => 0, "finger" => 1, "continuous" => 2, "wheel-tilt" => 3, _ => null };
             if (axis is null || source is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'axis' is vertical or horizontal; 'source' is wheel, finger, continuous or wheel-tilt");
+                reply.Error(IpcErrorCodes.InvalidParams, "'axis' must be vertical or horizontal. 'source' must be wheel, finger, continuous or wheel-tilt.");
                 return;
             }
 
@@ -134,7 +134,7 @@ internal static class IpcInputMethods
 
             if (request.Code is < 0 or > 767)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'code' is an evdev keycode");
+                reply.Error(IpcErrorCodes.InvalidParams, "'code' must be an evdev keycode.");
                 return;
             }
 
@@ -155,13 +155,13 @@ internal static class IpcInputMethods
             var kind = request.Kind;
             if (kind is not ("down" or "motion" or "up" or "frame" or "cancel"))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'kind' is down, motion, up, frame or cancel");
+                reply.Error(IpcErrorCodes.InvalidParams, "'kind' must be down, motion, up, frame or cancel.");
                 return;
             }
 
             if (kind is "down" or "motion" && (request.X is null || request.Y is null))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"a touch {kind} names x and y");
+                reply.Error(IpcErrorCodes.InvalidParams, $"A touch {kind} needs 'x' and 'y'.");
                 return;
             }
 
@@ -175,7 +175,7 @@ internal static class IpcInputMethods
             {
                 if (given is < 0 or > uint.MaxValue)
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "'time_ms' is a millisecond timestamp from 0 to 2^32-1");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'time_ms' must be a millisecond timestamp from 0 to 2^32-1.");
                     return;
                 }
 
@@ -203,7 +203,7 @@ internal static class IpcInputMethods
                 var via = request.Via ?? "auto";
                 if (via is not ("auto" or "keymap" or "text-input"))
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "'via' is auto, keymap or text-input");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'via' must be auto, keymap or text-input.");
                     return;
                 }
 
@@ -215,13 +215,13 @@ internal static class IpcInputMethods
 
                 if (via == "text-input")
                 {
-                    reply.Error(IpcErrorCodes.Refused, "the focused client has no enabled text input");
+                    reply.Error(IpcErrorCodes.Refused, "The focused client has no enabled text input. Use 'via': \"keymap\" instead.");
                     return;
                 }
 
                 if (lookup is null)
                 {
-                    reply.Error(IpcErrorCodes.Refused, "the compositor has no keymap lookup, and the focused client has no enabled text input");
+                    reply.Error(IpcErrorCodes.Refused, "The compositor has no keymap lookup, and the focused client has no enabled text input.");
                     return;
                 }
 
@@ -237,7 +237,7 @@ internal static class IpcInputMethods
 
                 if (error is not null)
                 {
-                    reply.Error(IpcErrorCodes.Failed, $"{error}, after {typed} characters were typed");
+                    reply.Error(IpcErrorCodes.Failed, $"Typing stopped after {typed} characters. {error}");
                     return;
                 }
 

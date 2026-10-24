@@ -139,12 +139,12 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
         Api.GetPhysicalDeviceFeatures2(Physical, &featuresQuery);
         if (!vulkan12Query.TimelineSemaphore)
         {
-            throw new InvalidOperationException($"{drmNodePath} has no timeline semaphores");
+            throw new InvalidOperationException($"The Vulkan device at {drmNodePath} has no timeline semaphores.");
         }
 
         if (!sync2Query.Synchronization2)
         {
-            throw new InvalidOperationException($"{drmNodePath} has no synchronization2");
+            throw new InvalidOperationException($"The Vulkan device at {drmNodePath} has no synchronization2.");
         }
 
         YcbcrSampling = ycbcrQuery.SamplerYcbcrConversion;
@@ -204,12 +204,12 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
 
         if (!Api.TryGetDeviceExtension(Instance, Device, out ExternalMemoryFd))
         {
-            throw new InvalidOperationException("VK_KHR_external_memory_fd has no entry points");
+            throw new InvalidOperationException("The driver has no entry points for VK_KHR_external_memory_fd.");
         }
 
         if (!Api.TryGetDeviceExtension(Instance, Device, out Synchronization2))
         {
-            throw new InvalidOperationException("VK_KHR_synchronization2 has no entry points");
+            throw new InvalidOperationException("The driver has no entry points for VK_KHR_synchronization2.");
         }
 
         Ring = new VulkanCommandPool(this);
@@ -310,7 +310,7 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
     {
         return TryMemoryTypeFor(typeBits, properties, out var index)
             ? index
-            : throw new InvalidOperationException("no suitable memory type");
+            : throw new InvalidOperationException("The device has no suitable memory type.");
     }
 
     /// <summary>
@@ -431,7 +431,7 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
     {
         if (!Ring.TrySubmitFrame(default, commands, waits, exportable: true, out point))
         {
-            throw new InvalidOperationException("vkQueueSubmit2 failed for a submission with waits");
+            throw new InvalidOperationException("vkQueueSubmit2 failed for a submission with waits.");
         }
 
         return Ring.ExportSyncFile(commands);
@@ -630,7 +630,7 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
     {
         if (result != Result.Success)
         {
-            throw new InvalidOperationException($"{what} failed: {result}");
+            throw new InvalidOperationException($"{what} failed with {result}.");
         }
     }
 
@@ -667,7 +667,7 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
             return RequireVulkan12(devices[0], in properties, drmNodePath);
         }
 
-        throw new InvalidOperationException($"no Vulkan device matches {drmNodePath}");
+        throw new InvalidOperationException($"No Vulkan device matches {drmNodePath}.");
     }
 
     private static PhysicalDevice RequireVulkan12(PhysicalDevice candidate, in PhysicalDeviceProperties properties, string drmNodePath)
@@ -675,7 +675,7 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
         return properties.ApiVersion >= Vk.Version12
             ? candidate
             : throw new InvalidOperationException(
-                $"{drmNodePath} is Vulkan {properties.ApiVersion >> 22}.{(properties.ApiVersion >> 12) & 0x3FF}; 1.2 is the floor");
+                $"The device at {drmNodePath} supports Vulkan {properties.ApiVersion >> 22}.{(properties.ApiVersion >> 12) & 0x3FF}. The Vulkan renderer needs Vulkan 1.2 or later.");
     }
 
     private static bool Matches(ulong rdev, long major, long minor) =>
@@ -723,6 +723,6 @@ public sealed unsafe class VulkanDevice : IDisposable, IRenderDevice
             }
         }
 
-        throw new InvalidOperationException("no graphics queue family");
+        throw new InvalidOperationException("The device has no graphics queue family.");
     }
 }

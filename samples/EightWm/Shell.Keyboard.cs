@@ -307,7 +307,7 @@ internal sealed partial class Shell
             var text = p.GetString("text");
             if (!p.Failed && (LockKeyboard is not { } keyboard || !keyboard.Typer.Type(text)))
             {
-                reply.Error(IpcErrorCodes.NotFound, "the lock keyboard is not shown or cannot type that");
+                reply.Error(IpcErrorCodes.NotFound, "The lock keyboard is not shown, or it cannot type that text. Lock the screen and show the keyboard first.");
             }
         });
 

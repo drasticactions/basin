@@ -20,7 +20,7 @@ internal sealed class IpcDiagDamageEvents(IpcServer server, ISceneDiagnostics di
 
         if (given.ValueKind != JsonValueKind.Object)
         {
-            return $"the options of {name} are an object";
+            return $"The options of {name} must be an object.";
         }
 
         foreach (var property in given.EnumerateObject())

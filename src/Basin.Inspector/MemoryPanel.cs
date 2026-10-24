@@ -75,7 +75,7 @@ public sealed unsafe class MemoryPanel : IInspectorPanel
         }
         else
         {
-            ImGuiApi.TextUnformatted("counters off in this build"u8);
+            ImGuiApi.TextUnformatted("Counters are off in this build."u8);
         }
 
         ImGuiApi.TextUnformatted(text.Format(

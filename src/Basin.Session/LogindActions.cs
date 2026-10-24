@@ -52,7 +52,7 @@ public static class LogindActions
         }
         catch (Exception error) when (error is DBusExceptionBase or InvalidOperationException or IOException)
         {
-            Log.Debug($"logind Can{Method(action)} failed: {error.Message}");
+            Log.Debug(error, $"Can{Method(action)} failed");
             return false;
         }
     }
@@ -85,7 +85,7 @@ public static class LogindActions
         {
             if ((address ?? DBusAddress.System) is not { } bus)
             {
-                Log.Warn($"no system bus for {method}");
+                Log.Warn($"{method} failed, no system bus");
                 return false;
             }
 
@@ -96,7 +96,7 @@ public static class LogindActions
         }
         catch (Exception error) when (error is DBusExceptionBase or InvalidOperationException or IOException)
         {
-            Log.Warn($"logind {method} failed: {error.Message}");
+            Log.Warn(error, $"{method} failed");
             return false;
         }
     }

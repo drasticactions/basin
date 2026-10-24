@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Basin.Cli;
 using Basin.Diagnostics;
 using Basin.Ipc;
 
@@ -11,6 +12,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
     private const int Success = 0;
     private const int ErrorReply = 1;
     private const int ConnectionFailure = 2;
+    private const string ProgramName = "basinctl";
 
     public async Task<int> RunAsync(string[] command)
     {
@@ -21,7 +23,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
         }
         catch (IOException exception)
         {
-            await Console.Error.WriteLineAsync($"basinctl: {exception.Message}").ConfigureAwait(false);
+            await Console.Error.WriteLineAsync(CliMessage.Line(ProgramName, exception)).ConfigureAwait(false);
             return ConnectionFailure;
         }
 
@@ -33,17 +35,19 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
             }
             catch (IpcCallException exception)
             {
-                await Console.Error.WriteLineAsync($"basinctl: {exception.Message}").ConfigureAwait(false);
+                await Console.Error.WriteLineAsync(exception.Method.Length == 0
+                    ? CliMessage.Line(ProgramName, exception)
+                    : $"{ProgramName}: {exception.Method}: {exception.Code}: {CliMessage.Text(exception.Reason)}").ConfigureAwait(false);
                 return ErrorReply;
             }
             catch (IOException exception)
             {
-                await Console.Error.WriteLineAsync($"basinctl: {exception.Message}").ConfigureAwait(false);
+                await Console.Error.WriteLineAsync(CliMessage.Line(ProgramName, exception)).ConfigureAwait(false);
                 return ConnectionFailure;
             }
-            catch (FormatException exception)
+            catch (Exception exception) when (exception is FormatException or ArgumentException or UnauthorizedAccessException or InvalidDataException)
             {
-                await Console.Error.WriteLineAsync($"basinctl: {exception.Message}").ConfigureAwait(false);
+                await Console.Error.WriteLineAsync(CliMessage.Line(ProgramName, exception)).ConfigureAwait(false);
                 return ErrorReply;
             }
         }
@@ -142,7 +146,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
 
                 await Console.Error.WriteLineAsync(clipboard.Types.IsEmpty
                     ? "basinctl: the selection is empty"
-                    : $"basinctl: no text type; offered {string.Join(' ', clipboard.Types.Items())}").ConfigureAwait(false);
+                    : $"basinctl: the selection has no text type. It offers {string.Join(' ', clipboard.Types.Items())}").ConfigureAwait(false);
                 return ErrorReply;
             case "clipboard" when rest is [] or ["primary"]:
                 return await GenericAsync(client, IpcMethodNames.ClipboardRead, rest.Length == 1 ? ["kind=primary"] : []).ConfigureAwait(false);
@@ -178,7 +182,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
             case var method when method.Contains('/', StringComparison.Ordinal):
                 return await GenericAsync(client, method, rest).ConfigureAwait(false);
             default:
-                await Console.Error.WriteLineAsync($"basinctl: unknown command '{command[0]}' or wrong arguments; see --help").ConfigureAwait(false);
+                await Console.Error.WriteLineAsync($"basinctl: unknown command '{command[0]}' or wrong arguments. Run basinctl --help for the commands").ConfigureAwait(false);
                 return ErrorReply;
         }
     }
@@ -196,8 +200,8 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
     {
         if (hdr && viaFd)
         {
-            Console.Error.WriteLine("basinctl: --hdr writes the PNG in the compositor, so it does not take --fd");
-            return 1;
+            Console.Error.WriteLine("basinctl: --hdr does not go with --fd, because the compositor writes the HDR PNG itself");
+            return ErrorReply;
         }
 
         if (!viaFd)
@@ -209,7 +213,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
         }
 
         var captured = await client.CaptureOutputAsync(output, IpcCaptureTarget.Fd).ConfigureAwait(false);
-        using var fd = captured.Fd ?? throw new IOException("the compositor sent no descriptor");
+        using var fd = captured.Fd ?? throw new IOException("The compositor sent no descriptor.");
         var rgba = captured.ReadRgba();
         await File.WriteAllBytesAsync(file, PngCodec.Encode(rgba, captured.Width, captured.Height)).ConfigureAwait(false);
         Console.WriteLine($"{Path.GetFullPath(file)} {captured.Width}x{captured.Height} via fd");
@@ -246,7 +250,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
             var equals = pair.IndexOf('=', StringComparison.Ordinal);
             if (equals <= 0)
             {
-                throw new FormatException($"'{pair}' is not key=value");
+                throw new FormatException($"'{pair}' is not a key=value pair.");
             }
 
             settings[pair[..equals]] = pair[(equals + 1)..];
@@ -301,7 +305,7 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
             var equals = pair.IndexOf('=', StringComparison.Ordinal);
             if (equals <= 0)
             {
-                throw new FormatException($"'{pair}' is not key=value");
+                throw new FormatException($"'{pair}' is not a key=value pair.");
             }
 
             var value = pair[(equals + 1)..];
@@ -417,10 +421,10 @@ internal sealed class Controller(string? socketPath, bool raw, bool viaFd, bool 
     private static ulong Id(string text) =>
         ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
             ? id
-            : throw new FormatException($"'{text}' is not a window id");
+            : throw new FormatException($"'{text}' is not an id. Give the number that basinctl windows or basinctl devices shows.");
 
     private static int Int(string text) =>
         int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value
-            : throw new FormatException($"'{text}' is not an integer");
+            : throw new FormatException($"'{text}' is not an integer.");
 }

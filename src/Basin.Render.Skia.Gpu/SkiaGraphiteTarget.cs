@@ -148,7 +148,7 @@ public sealed unsafe class SkiaGraphiteTarget : IDisposable
         }
         else
         {
-            throw new InvalidOperationException("render target is neither importable nor CPU-accessible");
+            throw new InvalidOperationException("The render target is neither importable nor CPU-accessible.");
         }
 
         target.BackendTexture = SkiaCensus.Track(SKGraphiteBackendTexture.CreateVulkan(

@@ -17,6 +17,13 @@ internal static partial class HeadlessNative
     [LibraryImport("libc", EntryPoint = "write", SetLastError = true)]
     public static unsafe partial nint Write(int fd, void* buffer, nuint count);
 
+    public const int OpenReadWrite = 2;
+
+    public const int OpenCloseOnExec = 0x80000;
+
+    [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int Open(string path, int flags);
+
     [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     public static partial int Close(int fd);
 }

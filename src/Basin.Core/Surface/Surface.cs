@@ -115,7 +115,7 @@ public sealed class Surface
     {
         if (!double.IsFinite(scale) || scale <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(scale), scale, "a server scale must be positive and finite");
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "The scale must be positive and finite.");
         }
 
         _serverScaleOverride = scale;
@@ -550,7 +550,7 @@ public sealed class Surface
         ArgumentNullException.ThrowIfNull(fence);
         if (_pendingFence is not null)
         {
-            throw new InvalidOperationException("a commit parks on one fence; this commit already has one");
+            throw new InvalidOperationException("This commit already waits on a fence. A commit can wait on one fence only.");
         }
 
         _pendingFence = fence;

@@ -36,7 +36,7 @@ public static class BlurNoise
         var side = Size * grain;
         if (pixels.Length < side * side)
         {
-            throw new ArgumentException($"the noise texture needs {side * side} bytes", nameof(pixels));
+            throw new ArgumentException($"The span is too short. The noise texture needs {side * side} bytes.", nameof(pixels));
         }
 
         if (strength <= 0)

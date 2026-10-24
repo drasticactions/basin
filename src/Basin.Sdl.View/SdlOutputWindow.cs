@@ -59,7 +59,7 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
             }
             catch (InvalidOperationException error)
             {
-                Log.Debug($"no popup windows on this SDL driver ({error.Message}); a borderless window stands in");
+                Log.Debug(error, $"popup: SDL driver has no popup windows, a borderless window stands in");
                 Window = new SdlWindow(
                     options.Title, options.Width, options.Height,
                     device.WindowFlags | SDL.WindowFlags.Borderless | SDL.WindowFlags.Utility);
@@ -345,7 +345,7 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         HostRelative = SDL.SetWindowRelativeMouseMode(Window.Handle, locked) && locked;
         if (locked && !HostRelative)
         {
-            Log.Info($"SDL refused relative mouse mode ({SDL.GetError()}); relative motion still reaches the client");
+            Log.Debug($"pointer: SDL refused relative mouse mode ({SDL.GetError()}), relative motion still reaches the client");
         }
     }
 

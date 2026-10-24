@@ -63,7 +63,7 @@ public static class InvertShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(InvertShader).Assembly.GetManifestResourceStream("invert.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource invert.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource invert.frag.spv is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

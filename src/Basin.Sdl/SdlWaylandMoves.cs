@@ -186,7 +186,7 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         }
         catch (Exception error)
         {
-            SdlLog.Log.Error($"wayland seat bind failed: {error.Message}");
+            SdlLog.Log.Error(error, $"wayland: seat bind failed");
         }
     }
 
@@ -212,7 +212,7 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         }
         catch (Exception error)
         {
-            SdlLog.Log.Error($"wayland pointer bind failed: {error.Message}");
+            SdlLog.Log.Error(error, $"wayland: pointer bind failed");
         }
     }
 
@@ -249,7 +249,7 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         }
         catch (Exception error)
         {
-            SdlLog.Log.Error($"wayland pointer button failed: {error.Message}");
+            SdlLog.Log.Error(error, $"wayland: pointer button handler failed");
         }
     }
 

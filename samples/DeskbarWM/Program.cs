@@ -45,9 +45,9 @@ internal static class Program
         {
             wm = new RiverWindowManager(socket);
         }
-        catch (InvalidOperationException error)
+        catch (Exception error) when (error is InvalidOperationException or Wayland.WaylandException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: cannot connect to the compositor");
             return 1;
         }
 
@@ -61,7 +61,7 @@ internal static class Program
             wm.Unavailable += () =>
             {
                 refused = true;
-                log.Error($"the compositor refused window management — another window manager is already running.");
+                log.Error($"startup: the compositor refused window management, another window manager is running");
             };
 
             var reached = false;
@@ -74,19 +74,19 @@ internal static class Program
                     if (seen >= exitAfter && !reached)
                     {
                         reached = true;
-                        log.Info($"managed {seen} window(s), stopping");
+                        log.Info($"exit: managed {seen} window(s), stopping");
                         wm.Stop();
                     }
                 };
             }
 
-            log.Info($"managing with protocol version {wm.Version}; bindings v{wm.Bindings.Version}, layer shell {(wm.LayerShell is null ? "absent" : "present")}");
+            log.Info($"startup: protocol version {wm.Version}, bindings v{wm.Bindings.Version}, layer shell {(wm.LayerShell is null ? "absent" : "present")}");
 
             wm.Run();
 
             if (exitAfter > 0 && !reached)
             {
-                log.Error($"the session ended before {exitAfter} window(s) were managed.");
+                log.Error($"exit: the session ended before {exitAfter} window(s) were managed");
                 return 1;
             }
 

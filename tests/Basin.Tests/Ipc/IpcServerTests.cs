@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Basin.Diagnostics;
 using Basin.Ipc;
 
 using Xunit;
@@ -167,8 +168,25 @@ public sealed class IpcServerTests
             throw new InvalidOperationException("boom");
         });
         var peer = rig.Connect();
-        var reply = Parse(peer.Call("""{"method":"test/throw"}"""));
+        var sink = new CollectingSink();
+        var level = BasinLog.Level;
+        BasinLog.Sink = sink;
+        BasinLog.Level = BasinLogLevel.Error;
+        JsonElement reply;
+        try
+        {
+            reply = Parse(peer.Call("""{"method":"test/throw"}"""));
+        }
+        finally
+        {
+            BasinLog.Sink = null;
+            BasinLog.Level = level;
+        }
+
         Assert.Equal(IpcErrorCodes.Internal, reply.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal("boom", reply.GetProperty("error").GetProperty("message").GetString());
+        Assert.Contains(sink.Lines, line => line.Contains("test/throw", StringComparison.Ordinal)
+            && line.Contains("InvalidOperationException: boom", StringComparison.Ordinal));
         Assert.True(Parse(peer.Call("""{"method":"ipc/version"}""")).TryGetProperty("result", out _));
     }
 
@@ -361,6 +379,13 @@ public sealed class IpcServerTests
         {
             directory.Delete(recursive: true);
         }
+    }
+
+    private sealed class CollectingSink : IBasinLogSink
+    {
+        public List<string> Lines { get; } = [];
+
+        public void Write(BasinLogLevel level, string category, ReadOnlySpan<char> message) => Lines.Add(message.ToString());
     }
 
     private sealed class NullSink : IIpcReplySink

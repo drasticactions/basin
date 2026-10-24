@@ -20,7 +20,7 @@ public sealed class ImGuiUIHost : IUIHost
         ArgumentNullException.ThrowIfNull(backend);
         if (!ImGuiNative.TryLoad(out var declined))
         {
-            throw new InvalidOperationException(declined);
+            throw new InvalidOperationException($"Dear ImGui is not available: {declined}.");
         }
 
         options ??= new ImGuiHostOptions();

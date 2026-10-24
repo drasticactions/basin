@@ -353,7 +353,7 @@ public sealed class Fcitx5Keyboard : IKeyboardBackend, IDisposable
         }
 
         BackendPresent = present;
-        Log.Info($"fcitx5 virtual keyboard backend {(present ? $"appeared as {owner}" : "went away")}");
+        Log.Info($"fcitx5: virtual keyboard backend {(present ? $"appeared as {owner}" : "went away")}");
         if (present)
         {
             CallBackend("SetVirtualKeyboardFunctionMode", FullFunctionMode);
@@ -421,7 +421,7 @@ public sealed class Fcitx5Keyboard : IKeyboardBackend, IDisposable
                 {
                     if (!_disposed)
                     {
-                        Log.Debug($"fcitx5 bus: {context.Exception.Message}");
+                        Log.Debug(context.Exception, $"fcitx5: bus connection error");
                     }
                 },
             });
@@ -472,7 +472,7 @@ public sealed class Fcitx5Keyboard : IKeyboardBackend, IDisposable
             Post(keyboard => keyboard.OnBackendOwner(current));
             return null;
         }
-        catch (Exception error)
+        catch (Exception error) when (error is DBusExceptionBase or IOException or System.Net.Sockets.SocketException or InvalidOperationException or ObjectDisposedException)
         {
             connection?.Dispose();
             return $"the session bus at {address} is not reachable: {error.Message}";
@@ -497,7 +497,7 @@ public sealed class Fcitx5Keyboard : IKeyboardBackend, IDisposable
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException)
         {
-            Log.Debug($"fcitx5 CurrentInputMethod: {error.Message}");
+            Log.Debug(error, $"fcitx5: CurrentInputMethod failed");
         }
     }
 

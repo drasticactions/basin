@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Prowl.Quill;
 using Prowl.Scribe;
 
@@ -8,6 +9,8 @@ namespace Basin.UI.Quill;
 /// </summary>
 public static class QuillFonts
 {
+    private static readonly BasinLogger Log = BasinLog.For("quill");
+
     private static readonly string[] Preferred =
     [
         "Cantarell",
@@ -63,11 +66,9 @@ public static class QuillFonts
                 }
             }
         }
-        catch (IOException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            Log.Debug(error, $"fonts: system font scan stopped early");
         }
 
         var added = 0;

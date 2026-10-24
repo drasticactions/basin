@@ -45,7 +45,7 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
         if (cursor > (int)VulkanRenderer.ShaderBlockCapacity)
         {
             renderer.Dev.Api.DestroyShaderModule(renderer.Dev.Device, module, null);
-            throw new ArgumentException("the declared uniforms exceed the uniform block capacity", nameof(uniforms));
+            throw new ArgumentException("The declared uniforms do not fit in the uniform block.", nameof(uniforms));
         }
 
         BasinCounters.Track();
@@ -76,7 +76,7 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (values.Length != _values.Length)
         {
-            throw new ArgumentException("value count must match the declared uniform count", nameof(values));
+            throw new ArgumentException("The value count must match the declared uniform count.", nameof(values));
         }
 
         values.CopyTo(_values);

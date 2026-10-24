@@ -43,7 +43,7 @@ public sealed class McpApprovalTests
         answer = "deny";
         var denied = harness.Call("process_spawn", """{"argv":["true"]}""");
         Assert.True(denied.IsError);
-        Assert.Contains("a person denied the call", Text(denied));
+        Assert.Contains("person denied the call", Text(denied), StringComparison.Ordinal);
         Assert.Equal(2, asked.Count);
         Assert.True(harness.Bridge.Relay.IsSubscribed);
     }

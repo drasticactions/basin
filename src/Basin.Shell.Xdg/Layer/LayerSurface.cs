@@ -236,7 +236,7 @@ public sealed class LayerSurface
         {
             _resource.PostError(
                 (uint)ZwlrLayerSurfaceV1.Error.InvalidExclusiveEdge,
-                "exclusive edge is not a single edge the surface is anchored to");
+                "The exclusive edge must be one edge that the surface is anchored to.");
             return;
         }
 
@@ -254,7 +254,7 @@ public sealed class LayerSurface
         {
             _resource.PostError(
                 (uint)ZwlrLayerSurfaceV1.Error.InvalidSurfaceState,
-                "buffer attached before the initial configure was acked");
+                "A buffer was attached before the client acknowledged the initial configure.");
             return;
         }
 

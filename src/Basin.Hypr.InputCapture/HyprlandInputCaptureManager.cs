@@ -140,7 +140,7 @@ public sealed class HyprlandInputCaptureManager : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Error($"session {e.Handle}: eis context failed: {ex.Message}");
+                Log.Error(ex, $"session {e.Handle}: cannot create the EIS context");
                 return;
             }
 
@@ -152,7 +152,7 @@ public sealed class HyprlandInputCaptureManager : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Error($"session {e.Handle}: eis client fd failed: {ex.Message}");
+                Log.Error(ex, $"session {e.Handle}: cannot create the EIS client fd");
                 return;
             }
 

@@ -37,7 +37,7 @@ public static class WaypipeListeners
 #pragma warning restore CA1416
             if (vm is { } ignored)
             {
-                WaypipeLog.Log.Debug($"--hyperv-vm {ignored} is ignored off Windows");
+                WaypipeLog.Log.Debug($"--hyperv-vm {ignored} ignored, it applies only on Windows");
             }
 
             return Task.FromResult<IWaypipeListener>(listener);
@@ -49,14 +49,14 @@ public static class WaypipeListeners
             if (WaypipeEndpoint.ForListening(endpoint) is not VsockEndPoint vsock)
             {
                 throw new PlatformNotSupportedException(
-                    "on Windows a listener takes vsock:PORT; a TCP or unix listener needs descriptors");
+                    "A TCP or unix listener needs file descriptors, which Windows does not have. Give the listener as vsock:PORT.");
             }
 
             return BindHyperVAsync(vsock, vm ?? HyperVVm.Wsl, host.Post, compression, limits, options, cancellation);
         }
 
         throw new PlatformNotSupportedException(
-            "this host binds no listening socket; attach a connected stream with AttachChannel instead");
+            "This host cannot bind a listening socket. Attach a connected stream with AttachChannel instead.");
     }
 
     [SupportedOSPlatform("windows")]

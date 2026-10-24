@@ -33,8 +33,9 @@ public sealed class XkbKeymapSource : IKeymapSource, IDisposable
         {
             compiled = _context.CreateKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(keymapText));
         }
-        catch (XkbException)
+        catch (XkbException e)
         {
+            SeatLog.Log.Debug(e, $"keyboard: the keymap text does not compile");
             compiled = null;
         }
 
@@ -57,8 +58,9 @@ public sealed class XkbKeymapSource : IKeymapSource, IDisposable
                 Options = names.Options,
             });
         }
-        catch (XkbException)
+        catch (XkbException e)
         {
+            SeatLog.Log.Debug(e, $"keyboard: keymap layout '{names.Layout}' variant '{names.Variant}' does not compile");
             compiled = null;
         }
 

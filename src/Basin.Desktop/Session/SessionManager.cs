@@ -64,7 +64,7 @@ public sealed class SessionManager : IDisposable
             or XdgSessionManagerV1.Reason.Recover
             or XdgSessionManagerV1.Reason.SessionRestore))
         {
-            manager.PostError((uint)XdgSessionManagerV1.Error.InvalidReason, $"invalid reason {(uint)e.Reason}");
+            manager.PostError((uint)XdgSessionManagerV1.Error.InvalidReason, $"Reason {(uint)e.Reason} is not a known value.");
             return;
         }
 
@@ -82,7 +82,7 @@ public sealed class SessionManager : IDisposable
             {
                 if (holder.Resource.Client == client)
                 {
-                    manager.PostError((uint)XdgSessionManagerV1.Error.InUse, $"session '{existing}' is already in use");
+                    manager.PostError((uint)XdgSessionManagerV1.Error.InUse, $"Session '{existing}' is already in use.");
                     return;
                 }
 
@@ -173,25 +173,25 @@ public sealed class SessionManager : IDisposable
 
             if (name.Length == 0)
             {
-                Resource.PostError((uint)XdgSessionV1.Error.InvalidName, "toplevel name is empty");
+                Resource.PostError((uint)XdgSessionV1.Error.InvalidName, "The toplevel name is empty.");
                 return;
             }
 
             if (_toplevels.ContainsKey(name))
             {
-                Resource.PostError((uint)XdgSessionV1.Error.NameInUse, $"toplevel name '{name}' is already in this session");
+                Resource.PostError((uint)XdgSessionV1.Error.NameInUse, $"Toplevel name '{name}' is already in this session.");
                 return;
             }
 
             if (!_added.Add(toplevel))
             {
-                Resource.PostError((uint)XdgSessionV1.Error.AlreadyAdded, "this toplevel is already in the session");
+                Resource.PostError((uint)XdgSessionV1.Error.AlreadyAdded, "This toplevel is already in the session.");
                 return;
             }
 
             if (restore && toplevel.Xdg.HasCommitted)
             {
-                Resource.PostError((uint)XdgSessionV1.Error.AlreadyMapped, "restore_toplevel after the surface's first commit");
+                Resource.PostError((uint)XdgSessionV1.Error.AlreadyMapped, "restore_toplevel came after the first commit of the surface.");
                 return;
             }
 
@@ -231,7 +231,7 @@ public sealed class SessionManager : IDisposable
         {
             if (_toplevels.ContainsKey(name))
             {
-                Resource.PostError((uint)XdgSessionV1.Error.NameInUse, $"toplevel name '{name}' is already in this session");
+                Resource.PostError((uint)XdgSessionV1.Error.NameInUse, $"Toplevel name '{name}' is already in this session.");
                 return false;
             }
 

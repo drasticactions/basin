@@ -166,7 +166,9 @@ public sealed class KeyTableTests
     {
         var table = BuildCapturing([new ShellKey("close", "Hyper+F4")], [], out var lines);
 
-        Assert.Contains("Warn: shell key close: 'Hyper+F4' has no modifier named 'Hyper'; the modifiers are shift, ctrl, alt and super", lines);
+        var warning = Assert.Single(lines, line => line.StartsWith("Warn", StringComparison.Ordinal));
+        Assert.Contains("shell key close:", warning, StringComparison.Ordinal);
+        Assert.Contains("no modifier named 'Hyper'", warning, StringComparison.Ordinal);
         Assert.DoesNotContain(table.Bindings, binding => binding.Name == "close");
     }
 
@@ -175,9 +177,9 @@ public sealed class KeyTableTests
     {
         var table = BuildCapturing([new ShellKey("minimize", "alt+f4")], [], out var lines);
 
-        Assert.Equal(
-            ["Warn: shell key close and minimize both use alt+f4, keeping close"],
-            lines.Where(line => line.StartsWith("Warn", StringComparison.Ordinal)).ToArray());
+        var warning = Assert.Single(lines, line => line.StartsWith("Warn", StringComparison.Ordinal));
+        Assert.Contains("shell key minimize:", warning, StringComparison.Ordinal);
+        Assert.Contains("close already uses alt+f4", warning, StringComparison.Ordinal);
         Assert.Equal("close", table.Match(ShellModifiers.Alt, 62));
         Assert.DoesNotContain(table.Bindings, binding => binding.Name == "minimize");
     }
@@ -188,9 +190,9 @@ public sealed class KeyTableTests
         var reserved = new[] { new ShellChord(ShellModifiers.Alt, 62) };
         var table = BuildCapturing([], reserved, out var lines);
 
-        Assert.Equal(
-            ["Warn: shell key close uses Alt+F4, which the host already binds, keeping the host's"],
-            lines.Where(line => line.StartsWith("Warn", StringComparison.Ordinal)));
+        var warning = Assert.Single(lines, line => line.StartsWith("Warn", StringComparison.Ordinal));
+        Assert.Contains("shell key close:", warning, StringComparison.Ordinal);
+        Assert.Contains("host already binds Alt+F4", warning, StringComparison.Ordinal);
         Assert.Null(table.Match(ShellModifiers.Alt, 62));
         Assert.DoesNotContain(table.Bindings, binding => binding.Name == "close");
         Assert.Equal("minimize", table.Match(ShellModifiers.Alt, 67));

@@ -29,7 +29,7 @@ internal sealed class BasinInputChannel
                 if (!_reportedGrowth)
                 {
                     _reportedGrowth = true;
-                    Log.Info($"the input ring grew to {_events.Length} entries");
+                    Log.Debug($"input: ring grew to {_events.Length} entries");
                 }
             }
 

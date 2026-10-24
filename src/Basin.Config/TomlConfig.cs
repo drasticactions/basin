@@ -54,7 +54,7 @@ public static class TomlConfig
             Seed(file, stream, log);
         }
 
-        var table = Read(file, out var failure);
+        var table = ReadFile(file, out var failure, out var error);
         if (table is not null)
         {
             return new TomlLoad(table, file, null);
@@ -65,11 +65,7 @@ public static class TomlConfig
             return new TomlLoad(null, file, $"{file}: {failure}");
         }
 
-        if (File.Exists(file))
-        {
-            log.Warn($"{file} did not parse, keeping defaults: {failure}");
-        }
-
+        WarnUnread(file, error, log);
         return new TomlLoad(null, file, null);
     }
 
@@ -101,25 +97,21 @@ public static class TomlConfig
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            log.Warn($"cannot write {file}, keeping the built-in defaults: {error.Message}");
+            log.Warn(error, $"cannot write {file}, keeping the built-in defaults");
             return false;
         }
     }
 
     /// <summary>
-    /// Reads and parses a TOML file. It warns when the file exists but does not parse.
+    /// Reads and parses a TOML file. It warns when the file exists but cannot be read or does not parse.
     /// </summary>
     /// <param name="path">The path of the file.</param>
     /// <param name="log">The logger for warnings.</param>
     /// <returns>The table, or <see langword="null"/> when the file is missing, cannot be read or does not parse.</returns>
     public static TomlTable? Read(string path, BasinLogger log)
     {
-        var table = Read(path, out var failure);
-        if (failure is not null && File.Exists(path))
-        {
-            log.Warn($"{path} did not parse, keeping defaults: {failure}");
-        }
-
+        var table = ReadFile(path, out _, out var error);
+        WarnUnread(path, error, log);
         return table;
     }
 
@@ -130,10 +122,12 @@ public static class TomlConfig
     /// <param name="failure">The reason for a <see langword="null"/> result, else <see langword="null"/>.</param>
     /// <returns>The table, or <see langword="null"/> when the file is missing, cannot be read or does not parse.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    public static TomlTable? Read(string path, out string? failure)
+    public static TomlTable? Read(string path, out string? failure) => ReadFile(path, out failure, out _);
+
+    private static TomlTable? ReadFile(string path, out string? failure, out Exception? error)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-
+        error = null;
         string text;
         try
         {
@@ -145,9 +139,10 @@ public static class TomlConfig
 
             text = File.ReadAllText(path);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            failure = error.Message;
+            error = exception;
+            failure = OneLine(exception.Message);
             return null;
         }
 
@@ -156,12 +151,29 @@ public static class TomlConfig
             failure = null;
             return Toml.ToModel(text);
         }
-        catch (TomlException error)
+        catch (TomlException exception)
         {
-            failure = error.Message;
+            error = exception;
+            failure = OneLine(exception.Message);
             return null;
         }
     }
+
+    private static void WarnUnread(string path, Exception? error, BasinLogger log)
+    {
+        switch (error)
+        {
+            case TomlException:
+                log.Warn(error, $"{path} did not parse, keeping defaults");
+                break;
+            case not null:
+                log.Warn(error, $"{path} cannot be read, keeping defaults");
+                break;
+        }
+    }
+
+    private static string OneLine(string text) =>
+        string.Join(' ', text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     /// <summary>
     /// Reads a boolean key.

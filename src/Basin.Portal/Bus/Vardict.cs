@@ -34,7 +34,7 @@ public static class Vardict
         {
             VariantValueType.UInt32 => value.GetUInt32(),
             VariantValueType.Int32 => unchecked((uint)value.GetInt32()),
-            _ => throw PortalError.Invalid($"option '{key}' must be a u, got {value.Type}"),
+            _ => throw PortalError.Invalid($"Option '{key}' must be a u, not {value.Type}."),
         };
     }
 
@@ -55,7 +55,7 @@ public static class Vardict
 
         return value.Type == VariantValueType.Bool
             ? value.GetBool()
-            : throw PortalError.Invalid($"option '{key}' must be a b, got {value.Type}");
+            : throw PortalError.Invalid($"Option '{key}' must be a b, not {value.Type}.");
     }
 
     /// <summary>
@@ -75,7 +75,7 @@ public static class Vardict
 
         return value.Type == VariantValueType.String
             ? value.GetString()
-            : throw PortalError.Invalid($"option '{key}' must be an s, got {value.Type}");
+            : throw PortalError.Invalid($"Option '{key}' must be an s, not {value.Type}.");
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ public static class Vardict
 
         if (value.Type != VariantValueType.Array || value.ItemType != VariantValueType.String)
         {
-            throw PortalError.Invalid($"option '{key}' must be an as, got {value.Type}");
+            throw PortalError.Invalid($"Option '{key}' must be an as, not {value.Type}.");
         }
 
         var strings = new string[value.Count];
@@ -122,14 +122,14 @@ public static class Vardict
 
         if (value.Type != VariantValueType.Struct || value.Count != 3)
         {
-            throw PortalError.Invalid($"option '{key}' must be an (suv), got {value.Type}");
+            throw PortalError.Invalid($"Option '{key}' must be an (suv), not {value.Type}.");
         }
 
         var vendor = value.GetItem(0);
         var version = value.GetItem(1);
         if (vendor.Type != VariantValueType.String || version.Type != VariantValueType.UInt32)
         {
-            throw PortalError.Invalid($"option '{key}' must be an (suv)");
+            throw PortalError.Invalid($"Option '{key}' must be an (suv).");
         }
 
         var data = value.GetItem(2);
@@ -152,7 +152,7 @@ public static class Vardict
     {
         if (value.Type != VariantValueType.Dictionary)
         {
-            throw PortalError.Invalid($"{what} must be an a{{sv}}, got {value.Type}");
+            throw PortalError.Invalid($"The {what} must be an a{{sv}}, not {value.Type}.");
         }
 
         return value.GetDictionary<string, VariantValue>();

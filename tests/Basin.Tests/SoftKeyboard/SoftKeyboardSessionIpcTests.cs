@@ -39,21 +39,27 @@ public sealed class SoftKeyboardSessionIpcTests
         session.Engine.Layout(1024, 335, 5);
         var peer = rig.Connect();
 
-        Assert.Contains("not shown", peer.Call("""{"method":"testwm/keyboard-type","params":{"text":"hi"}}"""));
+        var notShown = peer.Call("""{"method":"testwm/keyboard-type","params":{"text":"hi"}}""");
+        Assert.Contains(IpcErrorCodes.InvalidParams, notShown);
+        Assert.Contains("not shown", notShown);
         peer.Call("""{"method":"testwm/keyboard","params":{"state":"show"}}""");
         peer.Call("""{"method":"testwm/keyboard"}""");
         Assert.Equal(["show", "report"], calls);
 
         peer.Call("""{"method":"testwm/keyboard-type","params":{"text":"Hi!"}}""");
         Assert.Equal("Hi!", string.Concat(typed.Select(static t => t.Text)));
-        Assert.Contains("no key", peer.Call("""{"method":"testwm/keyboard-tap","params":{"key":"nope"}}"""));
+        var noKey = peer.Call("""{"method":"testwm/keyboard-tap","params":{"key":"nope"}}""");
+        Assert.Contains(IpcErrorCodes.NotFound, noKey);
+        Assert.Contains("'nope'", noKey);
         Assert.Contains("LONGPRESS", peer.Call("""{"method":"testwm/keyboard-hold","params":{"key":"e","ms":800}}"""));
         peer.Call("""{"method":"testwm/keyboard-choose","params":{"index":1}}""");
         Assert.Equal("è", typed[^1].Text);
 
         peer.Call("""{"method":"testwm/keyboard-size","params":{"size":"l"}}""");
         Assert.Equal([KeyboardSize.Large], sizes);
-        Assert.Contains("no layout fr-azerty", peer.Call("""{"method":"testwm/keyboard-layout","params":{"id":"fr-azerty"}}"""));
+        var noLayout = peer.Call("""{"method":"testwm/keyboard-layout","params":{"id":"fr-azerty"}}""");
+        Assert.Contains(IpcErrorCodes.NotFound, noLayout);
+        Assert.Contains("'fr-azerty'", noLayout);
         peer.Call("""{"method":"testwm/keyboard-layout","params":{"id":"win8-standard-en-us"}}""");
         Assert.Equal("win8-standard-en-us", session.CurrentLayout.Id);
         Assert.DoesNotContain("error", peer.Call("""{"method":"testwm/keyboard-type","params":{"text":"\ud83d\ude00"}}"""));

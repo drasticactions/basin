@@ -153,7 +153,7 @@ public static class Colorimetry
             m[2] * (m[3] * m[7] - m[4] * m[6]);
         if (Math.Abs(det) < 1e-12)
         {
-            throw new InvalidOperationException("chromaticity matrix is singular");
+            throw new InvalidOperationException("The chromaticity matrix is singular.");
         }
 
         var inv = 1.0 / det;

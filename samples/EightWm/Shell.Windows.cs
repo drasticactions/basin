@@ -91,7 +91,7 @@ internal sealed partial class Shell
         };
     }
 
-    internal ShellView PrimaryView => Views.Count > 0 ? Views[0] : throw new InvalidOperationException("no output");
+    internal ShellView PrimaryView => Views.Count > 0 ? Views[0] : throw new InvalidOperationException("The shell has no output.");
 
     internal ShellView? HomeOf(AppWindow app) => _homes.TryGetValue(app, out var view) ? view : Views.Count > 0 ? PrimaryView : null;
 
@@ -219,7 +219,7 @@ internal sealed partial class Shell
     {
         if (Views.Count == 0)
         {
-            throw new InvalidOperationException("no output");
+            throw new InvalidOperationException("The shell has no output.");
         }
 
         foreach (var view in Views)
@@ -761,25 +761,25 @@ internal sealed partial class Shell
     {
         if (!app.IsAttributable)
         {
-            _log.Debug($"no verified pid for the X11 window {app.AppId}; it is not killed");
+            _log.Debug($"windows: no verified pid for the X11 window {app.AppId}, not killed");
             return;
         }
 
         var pid = app.Pid;
         if (pid <= 0)
         {
-            _log.Debug($"no credentials for {app.AppId}; it is not killed");
+            _log.Debug($"windows: no credentials for {app.AppId}, not killed");
             return;
         }
 
-        _log.Debug($"{app.AppId} did not close in {_closing.GraceMillis}ms; killing pid {pid}");
+        _log.Debug($"windows: {app.AppId} did not close in {_closing.GraceMillis} ms, killing pid {pid}");
         try
         {
             System.Diagnostics.Process.GetProcessById(pid).Kill(entireProcessTree: false);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
         {
-            _log.Debug($"pid {pid} was gone already");
+            _log.Debug(error, $"windows: pid {pid} was gone already");
         }
     }
 

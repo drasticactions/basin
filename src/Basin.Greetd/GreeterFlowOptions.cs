@@ -20,7 +20,7 @@ public sealed record GreeterFlowOptions
     /// <summary>
     /// Gets the error text that the flow shows after an authentication failure.
     /// </summary>
-    public string LoginIncorrect { get; init; } = "Login incorrect";
+    public string LoginIncorrect { get; init; } = "Your username or password is incorrect. Try again.";
 
     /// <summary>
     /// Gets the text of the local secret prompt that the flow shows before it opens a conversation with greetd.
@@ -30,7 +30,7 @@ public sealed record GreeterFlowOptions
     /// <summary>
     /// Gets the error text that the flow shows when authentication succeeds but no session is available.
     /// </summary>
-    public string NoSessions { get; init; } = "No sessions are installed";
+    public string NoSessions { get; init; } = "No desktop sessions are installed. Ask your administrator to install one.";
 
     /// <summary>
     /// Gets a value indicating whether the flow asks systemd-homed for its users. A test turns it off to keep the D-Bus socket closed.

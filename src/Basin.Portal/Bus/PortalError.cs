@@ -76,12 +76,12 @@ public static class PortalError
     /// <param name="name">The D-Bus interface name.</param>
     /// <returns>The exception that the handler turns into the error reply.</returns>
     public static DBusErrorReplyException NoInterface(string name) =>
-        new(UnknownInterface, $"{name} is not installed on this compositor");
+        new(UnknownInterface, $"{name} is not installed on this compositor.");
 
     /// <summary>
     /// Creates an <see cref="UnknownObject"/> reply that names the path.
     /// </summary>
     /// <param name="path">The object path that does not exist.</param>
     /// <returns>The exception that the handler turns into the error reply.</returns>
-    public static DBusErrorReplyException NoObject(string path) => new(UnknownObject, $"no object at {path}");
+    public static DBusErrorReplyException NoObject(string path) => new(UnknownObject, $"No object is at {path}.");
 }

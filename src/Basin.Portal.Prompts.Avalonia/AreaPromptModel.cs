@@ -39,7 +39,7 @@ public sealed class AreaPromptModel : PromptModel
     /// <summary>
     /// Gets the instruction text that the view shows at the top.
     /// </summary>
-    public string Hint => PickPoint ? "Click a pixel, Escape cancels" : "Drag to select, Escape cancels, Enter takes everything";
+    public string Hint => PickPoint ? "Click to pick a color. Press Escape to cancel." : "Drag to select an area. Press Enter for the whole screen, or Escape to cancel.";
 
     /// <summary>
     /// Gets the chosen area in output-local logical pixels. It is empty until <see cref="Choose"/> is called.

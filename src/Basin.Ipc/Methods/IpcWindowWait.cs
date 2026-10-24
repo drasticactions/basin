@@ -58,7 +58,7 @@ internal sealed class IpcWindowWait : IToplevelObserver, IDisposable
         _server.Disown(this);
         if (!_reply.IsDone)
         {
-            _reply.Error(IpcErrorCodes.Failed, "the compositor stopped before a window matched");
+            _reply.Error(IpcErrorCodes.Failed, "The compositor stopped before a window matched.");
             _ = _reply.Complete();
         }
     }
@@ -82,7 +82,7 @@ internal sealed class IpcWindowWait : IToplevelObserver, IDisposable
             return;
         }
 
-        _reply.Error(IpcErrorCodes.Failed, "no matching window mapped before the timeout");
+        _reply.Error(IpcErrorCodes.Failed, "No matching window mapped before the timeout.");
         _ = _reply.Complete();
         Dispose();
     }

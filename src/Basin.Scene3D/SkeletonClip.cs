@@ -26,7 +26,7 @@ public sealed class SkeletonClip
         var frames = nodes.Length == 0 ? 0 : translations.Length / nodes.Length;
         if (translations.Length != frames * nodes.Length || rotations.Length != translations.Length || scales.Length != translations.Length)
         {
-            throw new ArgumentException("Every frame must hold one pose per animated node.");
+            throw new ArgumentException("Every frame must hold one pose per animated node.", nameof(translations));
         }
 
         Name = name;

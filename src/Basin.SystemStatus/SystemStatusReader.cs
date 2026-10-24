@@ -49,6 +49,11 @@ public abstract class SystemStatusReader : IDisposable
     public string? Reason => IsAvailable ? AvailableReason : _reason;
 
     /// <summary>
+    /// Gets a value indicating whether the last read failed because the service is not on the bus. A shell can tell the user that the service does not run.
+    /// </summary>
+    public bool ServiceMissing { get; private set; }
+
+    /// <summary>
     /// Occurs on the compositor thread after each read, successful or not. One burst of signals gives one event.
     /// </summary>
     public event Action? Changed;
@@ -136,7 +141,7 @@ public abstract class SystemStatusReader : IDisposable
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Warn($"{Service} {what}: {error.Message}");
+            Log.Warn(error, $"{Service}: {what} failed");
         }
 
         if (Bus.IsDisposed || _disposed)
@@ -262,6 +267,7 @@ public abstract class SystemStatusReader : IDisposable
     {
         Action? apply = null;
         string? failure = null;
+        var missing = false;
         try
         {
             apply = await ReadAsync(connection).ConfigureAwait(false);
@@ -269,6 +275,7 @@ public abstract class SystemStatusReader : IDisposable
         catch (DBusErrorReplyException error) when (error.ErrorName is "org.freedesktop.DBus.Error.ServiceUnknown" or "org.freedesktop.DBus.Error.NameHasNoOwner")
         {
             failure = $"{Service} is not on the system bus";
+            missing = true;
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException or IndexOutOfRangeException or FormatException)
         {
@@ -287,13 +294,14 @@ public abstract class SystemStatusReader : IDisposable
             {
                 apply();
                 IsAvailable = true;
+                ServiceMissing = false;
                 _reason = null;
                 _logged = false;
                 Finish();
             }
             else
             {
-                Fail(failure!);
+                Fail(failure!, missing);
             }
 
             if (_dirty)
@@ -304,7 +312,7 @@ public abstract class SystemStatusReader : IDisposable
         });
     }
 
-    private void Fail(string reason)
+    private void Fail(string reason, bool missing = false)
     {
         if (_disposed)
         {
@@ -313,11 +321,12 @@ public abstract class SystemStatusReader : IDisposable
 
         Clear();
         IsAvailable = false;
+        ServiceMissing = missing;
         _reason = reason;
         if (!_logged)
         {
             _logged = true;
-            Log.Info($"{reason}; the {_indicator} status reads as absent");
+            Log.Info($"{_indicator}: {reason}, the status reads as absent");
         }
 
         Finish();

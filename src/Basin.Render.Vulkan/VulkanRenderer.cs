@@ -511,7 +511,11 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
         catch (InvalidOperationException e)
         {
-            Log.Warn($"shm import rejected: {e.Message}");
+            if (VulkanLog.FirstRejection(buffer.Format, 0, shm: true))
+            {
+                Log.Warn(e, $"shm import rejected, format 0x{(uint)buffer.Format:X8} {buffer.Width}x{buffer.Height}");
+            }
+
             return null;
         }
     }
@@ -700,7 +704,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
             };
             if (vk.CreateShaderModule(Dev.Device, in info, null, out module) != Result.Success)
             {
-                throw new InvalidOperationException("vkCreateShaderModule rejected the pixel shader SPIR-V");
+                throw new InvalidOperationException("vkCreateShaderModule rejected the SPIR-V of the pixel shader.");
             }
         }
 
@@ -1167,7 +1171,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
     private ShaderModule CreateShaderModule(string resourceName)
     {
         using var stream = typeof(VulkanRenderer).Assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"missing shader resource {resourceName}");
+            ?? throw new InvalidOperationException($"The shader resource {resourceName} is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         fixed (byte* codePtr = code)

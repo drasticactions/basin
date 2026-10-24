@@ -13,26 +13,26 @@ internal sealed class IpcWindowPoint(IpcDescribe describe)
         layoutY = 0;
         if (describe.Toplevels is not { } model)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "this compositor has no window model, so 'window' cannot be used");
+            reply.Error(IpcErrorCodes.InvalidParams, "This compositor has no window model, so 'window' cannot be used. Give 'x' and 'y' in layout coordinates.");
             return false;
         }
 
         if (!model.TryGet(window, out var info))
         {
-            reply.Error(IpcErrorCodes.NotFound, $"no window {window}");
+            reply.Error(IpcErrorCodes.NotFound, $"No window has the id {window}. Call windows/list for the windows.");
             return false;
         }
 
         if ((info.State & ToplevelState.Minimized) != 0)
         {
-            reply.Error(IpcErrorCodes.Refused, $"window {window} is minimized");
+            reply.Error(IpcErrorCodes.Refused, $"Window {window} is minimized. Activate it first.");
             return false;
         }
 
         var client = info.ClientGeometry.IsEmpty ? info.Geometry : info.ClientGeometry;
         if (client.IsEmpty)
         {
-            reply.Error(IpcErrorCodes.Refused, $"window {window} is not mapped");
+            reply.Error(IpcErrorCodes.Refused, $"Window {window} is not mapped.");
             return false;
         }
 
@@ -40,7 +40,7 @@ internal sealed class IpcWindowPoint(IpcDescribe describe)
         {
             reply.Error(IpcErrorCodes.InvalidParams, string.Create(
                 CultureInfo.InvariantCulture,
-                $"({x}, {y}) is outside the {client.Width}x{client.Height} client area of window {window}"));
+                $"({x}, {y}) is outside the {client.Width}x{client.Height} client area of window {window}."));
             return false;
         }
 
@@ -48,7 +48,7 @@ internal sealed class IpcWindowPoint(IpcDescribe describe)
         layoutY = client.Y + y;
         if (!TryTop(model, layoutX, layoutY, out var top))
         {
-            reply.Error(IpcErrorCodes.Refused, "this compositor cannot tell which window is on top, so 'window' cannot be used");
+            reply.Error(IpcErrorCodes.Refused, "This compositor cannot tell which window is on top, so 'window' cannot be used. Give 'x' and 'y' in layout coordinates.");
             return false;
         }
 
@@ -63,8 +63,8 @@ internal sealed class IpcWindowPoint(IpcDescribe describe)
         }
 
         reply.Error(IpcErrorCodes.Refused, top == 0
-            ? string.Create(CultureInfo.InvariantCulture, $"window {window} is not at ({x}, {y})")
-            : string.Create(CultureInfo.InvariantCulture, $"window {window} is covered at ({x}, {y}) by window {top}"));
+            ? string.Create(CultureInfo.InvariantCulture, $"Window {window} is not at ({x}, {y}).")
+            : string.Create(CultureInfo.InvariantCulture, $"Window {top} covers window {window} at ({x}, {y}). Raise window {window}, or use another point."));
         return false;
     }
 

@@ -42,7 +42,7 @@ internal sealed class PanelObject : IPathMethodHandler
         }
         catch (Exception error)
         {
-            Log.Debug($"fcitx5 {context.Request.MemberAsString} failed: {error.Message}");
+            Log.Error(error, $"fcitx5: panel method {context.Request.MemberAsString} failed");
             TryReplyError(context, error.Message);
         }
 
@@ -123,7 +123,7 @@ internal sealed class PanelObject : IPathMethodHandler
         }
         catch (Exception error) when (error is ObjectDisposedException or InvalidOperationException or DBusExceptionBase)
         {
-            Log.Debug($"an error reply was not sent: {error.Message}");
+            Log.Debug(error, $"fcitx5: the error reply was not sent");
         }
     }
 }

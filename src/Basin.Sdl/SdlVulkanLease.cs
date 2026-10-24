@@ -17,8 +17,8 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 
     private readonly SdlVulkanDevice _device;
     private readonly SdlWindow _window;
-    private readonly nint _rawSurface;
-    private readonly SurfaceKHR _surface;
+    private nint _rawSurface;
+    private SurfaceKHR _surface;
     private SwapchainKHR _swapchain;
     private Format _format;
     private SKColorType _colorType;
@@ -37,6 +37,10 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
     private CommandPool _pool;
     private CommandBuffer _commands;
     private bool _disposed;
+    private bool _warnedAcquire;
+    private bool _surfaceLost;
+    private bool _rebuildingLostSurface;
+    private bool _stopped;
 
     internal SdlVulkanLease(SdlVulkanDevice device, SdlWindow window)
     {
@@ -44,7 +48,7 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _window = window;
         if (!SDL.VulkanCreateSurface(window.Handle, (nint)device.Instance.Handle, 0, out _rawSurface))
         {
-            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed with \"{SDL.GetError()}\".");
         }
 
         _surface = new SurfaceKHR((ulong)_rawSurface);
@@ -175,24 +179,25 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
     /// <summary>
     /// Acquires the next swapchain image and starts a frame on it. The acquire waits on the CPU for at most one second.
     /// After <see cref="Discard"/>, it starts the frame on the image that it kept, with the same age, unless the swapchain needs a rebuild.
-    /// An out-of-date swapchain is rebuilt once. A device loss abandons the context.
+    /// An out-of-date swapchain is rebuilt once. A lost surface is created again with a new swapchain once.
+    /// When that rebuild fails, the lease stops and every later call returns <see langword="false"/>. A device loss abandons the context.
     /// </summary>
     /// <param name="canvas">The canvas over the acquired image, in device pixels.</param>
     /// <param name="context">The shared Skia context of the device.</param>
     /// <param name="age">The number of frames since the image was last presented, or 0 for an image that was never presented.</param>
-    /// <returns><see langword="false"/> when the context is missing or lost, or no image can be acquired.</returns>
+    /// <returns><see langword="false"/> when the context is missing or lost, the lease stopped, or no image can be acquired.</returns>
     public bool Begin(out SKCanvas canvas, out GRContext? context, out int age)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         canvas = null!;
         age = 0;
         context = _device.Context;
-        if (context is null || context.IsAbandoned)
+        if (_stopped || context is null || context.IsAbandoned)
         {
             return false;
         }
 
-        if (_stale && !Recreate())
+        if (_stale && !Rebuild())
         {
             return false;
         }
@@ -207,9 +212,14 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         }
 
         var result = Acquire();
-        if (result is Result.ErrorOutOfDateKhr)
+        if (result is Result.ErrorSurfaceLostKhr)
         {
-            if (!Recreate())
+            _surfaceLost = true;
+        }
+
+        if (result is Result.ErrorOutOfDateKhr or Result.ErrorSurfaceLostKhr)
+        {
+            if (!Rebuild())
             {
                 return false;
             }
@@ -225,7 +235,12 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 
         if (result is not (Result.Success or Result.SuboptimalKhr))
         {
-            Log.Warn($"vkAcquireNextImageKHR returned {result}");
+            if (!_warnedAcquire)
+            {
+                _warnedAcquire = true;
+                Log.Warn($"vulkan: swapchain acquire returned {result}, frame skipped");
+            }
+
             return false;
         }
 
@@ -279,7 +294,7 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
             CurrentQueueFamily = _device.QueueFamily,
         }));
         var surface = SKSurface.Create(context, target, GRSurfaceOrigin.TopLeft, _colorType)
-            ?? throw new InvalidOperationException($"Ganesh rejected swapchain image {index} in {_format}");
+            ?? throw new InvalidOperationException($"Ganesh rejected swapchain image {index} in {_format}.");
         _targets[index] = target;
         _surfaces[index] = SkiaCensus.Track(surface);
         return surface;
@@ -324,6 +339,11 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _presentedAt[_index] = ++_frame;
         if (result is Result.ErrorOutOfDateKhr or Result.SuboptimalKhr)
         {
+            _stale = true;
+        }
+        else if (result is Result.ErrorSurfaceLostKhr)
+        {
+            _surfaceLost = true;
             _stale = true;
         }
         else if (result is Result.ErrorDeviceLost)
@@ -388,6 +408,21 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _ = api.WaitForFences(_device.Device, 1, in _fence, true, AcquireTimeoutNs);
     }
 
+    private bool Rebuild()
+    {
+        _rebuildingLostSurface = _surfaceLost;
+        try
+        {
+            return Recreate();
+        }
+        catch (InvalidOperationException error) when (_rebuildingLostSurface)
+        {
+            _stopped = true;
+            Log.Error(error, $"vulkan: window surface lost and not rebuilt, window stops presenting");
+            return false;
+        }
+    }
+
     private bool Recreate()
     {
         var api = _device.Api;
@@ -396,9 +431,22 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         ReleaseImages();
         _held = false;
         _acquired = false;
-        SdlVulkanDevice.Check(
-            surfaces.GetPhysicalDeviceSurfaceCapabilities(_device.Physical, _surface, out var caps),
-            "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+        var replaced = false;
+        if (_surfaceLost)
+        {
+            ReplaceSurface();
+            replaced = true;
+        }
+
+        var result = surfaces.GetPhysicalDeviceSurfaceCapabilities(_device.Physical, _surface, out var caps);
+        if (result is Result.ErrorSurfaceLostKhr && !replaced)
+        {
+            _rebuildingLostSurface = true;
+            ReplaceSurface();
+            result = surfaces.GetPhysicalDeviceSurfaceCapabilities(_device.Physical, _surface, out caps);
+        }
+
+        SdlVulkanDevice.Check(result, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
         var extent = caps.CurrentExtent.Width != uint.MaxValue
             ? caps.CurrentExtent
             : new Extent2D(
@@ -456,7 +504,30 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _presentedAt = new long[imageCount];
         _extent = extent;
         _stale = false;
+        _rebuildingLostSurface = false;
         return true;
+    }
+
+    private void ReplaceSurface()
+    {
+        _surfaceLost = false;
+        if (_swapchain.Handle != 0)
+        {
+            _device.Swapchains.DestroySwapchain(_device.Device, _swapchain, null);
+            _swapchain = default;
+        }
+
+        var instance = (nint)_device.Instance.Handle;
+        SDL.VulkanDestroySurface(instance, _rawSurface, 0);
+        _rawSurface = 0;
+        _surface = default;
+        if (!SDL.VulkanCreateSurface(_window.Handle, instance, 0, out var raw))
+        {
+            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed with \"{SDL.GetError()}\".");
+        }
+
+        _rawSurface = raw;
+        _surface = new SurfaceKHR((ulong)raw);
     }
 
     private (Format Format, SKColorType ColorType, ColorSpaceKHR ColorSpace) ChooseFormat()
@@ -489,7 +560,7 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
             }
         }
 
-        throw new InvalidOperationException("the SDL window's Vulkan surface offers no 8-bit sRGB format");
+        throw new InvalidOperationException("The Vulkan surface of the SDL window offers no 8-bit sRGB format.");
     }
 
     private void ReleaseImages()
@@ -534,6 +605,9 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 
         api.DestroyCommandPool(_device.Device, _pool, null);
         api.DestroyFence(_device.Device, _fence, null);
-        SDL.VulkanDestroySurface((nint)_device.Instance.Handle, _rawSurface, 0);
+        if (_rawSurface != 0)
+        {
+            SDL.VulkanDestroySurface((nint)_device.Instance.Handle, _rawSurface, 0);
+        }
     }
 }

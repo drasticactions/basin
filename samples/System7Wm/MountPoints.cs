@@ -26,6 +26,7 @@ internal static class MountPoints
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            System7Log.Log.Debug(error, $"finder: cannot read /proc/self/mountinfo");
         }
 
         return best;

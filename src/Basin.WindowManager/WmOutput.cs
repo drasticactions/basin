@@ -113,7 +113,7 @@ public sealed class WmOutput
         if (_wm.LayerShell is null)
         {
             throw new NotSupportedException(
-                "the compositor does not offer river_layer_shell_v1, so layer surfaces have no default output");
+                "The compositor does not offer river_layer_shell_v1, so layer surfaces have no default output.");
         }
 
         _wm.LayerShell.OutputStateFor(this).SetDefault();

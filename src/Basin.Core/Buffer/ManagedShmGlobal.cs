@@ -104,8 +104,7 @@ public sealed class ManagedShmGlobal : IDisposable
             }
         }
 
-        Log.Warn(
-            $"wl_shm: the guarded-copy primitive is unavailable (seccomp?); falling back to direct access");
+        Log.Warn($"wl_shm: guarded copy not available, direct access used");
         return false;
     }
 

@@ -260,22 +260,24 @@ internal sealed class Session : IDisposable
 
     public async Task<List<string>> StateAsync()
     {
-        var mark = 0;
-        lock (_gate)
-        {
-            mark = _lines.Count;
-        }
-
+        var mark = Mark();
         await SendAsync("where");
-        var end = await WaitForAsync(line => line.StartsWith("HIT ", StringComparison.Ordinal), fresh: true);
-        if (end is null)
-        {
-            return [];
-        }
+        var end = await WaitForAsync(_ => WhereBlock(mark) is not null, since: mark);
+        return end is null ? [] : WhereBlock(mark) ?? [];
+    }
 
+    private List<string>? WhereBlock(int mark)
+    {
         lock (_gate)
         {
-            return _lines.Skip(mark).ToList();
+            var start = _lines.FindIndex(mark, line => line.StartsWith("POINTER ", StringComparison.Ordinal));
+            if (start < 0)
+            {
+                return null;
+            }
+
+            var end = _lines.FindIndex(start, line => line.StartsWith("HIT ", StringComparison.Ordinal));
+            return end < 0 ? null : _lines.GetRange(start, end - start + 1);
         }
     }
 

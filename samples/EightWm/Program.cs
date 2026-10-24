@@ -74,7 +74,7 @@ internal static class Program
         });
         var pamHelper = cli.Add(new Option<string?>("--pam-helper-command")
         {
-            Description = "run `sh -c <command>` to check an unlock entry instead of the PAM helper; it reads one line and prints 1 or 0",
+            Description = "run `sh -c <command>` to check an unlock entry instead of the PAM helper. It reads one line and prints 1 or 0",
             HelpName = "COMMAND",
         });
         var greeter = cli.Add(new Option<bool>("--greeter")

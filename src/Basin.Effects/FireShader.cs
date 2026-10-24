@@ -110,7 +110,7 @@ public static class FireShader
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(FireShader).Assembly.GetManifestResourceStream("fire.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource fire.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource fire.frag.spv is not embedded in the assembly.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

@@ -62,8 +62,8 @@ public sealed class IpcPowerParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'output' is required"
-        : (_present & 2) == 0 ? "'on' is required"
+        (_present & 1) == 0 ? "'output' is required."
+        : (_present & 2) == 0 ? "'on' is required."
         : null;
 
     void IIpcReusable.Reset()

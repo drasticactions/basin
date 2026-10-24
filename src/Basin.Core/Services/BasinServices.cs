@@ -45,7 +45,7 @@ public sealed class BasinServices : IDisposable
     /// Gets the Wayland display. It throws <see cref="InvalidOperationException"/> when the registry has no display.
     /// </summary>
     public WlServerDisplay Display =>
-        _display ?? throw new InvalidOperationException("this registry serves a process with no Wayland display; only modules that install no global can be installed");
+        _display ?? throw new InvalidOperationException("This registry serves a process with no Wayland display. Install only modules that install no global.");
 
     /// <summary>
     /// Gets a value indicating whether the registry has a Wayland display.
@@ -87,7 +87,7 @@ public sealed class BasinServices : IDisposable
         ThrowIfFrozen();
         if (!_table.TryAdd(typeof(T), implementation))
         {
-            throw new InvalidOperationException($"{typeof(T).Name} is already registered");
+            throw new InvalidOperationException($"{typeof(T).Name} is already registered. Register each service once.");
         }
 
         return this;
@@ -157,7 +157,7 @@ public sealed class BasinServices : IDisposable
     /// <returns>The implementation.</returns>
     public T Require<T>()
         where T : class =>
-        Find<T>() ?? throw new InvalidOperationException($"no {typeof(T).Name} is registered");
+        Find<T>() ?? throw new InvalidOperationException($"No {typeof(T).Name} is registered.");
 
     /// <summary>
     /// Queues a module for <see cref="Freeze"/>. A module whose wire interface was removed with <see cref="Without"/> is ignored. A second module with the same wire interface throws.
@@ -178,7 +178,7 @@ public sealed class BasinServices : IDisposable
             if (queued.WireInterface == module.WireInterface)
             {
                 throw new InvalidOperationException(
-                    $"two modules claim the wire interface '{module.WireInterface}'");
+                    $"Two modules claim the wire interface '{module.WireInterface}'. Add only one module for each wire interface.");
             }
         }
 
@@ -239,7 +239,7 @@ public sealed class BasinServices : IDisposable
         {
             if (!module.ShouldInstall(this))
             {
-                Log.Info($"{module.WireInterface} not advertised: its capability is absent");
+                Log.Info($"services: {module.WireInterface} not advertised, its capability is absent");
                 continue;
             }
 
@@ -255,7 +255,7 @@ public sealed class BasinServices : IDisposable
                 if (!_table.ContainsKey(capability) && !_unresolved.Contains(capability))
                 {
                     _unresolved.Add(capability);
-                    Log.Debug($"no implementation for {capability.Name}; protocols consuming it degrade");
+                    Log.Debug($"services: no {capability.Name}, the protocols that use it degrade");
                 }
             }
         }
@@ -327,7 +327,7 @@ public sealed class BasinServices : IDisposable
 
             var article = "AEIOU".Contains(driver.Name[0]) ? "an" : "a";
             throw new InvalidOperationException(
-                $"{module.WireInterface} needs {article} {driver.Name} and none is registered.{Environment.NewLine}" +
+                $"{module.WireInterface} needs {article} {driver.Name} and none is registered. " +
                 $"Register one before Freeze, or drop the protocol with Without(\"{module.WireInterface}\").");
         }
     }
@@ -336,7 +336,7 @@ public sealed class BasinServices : IDisposable
     {
         if (IsFrozen)
         {
-            throw new InvalidOperationException("the service registry is frozen; register before Freeze()");
+            throw new InvalidOperationException("The service registry is frozen. Register services before Freeze.");
         }
     }
 }

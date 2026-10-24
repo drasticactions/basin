@@ -25,13 +25,14 @@ internal sealed class QuillDemo : IDisposable
     private bool _fontResolved;
     private string _clock = string.Empty;
     private bool _disposed;
+    private bool _drawFailed;
 
     internal QuillDemo(SceneTree parent, IUIHost host, ICompositorEventLoop loop, double scale, BasinLogger log)
     {
         _log = log;
         _node = new UISurfaceNode(parent, host) { Target = UITargetKind.Dmabuf, InputEnabled = false };
         _node.SetPosition(560, 60);
-        _node.Faulted += error => _log.Error($"quill demo: {error.Message}");
+        _node.Faulted += error => _log.Error(error, $"quill demo: surface faulted");
         _node.Configure((int)SurfaceWidth, (int)SurfaceHeight, scale);
         _clockTimer = loop.AddTimer(OnClockTick);
         OnClockTick();
@@ -76,7 +77,12 @@ internal sealed class QuillDemo : IDisposable
         }
         catch (InvalidOperationException error)
         {
-            _log.Error($"quill demo: {error.Message}");
+            if (!_drawFailed)
+            {
+                _drawFailed = true;
+                _log.Error(error, $"quill demo: draw failed");
+            }
+
             return;
         }
 

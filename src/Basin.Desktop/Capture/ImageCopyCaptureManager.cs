@@ -187,7 +187,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             var resource = new ExtImageCopyCaptureSessionV1Resource(client, manager.Version, e.Session);
             if (((uint)e.Options & ~1u) != 0)
             {
-                manager.PostError(ErrorInvalidOption, "invalid options bitfield");
+                manager.PostError(ErrorInvalidOption, "The options bitfield is not valid.");
                 return;
             }
 
@@ -292,7 +292,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
                 var frameResource = new ExtImageCopyCaptureFrameV1Resource(resource.Client, resource.Version, e.Frame);
                 if (_activeFrame is not null)
                 {
-                    resource.PostError(ErrorDuplicateFrame, "previous frame not destroyed");
+                    resource.PostError(ErrorDuplicateFrame, "The previous frame is not destroyed. Destroy it before the next frame.");
                     return;
                 }
 
@@ -379,7 +379,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             {
                 if (_captured)
                 {
-                    resource.PostError(ErrorAlreadyCaptured, "attach_buffer after capture");
+                    resource.PostError(ErrorAlreadyCaptured, "attach_buffer came after capture. Attach the buffer before capture.");
                     return;
                 }
 
@@ -389,13 +389,13 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             {
                 if (_captured)
                 {
-                    resource.PostError(ErrorAlreadyCaptured, "damage_buffer after capture");
+                    resource.PostError(ErrorAlreadyCaptured, "damage_buffer came after capture. Damage the buffer before capture.");
                     return;
                 }
 
                 if (e.X < 0 || e.Y < 0 || e.Width <= 0 || e.Height <= 0)
                 {
-                    resource.PostError(ErrorInvalidBufferDamage, "invalid buffer damage");
+                    resource.PostError(ErrorInvalidBufferDamage, "The buffer damage is not valid.");
                 }
             };
             resource.Capture += (_, _) => OnCapture();
@@ -430,7 +430,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
             }
             catch (InvalidOperationException e)
             {
-                Log.Warn($"capture frame refused its buffer: {e.Message}");
+                Log.Debug(e, $"image-copy: frame refused the client buffer");
                 SendFailed(ExtImageCopyCaptureFrameV1.FailureReason.BufferConstraints);
                 return;
             }
@@ -452,13 +452,13 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         {
             if (_captured)
             {
-                _resource.PostError(ErrorAlreadyCaptured, "capture sent twice");
+                _resource.PostError(ErrorAlreadyCaptured, "capture was sent two times. Send capture one time for each frame.");
                 return;
             }
 
             if (_bufferHandle == 0)
             {
-                _resource.PostError(ErrorNoBuffer, "capture without attach_buffer");
+                _resource.PostError(ErrorNoBuffer, "capture came before attach_buffer. Attach a buffer before capture.");
                 return;
             }
 
@@ -506,7 +506,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
                 var sessionResource = new ExtImageCopyCaptureSessionV1Resource(resource.Client, resource.Version, e.Session);
                 if (_capture is not null)
                 {
-                    resource.PostError(ErrorDuplicateSession, "get_capture_session sent twice");
+                    resource.PostError(ErrorDuplicateSession, "get_capture_session was sent two times. Send it one time for each frame.");
                     return;
                 }
 
@@ -634,13 +634,13 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         {
             if (frame.Captured)
             {
-                frame.Resource.PostError(ErrorAlreadyCaptured, "capture sent twice");
+                frame.Resource.PostError(ErrorAlreadyCaptured, "capture was sent two times. Send capture one time for each frame.");
                 return;
             }
 
             if (frame.BufferHandle == 0)
             {
-                frame.Resource.PostError(ErrorNoBuffer, "capture without attach_buffer");
+                frame.Resource.PostError(ErrorNoBuffer, "capture came before attach_buffer. Attach a buffer before capture.");
                 return;
             }
 

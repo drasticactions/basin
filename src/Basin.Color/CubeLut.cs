@@ -45,7 +45,7 @@ public static class CubeLut
                     continue;
                 case "LUT_1D_SIZE":
                 case "LUT_1D_INPUT_RANGE":
-                    throw new FormatException($"line {lineNumber}: a 1D LUT ({fields[0]}) is not a look; only LUT_3D_SIZE is read");
+                    throw new FormatException($"Line {lineNumber}: {fields[0]} starts a 1D LUT. A look must be a 3D LUT with LUT_3D_SIZE.");
                 case "LUT_3D_INPUT_RANGE":
                     var range = Triple(fields, lineNumber, 2);
                     domainMin = (range.R, range.R, range.R);
@@ -55,7 +55,7 @@ public static class CubeLut
                     if (fields.Length != 2 || !int.TryParse(fields[1], CultureInfo.InvariantCulture, out size) ||
                         size < 2 || size > MaxSize)
                     {
-                        throw new FormatException($"line {lineNumber}: LUT_3D_SIZE must be an integer from 2 to {MaxSize}");
+                        throw new FormatException($"Line {lineNumber}: LUT_3D_SIZE must be an integer from 2 to {MaxSize}.");
                     }
 
                     data = new float[size * size * size * 3];
@@ -75,12 +75,12 @@ public static class CubeLut
                     continue;
                 }
 
-                throw new FormatException($"line {lineNumber}: a data row comes before LUT_3D_SIZE");
+                throw new FormatException($"Line {lineNumber}: a data row comes before LUT_3D_SIZE. Put LUT_3D_SIZE before the data.");
             }
 
             if (count * 3 >= data.Length)
             {
-                throw new FormatException($"line {lineNumber}: more rows than LUT_3D_SIZE {size} allows");
+                throw new FormatException($"Line {lineNumber}: the file has more rows than LUT_3D_SIZE {size} allows.");
             }
 
             var row = Triple(fields, lineNumber, 3);
@@ -92,12 +92,12 @@ public static class CubeLut
 
         if (data is null)
         {
-            throw new FormatException("no LUT_3D_SIZE line");
+            throw new FormatException("The file has no LUT_3D_SIZE line.");
         }
 
         if (count != size * size * size)
         {
-            throw new FormatException($"{count} rows where LUT_3D_SIZE {size} needs {size * size * size}");
+            throw new FormatException($"The file has {count} data rows. LUT_3D_SIZE {size} needs {size * size * size}.");
         }
 
         var table = new ColorLut3D(size, data);
@@ -108,7 +108,7 @@ public static class CubeLut
 
         if (domainMax.R <= domainMin.R || domainMax.G <= domainMin.G || domainMax.B <= domainMin.B)
         {
-            throw new FormatException("DOMAIN_MAX must exceed DOMAIN_MIN on every channel");
+            throw new FormatException("DOMAIN_MAX must be greater than DOMAIN_MIN on every channel.");
         }
 
         var folded = new float[data.Length];
@@ -140,7 +140,7 @@ public static class CubeLut
         var offset = fields.Length == expected + 1 && char.IsLetter(fields[0][0]) ? 1 : 0;
         if (fields.Length - offset != expected)
         {
-            throw new FormatException($"line {lineNumber}: expected {expected} numbers");
+            throw new FormatException($"Line {lineNumber} must have {expected} numbers.");
         }
 
         var values = new float[3];
@@ -148,7 +148,7 @@ public static class CubeLut
         {
             if (!float.TryParse(fields[offset + i], NumberStyles.Float, CultureInfo.InvariantCulture, out values[i]))
             {
-                throw new FormatException($"line {lineNumber}: '{fields[offset + i]}' is not a number");
+                throw new FormatException($"Line {lineNumber}: '{fields[offset + i]}' is not a number.");
             }
         }
 

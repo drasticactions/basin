@@ -880,7 +880,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, level.Texture, 0);
         if (gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != GLEnum.FramebufferComplete)
         {
-            throw new InvalidOperationException("blur level framebuffer incomplete");
+            throw new InvalidOperationException("The framebuffer of a blur level is incomplete.");
         }
 
         if (clear)
@@ -910,7 +910,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
             gl.GetShader(shader, ShaderParameterName.CompileStatus, out var compiled);
             if (compiled == 0)
             {
-                throw new InvalidOperationException($"{type}: {gl.GetShaderInfoLog(shader)}");
+                throw new InvalidOperationException($"The {type} did not compile: {gl.GetShaderInfoLog(shader)}");
             }
 
             gl.AttachShader(handle, shader);
@@ -921,7 +921,7 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         gl.GetProgram(handle, ProgramPropertyARB.LinkStatus, out var linked);
         if (linked == 0)
         {
-            throw new InvalidOperationException($"link: {gl.GetProgramInfoLog(handle)}");
+            throw new InvalidOperationException($"The shader program did not link: {gl.GetProgramInfoLog(handle)}");
         }
 
         return new Program

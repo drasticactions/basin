@@ -658,7 +658,7 @@ internal sealed partial class DungeonWm
 
         if (voice is null)
         {
-            _log.Warn($"no voice for {sound.App}: {error}");
+            _log.Warn($"audio: no voice for {sound.App}: {error}");
             return;
         }
 

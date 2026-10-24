@@ -79,7 +79,7 @@ public sealed class HostScreens : IDisposable
             if (!ReferenceEquals(row.Output, output))
             {
                 throw new InvalidOperationException(
-                    $"'{info.Key}' is already a host screen row; an advertised output needs a key of its own.");
+                    $"The key '{info.Key}' already names a host screen. An advertised output needs a key of its own.");
             }
 
             var moved = LogicalX(row.Info) != LogicalX(info) || LogicalY(row.Info) != LogicalY(info);
@@ -140,8 +140,8 @@ public sealed class HostScreens : IDisposable
         if (AdvertisedKey is { } advertised)
         {
             throw new InvalidOperationException(
-                $"host screens cannot be applied while the output '{advertised}' is advertised by the consumer; " +
-                "a session shows either the host's monitors or outputs of its own, never both.");
+                $"The consumer advertises the output '{advertised}', so host screens cannot be applied. " +
+                "A session shows the host's monitors or its own outputs, not both.");
         }
 
         if (screens.Count == 0)

@@ -16,7 +16,7 @@ internal sealed class IpcDiagCommitEvents(IpcServer server, IpcDescribe describe
     {
         if (options is not { ValueKind: JsonValueKind.Object } given || TargetOf(options) is not { Length: > 0 })
         {
-            return $"{name} needs options {{\"target\": SELECTOR}}: a window id, an app_id, part of a title, or \"*\" for every surface";
+            return $"{name} needs the options {{\"target\": SELECTOR}}. Give a window id, an app_id, part of a title, or \"*\" for every surface.";
         }
 
         foreach (var property in given.EnumerateObject())

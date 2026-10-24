@@ -51,7 +51,7 @@ public sealed class PortalBus : IDisposable
         ArgumentNullException.ThrowIfNull(loop);
         Loop = loop;
         Address = address ?? DBusAddress.Session ?? throw new InvalidOperationException(
-            "this session has no D-Bus session bus: DBUS_SESSION_BUS_ADDRESS is unset");
+            "This session has no D-Bus session bus. Set DBUS_SESSION_BUS_ADDRESS, or pass an address.");
         BusName = busName ?? DefaultBusName;
         _ownedByModules = ownedByModules;
         _context = new CompositorSynchronizationContext(loop);
@@ -257,7 +257,7 @@ public sealed class PortalBus : IDisposable
         if (frontend is null)
         {
             _frontendUniqueName = sender;
-            Log.Info($"portal frontend adopted from its first call: {sender}");
+            Log.Info($"frontend: {sender} adopted from its first call");
             return true;
         }
 
@@ -328,7 +328,7 @@ public sealed class PortalBus : IDisposable
                 }
                 catch (Exception e) when (e is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
                 {
-                    Log.Debug($"the bus name was not released: {e.Message}");
+                    Log.Debug(e, $"bus: {BusName} not released");
                 }
             }
 
@@ -352,7 +352,7 @@ public sealed class PortalBus : IDisposable
                 {
                     if (!_disposed)
                     {
-                        Log.Warn($"portal bus: {context.Exception.Message}");
+                        Log.Warn(context.Exception, $"bus: connection failed");
                     }
                 },
             });
@@ -361,7 +361,7 @@ public sealed class PortalBus : IDisposable
             OwnsName = await connection.TryRequestNameAsync(BusName, RequestNameOptions.None).ConfigureAwait(false);
             if (!OwnsName)
             {
-                Log.Warn($"{BusName} is owned by another compositor on this bus; this one answers no portal calls");
+                Log.Warn($"bus: {BusName} is owned by another compositor, this one answers no portal calls");
             }
 
             var watcher = await connection.WatchNameOwnerAsync(FrontendName).ConfigureAwait(false);
@@ -380,10 +380,10 @@ public sealed class PortalBus : IDisposable
                 if (owner is not null)
                 {
                     _frontendUniqueName = NameOwnerWatcher.GetOwnerBusName(owner);
-                    Log.Info($"portal frontend is {_frontendUniqueName}");
+                    Log.Info($"frontend: {_frontendUniqueName} is the portal frontend");
                 }
 
-                Log.Info($"{BusName} {(OwnsName ? "owned" : "not owned")} on {Address}");
+                Log.Info($"bus: {BusName} {(OwnsName ? "owned" : "not owned")} on {Address}");
                 _started.TrySetResult();
             }, null);
 
@@ -394,7 +394,7 @@ public sealed class PortalBus : IDisposable
             connection?.Dispose();
             if (!_disposed)
             {
-                Log.Warn($"the portal bus is unreachable, no portal is offered: {error.Message}");
+                Log.Warn(error, $"bus: not reachable, no portal is offered");
             }
 
             _started.TrySetException(error);
@@ -414,6 +414,7 @@ public sealed class PortalBus : IDisposable
                 }
                 catch (OperationCanceledException)
                 {
+                    Log.Debug($"frontend: owner {owner} changed");
                 }
             }
             else
@@ -456,7 +457,7 @@ public sealed class PortalBus : IDisposable
 
         if (owner is null)
         {
-            Log.Info($"portal frontend {_frontendUniqueName ?? "<unknown>"} left the bus; closing {_sessions.Count} session(s)");
+            Log.Info($"frontend: {_frontendUniqueName ?? "<unknown>"} left the bus, {_sessions.Count} session(s) closed");
             _frontendUniqueName = null;
             foreach (var session in _sessions.Values.ToArray())
             {
@@ -473,6 +474,6 @@ public sealed class PortalBus : IDisposable
         }
 
         _frontendUniqueName = NameOwnerWatcher.GetOwnerBusName(owner);
-        Log.Info($"portal frontend is {_frontendUniqueName}");
+        Log.Info($"frontend: {_frontendUniqueName} is the portal frontend");
     }
 }

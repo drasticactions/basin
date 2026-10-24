@@ -36,8 +36,8 @@ public sealed class MsStylesFrameStyle
         Look = look switch
         {
             MsStylesLook.Auto => theme.Format == 3 ? MsStylesLook.ClassicXp : DwmWindow is not null ? MsStylesLook.Glass : MsStylesLook.Basic,
-            MsStylesLook.Glass when theme.Format == 3 => throw new ArgumentException("look = glass needs a Vista or later theme (PACKTHEM 4); this one is PACKTHEM 3."),
-            MsStylesLook.Glass when DwmWindow is null => throw new ArgumentException("look = glass needs the DWMWindow class, and this theme has none."),
+            MsStylesLook.Glass when theme.Format == 3 => throw new ArgumentException("The glass look needs a Vista or later theme (PACKTHEM 4). This theme is PACKTHEM 3.", nameof(look)),
+            MsStylesLook.Glass when DwmWindow is null => throw new ArgumentException("The glass look needs the DWMWindow class. This theme has no DWMWindow class.", nameof(look)),
             _ => look,
         };
         Colorization = colorization;

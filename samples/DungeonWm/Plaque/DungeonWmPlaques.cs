@@ -23,7 +23,7 @@ internal sealed class DungeonWmPlaques : IDisposable
         _renderer = renderer;
         _tree = new SceneTree(root) { Enabled = false };
         using (var stream = typeof(DungeonWmPlaques).Assembly.GetManifestResourceStream("Selawik-Semibold.ttf")
-            ?? throw new InvalidOperationException("dungeon-wm is missing Selawik-Semibold.ttf"))
+            ?? throw new InvalidOperationException("The font Selawik-Semibold.ttf is not embedded in the program."))
         {
             _font = new FontFile(stream);
         }
@@ -32,13 +32,13 @@ internal sealed class DungeonWmPlaques : IDisposable
         _host = Basin.Renderers.QuillHosts.For(renderer, allocator, null, out var declined, out var vulkanDeclined);
         if (vulkanDeclined is not null)
         {
-            log.Warn($"plaques cannot draw on the renderer's VulkanDevice: {vulkanDeclined}; trying a GlDevice");
+            log.Warn($"plaques: cannot draw on the Vulkan device, trying a GL device: {vulkanDeclined}");
         }
 
         Declined = declined;
         if (_host is null)
         {
-            log.Warn($"plaques draw without text: {declined}");
+            log.Warn($"plaques: drawing without text: {declined}");
         }
     }
 

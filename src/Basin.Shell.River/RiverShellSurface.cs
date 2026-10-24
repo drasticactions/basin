@@ -29,7 +29,7 @@ internal sealed class RiverShellSurface
             {
                 resource.PostError(
                     (uint)RiverShellSurfaceV1.Error.NodeExists,
-                    "this shell surface already has a node");
+                    "This shell surface already has a node.");
                 return;
             }
 
@@ -68,7 +68,7 @@ internal sealed class RiverShellSurface
 
     internal void PostMissingCommit() => _resource.PostError(
         (uint)RiverShellSurfaceV1.Error.NoCommit,
-        "sync_next_commit was not followed by a wl_surface.commit before render_finish");
+        "No wl_surface.commit came between sync_next_commit and render_finish.");
 
     internal void Destroy()
     {

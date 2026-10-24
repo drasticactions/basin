@@ -29,6 +29,7 @@ public sealed class WaypipeEngine : IDisposable
     private int _awaitingRemoteId = -1;
     private bool _draining;
     private bool _disposed;
+    private bool _videoFaultWarned;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WaypipeEngine"/> class.
@@ -145,7 +146,7 @@ public sealed class WaypipeEngine : IDisposable
                 if (!_options.CarriesDmabuf)
                 {
                     throw new WaypipeException(
-                        "this channel refuses OpenDmabuf: it was not asked for dmabuf (--gpu), so the global was withheld");
+                        "The channel refuses OpenDmabuf because it was not asked for dmabuf. Start the session with --gpu to carry dmabufs.");
                 }
 
                 Require(body.Length >= 8 + 64, type, "a remote id, a size and a slice");
@@ -159,7 +160,7 @@ public sealed class WaypipeEngine : IDisposable
                 if (!_options.AcceptsVideo || _options.VideoDecoder is null)
                 {
                     throw new WaypipeException(
-                        $"this channel refuses {type}: it was not asked for video (--video) or has no decoder");
+                        $"The channel refuses {type} because it has no video decoder. Start the session with --video to carry video.");
                 }
 
                 Require(body.Length >= 12 + 64, type, "a remote id, a size, the codec flags and a slice");
@@ -173,7 +174,7 @@ public sealed class WaypipeEngine : IDisposable
                 if (!_options.AcceptsVideo || _options.VideoDecoder is null)
                 {
                     throw new WaypipeException(
-                        $"this channel refuses {type}: it was not asked for video (--video) or has no decoder");
+                        $"The channel refuses {type} because it has no video decoder. Start the session with --video to carry video.");
                 }
 
                 Require(body.Length >= 4, type, "a remote id");
@@ -182,12 +183,12 @@ public sealed class WaypipeEngine : IDisposable
 
             case WaypipeMessageType.OpenDmaVidSrcV2:
                 throw new WaypipeException(
-                    $"this channel refuses {type}: it asks this side to encode, and the display side of a channel never owns a dmabuf");
+                    $"The channel refuses {type} because it asks the display side to encode. The display side never owns a dmabuf.");
 
             case WaypipeMessageType.OpenDmaVidSrc:
             case WaypipeMessageType.OpenDmaVidDst:
                 throw new WaypipeException(
-                    $"this channel refuses {type}: waypipe-c legacy video that waypipe 0.11 never sends");
+                    $"The channel refuses {type} because it is legacy waypipe-c video. waypipe 0.11 does not send it.");
 
             case WaypipeMessageType.ExtendFile:
                 Require(body.Length >= 8, type, "a remote id and a size");
@@ -241,8 +242,7 @@ public sealed class WaypipeEngine : IDisposable
 
             default:
                 throw new WaypipeException(
-                    $"this transport refuses {type}: video travels only on a channel asked for it (--video), "
-                    + "and timelines and session resume are never carried");
+                    $"The transport refuses {type}. Video needs a channel started with --video, and timelines and session resume are not supported.");
         }
     }
 
@@ -314,7 +314,7 @@ public sealed class WaypipeEngine : IDisposable
         {
             if (bytes.Length - offset < 8)
             {
-                throw new WaypipeException("a protocol message is shorter than its own header");
+                throw new WaypipeException("A protocol message is shorter than its own header.");
             }
 
             var header2 = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset + 4));
@@ -322,7 +322,7 @@ public sealed class WaypipeEngine : IDisposable
             if (length < 8 || length % 4 != 0 || offset + length > bytes.Length)
             {
                 throw new WaypipeException(
-                    $"a protocol message declares {length} bytes inside a {bytes.Length - offset} byte remainder");
+                    $"A protocol message declares {length} bytes, but only {bytes.Length - offset} bytes remain.");
             }
 
             var tagged = WaypipeWire.TaggedFdCount(header2);
@@ -331,7 +331,7 @@ public sealed class WaypipeEngine : IDisposable
                 if (_pending.Count == 0)
                 {
                     throw new WaypipeException(
-                        "a protocol message names more descriptors than the channel injected remote ids for");
+                        "A protocol message names more descriptors than the channel has remote ids for.");
                 }
 
                 slots.Add(Mint(_pending.Dequeue()));
@@ -374,14 +374,14 @@ public sealed class WaypipeEngine : IDisposable
             return _transport.Slots.Mint(pipe);
         }
 
-        throw new WaypipeException($"remote id {remoteId} was injected before anything created it");
+        throw new WaypipeException($"Remote id {remoteId} arrived before the peer created it.");
     }
 
     private void Queue(int remoteId)
     {
         if (_pending.Count > _limits.MaxRemoteIds)
         {
-            throw new WaypipeException("the channel queued more remote ids than one message can carry");
+            throw new WaypipeException("The channel queued more remote ids than one message can carry.");
         }
 
         _pending.Enqueue(remoteId);
@@ -391,19 +391,19 @@ public sealed class WaypipeEngine : IDisposable
     {
         if (size <= 0 || size > _limits.MaxRegionBytes)
         {
-            throw new WaypipeException($"remote id {remoteId} names a {size} byte file");
+            throw new WaypipeException($"Remote id {remoteId} names a file of {size} bytes, which is not a valid size.");
         }
 
         Sweep();
         if (_regions.ContainsKey(remoteId) || _images.ContainsKey(remoteId) || _pipes.ContainsKey(remoteId))
         {
-            throw new WaypipeException($"remote id {remoteId} already exists");
+            throw new WaypipeException($"Remote id {remoteId} already exists.");
         }
 
         if (_regions.Count + _images.Count + _pipes.Count >= _limits.MaxRemoteIds ||
             _regionBytes + size > _limits.MaxTotalRegionBytes)
         {
-            throw new WaypipeException("the channel has asked for more shared memory than it is allowed");
+            throw new WaypipeException("The peer asked for more shared memory than the channel limit allows.");
         }
 
         var region = new SharedMemoryRegion(size);
@@ -423,13 +423,13 @@ public sealed class WaypipeEngine : IDisposable
             VideoFormat.H264 => Basin.Capabilities.VideoCodec.H264,
             VideoFormat.Vp9 => Basin.Capabilities.VideoCodec.Vp9,
             VideoFormat.Av1 => Basin.Capabilities.VideoCodec.Av1,
-            _ => throw new WaypipeException($"remote id {remoteId} names video format {flags & 0xff}, which names no codec"),
+            _ => throw new WaypipeException($"Remote id {remoteId} names video format {flags & 0xff}, which is not a known codec."),
         };
 
         if (ExpectedVideoCodec != codec)
         {
             throw new WaypipeException(
-                $"the connection header promised {ExpectedVideoCodec?.ToString() ?? "no video"} and remote id {remoteId} opens {codec}");
+                $"Remote id {remoteId} opens {codec}, but the connection header promised {ExpectedVideoCodec?.ToString() ?? "no video"}.");
         }
 
         var image = CreateImage(remoteId, slice, declaredSize: null);
@@ -443,14 +443,14 @@ public sealed class WaypipeEngine : IDisposable
         }
 
         Log.Debug(
-            $"remote id {remoteId} is a {codec} stream into a {image.Width}x{image.Height} host region");
+            $"video: remote id {remoteId} is a {codec} stream into a {image.Width}x{image.Height} host region");
     }
 
     private void DecodePacket(int remoteId, ReadOnlySpan<byte> packet)
     {
         if (!_decodeSessions.TryGetValue(remoteId, out var session))
         {
-            throw new WaypipeException($"remote id {remoteId} names no video stream this channel opened");
+            throw new WaypipeException($"Remote id {remoteId} names no video stream that this channel opened.");
         }
 
         if (!_images.TryGetValue(remoteId, out var image) || image.IsReleased)
@@ -484,7 +484,15 @@ public sealed class WaypipeEngine : IDisposable
 
             if (!accepted && _awaitingImage is not null)
             {
-                Log.Warn($"a video packet for remote id {remoteId} was not accepted");
+                if (FirstVideoFault())
+                {
+                    Log.Warn($"video: decoder refused a packet for remote id {remoteId}");
+                }
+                else
+                {
+                    Log.Debug($"video: decoder refused a packet for remote id {remoteId}");
+                }
+
                 ClearAwaiting();
             }
 
@@ -493,7 +501,14 @@ public sealed class WaypipeEngine : IDisposable
 
         if (!session.Decode(packet, image.Pixels, image.Stride))
         {
-            Log.Warn($"a video packet for remote id {remoteId} produced no frame");
+            if (FirstVideoFault())
+            {
+                Log.Warn($"video: packet for remote id {remoteId} produced no frame");
+            }
+            else
+            {
+                Log.Debug($"video: packet for remote id {remoteId} produced no frame");
+            }
         }
     }
 
@@ -506,18 +521,40 @@ public sealed class WaypipeEngine : IDisposable
 
         if (_awaitingImage is null || _awaitingRemoteId != remoteId)
         {
-            Log.Warn($"remote id {remoteId} completed a frame this channel was not waiting for");
+            if (FirstVideoFault())
+            {
+                Log.Warn($"video: remote id {remoteId} completed an unexpected frame, frame ignored");
+            }
+            else
+            {
+                Log.Debug($"video: remote id {remoteId} completed an unexpected frame, frame ignored");
+            }
+
             return;
         }
 
         if (destination != _awaitingImage.Pixels)
         {
-            Log.Warn($"remote id {remoteId} completed a frame into a destination other than its own region");
+            if (FirstVideoFault())
+            {
+                Log.Warn($"video: remote id {remoteId} completed a frame into a different region");
+            }
+            else
+            {
+                Log.Debug($"video: remote id {remoteId} completed a frame into a different region");
+            }
         }
 
         if (!produced)
         {
-            Log.Warn($"a video packet for remote id {remoteId} produced no frame");
+            if (FirstVideoFault())
+            {
+                Log.Warn($"video: packet for remote id {remoteId} produced no frame");
+            }
+            else
+            {
+                Log.Debug($"video: packet for remote id {remoteId} produced no frame");
+            }
         }
 
         ClearAwaiting();
@@ -578,49 +615,49 @@ public sealed class WaypipeEngine : IDisposable
         if (planes != 1)
         {
             throw new WaypipeException(
-                $"remote id {remoteId} declares {planes} planes; a waypipe slice is single-plane and linear");
+                $"Remote id {remoteId} declares {planes} planes. A waypipe slice must have one linear plane.");
         }
 
         var format = (DrmFormat)fourcc;
         if (!TryBytesPerPixel(format, out var bytesPerPixel))
         {
             throw new WaypipeException(
-                $"remote id {remoteId} names fourcc 0x{fourcc:x8}, which this channel cannot back with a linear region");
+                $"Remote id {remoteId} names fourcc 0x{fourcc:x8}, which the channel cannot hold in a linear region.");
         }
 
         if (width <= 0 || height <= 0)
         {
-            throw new WaypipeException($"remote id {remoteId} declares a {width}x{height} image");
+            throw new WaypipeException($"Remote id {remoteId} declares a {width}x{height} image, which is not a valid size.");
         }
 
         if (stride < (long)width * bytesPerPixel || stride > int.MaxValue / 2)
         {
             throw new WaypipeException(
-                $"remote id {remoteId} declares stride {stride} for {width} pixels of {bytesPerPixel} bytes");
+                $"Remote id {remoteId} declares stride {stride}, which does not fit {width} pixels of {bytesPerPixel} bytes.");
         }
 
         var size = (long)height * stride;
         if (size > _limits.MaxRegionBytes)
         {
-            throw new WaypipeException($"remote id {remoteId} names a {size} byte image");
+            throw new WaypipeException($"Remote id {remoteId} names an image of {size} bytes, which is not a valid size.");
         }
 
         if (declaredSize is { } declared && size != declared)
         {
             throw new WaypipeException(
-                $"remote id {remoteId} declares {declared} bytes and its slice measures {size}");
+                $"Remote id {remoteId} declares {declared} bytes, but its slice measures {size} bytes.");
         }
 
         Sweep();
         if (_regions.ContainsKey(remoteId) || _images.ContainsKey(remoteId) || _pipes.ContainsKey(remoteId))
         {
-            throw new WaypipeException($"remote id {remoteId} already exists");
+            throw new WaypipeException($"Remote id {remoteId} already exists.");
         }
 
         if (_regions.Count + _images.Count + _pipes.Count >= _limits.MaxRemoteIds ||
             _regionBytes + size > _limits.MaxTotalRegionBytes)
         {
-            throw new WaypipeException("the channel has asked for more shared memory than it is allowed");
+            throw new WaypipeException("The peer asked for more shared memory than the channel limit allows.");
         }
 
         var region = new SharedMemoryRegion((int)size);
@@ -669,7 +706,7 @@ public sealed class WaypipeEngine : IDisposable
 
         if (size > _limits.MaxRegionBytes || _regionBytes + (size - region.Size) > _limits.MaxTotalRegionBytes)
         {
-            throw new WaypipeException($"growing remote id {remoteId} to {size} bytes is over the channel's budget");
+            throw new WaypipeException($"Remote id {remoteId} cannot grow to {size} bytes. That is over the budget of the channel.");
         }
 
         _regionBytes += size - region.Size;
@@ -682,7 +719,7 @@ public sealed class WaypipeEngine : IDisposable
         if (end <= start || start < 0 || end > region.Size)
         {
             throw new WaypipeException(
-                $"a fill for remote id {remoteId} names [{start},{end}) of a {region.Size} byte region");
+                $"A fill for remote id {remoteId} names [{start},{end}), outside a region of {region.Size} bytes.");
         }
 
         region.Touch(end);
@@ -696,13 +733,13 @@ public sealed class WaypipeEngine : IDisposable
         if (diffSize < 0 || trailing < 0 || diffSize % 4 != 0)
         {
             throw new WaypipeException(
-                $"a diff for remote id {remoteId} declares {diffSize} bytes of blocks and {trailing} trailing");
+                $"A diff for remote id {remoteId} declares {diffSize} bytes of blocks and {trailing} trailing bytes, which do not agree.");
         }
 
         var declared = (long)diffSize + trailing;
         if (declared > region.Size + 8L || declared > _limits.MaxRegionBytes)
         {
-            throw new WaypipeException($"a diff for remote id {remoteId} is longer than the region it applies to");
+            throw new WaypipeException($"A diff for remote id {remoteId} is longer than its region.");
         }
 
         var total = (int)declared;
@@ -720,7 +757,7 @@ public sealed class WaypipeEngine : IDisposable
         {
             if (position + 8 > diffSize)
             {
-                throw new WaypipeException($"a diff for remote id {remoteId} ends inside an interval header");
+                throw new WaypipeException($"A diff for remote id {remoteId} ends inside an interval header.");
             }
 
             var start = (long)BinaryPrimitives.ReadUInt32LittleEndian(diff[position..]) * 4;
@@ -730,7 +767,7 @@ public sealed class WaypipeEngine : IDisposable
             if (end <= start || end > size || position + (end - start) > diffSize)
             {
                 throw new WaypipeException(
-                    $"a diff for remote id {remoteId} names [{start},{end}) of a {size} byte region");
+                    $"A diff for remote id {remoteId} names [{start},{end}), outside a region of {size} bytes.");
             }
 
             mapped.Touch((int)end);
@@ -742,7 +779,7 @@ public sealed class WaypipeEngine : IDisposable
         {
             if (trailing > size)
             {
-                throw new WaypipeException($"a diff for remote id {remoteId} has more trailing bytes than the region holds");
+                throw new WaypipeException($"A diff for remote id {remoteId} has more trailing bytes than its region holds.");
             }
 
             mapped.Touch(size);
@@ -754,7 +791,7 @@ public sealed class WaypipeEngine : IDisposable
     {
         if (_regions.ContainsKey(remoteId) || _images.ContainsKey(remoteId) || _pipes.ContainsKey(remoteId))
         {
-            throw new WaypipeException($"remote id {remoteId} already exists");
+            throw new WaypipeException($"Remote id {remoteId} already exists.");
         }
 
         var pipe = new WaypipePipe(remoteId, kind, _limits.MaxPipeBytes);
@@ -767,12 +804,12 @@ public sealed class WaypipeEngine : IDisposable
         Sweep();
         if (_regions.ContainsKey(remoteId) || _images.ContainsKey(remoteId) || _pipes.ContainsKey(remoteId))
         {
-            throw new WaypipeException($"remote id {remoteId} already exists");
+            throw new WaypipeException($"Remote id {remoteId} already exists.");
         }
 
         if (_regions.Count + _images.Count + _pipes.Count >= _limits.MaxRemoteIds)
         {
-            throw new WaypipeException("the channel has opened more remote ids than it is allowed");
+            throw new WaypipeException("The peer opened more remote ids than the channel limit allows.");
         }
 
         var pipe = new WaypipePipe(remoteId, type, _limits.MaxPipeBytes);
@@ -820,7 +857,18 @@ public sealed class WaypipeEngine : IDisposable
     private SharedMemoryRegion RegionOf(int remoteId) =>
         TryResolve(remoteId, out var region)
             ? region
-            : throw new WaypipeException($"remote id {remoteId} names no file this channel opened");
+            : throw new WaypipeException($"Remote id {remoteId} names no file that this channel opened.");
+
+    private bool FirstVideoFault()
+    {
+        if (_videoFaultWarned)
+        {
+            return false;
+        }
+
+        _videoFaultWarned = true;
+        return true;
+    }
 
     private bool TryResolve(int remoteId, out SharedMemoryRegion region)
     {
@@ -899,7 +947,7 @@ public sealed class WaypipeEngine : IDisposable
                 if (payload.Length != destination.Length)
                 {
                     throw new WaypipeException(
-                        $"an uncompressed payload of {payload.Length} bytes fills {destination.Length}");
+                        $"An uncompressed payload of {payload.Length} bytes does not match its destination of {destination.Length} bytes.");
                 }
 
                 payload.CopyTo(destination);
@@ -913,13 +961,13 @@ public sealed class WaypipeEngine : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    throw new WaypipeException("an LZ4 block did not decode", ex);
+                    throw new WaypipeException("An LZ4 block did not decode.", ex);
                 }
 
                 if (written != destination.Length)
                 {
                     throw new WaypipeException(
-                        $"an LZ4 block decoded to {written} bytes where {destination.Length} were promised");
+                        $"An LZ4 block decoded to {written} bytes, but the frame promised {destination.Length} bytes.");
                 }
 
                 return;
@@ -932,19 +980,19 @@ public sealed class WaypipeEngine : IDisposable
                 }
                 catch (Exception ex) when (ex is ZstdException or ArgumentException or InvalidOperationException)
                 {
-                    throw new WaypipeException("a zstd frame did not decode", ex);
+                    throw new WaypipeException("A zstd frame did not decode.", ex);
                 }
 
                 if (unwrapped != destination.Length)
                 {
                     throw new WaypipeException(
-                        $"a zstd frame decoded to {unwrapped} bytes where {destination.Length} were promised");
+                        $"A zstd frame decoded to {unwrapped} bytes, but the frame promised {destination.Length} bytes.");
                 }
 
                 return;
 
             default:
-                throw new WaypipeException($"this transport does not decompress {Compression}");
+                throw new WaypipeException($"The transport cannot decompress {Compression}.");
         }
     }
 
@@ -962,7 +1010,7 @@ public sealed class WaypipeEngine : IDisposable
     {
         if (!condition)
         {
-            throw new WaypipeException($"a {type} message is too short to carry {what}");
+            throw new WaypipeException($"A {type} message is too short to carry {what}.");
         }
     }
 

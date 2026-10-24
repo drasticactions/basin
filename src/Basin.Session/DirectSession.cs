@@ -53,9 +53,8 @@ public sealed class DirectSession : ISession
         if (fd < 0)
         {
             throw new InvalidOperationException(
-                $"open {path} failed (errno {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}). " +
-                "Direct device access needs membership in the video/input groups; " +
-                "prefer a seat manager (seatd/logind).");
+                $"Cannot open {path}, errno {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}. " +
+                "Add the user to the video and input groups, or use a seat manager such as seatd or logind.");
         }
 
         return new DirectDevice(fd, path);
@@ -83,7 +82,7 @@ public sealed class DirectSession : ISession
     /// Always raises <see cref="NotSupportedException"/>, because no seat manager is available to switch sessions.
     /// </summary>
     /// <param name="session">The number of the target session. It is not used.</param>
-    public void SwitchSession(int session) => throw new NotSupportedException("no seat manager to switch sessions");
+    public void SwitchSession(int session) => throw new NotSupportedException("No seat manager is available to switch sessions.");
 
     /// <summary>
     /// Does nothing. Each device closes when the caller disposes it.

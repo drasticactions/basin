@@ -57,14 +57,14 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
         if (fd < 0)
         {
             Log.Warn(
-                $"{_backend.DevicePath}: cannot open a lease enumeration fd " +
-                $"(errno {Marshal.GetLastPInvokeError()}); clients see a card they cannot enumerate");
+                $"{_backend.DevicePath}: lease enumeration fd does not open (errno {Marshal.GetLastPInvokeError()}), " +
+                $"clients cannot enumerate the card");
             return -1;
         }
 
         if (Libdrm.drmIsMaster(fd) != 0 && Libdrm.drmDropMaster(fd) != 0)
         {
-            Log.Warn($"{_backend.DevicePath}: lease enumeration fd is master and will not drop it; withholding it");
+            Log.Warn($"{_backend.DevicePath}: lease enumeration fd does not drop DRM master, fd withheld");
             _ = CloseFd(fd);
             return -1;
         }
@@ -117,7 +117,7 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
 
         if (fd < 0)
         {
-            Log.Warn($"{_backend.DevicePath}: lease of {objectIds.Length} object(s) refused ({fd})");
+            Log.Warn($"{_backend.DevicePath}: lease of {objectIds.Length} object(s) refused (error {fd})");
             return false;
         }
 

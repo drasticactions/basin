@@ -84,7 +84,7 @@ public sealed class XdgToplevelDragManager : IDisposable
             {
                 manager.PostError(
                     (uint)XdgToplevelDragManagerV1.Error.InvalidSource,
-                    "the data source already has a toplevel drag");
+                    "The data source already has a toplevel drag.");
                 return;
             }
 
@@ -112,7 +112,7 @@ public sealed class XdgToplevelDragManager : IDisposable
             {
                 if (_owner._drags?.DraggingSource?.Resource == _source)
                 {
-                    resource.PostError((uint)XdgToplevelDragV1.Error.OngoingDrag, "the drag has not ended");
+                    resource.PostError((uint)XdgToplevelDragV1.Error.OngoingDrag, "The drag has not ended.");
                 }
             };
             resource.Destroyed += (_, _) =>
@@ -130,7 +130,7 @@ public sealed class XdgToplevelDragManager : IDisposable
         {
             if (_toplevel is not null)
             {
-                _resource.PostError((uint)XdgToplevelDragV1.Error.ToplevelAttached, "a toplevel is already attached");
+                _resource.PostError((uint)XdgToplevelDragV1.Error.ToplevelAttached, "A toplevel is already attached to the drag.");
                 return;
             }
 

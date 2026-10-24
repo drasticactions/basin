@@ -79,7 +79,7 @@ public sealed class AppMenuBus : IDisposable
     {
         if (_address is null)
         {
-            Log.Info($"this session has no D-Bus session bus; every window gets menus of the compositor's own");
+            Log.Info($"bus: no D-Bus session bus, every window gets the compositor's own menus");
             return null;
         }
 
@@ -92,7 +92,7 @@ public sealed class AppMenuBus : IDisposable
                 {
                     if (!_disposed)
                     {
-                        Log.Debug($"menu bus: {context.Exception.Message}");
+                        Log.Debug(context.Exception, $"bus: connection error");
                     }
                 },
             });
@@ -108,7 +108,7 @@ public sealed class AppMenuBus : IDisposable
         }
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException or System.Net.Sockets.SocketException)
         {
-            Log.Warn($"the session bus is not reachable ({error.Message}); every window gets menus of the compositor's own");
+            Log.Warn(error, $"bus: session bus not reachable, every window gets the compositor's own menus");
             return null;
         }
     }

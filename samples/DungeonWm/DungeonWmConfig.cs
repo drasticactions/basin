@@ -71,7 +71,7 @@ internal static class DungeonWmConfig
 
     private static Stream TemplateStream() =>
         typeof(DungeonWmConfig).Assembly.GetManifestResourceStream("dungeon-wm.toml")
-            ?? throw new InvalidOperationException("dungeon-wm.toml is not embedded");
+            ?? throw new InvalidOperationException("The dungeon-wm.toml template is not embedded in the program.");
 
     public static void Apply(DungeonWmSettings settings, TomlReader reader)
     {
@@ -309,7 +309,7 @@ internal static class DungeonWmConfig
                     }
                     else
                     {
-                        reader.Log.Warn($"[inspector] panels has no panel \"{panel}\"; the panels are {string.Join(", ", DungeonWmSettings.InspectorPanelNames)}");
+                        reader.Log.Warn($"[inspector] panels has no panel \"{panel}\", expected one of {string.Join(", ", DungeonWmSettings.InspectorPanelNames)}");
                     }
                 }
 

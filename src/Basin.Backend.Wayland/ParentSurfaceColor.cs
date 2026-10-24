@@ -154,7 +154,7 @@ internal sealed class ParentSurfaceColor : IDisposable
         entry.Proxy.Failed += (_, e) =>
         {
             entry.Failed = true;
-            Log.Debug($"the parent refused an image description for passthrough: {e.Msg}");
+            Log.Debug($"parent: image description for passthrough refused, {e.Msg}");
         };
         return entry;
     }

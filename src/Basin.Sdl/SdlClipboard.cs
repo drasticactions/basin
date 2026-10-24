@@ -179,7 +179,7 @@ public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
         _offer = offer;
         if (!SDL.SetClipboardData(_data, _cleanup, (nint)offer.Id, mimes, (nuint)mimes.Length))
         {
-            Log.Warn($"SDL_SetClipboardData failed: {SDL.GetError()}");
+            Log.Warn($"clipboard: host offer failed, SDL_SetClipboardData reports \"{SDL.GetError()}\"");
             _offer = previous;
             return;
         }
@@ -252,7 +252,7 @@ public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
         }
         catch (Exception error)
         {
-            Log.Error($"the clipboard data callback failed: {error}");
+            Log.Error(error, $"clipboard: data callback failed");
             return 0;
         }
     }
@@ -269,7 +269,7 @@ public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
         }
         catch (Exception error)
         {
-            Log.Error($"the clipboard cleanup callback failed: {error}");
+            Log.Error(error, $"clipboard: cleanup callback failed");
         }
     }
 

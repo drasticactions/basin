@@ -42,7 +42,7 @@ internal sealed class RiverXkbKeyboard
             {
                 resource.PostError(
                     (uint)RiverXkbKeyboardV1.Error.InvalidKeymap,
-                    "the keymap was never validated by this compositor");
+                    "The compositor did not validate this keymap.");
                 return;
             }
 

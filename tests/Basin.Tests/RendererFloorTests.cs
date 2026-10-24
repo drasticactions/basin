@@ -25,7 +25,7 @@ public sealed class RendererFloorTests
         var falls = new List<RendererFallback>();
         var error = Assert.Throws<InvalidOperationException>(
             () => RendererCatalog.CreateWithFallback(ref name, null, falls.Add, floor: "gl"));
-        Assert.Contains("no render node", error.Message);
+        Assert.Contains("render node", error.Message, StringComparison.Ordinal);
         Assert.Empty(falls);
 
         name = "gl";

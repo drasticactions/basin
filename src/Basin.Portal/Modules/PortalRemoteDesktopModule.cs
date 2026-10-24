@@ -113,7 +113,7 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
-        var bus = Bus ?? throw new InvalidOperationException("the portal bus is not connected");
+        var bus = Bus ?? throw new InvalidOperationException("The portal bus is not connected.");
         var session = new RemoteDesktopSession(this, bus, sessionHandle, appId);
         bus.Register(session);
         return ValueTask.FromResult((PortalResponse.Success, Results.With("session_id", VariantValue.String(session.Id))));
@@ -405,17 +405,17 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is not RemoteDesktopSession session || !session.IsStarted)
         {
-            throw PortalError.Denied("the session has not started");
+            throw PortalError.Denied("The session has not started.");
         }
 
         if (!EisLibrary.IsAvailable(out var whyNot))
         {
-            throw PortalError.Unsupported(whyNot ?? "libeis is not installed");
+            throw PortalError.Unsupported($"libeis is not available ({whyNot ?? "not installed"}).");
         }
 
         if (_sink is null)
         {
-            throw PortalError.Unsupported("this compositor injects no input");
+            throw PortalError.Unsupported("This compositor does not inject input.");
         }
 
         if (session.Eis is null)

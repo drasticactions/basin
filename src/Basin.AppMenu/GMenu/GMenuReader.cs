@@ -197,7 +197,7 @@ public sealed class GMenuReader : IAppMenuSource
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException or IndexOutOfRangeException)
         {
-            Log.Debug($"{_address.BusName}{MenuPath}: {error.Message}");
+            Log.Debug(error, $"gmenu: {_address.BusName}{MenuPath} subscribe failed");
             _bus.Post(Fail);
         }
     }
@@ -229,7 +229,7 @@ public sealed class GMenuReader : IAppMenuSource
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"{_address.BusName}{path} DescribeAll: {error.Message}");
+            Log.Debug(error, $"gmenu: {_address.BusName}{path} DescribeAll failed");
         }
     }
 
@@ -288,7 +288,7 @@ public sealed class GMenuReader : IAppMenuSource
         }
         catch (Exception error) when (error is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"{_address.BusName}{MenuPath} Start: {error.Message}");
+            Log.Debug(error, $"gmenu: {_address.BusName}{MenuPath} Start failed");
             _bus.Post(() =>
             {
                 if (!IsReady)

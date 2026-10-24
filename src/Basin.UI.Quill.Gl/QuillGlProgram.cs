@@ -175,7 +175,7 @@ internal sealed unsafe class QuillGlProgram : IDisposable
                 var log = gl.GetShaderInfoLog(shader);
                 gl.DeleteShader(shader);
                 gl.DeleteProgram(program);
-                throw new InvalidOperationException($"Quill {label} {type}: {log}");
+                throw new InvalidOperationException($"The Quill {label} {type} shader did not compile. {log.Trim()}");
             }
 
             gl.AttachShader(program, shader);
@@ -188,7 +188,7 @@ internal sealed unsafe class QuillGlProgram : IDisposable
         {
             var log = gl.GetProgramInfoLog(program);
             gl.DeleteProgram(program);
-            throw new InvalidOperationException($"Quill {label} link: {log}");
+            throw new InvalidOperationException($"The Quill {label} program did not link. {log.Trim()}");
         }
 
         return program;

@@ -119,7 +119,7 @@ public sealed class IpcHeldCall
     {
         if (IsDone)
         {
-            throw new InvalidOperationException("a held call is answered once");
+            throw new InvalidOperationException("The held call is already answered. Answer a held call once only.");
         }
 
         IsDone = true;

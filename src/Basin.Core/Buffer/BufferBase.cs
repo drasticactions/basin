@@ -89,7 +89,7 @@ public abstract class BufferBase : IBuffer
         _thread.Assert();
         if (_lockCount <= 0)
         {
-            throw new InvalidOperationException("Unlock without a matching Lock.");
+            throw new InvalidOperationException("Unlock was called without a matching Lock.");
         }
 
         _lockCount--;
@@ -158,7 +158,7 @@ public abstract class BufferBase : IBuffer
         _thread.Assert();
         if (_accessDepth <= 0)
         {
-            throw new InvalidOperationException("EndDataAccess without a matching BeginDataAccess.");
+            throw new InvalidOperationException("EndDataAccess was called without a matching BeginDataAccess.");
         }
 
         _accessDepth--;

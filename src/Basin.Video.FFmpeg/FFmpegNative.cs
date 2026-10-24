@@ -126,7 +126,7 @@ internal static unsafe class FFmpegNative
         }
         catch (EntryPointNotFoundException missing)
         {
-            return $"the FFmpeg libraries on this host miss an entry point: {missing.Message}";
+            return $"the FFmpeg libraries on this host lack an entry point ({missing.Message})";
         }
 
         var avcodecMajor = (int)(avcodec_version() >> 16);
@@ -165,7 +165,7 @@ internal static unsafe class FFmpegNative
         av_log_set_level(LogWarning);
         av_log_set_callback((nint)(delegate* unmanaged[Cdecl]<nint, int, byte*, byte*, void>)&LogCallback);
         Log.Debug(
-            $"ffmpeg: decode over {avcodecName} {avcodecMajor}, {avutilName} {avutilMajor}, {swscaleName} {swscaleMajor}");
+            $"decoding over {avcodecName} {avcodecMajor}, {avutilName} {avutilMajor}, {swscaleName} {swscaleMajor}");
         return null;
     }
 
@@ -250,8 +250,9 @@ internal static unsafe class FFmpegNative
 
             return fallback;
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log.Error(e, $"get_format callback failed, no pixel format chosen");
             return -1;
         }
     }
@@ -284,8 +285,9 @@ internal static unsafe class FFmpegNative
                 Log.Warn($"{text}");
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log.Error(e, $"log callback failed");
         }
     }
 }

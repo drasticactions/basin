@@ -108,7 +108,8 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            ShowAlert("Empty Trash", $"The Trash could not be emptied: {error.Message}", ["OK"], _ => { }, icon: "stop");
+            _log.Warn(error, $"finder: cannot empty the Trash");
+            ShowAlert("Empty Trash", FileErrorText("The Trash could not be emptied", error), ["OK"], _ => { }, icon: "stop");
         }
 
         RefreshTrash();

@@ -534,7 +534,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
 
         if (!ForgetConsumed(key) && _pressedKeys.Contains(key))
         {
-            SeatLog.Log.Debug($"key {key}: the press reached the client, so its consumed release is delivered too");
+            SeatLog.Log.Debug($"keyboard: key {key} press reached the client, its consumed release is delivered too");
             DeliverKey((uint)Environment.TickCount64, key, state);
             return;
         }
@@ -904,7 +904,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
         catch (XkbException error)
         {
-            SeatLog.Log.Debug($"keyboard: no compose table for {locale}: {error.Message}");
+            SeatLog.Log.Debug(error, $"keyboard: no compose table for {locale}");
             _compose = null;
         }
 

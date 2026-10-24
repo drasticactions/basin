@@ -31,6 +31,6 @@ public static class BasinLogging
         "info" => BasinLogLevel.Info,
         "warn" => BasinLogLevel.Warn,
         "error" => BasinLogLevel.Error,
-        _ => throw new ArgumentException($"unknown log level '{name}'", nameof(name)),
+        _ => throw new ArgumentException($"The log level '{name}' is unknown. Use trace, debug, info, warn or error.", nameof(name)),
     };
 }

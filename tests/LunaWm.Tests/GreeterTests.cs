@@ -55,7 +55,7 @@ public sealed class GreeterTests
         Assert.NotNull(await session.WaitForAsync(line => line == "LOGIN failed auth_error"));
         var mark = session.Mark();
         Assert.NotNull(await session.WaitForAsync(
-            line => line.StartsWith("VIEW conversation user=Charles Babbage prompt=\"Password:\" error=\"Login incorrect\" secret=yes", StringComparison.Ordinal),
+            line => line.StartsWith("VIEW conversation user=Charles Babbage prompt=\"Password:\" error=\"Your username or password is incorrect. Try again.\" secret=yes", StringComparison.Ordinal),
             poke: "where", since: mark));
         await session.SendAsync("type right");
         await session.SendAsync("submit");

@@ -17,7 +17,7 @@ internal sealed partial class TinyComp
         {
             if (!p.TryGetString("preset", out var name))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "preset is curved or off");
+                reply.Error(IpcErrorCodes.InvalidParams, "'preset' must be curved or off.");
                 return;
             }
 
@@ -33,7 +33,7 @@ internal sealed partial class TinyComp
             }
             else
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"no grid effects preset {name}");
+                reply.Error(IpcErrorCodes.InvalidParams, $"No grid effects preset is named {name}. Use curved or off.");
                 return;
             }
 

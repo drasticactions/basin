@@ -66,7 +66,7 @@ public static class XkbGrid
     public static KeyboardLayout Standard(XkbKeymap keymap, uint layoutIndex, KeyboardLayout? template = null, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(keymap);
-        template ??= KeyboardLayouts.Load("win8-standard-en-us") ?? throw new InvalidOperationException("win8-standard-en-us is not embedded");
+        template ??= KeyboardLayouts.Load("win8-standard-en-us") ?? throw new InvalidOperationException("The layout win8-standard-en-us is not embedded in the assembly.");
         return Shape(keymap, layoutIndex, template, "xkb-standard", language, [TopRow, HomeRow, BottomRow], lettersOnly: true);
     }
 
@@ -82,7 +82,7 @@ public static class XkbGrid
     public static KeyboardLayout Full(XkbKeymap keymap, uint layoutIndex, KeyboardLayout? template = null, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(keymap);
-        template ??= KeyboardLayouts.Load("win8-full-en-us") ?? throw new InvalidOperationException("win8-full-en-us is not embedded");
+        template ??= KeyboardLayouts.Load("win8-full-en-us") ?? throw new InvalidOperationException("The layout win8-full-en-us is not embedded in the assembly.");
         return Shape(keymap, layoutIndex, template, "xkb-full", language, [FullNumberRow, FullTopRow, FullHomeRow, FullBottomRow], lettersOnly: false);
     }
 

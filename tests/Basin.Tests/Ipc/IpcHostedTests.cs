@@ -134,7 +134,7 @@ public sealed class IpcHostedTests
 
         var covered = Parse(peer.Call($$$"""{"method":"input/pointer-button","params":{"button":"left","window":"{{{underId}}}","x":150,"y":100}}"""));
         Assert.Equal(IpcErrorCodes.Refused, covered.GetProperty("error").GetProperty("code").GetString());
-        Assert.Equal($"window {underId} is covered at (150, 100) by window {overId}", covered.GetProperty("error").GetProperty("message").GetString());
+        Assert.Contains($"Window {overId} covers window {underId} at (150, 100)", covered.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
         rig.Harness.Pump();
         Assert.DoesNotContain("press", log);
 
@@ -211,7 +211,7 @@ public sealed class IpcHostedTests
 
         var timedOut = Parse(peer.Receive()).GetProperty("error");
         Assert.Equal(IpcErrorCodes.Failed, timedOut.GetProperty("code").GetString());
-        Assert.Contains("the last commit was", timedOut.GetProperty("message").GetString());
+        Assert.Contains("last commit was", timedOut.GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Equal(IpcErrorCodes.NotFound, ErrorCode(peer.Call("""{"method":"windows/wait-idle","params":{"id":424242}}""")));
     }
 

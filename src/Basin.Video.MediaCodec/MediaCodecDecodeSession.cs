@@ -35,7 +35,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
     {
         if (!PixelRows.IsSupported(format))
         {
-            throw new NotSupportedException($"MediaCodec frames are not packed into {format}");
+            throw new NotSupportedException($"MediaCodec frames cannot be packed into {format}.");
         }
 
         _mime = mime;
@@ -45,7 +45,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         _codec = CreateDecoder(mime);
         if (_codec == 0)
         {
-            throw new NotSupportedException($"this device lists no {mime} decoder");
+            throw new NotSupportedException($"This device has no {mime} decoder.");
         }
 
         var configuration = AMediaFormat_new();
@@ -59,7 +59,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         {
             AMediaCodec_delete(_codec);
             _codec = 0;
-            throw new InvalidOperationException($"AMediaCodec_configure failed for {mime}: {configured}");
+            throw new InvalidOperationException($"AMediaCodec_configure failed for {mime} with status {configured}.");
         }
 
         var started = AMediaCodec_start(_codec);
@@ -67,7 +67,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         {
             AMediaCodec_delete(_codec);
             _codec = 0;
-            throw new InvalidOperationException($"AMediaCodec_start failed for {mime}: {started}");
+            throw new InvalidOperationException($"AMediaCodec_start failed for {mime} with status {started}.");
         }
 
         MediaCodecCensus.Track();
@@ -100,7 +100,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         var inputIndex = AMediaCodec_dequeueInputBuffer(_codec, InputTimeoutUs);
         if (inputIndex < 0)
         {
-            Log.Warn($"the {_mime} decoder offered no input buffer within {InputTimeoutUs / 1000} ms");
+            Log.Debug($"{_mime}: no input buffer within {InputTimeoutUs / 1000} ms");
             return false;
         }
 
@@ -108,7 +108,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         var input = AMediaCodec_getInputBuffer(_codec, (nuint)inputIndex, &capacity);
         if (input == null || capacity < (nuint)packet.Length)
         {
-            Log.Warn($"a {packet.Length} byte packet does not fit the decoder's {capacity} byte input buffer");
+            Log.Debug($"{_mime}: a {packet.Length} byte packet does not fit the {capacity} byte input buffer");
             AMediaCodec_queueInputBuffer(_codec, (nuint)inputIndex, 0, 0, 0, 0);
             return false;
         }
@@ -119,7 +119,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         _frameIndex++;
         if (queued != 0)
         {
-            Log.Warn($"AMediaCodec_queueInputBuffer failed: {queued}");
+            Log.Debug($"{_mime}: AMediaCodec_queueInputBuffer failed with status {queued}");
             return false;
         }
 
@@ -158,11 +158,11 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
                 continue;
             }
 
-            Log.Warn($"AMediaCodec_dequeueOutputBuffer failed: {outputIndex}");
+            Log.Debug($"{_mime}: AMediaCodec_dequeueOutputBuffer failed with status {outputIndex}");
             return false;
         }
 
-        Log.Warn($"the {_mime} decoder produced no frame within {OutputAttempts * OutputTimeoutUs / 1000} ms, and the peer encodes with delay 0");
+        Log.Debug($"{_mime}: no frame within {OutputAttempts * OutputTimeoutUs / 1000} ms");
         return false;
     }
 
@@ -186,7 +186,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         var needed = lumaSize + ((long)chromaStride * chromaRows);
         if (info.Offset + needed > (long)size)
         {
-            Log.Warn($"a {size} byte output buffer is smaller than the {needed} bytes its format describes");
+            Log.Debug($"{_mime}: a {size} byte output buffer is smaller than the {needed} bytes of its format");
             return false;
         }
 
@@ -194,7 +194,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         var visibleHeight = _frameHeight;
         if (visibleWidth < _width || visibleHeight < _height)
         {
-            Log.Warn($"a {visibleWidth}x{visibleHeight} frame cannot fill a {_width}x{_height} buffer");
+            Log.Debug($"{_mime}: a {visibleWidth}x{visibleHeight} frame cannot fill a {_width}x{_height} buffer");
             return false;
         }
 
@@ -226,7 +226,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
         var format = AMediaCodec_getOutputFormat(_codec);
         if (format == 0)
         {
-            Log.Warn($"the {_mime} decoder reports no output format");
+            Log.Warn($"{_mime}: the decoder reports no output format");
             return false;
         }
 
@@ -236,7 +236,7 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
                 || !TryGetInt32(format, "width\0"u8, out _frameWidth)
                 || !TryGetInt32(format, "height\0"u8, out _frameHeight))
             {
-                Log.Warn($"the {_mime} decoder's output format names no color format or size");
+                Log.Warn($"{_mime}: the output format has no color format or size");
                 return false;
             }
 
@@ -280,11 +280,11 @@ internal sealed unsafe class MediaCodecDecodeSession : IVideoDecodeSession
                 break;
 
             case ColorFormatYuv420Flexible:
-                Log.Warn($"the {_mime} decoder reports the flexible YUV420 format; its buffer is read as semi-planar");
+                Log.Warn($"{_mime}: flexible YUV420 output, read as semi-planar");
                 break;
 
             default:
-                Log.Warn($"the {_mime} decoder produces color format 0x{_colorFormat:x8}, which this session cannot read");
+                Log.Warn($"{_mime}: color format 0x{_colorFormat:x8} is not supported");
                 return false;
         }
 

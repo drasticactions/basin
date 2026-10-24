@@ -8,7 +8,7 @@ namespace Basin.Ipc;
 /// </summary>
 public sealed class IpcCaptureToConverter : JsonConverter<IpcCaptureTo>
 {
-    private const string Shape = "'to' is {\"path\": ...}, \"fd\" or \"inline\"";
+    private const string Shape = "'to' must be {\"path\": ...}, \"fd\" or \"inline\".";
 
     /// <summary>
     /// Reads one of the three target shapes. Other keys in the path object are skipped.

@@ -1,6 +1,5 @@
 using Basin;
 using Basin.Capabilities;
-using Basin.Diagnostics;
 using Basin.Portal.Client;
 using Basin.WindowManager.Skia.Protocol;
 using Basin.Portal;
@@ -13,16 +12,14 @@ internal sealed class AvaloniaPromptHost : IPortalPromptHost, IDisposable
     private readonly ZwlrLayerShellV1? _layerShell;
     private readonly ClientOutputs _outputs;
     private readonly ClientLoop _loop;
-    private readonly BasinLogger _log;
     private readonly List<AvaloniaPromptSurface> _shown = [];
 
-    public AvaloniaPromptHost(ClientGlobals globals, ZwlrLayerShellV1? layerShell, ClientOutputs outputs, ClientLoop loop, BasinLogger log)
+    public AvaloniaPromptHost(ClientGlobals globals, ZwlrLayerShellV1? layerShell, ClientOutputs outputs, ClientLoop loop)
     {
         _globals = globals;
         _layerShell = layerShell;
         _outputs = outputs;
         _loop = loop;
-        _log = log;
     }
 
     public int Open => _shown.Count;
@@ -34,8 +31,7 @@ internal sealed class AvaloniaPromptHost : IPortalPromptHost, IDisposable
         if (_layerShell is not { } layerShell || _globals.Compositor is not { } compositor ||
             _globals.Shm is not { } shm || output is not ClientOutput portal)
         {
-            _log.Warn($"no layer shell to show a portal prompt");
-            throw new InvalidOperationException("the compositor serves no layer shell to show a portal prompt on");
+            throw new InvalidOperationException("The compositor has no layer shell. A portal prompt needs one to show.");
         }
 
         var box = _outputs.Layout.BoxOf(output);

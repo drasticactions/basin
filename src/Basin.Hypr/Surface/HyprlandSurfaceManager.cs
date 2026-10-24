@@ -71,7 +71,7 @@ public sealed class HyprlandSurfaceManager : IDisposable
             {
                 manager.PostError(
                     (uint)HyprlandSurfaceManagerV1.Error.AlreadyConstructed,
-                    "wl_surface already has a hyprland surface object");
+                    "The wl_surface already has a hyprland surface object.");
                 return;
             }
 
@@ -90,14 +90,14 @@ public sealed class HyprlandSurfaceManager : IDisposable
             {
                 if (!alive)
                 {
-                    resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_opacity called for a destroyed wl_surface");
+                    resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_opacity came for a destroyed wl_surface.");
                     return;
                 }
 
                 var opacity = oe.Opacity.ToDouble();
                 if (opacity < 0.0 || opacity > 1.0)
                 {
-                    resource.PostError((uint)HyprlandSurfaceV1.Error.OutOfRange, "opacity is outside the range 0.0 - 1.0");
+                    resource.PostError((uint)HyprlandSurfaceV1.Error.OutOfRange, "The opacity must be from 0.0 to 1.0.");
                     return;
                 }
 
@@ -107,7 +107,7 @@ public sealed class HyprlandSurfaceManager : IDisposable
             {
                 if (!alive)
                 {
-                    resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_visible_region called for a destroyed wl_surface");
+                    resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_visible_region came for a destroyed wl_surface.");
                     return;
                 }
 

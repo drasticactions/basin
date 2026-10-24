@@ -122,7 +122,7 @@ public sealed unsafe class SkiaVulkanTarget : IDisposable
         }
         else
         {
-            throw new InvalidOperationException("render target is neither importable nor CPU-accessible");
+            throw new InvalidOperationException("The render target is neither importable nor CPU-accessible.");
         }
 
         target.BackendTarget = SkiaCensus.Track(new GRBackendRenderTarget(buffer.Width, buffer.Height, new GRVkImageInfo

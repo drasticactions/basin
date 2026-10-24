@@ -41,7 +41,7 @@ public sealed unsafe class AudioSession : IDisposable
                 _synced = true;
             }
         };
-        _core.Error += (_, error) => Log.Warn($"PipeWire error on object {error.Id}: {error.Message} ({error.Result})");
+        _core.Error += (_, error) => Log.Warn($"pipewire: object {error.Id} reported an error, {error.Message} ({error.Result})");
         _registry = _core.GetRegistry();
         _registry.GlobalAdded += (_, global) => OnGlobalAdded(global);
         _registry.GlobalRemoved += (_, id) => OnGlobalRemoved(id);

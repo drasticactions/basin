@@ -81,13 +81,13 @@ internal sealed class SkiaColorLut : IColorLut
         var atlasShader = SkiaCensus.Track(atlas.ToShader(
             SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, new SKSamplingOptions(SKFilterMode.Linear)));
         var effect = SKRuntimeEffect.CreateColorFilter(Sksl, out var errors)
-            ?? throw new InvalidOperationException($"LUT effect failed to compile: {errors}");
+            ?? throw new InvalidOperationException($"The LUT effect did not compile: {errors}");
         SkiaCensus.Track(effect);
 
         var uniforms = new SKRuntimeEffectUniforms(effect) { { "n", (float)n }, { "shaper", lut.ShaperNits } };
         var children = new SKRuntimeEffectChildren(effect) { { "atlas", atlasShader } };
         var filter = effect.ToColorFilter(uniforms, children)
-            ?? throw new InvalidOperationException("LUT effect rejected its uniforms or children.");
+            ?? throw new InvalidOperationException("The LUT effect rejected its uniforms or children.");
         return new SkiaColorLut(atlas, atlasShader, effect, SkiaCensus.Track(filter));
     }
 

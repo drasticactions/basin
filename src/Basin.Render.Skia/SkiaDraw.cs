@@ -195,12 +195,12 @@ internal static class SkiaDraw
     {
         if (shader is not SkiaPixelShader skiaShader)
         {
-            throw new ArgumentException("shader does not belong to this renderer");
+            throw new ArgumentException("The shader does not come from this renderer.", nameof(shader));
         }
 
         if (skiaShader.SamplesTexture)
         {
-            throw new ArgumentException("shader samples a texture and must draw through AddTexture");
+            throw new ArgumentException("The shader samples a texture. Draw it through AddTexture.", nameof(shader));
         }
 
         if (options.DstBox.IsEmpty)
@@ -226,19 +226,19 @@ internal static class SkiaDraw
     {
         if (options.Shader is not SkiaPixelShader skiaShader)
         {
-            throw new ArgumentException("shader does not belong to this renderer");
+            throw new ArgumentException("The shader does not come from this renderer.", nameof(options));
         }
 
         if (!skiaShader.SamplesTexture)
         {
-            throw new ArgumentException("shader does not sample a texture");
+            throw new ArgumentException("The shader does not sample a texture. Draw it through AddShader.", nameof(options));
         }
 
         var sampling = options.Filter != TextureFilter.Linear ? NearestSampling : LinearSampling;
         var child = SkiaShaderNative.ImageShader(image.Handle, SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, &sampling, null);
         if (child == 0)
         {
-            throw new InvalidOperationException("image refused to make a shader");
+            throw new InvalidOperationException("Skia could not make a shader from the image.");
         }
 
         var filter = options.Lut is SkiaColorLut lut ? lut.Filter : transform?.Filter;
@@ -401,7 +401,7 @@ internal static class SkiaDraw
 
         if (vertices.Length % 3 != 0)
         {
-            throw new ArgumentException("vertices must be a whole number of triangles", nameof(vertices));
+            throw new ArgumentException("The vertex count must be a multiple of three.", nameof(vertices));
         }
 
         SKImage? image = null;

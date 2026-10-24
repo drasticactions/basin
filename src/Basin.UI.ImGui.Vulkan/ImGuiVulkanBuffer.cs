@@ -40,7 +40,7 @@ internal sealed unsafe class ImGuiVulkanBuffer
                 out var type))
         {
             vk.DestroyBuffer(device.Device, buffer, null);
-            throw new InvalidOperationException("no host-visible coherent memory for an imgui buffer");
+            throw new InvalidOperationException("No host-visible coherent memory is available for an imgui buffer.");
         }
 
         var allocate = new MemoryAllocateInfo

@@ -152,13 +152,13 @@ public sealed class MsStylesTheme
         var resources = PeResources.Read(file);
         if (!resources.TryFind("PACKTHEM_VERSION", 1, out var versionBytes) || versionBytes.Length != 2)
         {
-            throw new MsStylesFormatException("No PACKTHEM_VERSION resource: not a visual style.");
+            throw new MsStylesFormatException("The file has no PACKTHEM_VERSION resource. It is not a visual style.");
         }
 
         var format = BinaryPrimitives.ReadUInt16LittleEndian(versionBytes.Span);
         if (format is not (3 or 4))
         {
-            throw new MsStylesFormatException($"PACKTHEM_VERSION {format} is not supported (3 and 4 are).");
+            throw new MsStylesFormatException($"PACKTHEM_VERSION {format} is not supported. Use a theme of format 3 or 4.");
         }
 
         PeResources? muiResources = null;
@@ -188,7 +188,7 @@ public sealed class MsStylesTheme
         var resources = PeResources.Read(File.ReadAllBytes(path));
         if (!resources.TryFind("PACKTHEM_VERSION", 1, out var versionBytes) || versionBytes.Length != 2)
         {
-            throw new MsStylesFormatException("No PACKTHEM_VERSION resource: not a visual style.");
+            throw new MsStylesFormatException("The file has no PACKTHEM_VERSION resource. It is not a visual style.");
         }
 
         var format = BinaryPrimitives.ReadUInt16LittleEndian(versionBytes.Span);
@@ -206,7 +206,7 @@ public sealed class MsStylesTheme
 
         if (format != 4)
         {
-            throw new MsStylesFormatException($"PACKTHEM_VERSION {format} is not supported (3 and 4 are).");
+            throw new MsStylesFormatException($"PACKTHEM_VERSION {format} is not supported. Use a theme of format 3 or 4.");
         }
 
         if (!resources.TryFind("CMAP", "CMAP", out _) || resources.Names("VARIANT").Count == 0)

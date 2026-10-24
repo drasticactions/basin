@@ -32,10 +32,18 @@ internal sealed partial class System7Shell
             var document = File.Exists(path) ? TomlDocument.Load(path) : TomlDocument.Parse("");
             document.Set(table, key, value);
             document.Save(path);
+            _settingSaveFailed = false;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            _log.Warn($"cannot write {table}.{key} to {path}: {error.Message}");
+            _log.Warn(error, $"settings: cannot write {table}.{key} to {path}");
+            if (!_settingSaveFailed)
+            {
+                _settingSaveFailed = true;
+                ShowAlert("Control Panels", FileErrorText("The setting could not be saved", error), ["OK"], _ => { }, icon: "stop");
+            }
         }
     }
+
+    private bool _settingSaveFailed;
 }

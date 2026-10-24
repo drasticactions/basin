@@ -48,6 +48,32 @@ public sealed class SdlCompProcessTests
         AssertPainted(comp);
     }
 
+    [Fact]
+    public void A_headless_run_shows_weston_simple_shm_on_the_raster_row()
+    {
+        var client = SdlCompProcess.Which("weston-simple-shm");
+        Assert.SkipWhen(client is null, "weston-simple-shm is not installed");
+        using var comp = new SdlCompProcess("--windows", "headless", "--width", "640", "--height", "400");
+        Assert.Equal("HEADLESS gpu=off dmabuf=off", comp.WaitFor("HEADLESS ", TimeSpan.FromSeconds(10)));
+        comp.StartClient(client!);
+        Thread.Sleep(1500);
+        AssertPainted(comp);
+    }
+
+    [Fact]
+    public void A_headless_run_on_a_render_node_shows_a_dmabuf_gl_client()
+    {
+        const string node = "/dev/dri/renderD128";
+        Assert.SkipUnless(File.Exists(node), "no render node");
+        var client = SdlCompProcess.Which("weston-simple-egl");
+        Assert.SkipWhen(client is null, "weston-simple-egl is not installed");
+        using var comp = new SdlCompProcess("--windows", "headless", "--render-node", node, "--width", "640", "--height", "400");
+        Assert.Equal("HEADLESS gpu=on dmabuf=on", comp.WaitFor("HEADLESS ", TimeSpan.FromSeconds(10)));
+        comp.StartClient(client!);
+        Thread.Sleep(1500);
+        AssertPainted(comp);
+    }
+
     private static void AssertPainted(SdlCompProcess comp)
     {
         var shot = Path.Combine(comp.RuntimeDir, "shot.png");

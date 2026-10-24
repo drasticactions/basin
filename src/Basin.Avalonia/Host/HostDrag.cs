@@ -270,7 +270,7 @@ public sealed class HostDrag : IDisposable
                 stream.Write(buffer, 0, (int)got);
             }
 
-            Log.Warn($"a drag source stalled; the host drag carries nothing");
+            Log.Warn($"drag: source stalled, host drag carries no data");
             return null;
         }
         finally

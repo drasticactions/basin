@@ -1,4 +1,5 @@
 using System.Xml;
+using Basin.Diagnostics;
 
 namespace Basin.Freedesktop;
 
@@ -17,6 +18,8 @@ public sealed class MimeGlobs
     /// The MIME type that <see cref="TypeOf(string)"/> gives a name that no glob matches.
     /// </summary>
     public const string Unknown = "application/octet-stream";
+
+    private static readonly BasinLogger Log = BasinLog.For("freedesktop");
 
     private readonly IReadOnlyList<string> _dataDirectories;
     private readonly List<MimeGlob> _literals = [];
@@ -402,6 +405,7 @@ public sealed class MimeGlobs
         }
         catch (Exception error) when (error is XmlException or IOException or UnauthorizedAccessException)
         {
+            Log.Debug(error, $"{file}: comment not read");
         }
 
         return null;

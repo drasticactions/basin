@@ -93,7 +93,7 @@ public readonly record struct Chromaticities(
             ColorPrimaries.DciP3 => DciP3,
             ColorPrimaries.DisplayP3 => DisplayP3,
             ColorPrimaries.AdobeRgb => AdobeRgb,
-            { } unknown => throw new ArgumentOutOfRangeException(nameof(description), unknown, "unknown named primaries"),
+            { } unknown => throw new ArgumentOutOfRangeException(nameof(description), unknown, "The named primaries are not known."),
         };
     }
 }

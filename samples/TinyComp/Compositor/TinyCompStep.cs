@@ -540,6 +540,7 @@ internal sealed partial class TinyComp
             if (next is null)
             {
                 var reason = exists ? "NOT AN IMAGE" : "NOT FOUND";
+                var said = exists ? "not an image" : "not found";
                 var presets = exists ? string.Empty : $" (presets: {string.Join(", ", CanvasTextures.Names.ToArray())})";
                 var failure = $"{path} {reason} {stamp.Ticks}";
                 var repeated = texture.Failed == failure;
@@ -548,14 +549,14 @@ internal sealed partial class TinyComp
                 {
                     if (!repeated)
                     {
-                        _overviewLog.Warn($"{texture.Key} \"{path}\": {reason}{presets}, keeping {texture.Name}");
+                        _overviewLog.Warn($"{texture.Key} \"{path}\": {said}{presets}, keeping {texture.Name}");
                     }
 
                     errors.Add($"{texture.Key}=error:{reason.Replace(' ', '-')}");
                     return;
                 }
 
-                _overviewLog.Warn($"{texture.Key} \"{path}\": {reason}{presets}, drawing flat");
+                _overviewLog.Warn($"{texture.Key} \"{path}\": {said}{presets}, drawing flat");
                 name = OverviewSetting.NoTexture;
             }
             else

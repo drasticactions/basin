@@ -113,7 +113,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
         }
 
         var instanceExtensions = SDL.VulkanGetInstanceExtensions(out _) ??
-            throw new InvalidOperationException($"SDL names no Vulkan instance extensions: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL names no Vulkan instance extensions. SDL reports \"{SDL.GetError()}\".");
         if (OffersInstanceExtension(SwapchainColorspace))
         {
             instanceExtensions = [.. instanceExtensions, SwapchainColorspace];
@@ -127,7 +127,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
             }
             catch (Exception error) when (error is InvalidOperationException or DllNotFoundException)
             {
-                Log.Info($"the Vulkan lease cannot share {_renderNode} with the dmabuf importer ({error.Message}); using a device of its own");
+                Log.Warn(error, $"vulkan: lease cannot share {_renderNode} with the dmabuf importer, lease uses a device of its own");
                 ReleaseContext();
             }
         }
@@ -144,18 +144,18 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
             var device = skia.Device;
             if (!device.EnabledExtensions.Contains("VK_KHR_swapchain"))
             {
-                throw new InvalidOperationException("the render node device offers no VK_KHR_swapchain");
+                throw new InvalidOperationException("The render node device offers no VK_KHR_swapchain.");
             }
 
             Bind(device.Api, device.Instance, device.Physical, device.Device, device.Queue, device.QueueFamily);
             if (!PresentsTo(window))
             {
-                throw new InvalidOperationException("the render node device cannot present to the SDL window");
+                throw new InvalidOperationException("The render node device cannot present to the SDL window.");
             }
 
             _skia = skia;
             _context = skia.Context;
-            Log.Info($"Vulkan lease on {renderNode} with dmabuf import");
+            Log.Info($"vulkan: lease on {renderNode} with dmabuf import");
         }
         catch
         {
@@ -175,7 +175,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
         if (!api.TryGetInstanceExtension(instance, out KhrSurface surfaces) ||
             !api.TryGetDeviceExtension(instance, device, out KhrSwapchain swapchains))
         {
-            throw new InvalidOperationException("the Vulkan surface or swapchain functions are missing");
+            throw new InvalidOperationException("The Vulkan surface or swapchain functions are missing.");
         }
 
         Surfaces = surfaces;
@@ -186,7 +186,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
     {
         if (!SDL.VulkanCreateSurface(window.Handle, (nint)Instance.Handle, 0, out var raw))
         {
-            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed with \"{SDL.GetError()}\".");
         }
 
         var surface = new SurfaceKHR((ulong)raw);
@@ -229,7 +229,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
             Instance = instance;
             if (!api.TryGetInstanceExtension(instance, out KhrSurface surfaces))
             {
-                throw new InvalidOperationException("VK_KHR_surface is missing");
+                throw new InvalidOperationException("The Vulkan instance has no VK_KHR_surface.");
             }
 
             Surfaces = surfaces;
@@ -242,7 +242,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
 
         if (!SDL.VulkanCreateSurface(window.Handle, (nint)Instance.Handle, 0, out var raw))
         {
-            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL_Vulkan_CreateSurface failed with \"{SDL.GetError()}\".");
         }
 
         var surface = new SurfaceKHR((ulong)raw);
@@ -302,7 +302,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
         _context = GRContext.CreateVulkan(_backend) ??
             throw new InvalidOperationException("Ganesh could not create a Vulkan context on the SDL device.");
         SkiaCensus.Track(_context);
-        Log.Info($"Vulkan lease on a device of its own");
+        Log.Info($"vulkan: lease on a device of its own");
     }
 
     private static bool OffersInstanceExtension(string name)
@@ -383,7 +383,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
             }
         }
 
-        return fallback ?? throw new InvalidOperationException("no Vulkan device can present to the SDL window");
+        return fallback ?? throw new InvalidOperationException("No Vulkan device can present to the SDL window.");
     }
 
     private nint GetProcedureAddress(string name, nint instance, nint device) =>
@@ -395,7 +395,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
     {
         if (result != Result.Success)
         {
-            throw new InvalidOperationException($"{what} failed with {result}");
+            throw new InvalidOperationException($"{what} failed with {result}.");
         }
     }
 
@@ -440,7 +440,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
             return false;
         }
 
-        Log.Warn($"the Vulkan device was lost; building a new one");
+        Log.Warn($"vulkan: device lost, lease builds a new one");
         ReleaseContext();
         return true;
     }

@@ -49,10 +49,10 @@ internal sealed class SettingSlot : ISettingValue<bool>, ISettingValue<string>, 
 
             if (key.FlagKey is { } flag && _context.FromFlags.Contains(flag))
             {
-                return $"overridden by {key.Flag} this run";
+                return $"Set by {key.Flag} for this run";
             }
 
-            return key.Restart ? "applies after restart" : null;
+            return key.Restart ? "Applies after a restart" : null;
         }
     }
 

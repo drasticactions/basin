@@ -142,7 +142,7 @@ internal sealed class DepthStage : IPostStage, IDisposable
     private static byte[] LoadSpirV()
     {
         using var stream = typeof(DepthStage).Assembly.GetManifestResourceStream("depth.frag.spv")
-            ?? throw new InvalidOperationException("missing shader resource depth.frag.spv");
+            ?? throw new InvalidOperationException("The shader resource depth.frag.spv is not embedded in the program.");
         var code = new byte[stream.Length];
         stream.ReadExactly(code);
         return code;

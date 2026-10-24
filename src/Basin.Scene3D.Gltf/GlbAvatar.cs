@@ -28,12 +28,12 @@ public static class GlbAvatar
         var skins = document.Root.Skins ?? [];
         if (skins.Length == 0 || skins[0].Joints is not { Length: > 0 } joints)
         {
-            throw new InvalidDataException("the model has no skin");
+            throw new InvalidDataException("The model has no skin.");
         }
 
         if (joints.Length > Skeleton.MaxJoints)
         {
-            throw new InvalidDataException($"the skin has {joints.Length} joints; the pass takes at most {Skeleton.MaxJoints}");
+            throw new InvalidDataException($"The skin has {joints.Length} joints. The pass takes at most {Skeleton.MaxJoints}.");
         }
 
         var parents = document.Parents();
@@ -107,7 +107,7 @@ public static class GlbAvatar
             {
                 if ((primitive.Mode ?? 4) != 4)
                 {
-                    throw new NotSupportedException($"primitive mode {primitive.Mode} is not triangles");
+                    throw new NotSupportedException($"Primitive mode {primitive.Mode} is not supported. Only triangles are read.");
                 }
 
                 if (primitive.Attributes is not { } attributes ||
@@ -200,7 +200,7 @@ public static class GlbAvatar
             var mode = sampler.Interpolation ?? "LINEAR";
             if (mode is not ("LINEAR" or "STEP" or "CUBICSPLINE"))
             {
-                throw new NotSupportedException($"animation sampler interpolation {mode} is not supported");
+                throw new NotSupportedException($"Animation sampler interpolation {mode} is not supported.");
             }
 
             var step = mode == "STEP";

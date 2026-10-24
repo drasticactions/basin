@@ -27,12 +27,12 @@ public sealed record IpcCapture(
     {
         if (Fd is not { IsInvalid: false } fd)
         {
-            throw new InvalidOperationException("the capture carries no descriptor; ask for IpcCaptureTarget.Fd");
+            throw new InvalidOperationException("The capture has no descriptor. Ask for IpcCaptureTarget.Fd.");
         }
 
         if (Width <= 0 || Height <= 0 || Stride < Width * 4)
         {
-            throw new InvalidDataException($"a {Width}x{Height} capture with stride {Stride} cannot be read as 32-bit pixels");
+            throw new InvalidDataException($"The {Width}x{Height} capture with stride {Stride} cannot be read as 32-bit pixels.");
         }
 
         var pixels = new byte[Stride * Height];
@@ -42,7 +42,7 @@ public sealed record IpcCapture(
             var got = RandomAccess.Read(fd, pixels.AsSpan(read), read);
             if (got <= 0)
             {
-                throw new EndOfStreamException($"the capture descriptor ended after {read} of {pixels.Length} bytes");
+                throw new EndOfStreamException($"The capture descriptor ended after {read} of {pixels.Length} bytes.");
             }
 
             read += got;

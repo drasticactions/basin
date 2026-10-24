@@ -49,7 +49,7 @@ public sealed class BasinGlGpu : IAvaloniaGpu, IDisposable
     /// <param name="renderNodePath">The DRM render node to open when <paramref name="shared"/> is <see langword="null"/>.</param>
     /// <param name="shared">A device to share. This object does not dispose it.</param>
     /// <param name="imports">The formats that the compositor renderer can import, or <see langword="null"/>.</param>
-    /// <returns>The GPU, or <see langword="null"/> when no device is given or any step fails.</returns>
+    /// <returns>The GPU, or <see langword="null"/> when no device is given or the device does not build.</returns>
     public static BasinGlGpu? TryCreate(string? renderNodePath, GlDevice? shared = null, DrmFormatSet? imports = null)
     {
         try
@@ -75,8 +75,11 @@ public sealed class BasinGlGpu : IAvaloniaGpu, IDisposable
                 throw;
             }
         }
-        catch
+        catch (Exception error) when (error is InvalidOperationException or DllNotFoundException
+                                          or EntryPointNotFoundException or Mesa.Egl.EglException
+                                          or Mesa.Gbm.GbmException)
         {
+            AvaloniaGpuLog.Log.Warn(error, $"gpu: no GL device for the chrome, chrome draws on the CPU");
             return null;
         }
     }

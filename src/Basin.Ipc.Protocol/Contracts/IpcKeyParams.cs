@@ -55,7 +55,7 @@ public sealed class IpcKeyParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'code' is required"
+        (_present & 1) == 0 ? "'code' is required."
         : null;
 
     void IIpcReusable.Reset()

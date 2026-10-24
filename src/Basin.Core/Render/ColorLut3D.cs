@@ -14,12 +14,12 @@ public sealed class ColorLut3D
     {
         if (size < 2)
         {
-            throw new ArgumentOutOfRangeException(nameof(size), "a LUT needs at least 2 grid points per axis");
+            throw new ArgumentOutOfRangeException(nameof(size), "A LUT needs at least 2 grid points on each axis.");
         }
 
         if (data.Length != size * size * size * 3)
         {
-            throw new ArgumentException($"expected {size * size * size * 3} floats for a {size}³ RGB grid, got {data.Length}");
+            throw new ArgumentException($"The data has {data.Length} floats. A {size}³ RGB grid needs {size * size * size * 3} floats.", nameof(data));
         }
 
         Size = size;

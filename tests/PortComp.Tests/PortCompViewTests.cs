@@ -72,7 +72,7 @@ public sealed class PortCompViewTests
         Assert.Equal(0, shell.Shell.TopStrip.Height);
         Assert.Equal(0, shell.Shell.BottomStrip.Height);
         Assert.Equal(shell.Shell.Output, shell.Shell.WorkArea);
-        Assert.Equal("ready", harness.View.StatusText);
+        Assert.Equal("Ready", harness.View.StatusText);
     }
 
     [AvaloniaFact]
@@ -101,7 +101,7 @@ public sealed class PortCompViewTests
         var toggle = harness.View.ToggleAsync();
         harness.PumpUntil(() => toggle.IsCompleted, "the connect attempt never finished");
         Assert.True(toggle.IsCompletedSuccessfully, "the connect attempt faulted instead of reporting");
-        Assert.StartsWith("could not connect", harness.View.StatusText, StringComparison.Ordinal);
+        Assert.Contains("Couldn't connect", harness.View.StatusText, StringComparison.Ordinal);
         Assert.False(harness.View.Connected);
     }
 

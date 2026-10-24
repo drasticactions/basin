@@ -134,7 +134,7 @@ internal sealed class McpBridge : IAsyncDisposable
 
         if (!await TryConnectAsync(cancellationToken).ConfigureAwait(false))
         {
-            return McpCallMapper.Unavailable(_lastFailure ?? "not connected");
+            return McpCallMapper.Unavailable(_lastFailure ?? "The bridge is not connected.");
         }
 
         if (name == McpWaitEvent.Name)
@@ -153,7 +153,7 @@ internal sealed class McpBridge : IAsyncDisposable
         {
             if (!_table.TryGet(name, out var entry))
             {
-                throw new McpProtocolException($"Unknown tool: '{name}'", McpErrorCode.InvalidParams);
+                throw new McpProtocolException($"The bridge has no tool '{name}'. Call tools/list for the tools.", McpErrorCode.InvalidParams);
             }
 
             var client = _client;
@@ -167,7 +167,7 @@ internal sealed class McpBridge : IAsyncDisposable
             }
             catch (Exception exception) when (attempt == 0 && IsConnectionFailure(exception))
             {
-                Log.Info($"the control connection dropped during {entry.Method}; reconnecting");
+                Log.Info(exception, $"bridge: control connection dropped during {entry.Method}, reconnecting");
                 if (!await TryConnectAsync(cancellationToken).ConfigureAwait(false))
                 {
                     return McpCallMapper.Unavailable(_lastFailure ?? exception.Message);
@@ -249,7 +249,7 @@ internal sealed class McpBridge : IAsyncDisposable
                 _table = McpToolTable.Empty;
                 _version = null;
                 _lastFailure = exception.Message;
-                Log.Debug($"no compositor: {exception.Message}");
+                Log.Debug(exception, $"bridge: no compositor answers");
                 return false;
             }
         }
@@ -290,7 +290,7 @@ internal sealed class McpBridge : IAsyncDisposable
             _published = [.. methods];
         }
 
-        Log.Info($"the method set changed; sending tools/list_changed");
+        Log.Info($"bridge: method set changed, tools/list_changed sent");
         _signal.Signal();
     }
 }

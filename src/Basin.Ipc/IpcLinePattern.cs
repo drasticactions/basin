@@ -34,14 +34,14 @@ internal sealed class IpcLinePattern
             }
             else if (optional)
             {
-                throw new ArgumentException($"'{pattern}': a required word follows an optional one", nameof(pattern));
+                throw new ArgumentException($"The line form '{pattern}' has a required word after an optional one.", nameof(pattern));
             }
 
             if (!(word.StartsWith('{') && word.EndsWith('}')))
             {
                 if (isOptional)
                 {
-                    throw new ArgumentException($"'{pattern}': only a placeholder can be optional", nameof(pattern));
+                    throw new ArgumentException($"The line form '{pattern}' has an optional word that is not a placeholder. Only a placeholder can be optional.", nameof(pattern));
                 }
 
                 parts[i] = new Part(word, null, Kind.Literal, null, false);
@@ -55,7 +55,7 @@ internal sealed class IpcLinePattern
             {
                 if (i != words.Length - 1)
                 {
-                    throw new ArgumentException($"'{pattern}': a rest placeholder comes last", nameof(pattern));
+                    throw new ArgumentException($"The line form '{pattern}' has a word after its rest placeholder. A rest placeholder must come last.", nameof(pattern));
                 }
 
                 inner = inner[..^3];
@@ -74,7 +74,7 @@ internal sealed class IpcLinePattern
                     "bool" => Kind.Bool,
                     "string" => Kind.String,
                     _ when type.Contains('|', StringComparison.Ordinal) => Kind.Choice,
-                    _ => throw new ArgumentException($"'{pattern}': unknown placeholder type '{type}'", nameof(pattern)),
+                    _ => throw new ArgumentException($"The line form '{pattern}' has an unknown placeholder type '{type}'.", nameof(pattern)),
                 };
                 if (kind == Kind.Choice)
                 {
@@ -84,7 +84,7 @@ internal sealed class IpcLinePattern
 
             if (inner.Length == 0)
             {
-                throw new ArgumentException($"'{pattern}': a placeholder needs a name", nameof(pattern));
+                throw new ArgumentException($"The line form '{pattern}' has a placeholder with no name.", nameof(pattern));
             }
 
             parts[i] = new Part(null, inner, kind, choices, isOptional);
@@ -92,7 +92,7 @@ internal sealed class IpcLinePattern
 
         if (parts.Length == 0 || parts[0].Kind != Kind.Literal)
         {
-            throw new ArgumentException($"'{pattern}': a line form starts with a word", nameof(pattern));
+            throw new ArgumentException($"The line form '{pattern}' does not start with a word.", nameof(pattern));
         }
 
         return new IpcLinePattern(pattern, parts);
@@ -149,7 +149,7 @@ internal sealed class IpcLinePattern
                 case Kind.Int:
                     if (!long.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer))
                     {
-                        error = $"'{part.Name}' must be an integer, not '{token}'";
+                        error = $"'{part.Name}' must be an integer, not '{token}'.";
                         return false;
                     }
 
@@ -159,7 +159,7 @@ internal sealed class IpcLinePattern
                     if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
                         || !double.IsFinite(number))
                     {
-                        error = $"'{part.Name}' must be a number, not '{token}'";
+                        error = $"'{part.Name}' must be a number, not '{token}'.";
                         return false;
                     }
 
@@ -174,7 +174,7 @@ internal sealed class IpcLinePattern
                     };
                     if (flag is not { } value)
                     {
-                        error = $"'{part.Name}' must be 1 or 0, not '{token}'";
+                        error = $"'{part.Name}' must be 1 or 0, not '{token}'.";
                         return false;
                     }
 

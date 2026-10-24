@@ -153,19 +153,19 @@ public sealed class PeResources
         }
         catch (BadImageFormatException e)
         {
-            throw new MsStylesFormatException("Not a PE image: " + e.Message, e);
+            throw new MsStylesFormatException("The file is not a PE image.", e);
         }
 
         if (headers.PEHeader is not { } pe)
         {
-            throw new MsStylesFormatException("PE image has no optional header.", 0);
+            throw new MsStylesFormatException("The PE image has no optional header.", 0);
         }
 
         _sections = [.. headers.SectionHeaders];
         var directory = pe.ResourceTableDirectory;
         if (directory.RelativeVirtualAddress == 0 || directory.Size == 0)
         {
-            throw new MsStylesFormatException("PE image has no resource directory.", 0);
+            throw new MsStylesFormatException("The PE image has no resource directory.", 0);
         }
 
         _resourceStart = RvaToOffset(directory.RelativeVirtualAddress, directory.Size);
@@ -203,7 +203,7 @@ public sealed class PeResources
                     {
                         if (languageIsDirectory)
                         {
-                            throw new MsStylesFormatException("Resource language entry points to a directory.", _resourceStart + languageTarget);
+                            throw new MsStylesFormatException("A resource language entry points to a directory.", _resourceStart + languageTarget);
                         }
 
                         dataEntry = languageTarget;
@@ -231,7 +231,7 @@ public sealed class PeResources
     {
         if (!visited.Add(directoryOffset))
         {
-            throw new MsStylesFormatException("Resource directory cycle.", _resourceStart + directoryOffset);
+            throw new MsStylesFormatException("The resource directory has a cycle.", _resourceStart + directoryOffset);
         }
 
         var at = Check(directoryOffset, DirectoryHeaderSize);
@@ -242,7 +242,7 @@ public sealed class PeResources
         _entries += count;
         if (_entries > MaxEntries)
         {
-            throw new MsStylesFormatException($"Resource tree has more than {MaxEntries} entries.", at);
+            throw new MsStylesFormatException($"The resource tree has more than {MaxEntries} entries.", at);
         }
 
         Check(directoryOffset + DirectoryHeaderSize, count * EntrySize);
@@ -281,7 +281,7 @@ public sealed class PeResources
         var size = BinaryPrimitives.ReadInt32LittleEndian(span[(at + 4)..]);
         if (size < 0)
         {
-            throw new MsStylesFormatException("Resource data has a negative size.", at);
+            throw new MsStylesFormatException("A resource data entry has a negative size.", at);
         }
 
         var offset = RvaToOffset(rva, size);
@@ -293,7 +293,7 @@ public sealed class PeResources
         var at = (long)_resourceStart + relative;
         if (relative < 0 || length < 0 || at + length > _resourceEnd)
         {
-            throw new MsStylesFormatException("Resource offset out of range.", at);
+            throw new MsStylesFormatException("A resource offset is out of range.", at);
         }
 
         return (int)at;

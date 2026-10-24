@@ -56,25 +56,20 @@ internal static class Program
 
             if (!PortalBus.HasSessionBus)
             {
-                log.Error($"this session has no D-Bus session bus (DBUS_SESSION_BUS_ADDRESS is unset); a portal backend has nothing to answer");
+                log.Error($"no D-Bus session bus, DBUS_SESSION_BUS_ADDRESS is not set");
                 return 1;
             }
 
-            PortalApp app;
             try
             {
                 var prompts = result.GetValue(promptsOption) == "avalonia" ? PromptStyle.Avalonia : PromptStyle.Skia;
-                app = new PortalApp(socket, result.GetValue(busNameOption)!, prompts, log);
+                using var app = new PortalApp(socket, result.GetValue(busNameOption)!, prompts, log);
+                return app.Run();
             }
             catch (Exception error) when (error is InvalidOperationException or Wayland.WaylandException)
             {
-                log.Error($"{error.Message}");
+                log.Error(error, $"portal stopped");
                 return 1;
-            }
-
-            using (app)
-            {
-                return app.Run();
             }
         });
     }

@@ -96,7 +96,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         Services.Find<ShmGlobal>()?.Advertise(Renderer.ShmTextureFormats);
         if (Color is { } color && !color.Attach(Services, Scene))
         {
-            Log.Info($"color management was asked for and the color manager is absent");
+            Log.Warn($"color: management was requested but no color manager is installed, colors stay unmanaged");
         }
 
         Shell = Services.Require<XdgShell>();
@@ -161,7 +161,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
 
         if (!File.Exists(node))
         {
-            Log.Info($"no render node for dmabuf feedback; the global stays withheld");
+            Log.Warn($"dmabuf: no render node for feedback, linux-dmabuf is not advertised");
             return;
         }
 
@@ -171,7 +171,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
             formats,
             node,
             compositor: Services.Require<CompositorGlobal>());
-        Log.Info($"dmabuf advertised with {formats.Count} format rows on {node}");
+        Log.Info($"dmabuf: advertised {formats.Count} formats on {node}");
     }
 
     /// <summary>
@@ -554,7 +554,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         _thread.Assert();
         if (!_frameOpen)
         {
-            throw new InvalidOperationException("ExitFrame without a matching EnterFrame.");
+            throw new InvalidOperationException("No frame is open. Call EnterFrame before ExitFrame.");
         }
 
         _frameOpen = false;
@@ -629,12 +629,12 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
     {
         if (!PlatformFacts.HasLocalClients)
         {
-            throw new PlatformNotSupportedException("a runtime directory serves local clients, which this host has none of");
+            throw new PlatformNotSupportedException("This host has no local clients. A runtime directory is only for local clients.");
         }
 
         var directory = Path.Combine(Path.GetTempPath(), $"basin-{Environment.UserName}");
         Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        Log.Debug($"XDG_RUNTIME_DIR is unset; sockets bind under {directory}");
+        Log.Debug($"XDG_RUNTIME_DIR is not set, sockets bind under {directory}");
         return directory;
     }
 }

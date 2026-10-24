@@ -131,8 +131,8 @@ public sealed class IpcDiagnosticsTests
 
         using var refused = JsonDocument.Parse(peer.Call("""{"method":"windows/get","params":{"id":"foot"}}"""));
         var message = refused.RootElement.GetProperty("error").GetProperty("message").GetString()!;
-        Assert.Contains($"{first} app_id=foot title=one", message, StringComparison.Ordinal);
-        Assert.Contains($"{second} app_id=foot title=two", message, StringComparison.Ordinal);
+        Assert.Contains($"{first} (app_id=foot, title=one)", message, StringComparison.Ordinal);
+        Assert.Contains($"{second} (app_id=foot, title=two)", message, StringComparison.Ordinal);
 
         model.SetState(second, ToplevelState.Activated);
         using var picked = JsonDocument.Parse(peer.Call("""{"method":"windows/get","params":{"id":"foot"}}"""));

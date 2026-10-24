@@ -36,7 +36,7 @@ internal static class IpcOutputMethods
 
                 if (!configuration.Apply(entries))
                 {
-                    reply.Error(IpcErrorCodes.Failed, configuration.LastFailureReason ?? "the configuration did not apply");
+                    reply.Error(IpcErrorCodes.Failed, configuration.LastFailureReason ?? "The configuration did not apply.");
                     return;
                 }
 
@@ -55,7 +55,7 @@ internal static class IpcOutputMethods
 
                 if (describe.OutputNamed(request.Output) is not { } output)
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"no output '{request.Output}'");
+                    reply.Error(IpcErrorCodes.NotFound, $"No output has the name '{request.Output}'. Call outputs/list for the outputs.");
                     return;
                 }
 
@@ -72,20 +72,20 @@ internal static class IpcOutputMethods
 
             if (describe.OutputNamed(request.Output) is not { } output)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no output '{request.Output}'");
+                reply.Error(IpcErrorCodes.NotFound, $"No output has the name '{request.Output}'. Call outputs/list for the outputs.");
                 return;
             }
 
             if (describe.Looks is not { } looks)
             {
-                reply.Error(IpcErrorCodes.Unavailable, "this compositor applies no looks");
+                reply.Error(IpcErrorCodes.Unavailable, "This compositor applies no looks.");
                 return;
             }
 
             var path = string.IsNullOrEmpty(request.Path) ? null : request.Path;
             if (!looks.SetLook(output, path, out var error))
             {
-                reply.Error(IpcErrorCodes.Failed, error ?? "the look did not load");
+                reply.Error(IpcErrorCodes.Failed, error ?? "The look did not load.");
                 return;
             }
 
@@ -105,7 +105,7 @@ internal static class IpcOutputMethods
         {
             if (change is null)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'entries' must be an array of objects");
+                reply.Error(IpcErrorCodes.InvalidParams, "'entries' must be an array of objects.");
                 return null;
             }
 
@@ -130,7 +130,7 @@ internal static class IpcOutputMethods
 
         if (describe.OutputNamed(change.Name) is not { } output)
         {
-            reply.Error(IpcErrorCodes.NotFound, $"no output '{change.Name}'");
+            reply.Error(IpcErrorCodes.NotFound, $"No output has the name '{change.Name}'. Call outputs/list for the outputs.");
             return null;
         }
 
@@ -154,7 +154,7 @@ internal static class IpcOutputMethods
         {
             if (scale <= 0 || scale > 16)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'scale' is above 0 and at most 16");
+                reply.Error(IpcErrorCodes.InvalidParams, "'scale' must be above 0 and at most 16.");
                 return null;
             }
 
@@ -165,7 +165,7 @@ internal static class IpcOutputMethods
         {
             if (!IpcWrite.TryParseTransform(transform, out var parsed))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"unknown transform '{transform}'");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{transform}' is not a transform.");
                 return null;
             }
 

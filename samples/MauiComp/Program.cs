@@ -55,7 +55,7 @@ internal static class Program
             var chosen = result.GetValue(backend);
             if (fatal is { } failure)
             {
-                BasinLog.For("MauiComp").Error($"{failure}");
+                BasinLog.For("MauiComp").Error($"config: {failure}");
                 return 1;
             }
 

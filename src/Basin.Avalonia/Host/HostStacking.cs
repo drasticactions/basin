@@ -50,11 +50,9 @@ public static class HostStacking
                 X11WindowLevel.Apply(handle, band);
             }
         }
-        catch (DllNotFoundException)
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
         {
-        }
-        catch (EntryPointNotFoundException)
-        {
+            AvaloniaLog.Log.Debug(error, $"stacking: window level not applied, platform library missing");
         }
     }
 }

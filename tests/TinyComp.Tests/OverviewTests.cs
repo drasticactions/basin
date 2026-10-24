@@ -309,6 +309,6 @@ public sealed class OverviewTests
         session.Send("button 272 0");
         Assert.NotNull(session.WaitForLine("OVERVIEW output=HEADLESS-1 open=false", 5000));
         session.Send("shelve right");
-        Assert.Equal("ERR no focused window", session.WaitForLine("ERR "));
+        Assert.StartsWith("ERR No window has focus.", session.WaitForLine("ERR "), StringComparison.Ordinal);
     }
 }

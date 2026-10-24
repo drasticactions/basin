@@ -74,7 +74,7 @@ public sealed class SoftKeyboardSession : IDisposable
     /// Gets the router that delivers typed keys.
     /// </summary>
     /// <exception cref="InvalidOperationException">The session is not attached.</exception>
-    public KeyboardRouter Router => _router ?? throw new InvalidOperationException("the session is not attached to a keyboard");
+    public KeyboardRouter Router => _router ?? throw new InvalidOperationException("The session is not attached to a keyboard. Call Attach first.");
 
     /// <summary>
     /// Gets a value indicating whether <see cref="Attach"/> has run.
@@ -200,7 +200,7 @@ public sealed class SoftKeyboardSession : IDisposable
         ArgumentNullException.ThrowIfNull(keyboard);
         if (_router is not null)
         {
-            throw new InvalidOperationException("the session is already attached");
+            throw new InvalidOperationException("The session is already attached. Attach it one time only.");
         }
 
         _keyboard = keyboard;
@@ -600,7 +600,7 @@ public sealed class SoftKeyboardSession : IDisposable
             var layout = IsXkb(id) ? BuildXkb(id) : KeyboardLayouts.Load(id, _options.UserLayoutDirectory, _log);
             if (layout is null)
             {
-                _log.Warn($"keyboard: layout '{id}' cannot be loaded");
+                _log.Warn($"layouts: '{id}' cannot be loaded, it is skipped");
                 continue;
             }
 
@@ -667,7 +667,7 @@ public sealed class SoftKeyboardSession : IDisposable
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
-            _log.Warn($"keyboard: cannot read the state file: {error.Message}");
+            _log.Warn(error, $"state: cannot read {path}, the defaults are used");
         }
     }
 
@@ -692,7 +692,7 @@ public sealed class SoftKeyboardSession : IDisposable
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"keyboard: cannot write the state file: {error.Message}");
+            _log.Warn(error, $"state: cannot write {path}");
         }
     }
 }

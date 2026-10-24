@@ -60,7 +60,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         }
 
         using var current = _backend.Context.Enter();
-        var target = Back() ?? throw new InvalidOperationException("the imgui chrome could not allocate a buffer.");
+        var target = Back() ?? throw new InvalidOperationException("The imgui chrome could not allocate a buffer.");
         var native = WrapOf(target);
         WaitForReaders(target);
 

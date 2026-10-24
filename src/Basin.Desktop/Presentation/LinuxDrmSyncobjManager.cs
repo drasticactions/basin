@@ -66,8 +66,8 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
         if (renderer.FencePrecision == RenderFencePrecision.PerSubmission)
         {
             throw new NotSupportedException(
-                "Release points are signaled at buffer replacement, which requires renderer reads to be complete by Submit. " +
-                "A per-submission renderer must drive release points from its pass fences instead.");
+                "The renderer has per-submission fences, but release points signal when the buffer is replaced. " +
+                "A per-submission renderer must signal release points from its pass fences.");
         }
     }
 
@@ -211,7 +211,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
             if (!_device.TryImportTimeline(e.Fd, out var timeline))
             {
                 client.CloseFd(e.Fd);
-                manager.PostError(ErrorInvalidTimeline, "fd is not a drm_syncobj");
+                manager.PostError(ErrorInvalidTimeline, "The fd is not a drm_syncobj.");
                 return;
             }
 
@@ -235,7 +235,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
             if (_surfaces.ContainsKey(surface))
             {
-                manager.PostError(ErrorSurfaceExists, "surface already has a sync object");
+                manager.PostError(ErrorSurfaceExists, "The surface already has a sync object.");
                 return;
             }
 
@@ -332,7 +332,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
                     _owner.ManagedCommits++;
                     if (!_resource.IsDestroyed)
                     {
-                        _resource.PostError(ErrorNoAcquirePoint, "buffer committed without an acquire point");
+                        _resource.PostError(ErrorNoAcquirePoint, "A buffer was committed without an acquire point.");
                     }
                 }
 
@@ -341,25 +341,25 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
             if (!attachedBuffer)
             {
-                _resource.PostError(ErrorNoBuffer, "sync points committed without a buffer");
+                _resource.PostError(ErrorNoBuffer, "Sync points were committed without a buffer.");
                 return;
             }
 
             if (acquireSlot is not { } acquire)
             {
-                _resource.PostError(ErrorNoAcquirePoint, "missing acquire point");
+                _resource.PostError(ErrorNoAcquirePoint, "The commit has no acquire point.");
                 return;
             }
 
             if (releaseSlot is not { } release)
             {
-                _resource.PostError(ErrorNoReleasePoint, "missing release point");
+                _resource.PostError(ErrorNoReleasePoint, "The commit has no release point.");
                 return;
             }
 
             if (acquire.Timeline == release.Timeline && release.Point <= acquire.Point)
             {
-                _resource.PostError(ErrorConflictingPoints, "release point not after acquire point on the same timeline");
+                _resource.PostError(ErrorConflictingPoints, "The release point must come after the acquire point on the same timeline.");
                 return;
             }
 

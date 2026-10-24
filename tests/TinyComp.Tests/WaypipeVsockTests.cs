@@ -54,7 +54,7 @@ public sealed class WaypipeVsockTests
             tinycomp, runtime.Path, "--backend", "headless", "--renderer", "pixman", "--config", "false",
             "--waypipe-listen", $"vsock:{port}");
         Assert.True(compositor.WaitForOutput($"CHANNEL vsock:{port}"), $"tinycomp never printed its channel: {compositor.Errors}");
-        Assert.True(compositor.WaitForError("accepting waypipe channels"), $"tinycomp never bound vsock:{port}: {compositor.Errors}");
+        Assert.True(compositor.WaitForError("waypipe: accepting channels"), $"tinycomp never bound vsock:{port}: {compositor.Errors}");
         using var first = Waypipe(port, runtime.Path);
         using var second = Waypipe(port, runtime.Path);
 

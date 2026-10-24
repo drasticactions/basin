@@ -103,7 +103,7 @@ public sealed class SystemStatusBus : IDisposable
         if (Address is null)
         {
             _failure = "this session has no system bus address";
-            Log.Info($"{_failure}; every system status reads as absent");
+            Log.Info($"bus: {_failure}, every system status reads as absent");
             return null;
         }
 
@@ -116,7 +116,7 @@ public sealed class SystemStatusBus : IDisposable
                 {
                     if (!_disposed)
                     {
-                        Log.Debug($"system bus: {context.Exception.Message}");
+                        Log.Debug(context.Exception, $"bus: system bus connection failed");
                     }
                 },
             });
@@ -133,7 +133,7 @@ public sealed class SystemStatusBus : IDisposable
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException or System.Net.Sockets.SocketException)
         {
             _failure = $"the system bus is not reachable ({error.Message})";
-            Log.Warn($"{_failure}; every system status reads as absent");
+            Log.Warn(error, $"bus: system bus not reachable, every system status reads as absent");
             return null;
         }
     }

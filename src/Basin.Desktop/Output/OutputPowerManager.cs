@@ -90,7 +90,7 @@ public sealed class OutputPowerManager : IDisposable
             {
                 if (me.Mode is not (ZwlrOutputPowerV1.Mode.On or ZwlrOutputPowerV1.Mode.Off))
                 {
-                    control.PostError(ErrorInvalidMode, "invalid power mode");
+                    control.PostError(ErrorInvalidMode, "The power mode is not valid.");
                     return;
                 }
 

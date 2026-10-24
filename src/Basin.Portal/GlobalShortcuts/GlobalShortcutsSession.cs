@@ -93,7 +93,7 @@ public sealed class GlobalShortcutsSession : PortalSession, IGlobalShortcutObser
         }
         catch (Exception e) when (e is DBusExceptionBase or ObjectDisposedException or InvalidOperationException)
         {
-            Log.Debug($"shortcut session {Id}: signal not sent: {e.Message}");
+            Log.Debug(e, $"shortcut session {Id}: signal not sent");
         }
     }
 }

@@ -56,7 +56,7 @@ internal static class Program
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"compositor stopped");
             return 1;
         }
 

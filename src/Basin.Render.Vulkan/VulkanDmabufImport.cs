@@ -10,7 +10,7 @@ internal static unsafe class VulkanDmabufImport
 
         if (!device.FormatTable.TryGet(attributes.Format, out var formatProps))
         {
-            throw new InvalidOperationException($"{attributes.Format} is not importable on this device");
+            throw new InvalidOperationException($"The device cannot import {attributes.Format}.");
         }
 
         var forRender = (usage & ImageUsageFlags.ColorAttachmentBit) != 0;
@@ -18,32 +18,32 @@ internal static unsafe class VulkanDmabufImport
 
         if (attributes.Modifier == DrmFormatSet.ModifierInvalid)
         {
-            throw new InvalidOperationException("implicit-modifier dmabuf; Vulkan imports need an explicit modifier");
+            throw new InvalidOperationException("The dmabuf has an implicit modifier. The Vulkan renderer imports only explicit modifiers.");
         }
 
         if (!modifiers.TryGetValue(attributes.Modifier, out var modifierProps))
         {
             throw new InvalidOperationException(
-                $"modifier 0x{attributes.Modifier:X} is not {(forRender ? "renderable" : "sampleable")} for {attributes.Format} here");
+                $"Modifier 0x{attributes.Modifier:X} is not {(forRender ? "renderable" : "sampleable")} for {attributes.Format} on this device.");
         }
 
         if (modifierProps.PlaneCount != (uint)attributes.PlaneCount)
         {
             throw new InvalidOperationException(
-                $"modifier 0x{attributes.Modifier:X} has {modifierProps.PlaneCount} memory planes on this device, not {attributes.PlaneCount}");
+                $"Modifier 0x{attributes.Modifier:X} has {modifierProps.PlaneCount} memory planes on this device, but the dmabuf has {attributes.PlaneCount}.");
         }
 
         if ((uint)attributes.Width > modifierProps.MaxWidth || (uint)attributes.Height > modifierProps.MaxHeight)
         {
             throw new InvalidOperationException(
-                $"{attributes.Width}x{attributes.Height} exceeds the device's {modifierProps.MaxWidth}x{modifierProps.MaxHeight} for this modifier");
+                $"The dmabuf is {attributes.Width}x{attributes.Height}. The device allows at most {modifierProps.MaxWidth}x{modifierProps.MaxHeight} for this modifier.");
         }
 
         var disjoint = IsDisjoint(attributes);
         if (disjoint && !modifierProps.SupportsDisjoint)
         {
             throw new InvalidOperationException(
-                $"modifier 0x{attributes.Modifier:X} arrived as separate allocations but the device cannot bind it disjointly");
+                $"Modifier 0x{attributes.Modifier:X} arrived as separate allocations, but the device cannot bind it disjointly.");
         }
 
         var result = new ImportedDmabuf

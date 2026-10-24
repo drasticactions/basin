@@ -69,7 +69,7 @@ public sealed class AreaPromptView : SkiaPromptView
 
         canvas.DrawColor(Theme.Veil);
         canvas.Restore();
-        var hint = _pickPoint ? "Click a pixel, Escape cancels" : "Drag to select, Escape cancels, Enter takes everything";
+        var hint = _pickPoint ? "Click to pick a color. Press Escape to cancel." : "Drag to select an area. Press Enter for the whole screen, or Escape to cancel.";
         var hintWidth = Theme.MeasureText(hint, Theme.BodyFont);
         Theme.Fill.Color = Theme.Panel;
         canvas.DrawRoundRect(new SKRect(width / 2f - hintWidth / 2 - 14, 16, width / 2f + hintWidth / 2 + 14, 48), 6, 6, Theme.Fill);

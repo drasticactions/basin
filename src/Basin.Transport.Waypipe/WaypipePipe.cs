@@ -67,7 +67,7 @@ public sealed class WaypipePipe : Basin.IPipeToClient
     {
         if (_writer is not { } writer)
         {
-            throw new InvalidOperationException($"pipe {RemoteId} carries bytes toward the compositor and is not ours to write");
+            throw new InvalidOperationException($"Pipe {RemoteId} carries bytes toward the compositor. The compositor cannot write to it.");
         }
 
         if (bytes.IsEmpty || WriteClosed || ReadClosed)
@@ -133,7 +133,7 @@ public sealed class WaypipePipe : Basin.IPipeToClient
         if (_buffered.Count + payload.Length > _maxBytes)
         {
             throw new WaypipeException(
-                $"pipe {RemoteId} holds {_buffered.Count} bytes and the channel added {payload.Length}, over its budget");
+                $"Pipe {RemoteId} holds {_buffered.Count} bytes, and {payload.Length} more bytes are over its budget.");
         }
 
         _buffered.AddRange(payload);

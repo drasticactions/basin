@@ -35,7 +35,7 @@ public sealed class WmReloadSignal : IDisposable
                 {
                     var errno = Marshal.GetLastPInvokeError();
                     throw new IOException(
-                        $"the SIGHUP reload pipe cannot be made: {Marshal.GetPInvokeErrorMessage(errno)} (errno {errno})");
+                        $"The SIGHUP reload pipe cannot be made: {Marshal.GetPInvokeErrorMessage(errno)} (errno {errno}).");
                 }
             }
         }

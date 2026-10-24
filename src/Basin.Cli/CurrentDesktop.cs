@@ -39,7 +39,7 @@ public static class CurrentDesktop
             }
             else
             {
-                Log.Info($"nested inside {outer}: WAYLAND_DISPLAY stays the outer session's in the activation environment; a dbus-activated portal needs --socket {display}");
+                Log.Info($"nested inside {outer}, activation environment keeps the outer WAYLAND_DISPLAY, a D-Bus activated portal needs --socket {display}");
             }
         }
 
@@ -67,7 +67,7 @@ public static class CurrentDesktop
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            Log.Info($"dbus-update-activation-environment did not run: {e.Message}; a dbus-activated portal frontend may not see {string.Join(" ", variables)}");
+            Log.Warn(e, $"dbus-update-activation-environment did not run, a D-Bus activated portal cannot see {string.Join(" ", variables)}");
         }
 
         return next;

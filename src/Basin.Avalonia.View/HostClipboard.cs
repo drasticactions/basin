@@ -221,7 +221,7 @@ public sealed class HostClipboard : IDisposable
                 stream.Write(buffer, 0, (int)got);
             }
 
-            Log.Warn($"clipboard source stalled; the host clipboard keeps its old contents");
+            Log.Warn($"clipboard: source stalled, host clipboard keeps its old contents");
             return null;
         }
         finally

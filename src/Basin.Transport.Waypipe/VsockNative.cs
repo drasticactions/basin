@@ -28,9 +28,8 @@ internal static unsafe partial class VsockNative
             var errno = LastError;
             throw errno == EAfNoSupport
                 ? new IOException(
-                    $"socket(AF_VSOCK) for {endpoint} failed: no vsock transport is loaded; "
-                    + "load vhost_vsock on a host, vmw_vsock_virtio_transport in a guest, hv_sock in a Hyper-V or WSL2 guest "
-                    + "(built into the WSL2 kernel), or vsock_loopback on one machine")
+                    $"socket(AF_VSOCK) for {endpoint} failed because no vsock transport is loaded. "
+                    + "Load vhost_vsock on a host, vmw_vsock_virtio_transport in a guest, hv_sock in a Hyper-V guest, or vsock_loopback on one machine.")
                 : Failure("socket", endpoint, errno);
         }
 
@@ -43,7 +42,7 @@ internal static unsafe partial class VsockNative
                 var errno = LastError;
                 throw errno == EAcces && endpoint.Port < 1024
                     ? new IOException(
-                        $"bind({endpoint}) failed: vsock ports below 1024 need CAP_NET_BIND_SERVICE; choose a port from 1024 up")
+                        $"bind({endpoint}) failed because vsock ports below 1024 need CAP_NET_BIND_SERVICE. Choose port 1024 or higher.")
                     : Failure("bind", endpoint, errno);
             }
 
@@ -98,7 +97,7 @@ internal static unsafe partial class VsockNative
     internal static int Close(int fd) => close(fd);
 
     private static IOException Failure(string call, VsockEndPoint endpoint, int errno) =>
-        new($"{call}({endpoint}) failed: {Marshal.GetPInvokeErrorMessage(errno)} (errno {errno})");
+        new($"{call}({endpoint}) failed with errno {errno}: {Marshal.GetPInvokeErrorMessage(errno)}.");
 
     [LibraryImport("libc", SetLastError = true)]
     private static partial int socket(int domain, int type, int protocol);

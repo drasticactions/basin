@@ -50,7 +50,7 @@ internal static class Program
         }
         catch (InvalidOperationException error)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"window manager not started");
             return 1;
         }
 
@@ -61,7 +61,7 @@ internal static class Program
             wm.Unavailable += () =>
             {
                 refused = true;
-                log.Error($"the compositor refused window management, another window manager is already running.");
+                log.Error($"compositor refused window management, another window manager is running");
             };
 
             var reached = false;
@@ -80,7 +80,7 @@ internal static class Program
                 };
             }
 
-            log.Info($"managing with protocol version {wm.Version}; bindings v{wm.Bindings.Version}, layer shell {(wm.LayerShell is null ? "absent" : "present")}");
+            log.Info($"managing with protocol version {wm.Version}, bindings v{wm.Bindings.Version}, layer shell {(wm.LayerShell is null ? "absent" : "present")}");
 
             if (trace)
             {
@@ -102,7 +102,7 @@ internal static class Program
 
             if (exitAfter > 0 && !reached)
             {
-                log.Error($"the session ended before {exitAfter} window(s) were laid out.");
+                log.Error($"session ended before {exitAfter} window(s) were laid out");
                 return 1;
             }
 

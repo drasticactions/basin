@@ -215,7 +215,7 @@ public sealed class RiverLayerShell : IDisposable
             {
                 resource.PostError(
                     (uint)RiverLayerShellV1.Error.ObjectAlreadyCreated,
-                    "this output already has a river_layer_shell_output_v1");
+                    "This output already has a river_layer_shell_output_v1.");
                 return;
             }
 
@@ -246,7 +246,7 @@ public sealed class RiverLayerShell : IDisposable
             {
                 resource.PostError(
                     (uint)RiverLayerShellV1.Error.ObjectAlreadyCreated,
-                    "this seat already has a river_layer_shell_seat_v1");
+                    "This seat already has a river_layer_shell_seat_v1.");
                 return;
             }
 

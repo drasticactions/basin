@@ -290,7 +290,7 @@ public sealed unsafe class XWaylandServer : IDisposable
             return n;
         }
 
-        throw new InvalidOperationException("no free X display in :0..:31");
+        throw new InvalidOperationException("No X display from :0 to :31 is free. Stop an X server or remove its stale lock file.");
     }
 
     private static bool ReclaimStaleLock(string lockPath)
@@ -334,7 +334,7 @@ public sealed unsafe class XWaylandServer : IDisposable
         var pathFd = BindUnix($"/tmp/.X11-unix/X{display}");
         if (pathFd < 0 && Marshal.GetLastPInvokeError() == Erofs)
         {
-            Log.Info($"/tmp/.X11-unix is read-only, so :{display} listens on its abstract socket alone");
+            Log.Info($"server: /tmp/.X11-unix is read-only, :{display} listens on its abstract socket only");
             _listenFds[0] = abstractFd;
             _listenFds[1] = -1;
             return true;
@@ -418,7 +418,7 @@ public sealed unsafe class XWaylandServer : IDisposable
             socketpair(AfUnix, SockStream, 0, wm) != 0 ||
             pipe2(displayPipe, 0) != 0)
         {
-            throw new InvalidOperationException("XWayland fd setup failed");
+            throw new InvalidOperationException($"The sockets for Xwayland cannot be made (errno {Marshal.GetLastPInvokeError()}).");
         }
 
         _client = _display.CreateClient(wayland[0]);
@@ -474,12 +474,12 @@ public sealed unsafe class XWaylandServer : IDisposable
         if (rc != 0)
         {
             close(displayPipe[0]);
-            throw new InvalidOperationException($"posix_spawn(Xwayland) failed: {rc}");
+            throw new InvalidOperationException($"Xwayland cannot start, posix_spawn returned error {rc}. Make sure that Xwayland is on PATH.");
         }
 
         _pid = pid;
         _running = true;
-        Log.Info($"Xwayland {DisplayName} spawned (pid {pid})");
+        Log.Info($"server: Xwayland {DisplayName} started, pid {pid}");
 
         var readFd = displayPipe[0];
         _displayFdSource = _loop.AddFd(readFd, FdReadiness.Readable, (_, _) =>
@@ -512,11 +512,11 @@ public sealed unsafe class XWaylandServer : IDisposable
         var reaped = waitpid(_pid, &status, 1) == _pid;
         if (reaped && (status & 0x7f) == 0 && ((status >> 8) & 0xff) == 0)
         {
-            Log.Info($"Xwayland {DisplayName} exited after its last client; relaunching on next X client");
+            Log.Info($"server: Xwayland {DisplayName} exited after its last client, it starts again on the next X client");
         }
         else
         {
-            Log.Warn($"Xwayland {DisplayName} crashed (wait status 0x{status:x}); relaunching on next X client");
+            Log.Warn($"server: Xwayland {DisplayName} crashed, wait status 0x{status:x}, it starts again on the next X client");
             CrashCount++;
         }
 
@@ -549,7 +549,7 @@ public sealed unsafe class XWaylandServer : IDisposable
             _ = usleep(10_000);
         }
 
-        Log.Warn($"Xwayland {DisplayName} ignored SIGTERM; killing");
+        Log.Warn($"server: Xwayland {DisplayName} ignored SIGTERM, sending SIGKILL");
         _ = kill(pid, Sigkill);
         _ = waitpid(pid, &status, 0);
     }

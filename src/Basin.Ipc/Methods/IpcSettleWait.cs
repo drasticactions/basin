@@ -39,7 +39,7 @@ internal sealed class IpcSettleWait : IDisposable
         _server.Disown(this);
         if (!_reply.IsDone)
         {
-            _reply.Error(IpcErrorCodes.Failed, "the compositor stopped before the outputs settled");
+            _reply.Error(IpcErrorCodes.Failed, "The compositor stopped before the outputs settled.");
             _ = _reply.Complete();
         }
     }
@@ -63,7 +63,7 @@ internal sealed class IpcSettleWait : IDisposable
             return;
         }
 
-        _reply.Error(IpcErrorCodes.Failed, "the outputs did not settle before the timeout");
+        _reply.Error(IpcErrorCodes.Failed, "The outputs did not settle before the timeout.");
         _ = _reply.Complete();
         Dispose();
     }

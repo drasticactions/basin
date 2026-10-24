@@ -87,13 +87,13 @@ public sealed class KeyTable
 
             if (host.Contains((modifiers, code)))
             {
-                log.Warn($"shell key {name} uses {chord}, which the host already binds, keeping the host's");
+                log.Warn($"shell key {name}: the host already binds {chord}, the host binding is kept");
                 continue;
             }
 
             if (owners.TryGetValue((modifiers, code), out var owner))
             {
-                log.Warn($"shell key {owner} and {name} both use {chord}, keeping {owner}");
+                log.Warn($"shell key {name}: {owner} already uses {chord}, {owner} is kept");
                 continue;
             }
 
@@ -131,7 +131,7 @@ public sealed class KeyTable
             }
             else
             {
-                return $"'{chord}' has no modifier named '{tokens[i]}'; the modifiers are shift, ctrl, alt and super";
+                return $"'{chord}' has no modifier named '{tokens[i]}', the modifiers are shift, ctrl, alt and super";
             }
         }
 

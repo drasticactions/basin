@@ -15,7 +15,7 @@ internal sealed class ImplicitFence : ISurfaceCommitFence
     {
         _fd = fd;
         _source = loop.AddFd(fd, FdReadiness.Readable, (_, _) => Signal());
-        CoreLog.Log.Debug($"a dma-buf commit waits for its implicit fence");
+        CoreLog.Log.Trace($"dmabuf: commit waits for its implicit fence");
     }
 
     internal static Func<int, (int Fd, int Errno)>? Export { get; set; }
@@ -52,7 +52,7 @@ internal sealed class ImplicitFence : ISurfaceCommitFence
                 if (errno == Enotty && !s_reported)
                 {
                     s_reported = true;
-                    CoreLog.Log.Debug($"DMA_BUF_IOCTL_EXPORT_SYNC_FILE failed with ENOTTY; such a buffer applies without waiting for an implicit fence");
+                    CoreLog.Log.Debug($"dmabuf: sync file export not supported (ENOTTY), buffer applies without an implicit fence");
                 }
 
                 continue;

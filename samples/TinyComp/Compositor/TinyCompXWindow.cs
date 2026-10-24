@@ -516,7 +516,7 @@ internal sealed partial class TinyComp
                 ? (int)Math.Round(glassRenderer.Theme.ResolvedContentRadius)
                 : -1;
             _frame.Requested += OnFrameAction;
-            _frame.Faulted += e => _comp.Log.Error($"frame fault {XWin.Class}: {e.Message}");
+            _frame.Faulted += e => _comp.Log.Error(e, $"frame: faulted for {XWin.Class}");
             Outer.RaiseToTop();
             Layout();
             RefreshShadow();

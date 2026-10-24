@@ -36,7 +36,7 @@ internal sealed partial class SdlComp
     {
         if (started.Exception is { } failure)
         {
-            _log.Error($"--waypipe-listen {endpoint} failed: {failure.GetBaseException().Message}");
+            _log.Error(failure.GetBaseException(), $"--waypipe-listen {endpoint} failed");
             return;
         }
 
@@ -49,7 +49,17 @@ internal sealed partial class SdlComp
 
         _listening = session;
         session.Changed += () => BasinReport.Line($"CHANNELS {session.Clients}");
-        session.Ended += error => _log.Info($"the channel listener ended{(error is null ? string.Empty : $": {error.Message}")}");
+        session.Ended += error =>
+        {
+            if (error is null)
+            {
+                _log.Info($"channel listener ended");
+            }
+            else
+            {
+                _log.Warn(error, $"channel listener ended");
+            }
+        };
         BasinReport.Line($"LISTEN {session.Listener.LocalEndPoint}");
     }
 }

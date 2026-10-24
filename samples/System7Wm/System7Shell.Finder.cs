@@ -96,7 +96,7 @@ internal sealed partial class System7Shell
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                _log.Warn($"cannot create {Trash.FilesDirectory}: {error.Message}");
+                _log.Warn(error, $"finder: cannot create {Trash.FilesDirectory}");
             }
 
             Watch.Add(Trash.FilesDirectory);
@@ -256,7 +256,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            _log.Warn($"cannot save the desktop to {StateFile}: {error.Message}");
+            _log.Warn(error, $"finder: cannot save the desktop to {StateFile}");
         }
     }
 
@@ -444,7 +444,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"cannot save the Finder window for {folder} to {FinderState.FileOf(folder)}: {error.Message}");
+            _log.Warn(error, $"finder: cannot save the window for {folder} to {FinderState.FileOf(folder)}");
         }
     }
 
@@ -481,7 +481,7 @@ internal sealed partial class System7Shell
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                _log.Warn($"cannot save the Finder window for {folder}: {error.Message}");
+                _log.Warn(error, $"finder: cannot save the window for {folder}");
             }
         }
 
@@ -502,7 +502,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            _log.Warn($"cannot save the desktop to {StateFile}: {error.Message}");
+            _log.Warn(error, $"finder: cannot save the desktop to {StateFile}");
         }
     }
 
@@ -643,7 +643,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"cannot read {view.Folder}: {error.Message}");
+            _log.Warn(error, $"finder: cannot read {view.Folder}");
         }
 
         view.SetEntries(entries);
@@ -655,6 +655,7 @@ internal sealed partial class System7Shell
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            _log.Debug(error, $"finder: no free space for {view.Folder}");
         }
 
         view.SetHeader($"{entries.Count} item{(entries.Count == 1 ? "" : "s")}{free}");
@@ -1078,6 +1079,17 @@ internal sealed partial class System7Shell
         }
     }
 
-    private void FileError(string what, Exception error) =>
-        ShowAlert("Finder", $"{what}: {error.Message}", ["OK"], _ => { }, icon: "stop");
+    private void FileError(string what, Exception error)
+    {
+        _log.Warn(error, $"finder: {char.ToLowerInvariant(what[0])}{what[1..]}");
+        ShowAlert("Finder", FileErrorText(what, error), ["OK"], _ => { }, icon: "stop");
+    }
+
+    internal static string FileErrorText(string what, Exception error) => error switch
+    {
+        UnauthorizedAccessException => $"{what}. You don't have permission to change it.",
+        IOException { HResult: 28 or 122 } => $"{what}. The disk is full.",
+        IOException { HResult: 30 } => $"{what}. The disk is locked.",
+        _ => $"{what}.",
+    };
 }

@@ -40,7 +40,7 @@ internal sealed partial class TinyComp
             return draft;
         }
 
-        draft = SettingsDraft.Open(SettingsPath);
+        draft = SettingsDraft.Open(SettingsPath, _log);
         draft.Changed += OnSettingsDraftChanged;
         _settingsDraft = draft;
         RememberSettingsBaseline();
@@ -68,7 +68,7 @@ internal sealed partial class TinyComp
         _settingsQuiet = true;
         try
         {
-            draft.Revert("reloaded from file");
+            draft.Revert("Reloaded from the file", "reloaded from file");
         }
         finally
         {
@@ -93,7 +93,7 @@ internal sealed partial class TinyComp
         if (QuillHost() is not { } quill)
         {
             _settingsUnavailable = _quillDeclined ?? "no Quill host could be built";
-            _log.Warn($"settings: unavailable on {_rendererName}: {_settingsUnavailable}");
+            _log.Warn($"settings: unavailable on {_rendererName}, {_settingsUnavailable}");
             return null;
         }
 
@@ -131,7 +131,7 @@ internal sealed partial class TinyComp
         var width = Math.Min(SettingsWidth, Math.Max(200, box.Width - 16));
         var height = Math.Min(SettingsHeight, Math.Max(160, box.Height - 16));
         var node = new UISurfaceNode(_layers.Overlay, host, UIIndex) { Target = UITargetKind.Dmabuf, InputEnabled = true };
-        node.Faulted += error => _log.Error($"settings: {error.Message}");
+        node.Faulted += error => _log.Error(error, $"settings: surface faulted");
         node.SetPosition(box.X + ((box.Width - width) / 2), box.Y + ((box.Height - height) / 2));
         if (!node.Configure(width, height, view.Output.Scale) || node.Surface is not PaperSurface surface)
         {
@@ -144,7 +144,7 @@ internal sealed partial class TinyComp
         surface.Build = _settingsForm.Build;
         surface.KeyText = _seat.Keyboard;
         surface.CursorChanged += OnSettingsCursor;
-        surface.Faulted += error => _log.Error($"settings: the panel threw: {error}");
+        surface.Faulted += error => _log.Error(error, $"settings: the panel threw");
         if (_services.Find<ISelectionStore>() is { } store)
         {
             _paperClipboard ??= new PaperClipboard(store, _loop);
@@ -297,7 +297,7 @@ internal sealed partial class TinyComp
         string? advice = null;
         if (fatal is not null && fatal != _settingsBaselineFatal)
         {
-            _log.Info($"settings: {fatal}");
+            _log.Debug($"settings: {fatal}");
             blocking = SettingsMessages.Explain(fatal).Text;
         }
 
@@ -308,7 +308,7 @@ internal sealed partial class TinyComp
                 continue;
             }
 
-            _log.Info($"settings: {warning}");
+            _log.Debug($"settings: {warning}");
             var (text, refused) = SettingsMessages.Explain(warning);
             if (refused)
             {
@@ -334,22 +334,31 @@ internal sealed partial class TinyComp
         _ = ApplyConfig(parsed, crossfade: false);
         if (_textureErrors.Count > 0)
         {
-            var why = string.Join(", ", _textureErrors);
+            var why = string.Join(" ", _textureErrors.Select(TextureStatus));
             draft.SetHint(path, why);
-            draft.Status = why;
+            draft.SetStatus(why, string.Join(", ", _textureErrors));
             _settingsTextureStatus = why;
         }
         else if (_settingsTextureStatus is { } shown)
         {
             if (draft.Status == shown)
             {
-                draft.Status = string.Empty;
+                draft.SetStatus(string.Empty, string.Empty);
             }
 
             _settingsTextureStatus = null;
         }
 
         _settingsSurface?.Invalidate();
+    }
+
+    private static string TextureStatus(string error)
+    {
+        var at = error.IndexOf("=error:", StringComparison.Ordinal);
+        var name = (at < 0 ? "texture" : error[..at]).Replace('_', ' ');
+        return error.EndsWith("NOT-FOUND", StringComparison.Ordinal)
+            ? $"Couldn't find the {name} file."
+            : $"The {name} file isn't an image.";
     }
 
     private Config ParseSettings(string text, out List<string> warnings, out string? fatal)
@@ -385,11 +394,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        if (SaveQuietly(draft, overwrite) is { } failure)
-        {
-            _log.Warn($"settings: {failure}");
-        }
-
+        _ = SaveQuietly(draft, overwrite);
         _settingsSurface?.Invalidate();
     }
 
@@ -401,6 +406,12 @@ internal sealed partial class TinyComp
         {
             failure = draft.Save(overwrite);
         }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn(error, $"settings: save to {draft.FilePath} failed");
+            failure = SettingsDraft.SaveFailure(error);
+            draft.ShowFailure(failure, $"save failed: {error.Message}");
+        }
         finally
         {
             _settingsQuiet = false;
@@ -409,6 +420,10 @@ internal sealed partial class TinyComp
         if (failure is null)
         {
             RememberSettingsBaseline();
+        }
+        else if (draft.Conflict)
+        {
+            _log.Debug($"settings: save refused, {draft.FilePath} changed on disk");
         }
 
         return failure;
@@ -421,7 +436,7 @@ internal sealed partial class TinyComp
             return;
         }
 
-        draft.Revert("reverted to the file");
+        draft.Revert("Reverted to the file", "reverted to the file");
         RememberSettingsBaseline();
     }
 
@@ -478,13 +493,13 @@ internal sealed partial class TinyComp
                 "open" => OpenSettings(),
                 "close" => CloseSettings(),
                 "toggle" => ToggleSettings(),
-                _ => "state is open, close or toggle",
+                _ => "'state' must be open, close or toggle.",
             };
             if (failure is not null)
             {
                 if (state is "open" or "close" or "toggle")
                 {
-                    reply.Error(IpcErrorCodes.Unavailable, $"unavailable on {_rendererName}: {failure}");
+                    reply.Error(IpcErrorCodes.Unavailable, $"The settings panel can't open on the {_rendererName} renderer: {failure.TrimEnd('.')}.");
                 }
                 else
                 {
@@ -509,13 +524,13 @@ internal sealed partial class TinyComp
             var dot = key.LastIndexOf('.');
             if (dot <= 0 || dot == key.Length - 1)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "key is TABLE.KEY, such as effects.wobbly");
+                reply.Error(IpcErrorCodes.InvalidParams, "'key' must be TABLE.KEY. Give a key such as effects.wobbly.");
                 return;
             }
 
             if (!Basin.Config.TomlValue.TryParse(value, out var literal))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'{value}' is not a TOML value; quote a string");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{value}' is not a TOML value. Put a string in quotes.");
                 return;
             }
 
@@ -577,7 +592,7 @@ internal sealed partial class TinyComp
             + $" dirty={draft?.DirtyCount ?? 0}"
             + $" file={SettingsPath ?? "none"} available={(_settingsUnavailable is null ? "yes" : "no")}"
             + $" wobbly={(_config.Wobbly ? "on" : "off")} offload={(_offload ? "on" : "off")} frame-style={_config.FrameStyle.ToString().ToLowerInvariant()}"
-            + $" status={(draft?.Status is { Length: > 0 } status ? status.Replace(' ', '-') : "none")}"
+            + $" status={(draft?.ReportStatus is { Length: > 0 } status ? status.Replace(' ', '-') : "none")}"
             + ConfigSummary(_config));
     }
 }

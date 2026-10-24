@@ -19,6 +19,7 @@ public sealed class SdlFrameLoop : IDisposable
     private readonly List<SdlOutputWindow> _windows = [];
     private bool _frameWanted;
     private bool _inTick;
+    private bool _frameFailing;
     private bool _wantedDuringTick;
     private long _lastFrameDone;
 
@@ -289,19 +290,28 @@ public sealed class SdlFrameLoop : IDisposable
         {
             Pumps++;
             var presented = false;
+            var attempted = false;
             var presentDue = PresentDueIn() == 0;
             for (var i = 0; i < _windows.Count; i++)
             {
                 var window = _windows[i];
-                if (presentDue && window.NeedsFrame && window.Render())
+                if (presentDue && window.NeedsFrame)
                 {
-                    presented = true;
+                    attempted = true;
+                    if (window.Render())
+                    {
+                        presented = true;
+                    }
                 }
             }
 
             if (presented)
             {
                 Frames++;
+            }
+
+            if (attempted)
+            {
                 _lastPresent = Stopwatch.GetTimestamp();
             }
 
@@ -309,10 +319,20 @@ public sealed class SdlFrameLoop : IDisposable
             {
                 SendFrameDone();
             }
+
+            _frameFailing = false;
         }
         catch (Exception error)
         {
-            Log.Error($"the SDL frame failed: {error}");
+            if (_frameFailing)
+            {
+                Log.Debug(error, $"frame: SDL frame failed again");
+            }
+            else
+            {
+                _frameFailing = true;
+                Log.Error(error, $"frame: SDL frame failed");
+            }
         }
         finally
         {

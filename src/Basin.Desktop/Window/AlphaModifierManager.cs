@@ -77,7 +77,7 @@ public sealed class AlphaModifierManager : IDisposable
 
             if (!_claimed.Add(surface))
             {
-                manager.PostError(ErrorAlreadyConstructed, "surface already has an alpha modifier");
+                manager.PostError(ErrorAlreadyConstructed, "The surface already has an alpha modifier.");
                 return;
             }
 
@@ -96,7 +96,7 @@ public sealed class AlphaModifierManager : IDisposable
             {
                 if (!alive)
                 {
-                    resource.PostError(ErrorNoSurface, "the wl_surface has been destroyed");
+                    resource.PostError(ErrorNoSurface, "The wl_surface is destroyed.");
                     return;
                 }
 

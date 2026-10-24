@@ -100,7 +100,7 @@ public sealed class IpcControlTests
         var peer = rig.Connect();
         var error = Parse(peer.Call("""{"method":"windows/wait","params":{"timeout_ms":20}}""")).GetProperty("error");
         Assert.Equal(IpcErrorCodes.InvalidParams, error.GetProperty("code").GetString());
-        Assert.Equal("name an app_id, a title, or both", error.GetProperty("message").GetString());
+        Assert.Contains("app_id", error.GetProperty("message").GetString(), StringComparison.Ordinal);
         Assert.Equal(0, model.ObserverCount);
     }
 

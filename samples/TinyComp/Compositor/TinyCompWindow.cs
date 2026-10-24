@@ -452,7 +452,7 @@ internal sealed partial class TinyComp
                 ? (int)Math.Round(glassRenderer.Theme.ResolvedContentRadius)
                 : -1;
             _frame.Requested += OnFrameAction;
-            _frame.Faulted += e => _comp.Log.Error($"frame fault {Toplevel.AppId}: {e.Message}");
+            _frame.Faulted += e => _comp.Log.Error(e, $"frame: faulted for {Toplevel.AppId}");
             _fit?.Root.RaiseToTop();
             LayoutDecorations();
             RefreshShadow();

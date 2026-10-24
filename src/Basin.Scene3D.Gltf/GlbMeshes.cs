@@ -66,7 +66,7 @@ public static class GlbMeshes
         {
             if ((primitive.Mode ?? 4) != 4)
             {
-                throw new NotSupportedException($"primitive mode {primitive.Mode} is not triangles");
+                throw new NotSupportedException($"Primitive mode {primitive.Mode} is not supported. Only triangles are read.");
             }
 
             if (primitive.Attributes is not { } attributes || !attributes.TryGetValue("POSITION", out var positionAccessor))

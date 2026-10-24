@@ -83,6 +83,6 @@ public sealed class FrameHosts
         var offered = _hosts.Count == 0
             ? "none"
             : string.Join(", ", _hosts.Select(host => host.SurfaceContract.Name));
-        return $"{renderer.GetType().Name} draws into {renderer.SurfaceContract.Name}; hosts offer {offered}";
+        return $"{renderer.GetType().Name} draws into {renderer.SurfaceContract.Name}, but the hosts offer {offered}";
     }
 }

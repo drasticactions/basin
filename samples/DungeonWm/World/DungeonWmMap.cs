@@ -70,7 +70,7 @@ internal sealed class DungeonWmMap
             }
         }
 
-        throw new InvalidOperationException("no free wall can take another room");
+        throw new InvalidOperationException("No free wall can take another room.");
     }
 
     public bool Grow(MapRegion room)

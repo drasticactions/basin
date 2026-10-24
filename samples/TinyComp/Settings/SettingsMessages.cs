@@ -203,6 +203,11 @@ internal static partial class SettingsMessages
             return ("Windows too wide for the shelf won't shrink to fit.", false);
         }
 
+        if (raw.Contains("[hypr.shortcuts] is deprecated", StringComparison.Ordinal))
+        {
+            return ("Rename the hypr.shortcuts table to shortcuts in the file.", false);
+        }
+
         if (raw.Contains("is ignored with [[effects.shader]]", StringComparison.Ordinal))
         {
             return ("Set parameters on each preset in the chain instead.", false);

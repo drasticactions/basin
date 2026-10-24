@@ -47,7 +47,7 @@ internal sealed unsafe class VulkanInstance : IDisposable
         var haveLayer = validate && OffersLayer(ValidationLayer);
         if (validate && !haveLayer)
         {
-            Log.Warn($"{ValidationVariable} is set but {ValidationLayer} is not installed; running without it");
+            Log.Warn($"validation: {ValidationVariable} is set, but {ValidationLayer} is not installed, validation off");
         }
 
         var appName = (byte*)SilkMarshal.StringToPtr("basin");
@@ -136,8 +136,9 @@ internal sealed unsafe class VulkanInstance : IDisposable
                 Log.Debug($"{id}: {message}");
             }
         }
-        catch
+        catch (Exception e)
         {
+            Log.Error(e, $"validation: debug callback failed");
         }
 
         return Vk.False;

@@ -340,7 +340,7 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
         gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, target.Texture, 0);
         if (gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != GLEnum.FramebufferComplete)
         {
-            throw new InvalidOperationException("glass framebuffer incomplete");
+            throw new InvalidOperationException("The glass framebuffer is incomplete.");
         }
 
         cache[(width, height)] = target;
@@ -359,7 +359,7 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
             gl.GetShader(shader, ShaderParameterName.CompileStatus, out var compiled);
             if (compiled == 0)
             {
-                throw new InvalidOperationException($"{type}: {gl.GetShaderInfoLog(shader)}");
+                throw new InvalidOperationException($"The {type} did not compile: {gl.GetShaderInfoLog(shader)}");
             }
 
             gl.AttachShader(handle, shader);
@@ -370,7 +370,7 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
         gl.GetProgram(handle, ProgramPropertyARB.LinkStatus, out var linked);
         if (linked == 0)
         {
-            throw new InvalidOperationException($"link: {gl.GetProgramInfoLog(handle)}");
+            throw new InvalidOperationException($"The shader program did not link: {gl.GetProgramInfoLog(handle)}");
         }
 
         return new Program

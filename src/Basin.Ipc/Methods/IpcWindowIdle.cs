@@ -75,7 +75,7 @@ internal sealed class IpcWindowIdle : IToplevelCommitObserver, IToplevelObserver
             return;
         }
 
-        _reply.Error(IpcErrorCodes.Failed, $"window {_target} went away before it was idle");
+        _reply.Error(IpcErrorCodes.Failed, $"Window {_target} went away before it was idle.");
         Finish();
     }
 
@@ -86,7 +86,7 @@ internal sealed class IpcWindowIdle : IToplevelCommitObserver, IToplevelObserver
             return;
         }
 
-        _reply.Error(IpcErrorCodes.Failed, "the compositor stopped before the window was idle");
+        _reply.Error(IpcErrorCodes.Failed, "The compositor stopped before the window was idle.");
         Finish();
     }
 
@@ -108,10 +108,10 @@ internal sealed class IpcWindowIdle : IToplevelCommitObserver, IToplevelObserver
             return;
         }
 
-        var what = _target == 0 ? "the windows" : $"window {_target}";
+        var what = _target == 0 ? "The windows" : $"Window {_target}";
         _reply.Error(IpcErrorCodes.Failed, _commits == 0
-            ? $"{what} did not go idle within {_timeoutMs} ms"
-            : $"{what} did not go idle within {_timeoutMs} ms; the last commit was {Environment.TickCount64 - _lastCommit} ms ago");
+            ? $"{what} did not go idle within {_timeoutMs} ms."
+            : $"{what} did not go idle within {_timeoutMs} ms. The last commit was {Environment.TickCount64 - _lastCommit} ms ago.");
         Finish();
     }
 

@@ -25,7 +25,7 @@ internal sealed class IpcFdWriter : IDisposable
     {
         if (!IpcNative.SetNonBlocking(_fd.Value))
         {
-            Log.Debug($"could not make selection fd {_fd.Value} non-blocking (errno {UnixSocket.LastError})");
+            Log.Debug($"clipboard: selection fd {_fd.Value} cannot be made non-blocking, errno {UnixSocket.LastError}");
             Finish();
             return;
         }
@@ -38,7 +38,7 @@ internal sealed class IpcFdWriter : IDisposable
         _source = _server.Loop.AddFd(_fd.Value, FdReadiness.Writable, (_, _) => Pump());
         _timer = _server.Loop.AddTimer(() =>
         {
-            Log.Debug($"a selection reader stopped reading after {_written} bytes");
+            Log.Debug($"clipboard: selection reader stopped after {_written} bytes");
             Finish();
         });
         _timer.UpdateTimer(TimeoutMs);

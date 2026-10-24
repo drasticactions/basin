@@ -48,7 +48,7 @@ internal sealed class NotificationsObject : IPathMethodHandler
         }
         catch (Exception error)
         {
-            Log.Warn($"{context.Request.MemberAsString} from {context.Request.SenderAsString} failed: {error.Message}");
+            Log.Warn(error, $"{context.Request.MemberAsString} from {context.Request.SenderAsString} failed");
             TryReplyError(context, "org.freedesktop.DBus.Error.InvalidArgs", error.Message);
         }
 
@@ -66,7 +66,7 @@ internal sealed class NotificationsObject : IPathMethodHandler
         }
         catch (Exception error) when (error is ObjectDisposedException or InvalidOperationException or DBusExceptionBase)
         {
-            Log.Debug($"an error reply was not sent: {error.Message}");
+            Log.Debug(error, $"bus: error reply not sent");
         }
     }
 

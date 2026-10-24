@@ -75,7 +75,7 @@ public readonly record struct HyperVVm(HyperVVmKind Kind, Guid Id)
             return Of(id);
         }
 
-        throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"'{text}' names no Hyper-V VM; give {Words}"));
+        throw new FormatException(string.Create(CultureInfo.InvariantCulture, $"'{text}' names no Hyper-V VM. Give {Words}."));
     }
 
     /// <summary>

@@ -31,7 +31,7 @@ internal sealed partial class LunaShell
         }, out var reason);
         if (_notify is null)
         {
-            _log.Info($"notifications: not serving org.freedesktop.Notifications: {reason}");
+            _log.Info($"notifications: not serving org.freedesktop.Notifications, {reason}");
             _report.Line("NOTIFICATIONS off");
             return;
         }
@@ -624,7 +624,7 @@ internal sealed partial class LunaShell
 
             if (_soundPlayer is null)
             {
-                _log.Info($"sounds unavailable: {reason}");
+                _log.Info($"notifications: no sounds, {reason}");
             }
         }
 

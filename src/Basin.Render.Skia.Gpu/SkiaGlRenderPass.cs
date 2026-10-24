@@ -107,7 +107,7 @@ internal sealed unsafe class SkiaGlRenderPass : IRenderPass
         var bounds = requested.Intersect(new Box(0, 0, _target.Width, _target.Height));
         if (effect is not IGlBackdropEffect glEffect)
         {
-            throw new ArgumentException("effect does not belong to this renderer");
+            throw new ArgumentException("The effect does not come from this renderer.", nameof(effect));
         }
 
         if (bounds.IsEmpty)

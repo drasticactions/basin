@@ -22,7 +22,7 @@ internal static class IpcDiagnosticsMethods
 
                 if (mode is not ("on" or "motion" or "off"))
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, $"'mode' is on, motion or off, not '{mode}'");
+                    reply.Error(IpcErrorCodes.InvalidParams, $"'mode' must be on, motion or off, not '{mode}'.");
                     return;
                 }
 
@@ -43,7 +43,7 @@ internal static class IpcDiagnosticsMethods
 
                 if (on && string.IsNullOrEmpty(target))
                 {
-                    reply.Error(IpcErrorCodes.InvalidParams, "name a 'target': a window id, an app_id, part of a title, or \"*\" for every surface");
+                    reply.Error(IpcErrorCodes.InvalidParams, "'target' is required. Give a window id, an app_id, part of a title, or \"*\" for every surface.");
                     return;
                 }
 
@@ -99,7 +99,7 @@ internal static class IpcDiagnosticsMethods
 
             if (mode is not ("on" or "stack" or "off"))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'mode' is on, stack or off, not '{mode}'");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'mode' must be on, stack or off, not '{mode}'.");
                 return;
             }
 
@@ -174,7 +174,7 @@ internal static class IpcDiagnosticsMethods
 
             if (tolerance is < 0 or > 255 || pixels < 0 || timeout < 1)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'channel' is 0 to 255, 'pixels' is not negative and 'timeout_ms' is at least 1");
+                reply.Error(IpcErrorCodes.InvalidParams, "'channel' must be 0 to 255, 'pixels' must not be negative and 'timeout_ms' must be at least 1.");
                 return;
             }
 
@@ -186,12 +186,12 @@ internal static class IpcDiagnosticsMethods
             }
             catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
             {
-                reply.Error(IpcErrorCodes.NotFound, $"no reference at '{reference}'");
+                reply.Error(IpcErrorCodes.NotFound, $"No reference image is at '{reference}'.");
                 return;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
             {
-                reply.Error(IpcErrorCodes.Failed, $"the reference '{reference}' is not a readable PNG: {exception.Message}");
+                reply.Error(IpcErrorCodes.Failed, $"The reference '{reference}' is not a readable PNG. {exception.Message}");
                 return;
             }
 
@@ -305,7 +305,7 @@ internal static class IpcDiagnosticsMethods
             uint? button = buttonName switch { "left" => 0x110, "right" => 0x111, "middle" => 0x112, _ => null };
             if (button is not { } code)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'button' is left, right or middle");
+                reply.Error(IpcErrorCodes.InvalidParams, "'button' must be left, right or middle.");
                 return;
             }
 
@@ -325,7 +325,7 @@ internal static class IpcDiagnosticsMethods
 
             if (!input.PointerMotionAbsolute(time, x, y) || !input.PointerButton(time, code, true) || !input.PointerButton(time, code, false))
             {
-                reply.Error(IpcErrorCodes.Refused, "the click was refused");
+                reply.Error(IpcErrorCodes.Refused, "The compositor refused the click.");
                 return;
             }
 
@@ -362,7 +362,7 @@ internal static class IpcDiagnosticsMethods
 
             if (steps is < 1 or > 600 || interval is < 1 or > 1000)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, "'steps' is 1 to 600 and 'interval_ms' is 1 to 1000");
+                reply.Error(IpcErrorCodes.InvalidParams, "'steps' must be 1 to 600 and 'interval_ms' must be 1 to 1000.");
                 return;
             }
 
@@ -465,7 +465,7 @@ internal static class IpcDiagnosticsMethods
     {
         if (reply.Sink is not IIpcEventSubscriber subscriber)
         {
-            reply.Error(IpcErrorCodes.Unavailable, "this front delivers no events");
+            reply.Error(IpcErrorCodes.Unavailable, "This front delivers no events. Subscribe through the control socket.");
             return;
         }
 
@@ -504,8 +504,8 @@ internal static class IpcDiagnosticsMethods
             if (matches.Count != 1)
             {
                 reply.Error(matches.Count == 0 ? IpcErrorCodes.NotFound : IpcErrorCodes.InvalidParams, matches.Count == 0
-                    ? $"no decorated window with app_id '{name}' or a title that contains it"
-                    : $"'{name}' matches {matches.Count} windows: " + string.Join("; ", matches.Select(static m => $"app_id={m.AppId} title={m.Title}")));
+                    ? $"No decorated window has the app_id '{name}' or a title that contains it."
+                    : $"'{name}' matches {matches.Count} windows. Give a more exact name: " + string.Join(", ", matches.Select(static m => $"app_id={m.AppId} title={m.Title}")) + ".");
                 return;
             }
 
@@ -544,7 +544,7 @@ internal static class IpcDiagnosticsMethods
 
         if (!target.HasFrame || target.Window is not { } window)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, $"'{target.Selector}' is a {target.Kind}; frame parts belong to a window or an x11 window");
+            reply.Error(IpcErrorCodes.InvalidParams, $"'{target.Selector}' is a {target.Kind}. Only a window or an x11 window has frame parts.");
             return false;
         }
 
@@ -610,7 +610,7 @@ internal static class IpcDiagnosticsMethods
 
         if (frames is < 1 or > 600 || maxDimension < 0 || timeout < 1)
         {
-            parameters.Invalid("'frames' is 1 to 600, 'max_dimension' is not negative and 'timeout_ms' is at least 1");
+            parameters.Invalid("'frames' must be 1 to 600, 'max_dimension' must not be negative and 'timeout_ms' must be at least 1.");
             return null;
         }
 
@@ -683,7 +683,7 @@ internal static class IpcDiagnosticsMethods
         parts = found;
         if (info.Surface is not { } surface || !diagnostics.WriteParts(surface, (part, box) => found.Add((part, box))))
         {
-            reply.Error(IpcErrorCodes.Refused, $"window {info.Id} has no tracked frame");
+            reply.Error(IpcErrorCodes.Refused, $"Window {info.Id} has no tracked frame.");
             return false;
         }
 
@@ -696,7 +696,7 @@ internal static class IpcDiagnosticsMethods
         box = default;
         if (!IpcWindowSelector.TryPart(name, out wanted))
         {
-            reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' is not a frame part");
+            reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' is not a frame part.");
             return false;
         }
 
@@ -714,7 +714,7 @@ internal static class IpcDiagnosticsMethods
             }
         }
 
-        reply.Error(IpcErrorCodes.NotFound, $"window {info.Id} has no {IpcWindowSelector.Name(wanted)} part");
+        reply.Error(IpcErrorCodes.NotFound, $"Window {info.Id} has no {IpcWindowSelector.Name(wanted)} part.");
         return false;
     }
 }

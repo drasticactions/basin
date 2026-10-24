@@ -67,7 +67,7 @@ public sealed class ProcessTracker : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (launch.Argv.Count == 0 || launch.Argv[0].Length == 0)
         {
-            error = "'argv' names at least a program";
+            error = "'argv' is empty. Give at least the program to start.";
             return null;
         }
 
@@ -75,7 +75,7 @@ public sealed class ProcessTracker : IDisposable
         {
             if (path is not null && !Path.IsPathRooted(path))
             {
-                error = $"'{path}' is not absolute";
+                error = $"'{path}' is not an absolute path. Give an absolute path.";
                 return null;
             }
         }
@@ -379,7 +379,7 @@ public sealed class ProcessTracker : IDisposable
         var pidfd = ProcessSpawn.PidfdOpenOf(process.Pid);
         if (pidfd < 0)
         {
-            Log.Debug($"pidfd_open({process.Pid}) failed; launch {process.LaunchId} is reaped only when it is killed");
+            Log.Debug($"process: pidfd_open({process.Pid}) failed, launch {process.LaunchId} is reaped only when it is killed");
             return;
         }
 
@@ -406,7 +406,7 @@ public sealed class ProcessTracker : IDisposable
         }
 
         process.Exit(status);
-        Log.Debug($"launch {process.LaunchId} (pid {process.Pid}) exited");
+        Log.Debug($"process: launch {process.LaunchId} (pid {process.Pid}) exited");
         Prune();
         try
         {
@@ -414,7 +414,7 @@ public sealed class ProcessTracker : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"an exit observer failed: {exception}");
+            Log.Error(exception, $"process: an exit observer failed");
         }
 
         return true;

@@ -40,7 +40,7 @@ public static unsafe class ImGuiNative
             _probed = true;
             if (_declined is not null)
             {
-                ImGuiLog.Log.Info($"dear imgui is unavailable: {_declined}");
+                ImGuiLog.Log.Info($"native: Dear ImGui unavailable, {_declined}");
             }
         }
 

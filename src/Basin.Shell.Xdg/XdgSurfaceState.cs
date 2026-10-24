@@ -30,7 +30,7 @@ public sealed class XdgSurfaceState
         {
             if (!Surface.CanSetRole(XdgToplevelWindow.RoleName))
             {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, $"surface already has the '{Surface.Role}' role");
+                wmBase.PostError((uint)XdgWmBase.Error.Role, $"The surface already has the '{Surface.Role}' role.");
                 return;
             }
 
@@ -45,13 +45,13 @@ public sealed class XdgSurfaceState
         {
             if (!Surface.CanSetRole(XdgPopupWindow.RoleName))
             {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, $"surface already has the '{Surface.Role}' role");
+                wmBase.PostError((uint)XdgWmBase.Error.Role, $"The surface already has the '{Surface.Role}' role.");
                 return;
             }
 
             if (!shell.TryGetPositioner(e.Positioner, out var rules))
             {
-                wmBase.PostError((uint)XdgWmBase.Error.InvalidPositioner, "positioner is incomplete");
+                wmBase.PostError((uint)XdgWmBase.Error.InvalidPositioner, "The positioner is not complete. Set its size and anchor rectangle.");
                 return;
             }
 
@@ -182,7 +182,7 @@ public sealed class XdgSurfaceState
         var index = _pendingConfigures.IndexOf(serial);
         if (index < 0)
         {
-            Resource.PostError((uint)XdgSurface.Error.InvalidSerial, $"serial {serial} was never sent");
+            Resource.PostError((uint)XdgSurface.Error.InvalidSerial, $"Serial {serial} does not match a sent configure.");
             return;
         }
 
@@ -215,7 +215,7 @@ public sealed class XdgSurfaceState
         {
             if (Surface.Current.Buffer is not null)
             {
-                Resource.PostError((uint)XdgSurface.Error.UnconfiguredBuffer, "buffer committed before the initial configure");
+                Resource.PostError((uint)XdgSurface.Error.UnconfiguredBuffer, "A buffer was committed before the initial configure.");
                 return;
             }
 
@@ -226,7 +226,7 @@ public sealed class XdgSurfaceState
 
         if (Surface.Current.Buffer is not null && !_configureAcked)
         {
-            Resource.PostError((uint)XdgSurface.Error.UnconfiguredBuffer, "buffer committed before ack_configure");
+            Resource.PostError((uint)XdgSurface.Error.UnconfiguredBuffer, "A buffer was committed before ack_configure.");
             return;
         }
 

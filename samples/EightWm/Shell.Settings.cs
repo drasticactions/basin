@@ -109,14 +109,14 @@ internal sealed partial class Shell
 
         if (!File.Exists(spec))
         {
-            _log.Warn($"[ui] font {spec} does not exist; the theme font is used");
+            _log.Warn($"[ui] font {spec} does not exist, the theme font is used");
             return null;
         }
 
         using var face = SkiaSharp.SKTypeface.FromFile(spec);
         if (face?.FamilyName is not { Length: > 0 } name)
         {
-            _log.Warn($"[ui] font {spec} is not a font file; the theme font is used");
+            _log.Warn($"[ui] font {spec} is not a font file, the theme font is used");
             return null;
         }
 

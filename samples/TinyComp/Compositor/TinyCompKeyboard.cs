@@ -243,7 +243,7 @@ internal sealed partial class TinyComp
     {
         if (_processes.SpawnShell(string.Join(' ', command), out var error) is null)
         {
-            _log.Error($"spawn failed: {error}");
+            _log.Warn($"spawn: command did not start, {error}");
             return;
         }
 

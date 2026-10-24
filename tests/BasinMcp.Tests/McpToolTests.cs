@@ -271,7 +271,7 @@ public sealed class McpToolTests
             }));
         var result = harness.Call("test_fd");
         Assert.NotEqual(true, result.IsError);
-        Assert.EndsWith("1 descriptor was dropped: the bridge cannot pass descriptors", Text(result), StringComparison.Ordinal);
+        Assert.Contains("1 descriptor was dropped", Text(result), StringComparison.Ordinal);
         Assert.Equal(0, result.StructuredContent!.Value.GetProperty("fd").GetInt32());
     }
 

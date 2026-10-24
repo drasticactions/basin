@@ -74,7 +74,7 @@ public sealed unsafe class HostedEglImport
         catch (Exception error) when (
             error is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
         {
-            Log.Info($"dmabuf import unavailable on this display: {error.Message}");
+            Log.Warn(error, $"dmabuf: import is unavailable on this display");
             return null;
         }
     }
@@ -131,7 +131,7 @@ public sealed unsafe class HostedEglImport
 
         if (image == 0)
         {
-            Log.Debug($"eglCreateImageKHR refused a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf, modifier 0x{attributes.Modifier:X}");
+            Log.Debug($"dmabuf: eglCreateImageKHR refused a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf, modifier 0x{attributes.Modifier:X}");
             return null;
         }
 
@@ -146,7 +146,7 @@ public sealed unsafe class HostedEglImport
         var glError = _getError();
         if (glError != GlNoError)
         {
-            Log.Debug($"glEGLImageTargetTexture2DOES failed with 0x{glError:X} on a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf");
+            Log.Debug($"dmabuf: glEGLImageTargetTexture2DOES failed with 0x{glError:X} on a {attributes.Width}x{attributes.Height} {attributes.Format} dmabuf");
             _deleteTextures(1, &texture);
             _destroyImage(_display, image);
             return null;
@@ -239,7 +239,7 @@ public sealed unsafe class HostedEglImport
         var loaded = TryLoad(name);
         if (loaded is null)
         {
-            throw new InvalidOperationException($"{name} unavailable");
+            throw new InvalidOperationException($"The EGL entry point {name} is not available.");
         }
 
         return loaded;

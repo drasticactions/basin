@@ -247,7 +247,7 @@ public sealed class SkiaGlRenderer : IRenderer
         if (_context.IsAbandoned)
         {
             DropTargets();
-            throw new InvalidOperationException("The Ganesh context is abandoned; cached targets were dropped.");
+            throw new InvalidOperationException("The Ganesh context is abandoned. The cached targets were dropped.");
         }
 
         if (_targets.TryGetValue(target, out var entry) && entry.Native.IsCpuReadback && entry.Native.SeenWrites != target.WriteCount)

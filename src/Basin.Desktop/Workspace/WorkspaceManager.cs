@@ -529,7 +529,7 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         {
             if (IsRemoved)
             {
-                throw new InvalidOperationException("the workspace group is removed");
+                throw new InvalidOperationException("The workspace group is removed.");
             }
 
             var workspace = new Workspace(_owner, this, name, id, state, coordinates);
@@ -737,7 +737,7 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             ArgumentNullException.ThrowIfNull(group);
             if (group.IsRemoved)
             {
-                throw new InvalidOperationException("the workspace group is removed");
+                throw new InvalidOperationException("The workspace group is removed.");
             }
 
             var previous = Group;

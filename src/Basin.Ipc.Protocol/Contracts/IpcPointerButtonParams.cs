@@ -83,7 +83,7 @@ public sealed class IpcPointerButtonParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'button' is required"
+        (_present & 1) == 0 ? "'button' is required."
         : null;
 
     void IIpcReusable.Reset()

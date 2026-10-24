@@ -16,7 +16,7 @@ internal static class IpcTargetSelector
         target = default;
         if (!parameters.TryGetRaw("window", out var raw))
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "name a 'window': a window selector");
+            reply.Error(IpcErrorCodes.InvalidParams, "'window' is required. Give a window selector.");
             return false;
         }
 
@@ -48,7 +48,7 @@ internal static class IpcTargetSelector
         target = default;
         if (selector.Length == 0)
         {
-            reply.Error(IpcErrorCodes.InvalidParams, "'window' is empty");
+            reply.Error(IpcErrorCodes.InvalidParams, "'window' is empty. Give a window selector.");
             return false;
         }
 
@@ -56,7 +56,7 @@ internal static class IpcTargetSelector
         {
             if (diagnostics.LocateNode(selector[NodePrefix.Length..], margin, out var error) is not { } node)
             {
-                reply.Error(IpcErrorCodes.NotFound, error ?? $"no node at '{selector}'");
+                reply.Error(IpcErrorCodes.NotFound, error ?? $"No scene node is at '{selector}'.");
                 return false;
             }
 
@@ -78,13 +78,13 @@ internal static class IpcTargetSelector
                 }
             }
 
-            reply.Error(IpcErrorCodes.NotFound, $"no mapped layer surface with namespace '{space}'");
+            reply.Error(IpcErrorCodes.NotFound, $"No mapped layer surface has the namespace '{space}'.");
             return false;
         }
 
         if (describe.Toplevels is not { } model)
         {
-            reply.Error(IpcErrorCodes.Unavailable, "this compositor has no window model");
+            reply.Error(IpcErrorCodes.Unavailable, "This compositor has no window model.");
             return false;
         }
 
@@ -103,7 +103,7 @@ internal static class IpcTargetSelector
         {
             if (info.Surface is not { } surface || diagnostics.LocateWindow(surface, margin) is not { } follow)
             {
-                reply.Error(IpcErrorCodes.Refused, $"window {info.Id} is not in the scene");
+                reply.Error(IpcErrorCodes.Refused, $"Window {info.Id} is not in the scene.");
                 return false;
             }
 
@@ -117,7 +117,7 @@ internal static class IpcTargetSelector
         {
             if (rest[0] != ':' || !int.TryParse(rest.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'{selector}' ends in neither /popup nor /popup:N");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{selector}' must end in /popup or /popup:N.");
                 return false;
             }
 
@@ -133,15 +133,15 @@ internal static class IpcTargetSelector
         if (popups.Count == 0 || (index is { } wanted && wanted >= popups.Count))
         {
             reply.Error(IpcErrorCodes.NotFound, popups.Count == 0
-                ? $"window {info.Id} has no mapped popup"
-                : $"window {info.Id} has {popups.Count} popups, so no popup:{index}");
+                ? $"Window {info.Id} has no mapped popup."
+                : $"Window {info.Id} has {popups.Count} popups, so it has no popup:{index}.");
             return false;
         }
 
         var popup = popups[index ?? popups.Count - 1];
         if (diagnostics.LocateSurface(popup, margin) is not { } popupFollow)
         {
-            reply.Error(IpcErrorCodes.Refused, $"the popup of window {info.Id} is not in the scene");
+            reply.Error(IpcErrorCodes.Refused, $"The popup of window {info.Id} is not in the scene.");
             return false;
         }
 

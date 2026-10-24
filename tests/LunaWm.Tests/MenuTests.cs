@@ -129,7 +129,7 @@ public sealed class MenuTests
 
         await session.SendAsync("menu wifi");
         Assert.NotNull(await session.WaitForAsync(line => line == "MENU wifi on"));
-        Assert.NotNull(await session.WaitForAsync(line => line == "  row note org.freedesktop.NetworkManager is not on the system bus", poke: "where", fresh: true));
+        Assert.NotNull(await session.WaitForAsync(line => line == "  row note NetworkManager isn't running, so Wi-Fi can't be shown.", poke: "where", fresh: true));
         await session.SendAsync("menu device");
         Assert.NotNull(await session.WaitForAsync(line => line == "MENU device on"));
         Assert.NotNull(await session.WaitForAsync(line => line == "  row action Shut Down", poke: "where", fresh: true));

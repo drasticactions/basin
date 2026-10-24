@@ -101,7 +101,7 @@ internal sealed class LunaConfig
 
     private static Stream TemplateStream() =>
         typeof(LunaConfig).Assembly.GetManifestResourceStream("luna-wm.toml")
-            ?? throw new InvalidOperationException("luna-wm.toml is not embedded");
+            ?? throw new InvalidOperationException("The luna-wm.toml template is not embedded in the program.");
 
     public static LunaConfig Load(string? path, bool none, BasinLogger log, out string? fatal)
     {
@@ -142,7 +142,7 @@ internal sealed class LunaConfig
             }
             else
             {
-                log.Warn($"[shell] xwayland_scale {scale} is not \"auto\" or a number of at least 1; auto is used");
+                log.Warn($"[shell] xwayland_scale {scale} is not \"auto\" or a number of at least 1, auto is used");
             }
 
             if (shell.Numbers("xwayland_dpi_buckets") is { } buckets)
@@ -172,7 +172,7 @@ internal sealed class LunaConfig
             BackKey = gestures.Text("back_key") is { Length: > 0 } back ? back : BackKey;
             if (Keysym.FromName(BackKey) == 0)
             {
-                log.Warn($"[gestures] back_key '{BackKey}' is not a keysym name; XF86Back is used");
+                log.Warn($"[gestures] back_key '{BackKey}' is not a keysym name, XF86Back is used");
                 BackKey = "XF86Back";
             }
         }
@@ -189,7 +189,7 @@ internal sealed class LunaConfig
             {
                 if (tab.Text("name") is not { Length: > 0 } name)
                 {
-                    log.Warn($"a [[launcher.tab]] with no name is dropped");
+                    log.Warn($"[[launcher.tab]] a tab with no name is dropped");
                     continue;
                 }
 

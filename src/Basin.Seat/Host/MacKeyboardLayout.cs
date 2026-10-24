@@ -202,8 +202,9 @@ public sealed class MacKeyboardLayout : IHostKeyboardLayout, IDisposable
                 layout.Refresh();
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            SeatLog.Log.Error(e, $"keyboard: macOS layout refresh failed");
         }
         finally
         {

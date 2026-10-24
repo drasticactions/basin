@@ -126,7 +126,7 @@ public sealed class TextTyper
                 {
                     if (_override is null)
                     {
-                        error ??= $"the keymap cannot type '{rune}' (U+{rune.Value:X4}) at position {start + position}";
+                        error ??= $"The keymap cannot type '{rune}' (U+{rune.Value:X4}) at position {start + position}.";
                         if (!SkipUntypable)
                         {
                             end = index;
@@ -188,7 +188,7 @@ public sealed class TextTyper
 
                 var first = _spares[0].Keysym;
                 var codepoint = (first & 0x01000000u) != 0 ? first & 0x00ffffffu : first;
-                error = $"the keymap override refused {refused} characters, the first is U+{codepoint:X4}";
+                error = $"The keymap override refused {refused} characters. The first one is U+{codepoint:X4}.";
             }
         }
 

@@ -76,7 +76,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
 
         _recorder = SkiaCensus.Track(recorder);
         _additiveEffect = SkiaCensus.Track(SKRuntimeEffect.CreateColorFilter(AdditiveSksl, out var errors)
-            ?? throw new InvalidOperationException($"the additive filter failed to compile: {errors}"));
+            ?? throw new InvalidOperationException($"The additive filter did not compile: {errors}"));
         AdditiveFilter = SkiaCensus.Track(_additiveEffect.ToColorFilter());
         _paint = SkiaCensus.Track(new SKPaint());
         _pass = new SkiaGraphiteRenderPass(this, _paint);
@@ -252,7 +252,7 @@ public sealed unsafe class SkiaGraphiteRenderer : IRenderer
         if (_context.IsDeviceLost)
         {
             DropTargets();
-            throw new InvalidOperationException("The Graphite context reports device loss; cached targets were dropped.");
+            throw new InvalidOperationException("The Graphite context reports device loss. The cached targets were dropped.");
         }
 
         _sync.WaitFence(options.WaitFenceFd);

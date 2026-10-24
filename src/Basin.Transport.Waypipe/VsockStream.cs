@@ -39,7 +39,7 @@ internal sealed class VsockStream : Stream
         }
         catch (SocketException ex)
         {
-            throw new IOException($"vsock read failed: {ex.Message}", ex);
+            throw new IOException($"The vsock read failed ({ex.SocketErrorCode}).", ex);
         }
     }
 
@@ -57,7 +57,7 @@ internal sealed class VsockStream : Stream
         }
         catch (SocketException ex)
         {
-            throw new IOException($"vsock write failed: {ex.Message}", ex);
+            throw new IOException($"The vsock write failed ({ex.SocketErrorCode}).", ex);
         }
     }
 
@@ -80,8 +80,9 @@ internal sealed class VsockStream : Stream
         {
             _socket.Shutdown(SocketShutdown.Both);
         }
-        catch (SocketException)
+        catch (SocketException ex)
         {
+            WaypipeLog.Log.Debug(ex, $"vsock: shutdown failed");
         }
     }
 

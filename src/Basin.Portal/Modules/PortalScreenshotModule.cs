@@ -97,7 +97,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
             var target = Vardict.UInt32(options, "target", TargetScreen);
             if ((target & ~AvailableTargets) != 0 || target == 0 || (target & (target - 1)) != 0)
             {
-                Log.Info($"screenshot for {appId}: target {target} is not one this compositor offers");
+                Log.Info($"screenshot for {appId}: target {target} is not offered");
                 return (PortalResponse.Other, Results.Empty);
             }
 
@@ -108,7 +108,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
                 if (!checkedByFrontend)
                 {
                     var confirm = await _prompts.Confirm(
-                        Named(new ConfirmPrompt(appId, parentWindow, modal, "Take a screenshot?", $"{Describe(appId)} wants to take a screenshot")),
+                        Named(new ConfirmPrompt(appId, parentWindow, modal, "Take a screenshot?", $"{Describe(appId)} wants to take a screenshot.")),
                         request.Token).ConfigureAwait(true);
                     if (!confirm.IsAccepted || !confirm.Value)
                     {
@@ -149,7 +149,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
             else
             {
                 var confirm = await _prompts.Confirm(
-                    Named(new ConfirmPrompt(appId, parentWindow, modal, "Take a screenshot?", $"{Describe(appId)} wants to take a screenshot")),
+                    Named(new ConfirmPrompt(appId, parentWindow, modal, "Take a screenshot?", $"{Describe(appId)} wants to take a screenshot.")),
                     request.Token).ConfigureAwait(true);
                 if (!confirm.IsAccepted || !confirm.Value)
                 {
@@ -196,7 +196,7 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                Log.Warn($"screenshot for {appId}: the file was not written: {e.Message}");
+                Log.Warn(e, $"screenshot for {appId}: file not written");
                 return (PortalResponse.Other, Results.Empty);
             }
             finally

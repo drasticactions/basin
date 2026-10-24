@@ -58,13 +58,13 @@ internal static class IpcWindowSelector
         info = default;
         if (describe.Toplevels is not { } model)
         {
-            reply.Error(IpcErrorCodes.Unavailable, "this compositor has no window model");
+            reply.Error(IpcErrorCodes.Unavailable, "This compositor has no window model.");
             return false;
         }
 
         if (!parameters.TryGetRaw(field, out var raw))
         {
-            reply.Error(IpcErrorCodes.InvalidParams, $"name a '{field}': an id, an app_id or part of a title");
+            reply.Error(IpcErrorCodes.InvalidParams, $"'{field}' is required. Give a window id, an app_id or part of a title.");
             return false;
         }
 
@@ -78,7 +78,7 @@ internal static class IpcWindowSelector
 
             if (text.Length == 0)
             {
-                reply.Error(IpcErrorCodes.InvalidParams, $"'{field}' is empty");
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{field}' is empty. Give a window id, an app_id or part of a title.");
                 return false;
             }
 
@@ -102,7 +102,7 @@ internal static class IpcWindowSelector
                 return true;
             }
 
-            reply.Error(IpcErrorCodes.NotFound, $"no window {id}");
+            reply.Error(IpcErrorCodes.NotFound, $"No window has the id {id}. Call windows/list for the windows.");
             return false;
         }
 
@@ -133,7 +133,7 @@ internal static class IpcWindowSelector
                 return true;
             }
 
-            reply.Error(IpcErrorCodes.NotFound, $"no window {id}");
+            reply.Error(IpcErrorCodes.NotFound, $"No window has the id {id}. Call windows/list for the windows.");
             return false;
         }
 
@@ -165,13 +165,13 @@ internal static class IpcWindowSelector
                     return true;
                 }
 
-                reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' matches {matches.Count} windows: " + string.Join(
-                    "; ", matches.Select(static m => string.Create(CultureInfo.InvariantCulture, $"{m.Id} app_id={m.AppId} title={m.Title}"))));
+                reply.Error(IpcErrorCodes.InvalidParams, $"'{name}' matches {matches.Count} windows. Give one of their ids: " + string.Join(
+                    ", ", matches.Select(static m => string.Create(CultureInfo.InvariantCulture, $"{m.Id} (app_id={m.AppId}, title={m.Title})"))) + ".");
                 return false;
             }
         }
 
-        reply.Error(IpcErrorCodes.NotFound, $"no window with app_id '{name}' or a title that contains it");
+        reply.Error(IpcErrorCodes.NotFound, $"No window has the app_id '{name}' or a title that contains it.");
         return false;
     }
 

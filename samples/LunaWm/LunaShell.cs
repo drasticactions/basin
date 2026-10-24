@@ -58,7 +58,7 @@ internal sealed partial class LunaShell : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: the shell did not start");
             return 1;
         }
 
@@ -78,7 +78,7 @@ internal sealed partial class LunaShell : IDisposable
         _config = config;
 
         var name = options.Renderer;
-        var stack = RendererCatalog.CreateWithFallback(ref name, RendererCatalog.FindRenderNode(), fallback => log.Warn($"{fallback.Describe()}"));
+        var stack = RendererCatalog.CreateWithFallback(ref name, RendererCatalog.FindRenderNode(), fallback => fallback.Log(log));
         _renderer = stack.Renderer;
         _rendererName = name;
         _deviceAllocator = stack.DeviceAllocator;
@@ -161,7 +161,7 @@ internal sealed partial class LunaShell : IDisposable
         _outputs.Emptied += Stop;
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
-        _outputs.ModesetRefused += card => log.Error($"modeset refused by {card.Name} in every mode");
+        _outputs.ModesetRefused += card => log.Error($"output: {card.Name} refused a modeset in every mode");
         _outputs.Added += OnOutputAdded;
         _outputs.Removed += OnOutputRemoved;
         _outputs.ModeChanged += driver =>
@@ -220,7 +220,7 @@ internal sealed partial class LunaShell : IDisposable
         _outputs.CreateInitialOutputs();
         if (options.Backend == BackendKind.Drm && _views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display, then start the shell again.");
         }
 
         Relayout();
@@ -250,7 +250,7 @@ internal sealed partial class LunaShell : IDisposable
 
     internal static LunaView ViewOf(OutputView driver) => (LunaView)driver.Tag!;
 
-    internal LunaView PrimaryView => _views.Count > 0 ? _views[0] : throw new InvalidOperationException("no output");
+    internal LunaView PrimaryView => _views.Count > 0 ? _views[0] : throw new InvalidOperationException("The shell has no output.");
 
     internal void Stop() => _loop.Stop();
 
@@ -356,7 +356,7 @@ internal sealed partial class LunaShell : IDisposable
         var next = LunaConfig.Load(_options.ConfigPath ?? LunaConfig.DefaultPath(), _options.NoConfig, _log, out var fatal);
         if (fatal is not null)
         {
-            _log.Warn($"reload failed, keeping the running config: {fatal}");
+            _log.Warn($"config: reload failed, the running config stays: {fatal}");
             _report.Line("RELOAD failed");
             return;
         }
@@ -387,7 +387,7 @@ internal sealed partial class LunaShell : IDisposable
     {
         if (_processes.SpawnShell(command, out var error) is null)
         {
-            _log.Warn($"cannot start '{command}': {error}");
+            _log.Warn($"launch: cannot start '{command}', {CliMessage.Text(error ?? string.Empty)}");
         }
     }
 
@@ -401,7 +401,7 @@ internal sealed partial class LunaShell : IDisposable
         _uiDriver.Pump();
         if (SceneScreenshot.Write(_scene, _renderer, _views[0].Output, path))
         {
-            _log.Info($"screenshot written to {path}");
+            _log.Info($"screenshot: written to {path}");
         }
     }
 

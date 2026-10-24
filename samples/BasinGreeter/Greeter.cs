@@ -50,7 +50,7 @@ internal sealed partial class Greeter : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException or System.Net.Sockets.SocketException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"login screen failed");
             return 1;
         }
 
@@ -247,7 +247,7 @@ internal sealed partial class Greeter : IDisposable
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            log.Warn($"cannot load {path}: {error.Message}");
+            log.Warn(error, $"background: cannot load {path}");
             return null;
         }
     }

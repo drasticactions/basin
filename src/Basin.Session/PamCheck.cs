@@ -55,13 +55,13 @@ public sealed unsafe class PamCheck : IDisposable
         var output = stackalloc int[2];
         if (PamNative.Pipe2(input, CloseOnExec) != 0)
         {
-            error = $"pipe: {Marshal.GetLastPInvokeError()}";
+            error = $"pipe2 failed, {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}";
             return false;
         }
 
         if (PamNative.Pipe2(output, CloseOnExec) != 0)
         {
-            error = $"pipe: {Marshal.GetLastPInvokeError()}";
+            error = $"pipe2 failed, {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}";
             _ = PamNative.Close(input[0]);
             _ = PamNative.Close(input[1]);
             return false;

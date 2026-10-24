@@ -75,7 +75,7 @@ internal sealed partial class Westonia : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
         {
-            log.Error($"{error.Message}");
+            log.Error(error, $"startup: the compositor did not start");
             return 1;
         }
 
@@ -176,7 +176,7 @@ internal sealed partial class Westonia : IDisposable
         _outputs.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         _host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         _outputs.ModesetRefused += card =>
-            log.Error($"modeset refused by {card.Name} in every mode");
+            log.Error($"output: {card.Name} refused a modeset in every mode");
         _outputs.Added += view => BasinReport.Line($"OUTPUT {view.Output.Name} {view.Output.CurrentMode.Width}x{view.Output.CurrentMode.Height}");
         _presenceTracker = new SurfacePresenceTracker(
             _layout, (surface, scale) => _fractionalScale?.AnnounceScale(surface, scale));
@@ -229,7 +229,7 @@ internal sealed partial class Westonia : IDisposable
         }
         else if (_ini.Shell.PanelBlur > 0)
         {
-            log.Warn($"panel-blur needs a renderer with backdrop effects, and {rendererName} has none");
+            log.Warn($"weston.ini: [shell] panel-blur is ignored, {rendererName} has no backdrop effects");
         }
 
         _avalonia = new AvaloniaShell(_ui, _layers, _ini, log, Spawn, _shellSurfaces)
@@ -423,7 +423,7 @@ internal sealed partial class Westonia : IDisposable
 
         if (options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
-            throw new InvalidOperationException("no connected output");
+            throw new InvalidOperationException("No output is connected. Connect a display, then start the compositor again.");
         }
 
         if (_host.Parent is { } parent)
@@ -464,7 +464,7 @@ internal sealed partial class Westonia : IDisposable
 
         if (SceneScreenshot.Write(_scene, _renderer, view.Output, path))
         {
-            _log.Info($"screenshot written to {path}");
+            _log.Info($"screenshot: written to {path}");
         }
     }
 
@@ -565,7 +565,7 @@ internal sealed partial class Westonia : IDisposable
     {
         if (_processes.Spawn(new ProcessLaunch(["/bin/sh", "-c", command]) { X11 = x11 }, out var error) is null)
         {
-            _log.Error($"cannot start {command}: {error}");
+            _log.Warn($"launch: cannot start {command}, {CliMessage.Text(error ?? string.Empty)}");
         }
     }
 
@@ -575,7 +575,7 @@ internal sealed partial class Westonia : IDisposable
         return RendererCatalog.CreateWithFallback(
             ref name,
             RendererCatalog.FindRenderNode(),
-            fallback => log.Warn($"{(fallback.Describe())}"));
+            fallback => fallback.Log(log));
     }
 
     public void Dispose()

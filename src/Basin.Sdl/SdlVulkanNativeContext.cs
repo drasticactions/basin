@@ -13,7 +13,7 @@ internal sealed unsafe class SdlVulkanNativeContext : INativeContext
         var address = SDL.VulkanGetVkGetInstanceProcAddr();
         if (address == 0)
         {
-            throw new InvalidOperationException($"SDL has no Vulkan loader: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL has no Vulkan loader. SDL reports \"{SDL.GetError()}\".");
         }
 
         _getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)address;

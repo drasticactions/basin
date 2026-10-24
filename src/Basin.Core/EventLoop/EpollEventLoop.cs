@@ -45,13 +45,13 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
     {
         if (!OperatingSystem.IsLinux())
         {
-            throw new PlatformNotSupportedException("EpollEventLoop needs Linux");
+            throw new PlatformNotSupportedException("EpollEventLoop runs only on Linux.");
         }
 
         _epoll = epoll_create1(EpollCloexec);
         if (_epoll < 0)
         {
-            throw new InvalidOperationException($"epoll_create1 failed: errno {Marshal.GetLastPInvokeError()}");
+            throw new InvalidOperationException($"epoll_create1 failed with errno {Marshal.GetLastPInvokeError()}.");
         }
 
         var packed = RuntimeInformation.ProcessArchitecture is Architecture.X64 or Architecture.X86;
@@ -117,7 +117,7 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         var fd = timerfd_create(ClockMonotonic, TfdNonblock | TfdCloexec);
         if (fd < 0)
         {
-            throw new InvalidOperationException($"timerfd_create failed: errno {Marshal.GetLastPInvokeError()}");
+            throw new InvalidOperationException($"timerfd_create failed with errno {Marshal.GetLastPInvokeError()}.");
         }
 
         var source = new TimerSource(this, ++_nextId, fd, handler);
@@ -133,7 +133,7 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         var fds = stackalloc int[2];
         if (pipe2(fds, ONonblock | OCloexec) != 0)
         {
-            throw new InvalidOperationException($"pipe2 failed for signal {signalNumber}: errno {Marshal.GetLastPInvokeError()}");
+            throw new InvalidOperationException($"pipe2 failed for signal {signalNumber} with errno {Marshal.GetLastPInvokeError()}.");
         }
 
         var source = new SignalSource(this, ++_nextId, fds[0], fds[1], signalNumber, handler);
@@ -194,7 +194,7 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         if (epoll_ctl(_epoll, EpollCtlAdd, fd, entry) != 0)
         {
             source.Close();
-            throw new InvalidOperationException($"epoll_ctl failed for fd {fd}: errno {Marshal.GetLastPInvokeError()}");
+            throw new InvalidOperationException($"epoll_ctl failed for fd {fd} with errno {Marshal.GetLastPInvokeError()}.");
         }
 
         _sources[source.Id] = source;
@@ -310,10 +310,10 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         public abstract void Fire(uint flags);
 
         public virtual void UpdateTimer(int delayMs) =>
-            throw new InvalidOperationException("this source has no timer");
+            throw new InvalidOperationException("This event source has no timer.");
 
         public virtual void UpdateFd(FdReadiness events) =>
-            throw new InvalidOperationException("this source watches its own fd");
+            throw new InvalidOperationException("This event source watches its own fd. Its fd cannot change.");
 
         public void Remove()
         {

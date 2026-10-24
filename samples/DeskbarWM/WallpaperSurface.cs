@@ -1,3 +1,4 @@
+using Basin.Diagnostics;
 using Basin.WindowManager;
 using Basin.WindowManager.Skia;
 using Basin.WindowManager.Skia.Protocol;
@@ -9,6 +10,7 @@ namespace DeskbarWm;
 internal sealed class WallpaperSurface : IDisposable
 {
     private readonly ManagerSurface _surface;
+    private readonly BasinLogger _log;
     private SKImage? _image;
     private string? _imagePath;
     private string? _lastKey;
@@ -17,9 +19,11 @@ internal sealed class WallpaperSurface : IDisposable
         ManagerSurfaceHost host,
         WlOutput wlOutput,
         WmOutput output,
-        RiverWindowManager wm)
+        RiverWindowManager wm,
+        BasinLogger log)
     {
         Output = output;
+        _log = log;
         _surface = host.Create(wlOutput, ZwlrLayerShellV1.Layer.Background, "deskbar-wallpaper");
         _surface.SetExclusiveZone(-1);
         _surface.SetAnchor(
@@ -89,8 +93,14 @@ internal sealed class WallpaperSurface : IDisposable
         _imagePath = path;
         _image?.Dispose();
         _image = null;
-        if (path.Length == 0 || !File.Exists(path))
+        if (path.Length == 0)
         {
+            return;
+        }
+
+        if (!File.Exists(path))
+        {
+            _log.Warn($"[desktop] wallpaper {path} does not exist, the desktop color is used");
             return;
         }
 
@@ -100,10 +110,14 @@ internal sealed class WallpaperSurface : IDisposable
             if (bitmap is not null && bitmap.Width > 0 && bitmap.Height > 0)
             {
                 _image = SKImage.FromBitmap(bitmap);
+                return;
             }
+
+            _log.Warn($"[desktop] wallpaper {path} is not an image Skia can read, the desktop color is used");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            _log.Warn(error, $"[desktop] cannot load the wallpaper {path}, the desktop color is used");
         }
     }
 

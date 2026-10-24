@@ -102,14 +102,14 @@ internal sealed class System7Config
 
     private static Stream TemplateStream() =>
         typeof(System7Config).Assembly.GetManifestResourceStream("system7-wm.toml")
-            ?? throw new InvalidOperationException("system7-wm.toml is not embedded");
+            ?? throw new InvalidOperationException("The system7-wm.toml template is not embedded in the program.");
 
     public static System7Config Load(string? path, bool none, BasinLogger log)
     {
         var config = Load(path, none, log, out var fatal);
         if (fatal is not null)
         {
-            log.Warn($"{fatal}, keeping defaults");
+            log.Warn($"config: {fatal}, the defaults are used");
         }
 
         return config;
@@ -131,7 +131,7 @@ internal sealed class System7Config
         {
             config.MainOutput = display.Text("main") ?? "";
             var depth = display.Text("depth");
-            config.Depth = depth is null ? config.Depth : ColorDepths.Parse(depth) ?? Warn(log, $"[display] depth '{depth}' is not a depth; 256 is used", System7ColorDepth.Indexed8);
+            config.Depth = depth is null ? config.Depth : ColorDepths.Parse(depth) ?? Warn(log, $"[display] depth '{depth}' is not a depth, 256 is used", System7ColorDepth.Indexed8);
             config.DepthApplications = display.Flag("apply_to_applications", config.DepthApplications);
             config.DepthDither = display.Flag("dither", config.DepthDither);
         }
@@ -162,7 +162,7 @@ internal sealed class System7Config
             var scale = windows.Raw("xwayland_scale");
             config.XWaylandScale = Basin.XWayland.XWaylandScale.TryParse(scale, out var parsed)
                 ? parsed
-                : Warn(log, $"[windows] xwayland_scale {scale} is not \"auto\" or a number of at least 1; auto is used", Basin.XWayland.XWaylandScale.Auto);
+                : Warn(log, $"[windows] xwayland_scale {scale} is not \"auto\" or a number of at least 1, auto is used", Basin.XWayland.XWaylandScale.Auto);
             if (windows.Numbers("xwayland_dpi_buckets") is { } buckets)
             {
                 config.XWaylandDpiBuckets = [.. buckets.Where(static b => b > 0).Select(static b => (int)Math.Round(b))];
@@ -217,7 +217,7 @@ internal sealed class System7Config
             config.TerminalCommand = terminal.Text("command") ?? "";
             config.TerminalShell = terminal.Text("shell") ?? "";
             var size = terminal.Number("font_size", config.TerminalFontSize);
-            config.TerminalFontSize = TerminalFonts.IsSize(size) ? size : Warn(log, $"[terminal] font_size {size} is not 9 or 12; 9 is used", 9);
+            config.TerminalFontSize = TerminalFonts.IsSize(size) ? size : Warn(log, $"[terminal] font_size {size} is not 9 or 12, 9 is used", 9);
             config.TerminalScrollback = Math.Clamp(terminal.Number("scrollback", config.TerminalScrollback), 0, 100000);
         }
 

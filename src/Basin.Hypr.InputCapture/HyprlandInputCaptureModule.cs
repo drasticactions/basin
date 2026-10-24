@@ -32,7 +32,7 @@ public sealed class HyprlandInputCaptureModule : DesktopModule<HyprlandInputCapt
             return true;
         }
 
-        Log.Info($"{WireInterface} not advertised: {whyNot}");
+        Log.Info($"{WireInterface} not advertised, {whyNot}");
         return false;
     }
 

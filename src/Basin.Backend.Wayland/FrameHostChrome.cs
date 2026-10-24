@@ -116,7 +116,7 @@ public sealed class FrameHostChrome : HostFrameChrome
         {
             _faulted = true;
             Frame.SetInsets(default);
-            Log.Error($"host frame fault: {e.Message}");
+            Log.Error(e, $"host frame: drawing failed, frame turned off");
         }
     }
 

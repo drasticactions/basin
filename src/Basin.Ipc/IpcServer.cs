@@ -190,7 +190,7 @@ public sealed unsafe class IpcServer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsStarted)
         {
-            throw new InvalidOperationException("the server starts once");
+            throw new InvalidOperationException("The server has already started. Start it once only.");
         }
 
         SyntheticInput ??= Services.Find<ISyntheticInput>();
@@ -220,7 +220,7 @@ public sealed unsafe class IpcServer : IDisposable
         ThrowIfNotStarted();
         if (LineFront is not null)
         {
-            throw new InvalidOperationException("the line front is already running");
+            throw new InvalidOperationException("The line front is already running.");
         }
 
         LineFront = new IpcLineFront(this, fd);
@@ -281,7 +281,7 @@ public sealed unsafe class IpcServer : IDisposable
             return true;
         }
 
-        reply.Error(IpcErrorCodes.UnknownMethod, $"no method '{method}' on this compositor");
+        reply.Error(IpcErrorCodes.UnknownMethod, $"This compositor has no method '{method}'. Call ipc/methods for the list.");
         return false;
     }
 
@@ -315,7 +315,7 @@ public sealed unsafe class IpcServer : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"the interceptor failed after {method}: {exception}");
+            Log.Error(exception, $"interceptor: After failed for {method}");
         }
         finally
         {
@@ -340,8 +340,8 @@ public sealed unsafe class IpcServer : IDisposable
                 }
                 catch (Exception exception)
                 {
-                    Log.Error($"the interceptor failed before {method}: {exception}");
-                    decision = IpcDecision.Deny("the compositor could not decide on this call");
+                    Log.Error(exception, $"interceptor: Before failed for {method}");
+                    decision = IpcDecision.Deny("The compositor could not decide on this call. Read the compositor log for the cause.");
                 }
 
                 held = context.Held;
@@ -375,12 +375,12 @@ public sealed unsafe class IpcServer : IDisposable
                 return;
 
             case IpcDecisionKind.Defer:
-                reply.Error(IpcErrorCodes.Internal, "the interceptor deferred a call it did not hold");
+                reply.Error(IpcErrorCodes.Internal, "The interceptor deferred a call but did not hold it.");
                 After(method, reply, started);
                 return;
 
             default:
-                reply.Error(IpcErrorCodes.Refused, decision.Message ?? "the compositor refused the call");
+                reply.Error(IpcErrorCodes.Refused, decision.Message ?? "The compositor refused the call.");
                 After(method, reply, started);
                 return;
         }
@@ -431,7 +431,7 @@ public sealed unsafe class IpcServer : IDisposable
         {
             if (!held.IsDone)
             {
-                held.Deny("the compositor stopped");
+                held.Deny("The compositor stopped.");
             }
         }
 
@@ -476,7 +476,7 @@ public sealed unsafe class IpcServer : IDisposable
             IpcNative.Export(IpcProtocol.PathVariable, null);
             if (!System.IO.Path.IsPathRooted(inherited))
             {
-                Log.Warn($"{IpcProtocol.PathVariable} is not absolute; the default path is used");
+                Log.Warn($"socket: {IpcProtocol.PathVariable} is not an absolute path, default path used");
                 inherited = null;
             }
         }
@@ -489,39 +489,39 @@ public sealed unsafe class IpcServer : IDisposable
 
         if (path is null)
         {
-            Log.Warn($"XDG_RUNTIME_DIR is not set; the control socket is off");
+            Log.Warn($"socket: XDG_RUNTIME_DIR is not set, control socket off");
             return;
         }
 
         if (!UnixSocket.FitsPath(path))
         {
-            Log.Warn($"'{path}' is too long for a Unix socket; the control socket is off");
+            Log.Warn($"socket: '{path}' is too long for a Unix socket, control socket off");
             return;
         }
 
         if (File.Exists(path) && !ClearStale(path))
         {
-            Log.Warn($"a live compositor already answers on '{path}'; the control socket is off");
+            Log.Warn($"socket: a live compositor already answers on '{path}', control socket off");
             return;
         }
 
         var fd = UnixSocket.Create();
         if (fd < 0)
         {
-            Log.Warn($"socket() failed with errno {UnixSocket.LastError}; the control socket is off");
+            Log.Warn($"socket: socket() failed with errno {UnixSocket.LastError}, control socket off");
             return;
         }
 
         if (UnixSocket.Bind(fd, path) != 0)
         {
-            Log.Warn($"bind('{path}') failed with errno {UnixSocket.LastError}; the control socket is off");
+            Log.Warn($"socket: bind of '{path}' failed with errno {UnixSocket.LastError}, control socket off");
             _ = UnixSocket.Close(fd);
             return;
         }
 
         if (UnixSocket.Chmod(path, Convert.ToUInt32("600", 8)) != 0 || UnixSocket.Listen(fd, Backlog) != 0)
         {
-            Log.Warn($"could not secure or listen on '{path}' (errno {UnixSocket.LastError}); the control socket is off");
+            Log.Warn($"socket: chmod or listen on '{path}' failed with errno {UnixSocket.LastError}, control socket off");
             _ = UnixSocket.Close(fd);
             _ = UnixSocket.Unlink(path);
             return;
@@ -565,7 +565,7 @@ public sealed unsafe class IpcServer : IDisposable
                     var error = UnixSocket.LastError;
                     if (error != UnixSocket.EAgain && error != UnixSocket.EIntr)
                     {
-                        Log.Debug($"accept failed with errno {error}");
+                        Log.Debug($"socket: accept failed with errno {error}");
                     }
 
                     if (error == UnixSocket.EIntr)
@@ -578,7 +578,7 @@ public sealed unsafe class IpcServer : IDisposable
 
                 if (!UnixSocket.TryPeerCredentials(client, out var pid, out var uid) || uid != UnixSocket.EffectiveUid())
                 {
-                    Log.Info($"refused a control connection from uid {uid} (pid {pid})");
+                    Log.Warn($"socket: connection from uid {uid} (pid {pid}) refused, another user");
                     _ = UnixSocket.Close(client);
                     continue;
                 }
@@ -590,7 +590,7 @@ public sealed unsafe class IpcServer : IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error($"accepting a control connection failed: {exception}");
+            Log.Error(exception, $"socket: accept failed");
         }
     }
 
@@ -599,7 +599,7 @@ public sealed unsafe class IpcServer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsStarted)
         {
-            throw new InvalidOperationException("set this before the server starts");
+            throw new InvalidOperationException("The server has started. Set this before Start.");
         }
     }
 
@@ -608,7 +608,7 @@ public sealed unsafe class IpcServer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!IsStarted)
         {
-            throw new InvalidOperationException("start the server first");
+            throw new InvalidOperationException("The server has not started. Call Start first.");
         }
     }
 }

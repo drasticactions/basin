@@ -58,7 +58,7 @@ public static class ProcessSubreaper
     {
         ArgumentNullException.ThrowIfNull(command);
         var argv = new List<string>();
-        var path = Environment.ProcessPath ?? throw new InvalidOperationException("the process path is unknown");
+        var path = Environment.ProcessPath ?? throw new InvalidOperationException("The process path is unknown. The reaper process cannot start.");
         argv.Add(path);
         if (Path.GetFileNameWithoutExtension(path) == "dotnet" && Environment.GetCommandLineArgs() is [{ } entry, ..])
         {
@@ -112,7 +112,7 @@ public static class ProcessSubreaper
         var command = separator >= 0 ? args[(separator + 1)..] : args;
         if (command.Length == 0)
         {
-            Console.Error.WriteLine($"{Mode}: no command after --");
+            Console.Error.WriteLine($"{Mode}: no command given. Put the command after the separator");
             return 1;
         }
 
@@ -136,7 +136,7 @@ public static class ProcessSubreaper
         var primary = Spawn(command);
         if (primary < 0)
         {
-            Console.Error.WriteLine($"{Mode}: could not start {command[0]}");
+            Console.Error.WriteLine($"{Mode}: cannot start {command[0]}");
             return 127;
         }
 

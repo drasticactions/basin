@@ -104,7 +104,7 @@ public sealed class GammaControlManager : IDisposable
         control.Client.CloseFd(fd);
         if (total != bytes.Length)
         {
-            control.PostError(ErrorInvalidGamma, "gamma table too short");
+            control.PostError(ErrorInvalidGamma, "The gamma table is too short.");
             return;
         }
 

@@ -83,7 +83,7 @@ public sealed class SecurityContextManager : IDisposable
             {
                 client.CloseFd(e.ListenFd);
                 client.CloseFd(e.CloseFd);
-                manager.PostError(ErrorNested, "nested security contexts are not allowed");
+                manager.PostError(ErrorNested, "A client in a security context cannot make a new security context.");
             };
             return;
         }
@@ -94,7 +94,7 @@ public sealed class SecurityContextManager : IDisposable
             if (e.ListenFd < 0)
             {
                 client.CloseFd(e.CloseFd);
-                resource.PostError(ErrorInvalidListenFd, "invalid listening socket");
+                resource.PostError(ErrorInvalidListenFd, "The listening socket is not valid.");
                 return;
             }
 
@@ -127,7 +127,7 @@ public sealed class SecurityContextManager : IDisposable
             {
                 if (_committed)
                 {
-                    resource.PostError(ErrorAlreadyUsed, "security context already committed");
+                    resource.PostError(ErrorAlreadyUsed, "The security context is already committed.");
                     return;
                 }
 
@@ -150,7 +150,7 @@ public sealed class SecurityContextManager : IDisposable
         {
             if (_committed || slot is not null)
             {
-                _resource.PostError(ErrorAlreadySet, "metadata already set");
+                _resource.PostError(ErrorAlreadySet, "This metadata is already set.");
                 return;
             }
 
@@ -203,8 +203,9 @@ public sealed class SecurityContextManager : IDisposable
             {
                 client = _owner._display.CreateClient(fd);
             }
-            catch (WaylandException)
+            catch (WaylandException error)
             {
+                DesktopLog.Log.Warn(error, $"security-context: cannot create a client for an accepted connection");
                 close(fd);
                 return;
             }

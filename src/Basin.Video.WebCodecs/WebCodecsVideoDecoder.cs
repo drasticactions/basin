@@ -56,7 +56,7 @@ public sealed class WebCodecsVideoDecoder : IVideoDecoder
         var vp9 = await WebCodecsInterop.Supports(CodecString(VideoCodec.Vp9)).ConfigureAwait(true);
         var av1 = await WebCodecsInterop.Supports(CodecString(VideoCodec.Av1)).ConfigureAwait(true);
         WhyNot = null;
-        Log.Debug($"decode over WebCodecs: h264 {h264}, vp9 {vp9}, av1 {av1}");
+        Log.Debug($"decoding over WebCodecs, h264 {h264}, vp9 {vp9}, av1 {av1}");
         return new WebCodecsVideoDecoder(h264, vp9, av1);
     }
 
@@ -82,7 +82,7 @@ public sealed class WebCodecsVideoDecoder : IVideoDecoder
     {
         if (!Supports(codec))
         {
-            throw new NotSupportedException($"this browser's WebCodecs decodes no {codec}");
+            throw new NotSupportedException($"The browser's WebCodecs does not decode {codec}.");
         }
 
         return new WebCodecsDecodeSession(codec, CodecString(codec), width, height, format);
@@ -93,6 +93,6 @@ public sealed class WebCodecsVideoDecoder : IVideoDecoder
         VideoCodec.H264 => "avc1.640028",
         VideoCodec.Vp9 => "vp09.00.10.08",
         VideoCodec.Av1 => "av01.0.08M.08",
-        _ => throw new ArgumentOutOfRangeException(nameof(codec)),
+        _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, "The codec is not supported."),
     };
 }

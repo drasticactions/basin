@@ -71,19 +71,19 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_model() is not { } model || !model.TryGet(toplevelId, out var info))
         {
-            error = $"no window {toplevelId}";
+            error = $"No window has the id {toplevelId}. Call windows/list for the windows.";
             return false;
         }
 
         if (info.X11Display is null)
         {
-            error = $"window {toplevelId} is not an X11 window";
+            error = $"Window {toplevelId} is not an X11 window. Only an X11 window can change its X server.";
             return false;
         }
 
         if (_configPath() is not { Length: > 0 } path)
         {
-            error = "the compositor has no configuration file to write a launch rule into";
+            error = "The compositor has no configuration file to write a launch rule into. Start it with a configuration file.";
             return false;
         }
 
@@ -97,7 +97,7 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
             : identity.Name is { Length: > 0 } name ? name : null;
         if (desktopId is null && exec is null)
         {
-            error = $"window {toplevelId} names no desktop entry and no program to write a rule for";
+            error = $"Window {toplevelId} names no desktop entry and no program. A launch rule needs one of them.";
             return false;
         }
 
@@ -108,7 +108,8 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            error = $"cannot write {path}: {exception.Message}";
+            _log.Warn(exception, $"x11 density: cannot write {path}");
+            error = $"The compositor cannot write {path}. {exception.Message}";
             return false;
         }
 
@@ -117,19 +118,19 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         if (tracked is null || tracked.Launch is null)
         {
             completed(new X11DensityResult(X11DensityOutcome.AppliesNextStart, rule,
-                known ? "the compositor did not start this process" : "the window reports no process of its own"));
+                known ? "The compositor did not start this process." : "The window reports no process of its own."));
             return true;
         }
 
         if (_tracker.X11Routes?.Invoke(density) is { } route && route.Display == info.X11Display)
         {
-            completed(new X11DensityResult(X11DensityOutcome.Unchanged, rule, $"the window is on {route.Display} already"));
+            completed(new X11DensityResult(X11DensityOutcome.Unchanged, rule, $"The window is on {route.Display} already."));
             return true;
         }
 
         if (_pending.ContainsKey(tracked.LaunchId))
         {
-            completed(new X11DensityResult(X11DensityOutcome.StillRunning, rule, "a relaunch of this process is in progress"));
+            completed(new X11DensityResult(X11DensityOutcome.StillRunning, rule, "A relaunch of this process is in progress."));
             return true;
         }
 
@@ -156,7 +157,7 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         foreach (var pending in _pending.Values.ToArray())
         {
             pending.Timer?.Remove();
-            pending.Completed(new X11DensityResult(X11DensityOutcome.StillRunning, pending.Rule, "the compositor stopped"));
+            pending.Completed(new X11DensityResult(X11DensityOutcome.StillRunning, pending.Rule, "The compositor stopped."));
         }
 
         _pending.Clear();
@@ -251,12 +252,12 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         var launch = process.Launch! with { X11 = pending.Density };
         if (_tracker.Spawn(launch, out var error) is { } relaunched)
         {
-            _log.Info($"relaunched launch {process.LaunchId} as {relaunched.LaunchId} on the {LaunchRules.Name(pending.Density)} X server");
+            _log.Info($"x11 density: launch {process.LaunchId} relaunched as {relaunched.LaunchId} on the {LaunchRules.Name(pending.Density)} X server");
             pending.Completed(new X11DensityResult(X11DensityOutcome.Relaunched, pending.Rule, null, relaunched.LaunchId));
             return;
         }
 
-        pending.Completed(new X11DensityResult(X11DensityOutcome.AppliesNextStart, pending.Rule, $"the relaunch failed: {error}"));
+        pending.Completed(new X11DensityResult(X11DensityOutcome.AppliesNextStart, pending.Rule, $"The relaunch failed. {error}"));
     }
 
     private void GiveUp(Pending pending)
@@ -266,7 +267,7 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         if (_pending.Remove(pending.Process.LaunchId))
         {
             pending.Completed(new X11DensityResult(X11DensityOutcome.StillRunning, pending.Rule,
-                $"pid {pending.Process.Pid} did not exit within {Grace.TotalSeconds:0.#} s; nothing was killed"));
+                $"Process {pending.Process.Pid} did not exit within {Grace.TotalSeconds:0.#} s. Nothing was killed."));
         }
     }
 

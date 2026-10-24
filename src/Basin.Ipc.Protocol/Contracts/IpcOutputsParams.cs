@@ -46,7 +46,7 @@ public sealed class IpcOutputsParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'entries' is required"
+        (_present & 1) == 0 ? "'entries' is required."
         : null;
 
     void IIpcReusable.Reset()

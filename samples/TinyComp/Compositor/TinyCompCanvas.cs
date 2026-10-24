@@ -1645,10 +1645,13 @@ internal sealed partial class TinyComp
         state.Home ??= (window.X, window.Y);
         state.Anchor = null;
         var box = CanvasBoxOf(window);
+        var settled = box.Translated(
+            state.MotionX.IsRunning ? (int)Math.Round(state.MotionX.Target) - window.X : 0,
+            state.MotionY.IsRunning ? (int)Math.Round(state.MotionY.Target) - window.Y : 0);
         var vertical = (side & CanvasSide.Vertical) != 0;
         var across = vertical
-            ? (canvas.Left.ContainsCanvas(box.X) ? canvas.Left : canvas.Right.ContainsCanvas(box.Right) ? canvas.Right : null)
-            : (canvas.Top.ContainsCanvas(box.Y) ? canvas.Top : canvas.Bottom.ContainsCanvas(box.Bottom) ? canvas.Bottom : null);
+            ? (canvas.Left.ContainsCanvas(settled.X) ? canvas.Left : canvas.Right.ContainsCanvas(settled.Right) ? canvas.Right : null)
+            : (canvas.Top.ContainsCanvas(settled.Y) ? canvas.Top : canvas.Bottom.ContainsCanvas(settled.Bottom) ? canvas.Bottom : null);
         var nanos = CanvasAnimationNanos(view);
         if (across is not null)
         {

@@ -430,7 +430,7 @@ internal sealed class Config
         }
         catch (Tomlyn.TomlException error)
         {
-            fatal = error.Message;
+            fatal = $"the settings text did not parse: {error.Message}";
             return config;
         }
 
@@ -450,7 +450,7 @@ internal sealed class Config
         var available = installed.Count == 0 ? "none installed" : string.Join(", ", installed);
         if (MetacityTheme is not { Length: > 0 } name)
         {
-            return $"[frame] style = \"metacity\" names no theme in [frame.metacity] theme; installed themes: {available}";
+            return $"[frame] style = \"metacity\" names no theme in [frame.metacity] theme, installed themes: {available}";
         }
 
         try
@@ -460,7 +460,7 @@ internal sealed class Config
         }
         catch (Basin.Frames.Metacity.MetacityThemeException e)
         {
-            return $"[frame.metacity] theme = \"{name}\": {e.Message}; installed themes: {available}";
+            return $"[frame.metacity] theme = \"{name}\": {e.Message.TrimEnd('.')}, installed themes: {available}";
         }
     }
 
@@ -473,7 +473,7 @@ internal sealed class Config
 
         if (MsStylesTheme is not { Length: > 0 } name)
         {
-            return $"[frame] style = \"msstyles\" names no theme in [frame.msstyles] theme; installed themes: {InstalledMsStyles()}";
+            return $"[frame] style = \"msstyles\" names no theme in [frame.msstyles] theme, installed themes: {InstalledMsStyles()}";
         }
 
         try
@@ -483,7 +483,7 @@ internal sealed class Config
         }
         catch (MsStylesFrameException e)
         {
-            return $"[frame.msstyles] theme = \"{name}\": {e.Message}; installed themes: {InstalledMsStyles()}";
+            return $"[frame.msstyles] theme = \"{name}\": {e.Message.TrimEnd('.')}, installed themes: {InstalledMsStyles()}";
         }
     }
 
@@ -501,7 +501,7 @@ internal sealed class Config
 
     private static Stream TemplateStream() =>
         typeof(Config).Assembly.GetManifestResourceStream("tinycomp.toml")
-            ?? throw new InvalidOperationException("tinycomp.toml is not embedded");
+            ?? throw new InvalidOperationException("The tinycomp.toml template is not embedded in the assembly.");
 
     public Rule? RuleFor(string? appId, string? title) => RuleFor(new WindowFacts { AppId = appId, Title = title });
 
@@ -863,7 +863,7 @@ internal sealed class Config
                     }
                     else
                     {
-                        log.Warn($"[inspector] panels has no panel \"{panel}\"; the panels are {string.Join(", ", InspectorPanelNames)}");
+                        log.Warn($"[inspector] panels \"{panel}\" is not {string.Join('|', InspectorPanelNames)}, ignored");
                     }
                 }
 
@@ -906,7 +906,7 @@ internal sealed class Config
             HyprCtm = hypr.Flag("ctm", HyprCtm);
             if (hypr.Free("shortcuts") is { } renamed)
             {
-                log.Warn($"[hypr.shortcuts] is now [shortcuts]; the old table is read this once, rename it");
+                log.Warn($"[hypr.shortcuts] is deprecated, rename the table to [shortcuts]");
                 Shortcuts = ParseShortcuts(renamed, "hypr.shortcuts", log);
             }
         }
@@ -1416,7 +1416,7 @@ internal sealed class Config
 
             if (ShaderParameters(effects, "shader_params").Count > 0)
             {
-                log.Warn($"effects.shader_params is ignored with [[effects.shader]]; put params on each entry");
+                log.Warn($"effects.shader_params is ignored with [[effects.shader]], put params on each entry");
             }
 
             return entries;

@@ -63,8 +63,8 @@ internal sealed class MsStylesFrames : IDisposable
 
     public static MsStylesFrames Load(Config config, Func<string, int, SKImage?>? icons)
     {
-        var name = config.MsStylesTheme ?? throw new MsStylesFrameException("[frame.msstyles] theme is not set");
-        var path = MsStylesThemes.Find(name) ?? throw new MsStylesFrameException($"no msstyles theme named {name} under ~/.themes, the msstyles data directories or the Wine prefix");
+        var name = config.MsStylesTheme ?? throw new MsStylesFrameException("[frame.msstyles] theme is not set. Set it to an installed visual style.");
+        var path = MsStylesThemes.Find(name) ?? throw new MsStylesFrameException($"No msstyles theme named {name} is in ~/.themes, the msstyles data directories or the Wine prefix.");
         MsStylesTheme theme;
         MsStylesFrameStyle style;
         try
@@ -83,7 +83,7 @@ internal sealed class MsStylesFrames : IDisposable
             fallback = SKFontManager.Default.MatchFamily(family);
             if (fallback is null)
             {
-                throw new MsStylesFrameException($"[frame.msstyles] font = \"{family}\" matches no installed family");
+                throw new MsStylesFrameException($"[frame.msstyles] font = \"{family}\" matches no installed font family. Install it or choose another font.");
             }
 
             SkiaCensus.Track(fallback);

@@ -38,13 +38,13 @@ public sealed class IpcPendingReply : IpcReply
     {
         if (IsDone)
         {
-            throw new InvalidOperationException("a pending reply completes once");
+            throw new InvalidOperationException("The pending reply is already complete. Complete it once only.");
         }
 
         IsDone = true;
         if (!ResultIsBalanced)
         {
-            Fail(IpcErrorCodes.Internal, "the handler left its result unfinished");
+            Fail(IpcErrorCodes.Internal, "The handler did not finish its result.");
         }
 
         if (Intercepted is { } server)

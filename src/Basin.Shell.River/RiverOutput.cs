@@ -75,7 +75,7 @@ internal sealed class RiverOutput
             {
                 resource.PostError(
                     (uint)RiverOutputV1.Error.InvalidPresentationMode,
-                    $"presentation mode {(uint)e.Mode} is not a known value");
+                    $"Presentation mode {(uint)e.Mode} is not a known value.");
                 return;
             }
 

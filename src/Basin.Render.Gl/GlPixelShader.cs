@@ -59,7 +59,7 @@ internal sealed class GlPixelShader : IPixelShader
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (values.Length != _values.Length)
         {
-            throw new ArgumentException("value count must match the declared uniform count", nameof(values));
+            throw new ArgumentException("The value count must match the declared uniform count.", nameof(values));
         }
 
         values.CopyTo(_values);

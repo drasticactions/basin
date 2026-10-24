@@ -61,4 +61,39 @@ public static class BasinLog
     /// </summary>
     /// <param name="message">The interpolated message. It is formatted only when errors are enabled.</param>
     public static void Error(ref LogHandler<LevelError> message) => Root.Error(ref message);
+
+    /// <summary>
+    /// Writes a trace message with no category, followed by the type and text of an exception and of each inner exception.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when trace is enabled.</param>
+    public static void Trace(Exception exception, ref LogHandler<LevelTrace> message) => Root.Trace(exception, ref message);
+
+    /// <summary>
+    /// Writes a debug message with no category, followed by the type and text of an exception and of each inner exception.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when debug is enabled.</param>
+    public static void Debug(Exception exception, ref LogHandler<LevelDebug> message) => Root.Debug(exception, ref message);
+
+    /// <summary>
+    /// Writes an info message with no category, followed by the type and text of an exception and of each inner exception.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when info is enabled.</param>
+    public static void Info(Exception exception, ref LogHandler<LevelInfo> message) => Root.Info(exception, ref message);
+
+    /// <summary>
+    /// Writes a warning with no category, followed by the type and text of an exception and of each inner exception.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when warnings are enabled.</param>
+    public static void Warn(Exception exception, ref LogHandler<LevelWarn> message) => Root.Warn(exception, ref message);
+
+    /// <summary>
+    /// Writes an error with no category, followed by the type and text of an exception and of each inner exception.
+    /// </summary>
+    /// <param name="exception">The exception that caused the message.</param>
+    /// <param name="message">The interpolated message. It is formatted only when errors are enabled.</param>
+    public static void Error(Exception exception, ref LogHandler<LevelError> message) => Root.Error(exception, ref message);
 }

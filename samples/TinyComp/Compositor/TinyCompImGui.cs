@@ -30,7 +30,7 @@ internal sealed partial class TinyComp
             _renderer, _allocator, _renderNode, out _imguiDeclined, out var vulkanDeclined, options);
         if (vulkanDeclined is not null)
         {
-            _log.Warn($"imgui cannot draw on the {_config.Renderer} renderer's VulkanDevice: {vulkanDeclined}; trying a GlDevice");
+            _log.Warn($"imgui: cannot use the {_rendererName} renderer's VulkanDevice, trying a GlDevice: {vulkanDeclined}");
         }
 
         if (host is null)
@@ -39,7 +39,7 @@ internal sealed partial class TinyComp
             return null;
         }
 
-        _log.Info($"imgui draws on the {host.Name} host beside the {_config.Renderer} renderer");
+        _log.Info($"imgui: draws on the {host.Name} host beside the {_rendererName} renderer");
         _imguiHost = host;
         _imguiDriver = new UIDriver(host, _loop);
         _imguiDriver.Start();
@@ -51,7 +51,7 @@ internal sealed partial class TinyComp
     {
         if (ImGuiHost() is not { } host)
         {
-            _log.Warn($"imgui demo: {_imguiDeclined}, so the demo is unavailable");
+            _log.Warn($"imgui demo: unavailable, {_imguiDeclined}");
             return;
         }
 

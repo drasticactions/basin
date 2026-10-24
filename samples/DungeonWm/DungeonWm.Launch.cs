@@ -1,4 +1,5 @@
 using Basin;
+using Basin.Cli;
 using Basin.Desktop;
 using Basin.Diagnostics;
 using Basin.Ipc;
@@ -19,7 +20,7 @@ internal sealed partial class DungeonWm
         BasinReport.Line($"ACTION spawn {command}");
         if (_processes.Spawn(new ProcessLaunch(argv), out var error) is not { } process)
         {
-            _log.Warn($"cannot run '{command}': {error}");
+            _log.Warn($"launch: cannot run '{command}', {CliMessage.Text(error ?? string.Empty)}");
             return;
         }
 

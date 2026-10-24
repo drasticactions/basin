@@ -76,7 +76,7 @@ public sealed class FreedesktopTrash
         var full = Path.GetFullPath(path);
         if (!File.Exists(full) && !Directory.Exists(full))
         {
-            throw new FileNotFoundException("nothing to move to the Trash", full);
+            throw new FileNotFoundException("Nothing exists at the path. Give the path of a file or a directory to move to the Trash.", full);
         }
 
         EnsureDirectories();
@@ -171,7 +171,7 @@ public sealed class FreedesktopTrash
         ArgumentNullException.ThrowIfNull(item);
         if (File.Exists(item.OriginalPath) || Directory.Exists(item.OriginalPath))
         {
-            throw new IOException($"{item.OriginalPath} already exists");
+            throw new IOException($"Something already exists at {item.OriginalPath}. Move or rename it, then restore the item again.");
         }
 
         if (Path.GetDirectoryName(item.OriginalPath) is { Length: > 0 } parent)
@@ -309,6 +309,7 @@ public sealed class FreedesktopTrash
             }
             catch (IOException) when (File.Exists(info))
             {
+                continue;
             }
         }
     }

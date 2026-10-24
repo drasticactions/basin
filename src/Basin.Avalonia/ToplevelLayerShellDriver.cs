@@ -28,7 +28,7 @@ public sealed class ToplevelLayerShellDriver : ILayerShellDriver
         ArgumentNullException.ThrowIfNull(shell);
         if (_shell is not null)
         {
-            throw new InvalidOperationException("this layer-shell driver already drives a layer shell");
+            throw new InvalidOperationException("This driver already drives a layer shell.");
         }
 
         _shell = shell;
@@ -39,7 +39,7 @@ public sealed class ToplevelLayerShellDriver : ILayerShellDriver
     {
         if (_target is not null)
         {
-            throw new InvalidOperationException("this layer-shell driver already drives a ToplevelWindows");
+            throw new InvalidOperationException("This driver already drives a ToplevelWindows.");
         }
 
         _target = target;

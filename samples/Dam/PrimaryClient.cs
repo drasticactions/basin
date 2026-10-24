@@ -104,7 +104,7 @@ internal sealed class PrimaryClient : IDisposable
     {
         if (getuid() == 0 || getgid() == 0)
         {
-            log.Info($"running as root user, this is dangerous");
+            log.Warn($"running as root, this is dangerous");
             return true;
         }
 
@@ -120,7 +120,7 @@ internal sealed class PrimaryClient : IDisposable
 
         if (setgid(0) != -1 || setuid(0) != -1)
         {
-            log.Error($"unable to drop root (it can be restored after setuid), refusing to start");
+            log.Error($"root can be restored after setuid, refusing to start");
             return false;
         }
 
@@ -184,7 +184,7 @@ internal sealed class PrimaryClient : IDisposable
             if (posix_spawnattr_init(attributes) != 0 || !(attributesReady = true) ||
                 posix_spawn_file_actions_init(actions) != 0 || !(actionsReady = true))
             {
-                log.Error($"failed to spawn the application: posix_spawn setup failed");
+                log.Error($"posix_spawn setup failed, application not started");
                 close(readFd);
                 close(writeFd);
                 return null;

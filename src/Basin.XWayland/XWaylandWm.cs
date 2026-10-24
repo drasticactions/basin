@@ -94,7 +94,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         _conn = Libxcb.xcb_connect_to_fd(wmFd, null);
         if (Libxcb.xcb_connection_has_error(_conn) != 0)
         {
-            throw new InvalidOperationException("xcb connection to Xwayland failed");
+            throw new InvalidOperationException("The xcb connection to Xwayland failed.");
         }
 
         var setup = Libxcb.xcb_get_setup(_conn);
@@ -205,7 +205,7 @@ public sealed unsafe class XWaylandWm : IDisposable
     {
         if (!double.IsFinite(scale) || scale <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(scale), scale, "an X11 scale must be positive and finite");
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "The X11 scale must be finite and more than 0.");
         }
 
         if (scale == _scale)
@@ -293,7 +293,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         _rootCursor = (theme, size);
         if (!XWaylandRootCursor.Set(_conn, _root, theme, size))
         {
-            Log.Warn($"cursor theme '{theme}' has no left_ptr cursor at {size}px. X11 windows without their own cursor will show the X default cursor.");
+            Log.Warn($"wm: cursor theme '{theme}' has no left_ptr at {size}px, X11 windows without a cursor show the X default");
         }
     }
 
@@ -593,7 +593,7 @@ public sealed unsafe class XWaylandWm : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Warn($"xwayland wm event failed: {ex.Message}");
+                Log.Warn(ex, $"wm: event dispatch failed");
             }
 
             Libc.Free(ev);
@@ -1215,7 +1215,7 @@ public sealed unsafe class XWaylandWm : IDisposable
     private void RestoreFocus(XWaylandWindow focused)
     {
         var target = focused.FocusChild is { } child && child != 0 && child != 1 ? child : focused.WindowId;
-        Log.Debug($"X focus left 0x{focused.WindowId:x}; giving it back to 0x{target:x}");
+        Log.Debug($"wm: X focus left 0x{focused.WindowId:x}, focus goes back to 0x{target:x}");
         _ = Libxcb.xcb_set_input_focus(_conn, 1, target, 0);
         Flush();
     }
@@ -1563,7 +1563,7 @@ public sealed unsafe class XWaylandWm : IDisposable
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
         {
             _xresMissing = true;
-            Log.Debug($"X-Resource is unavailable, so X11 pids are unverified: {error.Message}");
+            Log.Debug(error, $"wm: X-Resource not available, X11 pids are not verified");
             return 0;
         }
     }
@@ -1889,7 +1889,7 @@ public sealed unsafe class XWaylandWm : IDisposable
     {
         if (!window.WantsFocus)
         {
-            Log.Debug($"0x{window.WindowId:x} does not take focus; activation leaves the X focus alone");
+            Log.Debug($"wm: 0x{window.WindowId:x} does not take focus, activation leaves the X focus unchanged");
             return;
         }
 

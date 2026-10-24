@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 using Basin.Hosted;
+using Basin.Scene;
 using Basin.Shell.Nested;
 using Basin.Tests.Nested;
 using Xunit;
@@ -13,12 +14,18 @@ public sealed class HeadlessDriverTests
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int socketpair(int domain, int type, int protocol, int* fds);
 
+    [DllImport("libc", SetLastError = true)]
+    private static extern int open(string path, int flags);
+
+    [DllImport("libc")]
+    private static extern int close(int fd);
+
     private sealed class Rig : IDisposable
     {
         private NestedShell? _shell;
         private BasinViewOutput? _view;
 
-        public Rig()
+        public Rig(string? renderNode = null, bool capture = false)
         {
             CompositorTestHost.SkipWithoutWaylandClient();
             BasinCounters.Reset();
@@ -33,19 +40,42 @@ public sealed class HeadlessDriverTests
 
             Driver = new BasinHeadlessDriver(() =>
             {
-                var host = new BasinCompositorHost(new BasinCompositorOptions { AppName = "basin-tests", ConfigureServices = HostedDrivers.Without });
+                var host = new BasinCompositorHost(new BasinCompositorOptions
+                {
+                    AppName = "basin-tests",
+                    ConfigureServices = (host, services) =>
+                    {
+                        HostedDrivers.Without(host, services);
+                        if (capture)
+                        {
+                            services.With(Capture = new SceneCapturePack(host.Scene, host.Layout));
+                        }
+                    },
+                });
                 _view = host.CreateViewOutput(640, 480, 1.0, NestedShell.OutputKey);
                 _shell = new NestedShell(
                     host, _view, new ShellSettings(), new PanelLayout(0, 0, 0), KeyTable.Empty, Post, [TestTheme.Load]);
+                if (Capture is { } pack)
+                {
+                    _shell.AttachCapture(pack);
+                }
+
                 host.Display.CreateClient(serverFd);
                 return host;
-            });
+            })
+            {
+                RenderNode = renderNode,
+            };
             Driver.Start();
             Client = new ShmTestClient(clientFd);
             Client.BindGlobals(() => Client.Display.Roundtrip());
         }
 
         public BasinHeadlessDriver Driver { get; }
+
+        public SceneCapturePack? Capture { get; private set; }
+
+        public BasinViewOutput View => _view!;
 
         public ShmTestClient Client { get; }
 
@@ -243,6 +273,124 @@ public sealed class HeadlessDriverTests
         }
 
         return count;
+    }
+
+    [Fact]
+    public async Task A_render_node_offers_dmabuf_and_its_buffers_reach_screenshots_and_captures()
+    {
+        Assert.SkipUnless(File.Exists(CompositorTestHost.RenderNodePath), "no render node");
+        using var rig = new Rig(CompositorTestHost.RenderNodePath, capture: true);
+        Assert.True(rig.Driver.RendersOnGpu);
+        Assert.True(await rig.Driver.InvokeAsync(() => rig.Driver.Host.Dmabuf is not null));
+        Assert.NotNull(rig.Client.Dmabuf);
+
+        var nodeFd = open(CompositorTestHost.RenderNodePath, 2 | 0x80000);
+        Assert.True(nodeFd >= 0);
+        var gbm = Mesa.Gbm.GbmDevice.Create(nodeFd);
+        var source = gbm.CreateBuffer(
+            120, 90, (uint)DrmFormat.Xrgb8888, Mesa.Gbm.GbmBufferFlags.Linear | Mesa.Gbm.GbmBufferFlags.Rendering);
+        using (var mapping = source.Map(Mesa.Gbm.GbmTransferFlags.Write))
+        {
+            for (var y = 0; y < 90; y++)
+            {
+                MemoryMarshal.Cast<byte, uint>(mapping.Span.Slice(y * (int)mapping.Stride, 120 * 4)).Fill(0xFF3366AA);
+            }
+        }
+
+        var client = rig.Client;
+        var dmabufFd = source.ExportDmaBuf();
+        var bufferParams = client.Dmabuf!.CreateParams();
+        bufferParams.Add(dmabufFd, 0, (uint)source.GetOffsetForPlane(0), (uint)source.GetStrideForPlane(0), 0, 0);
+        _ = close(dmabufFd);
+        var wlBuffer = bufferParams.CreateImmed(120, 90, (uint)DrmFormat.Xrgb8888, 0);
+        bufferParams.Dispose();
+        var (toplevel, xdgSurface, surface) = MapBuffer(rig, wlBuffer, 120, 90);
+        var path = Path.Combine(Path.GetTempPath(), $"basin-headless-gpu-{Environment.ProcessId}-{Guid.NewGuid():N}.png");
+        try
+        {
+            var done = new TaskCompletionSource<RecordingResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var refused = await rig.Driver.InvokeAsync(() => rig.Driver.Host.Services.Require<ISceneDiagnostics>().Record(
+                new RecordRequest(string.Empty, 2) { Region = new Box(0, 0, 640, 480), KeepPixels = true, TimeoutMs = 5000 },
+                done.SetResult));
+            Assert.Null(refused);
+            var recording = await done.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            Assert.True(Count(recording.Pixels!, 0x33, 0x66, 0xAA) >= 120 * 90 * 2);
+
+            var written = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            rig.Driver.Post(() => rig.Driver.Host.RequestScreenshot(path, written.SetResult));
+            Assert.True(await written.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+
+            var captured = await rig.Driver.InvokeAsync(() =>
+            {
+                var target = new MemoryBuffer(640, 480, DrmFormat.Xrgb8888);
+                try
+                {
+                    var capture = rig.Capture!.Capture;
+                    Assert.Same(rig.Driver.Host.Renderer, capture.Renderer);
+                    Assert.True(capture.Capture(CaptureSource.Output(rig.View.Output), default, target));
+                    Assert.True(target.BeginDataAccess(BufferDataAccess.Read, out var view));
+                    var bgrx = new byte[target.Stride * target.Height];
+                    System.Runtime.InteropServices.Marshal.Copy(view.Data, bgrx, 0, bgrx.Length);
+                    target.EndDataAccess();
+                    return bgrx;
+                }
+                finally
+                {
+                    target.Destroy();
+                }
+            });
+            Assert.True(Count(captured, 0xAA, 0x66, 0x33) >= 120 * 90);
+        }
+        finally
+        {
+            File.Delete(path);
+            toplevel.Dispose();
+            xdgSurface.Dispose();
+            surface.Dispose();
+            wlBuffer.Dispose();
+            client.Display.Roundtrip();
+            source.Dispose();
+            gbm.Dispose();
+            _ = close(nodeFd);
+        }
+    }
+
+    [Fact]
+    public void A_missing_render_node_falls_back_to_the_raster_row()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), $"basin-no-node-{Guid.NewGuid():N}");
+        using var rig = new Rig(missing);
+        Assert.False(rig.Driver.RendersOnGpu);
+        Assert.Null(rig.Client.Dmabuf);
+        var (toplevel, xdgSurface, surface) = MapColored(rig, 0xFF3366AA);
+        toplevel.Dispose();
+        xdgSurface.Dispose();
+        surface.Dispose();
+    }
+
+    private static (Basin.Shell.Xdg.Protocol.XdgToplevel, Basin.Shell.Xdg.Protocol.XdgSurface, Wayland.WlSurface) MapBuffer(
+        Rig rig, Wayland.WlBuffer buffer, int width, int height)
+    {
+        var client = rig.Client;
+        var surface = client.Compositor.CreateSurface();
+        var xdgSurface = client.WmBase!.GetXdgSurface(surface);
+        var toplevel = xdgSurface.GetToplevel();
+        var configured = false;
+        xdgSurface.Configure += (_, e) =>
+        {
+            xdgSurface.AckConfigure(e.Serial);
+            configured = true;
+        };
+        surface.Commit();
+        rig.Until(() => configured, "the headless compositor never configured the toplevel");
+
+        var frame = false;
+        surface.Frame().Done += (_, _) => frame = true;
+        surface.Attach(buffer, 0, 0);
+        surface.Damage(0, 0, width, height);
+        surface.Commit();
+        rig.Until(() => frame, "the headless driver never framed the mapped toplevel");
+        return (toplevel, xdgSurface, surface);
     }
 
     [Fact]

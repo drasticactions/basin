@@ -53,7 +53,7 @@ public sealed class IpcMethodRegistry
         ArgumentNullException.ThrowIfNull(name);
         if (IsReserved(name))
         {
-            throw new ArgumentException($"'{name}' is in a namespace the library owns", nameof(name));
+            throw new ArgumentException($"The library owns the namespace of '{name}'. Register the method in another namespace.", nameof(name));
         }
 
         Add(name, handler, info);
@@ -77,7 +77,7 @@ public sealed class IpcMethodRegistry
         ThrowIfFrozen();
         if (!IpcProtocol.IsValidName(method))
         {
-            throw new ArgumentException($"'{method}' is not a method name", nameof(method));
+            throw new ArgumentException($"'{method}' is not a method name.", nameof(method));
         }
 
         _lines.Add(new IpcLineForm(method, IpcLinePattern.Parse(pattern), reply));
@@ -191,12 +191,12 @@ public sealed class IpcMethodRegistry
             handler(ref bound, reply);
             if (!reply.IsDeferred && !reply.ResultIsBalanced)
             {
-                reply.Fail(IpcErrorCodes.Internal, "the handler left its result unfinished");
+                reply.Fail(IpcErrorCodes.Internal, "The handler did not finish its result.");
             }
         }
         catch (Exception exception)
         {
-            Log.Error($"{name} threw: {exception}");
+            Log.Error(exception, $"method: {name} failed");
             if (!reply.IsDeferred)
             {
                 reply.Fail(IpcErrorCodes.Internal, exception.Message);
@@ -263,7 +263,7 @@ public sealed class IpcMethodRegistry
 
         if (!IpcProtocol.IsValidName(name))
         {
-            throw new ArgumentException($"'{name}' is neither a method name nor group/*", nameof(name));
+            throw new ArgumentException($"'{name}' is not a method name or a group/* pattern.", nameof(name));
         }
 
         _omitted.Add(name);
@@ -291,7 +291,7 @@ public sealed class IpcMethodRegistry
         ThrowIfFrozen();
         if (!IpcProtocol.IsValidName(name))
         {
-            throw new ArgumentException($"'{name}' is not namespace/verb in [a-z0-9-]", nameof(name));
+            throw new ArgumentException($"'{name}' is not a namespace/verb name. Use only a-z, 0-9 and '-' in each part.", nameof(name));
         }
 
         if (info?.ParamsSchema is { } schema)
@@ -301,7 +301,7 @@ public sealed class IpcMethodRegistry
 
         if (!_methods.TryAdd(name, handler))
         {
-            throw new InvalidOperationException($"'{name}' is already registered");
+            throw new InvalidOperationException($"'{name}' is already registered.");
         }
 
         if (info is not null)
@@ -334,17 +334,17 @@ public sealed class IpcMethodRegistry
         }
         catch (JsonException exception)
         {
-            throw new ArgumentException($"the schema of '{name}' is not JSON: {exception.Message}", nameof(schema));
+            throw new ArgumentException($"The schema of '{name}' is not valid JSON.", nameof(schema), exception);
         }
 
-        throw new ArgumentException($"the schema of '{name}' is not an object with \"type\": \"object\"", nameof(schema));
+        throw new ArgumentException($"The schema of '{name}' is not an object with \"type\": \"object\".", nameof(schema));
     }
 
     private void ThrowIfFrozen()
     {
         if (IsFrozen)
         {
-            throw new InvalidOperationException("methods register before the server starts");
+            throw new InvalidOperationException("The server has started. Register methods before Start.");
         }
     }
 }

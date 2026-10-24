@@ -95,8 +95,13 @@ internal sealed unsafe class VulkanDmabufTexture : ITexture, IVulkanRetired
         }
         catch (InvalidOperationException failure)
         {
-            Log.Warn(
-                $"dmabuf import rejected: {failure.Message} (format=0x{(uint)attributes.Format:X8} modifier=0x{attributes.Modifier:X} planes={attributes.PlaneCount} {attributes.Width}x{attributes.Height})");
+            if (VulkanLog.FirstRejection(attributes.Format, attributes.Modifier, shm: false))
+            {
+                Log.Warn(
+                    failure,
+                    $"dmabuf import rejected, format 0x{(uint)attributes.Format:X8} modifier 0x{attributes.Modifier:X} planes {attributes.PlaneCount} {attributes.Width}x{attributes.Height}");
+            }
+
             return null;
         }
     }

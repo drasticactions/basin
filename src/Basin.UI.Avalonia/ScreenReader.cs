@@ -131,7 +131,7 @@ public sealed class ScreenReader : IDisposable
         _process = _processes.Spawn(new ProcessLaunch([.. _argv]), out var error);
         if (_process is null)
         {
-            _log.Warn($"cannot start {_argv[0]}: {error}");
+            _log.Warn($"start failed, {error?.TrimEnd('.')}");
             Changed?.Invoke();
             StartFailed?.Invoke(error ?? "");
             return;

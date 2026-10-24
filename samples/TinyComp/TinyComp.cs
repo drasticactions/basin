@@ -108,7 +108,7 @@ internal sealed partial class TinyComp :
             if (!_glassWarned)
             {
                 _glassWarned = true;
-                _log.Error($"[frame] style = \"glass\" cannot run beside the {_config.Renderer} renderer: {_quillDeclined}; the flat frames are used instead");
+                _log.Warn($"[frame] style = \"glass\" is unavailable on the {_rendererName} renderer, flat frames used: {_quillDeclined}");
             }
 
             return new Basin.UI.Skia.FlatFrameRenderer(FlatThemeOrLoad());
@@ -119,7 +119,7 @@ internal sealed partial class TinyComp :
             if (!_glassWarned)
             {
                 _glassWarned = true;
-                _log.Error($"[frame] style = \"glass\" needs backdrop effects, and the {_config.Renderer} renderer runs none; the plain quill frames are used instead");
+                _log.Warn($"[frame] style = \"glass\" needs backdrop effects, the {_rendererName} renderer has none, plain quill frames used");
             }
 
             return CreateQuillFrameRenderer();
@@ -191,7 +191,7 @@ internal sealed partial class TinyComp :
             var asked = (int)Math.Round(_config.GlassBlur);
             if (asked != glass.Options.Strength)
             {
-                _log.Warn($"[frame.glass] blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {glass.Options.Strength}");
+                _log.Warn($"[frame.glass] blur {asked} reads as strength {glass.Options.Strength}, the range is 1 to {Basin.Effects.BlurStrength.Steps}");
             }
         }
 
@@ -202,7 +202,7 @@ internal sealed partial class TinyComp :
     {
         if (QuillHost() is null)
         {
-            _log.Error($"[frame] style = \"quill\" cannot run beside the {_config.Renderer} renderer: {_quillDeclined}; the flat frames are used instead");
+            _log.Warn($"[frame] style = \"quill\" is unavailable on the {_rendererName} renderer, flat frames used: {_quillDeclined}");
             return new Basin.UI.Skia.FlatFrameRenderer(FlatThemeOrLoad());
         }
 
@@ -220,7 +220,7 @@ internal sealed partial class TinyComp :
         if (frames.Painter == "quill" && !quill && !_msstylesQuillWarned)
         {
             _msstylesQuillWarned = true;
-            _log.Warn($"[frame.msstyles] painter = \"quill\" cannot run beside the {_config.Renderer} renderer: {_quillDeclined}; Skia paints the frames instead");
+            _log.Warn($"[frame.msstyles] painter = \"quill\" is unavailable on the {_rendererName} renderer, Skia paints the frames: {_quillDeclined}");
         }
 
         var renderer = frames.CreateRenderer(quill);
@@ -284,7 +284,7 @@ internal sealed partial class TinyComp :
         var host = Basin.Renderers.QuillHosts.For(_renderer, _allocator, _renderNode, out _quillDeclined, out var vulkanDeclined);
         if (vulkanDeclined is not null)
         {
-            _log.Warn($"quill frames cannot draw on the {_config.Renderer} renderer's VulkanDevice: {vulkanDeclined}; trying a GlDevice");
+            _log.Warn($"quill: frames cannot use the {_rendererName} renderer's VulkanDevice, trying a GlDevice: {vulkanDeclined}");
         }
 
         switch (host)
@@ -292,13 +292,13 @@ internal sealed partial class TinyComp :
             case null:
                 return null;
             case Basin.UI.Quill.QuillVulkanUIHost:
-                _log.Info($"quill frames share the {_config.Renderer} renderer's VulkanDevice");
+                _log.Info($"quill: frames share the {_rendererName} renderer's VulkanDevice");
                 break;
             case Basin.UI.Quill.QuillUIHost { OwnsDevice: true } glHost:
-                _log.Info($"quill frames draw on their own GlDevice on {glHost.Device.DevicePath} beside the {_config.Renderer} renderer");
+                _log.Info($"quill: frames draw on their own GlDevice on {glHost.Device.DevicePath} beside the {_rendererName} renderer");
                 break;
             default:
-                _log.Info($"quill frames share the {_config.Renderer} renderer's GlDevice");
+                _log.Info($"quill: frames share the {_rendererName} renderer's GlDevice");
                 break;
         }
 
@@ -330,7 +330,7 @@ internal sealed partial class TinyComp :
             if (asked != strength && !_quillBlurClamped)
             {
                 _quillBlurClamped = true;
-                _log.Warn($"[frame.quill] backdrop_blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {strength}");
+                _log.Warn($"[frame.quill] backdrop_blur {asked} reads as strength {strength}, the range is 1 to {Basin.Effects.BlurStrength.Steps}");
             }
         }
         else if (renderer is Basin.Frames.Metacity.MetacityFrameRenderer { Frosted: true } metacity)
@@ -340,13 +340,13 @@ internal sealed partial class TinyComp :
             if (asked != strength && !_metacityBlurClamped)
             {
                 _metacityBlurClamped = true;
-                _log.Warn($"[frame.metacity] backdrop_blur is a strength from 1 to {Basin.Effects.BlurStrength.Steps}, not a pixel radius; {asked} reads as {strength}");
+                _log.Warn($"[frame.metacity] backdrop_blur {asked} reads as strength {strength}, the range is 1 to {Basin.Effects.BlurStrength.Steps}");
             }
 
             if (!_metacityOpaqueWarned && !metacity.Painter.Theme.HasTranslucentBackground)
             {
                 _metacityOpaqueWarned = true;
-                _log.Warn($"[frame.metacity] backdrop_blur is set, but the {metacity.Painter.Theme.Name} theme sets no window_background_alpha, so its frames are opaque and hide the blur");
+                _log.Warn($"[frame.metacity] backdrop_blur is set, but the {metacity.Painter.Theme.Name} theme sets no window_background_alpha, so its opaque frames hide the blur");
             }
         }
         else if (renderer is MenuDonorFrameRenderer { Frame: Basin.Frames.MsStyles.MsStylesFrameRenderer or Basin.Frames.MsStyles.Quill.MsStylesQuillFrameRenderer }
@@ -523,7 +523,7 @@ internal sealed partial class TinyComp :
         _fireShader = _renderer.CompilePixelShader(Basin.Effects.FireShader.Source, Basin.Effects.FireShader.Uniforms);
         if (_fireShader is null)
         {
-            _log.Warn($"{_rendererName} compiles no pixel shader dialect; fire-gpu falls back to the particle mesh");
+            _log.Warn($"effects: {_rendererName} has no pixel shaders, fire-gpu uses the particle burn");
         }
 
         return _fireShader;
@@ -687,6 +687,7 @@ internal sealed partial class TinyComp :
         WireOutputDriver();
 
         _popupPlacer = new Basin.Desktop.PopupPlacer(_layout);
+        _rendererName = rendererName;
         _effects.SlideEnabled = rendererName != "pixman";
 
         var servicePack = new Basin.Desktop.DesktopServicePack(_scene, _layout, _renderer, _drm);
@@ -785,7 +786,6 @@ internal sealed partial class TinyComp :
             _services.Use<Basin.Capabilities.IBackgroundEffects>(blur);
         }
 
-        _rendererName = rendererName;
         _post = new PostEffects(_renderer, rendererName, _log);
         _post.Configure(config);
         _shader = new ScreenShader(_renderer, rendererName, _allocator, _log);
@@ -948,7 +948,7 @@ internal sealed partial class TinyComp :
             (toplevel, name) => FindWindow(toplevel)?.SetIconName(name);
         if (!_colorPack.Attach(_services, _scene))
         {
-            throw new InvalidOperationException("no color manager is registered");
+            throw new InvalidOperationException("No color manager is registered. The color pack needs one to attach.");
         }
 
         _color = _colorPack.Manager;
@@ -1160,7 +1160,7 @@ internal sealed partial class TinyComp :
     {
         if (QuillHost() is not { } host)
         {
-            _log.Warn($"quill demo: {_quillDeclined}, so the mock is unavailable");
+            _log.Warn($"quill demo: unavailable, {_quillDeclined}");
             return;
         }
 
@@ -1188,12 +1188,22 @@ internal sealed partial class TinyComp :
             listener.ChannelAccepted += accepted =>
             {
                 var index = listener.Accepted;
-                accepted.Ended += failure => _log.Info($"channel {index} ended{(failure is null ? string.Empty : $": {failure.Message}")}");
+                accepted.Ended += failure =>
+                {
+                    if (failure is null)
+                    {
+                        _log.Info($"waypipe: channel {index} ended");
+                    }
+                    else
+                    {
+                        _log.Warn(failure, $"waypipe: channel {index} ended");
+                    }
+                };
                 adoption.Adopt(accepted);
-                _log.Info($"channel {index} attached; replaying it as one client");
+                _log.Info($"waypipe: channel {index} attached, replayed as one client");
             };
-            listener.Failed += failure => _log.Error($"the channel listener failed: {failure.Message}");
-            _log.Info($"accepting waypipe channels on {listener.LocalEndPoint}");
+            listener.Failed += failure => _log.Error(failure, $"waypipe: channel listener failed");
+            _log.Info($"waypipe: accepting channels on {listener.LocalEndPoint}");
         }
 
         if (_config.QuillDemo)

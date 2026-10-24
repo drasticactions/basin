@@ -307,6 +307,7 @@ public sealed class TomlDocument
     /// </summary>
     /// <param name="path">The path of the file. Missing directories are created.</param>
     /// <exception cref="IOException">The file cannot be written.</exception>
+    /// <exception cref="UnauthorizedAccessException">The file exists and is read-only, or the directory refuses the write.</exception>
     public void Save(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -324,6 +325,14 @@ public sealed class TomlDocument
         }
 
         UnixFileMode? mode = !OperatingSystem.IsWindows() && File.Exists(target) ? File.GetUnixFileMode(target) : null;
+        var readOnly = mode is { } current
+            ? (current & UnixFileMode.UserWrite) == 0
+            : OperatingSystem.IsWindows() && File.Exists(target) && File.GetAttributes(target).HasFlag(FileAttributes.ReadOnly);
+        if (readOnly)
+        {
+            throw new UnauthorizedAccessException($"The file {target} is read-only. Make it writable to save changes.");
+        }
+
         var temporary = target + ".tmp";
         using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
         {
@@ -452,7 +461,7 @@ public sealed class TomlDocument
             }
         }
 
-        throw new ArgumentOutOfRangeException(nameof(index), $"there is no [[{name}]] number {index}");
+        throw new ArgumentOutOfRangeException(nameof(index), $"There is no [[{name}]] number {index}.");
     }
 
     private TableScope ScopeOf(TableSyntaxBase table)
@@ -577,7 +586,7 @@ public sealed class TomlDocument
         var syntax = Toml.Parse(text);
         if (syntax.HasErrors)
         {
-            throw new InvalidOperationException($"the edit would not parse: {First(syntax)}");
+            throw new InvalidOperationException($"The edit does not parse ({First(syntax)}).");
         }
 
         try
@@ -586,7 +595,7 @@ public sealed class TomlDocument
         }
         catch (Exception error) when (error is TomlException or InvalidCastException or InvalidOperationException)
         {
-            throw new InvalidOperationException($"the edit would define a key twice: {error.Message}", error);
+            throw new InvalidOperationException("The edit defines a key twice.", error);
         }
 
         _text = text;

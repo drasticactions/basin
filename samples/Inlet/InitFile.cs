@@ -49,13 +49,11 @@ internal static class InitFile
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            log.Debug($"failed to read the init file {command}: {e.Message}");
+            log.Debug(e, $"init: {command} not read");
             return false;
         }
 
-        log.Error($"the init file {command} contains the string \"riverctl\". Inlet implements the river " +
-            $"window-management protocols, which have no riverctl. An init written for river-classic " +
-            $"cannot configure Inlet: it must start a window manager instead");
+        log.Error($"init: {command} uses riverctl, which Inlet does not have, start a window manager from the init instead");
         return true;
     }
 }

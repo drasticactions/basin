@@ -177,7 +177,8 @@ public sealed class SettingsPanelTests
         session!.Send("ipc tinycomp/settings {\"state\":\"open\"}");
         var line = session.WaitForLine("ERR ");
         Assert.NotNull(line);
-        Assert.Contains("unavailable on pixman", line);
+        Assert.StartsWith("ERR unavailable ", line, StringComparison.Ordinal);
+        Assert.Contains("pixman", line, StringComparison.Ordinal);
     }
 
     private static string CommentOf(string line)

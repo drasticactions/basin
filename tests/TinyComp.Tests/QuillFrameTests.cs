@@ -16,8 +16,8 @@ public sealed class QuillFrameTests
     {
         using var session = QuillSession.Start(row);
         Assert.SkipWhen(session is null, $"tinycomp, ssdwin or the {row} row is not available beside the tests");
-        Assert.False(session!.Logged("flat frames are used instead"), $"the {row} row fell back to the flat frames");
-        Assert.True(session.Logged("quill frames "), $"the {row} row never reported which device its quill frames draw on");
+        Assert.False(session!.Logged("flat frames used"), $"the {row} row fell back to the flat frames");
+        Assert.True(session.Logged("quill: frames "), $"the {row} row never reported which device its quill frames draw on");
 
         var shot = session.Shot("quill");
         var (x, y) = session.WindowPosition();

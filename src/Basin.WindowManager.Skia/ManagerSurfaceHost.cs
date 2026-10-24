@@ -85,7 +85,7 @@ public sealed class ManagerSurfaceHost
     public ManagerSurface Create(WlOutput output, ZwlrLayerShellV1.Layer layer, string scope)
     {
         ArgumentNullException.ThrowIfNull(output);
-        var shell = LayerShell ?? throw new InvalidOperationException("the compositor has not offered zwlr_layer_shell_v1");
+        var shell = LayerShell ?? throw new InvalidOperationException("The compositor does not offer zwlr_layer_shell_v1.");
         return new ManagerSurface(Compositor, Shm, shell, output, layer, scope);
     }
 }

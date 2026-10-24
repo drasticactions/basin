@@ -44,7 +44,7 @@ internal sealed partial class LunaShell
         var saved = LauncherState.Read(LauncherState.DefaultPath(), out var error);
         if (error is not null)
         {
-            _log.Warn($"launcher state {LauncherState.DefaultPath()} is unreadable, the seed is used: {error}");
+            _log.Warn(error, $"launcher: cannot read the state {LauncherState.DefaultPath()}, the seed is used");
         }
 
         _launcherState = LauncherState.Build(_config.Tabs, _config.QuickLaunch, _entries, saved);
@@ -60,7 +60,7 @@ internal sealed partial class LunaShell
     {
         if (!_launcherState.Write(LauncherState.DefaultPath(), out var error))
         {
-            _log.Warn($"cannot save the launcher state: {error}");
+            _log.Warn(error, $"launcher: cannot save the state to {LauncherState.DefaultPath()}");
         }
     }
 

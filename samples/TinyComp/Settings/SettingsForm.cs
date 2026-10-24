@@ -131,13 +131,13 @@ internal sealed class SettingsForm
 
     private static string ResetNote(string section) => section switch
     {
-        SettingsCatalog.Bindings => "Every row goes, and the built-in bindings apply again. Nothing is saved until Save.",
-        SettingsCatalog.Rules => "Every rule goes. Nothing is saved until Save.",
-        SettingsCatalog.Outputs => "Every per-output setting goes, for connected and absent outputs alike. Nothing is saved until Save.",
-        SettingsCatalog.Input => "Every [input] table and every [[input.device]] entry goes, and each device returns to its libinput default. Values set at run time stay. Nothing is saved until Save.",
-        SettingsCatalog.Hypr => "The flags go back to their defaults and every global shortcut row goes. Nothing is saved until Save.",
-        SettingsCatalog.Effects => "Every effect goes back to its default and the preset chain goes. Nothing is saved until Save.",
-        _ => "Every setting here goes back to its default. Nothing is saved until Save.",
+        SettingsCatalog.Bindings => "This removes every binding, and the built-in bindings apply again. Nothing is saved until you click Save.",
+        SettingsCatalog.Rules => "This removes every rule. Nothing is saved until you click Save.",
+        SettingsCatalog.Outputs => "This removes every output setting, for connected and disconnected outputs. Nothing is saved until you click Save.",
+        SettingsCatalog.Input => "This removes every [input] table and [[input.device]] entry, and each device goes back to its default. Values set while running stay. Nothing is saved until you click Save.",
+        SettingsCatalog.Hypr => "The switches go back to their defaults, and every global shortcut is removed. Nothing is saved until you click Save.",
+        SettingsCatalog.Effects => "Every effect goes back to its default, and the preset chain is removed. Nothing is saved until you click Save.",
+        _ => "Every setting here goes back to its default. Nothing is saved until you click Save.",
     };
 
     public void ResetSection(string section)
@@ -265,7 +265,7 @@ internal sealed class SettingsForm
             if (_draft.Conflict)
             {
                 SettingsWidgets.Button(paper, theme, "overwrite", "Overwrite", () => _context.Overwrite?.Invoke(), primary: true);
-                SettingsWidgets.Button(paper, theme, "reload", "Reload", () => _context.Revert?.Invoke());
+                SettingsWidgets.Button(paper, theme, "reload", "Revert", () => _context.Revert?.Invoke());
             }
             else
             {
@@ -355,7 +355,7 @@ internal sealed class SettingsForm
                 if (key.Kind == SettingKind.Path && ((ISettingValue<string>)slot).Value is { Length: > 0 } path &&
                     path != "none" && key.Presets?.Contains(path) != true && !File.Exists(ExpandFor(key, path)))
                 {
-                    SettingsWidgets.Note(paper, theme, key.Path + "-missing", $"{path} does not exist", theme.Warning);
+                    SettingsWidgets.Note(paper, theme, key.Path + "-missing", $"Couldn't find {path}.", theme.Warning);
                 }
 
                 break;
@@ -514,7 +514,7 @@ internal sealed class SettingsForm
 
     private void BindingsSection(Prowl.PaperUI.Paper paper, SettingsTheme theme)
     {
-        SettingsWidgets.Note(paper, theme, "bindings-note", "A row replaces the built-in binding with the same chord, and none unbinds it. Pick exec to run a command.");
+        SettingsWidgets.Note(paper, theme, "bindings-note", "A binding replaces the built-in one for the same keys. Pick none to unbind the keys, or exec to run a command.");
         var chords = _draft.Document.Keys("bindings");
         var parsed = new Dictionary<(uint, Modifiers), int>();
         foreach (var chord in chords)
@@ -529,7 +529,7 @@ internal sealed class SettingsForm
             _context.Capture.Begin(new NewKey(_draft, "bindings", TomlValue.From("none"))));
         if (_context.Capture.Target is NewKey { Table: "bindings" })
         {
-            SettingsWidgets.Note(paper, theme, "capturing", "Press the chord for the new binding. Escape cancels.", theme.Accent);
+            SettingsWidgets.Note(paper, theme, "capturing", "Press the keys for the new binding. Press Escape to cancel.", theme.Accent);
         }
 
         for (var i = 0; i < chords.Count; i++)
@@ -566,7 +566,7 @@ internal sealed class SettingsForm
 
     private void RulesSection(Prowl.PaperUI.Paper paper, SettingsTheme theme)
     {
-        SettingsWidgets.Note(paper, theme, "rules-note", "Rules apply to windows mapped after the change. The most specific rule wins, then the order here.");
+        SettingsWidgets.Note(paper, theme, "rules-note", "Rules apply to windows that open after the change. The most specific rule wins, then the order here.");
         SettingsWidgets.Button(paper, theme, "add-rule", "Add rule", () => _draft.Edit(
             document =>
             {
@@ -612,7 +612,7 @@ internal sealed class SettingsForm
 
     private void LaunchSection(Prowl.PaperUI.Paper paper, SettingsTheme theme)
     {
-        SettingsWidgets.Note(paper, theme, "launch-note", "A launch rule chooses the X server of an X11 application before it starts. low-density is a server at scale 1 and 96 DPI that is stretched to the output. A rule applies at the next start, and the window menu's density item restarts a running application.");
+        SettingsWidgets.Note(paper, theme, "launch-note", "A launch rule picks the X server for an X11 app before it starts. The low-density server runs at scale 1 and 96 DPI and is stretched to fit the output. A rule applies the next time the app starts. To restart a running app, use the density item in its window menu.");
         SettingsWidgets.Button(paper, theme, "add-launch", "Add launch rule", () => _draft.Edit(
             document =>
             {
@@ -702,7 +702,7 @@ internal sealed class SettingsForm
         SettingsWidgets.TextRow(paper, theme, "overview_scale", "Overview scale", OutputSlot(table, "overview_scale", SettingKind.Literal), "inherit");
         SettingsWidgets.EnumRow(paper, theme, "overview_wall", "Overview wall", OutputSlot(table, "overview_wall", SettingKind.Choice, "(inherit)"), ["(inherit)", "slope", "step"]);
         SettingsWidgets.Heading(paper, theme, "canvas-overrides", "Canvas overrides");
-        SettingsWidgets.Note(paper, theme, "canvas-overrides-note", "Each value is a TOML literal, and an empty field inherits [canvas].");
+        SettingsWidgets.Note(paper, theme, "canvas-overrides-note", "Type each value as you would in the file. Leave a field empty to use the [canvas] value.");
         foreach (var key in SettingsCatalog.Keys)
         {
             if (key.Section != SettingsCatalog.Canvas)
@@ -724,7 +724,7 @@ internal sealed class SettingsForm
         }
         else
         {
-            SettingsWidgets.Note(paper, theme, "overview-overrides-note", "Each value is a TOML literal, and an empty field inherits [overview].");
+            SettingsWidgets.Note(paper, theme, "overview-overrides-note", "Type each value as you would in the file. Leave a field empty to use the [overview] value.");
             foreach (var key in SettingsCatalog.Keys)
             {
                 if (key.Section != SettingsCatalog.Overview || (key.Key != "anchor" && Array.IndexOf(OverviewSetting.TerraceKeys, key.Key) < 0))
@@ -838,11 +838,11 @@ internal sealed class SettingsForm
 
         if (_context.Input is null)
         {
-            SettingsWidgets.Note(paper, theme, "no-input", "This session has no input configuration. Values still save to the file.", theme.Warning);
+            SettingsWidgets.Note(paper, theme, "no-input", "This session can't apply input settings live. They still save to the file.", theme.Warning);
         }
         else if (chosen is null && devices.Count == 0)
         {
-            SettingsWidgets.Note(paper, theme, "no-devices", "No input devices are present. Values still save to the file.");
+            SettingsWidgets.Note(paper, theme, "no-devices", "No input devices are connected. Values still save to the file.");
         }
 
         var target = labels[_inputTarget];
@@ -912,7 +912,7 @@ internal sealed class SettingsForm
     private void Shortcuts(Prowl.PaperUI.Paper paper, SettingsTheme theme)
     {
         SettingsWidgets.Heading(paper, theme, "shortcuts", "Global shortcuts");
-        SettingsWidgets.Note(paper, theme, "shortcuts-note", "Rows are app_id:id and the chord a client's shortcut fires on.");
+        SettingsWidgets.Note(paper, theme, "shortcuts-note", "Each row is an app_id:id and the keys that fire that app's shortcut.");
         var names = _draft.Document.Keys("shortcuts");
         for (var i = 0; i < names.Count; i++)
         {
@@ -935,7 +935,7 @@ internal sealed class SettingsForm
     private void ShaderChain(Prowl.PaperUI.Paper paper, SettingsTheme theme)
     {
         SettingsWidgets.Heading(paper, theme, "chain", "Preset chain");
-        SettingsWidgets.Note(paper, theme, "chain-note", "Several presets chain in order, each with its own parameters. The chain replaces the shader key above.");
+        SettingsWidgets.Note(paper, theme, "chain-note", "Presets run in order, each with its own parameters. The chain replaces the shader preset above.");
         SettingsWidgets.Button(paper, theme, "add-preset", "Add preset", () => _draft.Edit(
             document =>
             {
@@ -964,7 +964,7 @@ internal sealed class SettingsForm
             var raw = _draft.Document.RawValueInTable("effects.shader", i, "params");
             if (raw is null && rows is not null && i < rows.Count && rows[i].ContainsKey("params"))
             {
-                SettingsWidgets.Note(paper, theme, "params-table", "This preset's params are a [effects.shader.params] table; edit them in the file.");
+                SettingsWidgets.Note(paper, theme, "params-table", "This preset's parameters are in an [effects.shader.params] table. Edit them in the file.");
             }
             else
             {

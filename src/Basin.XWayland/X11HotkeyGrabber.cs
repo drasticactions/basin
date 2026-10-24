@@ -86,7 +86,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         if (Libxcb.xcb_connection_has_error(conn) != 0)
         {
-            Log.Warn($"no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
+            Log.Warn($"hotkeys: no X server answers on '{display ?? Environment.GetEnvironmentVariable("DISPLAY")}'");
             Libxcb.xcb_disconnect(conn);
             return null;
         }
@@ -112,7 +112,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         if (Keysym(key) is not { } keysym)
         {
-            Log.Warn($"no X keysym for '{key}'");
+            Log.Warn($"hotkeys: no X keysym for '{key}'");
             return false;
         }
 
@@ -170,7 +170,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
         if (binding.Keycodes.Count == 0)
         {
-            Log.Warn($"the keyboard mapping has no keycode for '{binding.Key}'");
+            Log.Warn($"hotkeys: the keyboard mapping has no keycode for '{binding.Key}'");
             return false;
         }
 
@@ -185,7 +185,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
                 {
                     var code = error->error_code;
                     Libc.Free(error);
-                    Log.Warn($"the X server refused the grab for '{binding.Key}' (error {code})");
+                    Log.Warn($"hotkeys: the X server refused the grab for '{binding.Key}', error {code}");
                     Ungrab(binding);
                     return false;
                 }
@@ -257,7 +257,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
             }
             catch (Exception error)
             {
-                Log.Warn($"hotkey dispatch failed: {error.Message}");
+                Log.Warn(error, $"hotkeys: dispatch failed");
             }
 
             Libc.Free(ev);
@@ -267,7 +267,7 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
         {
             _dead = true;
             _source.Remove();
-            Log.Warn($"the X server connection was lost, global hotkeys are off");
+            Log.Warn($"hotkeys: X server connection lost, global hotkeys are off");
         }
     }
 

@@ -51,7 +51,7 @@ public sealed class XdgDialogManager : IDisposable
 
             if (!_dialogs.Add(toplevel))
             {
-                manager.PostError(ErrorAlreadyUsed, "toplevel already has a dialog object");
+                manager.PostError(ErrorAlreadyUsed, "The toplevel already has a dialog object.");
                 return;
             }
 

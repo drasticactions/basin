@@ -579,7 +579,7 @@ public static class SettingsWidgets
         ArgumentNullException.ThrowIfNull(capture);
 
         var capturing = ReferenceEquals(capture.Target, value);
-        var text = capturing ? "Press a chord, Esc cancels" : value.Value;
+        var text = capturing ? "Press keys, or Esc to cancel" : value.Value;
         paper.Box(id).Width(width).Height(MathF.Round(theme.RowHeight * 0.8f)).Rounded(5)
             .BackgroundColor(capturing ? theme.Accent : theme.Raised).BorderColor(theme.Border).BorderWidth(capturing ? 0 : 1)
             .PaddingLeft(10).Text(text, theme.Font).FontSize(theme.FontSize)

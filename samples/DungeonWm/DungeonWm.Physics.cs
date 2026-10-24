@@ -486,7 +486,7 @@ internal sealed partial class DungeonWm
 
                 if (!TurnHeld((float)(yaw * Math.PI / 180), (float)(pitch * Math.PI / 180), (float)(roll * Math.PI / 180)))
                 {
-                    p.Invalid("no window is held");
+                    p.Invalid("No window is held. Grab a window first.");
                 }
             });
 
@@ -496,7 +496,7 @@ internal sealed partial class DungeonWm
             {
                 if (!SquareHeld())
                 {
-                    p.Invalid("no window is held");
+                    p.Invalid("No window is held. Grab a window first.");
                 }
             });
 

@@ -825,7 +825,7 @@ public sealed class SeatBinder
         }
         catch (NotSupportedException)
         {
-            Log.Debug($"no seat manager to switch sessions");
+            Log.Debug($"vt switch: no seat manager to switch sessions");
         }
 
         return true;

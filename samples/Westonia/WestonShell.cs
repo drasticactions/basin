@@ -115,7 +115,7 @@ internal sealed partial class WestonShell : IDisposable
     public void DesktopReady()
     {
         _desktopReady = true;
-        _log.Info($"the shell reports the desktop is ready");
+        _log.Info($"shell: the desktop is ready");
     }
 
     public void AdoptScreensaverSurface(IOutput output, Surface surface)

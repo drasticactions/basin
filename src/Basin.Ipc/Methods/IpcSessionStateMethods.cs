@@ -38,7 +38,7 @@ internal static class IpcSessionStateMethods
                 var token = request.Token;
                 if (!token.StartsWith("inhibit-", StringComparison.Ordinal) || !reply.State.Remove(token))
                 {
-                    reply.Error(IpcErrorCodes.NotFound, $"this connection holds no inhibitor '{token}'");
+                    reply.Error(IpcErrorCodes.NotFound, $"This connection holds no inhibitor '{token}'.");
                     return;
                 }
 
@@ -78,7 +78,7 @@ internal static class IpcSessionStateMethods
                     var copy = UnixSocket.Duplicate(shared.Fd);
                     if (copy < 0)
                     {
-                        reply.Error(IpcErrorCodes.Failed, $"could not duplicate the keymap fd (errno {UnixSocket.LastError})");
+                        reply.Error(IpcErrorCodes.Failed, $"The compositor could not duplicate the keymap fd (errno {UnixSocket.LastError}).");
                         return;
                     }
 

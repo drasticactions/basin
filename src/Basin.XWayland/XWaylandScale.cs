@@ -22,7 +22,7 @@ public readonly record struct XWaylandScale
     {
         if (!double.IsFinite(value) || value < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(value), value, "an X11 scale must be finite and at least 1");
+            throw new ArgumentOutOfRangeException(nameof(value), value, "The X11 scale must be finite and at least 1.");
         }
 
         return new(value);

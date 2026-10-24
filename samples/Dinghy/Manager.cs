@@ -1674,7 +1674,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
         if (_config.Blur && !_wm.BackgroundEffects.Supported && !_blurWarned)
         {
             _blurWarned = true;
-            _log.Warn($"[blur] strength is set, but the compositor offers no ext-background-effect blur, so nothing is blurred");
+            _log.Warn($"[blur] strength ignored, the compositor has no ext-background-effect blur");
         }
     }
 
@@ -2461,7 +2461,7 @@ internal sealed class Manager : Basin.Capabilities.IWindowPartsSource
     {
         if (WmSpawn.Run(argv) is { } failure)
         {
-            _log.Error($"could not spawn '{(argv[0])}': {failure}");
+            _log.Warn($"spawn: '{(argv[0])}' not started: {failure}");
         }
     }
 

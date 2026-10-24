@@ -46,7 +46,7 @@ internal sealed class MetacityColorSpec
         {
             if (str.Length < 11 || str[10] != '(')
             {
-                error = $"GTK custom color specification must have color name and fallback in parentheses, e.g. gtk:custom(foo,bar); could not parse \"{str}\"";
+                error = $"GTK custom color specification must have color name and fallback in parentheses, e.g. gtk:custom(foo,bar). Could not parse \"{str}\"";
                 return Failed();
             }
 
@@ -92,14 +92,14 @@ internal sealed class MetacityColorSpec
             var bracket = str.IndexOf('[');
             if (bracket < 0)
             {
-                error = $"GTK color specification must have the state in brackets, e.g. gtk:fg[NORMAL] where NORMAL is the state; could not parse \"{str}\"";
+                error = $"GTK color specification must have the state in brackets, e.g. gtk:fg[NORMAL] where NORMAL is the state. Could not parse \"{str}\"";
                 return Failed();
             }
 
             var endBracket = str.IndexOf(']', bracket + 1);
             if (endBracket < 0)
             {
-                error = $"GTK color specification must have a close bracket after the state, e.g. gtk:fg[NORMAL] where NORMAL is the state; could not parse \"{str}\"";
+                error = $"GTK color specification must have a close bracket after the state, e.g. gtk:fg[NORMAL] where NORMAL is the state. Could not parse \"{str}\"";
                 return Failed();
             }
 

@@ -97,7 +97,7 @@ internal static class Program
         return Basin.Renderers.RendererCatalog.CreateWithFallback(
             ref name,
             Basin.Renderers.RendererCatalog.FindRenderNode(),
-            fallback => log.Warn($"{(fallback.Describe())}"));
+            fallback => fallback.Log(log));
     }
 
     private static int Run(
@@ -120,9 +120,20 @@ internal static class Program
     {
         BasinCounters.Reset();
 
-        var status = RunCompositor(
-            log, rendererName, drm, nested, outputCount, width, height, scales, xwayland, frames, screenshotPath,
-            startupCommand, ipcChoice, handoff, inspectorOpen, out var totalRendered);
+        int status;
+        long totalRendered;
+        try
+        {
+            status = RunCompositor(
+                log, rendererName, drm, nested, outputCount, width, height, scales, xwayland, frames, screenshotPath,
+                startupCommand, ipcChoice, handoff, inspectorOpen, out totalRendered);
+        }
+        catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or IOException)
+        {
+            log.Error(error, $"compositor stopped");
+            renderedFrames = 0;
+            return 1;
+        }
 
         renderedFrames = Math.Max(0, totalRendered);
 
@@ -213,7 +224,7 @@ internal static class Program
         driver.HandoffInherited += inheritance => BasinReport.Line(HandoffLines.Inherit(inheritance));
         host.HandoffRetained += retention => BasinReport.Line(HandoffLines.Retain(retention));
         driver.ScaleRefused += (view, scale) =>
-            log.Error($"scale {scale} refused by {view.Output.Name}");
+            log.Warn($"scale {scale} refused by {view.Output.Name}");
         driver.ScanoutChanged += (view, choice) =>
             BasinReport.Line(CompositorLines.Scanout(view.Output.Name, choice, view.SwapModifiers.Length));
 
@@ -329,7 +340,7 @@ internal static class Program
 
         if (!colorPack.Attach(services, scene))
         {
-            throw new InvalidOperationException("no color manager is registered");
+            throw new InvalidOperationException("No color manager is registered. Inlet needs one to manage color.");
         }
 
         var color = colorPack.Manager;

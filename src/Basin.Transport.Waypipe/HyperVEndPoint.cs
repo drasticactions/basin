@@ -130,7 +130,7 @@ public sealed class HyperVEndPoint : EndPoint
         ArgumentNullException.ThrowIfNull(socketAddress);
         if (socketAddress.Size < SockaddrLength)
         {
-            throw new ArgumentException("a SOCKADDR_HV is 36 bytes", nameof(socketAddress));
+            throw new ArgumentException("The address is not 36 bytes. A SOCKADDR_HV is 36 bytes.", nameof(socketAddress));
         }
 
         Span<byte> bytes = stackalloc byte[SockaddrLength];
@@ -169,7 +169,7 @@ public sealed class HyperVEndPoint : EndPoint
     {
         if (BinaryPrimitives.ReadUInt16LittleEndian(sockaddr) != (ushort)HyperVFamily)
         {
-            throw new ArgumentException("the address is not AF_HYPERV", nameof(sockaddr));
+            throw new ArgumentException("The address is not AF_HYPERV.", nameof(sockaddr));
         }
 
         return new HyperVEndPoint(

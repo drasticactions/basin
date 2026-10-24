@@ -117,7 +117,7 @@ public sealed record WindowQuirks
     {
         if (take("x11_scale") is not null)
         {
-            log.Warn($"{where("x11_scale")} is removed, ignored: a [[launch]] rule with x11 = \"low-density\" starts an application on the low-density X server");
+            log.Warn($"{where("x11_scale")} is removed, use a [[launch]] rule with x11 = \"low-density\" instead, ignored");
         }
 
         return new WindowQuirks

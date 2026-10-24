@@ -111,7 +111,7 @@ internal sealed class MetacityExpression
             if (!_reported)
             {
                 _reported = true;
-                Log.Warn($"Theme contained an expression that resulted in an error: {Describe(result, _tokens)} in \"{Source}\"");
+                Log.Warn($"theme: expression \"{Source}\" failed, {Describe(result, _tokens)}");
             }
 
             return 0;

@@ -134,7 +134,7 @@ internal sealed partial class DungeonWm
             voice = SpatialVoice.Create(session, new VoiceGraph(VoiceMode.Stereo, null, ImpulseFor(region)), name, out var error, "dungeon-wm room");
             if (voice is null)
             {
-                _log.Warn($"no room voice for the effects: {error}");
+                _log.Warn($"audio: no room voice for the effects: {error}");
             }
             else
             {

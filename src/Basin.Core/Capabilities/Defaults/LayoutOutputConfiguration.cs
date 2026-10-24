@@ -344,7 +344,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
 
             if (!output.Commit(state))
             {
-                Log.Warn($"{output.Name}: could not restore the output after a failed configuration");
+                Log.Warn($"{output.Name}: restore failed after a refused configuration");
             }
 
             RestorePlacement(output, snapshot);

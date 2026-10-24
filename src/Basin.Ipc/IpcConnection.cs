@@ -61,7 +61,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
         {
             _send.Truncate(start);
             reply.ReleaseFds();
-            reply.Fail(IpcErrorCodes.TooLarge, "the reply is larger than a frame can carry; ask for a path or an fd");
+            reply.Fail(IpcErrorCodes.TooLarge, "The reply is too large for one frame. Ask for a path or an fd instead.");
             WriteReply(reply, start);
         }
 
@@ -169,7 +169,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
         }
         catch (Exception exception)
         {
-            Log.Error($"connection {Fd} failed: {exception}");
+            Log.Error(exception, $"connection {Fd}: dispatch failed, connection closed");
             Dispose();
         }
     }
@@ -198,7 +198,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
                     break;
                 }
 
-                Log.Debug($"connection {Fd} read failed with errno {error}");
+                Log.Debug($"connection {Fd}: read failed with errno {error}");
                 Dispose();
                 return;
             }
@@ -254,7 +254,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
             var length = IpcProtocol.ReadLength(pending);
             if (length > IpcProtocol.MaxRequestBytes)
             {
-                Log.Warn($"connection {Fd} sent a {length}-byte request, over the limit; closing it");
+                Log.Warn($"connection {Fd}: {length}-byte request is over the limit, connection closed");
                 Dispose();
                 return false;
             }
@@ -282,7 +282,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
         if (!IpcRequest.TryParse(frame, out var request, out var error))
         {
             _reply.Begin(request.Id, request.Method ?? string.Empty);
-            _reply.Error(IpcErrorCodes.ParseError, error ?? "malformed request");
+            _reply.Error(IpcErrorCodes.ParseError, error ?? "The request is malformed.");
             Deliver(_reply);
             return;
         }
@@ -327,7 +327,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
                     break;
                 }
 
-                Log.Debug($"connection {Fd} write failed with errno {error}");
+                Log.Debug($"connection {Fd}: write failed with errno {error}");
                 Dispose();
                 return;
             }
@@ -357,7 +357,7 @@ internal sealed class IpcConnection : IIpcReplySink, IIpcEventSubscriber, IDispo
 
         if (_send.Length > MaxQueuedBytes)
         {
-            Log.Warn($"connection {Fd} has {_send.Length} bytes queued and is not reading; closing it");
+            Log.Warn($"connection {Fd}: {_send.Length} bytes queued and the client does not read, connection closed");
             Dispose();
             return;
         }

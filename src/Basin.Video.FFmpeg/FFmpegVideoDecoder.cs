@@ -40,11 +40,11 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder, IDisposable
             hardware = FFmpegHardware.TryCreate();
             if (hardware is null)
             {
-                Log.Warn($"no hardware decode device opens on this host; decoding in software");
+                Log.Warn($"hardware: no decode device opens, decoding in software");
             }
             else
             {
-                Log.Debug($"hardware decode over {hardware.Name}");
+                Log.Debug($"hardware: decoding over {hardware.Name}");
             }
         }
 
@@ -102,6 +102,6 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder, IDisposable
         VideoCodec.H264 => "h264",
         VideoCodec.Vp9 => "vp9",
         VideoCodec.Av1 => "av1",
-        _ => throw new ArgumentOutOfRangeException(nameof(codec)),
+        _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, "The codec is not supported."),
     };
 }

@@ -51,7 +51,7 @@ internal abstract class IpcCoalescedSource : IpcEventSource
         }
         catch (Exception exception)
         {
-            Log.Error($"{GetType().Name} failed to flush: {exception}");
+            Log.Error(exception, $"events: {GetType().Name} flush failed");
         }
     }
 }

@@ -88,7 +88,7 @@ public sealed class BasinViewOutput : IDisposable
 
         if (!Output.Reconfigure(width, height, scale, transform))
         {
-            throw new InvalidOperationException($"the output refused {width}x{height} at scale {scale} with {transform}");
+            throw new InvalidOperationException($"The output refused {width}x{height} at scale {scale} with transform {transform}.");
         }
 
         var stale = Target;
@@ -118,7 +118,7 @@ public sealed class BasinViewOutput : IDisposable
 
         if (!Output.SetRefresh(refreshMilliHz))
         {
-            throw new InvalidOperationException($"the output refused a refresh of {refreshMilliHz} mHz");
+            throw new InvalidOperationException($"The output refused a refresh rate of {refreshMilliHz} mHz.");
         }
 
         _host.Screens.NotifyReconfigured(Output);

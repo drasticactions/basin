@@ -57,11 +57,13 @@ public sealed class IpcLineFrontTests
         Assert.Equal("WINDOW \"a b\" 0,0 ws=1", output[1]);
         Assert.Equal("ERR invalid_params usage: park {side:left|right}", output[2]);
         Assert.Equal("ERR no output 3", output[3]);
-        Assert.Equal("ERR invalid_params 'y' must be a number, not 'nope'", output[4]);
+        Assert.StartsWith("ERR invalid_params 'y' must be a number", output[4], StringComparison.Ordinal);
         Assert.Equal("ERR unknown_method bogus", output[5]);
         Assert.StartsWith("OK ipc/version protocol=1 compositor=test", output[6], StringComparison.Ordinal);
-        Assert.Equal("ERR unknown_method no method 'nope/nothing' on this compositor", output[7]);
-        Assert.Equal("ERR parse_error the params are not a JSON object", output[8]);
+        Assert.StartsWith("ERR unknown_method ", output[7], StringComparison.Ordinal);
+        Assert.Contains("'nope/nothing'", output[7], StringComparison.Ordinal);
+        Assert.StartsWith("ERR parse_error ", output[8], StringComparison.Ordinal);
+        Assert.Contains("JSON object", output[8], StringComparison.Ordinal);
         Assert.Equal(9, output.Count);
     }
 

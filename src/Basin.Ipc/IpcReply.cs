@@ -193,7 +193,7 @@ public class IpcReply
         ArgumentOutOfRangeException.ThrowIfNegative(fd);
         if (_fds.Count >= UnixSocket.MaxFds)
         {
-            throw new InvalidOperationException($"a reply carries at most {UnixSocket.MaxFds} descriptors");
+            throw new InvalidOperationException($"The reply already carries {UnixSocket.MaxFds} descriptors. A reply carries at most {UnixSocket.MaxFds}.");
         }
 
         _fds.Add(fd);
@@ -209,7 +209,7 @@ public class IpcReply
     {
         if (IsDeferred || this is IpcPendingReply { Rerun: false })
         {
-            throw new InvalidOperationException("a reply is deferred once");
+            throw new InvalidOperationException("The reply is already deferred. Defer a reply once only.");
         }
 
         IsDeferred = true;

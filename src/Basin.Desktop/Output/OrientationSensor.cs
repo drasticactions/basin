@@ -42,7 +42,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
             {
                 if (pipe2(fds, OCloexec) != 0)
                 {
-                    throw new InvalidOperationException("the sensor wake pipe could not be created");
+                    throw new InvalidOperationException($"The sensor wake pipe cannot be created (errno {Marshal.GetLastPInvokeError()}).");
                 }
             }
         }
@@ -116,7 +116,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         {
             if (DBusAddress.System is not { } address)
             {
-                Log.Debug($"this session has no system bus, auto rotate is off");
+                Log.Debug($"orientation: no system bus, auto rotate is off");
                 return;
             }
 
@@ -155,7 +155,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         {
             if (!_disposed)
             {
-                Log.Debug($"iio-sensor-proxy is not reachable, auto rotate is off ({error.Message})");
+                Log.Debug(error, $"orientation: iio-sensor-proxy not reachable, auto rotate is off");
             }
         }
     }
@@ -200,7 +200,7 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         {
             if (!_disposed)
             {
-                Log.Warn($"the accelerometer claim failed ({error.Message})");
+                Log.Warn(error, $"orientation: accelerometer claim failed");
             }
         }
     }

@@ -40,7 +40,7 @@ internal sealed partial class TinyComp
             : Basin.Capabilities.ImageDescription.SdrDefault;
 
     private void ReportFallback(Basin.Renderers.RendererFallback fallback) =>
-        _log.Warn($"{(fallback.Describe())}");
+        fallback.Log(_log);
 
     private void WireOutputDriver()
     {
@@ -374,13 +374,11 @@ internal sealed partial class TinyComp
         }
         else if (choice == ScanoutChoice.DumbLinear && _renderer.Device is not null)
         {
-            _log.Warn(
-                $"{view.Output.Name}: the renderer shares no scanout format with this plane; " +
-                $"presenting through CPU-mapped buffers, which reads the whole framebuffer back every frame");
+            _log.Warn($"{view.Output.Name}: no scanout format shared with the plane, CPU-mapped buffers read the framebuffer back each frame");
         }
         else if (choice == ScanoutChoice.RefusedByPlane)
         {
-            _log.Warn($"{view.Output.Name}: device buffers refused by the plane; falling back to dumb linear");
+            _log.Warn($"{view.Output.Name}: plane refused device buffers, dumb linear buffers used");
         }
     }
 
@@ -669,7 +667,7 @@ internal sealed partial class TinyComp
 
         if (FrameHosts.For(renderer) is not { } host)
         {
-            _log.Error($"host frame: {FrameHosts.Describe(renderer)}");
+            _log.Warn($"host frame: {FrameHosts.Describe(renderer)}, default chrome used");
             return Basin.Backend.Wayland.Skia.DefaultHostChrome.Attach(hosted, frame);
         }
 

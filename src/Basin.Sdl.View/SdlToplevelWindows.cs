@@ -251,7 +251,7 @@ public sealed class SdlToplevelWindows : IDisposable
         }
         catch (Exception error) when (error is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
         {
-            Log.Error($"no SDL window for {entry.Key}: {error.Message}");
+            Log.Error(error, $"window: no SDL window for {entry.Key}, surface closed");
             if (entry.Popup is { } popup)
             {
                 popup.Dismiss();
@@ -400,7 +400,7 @@ public sealed class SdlToplevelWindows : IDisposable
             if (!_reportedNoMove)
             {
                 _reportedNoMove = true;
-                Log.Info($"SDL's {SDL.GetCurrentVideoDriver()} driver cannot start a client move or resize; the host frame or the host's move binding does it");
+                Log.Info($"move: SDL {SDL.GetCurrentVideoDriver()} driver cannot start a client move or resize, host frame or move binding does it");
             }
 
             return;

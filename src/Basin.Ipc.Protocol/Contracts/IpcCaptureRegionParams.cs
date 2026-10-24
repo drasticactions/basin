@@ -148,11 +148,11 @@ public sealed class IpcCaptureRegionParams : IIpcParams, IIpcReusable
     /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
-        (_present & 1) == 0 ? "'x' is required"
-        : (_present & 2) == 0 ? "'y' is required"
-        : (_present & 4) == 0 ? "'width' is required"
-        : (_present & 8) == 0 ? "'height' is required"
-        : (_present & 16) == 0 ? "'to' is required"
+        (_present & 1) == 0 ? "'x' is required."
+        : (_present & 2) == 0 ? "'y' is required."
+        : (_present & 4) == 0 ? "'width' is required."
+        : (_present & 8) == 0 ? "'height' is required."
+        : (_present & 16) == 0 ? "'to' is required."
         : null;
 
     void IIpcReusable.Reset()

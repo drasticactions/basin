@@ -13,7 +13,7 @@ internal sealed partial class TinyComp
     private InputCaptureEngine? _inputCapture;
 
     internal void WarnNoCtmShader() =>
-        _log.Warn($"{_rendererName} compiles no pixel shader dialect; a CTM on this backend is ignored");
+        _log.Warn($"hypr: {_rendererName} has no pixel shaders, CTM ignored on this backend");
 
     internal Basin.Host.OutputView? ViewOf(IOutput output)
     {

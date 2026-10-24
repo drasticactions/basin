@@ -943,7 +943,7 @@ public sealed unsafe class ImGuiUISurface : IUISurface
         }
         catch (Exception error)
         {
-            ImGuiLog.Log.Warn($"clipboard read failed: {error.Message}");
+            ImGuiLog.Log.Error(error, $"clipboard: read callback failed");
             return EmptyText;
         }
     }
@@ -960,7 +960,7 @@ public sealed unsafe class ImGuiUISurface : IUISurface
         }
         catch (Exception error)
         {
-            ImGuiLog.Log.Warn($"clipboard write failed: {error.Message}");
+            ImGuiLog.Log.Error(error, $"clipboard: write callback failed");
         }
     }
 
@@ -977,7 +977,7 @@ public sealed unsafe class ImGuiUISurface : IUISurface
         }
         catch (Exception error)
         {
-            ImGuiLog.Log.Warn($"text input placement failed: {error.Message}");
+            ImGuiLog.Log.Error(error, $"ime: text input placement callback failed");
         }
     }
 }

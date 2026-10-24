@@ -88,7 +88,7 @@ public sealed class LockSurface
         {
             _resource.PostError(
                 (uint)ExtSessionLockSurfaceV1.Error.CommitBeforeFirstAck,
-                "buffer committed before acking the first configure");
+                "A buffer was committed before the client acknowledged the first configure.");
             return;
         }
 

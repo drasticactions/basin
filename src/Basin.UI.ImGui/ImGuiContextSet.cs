@@ -26,7 +26,7 @@ public sealed unsafe class ImGuiContextSet : IDisposable
     {
         if (!ImGuiNative.TryLoad(out var declined))
         {
-            throw new InvalidOperationException(declined);
+            throw new InvalidOperationException($"Dear ImGui is not available: {declined}.");
         }
 
         var previous = Scope.Capture();

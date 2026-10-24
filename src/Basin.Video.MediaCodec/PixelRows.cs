@@ -61,7 +61,7 @@ internal static unsafe class PixelRows
                     break;
 
                 default:
-                    throw new NotSupportedException($"MediaCodec frames are not packed into {format}");
+                    throw new NotSupportedException($"MediaCodec frames cannot be packed into {format}.");
             }
         }
     }

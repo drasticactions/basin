@@ -35,26 +35,26 @@ public static class FileDescriptorLimit
     {
         if (getrlimit(ResourceOpenFiles, out var original) != 0)
         {
-            log.Error($"getrlimit failed, using the system default file descriptor limit");
+            log.Warn($"fd limit: getrlimit failed, system limit kept");
             return;
         }
 
         var raised = Raised(original);
         if (raised.Current == original.Current)
         {
-            log.Debug($"the file descriptor limit of the compositor process stays at {original.Current}");
+            log.Debug($"fd limit: stays at {original.Current}");
             return;
         }
 
         _original = original;
         if (setrlimit(ResourceOpenFiles, in raised) != 0)
         {
-            log.Error($"setrlimit failed, using the system default file descriptor limit of {original.Current}");
+            log.Warn($"fd limit: setrlimit failed, system limit of {original.Current} kept");
             _original = null;
             return;
         }
 
-        log.Info($"raised the file descriptor limit of the compositor process to {raised.Current}");
+        log.Info($"fd limit: raised to {raised.Current}");
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public static class FileDescriptorLimit
         var raised = Raised(original);
         if (setrlimit(ResourceOpenFiles, in raised) != 0)
         {
-            log.Error($"failed to raise the file descriptor limit of the compositor process again");
+            log.Warn($"fd limit: raise after spawn failed, system limit kept");
         }
     }
 

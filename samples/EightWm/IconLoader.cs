@@ -31,6 +31,7 @@ internal sealed class IconLoader : IDisposable
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            EightWmLog.Log.Debug(error, $"icons: cannot load {appId} at {sizePx} px");
         }
 
         _cache[key] = image;

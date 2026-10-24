@@ -66,6 +66,7 @@ internal sealed class TinyWl : IDisposable
     private ResizeEdges _grabEdges;
 
     private readonly IEventSource _interrupt;
+    private readonly IEventSource _terminate;
 
     private readonly BasinLogger _log;
 
@@ -117,7 +118,7 @@ internal sealed class TinyWl : IDisposable
         _cursors = new CursorImages(_cursorAllocator, bufferWidth: 64, bufferHeight: 64, logicalSize: 24);
         if (!_cursors.HasTheme)
         {
-            _log.Warn($"no xcursor theme found; running without a visible cursor");
+            _log.Warn($"no xcursor theme found, the cursor is not visible");
         }
 
         _seat.Pointer.CursorRequested += OnClientCursor;
@@ -148,6 +149,7 @@ internal sealed class TinyWl : IDisposable
         SetThemeCursor();
 
         _interrupt = _loop.AddSignal(Signal.Interrupt, _ => _running = false);
+        _terminate = _loop.AddSignal(Signal.Terminate, _ => _running = false);
     }
 
     public int Run(string? startupCommand, IpcChoice ipcChoice)
@@ -160,7 +162,7 @@ internal sealed class TinyWl : IDisposable
         using var processes = new ProcessTracker(_loop, () => ProcessTracker.SessionEnvironment(_socket, null, null));
         if (startupCommand is { Length: > 0 } && processes.SpawnShell(startupCommand, out var error) is null)
         {
-            BasinReport.Line($"tinywl: cannot start '{startupCommand}': {error}");
+            BasinReport.Line($"tinywl: cannot start '{startupCommand}'. {CliMessage.Text(error ?? string.Empty)}");
         }
 
         while (_running)
@@ -501,7 +503,15 @@ internal sealed class TinyWl : IDisposable
             entry.Chrome = Basin.Backend.Wayland.Skia.DefaultHostChrome.Wire(nested);
         }
 
-        _log.Info($"output {handle.Name} {handle.CurrentMode.Width}x{handle.CurrentMode.Height}");
+        if (handle.CurrentMode.Width == 0)
+        {
+            _log.Info($"output {handle.Name} added, the parent window sets its size");
+        }
+        else
+        {
+            _log.Info($"output {handle.Name} {handle.CurrentMode.Width}x{handle.CurrentMode.Height}");
+        }
+
         entry.Scheduler.ScheduleRepaint();
 
         if (_outputs.Count == 1 && _drm is not null)
@@ -646,7 +656,7 @@ internal sealed class TinyWl : IDisposable
                 throw;
             }
 
-            _log.Warn($"{name} renderer unavailable ({error.Message}); falling back to pixman");
+            _log.Warn(error, $"{name} renderer unavailable, pixman used");
             name = "pixman";
             return Basin.Renderers.RendererCatalog.Create(name, string.Empty);
         }
@@ -674,6 +684,7 @@ internal sealed class TinyWl : IDisposable
     public void Dispose()
     {
         _interrupt.Remove();
+        _terminate.Remove();
         _scene.Root.Destroy();
         foreach (var entry in _outputs)
         {

@@ -42,7 +42,7 @@ internal sealed class ShaderProgram
             gl.GetShader(shader, ShaderParameterName.CompileStatus, out var compiled);
             if (compiled == 0)
             {
-                throw new InvalidOperationException($"{type}: {gl.GetShaderInfoLog(shader)}");
+                throw new InvalidOperationException($"The {type} did not compile: {gl.GetShaderInfoLog(shader)}");
             }
 
             gl.AttachShader(Program, shader);
@@ -53,7 +53,7 @@ internal sealed class ShaderProgram
         gl.GetProgram(Program, ProgramPropertyARB.LinkStatus, out var linked);
         if (linked == 0)
         {
-            throw new InvalidOperationException($"link: {gl.GetProgramInfoLog(Program)}");
+            throw new InvalidOperationException($"The shader program did not link: {gl.GetProgramInfoLog(Program)}");
         }
 
         Dst = gl.GetUniformLocation(Program, "u_dst");
