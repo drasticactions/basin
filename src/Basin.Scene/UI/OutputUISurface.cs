@@ -14,6 +14,8 @@ public sealed class OutputUISurface : IDisposable
     private bool _placed;
     private bool _disposed;
     private bool _zoomed;
+    private string? _accessibleName;
+    private bool _accessible = true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OutputUISurface"/> class.
@@ -110,6 +112,39 @@ public sealed class OutputUISurface : IDisposable
     public event Action<IUISurface>? Realized;
 
     /// <summary>
+    /// Gets or sets the name that a screen reader gives the surface. It applies now and at <see cref="Realized"/>, to a surface that implements <see cref="IAccessibleUISurface"/>.
+    /// </summary>
+    public string? AccessibleName
+    {
+        get => _accessibleName;
+        set
+        {
+            _accessibleName = value;
+            if (_node.Surface is IAccessibleUISurface surface)
+            {
+                surface.AccessibleName = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the surface appears on the accessibility bus. The default is <see langword="true"/>.
+    /// It applies now and at <see cref="Realized"/>, to a surface that implements <see cref="IAccessibleUISurface"/>.
+    /// </summary>
+    public bool Accessible
+    {
+        get => _accessible;
+        set
+        {
+            _accessible = value;
+            if (_node.Surface is IAccessibleUISurface surface)
+            {
+                surface.Accessible = value;
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the node is drawn.
     /// </summary>
     public bool Enabled
@@ -162,6 +197,15 @@ public sealed class OutputUISurface : IDisposable
 
         if (!realized && _node.Surface is { } surface)
         {
+            if (surface is IAccessibleUISurface accessible)
+            {
+                accessible.Accessible = _accessible;
+                if (_accessibleName is not null)
+                {
+                    accessible.AccessibleName = _accessibleName;
+                }
+            }
+
             Realized?.Invoke(surface);
         }
 

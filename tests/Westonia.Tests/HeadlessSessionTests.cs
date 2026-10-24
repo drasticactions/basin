@@ -496,6 +496,42 @@ public sealed class HeadlessSessionTests
     }
 
     [Fact]
+    public async Task The_panel_and_its_launchers_are_on_the_accessibility_bus_and_a_reader_presses_one()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+        var compositor = Locate("westonia");
+        Assert.SkipWhen(compositor is null, "westonia has not been built beside the tests");
+        using var bus = await Basin.Testing.AccessibilityBus.StartAsync();
+        var directory = Directory.CreateTempSubdirectory("westonia-a11y");
+        var marker = Path.Combine(directory.FullName, "launched");
+        var config = Path.Combine(directory.FullName, "weston.ini");
+        await File.WriteAllTextAsync(
+            config,
+            $"[accessibility]\nenabled=on\n[launcher]\nicon=/nonexistent.png\npath=/usr/bin/touch {marker}\ndisplayname=Marker\n",
+            TestContext.Current.CancellationToken);
+        try
+        {
+            using var session = new Session(compositor!, config, environment: bus.Apply(new Dictionary<string, string?>()));
+            Assert.NotNull(await session.WaitForAsync(line => line == "A11Y on"));
+            using var reader = await bus.ConnectAsync();
+            await reader.FindAsync("Panel", "frame");
+            var launcher = await reader.FindAsync("Marker", "push button");
+            Assert.True(await reader.DoActionAsync(launcher, "click"));
+            for (var attempt = 0; attempt < 100 && !File.Exists(marker); attempt++)
+            {
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            }
+
+            Assert.True(File.Exists(marker), "the launcher never ran");
+            Assert.DoesNotContain(await reader.TreeAsync(), node => node.Name.Contains("Westonia.", StringComparison.Ordinal));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task A_window_leaving_fullscreen_returns_to_its_own_workspace()
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
@@ -842,6 +878,32 @@ public sealed class HeadlessSessionTests
         return after;
     }
 
+    [Fact]
+    public async Task Super_alt_8_zooms_and_super_alt_c_draws_the_screen_curtain()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+        var compositor = Locate("westonia");
+        Assert.SkipWhen(compositor is null, "westonia has not been built beside the tests");
+        using var session = new Session(compositor!);
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
+        async Task AccessChord(int key)
+        {
+            foreach (var (code, pressed) in new[] { (125, 1), (56, 1), (key, 1), (key, 0), (56, 0), (125, 0) })
+            {
+                await session.SendAsync($"key {code} {pressed}");
+            }
+        }
+
+        await AccessChord(9);
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=2"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN on"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN off"));
+        await AccessChord(9);
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=1"));
+    }
+
     private static async Task Chord(Session session, int key)
     {
         await session.SendAsync("key 125 1");
@@ -959,7 +1021,7 @@ public sealed class HeadlessSessionTests
         private readonly Lock _gate = new();
         private TaskCompletionSource _arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Session(string path, string config = "false", string renderer = "pixman")
+        public Session(string path, string config = "false", string renderer = "pixman", Dictionary<string, string?>? environment = null)
         {
             var info = new ProcessStartInfo(path)
             {
@@ -975,6 +1037,10 @@ public sealed class HeadlessSessionTests
             info.ArgumentList.Add("--config");
             info.ArgumentList.Add(config);
             info.Environment["BASIN_TRACE"] = string.Empty;
+            foreach (var (name, value) in environment ?? [])
+            {
+                info.Environment[name] = value;
+            }
 
             _process = Process.Start(info)!;
             _process.OutputDataReceived += (_, e) =>

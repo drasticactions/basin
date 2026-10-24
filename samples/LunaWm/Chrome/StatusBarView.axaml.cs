@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
 namespace LunaWm;
@@ -122,4 +123,16 @@ public sealed partial class StatusBarView : UserControl
     private void OnSound(object? sender, PointerReleasedEventArgs e) => Model?.Press("sound");
 
     private void OnBattery(object? sender, PointerReleasedEventArgs e) => Model?.Press("battery");
+
+    private void OnTitleInvoked(object? sender, RoutedEventArgs e) => Model?.Press("title");
+
+    private void OnNotificationsInvoked(object? sender, RoutedEventArgs e) => Model?.Press("notifications");
+
+    private void OnBluetoothInvoked(object? sender, RoutedEventArgs e) => Model?.Press("bluetooth");
+
+    private void OnWifiInvoked(object? sender, RoutedEventArgs e) => Model?.Press("wifi");
+
+    private void OnSoundInvoked(object? sender, RoutedEventArgs e) => Model?.Press("sound");
+
+    private void OnBatteryInvoked(object? sender, RoutedEventArgs e) => Model?.Press("battery");
 }

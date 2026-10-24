@@ -214,6 +214,7 @@ internal sealed partial class TinyComp
             Drm = _drm,
             Theme = _cursorTheme,
         };
+        _touchBinder.UseKeyboardAids(_loop);
         _touchDriver = new Basin.Seat.Backends.SeatTouchDriver(_touchBinder, _seat);
         _touchMoveResize = _touchDriver.MoveResize;
         _grabOrigin.Touch = _touchMoveResize;

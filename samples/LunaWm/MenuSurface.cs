@@ -13,7 +13,7 @@ internal sealed class MenuSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = new SystemMenuModel();
         View = new SystemMenuView { DataContext = Model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Menu") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

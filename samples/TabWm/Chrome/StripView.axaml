@@ -7,6 +7,7 @@
   <Panel union:Union.Type="titlebar" Background="{union:Style Background.Color}">
     <chrome:StripPanel Name="Layout" Margin="4,3,4,0">
       <TabControl Name="Tabs"
+                  AutomationProperties.Name="Tabs"
                   ItemsSource="{Binding Tabs}"
                   SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
                   union:ClosableTabs.IsEnabled="True"
@@ -27,6 +28,7 @@
                          VerticalAlignment="Center"
                          IsVisible="{Binding !IsEditing}" />
               <TextBox Classes="tab-rename"
+                       AutomationProperties.Name="Tab name"
                        Text="{Binding EditText, Mode=TwoWay}"
                        IsVisible="{Binding IsEditing}"
                        MinWidth="120"
@@ -36,7 +38,8 @@
                       Command="{Binding $parent[chrome:StripView].((chrome:StripModel)DataContext).MuteCommand}"
                       CommandParameter="{Binding}"
                       VerticalAlignment="Center"
-                      ToolTip.Tip="Mute tab">
+                      ToolTip.Tip="Mute tab"
+                      AutomationProperties.Name="Mute tab">
                 <union:UnionIcon IconName="{Binding AudioIcon}" Width="16" Height="16" />
               </Button>
               <Ellipse Classes="tab-attention"
@@ -58,6 +61,7 @@
               Classes="new-tab"
               Command="{Binding NewTabCommand}"
               ToolTip.Tip="New tab"
+              AutomationProperties.Name="New tab"
               VerticalAlignment="Center"
               Margin="4,0">
         <union:UnionIcon IconName="list-add" Width="16" Height="16" />
@@ -65,7 +69,7 @@
       <StackPanel Name="Status" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" Margin="8,0,0,0">
         <union:UnionIcon IconName="audio-volume-high" Width="16" Height="16" IsVisible="{Binding AnyAudio}" VerticalAlignment="Center" />
         <TextBlock Name="Clock" Text="{Binding Clock}" VerticalAlignment="Center" />
-        <Button Name="MenuButton" Classes="strip-menu" ToolTip.Tip="Menu" VerticalAlignment="Center">
+        <Button Name="MenuButton" Classes="strip-menu" ToolTip.Tip="Menu" AutomationProperties.Name="Menu" VerticalAlignment="Center">
           <union:UnionIcon IconName="application-menu" Width="16" Height="16" />
           <Button.Flyout>
             <MenuFlyout Placement="BottomEdgeAlignedRight">

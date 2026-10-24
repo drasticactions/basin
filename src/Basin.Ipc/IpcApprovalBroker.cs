@@ -141,6 +141,15 @@ public sealed class IpcApprovalBroker : IApprovalBroker
         {
             if (answer is IpcApprovalAnswer.AllowOnce or IpcApprovalAnswer.AllowRun)
             {
+                try
+                {
+                    approval.Allow();
+                }
+                catch (Exception exception)
+                {
+                    Log.Error(exception, $"approval: observer failed");
+                }
+
                 approval.Call.Allow();
             }
             else

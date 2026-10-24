@@ -46,7 +46,7 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="local:AccentSwatch">
-              <Button Classes="swatch" Command="{Binding ChooseCommand}">
+              <Button Classes="swatch" Command="{Binding ChooseCommand}" AutomationProperties.Name="{Binding Label}">
                 <Border Background="{Binding Fill}">
                   <Border BorderBrush="{DynamicResource WinTextBrush}"
                           BorderThickness="3"

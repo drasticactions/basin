@@ -13,7 +13,7 @@ internal sealed class LauncherSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = model;
         View = new LauncherView { DataContext = model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Launcher") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

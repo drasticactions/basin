@@ -486,6 +486,33 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return output.Projection.ProjectExpanded(scene.Translated(-area.X, -area.Y));
     }
 
+    private bool TryReadFrame(SceneOutput view, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out byte[]? rgba, out int width, out int height)
+    {
+        if (_scene.Curtain is not { IsDrawn: true, CapturesSee: true })
+        {
+            return _outputs!.TryReadPresented(view, _renderer, out rgba, out width, out height);
+        }
+
+        var mode = view.Output.CurrentMode;
+        (width, height) = (mode.Width, mode.Height);
+        var target = new MemoryBuffer(width, height, DrmFormat.Xrgb8888);
+        try
+        {
+            rgba = null;
+            return _scene.Render(_renderer, target, new SceneRenderOptions
+            {
+                Background = RenderColor.Black,
+                Projection = view.Projection,
+                OriginX = view.Position.X,
+                OriginY = view.Position.Y,
+            }) && BufferCapture.TryReadRgba(target, _renderer, out rgba);
+        }
+        finally
+        {
+            target.Destroy();
+        }
+    }
+
     private FrameInfo Info(Frame frame)
     {
         var state = frame.DrawnState;
@@ -645,7 +672,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
             _timeout.UpdateTimer(Math.Max(1, request.TimeoutMs));
             _nudge = owner._loop.AddTimer(Nudge);
             _nudge.UpdateTimer(NudgeMs);
-            if (request.Immediate && outputs.TryReadPresented(view, owner._renderer, out _, out _, out _))
+            if (request.Immediate && owner.TryReadFrame(view, out _, out _, out _))
             {
                 OnPresented(view);
             }
@@ -755,7 +782,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
             var index = _stats.Count;
             var box = _box;
             var planes = new List<Box>();
-            if (owner._outputs!.TryReadPresented(view, owner._renderer, out var rgba, out var bufferWidth, out var bufferHeight))
+            if (owner.TryReadFrame(view, out var rgba, out var bufferWidth, out var bufferHeight))
             {
                 var left = Math.Max(0, -box.X);
                 var columns = Math.Min(box.Width, bufferWidth - box.X) - left;
@@ -766,7 +793,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
                 }
             }
 
-            if (view.PresentedLayers is { } layers)
+            if (view.PresentedLayers is { } layers && owner._scene.Curtain is not { IsDrawn: true })
             {
                 foreach (var layer in layers)
                 {

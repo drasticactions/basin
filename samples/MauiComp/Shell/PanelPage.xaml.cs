@@ -64,4 +64,7 @@ public partial class PanelPage
 
     private void OnLauncherTapped(object? sender, TappedEventArgs e) =>
         (BindingContext as PanelModel)?.StartRequested?.Invoke();
+
+    private void OnLauncherInvoked(object? sender, EventArgs e) =>
+        (BindingContext as PanelModel)?.StartRequested?.Invoke();
 }

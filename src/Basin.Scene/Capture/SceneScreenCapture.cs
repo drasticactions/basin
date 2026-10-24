@@ -236,6 +236,11 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
     public bool Capture(in CaptureSource source, in Box region, IBuffer target)
     {
         ArgumentNullException.ThrowIfNull(target);
+        if (_scene.HidesCaptures && target.Format != DrmFormat.Nv12)
+        {
+            return Renderer is { } curtainRenderer && Scene.RenderCurtain(curtainRenderer, target);
+        }
+
         if (target.Format == DrmFormat.Nv12)
         {
             return CaptureYuv(source, region, target);

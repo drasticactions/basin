@@ -65,6 +65,11 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
     public event Action<string>? CommitStringUnclaimed;
 
     /// <summary>
+    /// Occurs when the active text input commits a caret rectangle, with the focused surface and the rectangle in surface-local logical pixels.
+    /// </summary>
+    public event Action<Surface, Box>? CaretMoved;
+
+    /// <summary>
     /// Stops following the seat and the input method, releases the keyboard text commit hook when it holds it, and removes the global.
     /// </summary>
     public void Dispose()
@@ -294,9 +299,15 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
                 Enabled = _pendingEnabled;
                 Surrounding = _pendingSurrounding;
                 ContentType = _pendingContentType;
+                var caretMoved = _pendingCursorRectangle is { } pending && pending != CursorRectangle;
                 CursorRectangle = _pendingCursorRectangle;
 
                 var active = _owner.ActiveTextInput();
+                if (active == this && caretMoved && Enabled && _owner._focus is { } focused && CursorRectangle is { } moved)
+                {
+                    _owner.CaretMoved?.Invoke(focused, ServerScaling.ToLogicalNearest(moved, focused.ServerScale));
+                }
+
                 if (active == this)
                 {
                     if (!wasEnabled)

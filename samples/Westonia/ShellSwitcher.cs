@@ -92,6 +92,7 @@ internal sealed class ShellSwitcher : IDisposable
             return;
         }
 
+        _surface.AccessibleName = "Window switcher";
         _surface.Content = new SwitcherView { DataContext = _model };
         _node = new UISurfaceNode(_layers.Panel, _surface, _surfaces) { PreciseDamage = true };
 

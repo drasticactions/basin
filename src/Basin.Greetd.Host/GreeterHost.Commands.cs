@@ -61,6 +61,11 @@ public sealed partial class GreeterHost
             WaylandSocket = _host.Socket,
         }, _options.IpcPath, _options.IpcListen);
         _ipc.SyntheticInput = Seat.Injector;
+        if (_access is { } access)
+        {
+            _ipc.GuardWithCurtain(access.Curtain);
+        }
+
         Register(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();

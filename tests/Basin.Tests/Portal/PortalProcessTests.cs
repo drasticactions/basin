@@ -106,6 +106,67 @@ public sealed class PortalProcessTests
     }
 
     [Fact]
+    public async Task An_avalonia_prompt_is_a_window_named_by_its_title_that_a_reader_accepts()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the compositor half is Linux only");
+        var compositor = Locate("tinycomp");
+        Assert.SkipWhen(compositor is null, "tinycomp has not been built beside the tests");
+        var portal = Locate("xdg-desktop-portal-basin");
+        Assert.SkipWhen(portal is null, "xdg-desktop-portal-basin has not been built beside the tests");
+
+        using var a11y = await AccessibilityBus.StartAsync();
+        using var compositorProcess = StartCompositor(compositor!, a11y.SessionAddress, out var socket);
+        Assert.SkipWhen(socket is null, "the compositor printed no socket");
+        using var portalProcess = StartPortal(portal!, a11y.SessionAddress, socket!, "avalonia", a11y: a11y.A11yAddress);
+        try
+        {
+            using var connection = new DBusConnection(a11y.SessionAddress);
+            await connection.ConnectAsync();
+            for (var i = 0; i < 100 && !await OwnedAsync(connection); i++)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+            }
+
+            using var frontend = await PortalTestClient.ConnectAsync(a11y.SessionAddress, PortalBus.DefaultBusName, asFrontend: true);
+            var handle = frontend.NextRequest();
+            var call = frontend.CallRawAsync(
+                "org.freedesktop.impl.portal.Access",
+                "AccessDialog",
+                "osssssa{sv}",
+                (ref MessageWriter writer) =>
+                {
+                    writer.WriteObjectPath(handle);
+                    writer.WriteString("org.example.App");
+                    writer.WriteString("");
+                    writer.WriteString("Allow access?");
+                    writer.WriteString("org.example.App wants access");
+                    writer.WriteString("");
+                    writer.WriteDictionary(new Dictionary<string, VariantValue>());
+                },
+                static (Message m, object? _) => PortalTestClient.ReadResponse(m));
+
+            using var reader = await a11y.ConnectAsync();
+            await reader.FindAsync("Allow access?", "frame");
+            var allow = await reader.FindAsync("Allow", "push button");
+            Assert.True(await reader.DoActionAsync(allow, "click"));
+            var (response, _) = await call.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            Assert.Equal(PortalResponse.Success, response);
+        }
+        finally
+        {
+            if (!portalProcess.HasExited)
+            {
+                portalProcess.Kill(entireProcessTree: true);
+            }
+
+            if (!compositorProcess.HasExited)
+            {
+                compositorProcess.Kill(entireProcessTree: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task The_out_of_process_pick_reads_the_clicked_pixel_of_a_client()
     {
         using var session = await Session.StartAsync();
@@ -296,7 +357,7 @@ public sealed class PortalProcessTests
         return process;
     }
 
-    private static Process StartPortal(string path, string busAddress, string socket, string prompts, string? cache = null)
+    private static Process StartPortal(string path, string busAddress, string socket, string prompts, string? cache = null, string? a11y = null)
     {
         var info = new ProcessStartInfo(path)
         {
@@ -310,6 +371,8 @@ public sealed class PortalProcessTests
         info.ArgumentList.Add(prompts);
         info.Environment["DBUS_SESSION_BUS_ADDRESS"] = busAddress;
         info.Environment["XDG_CURRENT_DESKTOP"] = "basin";
+        info.Environment["AT_SPI_BUS_ADDRESS"] = a11y ?? "unix:path=/nonexistent/basin-portal-tests/at-spi";
+
         if (cache is not null)
         {
             info.Environment["XDG_CACHE_HOME"] = cache;

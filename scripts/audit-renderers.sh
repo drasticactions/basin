@@ -29,6 +29,13 @@
 #   --logs DIR        keep the run logs here instead of a temporary directory
 #   --no-build        use the binaries already built
 #
+# The headless mode also checks accessibility once per program. Each program runs
+# with BASIN_ACCESSIBILITY=on against a private session bus and AT-SPI bus, and the
+# check needs a named window on that bus: Inlet's own window, Westonia's Panel, and
+# TabWm's window with at least one named push button. The nested mode checks that each program prints A11Y off,
+# because a nested compositor leaves accessibility to the parent session. The check
+# is SKIP without dbus-daemon, at-spi-bus-launcher or the Python Atspi bindings
+#
 # A row that cannot run is reported SKIP, never PASS. That includes a renderer
 # this build does not carry, a GPU row with no render node, and a row the
 # compositor silently fell back from.
@@ -62,7 +69,7 @@ while [ $# -gt 0 ]; do
         --logs) logs=$2; shift 2 ;;
         --heaptrack) heaptrack=1; shift ;;
         --no-build) build=0; shift ;;
-        -h|--help) sed -n '3,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '3,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -480,6 +487,130 @@ run_tinywl() {
     judge_tinywl "$mode" "$row" "$log" "$status"
 }
 
+a11y_launcher=
+for candidate in /usr/lib/at-spi-bus-launcher /usr/libexec/at-spi-bus-launcher /usr/lib/at-spi2-core/at-spi-bus-launcher; do
+    if [ -x "$candidate" ]; then
+        a11y_launcher=$candidate
+        break
+    fi
+done
+
+a11y_ready() {
+    [ -n "$a11y_launcher" ] && command -v dbus-daemon >/dev/null 2>&1 &&
+        python3 -I -c 'import gi; gi.require_version("Atspi", "2.0"); from gi.repository import Atspi' >/dev/null 2>&1
+}
+
+# The probe walks the AT-SPI tree as Orca does and prints FOUND when the window and
+# the named push buttons are there. It reads role numbers, because AccessKit answers
+# no GetRoleName
+write_a11y_probe() {
+    cat >"$logs/a11y-probe.py" <<'PROBE'
+import sys
+import time
+import gi
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+
+name, need_button = sys.argv[1], sys.argv[2] == "1"
+deadline = time.time() + 15
+while True:
+    window = False
+    buttons = 0
+    desktop = Atspi.get_desktop(0)
+    stack = [(desktop.get_child_at_index(i), 0) for i in range(desktop.get_child_count())]
+    while stack:
+        node, depth = stack.pop()
+        if node is None or depth > 12:
+            continue
+        try:
+            role = node.get_role()
+            label = node.get_name() or ""
+            count = node.get_child_count()
+        except Exception:
+            continue
+        if role in (Atspi.Role.FRAME, Atspi.Role.WINDOW) and label == name:
+            window = True
+        if role in (Atspi.Role.PUSH_BUTTON, Atspi.Role.BUTTON) and label:
+            buttons += 1
+        stack.extend((node.get_child_at_index(i), depth + 1) for i in range(count))
+    if window and (buttons > 0 or not need_button):
+        print(f"FOUND window={name} buttons={buttons}")
+        sys.exit(0)
+    if time.time() > deadline:
+        print(f"MISSING window={'yes' if window else 'no'} buttons={buttons}")
+        sys.exit(1)
+    time.sleep(0.5)
+PROBE
+}
+
+check_a11y() {
+    local program=$1 name=$2 need_button=$3
+    shift 3
+    local log=$logs/a11y-$program.log
+    if ! a11y_ready; then
+        record "$program" a11y - SKIP "no dbus-daemon, at-spi-bus-launcher or Python Atspi"
+        return
+    fi
+
+    local runtime session_log session daemon launcher compositor result stdin_fd
+    runtime=$(mktemp -d -t basin-audit-a11y-XXXXXX)
+    chmod 700 "$runtime"
+    session_log=$runtime/session.address
+    env -u DBUS_SESSION_BUS_ADDRESS -u AT_SPI_BUS_ADDRESS XDG_RUNTIME_DIR="$runtime" \
+        dbus-daemon --session --print-address=1 --nofork --nopidfile >"$session_log" 2>/dev/null &
+    daemon=$!
+    for _ in $(seq 1 50); do
+        [ -s "$session_log" ] && break
+        sleep 0.1
+    done
+    session=$(head -1 "$session_log")
+    env -u AT_SPI_BUS_ADDRESS -u DISPLAY XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="$session" \
+        ATSPI_DBUS_IMPLEMENTATION=dbus-daemon "$a11y_launcher" --launch-immediately >/dev/null 2>&1 &
+    launcher=$!
+    for _ in $(seq 1 50); do
+        [ -S "$runtime/at-spi/bus" ] && break
+        sleep 0.1
+    done
+    busctl --address="$session" set-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled b true >/dev/null 2>&1 || true
+
+    # A FIFO keeps stdin open without a helper process, so the compositor does not
+    # read end of file and quit before the probe
+    mkfifo "$runtime/stdin"
+    exec {stdin_fd}<>"$runtime/stdin"
+    env XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="$session" AT_SPI_BUS_ADDRESS="unix:path=$runtime/at-spi/bus" \
+        BASIN_ACCESSIBILITY=on BASIN_MUTE=1 WAYLAND_DISPLAY= "$@" >"$log" 2>&1 <&"$stdin_fd" &
+    compositor=$!
+    for _ in $(seq 1 100); do
+        grep -qE '^A11Y (on|off)' "$log" && break
+        kill -0 "$compositor" 2>/dev/null || break
+        sleep 0.1
+    done
+
+    if ! grep -q '^A11Y on' "$log"; then
+        record "$program" a11y - FAIL "no A11Y on line"
+    elif result=$(AT_SPI_BUS_ADDRESS="unix:path=$runtime/at-spi/bus" DBUS_SESSION_BUS_ADDRESS="$session" \
+        XDG_RUNTIME_DIR="$runtime" python3 -I "$logs/a11y-probe.py" "$name" "$need_button" 2>/dev/null); then
+        record "$program" a11y - PASS "${result#FOUND }"
+    else
+        record "$program" a11y - FAIL "${result:-the probe printed nothing}"
+    fi
+
+    kill "$compositor" "$launcher" "$daemon" 2>/dev/null || true
+    wait "$compositor" "$launcher" "$daemon" 2>/dev/null || true
+    exec {stdin_fd}>&-
+    rm -rf "$runtime"
+}
+
+check_gate_off() {
+    local program=$1 log=$2
+    [ -f "$log" ] || return 0
+    if grep -q '^A11Y off' "$log"; then
+        record "$program" nested a11y PASS "the gate is off"
+    else
+        record "$program" nested a11y FAIL "no A11Y off line"
+    fi
+}
+
 start_parent() {
     parent_runtime=$(mktemp -d -t basin-audit-parent-XXXXXX)
     local log=$logs/parent.log
@@ -575,6 +706,20 @@ for mode in "${modes[@]}"; do
             echo "warning: $left compositor process(es) still running after the $row run" >&2
         fi
     done
+
+    if [ "$mode" = headless ]; then
+        write_a11y_probe
+        check_a11y inlet inlet 0 "$inlet" --backend headless --renderer pixman
+        [ -n "$westonia" ] && check_a11y westonia Panel 0 "$westonia" --backend headless --renderer pixman --config false
+        [ -n "$tabwm" ] && check_a11y tab-wm tab-wm 1 "$tabwm" --backend headless --renderer pixman --config false --no-restore
+    fi
+
+    if [ "$mode" = nested ]; then
+        first=${rows[0]}
+        check_gate_off inlet "$logs/inlet-nested-$first.log"
+        check_gate_off westonia "$logs/westonia-nested-$first.log"
+        check_gate_off tab-wm "$logs/tabwm-nested-$first.log"
+    fi
 
     if [ "$mode" = nested ]; then
         [ -n "${saved_runtime:-}" ] && export XDG_RUNTIME_DIR=$saved_runtime || unset XDG_RUNTIME_DIR

@@ -13,7 +13,7 @@ namespace Basin.UI.Avalonia;
 /// <summary>
 /// A chrome surface whose content is an Avalonia top level. Input from the compositor becomes Avalonia raw input.
 /// </summary>
-public sealed class AvaloniaUISurface : IUISurface
+public sealed class AvaloniaUISurface : IUISurface, IAccessibleUISurface
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly UISurfaceObservers _observers;
@@ -29,6 +29,8 @@ public sealed class AvaloniaUISurface : IUISurface
     private readonly int[] _touchIds = new int[TouchCapacity];
     private readonly global::Avalonia.Point[] _touchPoints = new global::Avalonia.Point[TouchCapacity];
     private readonly bool[] _touchLive = new bool[TouchCapacity];
+    private AccessKitPeerTree? _accessKit;
+    private bool _accessible = true;
     private RawInputModifiers _modifiers;
     private bool _keyHandled;
     private bool _pointerInside;
@@ -54,6 +56,7 @@ public sealed class AvaloniaUISurface : IUISurface
                 Background = null,
                 TransparencyLevelHint = [WindowTransparencyLevel.Transparent],
             };
+            global::Avalonia.Automation.AutomationProperties.SetControlTypeOverride(_root, global::Avalonia.Automation.Peers.AutomationControlType.Window);
             _root.Prepare();
             _root.StartRendering();
         }
@@ -168,13 +171,20 @@ public sealed class AvaloniaUISurface : IUISurface
         _impl.ScreenPosition = new PixelPoint(
             (int)Math.Round(x * _impl.RenderScaling),
             (int)Math.Round(y * _impl.RenderScaling));
+        UpdateAccessibleBounds();
     }
 
     /// <inheritdoc/>
     public bool Configure(int logicalWidth, int logicalHeight, double scale)
     {
         _thread.Assert();
-        return !_disposed && _impl.Resize(logicalWidth, logicalHeight, scale, WindowResizeReason.Layout);
+        if (_disposed || !_impl.Resize(logicalWidth, logicalHeight, scale, WindowResizeReason.Layout))
+        {
+            return false;
+        }
+
+        UpdateAccessibleBounds();
+        return true;
     }
 
     /// <inheritdoc/>
@@ -352,11 +362,7 @@ public sealed class AvaloniaUISurface : IUISurface
                 _modifiers = EvdevInput.WithKey(_modifiers, key, pressed: true);
             }
 
-            if (_root is not null)
-            {
-                global::Avalonia.Automation.AutomationProperties.SetControlTypeOverride(_root, global::Avalonia.Automation.Peers.AutomationControlType.Window);
-            }
-
+            _accessKit?.SetWindowFocused(true);
             if (!_disposed && _impl is BasinWindowImpl window)
             {
                 window.Activated?.Invoke();
@@ -379,15 +385,82 @@ public sealed class AvaloniaUISurface : IUISurface
         }
     }
 
+    /// <inheritdoc/>
+    public bool Accessible
+    {
+        get => _accessible;
+        set
+        {
+            AssertThread();
+            if (_accessible == value)
+            {
+                return;
+            }
+
+            _accessible = value;
+            if (!value)
+            {
+                DetachAccessibility();
+            }
+            else if (_host?.IsAccessible == true)
+            {
+                AttachAccessibility();
+            }
+        }
+    }
+
     internal bool HasKeyboardFocus { get; private set; }
 
-    internal void Reactivate() => OnUiThread(() =>
+    internal static string? AccessKitUnavailable()
     {
-        if (!_disposed && HasKeyboardFocus && _impl is BasinWindowImpl window)
+        try
         {
-            window.Activated?.Invoke();
+            using var probe = new AccessKit.Node(AccessKit.Role.Unknown);
+            return null;
         }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException or BadImageFormatException)
+        {
+            return $"libaccesskit is not loadable ({error.Message})";
+        }
+    }
+
+    internal void AttachAccessibility()
+    {
+        var focused = HasKeyboardFocus;
+        OnUiThread(() =>
+        {
+            if (_disposed || _root is null || _accessKit is not null || !_accessible)
+            {
+                return;
+            }
+
+            try
+            {
+                _accessKit = new AccessKitPeerTree(_root);
+            }
+            catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or TypeInitializationException)
+            {
+                BasinLog.For("avalonia").Info($"accessibility: no adapter, {error.Message}");
+                return;
+            }
+
+            _accessKit.SetWindowFocused(focused);
+        });
+        UpdateAccessibleBounds();
+    }
+
+    internal void DetachAccessibility() => OnUiThread(() =>
+    {
+        _accessKit?.Dispose();
+        _accessKit = null;
     });
+
+    private void UpdateAccessibleBounds()
+    {
+        var size = _impl.Size;
+        var bounds = new AccessKit.Rect(PositionX, PositionY, PositionX + size.Width, PositionY + size.Height);
+        OnUiThread(() => _accessKit?.SetRootWindowBounds(bounds));
+    }
 
     /// <inheritdoc/>
     public void NotifyKey(uint timeMs, uint key, bool pressed)
@@ -449,10 +522,7 @@ public sealed class AvaloniaUISurface : IUISurface
             {
                 _impl.LostFocus?.Invoke();
                 (_impl as BasinWindowImpl)?.Deactivated?.Invoke();
-                if (_root is not null)
-                {
-                    _root.ClearValue(global::Avalonia.Automation.AutomationProperties.ControlTypeOverrideProperty);
-                }
+                _accessKit?.SetWindowFocused(false);
             }
         });
     }
@@ -560,6 +630,8 @@ public sealed class AvaloniaUISurface : IUISurface
 
         _disposed = true;
         _host?.Forget(this);
+        _accessKit?.Dispose();
+        _accessKit = null;
         _root?.StopRendering();
         _touch.Dispose();
         _impl.Surface = null;

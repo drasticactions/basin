@@ -70,6 +70,7 @@ public sealed class SceneDmabufCapture : IDmabufCapture
     /// <summary>
     /// Gets the dmabuf of <see cref="SceneOutput.LastTarget"/> for a tracked output, or of the buffer that <see cref="NotifyPresented"/> last reported.
     /// It fails while an excluded toplevel that is not minimized, or an enabled excluded scene node, intersects the output in <see cref="Layout"/>.
+    /// It also fails while the output is zoomed or the screen curtain is drawn, because the presented buffer then differs from the capture.
     /// Without a layout, or while the scene holds a mirror, it fails while any excluded content exists anywhere.
     /// </summary>
     /// <param name="output">The output to read.</param>
@@ -82,6 +83,8 @@ public sealed class SceneDmabufCapture : IDmabufCapture
             ? sceneOutput.LastTarget
             : _presented.TryGetValue(output, out var presented) && !presented.IsDestroyed ? presented : null;
         return last is not null
+            && sceneOutput is not { IsZoomed: true }
+            && Scene?.Curtain is not { IsDrawn: true }
             && !Refuses(output)
             && last.TryGetDmabuf(out attributes);
     }

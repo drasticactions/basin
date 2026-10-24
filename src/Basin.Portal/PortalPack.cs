@@ -17,5 +17,6 @@ public static class PortalPack
         new PortalClipboardModule(),
         new PortalGlobalShortcutsModule(),
         new PortalAccessModule(),
+        new PortalSettingsModule(),
     ]);
 }

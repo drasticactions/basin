@@ -95,7 +95,7 @@ public struct SpringMotion
 
     /// <summary>
     /// Advances the motion by an elapsed time. A motion that is settled does not change.
-    /// A spring constant that is infinite, not positive or not a number moves the value to the anchor at once.
+    /// A spring constant that is infinite, not positive or not a number moves the value to the anchor at once, and so does <see cref="ReducedMotion.IsOn"/>.
     /// </summary>
     /// <param name="millis">The elapsed time in milliseconds.</param>
     public void Advance(double millis)
@@ -105,7 +105,7 @@ public struct SpringMotion
             return;
         }
 
-        if (double.IsInfinity(SpringConstant) || !(SpringConstant > 0))
+        if (double.IsInfinity(SpringConstant) || !(SpringConstant > 0) || ReducedMotion.IsOn)
         {
             _previousPosition = Anchor;
             _previousVelocity = 0;

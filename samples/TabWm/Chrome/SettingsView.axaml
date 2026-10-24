@@ -7,47 +7,52 @@
   <Border union:Union.Type="applicationwindow" Background="{union:Style Background.Color}">
     <DockPanel Margin="20,14,20,16">
       <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-        <TextBlock Classes="settings-title" Text="tab-wm Settings" VerticalAlignment="Center" />
-        <Button Grid.Column="1" Name="CloseButton" Classes="strip-menu" Command="{Binding CloseCommand}" ToolTip.Tip="Close">
+        <TextBlock Classes="settings-title" AutomationProperties.HeadingLevel="1" Text="tab-wm Settings" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Name="CloseButton" Classes="strip-menu" Command="{Binding CloseCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close settings">
           <union:UnionIcon IconName="window-close" Width="16" Height="16" />
         </Button>
       </Grid>
       <TextBlock DockPanel.Dock="Bottom" Classes="settings-status" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" Margin="0,8,0,0" />
-      <TabControl Name="Sections" SelectedIndex="{Binding Section, Mode=TwoWay}">
+      <TabControl Name="Sections" AutomationProperties.Name="Settings sections" SelectedIndex="{Binding Section, Mode=TwoWay}">
         <TabItem Header="General">
           <ScrollViewer HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="18" Margin="4,12,12,4" IsEnabled="{Binding CanSave}">
               <StackPanel Spacing="8">
-                <TextBlock Classes="settings-heading" Text="Appearance" />
+                <TextBlock Classes="settings-heading" AutomationProperties.HeadingLevel="2" Text="Appearance" />
                 <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                   <TextBlock Text="Light or dark" VerticalAlignment="Center" />
-                  <ComboBox Grid.Column="1" Name="Variant" ItemsSource="{x:Static chrome:SettingsViewModel.Variants}" SelectedIndex="{Binding Variant, Mode=TwoWay}" MinWidth="240" />
+                  <ComboBox Grid.Column="1" Name="Variant" AutomationProperties.Name="Light or dark" ItemsSource="{x:Static chrome:SettingsViewModel.Variants}" SelectedIndex="{Binding Variant, Mode=TwoWay}" MinWidth="240" />
                   <TextBlock Grid.Row="1" Text="Color scheme" VerticalAlignment="Center" />
-                  <ComboBox Grid.Row="1" Grid.Column="1" Name="ColorScheme" ItemsSource="{Binding ColorSchemes}" SelectedIndex="{Binding ColorScheme, Mode=TwoWay}" MinWidth="240" />
+                  <ComboBox Grid.Row="1" Grid.Column="1" Name="ColorScheme" AutomationProperties.Name="Color scheme" ItemsSource="{Binding ColorSchemes}" SelectedIndex="{Binding ColorScheme, Mode=TwoWay}" MinWidth="240" />
                   <TextBlock Grid.Row="2" Text="Style engine" VerticalAlignment="Center" />
                   <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                    <ComboBox Name="Engine" ItemsSource="{x:Static chrome:SettingsViewModel.Engines}" SelectedIndex="{Binding EngineChoice, Mode=TwoWay}" MinWidth="240" />
+                    <ComboBox Name="Engine" AutomationProperties.Name="Style engine" ItemsSource="{x:Static chrome:SettingsViewModel.Engines}" SelectedIndex="{Binding EngineChoice, Mode=TwoWay}" MinWidth="240" />
                     <TextBlock Classes="settings-note" Text="Applies at the next start" VerticalAlignment="Center" />
                   </StackPanel>
                 </Grid>
               </StackPanel>
               <StackPanel Spacing="8">
-                <TextBlock Classes="settings-heading" Text="Tabs" />
+                <TextBlock Classes="settings-heading" AutomationProperties.HeadingLevel="2" Text="Accessibility" />
+                <CheckBox Name="HighContrast" Content="High contrast" IsChecked="{Binding HighContrast, Mode=TwoWay}" />
+                <CheckBox Name="ReducedMotion" Content="Reduce motion" IsChecked="{Binding ReducedMotion, Mode=TwoWay}" />
+              </StackPanel>
+              <StackPanel Spacing="8">
+                <TextBlock Classes="settings-heading" AutomationProperties.HeadingLevel="2" Text="Tabs" />
                 <CheckBox Name="CloseWhenEmpty" Content="Close a tab when its last window closes" IsChecked="{Binding CloseWhenEmpty, Mode=TwoWay}" />
                 <StackPanel Orientation="Horizontal" Spacing="10">
                   <TextBlock Text="Wait for windows to close" VerticalAlignment="Center" Width="200" />
-                  <NumericUpDown Name="CloseTimeout" Value="{Binding CloseTimeoutSeconds, Mode=TwoWay}" Minimum="0" Maximum="120" Increment="1" FormatString="0" Width="120" />
+                  <NumericUpDown Name="CloseTimeout" AutomationProperties.Name="Wait for windows to close, in seconds" Value="{Binding CloseTimeoutSeconds, Mode=TwoWay}" Minimum="0" Maximum="120" Increment="1" FormatString="0" Width="120" />
                   <TextBlock Text="seconds" VerticalAlignment="Center" />
                 </StackPanel>
                 <CheckBox Name="Restore" Content="Reopen the tabs of the last session at start" IsChecked="{Binding Restore, Mode=TwoWay}" />
               </StackPanel>
               <StackPanel Spacing="8">
-                <TextBlock Classes="settings-heading" Text="Programs" />
+                <TextBlock Classes="settings-heading" AutomationProperties.HeadingLevel="2" Text="Programs" />
                 <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto" RowSpacing="8">
                   <TextBlock Text="Terminal" VerticalAlignment="Center" />
-                  <TextBox Grid.Column="1" Name="Terminal" Text="{Binding Terminal, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <TextBox Grid.Column="1" Name="Terminal" AutomationProperties.Name="Terminal" Text="{Binding Terminal, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                   <TextBlock Grid.Row="1" Text="Lock command" VerticalAlignment="Center" />
-                  <TextBox Grid.Row="1" Grid.Column="1" Name="LockCommand" Text="{Binding LockCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <TextBox Grid.Row="1" Grid.Column="1" Name="LockCommand" AutomationProperties.Name="Lock command" Text="{Binding LockCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                   <CheckBox Name="XWayland" Content="Run X11 programs through Xwayland" IsChecked="{Binding XWayland, Mode=TwoWay}" />

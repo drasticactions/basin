@@ -194,6 +194,7 @@ internal sealed partial class LunaGreeter : IDisposable
 
     private void OnBackgroundAdded(IOutput output, OutputUISurface surface)
     {
+        surface.AccessibleName = "Background";
         var model = new GreeterBackgroundModel { Wallpaper = _wallpaper, HighContrast = _highContrast, ClockShown = !_model.KeyboardVisible };
         surface.Realized += realized => ((AvaloniaUISurface)realized).Content = new GreeterBackgroundView { DataContext = model };
         _backgrounds[output] = (surface, model);

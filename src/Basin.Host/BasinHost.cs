@@ -124,6 +124,11 @@ public sealed class BasinHost : IDisposable
     public bool DrmDevicePinned { get; private init; }
 
     /// <summary>
+    /// Gets the options that <see cref="Create"/> built the host from.
+    /// </summary>
+    public HostOptions Options { get; private init; } = new();
+
+    /// <summary>
     /// Gets the handoff policy that <see cref="Create"/> built from the options.
     /// </summary>
     public HandoffPolicy Handoff { get; private init; } = new(HandoffMode.Auto);
@@ -205,6 +210,7 @@ public sealed class BasinHost : IDisposable
 
         var host = new BasinHost(display, socket, loop, session, drm, parent, headless)
         {
+            Options = options,
             Handoff = new HandoffPolicy(options.Handoff, options.Greeter, options.Greetd),
             DrmDevicePinned = drm is not null && !string.IsNullOrEmpty(pinned),
         };

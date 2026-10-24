@@ -87,6 +87,20 @@ public sealed unsafe class IpcServer : IDisposable
     }
 
     /// <summary>
+    /// Holds every call that returns screen pixels while the curtain is drawn, until a person allows it through <see cref="Approvals"/>.
+    /// It makes an approval broker when the server has none, and it keeps the current interceptor in front of the curtain.
+    /// </summary>
+    /// <param name="curtain">The screen curtain.</param>
+    /// <exception cref="InvalidOperationException">The server is started.</exception>
+    public void GuardWithCurtain(Basin.Capabilities.IScreenCurtain curtain)
+    {
+        ArgumentNullException.ThrowIfNull(curtain);
+        ThrowIfStartedOrDisposed();
+        _approvals ??= new IpcApprovalBroker();
+        _interceptor = new CurtainInterceptor(curtain, _approvals, _interceptor);
+    }
+
+    /// <summary>
     /// Gets the number of held calls that wait for an answer.
     /// </summary>
     public int HeldCount => _held.Count;

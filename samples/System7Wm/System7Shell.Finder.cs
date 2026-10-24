@@ -83,7 +83,7 @@ internal sealed partial class System7Shell
                 }
             };
             _desktop.OverWindowTest = point => WindowAt(DesktopToScene(point).X, DesktopToScene(point).Y, out _, out _, out _) is not null;
-            _desktopSurface = new ChromeSurface(_layers.Icons, _ui, _chrome, () => _desktop);
+            _desktopSurface = new ChromeSurface(_layers.Icons, _ui, _chrome, () => _desktop, "Desktop");
             Watch.Add(DesktopFolder);
             try
             {

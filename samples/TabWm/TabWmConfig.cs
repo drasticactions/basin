@@ -32,6 +32,8 @@ internal sealed class TabWmConfig
 
     public List<string> Startup { get; } = [];
 
+    public AccessibilitySettings Accessibility { get; set; } = new();
+
     public static Stream TemplateStream() =>
         typeof(TabWmConfig).Assembly.GetManifestResourceStream("tab-wm.toml")
             ?? throw new InvalidOperationException("The tab-wm.toml template is not embedded in the program.");
@@ -111,6 +113,12 @@ internal sealed class TabWmConfig
         }
 
         Bindings = TabBindings.Build(reader.Free("keys"), log);
+        if (reader.Section("accessibility") is { } accessibility)
+        {
+            Accessibility = AccessibilitySettings.Read(accessibility);
+            accessibility.ReportUnknown();
+        }
+
         foreach (var startup in reader.Sections("startup"))
         {
             if (startup.Text("command") is { Length: > 0 } command)

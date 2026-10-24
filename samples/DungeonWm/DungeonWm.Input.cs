@@ -636,6 +636,9 @@ internal sealed partial class DungeonWm
                 _camera.Pitch = 0;
                 ScheduleAll();
                 break;
+            default:
+                _access?.Run(action);
+                break;
         }
     }
 

@@ -138,7 +138,14 @@ internal sealed class ShellTitlebar : IDisposable
         }
     }
 
-    public void SetTitle(string title) => _model.Title = title;
+    public void SetTitle(string title)
+    {
+        _model.Title = title;
+        if (_surface is not null)
+        {
+            _surface.AccessibleName = title;
+        }
+    }
 
     public bool OwnsSurface(IUISurface surface) => _surface is not null && ReferenceEquals(_surface, surface);
 
@@ -179,6 +186,7 @@ internal sealed class ShellTitlebar : IDisposable
             }
 
             _surface = created;
+            _surface.AccessibleName = _model.Title;
             _page = new TitlebarPage { BindingContext = _model };
             _scope = _surfaces.Attach(created, _page);
             _node = new UISurfaceNode(_window.Tree, created, _index) { PreciseDamage = true };

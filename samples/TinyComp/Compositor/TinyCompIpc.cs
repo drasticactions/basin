@@ -27,6 +27,7 @@ internal sealed partial class TinyComp
             Processes = _processes,
         });
         _ipc.SyntheticInput = new SyntheticInput(this);
+        _ipc.GuardWithCurtain(_curtain);
         RegisterCommands(_ipc.Methods);
         RegisterOverviewCommands(_ipc.Methods);
         RegisterPhysicsCommands(_ipc.Methods);
@@ -611,7 +612,11 @@ internal sealed partial class TinyComp
 
         public bool Key(uint timeMs, uint keycode, bool pressed)
         {
-            comp.HandleKey(timeMs, keycode, pressed);
+            if (!comp._seat.Keyboard.IsKeyBlocked(timeMs, keycode, pressed))
+            {
+                comp.HandleKey(timeMs, keycode, pressed);
+            }
+
             return true;
         }
 

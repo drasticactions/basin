@@ -217,8 +217,19 @@ public sealed class ProcessTests
         Assert.Equal(to, Field(moved, "output"));
         Assert.Equal("1", Field(moved, "active"));
         Assert.Contains(tabs, t => Field(t, "output") == from);
-        var after = int.Parse(Field((await session.WindowsAsync()).Single(), "x"), CultureInfo.InvariantCulture);
-        Assert.Equal(to == "1" ? 1280 : -1280, after - before);
+        var expected = to == "1" ? 1280 : -1280;
+        var after = before;
+        for (var attempt = 0; attempt < 50 && after - before != expected; attempt++)
+        {
+            if (attempt > 0)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+            }
+
+            after = int.Parse(Field((await session.WindowsAsync()).Single(), "x"), CultureInfo.InvariantCulture);
+        }
+
+        Assert.Equal(expected, after - before);
         await session.QuitCleanlyAsync();
     }
 

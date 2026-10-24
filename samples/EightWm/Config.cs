@@ -13,6 +13,8 @@ internal sealed class Config
 
     public HandoffSettings Handoff { get; private set; } = new();
 
+    public AccessibilitySettings Accessibility { get; private set; } = new();
+
     public bool ScanDesktopFiles { get; private set; } = true;
 
     public bool AppsView { get; private set; } = true;
@@ -182,6 +184,7 @@ internal sealed class Config
 
         config.Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
         config.Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        config.Accessibility = AccessibilitySettings.Read(reader.Section("accessibility"));
         reader.ReportUnknown();
         return config;
     }

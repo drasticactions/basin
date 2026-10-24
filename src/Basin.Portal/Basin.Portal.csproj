@@ -24,6 +24,7 @@
     <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.InputCapture.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
     <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.GlobalShortcuts.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
     <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Access.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
+    <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Settings.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
     <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Request.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
     <AdditionalFiles Include="$(XdgDesktopPortalDir)org.freedesktop.impl.portal.Session.xml" DBusGeneratorMode="Handler" Namespace="Basin.Portal.DBus" />
   </ItemGroup>

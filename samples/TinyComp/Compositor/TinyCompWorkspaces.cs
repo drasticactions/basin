@@ -456,6 +456,7 @@ internal sealed partial class TinyComp
         RefreshAboveVisibility();
         _workspaceModel.RaiseChanged();
         _report.Line($"WORKSPACE {view.Output.Name} {target.Name}");
+        AccessibleChrome?.Announce($"Workspace {target.Name}");
         if (refocus)
         {
             FocusWorkspaceWindow(target);

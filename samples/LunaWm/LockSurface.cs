@@ -13,7 +13,7 @@ internal sealed class LockSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = model;
         View = new LockScreenView { DataContext = model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Lock screen") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

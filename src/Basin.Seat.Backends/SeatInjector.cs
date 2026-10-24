@@ -88,7 +88,11 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
     public void Key(uint key, bool pressed)
     {
         _seat.SetCapability(SeatCapability.Keyboard, true);
-        DeliverKey?.Invoke((uint)Environment.TickCount, key, pressed);
+        var timeMs = (uint)Environment.TickCount;
+        if (!_seat.Keyboard.IsKeyBlocked(timeMs, key, pressed))
+        {
+            DeliverKey?.Invoke(timeMs, key, pressed);
+        }
     }
 
     /// <summary>
@@ -228,7 +232,11 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
         if (DeliverKey is { } deliver)
         {
             _seat.SetCapability(SeatCapability.Keyboard, true);
-            deliver(timeMs, keycode, pressed);
+            if (!_seat.Keyboard.IsKeyBlocked(timeMs, keycode, pressed))
+            {
+                deliver(timeMs, keycode, pressed);
+            }
+
             return true;
         }
 

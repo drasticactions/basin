@@ -169,3 +169,16 @@ mode = "auto"            # auto | retain | off. --handoff beats it. Read at star
 transition = "crossfade" # crossfade | cut: how the inherited frame gives way to this one
 duration_ms = 400        # the crossfade
 hold_limit_ms = 3000     # the longest the inherited frame stays before the transition starts
+
+# Screen reader support. docs/accessibility.md has the rules.
+[accessibility]
+enabled = "auto"         # auto | on | off. auto is on under DRM, off nested or headless
+
+# Keyboard aids for physical keys. Every aid is off by default.
+# [accessibility.keyboard]
+# sticky = false           # a modifier tapped alone stays down for the next key, a second tap locks it
+# sticky-shortcut = false  # five taps of Shift turn sticky keys on and off
+# slow-ms = 0              # a key counts only after it stays down this long
+# bounce-ms = 0            # a new press of a key this soon after its release is ignored
+# mouse-keys = false       # the keypad moves the pointer, 5 clicks, / * - choose the button
+# mouse-keys-speed = 1000  # the highest pointer speed in logical pixels per second

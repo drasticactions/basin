@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/System7Wm/System7Wm.csproj" />
     <ProjectReference Include="../../src/Basin.AppMenu/Basin.AppMenu.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />

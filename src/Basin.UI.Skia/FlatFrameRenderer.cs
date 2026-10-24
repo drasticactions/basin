@@ -41,7 +41,12 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
             new(0xEC, 0xED, 0xF0), new(0xF6, 0xF6, 0xF8), new(0xB8, 0xBB, 0xC2), new(0x22, 0x24, 0x29), new(0x80, 0x84, 0x8C),
             new(0xD9, 0x4A, 0x4A), new(0xB0, 0x38, 0x38), new(0xD6, 0xD8, 0xDD), new(0xC4, 0xC7, 0xCE), new(0xF4, 0xF5, 0xF7));
 
-        public static Palette For(FrameColorScheme scheme) => scheme == FrameColorScheme.Light ? Light : Dark;
+        public static readonly Palette HighContrast = new(
+            new(0x00, 0x00, 0x00), new(0x00, 0x00, 0x00), new(0xFF, 0xFF, 0x00), new(0xFF, 0xFF, 0xFF), new(0xFF, 0xFF, 0x00),
+            new(0xC0, 0x00, 0x00), new(0x80, 0x00, 0x00), new(0x40, 0x40, 0x00), new(0x60, 0x60, 0x00), new(0x00, 0x00, 0x00));
+
+        public static Palette For(FrameColorScheme scheme, bool highContrast) =>
+            highContrast ? HighContrast : scheme == FrameColorScheme.Light ? Light : Dark;
     }
 
     private static readonly SKColor[] BadgePalette =
@@ -232,7 +237,7 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
     {
         var skia = (ISkiaUISurface)surface;
         var count = MenuItemCount(state);
-        _palette = Palette.For(state.ColorScheme);
+        _palette = Palette.For(state.ColorScheme, theme.HighContrast);
         var canvas = skia.BeginDraw();
         try
         {
@@ -356,7 +361,7 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
 
     private void DrawChrome(SKCanvas canvas, in Box clientBox, in FrameState state, in FrameInteraction interaction, int iconScale)
     {
-        _palette = Palette.For(state.ColorScheme);
+        _palette = Palette.For(state.ColorScheme, theme.HighContrast);
         var chrome = state.Active ? _palette.ChromeActive : _palette.ChromeInactive;
         var text = state.Active ? _palette.TextActive : _palette.TextInactive;
         var fill = theme.Fill;

@@ -20,5 +20,10 @@ internal enum TabAction
     Minimize,
     MuteTab,
     Lock,
+    ScreenReader,
+    Magnifier,
+    MagnifierIn,
+    MagnifierOut,
+    ScreenCurtain,
     Exec,
 }

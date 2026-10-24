@@ -42,4 +42,9 @@ internal enum KeyAction
     Upright,
     StopSpin,
     Inspector,
+    ScreenReader,
+    Magnifier,
+    MagnifierIn,
+    MagnifierOut,
+    ScreenCurtain,
 }

@@ -58,7 +58,7 @@ public sealed class StatusTests
     public async Task A_confirmed_restart_calls_logind_reboot_without_interaction()
     {
         Assert.SkipUnless(Directory.Exists("/run/systemd/system"), "LogindActions needs a systemd host");
-        using var bus = Basin.Tests.PrivateBus.Start();
+        using var bus = Basin.Testing.PrivateBus.Start();
         using var logind = await Basin.Tests.MockSystemService.StartAsync(bus.Address, "org.freedesktop.login1");
         logind.OnMethod = context =>
         {

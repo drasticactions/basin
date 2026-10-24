@@ -34,6 +34,10 @@ internal sealed partial class System7Shell
             Processes = _processes,
         });
         _ipc.SyntheticInput = _seat.Injector;
+        if (_access is { } access)
+        {
+            _ipc.GuardWithCurtain(access.Curtain);
+        }
         RegisterCommands(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();

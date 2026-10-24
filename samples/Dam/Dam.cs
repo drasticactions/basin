@@ -37,6 +37,8 @@ internal sealed partial class Dam : IDisposable
     private readonly Basin.Color.PanelTable _panels;
     private readonly string? _renderNode = RendererCatalog.FindRenderNode();
     private readonly IpcLineReport _lines = new();
+    private Basin.Accessibility.DesktopAccessibility? _access;
+    private ProcessTracker? _processes;
     private InspectorSession? _inspector;
 
     public static int Run(DamOptions options, BasinLogger log, out long rendered)
@@ -262,6 +264,26 @@ internal sealed partial class Dam : IDisposable
             Settle = _settle,
         });
         _ipc.SyntheticInput = _damSeat.Injector;
+        _processes = new ProcessTracker(_host.Loop, () => ProcessTracker.SessionEnvironment(_host.Socket, _xServer?.DisplayName, _ipc?.Path));
+        _damSeat.Binder.UseKeyboardAids(_host.Loop);
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "dam",
+            Host = _host,
+            Scene = _scene,
+            Seat = Seat,
+            Pointer = _damSeat.Binder.Pointer,
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = _services.Find<Basin.Capabilities.IToplevelModel>(),
+            Aids = _damSeat.Binder.Aids,
+            Log = _log,
+        });
+        _access.Apply(new Basin.Config.AccessibilitySettings());
+        _damSeat.Cursor.Curtain = _access.Curtain;
+        _damSeat.AccessChord = key => Basin.Accessibility.DesktopAccessibility.DefaultActionForKey(key) is { } action && _access.Run(action);
+        _ipc.GuardWithCurtain(_access.Curtain);
+        _ = _access.StartAsync(AccessibilityMode.Auto);
         var lines = _lines;
         lines.AddInputLines(_ipc.Methods);
         lines.AddSessionLines(_ipc.Methods);
@@ -334,6 +356,10 @@ internal sealed partial class Dam : IDisposable
         _ipc?.Dispose();
         _settle?.Dispose();
         _ipc = null;
+        _access?.Dispose();
+        _access = null;
+        _processes?.Dispose();
+        _processes = null;
         _colorPack?.Luts.Dispose();
         _client?.Dispose();
         _inspector?.Dispose();

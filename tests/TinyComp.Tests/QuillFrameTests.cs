@@ -109,7 +109,7 @@ public sealed class QuillFrameTests
             _runtimeDir = runtimeDir;
         }
 
-        public static QuillSession? Start(string renderer = "gl", string config = "[frame]\nstyle = \"quill\"\n\n[frame.quill]\ncorner_radius = 8\n", string[]? clientArgs = null, string[]? extra = null, [CallerFilePath] string sourcePath = "")
+        public static QuillSession? Start(string renderer = "gl", string config = "[frame]\nstyle = \"quill\"\n\n[frame.quill]\ncorner_radius = 8\n", string[]? clientArgs = null, string[]? extra = null, Dictionary<string, string>? environment = null, [CallerFilePath] string sourcePath = "")
         {
             if (!OperatingSystem.IsLinux() || Locate("tinycomp") is not { } compositorPath ||
                 ClientPath(sourcePath) is not { } clientPath)
@@ -149,6 +149,11 @@ public sealed class QuillFrameTests
 
             info.Environment["XDG_RUNTIME_DIR"] = runtimeDir;
             info.Environment.Remove("WAYLAND_DISPLAY");
+            foreach (var (name, value) in environment ?? [])
+            {
+                info.Environment[name] = value;
+            }
+
             var compositor = Process.Start(info)!;
             var session = new QuillSession(compositor, runtimeDir);
             compositor.OutputDataReceived += (_, e) =>

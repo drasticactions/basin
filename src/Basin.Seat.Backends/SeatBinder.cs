@@ -183,7 +183,8 @@ public sealed class SeatBinder
     public event Action<InputDevice>? DeviceRemoved;
 
     /// <summary>
-    /// Occurs for each key from libinput, the parent or the injector. The arguments are the time, the evdev key code and the press state. A VT switch key is not raised.
+    /// Occurs for each key from libinput, the parent or the injector. The arguments are the time, the evdev key code and the press state.
+    /// A VT switch key is not raised, and neither is a key that <see cref="Seat.KeyMonitor"/> blocks.
     /// </summary>
     public event Action<uint, uint, bool>? Key;
 
@@ -297,7 +298,7 @@ public sealed class SeatBinder
                 return;
             }
 
-            Key?.Invoke(timeMs, key, pressed);
+            RaisePhysicalKey(timeMs, key, pressed);
         };
         input.PointerMotion += (_, timeMs, dx, dy, unacceleratedDx, unacceleratedDy) =>
         {
@@ -562,6 +563,11 @@ public sealed class SeatBinder
     internal void DeliverAxis(uint timeMs, PointerAxis axis, double factor) => Axis?.Invoke(timeMs, Scaled(axis, factor));
 
     /// <summary>
+    /// Gets the layout pointer that the binder moves.
+    /// </summary>
+    public LayoutPointer Pointer => _pointer;
+
+    /// <summary>
     /// Gets the injector that delivers synthetic input through this binder's events.
     /// </summary>
     public SeatInjector Injector { get; }
@@ -570,7 +576,50 @@ public sealed class SeatBinder
 
     internal void RaiseButton(uint timeMs, uint button, bool pressed) => Button?.Invoke(timeMs, button, pressed);
 
-    internal void RaiseKey(uint timeMs, uint key, bool pressed) => Key?.Invoke(timeMs, key, pressed);
+    internal void RaiseKey(uint timeMs, uint key, bool pressed) => RaiseMonitoredKey(timeMs, key, pressed);
+
+    private void RaiseMonitoredKey(uint timeMs, uint key, bool pressed)
+    {
+        if (!_seat.Keyboard.IsKeyBlocked(timeMs, key, pressed))
+        {
+            Key?.Invoke(timeMs, key, pressed);
+        }
+    }
+
+    private void RaisePhysicalKey(uint timeMs, uint key, bool pressed)
+    {
+        if (_seat.Keyboard.IsKeyBlocked(timeMs, key, pressed))
+        {
+            return;
+        }
+
+        if (_aids is { IsActive: true } aids)
+        {
+            aids.Process(timeMs, key, pressed);
+            return;
+        }
+
+        Key?.Invoke(timeMs, key, pressed);
+    }
+
+    private KeyboardAids? _aids;
+
+    /// <summary>
+    /// Gets the keyboard aids, or <see langword="null"/> before <see cref="UseKeyboardAids"/>.
+    /// </summary>
+    public KeyboardAids? Aids => _aids;
+
+    /// <summary>
+    /// Makes the keyboard aids for the physical keys of this seat. Keys from <see cref="Injector"/> never pass through them. Mouse keys move the pointer through <see cref="Injector"/>.
+    /// A second call returns the same aids.
+    /// </summary>
+    /// <param name="loop">The loop for the timer of slow keys and mouse keys.</param>
+    /// <returns>The aids, with every aid off until the caller sets <see cref="KeyboardAids.Options"/>.</returns>
+    public KeyboardAids UseKeyboardAids(ICompositorEventLoop loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        return _aids ??= new KeyboardAids((time, key, pressed) => Key?.Invoke(time, key, pressed), loop) { Pointer = Injector };
+    }
 
     private static PointerAxis Scaled(PointerAxis axis, double factor) =>
         factor == 1.0
@@ -694,7 +743,7 @@ public sealed class SeatBinder
         keyboard.Key += (timeMs, key, pressed) =>
         {
             _seat.Keyboard.Activate(null);
-            Key?.Invoke(timeMs, key, pressed);
+            RaisePhysicalKey(timeMs, key, pressed);
         };
         keyboard.Modifiers += (depressed, latched, locked, group) =>
         {

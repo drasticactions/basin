@@ -10,10 +10,10 @@ internal sealed class AvaloniaChrome : IDisposable
 {
     private readonly OutputUISurface _surface;
 
-    public AvaloniaChrome(SceneTree parent, IUIHost host, UISurfaceIndex index, Control content)
+    public AvaloniaChrome(SceneTree parent, IUIHost host, UISurfaceIndex index, Control content, string? name)
     {
         Content = content;
-        _surface = new OutputUISurface(parent, host, index) { PreciseDamage = true, AutoEnable = false };
+        _surface = new OutputUISurface(parent, host, index) { PreciseDamage = true, AutoEnable = false, AccessibleName = name, Accessible = name is not null };
         _surface.Realized += surface => ((AvaloniaUISurface)surface).Content = content;
     }
 

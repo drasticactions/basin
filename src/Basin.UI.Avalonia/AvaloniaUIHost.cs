@@ -20,7 +20,7 @@ public sealed class AvaloniaUIHost : IUIHost, IUIElementLocator
     private readonly BasinRenderTimer? _renderTimer;
     private readonly BasinPlatformContext _context;
     private readonly List<AvaloniaUISurface> _surfaces = [];
-    private object? _atSpi;
+    private bool _accessible;
     private bool _disposed;
     private int _wakePosted;
 
@@ -156,23 +156,23 @@ public sealed class AvaloniaUIHost : IUIHost, IUIElementLocator
 
         var surface = new AvaloniaUISurface(impl, ownsRoot: true, this);
         _surfaces.Add(surface);
-        if (_atSpi is not null)
+        if (_accessible)
         {
-            Expose(surface);
+            surface.AttachAccessibility();
         }
 
         return surface;
     }
 
     /// <summary>
-    /// Gets a value indicating whether the AT-SPI server runs and shows the chrome surfaces on the accessibility bus.
+    /// Gets a value indicating whether every chrome surface is on the accessibility bus.
     /// </summary>
-    public bool IsAccessible => _atSpi is not null;
+    public bool IsAccessible => _accessible;
 
     /// <summary>
-    /// Starts the Avalonia AT-SPI server and adds every chrome surface to it. A second call does nothing.
+    /// Checks that the session has an accessibility bus, then puts every chrome surface on it, each as its own AccessKit adapter. A second call does nothing.
     /// </summary>
-    /// <returns><see langword="null"/> on success, or the reason that the server cannot start.</returns>
+    /// <returns><see langword="null"/> on success, or the reason that the tree cannot start.</returns>
     public async Task<string?> StartAccessibilityAsync()
     {
         _thread.Assert();
@@ -181,137 +181,65 @@ public sealed class AvaloniaUIHost : IUIHost, IUIElementLocator
             return "the host is disposed";
         }
 
-        if (_atSpi is not null)
+        if (_accessible)
         {
             return null;
         }
 
-        if (Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS") is not { Length: > 0 })
+        if (await AccessibilityBusProbe.ReasonAsync() is { } reason)
         {
-            return "this session has no session bus, so the accessibility bus cannot be found";
+            return reason;
         }
 
-        object server;
-        try
-        {
-            server = AtSpiAccess.Create();
-        }
-        catch (Exception error) when (error is MissingMemberException or TypeLoadException or FileNotFoundException or FileLoadException)
-        {
-            return $"this Avalonia build has no AT-SPI server the host can reach ({error.Message})";
-        }
+        return StartAccessibility();
+    }
 
-        try
-        {
-            await AtSpiAccess.StartAsync(server);
-        }
-        catch (Exception error) when (error is not OutOfMemoryException)
-        {
-            await DisposeQuietly(server);
-            return $"the accessibility bus is not reachable ({error.Message})";
-        }
-
+    /// <summary>
+    /// Puts every chrome surface on the accessibility bus, each as its own AccessKit adapter, without a check of the bus. A second call does nothing.
+    /// </summary>
+    /// <returns><see langword="null"/> on success, or the reason that the tree cannot start.</returns>
+    public string? StartAccessibility()
+    {
+        _thread.Assert();
         if (_disposed)
         {
-            await DisposeQuietly(server);
             return "the host is disposed";
         }
 
-        _atSpi = server;
+        if (_accessible)
+        {
+            return null;
+        }
+
+        if (AvaloniaUISurface.AccessKitUnavailable() is { } reason)
+        {
+            return reason;
+        }
+
+        _accessible = true;
         foreach (var surface in _surfaces)
         {
-            Expose(surface);
+            surface.AttachAccessibility();
         }
 
         return null;
     }
 
     /// <summary>
-    /// Stops the AT-SPI server. Errors during the stop are logged, not raised.
+    /// Takes every chrome surface off the accessibility bus.
     /// </summary>
-    /// <returns>A task that completes when the server is disposed.</returns>
-    public async Task StopAccessibilityAsync()
+    public void StopAccessibility()
     {
         _thread.Assert();
-        if (_atSpi is not { } server)
+        if (!_accessible)
         {
             return;
         }
 
-        _atSpi = null;
+        _accessible = false;
         foreach (var surface in _surfaces)
         {
-            surface.Root?.RemoveHandler(global::Avalonia.Input.InputElement.GotFocusEvent, OnGotFocus);
-        }
-
-        await DisposeQuietly(server);
-    }
-
-    private void OnGotFocus(object? sender, global::Avalonia.Input.FocusChangedEventArgs e)
-    {
-        if (e.Source is global::Avalonia.Controls.Control focused)
-        {
-            Dispatcher.UIThread.Post(() => AnnounceFocus(focused), DispatcherPriority.Background);
-        }
-    }
-
-    private void AnnounceFocus(global::Avalonia.Controls.Control focused)
-    {
-        if (_atSpi is not { } server || !focused.IsFocused)
-        {
-            return;
-        }
-
-        AvaloniaUISurface? owner = null;
-        foreach (var surface in _surfaces)
-        {
-            if (surface.Root is { } root && (ReferenceEquals(root, focused) || global::Avalonia.VisualTree.VisualExtensions.IsVisualAncestorOf(root, focused)))
-            {
-                owner = surface;
-                break;
-            }
-        }
-
-        if (owner is null || RootPeer(owner) is not { } rootPeer)
-        {
-            return;
-        }
-
-        var leaf = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(focused);
-        try
-        {
-            if (AtSpiAccess.TryGetAttachedNode(server, leaf) is not null)
-            {
-                return;
-            }
-
-            var chain = new List<global::Avalonia.Automation.Peers.AutomationPeer>();
-            for (var peer = leaf; peer is not null && !ReferenceEquals(peer, rootPeer); peer = peer.GetParent())
-            {
-                chain.Add(peer);
-            }
-
-            if (AtSpiAccess.TryGetAttachedNode(server, rootPeer) is not { } parent)
-            {
-                return;
-            }
-
-            for (var i = chain.Count - 1; i >= 0; i--)
-            {
-                var node = AtSpiAccess.TryGetAttachedNode(server, chain[i]) ?? AtSpiAccess.GetOrCreateNode(server, chain[i]);
-                if (!AtSpiAccess.AttachNode(server, node, parent))
-                {
-                    return;
-                }
-
-                parent = node;
-            }
-
-            AtSpiAccess.EmitFocusChange(server, parent);
-        }
-        catch (Exception error) when (error is MissingMemberException or TypeLoadException)
-        {
-            BasinLog.For("avalonia").Debug(error, $"at-spi: focus announcement unavailable");
+            surface.DetachAccessibility();
         }
     }
 
@@ -339,7 +267,7 @@ public sealed class AvaloniaUIHost : IUIHost, IUIElementLocator
     }
 
     /// <summary>
-    /// Disposes every surface, the AT-SPI server and the wake channel. A second call does nothing.
+    /// Disposes every surface, with its accessibility adapter, and the wake channel. A second call does nothing.
     /// </summary>
     public void Dispose()
     {
@@ -361,55 +289,12 @@ public sealed class AvaloniaUIHost : IUIHost, IUIElementLocator
         }
 
         _surfaces.Clear();
-        if (_atSpi is { } server)
-        {
-            _atSpi = null;
-            _ = DisposeQuietly(server);
-        }
+        _accessible = false;
 
         Wake?.Dispose();
     }
 
-    internal void Forget(AvaloniaUISurface surface)
-    {
-        if (_surfaces.Remove(surface) && _atSpi is { } server && RootPeer(surface) is { } peer)
-        {
-            AtSpiAccess.RemoveWindow(server, peer);
-        }
-    }
-
-    private void Expose(AvaloniaUISurface surface)
-    {
-        if (_atSpi is { } server && RootPeer(surface) is { } peer)
-        {
-            AtSpiAccess.AddWindow(server, peer);
-            surface.Root!.AddHandler(global::Avalonia.Input.InputElement.GotFocusEvent, OnGotFocus, global::Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
-            surface.Reactivate();
-        }
-    }
-
-    private static global::Avalonia.Automation.Peers.AutomationPeer? RootPeer(AvaloniaUISurface surface)
-    {
-        if (surface.Root is not { } root)
-        {
-            return null;
-        }
-
-        var peer = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(root);
-        return peer.GetAutomationRoot() ?? peer;
-    }
-
-    private static async Task DisposeQuietly(object server)
-    {
-        try
-        {
-            await AtSpiAccess.DisposeAsync(server);
-        }
-        catch (Exception error) when (error is not OutOfMemoryException)
-        {
-            BasinLog.For("avalonia").Debug(error, $"at-spi: server dispose failed");
-        }
-    }
+    internal void Forget(AvaloniaUISurface surface) => _surfaces.Remove(surface);
 
     internal void AnnouncePopup(AvaloniaUISurface popup) => PopupAppeared?.Invoke(popup);
 

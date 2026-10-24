@@ -60,4 +60,29 @@ public sealed partial class DashboardView : UserControl
             Model?.SwipeItem(item);
         }
     }
+
+    private void OnBadgeInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: DashboardGroupModel group })
+        {
+            e.Handled = true;
+            group.Expanded = !group.Expanded;
+        }
+    }
+
+    private void OnGroupInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (!e.Handled && sender is Control { Tag: DashboardGroupModel group })
+        {
+            Model?.Tap(group);
+        }
+    }
+
+    private void OnItemInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: DashboardItemModel item })
+        {
+            Model?.TapItem(item);
+        }
+    }
 }

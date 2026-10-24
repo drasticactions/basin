@@ -50,13 +50,13 @@ internal sealed class CharmsBar : IDisposable
         _barView = new CharmsBarView { DataContext = Model };
         _paneView = new CharmPaneView { DataContext = Pane };
         _paneView.Flyout.Closed += (_, _) => paneClosed();
-        _bar = new AvaloniaChrome(barFrame, host, index, _barView) { Enabled = false };
-        _clock = new AvaloniaChrome(clockFrame, host, index, new ClockView { DataContext = Model })
+        _bar = new AvaloniaChrome(barFrame, host, index, _barView, "Charms") { Enabled = false };
+        _clock = new AvaloniaChrome(clockFrame, host, index, new ClockView { DataContext = Model }, "Clock")
         {
             Enabled = false,
             InputEnabled = false,
         };
-        _pane = new AvaloniaChrome(paneFrame, host, index, _paneView) { Enabled = false };
+        _pane = new AvaloniaChrome(paneFrame, host, index, _paneView, "Charm pane") { Enabled = false };
     }
 
     public SceneTransform BarFrame { get; }

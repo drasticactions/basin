@@ -12,7 +12,7 @@ internal sealed class StatusBar : IDisposable
     {
         Model = new StatusBarModel();
         View = new StatusBarView { DataContext = Model };
-        _chrome = new ChromeSurface(parent, host, index, View) { Enabled = true };
+        _chrome = new ChromeSurface(parent, host, index, View, "Status bar") { Enabled = true };
     }
 
     public StatusBarModel Model { get; }

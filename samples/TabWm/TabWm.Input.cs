@@ -148,6 +148,21 @@ internal sealed partial class TabWm
             case TabAction.Lock:
                 Lock();
                 break;
+            case TabAction.ScreenReader:
+                _access?.Run("screen-reader");
+                break;
+            case TabAction.Magnifier:
+                _access?.Run("magnifier");
+                break;
+            case TabAction.MagnifierIn:
+                _access?.Run("magnifier-in");
+                break;
+            case TabAction.MagnifierOut:
+                _access?.Run("magnifier-out");
+                break;
+            case TabAction.ScreenCurtain:
+                _access?.Run("screen-curtain");
+                break;
             case TabAction.Exec when binding.Command is { Length: > 0 } command:
                 Launch(tab, Basin.Freedesktop.ExecLine.Join(command), null, null);
                 break;

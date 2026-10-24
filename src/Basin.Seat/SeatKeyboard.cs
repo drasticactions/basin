@@ -567,6 +567,32 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
     /// <inheritdoc/>
     public uint KeysymForKeycode(uint keycode) => KeysymFor(keycode).Value;
 
+    /// <summary>
+    /// Gets the Unicode character that a key gives in the current state.
+    /// </summary>
+    /// <param name="key">The evdev key code.</param>
+    /// <returns>The character, or 0 when the key gives none or there is no keymap.</returns>
+    public uint UnicharFor(uint key) => State?.GetKeyUtf32(key + 8) ?? 0;
+
+    /// <summary>
+    /// Asks <see cref="Seat.KeyMonitor"/> about a key, with the modifiers, keysym and character from the current xkb state.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The evdev key code.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
+    /// <returns><see langword="true"/> when the monitor holds the key back.</returns>
+    public bool IsKeyBlocked(uint timeMs, uint key, bool pressed)
+    {
+        if (_seat.KeyMonitor is not { } monitor)
+        {
+            return false;
+        }
+
+        var (depressed, latched, locked, _) = _modifiers;
+        var input = new KeyMonitorEvent(timeMs, key, !pressed, depressed | latched | locked, KeysymForKeycode(key), UnicharFor(key), (uint)Math.Max(0, _repeatDelay));
+        return monitor.Filter(input) == KeyMonitorVerdict.Block;
+    }
+
     /// <inheritdoc/>
     public uint RawKeysymForKeycode(uint keycode) => RawKeysymFor(keycode).Value;
 

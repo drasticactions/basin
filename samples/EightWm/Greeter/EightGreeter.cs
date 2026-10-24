@@ -232,6 +232,7 @@ internal sealed partial class EightGreeter : IDisposable
 
     private void OnBackgroundAdded(IOutput output, OutputUISurface surface)
     {
+        surface.AccessibleName = "Lock screen";
         var under = NewCurtain(dimmed: true);
         var over = NewCurtain(dimmed: false);
         over.Raised = _curtain.Raised;

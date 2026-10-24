@@ -263,19 +263,21 @@ public sealed class GreeterChromeTests
         await Expect(session, "A11Y on");
         using var a11y = await bus.ConnectAsync();
 
-        var tree = await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Name == "Ada Lovelace"));
+        var tree = await a11y.WhereAsync(nodes => nodes.Any(node => node.Name == "Ada Lovelace"));
         Assert.Contains(tree, node => node.Role == "push button" && node.Name == "Ada Lovelace");
         Assert.Contains(tree, node => node.Role == "push button" && node.Name == "Other");
 
         await session.SendAsync("select ada");
         await Expect(session, "AUTH secret Password: ");
         await session.SettleAsync();
-        await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Role == "entry" && node.Name == "Password:"));
+        await a11y.WhereAsync(nodes => nodes.Any(node => node.Role == "password text" && node.Name == "Password:"));
         await session.SendAsync("type hunter2");
         await session.SettleAsync();
-        var texts = await AtSpiTree.Texts(a11y);
+        var texts = await a11y.TextsAsync();
+        var after = await a11y.TreeAsync();
         Assert.Contains("●●●●●●●", texts);
         Assert.DoesNotContain(texts, text => text.Contains("hunter2", StringComparison.Ordinal));
+        Assert.DoesNotContain(after, node => node.Name.Contains("hunter2", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -288,12 +290,12 @@ public sealed class GreeterChromeTests
         await Ready(session);
         await Expect(session, "A11Y on");
         using var a11y = await bus.ConnectAsync();
-        await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Name == "Ada Lovelace"));
+        await a11y.WhereAsync(nodes => nodes.Any(node => node.Name == "Ada Lovelace"));
 
         var clock = Stopwatch.StartNew();
         for (var round = 0; round < 40; round++)
         {
-            var walk = AtSpiTree.Tree(a11y);
+            var walk = a11y.TreeAsync();
             await session.SendAsync(round % 2 == 0 ? "key 15 1" : "key 15 0");
             var mark = session.Mark();
             Assert.True(

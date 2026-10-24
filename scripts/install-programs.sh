@@ -21,9 +21,11 @@
 #
 # A .desktop file in a publish goes into the desktop database under
 # $XDG_DATA_HOME instead, because a portal reads it there. When the set
-# includes tinycomp, westonia, maui-comp or tab-wm, the script also writes the two
+# includes tinycomp, westonia, maui-comp or tab-wm, the script also writes the
 # xdg-desktop-portal registration files that route the portal interfaces to
-# basin, under $XDG_DATA_HOME/xdg-desktop-portal. --no-portal-files skips them.
+# basin, under $XDG_DATA_HOME/xdg-desktop-portal. basin.portal names the portal
+# process, and basin-settings.portal names the Settings service that a running
+# compositor owns. --no-portal-files skips them.
 #
 # --ssh DEST installs on another machine instead of this one, and nothing is
 # left here. DEST is anything ssh takes, an alias in ~/.ssh/config included,
@@ -170,7 +172,11 @@ write_portal_files() {
     {
         printf '[preferred]\ndefault=gtk;kde;gnome;\n'
         printf '%s\n' "$portal_interfaces" | tr ';' '\n' | sed '/^$/d; s/$/=basin;/'
+        printf 'org.freedesktop.impl.portal.Settings=basin-settings;\n'
     } > "$directory/basin-portals.conf"
+    # The compositor serves Settings itself on its own bus name, so this file has no service file
+    printf '[portal]\nDBusName=org.freedesktop.impl.portal.desktop.basin.settings\nInterfaces=org.freedesktop.impl.portal.Settings;\nUseIn=basin\n' \
+        > "$directory/portals/basin-settings.portal"
     if [ -n "$executable" ]; then
         printf '[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.basin\nExec=%s\n' \
             "$executable" > "$directory/basin.service"
@@ -241,6 +247,7 @@ if [ "$system" -eq 1 ]; then
         echo "  $system_share/applications/  (any .desktop file a publish carries)"
         if wants_portal_files; then
             echo "  $system_share/xdg-desktop-portal/portals/basin.portal"
+            echo "  $system_share/xdg-desktop-portal/portals/basin-settings.portal"
             echo "  $system_share/xdg-desktop-portal/basin-portals.conf"
             echo "  $system_share/dbus-1/services/org.freedesktop.impl.portal.desktop.basin.service"
         fi
@@ -446,6 +453,7 @@ for file in "$work"/applications/*; do
 done
 if [ -f "$work/portal/basin-portals.conf" ]; then
     place "$work/portal/portals/basin.portal" "$share/xdg-desktop-portal/portals/basin.portal" 644
+    place "$work/portal/portals/basin-settings.portal" "$share/xdg-desktop-portal/portals/basin-settings.portal" 644
     place "$work/portal/basin-portals.conf" "$share/xdg-desktop-portal/basin-portals.conf" 644
     place "$work/portal/basin.service" "$share/dbus-1/services/org.freedesktop.impl.portal.desktop.basin.service" 644
 fi
@@ -604,12 +612,13 @@ if wants_portal_files; then
         write_portal_files "$stage/portal" "$out/xdg-desktop-portal-basin"
         mkdir -p "$portal_home/portals" "$services_home"
         install_file 644 "$stage/portal/portals/basin.portal" "$portal_home/portals/basin.portal"
+        install_file 644 "$stage/portal/portals/basin-settings.portal" "$portal_home/portals/basin-settings.portal"
         install_file 644 "$stage/portal/basin-portals.conf" "$portal_home/basin-portals.conf"
         install_file 644 "$stage/portal/basin.service" "$services_home/org.freedesktop.impl.portal.desktop.basin.service"
         reload_bus
     fi
 
-    installed+=("$portal_home/portals/basin.portal" "$portal_home/basin-portals.conf" "$services_home/org.freedesktop.impl.portal.desktop.basin.service")
+    installed+=("$portal_home/portals/basin.portal" "$portal_home/portals/basin-settings.portal" "$portal_home/basin-portals.conf" "$services_home/org.freedesktop.impl.portal.desktop.basin.service")
 fi
 
 if [ -n "$destination" ]; then
@@ -638,6 +647,7 @@ done
 if [ -f "$work/portal/basin-portals.conf" ]; then
     mkdir -p "$portal_home/portals" "$services_home"
     mv -f "$work/portal/portals/basin.portal" "$portal_home/portals/basin.portal"
+    mv -f "$work/portal/portals/basin-settings.portal" "$portal_home/portals/basin-settings.portal"
     mv -f "$work/portal/basin-portals.conf" "$portal_home/basin-portals.conf"
     [ -f "$work/portal/basin.service" ] && mv -f "$work/portal/basin.service" "$services_home/org.freedesktop.impl.portal.desktop.basin.service"
     command -v busctl >/dev/null 2>&1 && busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig >/dev/null 2>&1 || true

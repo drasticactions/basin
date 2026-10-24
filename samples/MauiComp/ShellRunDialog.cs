@@ -102,6 +102,8 @@ internal sealed class ShellRunDialog : IDisposable
             return;
         }
 
+        _surface.AccessibleName = "Run";
+
         _model.Command = string.Empty;
         var page = new RunPage { BindingContext = _model };
         _scope = _surfaces.Attach(_surface, page);

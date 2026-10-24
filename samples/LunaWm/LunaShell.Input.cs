@@ -146,6 +146,9 @@ internal sealed partial class LunaShell
                 }
 
                 break;
+            default:
+                _access?.Run(action);
+                break;
         }
     }
 

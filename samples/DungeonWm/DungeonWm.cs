@@ -322,6 +322,8 @@ internal sealed partial class DungeonWm : IDisposable
     public void Dispose()
     {
         _disposing = true;
+        _access?.Dispose();
+        _access = null;
         StopAudio();
         StopSounds();
         _host.DisconnectClients();
@@ -347,9 +349,28 @@ internal sealed partial class DungeonWm : IDisposable
         _renderer.Dispose();
     }
 
+    private Basin.Accessibility.DesktopAccessibility? _access;
+
     private int RunLoop()
     {
         BasinReport.Line(CompositorLines.Socket(_host.Socket));
+        _binder.UseKeyboardAids(_host.Loop);
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "dungeon-wm",
+            Host = _host,
+            Scene = _scene,
+            Seat = _seat,
+            Pointer = _binder.Pointer,
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = _services.Find<Basin.Capabilities.IToplevelModel>(),
+            Aids = _binder.Aids,
+            Log = _log,
+        });
+        _access.Apply(_settings.Accessibility);
+        _cursor.Curtain = _access.Curtain;
+        _ = _access.StartAsync(_settings.Accessibility.Enabled);
         BasinReport.Line($"WORLD renderer={RendererName} rooms={_world.Map.Rooms.Count} seed={_settings.Map.Seed}");
         using var ipc = StartIpc();
         StartInspector();

@@ -152,6 +152,7 @@ internal sealed partial class TinyComp
         }
 
         _inspector = overlay;
+        AccessibleChrome?.Add(overlay);
         ApplyInspectorRefresh(_config);
         return overlay;
     }
@@ -274,6 +275,11 @@ internal sealed partial class TinyComp
 
     private void DisposeInspector()
     {
+        if (_inspector is { } inspector)
+        {
+            AccessibleChrome?.Remove(inspector);
+        }
+
         _inspector?.Dispose();
         _inspector = null;
         _inspectorScales.Clear();

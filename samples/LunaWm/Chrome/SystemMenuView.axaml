@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:Basin.UI.Avalonia"
              xmlns:enyo="https://github.com/avaenyo"
              xmlns:luna="using:LunaWm"
              x:Class="LunaWm.SystemMenuView"
@@ -24,7 +25,7 @@
               <TextBlock Text="{Binding Label}" Opacity="0.6" FontSize="15" Margin="0,6" TextWrapping="Wrap" />
             </DataTemplate>
             <DataTemplate DataType="luna:ToggleRow">
-              <Border Classes="menurow" Padding="0,8" Background="Transparent" Tag="{Binding}" PointerReleased="OnToggle">
+              <Border Classes="menurow" Padding="0,8" Background="Transparent" Tag="{Binding}" PointerReleased="OnToggle" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnToggleInvoked">
                 <DockPanel>
                   <Border DockPanel.Dock="Right" Classes="pill" Classes.on="{Binding On}">
                     <TextBlock Text="{Binding State}" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -51,7 +52,7 @@
               </StackPanel>
             </DataTemplate>
             <DataTemplate DataType="luna:ActionRow">
-              <Border Classes="menurow" Padding="0,9" Background="Transparent" Tag="{Binding}" PointerReleased="OnAction"
+              <Border Classes="menurow" Padding="0,9" Background="Transparent" Tag="{Binding}" PointerReleased="OnAction" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnActionInvoked"
                       IsEnabled="{Binding Enabled}" Margin="{Binding Indent}">
                 <DockPanel>
                   <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" Opacity="0.6" FontSize="15" VerticalAlignment="Center" Margin="12,0,0,0" />

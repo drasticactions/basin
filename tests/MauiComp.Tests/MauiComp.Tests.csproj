@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/MauiComp/MauiComp.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.Portal/Basin.Portal.csproj" />

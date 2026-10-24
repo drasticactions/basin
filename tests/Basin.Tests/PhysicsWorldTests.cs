@@ -548,6 +548,7 @@ public sealed class PhysicsWorldTests
     [MemberData(nameof(Engines))]
     public void Basin_code_around_the_engine_allocates_nothing(string engine)
     {
+        Budgets.SettleRuntimeCaches();
         using var world = Boxed(engine, 400, 1200);
         var loose = new PhysicsMaterial(Density: 1, Friction: 0, Restitution: 1, GravityScale: 1, LinearDamping: 0);
         var body = world.CreateBody(PhysicsBodyKind.Dynamic, 150, 500, 100, 100, loose);

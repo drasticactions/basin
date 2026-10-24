@@ -16,22 +16,24 @@ public sealed class AtSpiTests
         await greeter.ExpectAsync("A11Y on");
         using var a11y = await bus.ConnectAsync();
 
-        var list = await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Name == "Log in"));
+        var list = await a11y.WhereAsync(nodes => nodes.Any(node => node.Name == "Log in"));
         Assert.True(list.Any(node => node.Role == "list item" && node.Name == "Ada Lovelace"), string.Join(" | ", list.Select(node => $"{node.Role}:{node.Name}")));
         Assert.Contains(list, node => node.Role == "push button" && node.Name == "Log in");
         Assert.Contains(list, node => node.Role == "push button" && node.Name == "Power");
         Assert.Contains(list, node => node.Role == "combo box" && node.Name == "Session");
-        Assert.Contains(list, node => node.Role == "list" && node.Name == "Users");
+        Assert.Contains(list, node => node.Role == "list box" && node.Name == "Users");
 
         await greeter.SendAsync("select ada");
         await greeter.ExpectAsync("AUTH secret Password: ");
         await greeter.SettleAsync();
-        var prompt = await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Role == "entry" && node.Name == "Password:"));
-        Assert.Contains(prompt, node => node.Role == "entry" && node.Name == "Password:");
+        var prompt = await a11y.WhereAsync(nodes => nodes.Any(node => node.Role == "password text" && node.Name == "Password:"));
+        Assert.Contains(prompt, node => node.Role == "password text" && node.Name == "Password:");
         await greeter.SendAsync("type hunter2");
         await greeter.SettleAsync();
-        var texts = await AtSpiTree.Texts(a11y);
+        var texts = await a11y.TextsAsync();
+        var tree = await a11y.TreeAsync();
         Assert.Contains("●●●●●●●", texts);
         Assert.DoesNotContain(texts, text => text.Contains("hunter2", StringComparison.Ordinal));
+        Assert.DoesNotContain(tree, node => node.Name.Contains("hunter2", StringComparison.Ordinal));
     }
 }

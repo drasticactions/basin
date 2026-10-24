@@ -21,13 +21,13 @@ internal sealed partial class TabWm
         set.Usable = UsableOf(set);
         set.Background = new SceneRect(_layers.Background, set.Box.Width, set.Box.Height, new RenderColor(0.16f, 0.17f, 0.19f, 1f));
         set.Background.SetPosition(set.Box.X, set.Box.Y);
-        set.StripSurface = new OutputUISurface(_layers.Strip, _ui, _index) { PreciseDamage = true };
+        set.StripSurface = new OutputUISurface(_layers.Strip, _ui, _index) { PreciseDamage = true, AccessibleName = "Tab strip" };
         set.StripSurface.Realized += surface =>
         {
             set.StripView = new StripView { DataContext = set.Strip };
             ((AvaloniaUISurface)surface).Content = set.StripView;
         };
-        set.Page = new OutputUISurface(_layers.NewTabPages, _ui, _index) { PreciseDamage = true, AutoEnable = false };
+        set.Page = new OutputUISurface(_layers.NewTabPages, _ui, _index) { PreciseDamage = true, AutoEnable = false, AccessibleName = "New tab page" };
         set.Page.Realized += surface =>
         {
             ((AvaloniaUISurface)surface).Content = CreatePage(set);

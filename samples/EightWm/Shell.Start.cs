@@ -207,21 +207,21 @@ internal sealed partial class Shell
         start.TileList.SelectionChanged += (_, e) => ReportSelection(e);
         start.TileList.ItemDragDrop += (_, e) => ReportReorder(model, e);
         view.StartView = start;
-        view.Start = new AvaloniaChrome(view.StartFrame, _ui, _chromeIndex, start) { Enabled = false };
+        view.Start = new AvaloniaChrome(view.StartFrame, _ui, _chromeIndex, start, "Start") { Enabled = false };
 
         var apps = new AppsView { DataContext = model };
         view.AppsView = apps;
-        view.AppsSurface = new AvaloniaChrome(view.AppsFrame, _ui, _chromeIndex, apps) { Enabled = false };
+        view.AppsSurface = new AvaloniaChrome(view.AppsFrame, _ui, _chromeIndex, apps, "Apps") { Enabled = false };
 
         view.Splash = new AvaloniaChrome(
-            view.SplashFrame, _ui, _chromeIndex, new SplashView { DataContext = view.SplashModel })
+            view.SplashFrame, _ui, _chromeIndex, new SplashView { DataContext = view.SplashModel }, null)
         {
             Enabled = false,
             InputEnabled = false,
         };
 
         view.FlipFace = new AvaloniaChrome(
-            view.FlipFrame, _ui, _chromeIndex, new FlipFaceView { DataContext = view.FlipModel })
+            view.FlipFrame, _ui, _chromeIndex, new FlipFaceView { DataContext = view.FlipModel }, null)
         {
             Enabled = false,
             InputEnabled = false,

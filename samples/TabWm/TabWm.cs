@@ -30,6 +30,7 @@ internal sealed partial class TabWm : IDisposable
     private readonly BasinHost _host;
     private readonly OutputLayout _layout = new();
     private readonly Scene _scene = new();
+    private readonly SceneCurtain _curtain;
     private readonly BasinServices _services;
     private readonly TabLayers _layers;
     private readonly OutputDriver _outputs;
@@ -38,6 +39,9 @@ internal sealed partial class TabWm : IDisposable
     private readonly ToplevelGeometryReporter? _geometryReporter;
     private readonly BasinGlGpu? _gpu;
     private readonly AvaloniaUIHost _ui;
+    private Basin.Accessibility.DesktopAccessibility? _access;
+    private Basin.Portal.PortalSettingsService? _settingsPortal;
+    private readonly Basin.Capabilities.Defaults.AppearanceSettingsStore _appearance = new();
     private readonly UIDriver _uiDriver;
     private readonly OutputScreens _screens;
     private readonly UISurfaceIndex _index = new();
@@ -95,6 +99,7 @@ internal sealed partial class TabWm : IDisposable
 
     internal TabWm(TabWmOptions options, TabWmConfig config, BasinLogger log)
     {
+        _curtain = new SceneCurtain(_scene);
         _options = options;
         _config = config;
         _log = log;
@@ -133,7 +138,7 @@ internal sealed partial class TabWm : IDisposable
         _colorPack = new ColorCapabilityPack(_layout, _renderer);
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm) { ActivationTokens = _tokens };
         var capturePack = servicePack.Capture;
-        _cursor = new CursorController(_layout) { Capture = capturePack.Capture };
+        _cursor = new CursorController(_layout) { Capture = capturePack.Capture, Curtain = _curtain };
         if (_host.Session is { } session && options.Backend == BackendKind.Drm)
         {
             _input = new Basin.Backend.Libinput.LibinputBackend(_host.Loop, session);
@@ -162,6 +167,8 @@ internal sealed partial class TabWm : IDisposable
         _services.UseDefault<IInputDeviceConfiguration>(_inputConfigurator);
         CreateLayerDrivers();
         _services.Use<IInputSink>(_inputSink);
+        _services.Use<IAppearanceSettings>(_appearance);
+        ApplyAppearance();
         _services.Freeze();
 
         _outputs = new OutputDriver(_host, _scene, _layout, _renderer, _deviceAllocator)
@@ -261,6 +268,7 @@ internal sealed partial class TabWm : IDisposable
             PointerMoved = OnPointerMoved,
         };
         _inputConfigurator.Attach(Seat, _seat.Binder, _input?.Configuration);
+        _seat.Binder.UseKeyboardAids(_host.Loop);
         BasinReport.Line($"KEYMAP system compiled={(Seat.Keyboard.Keymap is null ? "no" : "yes")}");
 
         AttachWindows();
@@ -281,6 +289,26 @@ internal sealed partial class TabWm : IDisposable
         }
 
         ReportUnion();
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "tab-wm",
+            Host = _host,
+            Scene = _scene,
+            Seat = Seat,
+            Pointer = _seat.Binder.Pointer,
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = Toplevels,
+            Aids = _seat.Binder.Aids,
+            StartToolkit = _ui.StartAccessibilityAsync,
+            Log = _log,
+        });
+        _access.Apply(_config.Accessibility);
+        _ = StartAccessibilityAsync();
+        if (_host.Drm is not null)
+        {
+            _settingsPortal = Basin.Portal.PortalSettingsService.TryStart(_host.Loop, _appearance, null, null, out _);
+        }
     }
 
     internal Basin.Seat.Seat Seat { get; }
@@ -363,9 +391,21 @@ internal sealed partial class TabWm : IDisposable
         _uiDriver.Woken -= _outputs.ScheduleAll;
         _ipc?.Dispose();
         _ipc = null;
+        _access?.Dispose();
+        _access = null;
+        _settingsPortal?.Dispose();
+        _settingsPortal = null;
         _settle?.Dispose();
         _clock?.Dispose();
         return 0;
+    }
+
+    private async Task StartAccessibilityAsync()
+    {
+        if (_access is { } access && await access.StartAsync(_config.Accessibility.Enabled) && _config.Accessibility.ScreenReader == "on")
+        {
+            _host.Loop.AddIdle(PlayReadyChime);
+        }
     }
 
     private void WireColor()

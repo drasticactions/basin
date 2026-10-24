@@ -6,7 +6,7 @@ namespace Basin.Tests;
 
 public sealed class IpcApprovalTests
 {
-    private static JsonElement Parse(string frame) => JsonDocument.Parse(frame).RootElement.Clone();
+    internal static JsonElement Parse(string frame) => JsonDocument.Parse(frame).RootElement.Clone();
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IpcTestPeer, List<JsonElement>> Backlog = [];
 
@@ -37,13 +37,13 @@ public sealed class IpcApprovalTests
         throw new Xunit.Sdk.XunitException("the expected frame never arrived");
     }
 
-    private static JsonElement Event(IpcTestPeer peer) =>
+    internal static JsonElement Event(IpcTestPeer peer) =>
         Next(peer, f => f.TryGetProperty("event", out var name) && name.GetString() == IpcEventNames.ApprovalRequested).GetProperty("data");
 
-    private static JsonElement Reply(IpcTestPeer peer, int id) =>
+    internal static JsonElement Reply(IpcTestPeer peer, int id) =>
         Next(peer, f => f.TryGetProperty("id", out var got) && got.ValueKind == JsonValueKind.Number && got.GetInt32() == id);
 
-    private static string? Code(JsonElement frame) =>
+    internal static string? Code(JsonElement frame) =>
         frame.TryGetProperty("error", out var error) ? error.GetProperty("code").GetString() : null;
 
     private static IpcTestRig Rig(IpcApprovalBroker broker) => IpcFullRig.Create(register: server =>

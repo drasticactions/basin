@@ -168,6 +168,7 @@ internal sealed partial class Greeter : IDisposable
 
     private void OnBackgroundAdded(IOutput output, OutputUISurface surface)
     {
+        surface.AccessibleName = GreeterText.BackgroundWindow;
         var model = new BackgroundModel
         {
             Fill = new SolidColorBrush(_highContrast ? Colors.Black : Argb(_config.BackgroundColor)),

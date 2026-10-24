@@ -104,7 +104,7 @@ public sealed class InletInspectorTests
         await inlet.QuitAsync();
     }
 
-    private sealed class InletProcess : IDisposable
+    internal sealed class InletProcess : IDisposable
     {
         private readonly Process _process;
         private readonly BlockingCollection<string> _lines = [];

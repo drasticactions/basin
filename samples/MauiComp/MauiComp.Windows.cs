@@ -666,6 +666,13 @@ internal sealed partial class MauiComp
             return true;
         }
 
+        if (pressed && alt && Seat.Keyboard.State?.IsModActive("Mod4") == true &&
+            Basin.Accessibility.DesktopAccessibility.DefaultActionForKey(key) is { } action &&
+            _access?.Run(action) == true)
+        {
+            return true;
+        }
+
         if (pressed && symbol == Escape && _startMenu is { IsOpen: true })
         {
             _startMenu.Close();

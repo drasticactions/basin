@@ -287,6 +287,43 @@ public sealed partial class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
+    public void A_zoomed_and_panning_output_allocates_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+
+        var surface = host.Client.Compositor.CreateSurface();
+        var buffer = host.Client.CreateBuffer(64, 48, Fill.Gradient(64, 48));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Commit();
+        host.PumpToServer();
+        var node = new Scene.SceneRect(host.Scene.Root, 30, 30, new RenderColor(0.2f, 0.5f, 0.8f, 1f));
+
+        void Frame(int i)
+        {
+            node.SetPosition(i % 2, 0);
+            host.SceneOutput.SetZoom(2 + (i % 3), 60 + (i % 7), 50);
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Frame(i);
+        }
+
+        Assert.True(host.SceneOutput.IsZoomed);
+        NothingAllocated(1000, Frame);
+        node.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
     public void SceneOutput_direct_scanout_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);
@@ -1860,7 +1897,7 @@ public sealed partial class ZeroAllocationTests
             $" (a first pass allocated {first} bytes: {firstRounds})");
     }
 
-    private static void NothingAllocated(int rounds, Action<int> round)
+    internal static void NothingAllocated(int rounds, Action<int> round)
     {
         var measured = new long[rounds];
         var first = Pass(round, measured);

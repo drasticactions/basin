@@ -67,6 +67,11 @@ internal sealed partial class TinyComp
                 _fit?.Destroy();
                 _fit = null;
                 comp.ForgetFrameBackdrop(_frame);
+                if (_frame is not null)
+                {
+                    _comp.AccessibleChrome?.Remove(_frame);
+                }
+
                 _frame?.Dispose();
                 _frame = null;
                 if (Tree is { } gone)
@@ -421,6 +426,11 @@ internal sealed partial class TinyComp
                 _cornerRig?.Dispose();
                 _cornerRig = null;
                 _comp.ForgetFrameBackdrop(_frame);
+                if (_frame is not null)
+                {
+                    _comp.AccessibleChrome?.Remove(_frame);
+                }
+
                 _frame?.Dispose();
                 _frame = null;
                 if (SceneSurface is not null)
@@ -452,6 +462,7 @@ internal sealed partial class TinyComp
                 ? (int)Math.Round(glassRenderer.Theme.ResolvedContentRadius)
                 : -1;
             _frame.Requested += OnFrameAction;
+            _comp.AccessibleChrome?.Add(_frame);
             _frame.Faulted += e => _comp.Log.Error(e, $"frame: faulted for {Toplevel.AppId}");
             _fit?.Root.RaiseToTop();
             LayoutDecorations();
@@ -482,6 +493,7 @@ internal sealed partial class TinyComp
             _cornerRig?.Dispose();
             _cornerRig = null;
             _comp.ForgetFrameBackdrop(_frame);
+            _comp.AccessibleChrome?.Remove(_frame);
             _frame.Dispose();
             _frame = null;
             SetDecorated(true);

@@ -26,6 +26,26 @@ restore = true
 # The session lock client that Super+Escape and the menu run. Empty disables locking.
 lock-command = "swaylock -f"
 
+[accessibility]
+# auto serves the screen reader under DRM and stays off when nested or headless.
+enabled = "auto"         # auto | on | off
+# toggle starts and stops the reader on Super+Alt+S. on starts it with the session.
+screen-reader = "toggle" # off | toggle | on
+screen-reader-command = ["orca", "--replace"]
+# High-contrast chrome. Applications also get the contrast preference through the Settings portal.
+high-contrast = false
+# Turns animations off. Applications also get the reduced-motion preference through the Settings portal.
+reduced-motion = false
+
+# Keyboard aids for physical keys. Every aid is off by default.
+# [accessibility.keyboard]
+# sticky = false           # a modifier tapped alone stays down for the next key, a second tap locks it
+# sticky-shortcut = false  # five taps of Shift turn sticky keys on and off
+# slow-ms = 0              # a key counts only after it stays down this long
+# bounce-ms = 0            # a new press of a key this soon after its release is ignored
+# mouse-keys = false       # the keypad moves the pointer, 5 clicks, / * - choose the button
+# mouse-keys-speed = 1000  # the highest pointer speed in logical pixels per second
+
 [keys]
 # Every default chord can be rebound or removed. Examples:
 # "Super+T" = "new-tab"

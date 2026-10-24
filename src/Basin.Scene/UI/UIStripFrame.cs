@@ -12,6 +12,7 @@ public sealed class UIStripFrame : IDisposable
     private readonly UISurfaceIndex? _index;
     private readonly Action<UIFrameStrip, IUISurface> _fill;
     private readonly Strip[] _strips = new Strip[4];
+    private string? _accessibleTitle;
     private int _x;
     private int _y;
     private int _width;
@@ -43,6 +44,23 @@ public sealed class UIStripFrame : IDisposable
     /// Gets the tree that holds the strip nodes.
     /// </summary>
     public SceneTree Parent { get; }
+
+    /// <summary>
+    /// Gets or sets the name that a screen reader gives the titlebar strip, usually the window title.
+    /// The edge strips stay off the accessibility bus. It applies to a strip surface that implements <see cref="IAccessibleUISurface"/>.
+    /// </summary>
+    public string? AccessibleTitle
+    {
+        get => _accessibleTitle;
+        set
+        {
+            _accessibleTitle = value;
+            if (_strips[(int)UIFrameStrip.Title].Surface is IAccessibleUISurface title)
+            {
+                title.AccessibleName = value;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the margin, border and titlebar sizes.
@@ -239,6 +257,15 @@ public sealed class UIStripFrame : IDisposable
             if (created is null)
             {
                 return;
+            }
+
+            if (created is IAccessibleUISurface accessible)
+            {
+                accessible.Accessible = which == UIFrameStrip.Title;
+                if (which == UIFrameStrip.Title)
+                {
+                    accessible.AccessibleName = _accessibleTitle;
+                }
             }
 
             _fill(which, created);

@@ -18,6 +18,8 @@ public sealed class AccentSwatch : ObservableModel
 
     public IBrush Fill { get; }
 
+    public string Label => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Accent color #{Argb & 0xFFFFFF:X6}");
+
     public ICommand ChooseCommand { get; }
 
     public bool IsCurrent

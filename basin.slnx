@@ -46,6 +46,7 @@
     <Project Path="src/Basin.Greetd/Basin.Greetd.csproj" />
     <Project Path="src/Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
     <Project Path="src/Basin.Greetd.Host/Basin.Greetd.Host.csproj" />
+    <Project Path="src/Basin.Accessibility/Basin.Accessibility.csproj" />
     <Project Path="src/Basin.Notifications/Basin.Notifications.csproj" />
     <Project Path="src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
     <Project Path="src/Basin.Backend.Wayland.Skia/Basin.Backend.Wayland.Skia.csproj" />

@@ -370,7 +370,7 @@ public sealed partial class GreeterHost : IDisposable
             },
             Pressed = () => Pressed?.Invoke(),
             TouchFramed = () => _outputs.ScheduleAll(),
-            KeyHook = (time, key, pressed) => (_options.ReaderChord && ReaderChord(key, pressed)) || KeyHook?.Invoke(time, key, pressed) == true,
+            KeyHook = (time, key, pressed) => (_options.ReaderChord && ReaderChord(key, pressed)) || AccessChord(key, pressed) || KeyHook?.Invoke(time, key, pressed) == true,
         };
         _seat.Binder.VtSwitching = true;
         if (_box.Surface is { } realized)
@@ -392,12 +392,46 @@ public sealed partial class GreeterHost : IDisposable
         _reader.Started += process => BasinReport.Line($"READER on pid={process.Pid}");
         _reader.StartFailed += _ => BasinReport.Line("READER failed");
         _reader.Stopped += () => BasinReport.Line("READER off");
+        var aids = _seat.Binder.UseKeyboardAids(_host.Loop);
+        aids.Options = _options.Settings.KeyboardAids;
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = _options.Program,
+            Host = _host,
+            Scene = _scene,
+            Seat = _seatState,
+            Pointer = _seat.Binder.Pointer,
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Aids = aids,
+            Reader = _reader,
+            StartToolkit = _ui is AvaloniaUIHost avalonia
+                ? avalonia.StartAccessibilityAsync
+                : static () => Task.FromResult<string?>("the greeter's toolkit has no accessibility tree"),
+            Log = _log,
+        });
+        _cursor.Curtain = _access.Curtain;
     }
+
+    private Basin.Accessibility.DesktopAccessibility? _access;
+
+    /// <summary>
+    /// Gets the greeter's accessibility suite: the reader, zoom, the curtain and the keyboard aids. It is <see langword="null"/> before the host starts.
+    /// </summary>
+    public Basin.Accessibility.DesktopAccessibility? Accessibility => _access;
 
     /// <summary>
     /// Starts the accessibility tree in the background and prints <c>A11Y on</c> or <c>A11Y off</c>. A host that is not Avalonia always prints <c>A11Y off</c>.
     /// </summary>
-    public void StartAccessibility() => _ = StartAtSpiAsync();
+    public void StartAccessibility() => _ = StartAccessibilityTreeAsync();
+
+    private async Task StartAccessibilityTreeAsync()
+    {
+        if (_access is { } access)
+        {
+            await access.StartAsync(AccessibilityMode.On);
+        }
+    }
 
     /// <summary>
     /// Stops the loop. The first call sets the exit reason and status. The reason <c>start</c> marks a session start for the handoff.
@@ -524,19 +558,28 @@ public sealed partial class GreeterHost : IDisposable
         ["GDK_BACKEND"] = "wayland",
     };
 
-    private async Task StartAtSpiAsync()
+
+    private bool AccessChord(uint key, bool pressed)
     {
-        var reason = _ui is AvaloniaUIHost avalonia ? await avalonia.StartAccessibilityAsync() : "the greeter's toolkit has no accessibility tree";
-        if (reason is null)
+        if (key == KeyS || _access is not { } access || Basin.Accessibility.DesktopAccessibility.DefaultActionForKey(key) is not { } action ||
+            _seatState.Keyboard.Keymap is not { } keymap)
         {
-            BasinReport.Line("A11Y on");
-            _reader?.AccessibilityStarted(true);
-            return;
+            return false;
         }
 
-        _log.Info($"accessibility: no tree, {reason}");
-        BasinReport.Line("A11Y off");
-        _reader?.AccessibilityStarted(false);
+        var (depressed, _, _, _) = _seatState.Keyboard.ModifierState;
+        if (keymap.GetModIndex("Mod4") is not { } super || keymap.GetModIndex("Mod1") is not { } alt ||
+            (depressed & (1u << (int)super)) == 0 || (depressed & (1u << (int)alt)) == 0)
+        {
+            return false;
+        }
+
+        if (pressed)
+        {
+            access.Run(action);
+        }
+
+        return true;
     }
 
     private bool ReaderChord(uint key, bool pressed)
@@ -569,6 +612,8 @@ public sealed partial class GreeterHost : IDisposable
         _host.DisconnectClients();
         _ipc?.Dispose();
         _settle?.Dispose();
+        _access?.Dispose();
+        _access = null;
         _reader?.Dispose();
         _processes.TerminateAll(TimeSpan.FromMilliseconds(500));
         _processes.Dispose();

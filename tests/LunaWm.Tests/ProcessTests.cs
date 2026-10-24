@@ -245,4 +245,29 @@ public sealed class ProcessTests
         await session.SendAsync("quit");
         Assert.NotNull(await session.WaitForAsync(line => Starts(line, "FRAMES ")));
     }
+
+    [Fact]
+    public async Task Super_alt_8_zooms_and_super_alt_c_draws_the_screen_curtain()
+    {
+        var compositor = LunaSession.Compositor();
+        using var config = new TempConfig(TempConfig.Quiet + "\n\n[input.keyboard]\nlayout = \"us\"\n");
+        using var session = new LunaSession(compositor, config.Path, config.Environment);
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
+        async Task AccessChord(int key)
+        {
+            foreach (var (code, pressed) in new[] { (125, 1), (56, 1), (key, 1), (key, 0), (56, 0), (125, 0) })
+            {
+                await session.SendAsync($"key {code} {pressed}");
+            }
+        }
+
+        await AccessChord(9);
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=2"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN on"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN off"));
+        await AccessChord(12);
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=1.6"));
+    }
 }

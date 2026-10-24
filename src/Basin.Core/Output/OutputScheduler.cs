@@ -27,6 +27,7 @@ public sealed class OutputScheduler : IDisposable
     private long _fireLateNanos;
     private bool _pacedFromLastFrame;
     private long _commits;
+    private long _commitsAtFire = -1;
     private bool _disposed;
     private bool _idleRaised = true;
 
@@ -343,6 +344,12 @@ public sealed class OutputScheduler : IDisposable
         }
 
         _repaintQueued = false;
+        if (_commits == _commitsAtFire)
+        {
+            _pacedFromLastFrame = false;
+        }
+
+        _commitsAtFire = _commits;
         _lastFireTick = Environment.TickCount64;
         _lastFireNanos = MonotonicClock.Nanos;
         _fireLateNanos = _armedFireNanos > 0 ? _lastFireNanos - _armedFireNanos : 0;

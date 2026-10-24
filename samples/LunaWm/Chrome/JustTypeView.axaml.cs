@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 
 namespace LunaWm;
@@ -61,6 +62,14 @@ public sealed partial class JustTypeView : UserControl
     }
 
     private void OnRow(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Control { Tag: JustTypeRow row })
+        {
+            Model?.Choose(row);
+        }
+    }
+
+    private void OnRowInvoked(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { Tag: JustTypeRow row })
         {

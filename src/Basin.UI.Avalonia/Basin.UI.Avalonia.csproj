@@ -18,7 +18,8 @@
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Skia" />
-    <PackageReference Include="Avalonia.FreeDesktop.AtSpi" />
+    <PackageReference Include="accesskit-dotnet" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
     <PackageReference Include="Avalonia.HarfBuzz" />
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>

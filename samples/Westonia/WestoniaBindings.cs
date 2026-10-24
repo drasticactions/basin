@@ -60,6 +60,13 @@ internal sealed partial class Westonia
             return _shell.KeyboardTarget is null;
         }
 
+        if (Modifiers.Exactly(ShellModifiers.Super | ShellModifiers.Alt) &&
+            Basin.Accessibility.DesktopAccessibility.DefaultActionForKey(key) is { } action &&
+            _access?.Run(action) == true)
+        {
+            return true;
+        }
+
         if (_ini.Shell.AllowZap &&
             Modifiers.Exactly(ShellModifiers.Ctrl | ShellModifiers.Alt) &&
             key == InputCodes.KeyBackspace)

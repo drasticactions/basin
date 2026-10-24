@@ -6,6 +6,8 @@ namespace TabWm;
 internal sealed partial class TabWm
 {
     private TabAudio? _audio;
+    private AudioSession? _audioSession;
+    private SoundPlayer? _chime;
 
     private void StartAudio()
     {
@@ -20,6 +22,7 @@ internal sealed partial class TabWm
             return;
         }
 
+        _audioSession = session;
         _audio = new TabAudio(session, toplevels, LaunchGroup);
         _audio.Changed += RecomputeAudio;
         RecomputeAudio();
@@ -27,8 +30,37 @@ internal sealed partial class TabWm
 
     private void StopAudio()
     {
+        _chime?.Dispose();
+        _chime = null;
         _audio?.Dispose();
         _audio = null;
+        _audioSession = null;
+    }
+
+    private void PlayReadyChime()
+    {
+        if (Environment.GetEnvironmentVariable("BASIN_MUTE") is { Length: > 0 })
+        {
+            return;
+        }
+
+        if (_audioSession is not { } session)
+        {
+            _log.Info($"accessibility: no ready chime, there is no audio session");
+            return;
+        }
+
+        if (_chime is null)
+        {
+            _chime = SoundPlayer.Create(session, "tab-wm-ready", out var error, role: "Notification");
+            if (_chime is null)
+            {
+                _log.Info($"accessibility: no ready chime, {error}");
+                return;
+            }
+        }
+
+        _chime.Play(ReadyChime.Create(), SoundPlacement.Centered);
     }
 
     private void RecomputeAudio()

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Basin.Capabilities;
 using Prowl.PaperUI;
 using Prowl.PaperUI.Events;
 using Prowl.PaperUI.LayoutEngine;
@@ -14,6 +15,9 @@ namespace Basin.UI.Paper;
 public static class SettingsWidgets
 {
     private const float ScrollStep = 40f;
+
+    [ThreadStatic]
+    private static string? _rowLabel;
     private const float ScrollBarWidth = 6f;
 
     /// <summary>
@@ -35,6 +39,7 @@ public static class SettingsWidgets
         ArgumentNullException.ThrowIfNull(paper);
         ArgumentNullException.ThrowIfNull(theme);
 
+        _rowLabel = label;
         paper.PushID(id);
         var outer = paper.Column("row").Width(paper.Stretch()).Height(UnitValue.Auto).Enter();
         var line = paper.Row("line").Width(paper.Stretch()).Height(theme.RowHeight).Gap(8)
@@ -69,9 +74,10 @@ public static class SettingsWidgets
         using (paper.Row(id).Width(paper.Stretch()).Height(UnitValue.Auto).PaddingBottom(4).Enter())
         {
             paper.Box("spacer").Width(paper.Stretch()).Height(1).IsNotInteractable();
-            paper.Box("text").Width(theme.ControlWidth).Height(UnitValue.Auto)
+            var message = paper.Box("text").Width(theme.ControlWidth).Height(UnitValue.Auto)
                 .Text(text, theme.Font).FontSize(theme.Small).TextColor(color)
                 .Wrap(TextWrapMode.Wrap).Alignment(TextAlignment.Left).IsNotInteractable();
+            PaperAccessibility.For(paper)?.Record(message._handle, AccessibleRole.Label, text);
         }
     }
 
@@ -87,9 +93,10 @@ public static class SettingsWidgets
         ArgumentNullException.ThrowIfNull(paper);
         ArgumentNullException.ThrowIfNull(theme);
 
-        paper.Box(id).Width(paper.Stretch()).Height(MathF.Round(theme.RowHeight * 1.2f))
+        var heading = paper.Box(id).Width(paper.Stretch()).Height(MathF.Round(theme.RowHeight * 1.2f))
             .Text(text, theme.Font).FontSize(MathF.Round(theme.FontSize * 1.15f)).TextColor(theme.Text)
             .Alignment(TextAlignment.BottomLeft).PaddingBottom(4).IsNotInteractable();
+        PaperAccessibility.For(paper)?.Record(heading._handle, AccessibleRole.Heading, text);
     }
 
     /// <summary>
@@ -105,9 +112,10 @@ public static class SettingsWidgets
         ArgumentNullException.ThrowIfNull(paper);
         ArgumentNullException.ThrowIfNull(theme);
 
-        paper.Box(id).Width(paper.Stretch()).Height(UnitValue.Auto).PaddingLeft(14)
+        var note = paper.Box(id).Width(paper.Stretch()).Height(UnitValue.Auto).PaddingLeft(14)
             .Text(text, theme.Font).FontSize(theme.Small).TextColor(color ?? theme.Dim)
             .Wrap(TextWrapMode.Wrap).Alignment(TextAlignment.Left).IsNotInteractable();
+        PaperAccessibility.For(paper)?.Record(note._handle, AccessibleRole.Label, text);
     }
 
     /// <summary>
@@ -144,6 +152,7 @@ public static class SettingsWidgets
         var builder = paper.Box(id).Width(UnitValue.Auto).Height(MathF.Round(theme.RowHeight * 0.8f))
             .Padding(12, 12, 0, 0).Rounded(5).BackgroundColor(fill).BorderColor(theme.Border).BorderWidth(primary ? 0 : 1)
             .Text(text, theme.Font).FontSize(theme.FontSize).TextColor(ink).Alignment(TextAlignment.MiddleCenter);
+        PaperAccessibility.For(paper)?.Record(builder._handle, AccessibleRole.Button, text, enabled ? AccessibleStates.None : AccessibleStates.Disabled, press: enabled ? onClick : null);
         if (!enabled)
         {
             builder.Cursor(PaperCursor.NotAllowed);
@@ -194,6 +203,8 @@ public static class SettingsWidgets
             .OnClick(value, static (setting, _) => setting.Value = !setting.Value)
             .Enter())
         {
+            PaperAccessibility.For(paper)?.Record(
+                paper.CurrentParent, AccessibleRole.CheckBox, _rowLabel ?? id, on ? AccessibleStates.Checked : AccessibleStates.None, press: () => value.Value = !value.Value);
             var knob = height - 4f;
             paper.Box("knob").PositionType(PositionType.SelfDirected)
                 .Position(on ? width - knob - 2f : 2f, 2f).Size(knob, knob).Rounded(knob / 2f)
@@ -221,6 +232,7 @@ public static class SettingsWidgets
         using var row = Row(paper, theme, id, label, value.IsDirty, value.Badge, value.Error, value.Hint);
         var open = paper.GetElementStorage(row.Outer, "open", false);
         var current = value.Value;
+        var combo = -1;
         using (paper.Box("choice").Width(theme.ControlWidth).Height(MathF.Round(theme.RowHeight * 0.8f))
             .Rounded(5).BackgroundColor(theme.Raised).BorderColor(open ? theme.Accent : theme.Border).BorderWidth(1)
             .PaddingLeft(10).PaddingRight(10)
@@ -231,6 +243,10 @@ public static class SettingsWidgets
                 context.paper.SetElementStorage(context.Outer, "open", !context.paper.GetElementStorage(context.Outer, "open", false)))
             .Enter())
         {
+            var outerRow = row.Outer;
+            combo = PaperAccessibility.For(paper)?.Record(
+                paper.CurrentParent, AccessibleRole.ComboBox, label, value: current,
+                press: () => paper.SetElementStorage(outerRow, "open", !paper.GetElementStorage(outerRow, "open", false))) ?? -1;
             var size = MathF.Round(theme.FontSize * 0.35f);
             var ink = theme.Dim;
             paper.DrawForeground((canvas, rect) =>
@@ -269,7 +285,7 @@ public static class SettingsWidgets
             {
                 var choice = choices[i];
                 var selected = string.Equals(choice, current, StringComparison.Ordinal);
-                paper.Box("option", i).Width(paper.Stretch()).Height(MathF.Round(theme.RowHeight * 0.75f))
+                var option = paper.Box("option", i).Width(paper.Stretch()).Height(MathF.Round(theme.RowHeight * 0.75f))
                     .Rounded(4).PaddingLeft(10).BackgroundColor(selected ? theme.Accent : theme.Surface)
                     .Hovered.BackgroundColor(selected ? theme.Accent : theme.Raised).End()
                     .Text(choice, theme.Font).FontSize(theme.FontSize)
@@ -280,6 +296,15 @@ public static class SettingsWidgets
                         context.paper.SetElementStorage(context.Outer, "open", false);
                         context.value.Value = context.choice;
                     });
+                if (PaperAccessibility.For(paper) is { } reader)
+                {
+                    var outerRow = row.Outer;
+                    reader.Record(option._handle, AccessibleRole.ListItem, choice, selected ? AccessibleStates.Selected : AccessibleStates.None, press: () =>
+                    {
+                        paper.SetElementStorage(outerRow, "open", false);
+                        value.Value = choice;
+                    }, parent: combo);
+                }
             }
         }
     }
@@ -316,6 +341,7 @@ public static class SettingsWidgets
             .OnDragging(slider, static (s, e) => s.Set(e.NormalizedPosition.X))
             .Enter())
         {
+            PaperAccessibility.For(paper)?.Record(paper.CurrentParent, AccessibleRole.Slider, label, value: current.ToString(format, CultureInfo.InvariantCulture));
             var bar = MathF.Round(knob * 0.3f);
             paper.Box("rail").PositionType(PositionType.SelfDirected).Position(0, (knob - bar) / 2f)
                 .Size(trackWidth, bar).Rounded(bar / 2f).BackgroundColor(theme.Raised).IsNotInteractable();
@@ -580,7 +606,7 @@ public static class SettingsWidgets
 
         var capturing = ReferenceEquals(capture.Target, value);
         var text = capturing ? "Press keys, or Esc to cancel" : value.Value;
-        paper.Box(id).Width(width).Height(MathF.Round(theme.RowHeight * 0.8f)).Rounded(5)
+        var button = paper.Box(id).Width(width).Height(MathF.Round(theme.RowHeight * 0.8f)).Rounded(5)
             .BackgroundColor(capturing ? theme.Accent : theme.Raised).BorderColor(theme.Border).BorderWidth(capturing ? 0 : 1)
             .PaddingLeft(10).Text(text, theme.Font).FontSize(theme.FontSize)
             .TextColor(capturing ? theme.AccentText : theme.Text).Alignment(TextAlignment.MiddleLeft)
@@ -596,6 +622,17 @@ public static class SettingsWidgets
                     context.capture.Begin(context.value);
                 }
             });
+        PaperAccessibility.For(paper)?.Record(button._handle, AccessibleRole.Button, _rowLabel ?? text, value: text, press: () =>
+        {
+            if (ReferenceEquals(capture.Target, value))
+            {
+                capture.Cancel();
+            }
+            else
+            {
+                capture.Begin(value);
+            }
+        });
     }
 
     /// <summary>
@@ -689,17 +726,24 @@ public static class SettingsWidgets
         using (paper.Column(id).Width(MathF.Round(theme.FontSize * 11f)).Height(paper.Stretch())
             .BackgroundColor(theme.Surface).Padding(8).Gap(2).Enter())
         {
+            var reader = PaperAccessibility.For(paper);
+            var list = reader?.Record(paper.CurrentParent, AccessibleRole.List, "Sections") ?? -1;
             for (var i = 0; i < sections.Count; i++)
             {
                 var active = i == selected;
                 var mark = dirty is not null && i < dirty.Count && dirty[i];
-                paper.Box("section", i).Width(paper.Stretch()).Height(MathF.Round(theme.RowHeight * 0.9f))
+                var item = paper.Box("section", i).Width(paper.Stretch()).Height(MathF.Round(theme.RowHeight * 0.9f))
                     .Rounded(5).PaddingLeft(10).BackgroundColor(active ? theme.Accent : theme.Surface)
                     .Hovered.BackgroundColor(active ? theme.Accent : theme.Raised).End()
                     .Text(mark ? sections[i] + " •" : sections[i], theme.Font).FontSize(theme.FontSize)
                     .TextColor(active ? theme.AccentText : theme.Text).Alignment(TextAlignment.MiddleLeft)
                     .Cursor(PaperCursor.Pointer)
                     .OnClick((select, i), static (context, _) => context.select(context.i));
+                if (reader is not null)
+                {
+                    var index = i;
+                    reader.Record(item._handle, AccessibleRole.ListItem, sections[i], active ? AccessibleStates.Selected : AccessibleStates.None, press: () => select(index), parent: list);
+                }
             }
         }
     }
@@ -821,6 +865,7 @@ public static class SettingsWidgets
             .Enter())
         {
             var handle = paper.CurrentParent;
+            PaperAccessibility.For(paper)?.Record(handle, AccessibleRole.TextInput, _rowLabel ?? placeholder, value: value);
             paper.Box("field").Margin(8, 8, UnitValue.StretchOne, UnitValue.StretchOne).Width(paper.Stretch())
                 .Height(MathF.Round(theme.FontSize * 1.3f)).FontSize(theme.FontSize)
                 .TextField(value, settings, text => paper.SetElementStorage(handle, "draft", text))
@@ -893,6 +938,7 @@ public static class SettingsWidgets
         /// </summary>
         public void Dispose()
         {
+            _rowLabel = null;
             _line.Close();
             _outer.Dispose();
             _paper.PopID();

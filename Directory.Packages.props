@@ -11,6 +11,7 @@
 
   <PropertyGroup>
     <AvaloniaVersion>12.1.4</AvaloniaVersion>
+    <AccessKitVersion>0.23.1.8</AccessKitVersion>
     <!-- samples/TabWm: KDE Union over Avalonia; its Avalonia dependency must equal AvaloniaVersion -->
     <AvaUnionVersion>6.8.0.6</AvaUnionVersion>
     <!-- samples/System7Wm and tests/System7Wm.Tests only, through VersionOverride; must equal external/System7.Avalonia's AvaloniaVersion -->
@@ -90,10 +91,10 @@
     <PackageVersion Include="AvaUnion.Theme" Version="$(AvaUnionVersion)" />
     <PackageVersion Include="AvaUnion.Controls" Version="$(AvaUnionVersion)" />
     <PackageVersion Include="AvaUnion.BreezeIcons" Version="$(AvaUnionVersion)" />
+    <PackageVersion Include="accesskit-dotnet" Version="$(AccessKitVersion)" />
     <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
-    <PackageVersion Include="Avalonia.FreeDesktop.AtSpi" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.HarfBuzz" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />

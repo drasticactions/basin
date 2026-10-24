@@ -43,7 +43,7 @@ internal sealed partial class System7Shell
         };
         System7Theme.SetColorDepth(frame, _config.Depth);
         var root = new Panel { Background = null, Children = { frame } };
-        var surface = new ChromeSurface(container, _ui, _chrome, () => root);
+        var surface = new ChromeSurface(container, _ui, _chrome, () => root, title);
         var group = app ?? _finder;
         var window = new ShellWindow(container, group)
         {

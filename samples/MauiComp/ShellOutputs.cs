@@ -42,10 +42,11 @@ internal sealed class ShellOutputs : IDisposable
 
         var elements = new ShellElements
         {
-            BackgroundSurface = new OutputUISurface(_layers.Background, _host, _index) { PreciseDamage = true },
+            BackgroundSurface = new OutputUISurface(_layers.Background, _host, _index) { PreciseDamage = true, Accessible = false },
             PanelSurface = new OutputUISurface(_layers.Panel, _host, _index)
             {
                 PreciseDamage = true,
+                AccessibleName = "Taskbar",
                 Anchor = (outputBox, _) =>
                     new Box(outputBox.X, outputBox.Bottom - PanelThickness, outputBox.Width, PanelThickness),
             },

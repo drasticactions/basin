@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Using Include="Basin.Testing" />
     <Compile Include="../Basin.Tests/Shared/InspectorScroll.cs" Link="InspectorScroll.cs" />
     <PackageReference Include="Avalonia.Headless.XUnit" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -17,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/EightWm/EightWm.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
@@ -25,10 +27,7 @@
 
   <ItemGroup>
     <Compile Include="../Basin.Tests/Greetd/FakeGreetd.cs" Link="FakeGreetd.cs" />
-    <Compile Include="../BasinGreeter.Tests/AccessibilityBus.cs" Link="AccessibilityBus.cs" />
-    <Compile Include="../BasinGreeter.Tests/AtSpiTree.cs" Link="AtSpiTree.cs" />
     <Compile Include="../BasinGreeter.Tests/TempDir.cs" Link="TempDir.cs" />
-    <Compile Include="../Basin.Tests/Portal/PrivateBus.cs" Link="PrivateBus.cs" />
     <None Include="Goldens/**" />
   </ItemGroup>
 

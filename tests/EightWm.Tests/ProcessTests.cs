@@ -516,6 +516,23 @@ public sealed class ProcessTests
         public void Dispose() => File.Delete(Path);
     }
 
+    [Fact]
+    public async Task Super_alt_8_zooms_and_super_alt_c_draws_the_screen_curtain()
+    {
+        var (compositor, _) = Prerequisites()!.Value;
+        using var config = new TempFile(Config);
+        using var session = new Session(compositor, config.Path);
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
+        await session.SendAsync("key Super+Alt+8");
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=2"));
+        await session.SendAsync("key Super+Alt+c");
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN on"));
+        await session.SendAsync("key Super+Alt+c");
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN off"));
+        await session.SendAsync("key Super+Alt+minus");
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=1.6"));
+    }
+
     private sealed class Session : IDisposable
     {
         private readonly Process _process;

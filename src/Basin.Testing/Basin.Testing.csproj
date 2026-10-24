@@ -4,13 +4,14 @@
     <PackageId>Basin.Testing</PackageId>
     <RootNamespace>Basin.Testing</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Conformance tests for the Basin capabilities.</Description>
+    <Description>Conformance tests for the Basin capabilities, and an AT-SPI test kit for accessibility trees.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
     <PackageReference Include="xunit.v3.extensibility.core" />
     <PackageReference Include="xunit.v3.assert" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
   </ItemGroup>
 
 </Project>

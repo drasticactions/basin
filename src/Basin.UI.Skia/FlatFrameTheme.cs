@@ -101,6 +101,11 @@ public sealed class FlatFrameTheme : IDisposable
     public Func<string, int, SKImage?>? Icons { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the frames are black with white titles and a yellow outline, whatever color scheme the window asks for.
+    /// </summary>
+    public bool HighContrast { get; set; }
+
+    /// <summary>
     /// Looks up a named icon through <see cref="Icons"/>.
     /// </summary>
     /// <param name="name">The icon name or the app id.</param>

@@ -17,6 +17,13 @@ public sealed partial class Scene
     public IReadOnlyList<SceneOutput> Outputs => _outputs;
 
     /// <summary>
+    /// Gets every output that zoom can magnify: each attached <see cref="SceneOutput"/> and each <see cref="ZoomView"/>.
+    /// </summary>
+    public IReadOnlyList<IZoomable> Zoomables => _zoomables;
+
+    private readonly List<IZoomable> _zoomables = [];
+
+    /// <summary>
     /// Occurs when the color description of a buffer node changes.
     /// </summary>
     public event Action<SceneBuffer>? ColorDescriptionChanged;
@@ -82,9 +89,21 @@ public sealed partial class Scene
         CollectColorDescriptions(Root, descriptions);
     }
 
-    internal void Attach(SceneOutput output) => _outputs.Add(output);
+    internal void Attach(SceneOutput output)
+    {
+        _outputs.Add(output);
+        _zoomables.Add(output);
+    }
 
-    internal void Detach(SceneOutput output) => _outputs.Remove(output);
+    internal void Detach(SceneOutput output)
+    {
+        _outputs.Remove(output);
+        _zoomables.Remove(output);
+    }
+
+    internal void AttachZoomable(IZoomable zoomable) => _zoomables.Add(zoomable);
+
+    internal void DetachZoomable(IZoomable zoomable) => _zoomables.Remove(zoomable);
 
     internal void AttachColorTables(OutputColorTables tables) => _colorTables.Add(tables);
 

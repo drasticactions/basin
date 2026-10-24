@@ -233,7 +233,31 @@ internal sealed partial class MauiComp : IDisposable
         {
             parent.ParentGone += Stop;
         }
+
+        if (_seat is { } seat)
+        {
+            seat.Binder.UseKeyboardAids(_host.Loop);
+            _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+            {
+                Name = "maui-comp",
+                Host = _host,
+                Scene = _scene,
+                Seat = Seat,
+                Pointer = seat.Binder.Pointer,
+                Processes = _processes,
+                TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+                Toplevels = _services.Find<Basin.Capabilities.IToplevelModel>(),
+                Aids = seat.Binder.Aids,
+                StartToolkit = _ui.StartAccessibilityAsync,
+                Log = _log,
+            });
+            _access.Apply(_config.Accessibility);
+            _cursor.Curtain = _access.Curtain;
+            _ = _access.StartAsync(_config.Accessibility.Enabled);
+        }
     }
+
+    private Basin.Accessibility.DesktopAccessibility? _access;
 
     internal string RendererName { get; }
 
@@ -345,6 +369,8 @@ internal sealed partial class MauiComp : IDisposable
         _ipc?.Dispose();
         _settle?.Dispose();
         _ipc = null;
+        _access?.Dispose();
+        _access = null;
         _colorPack.Luts.Dispose();
         _processes.TerminateAll(TimeSpan.FromMilliseconds(500));
         _processes.Dispose();

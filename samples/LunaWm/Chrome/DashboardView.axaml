@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:Basin.UI.Avalonia"
              xmlns:enyo="https://github.com/avaenyo"
              xmlns:luna="using:LunaWm"
              x:Class="LunaWm.DashboardView"
@@ -13,8 +14,8 @@
             <DataTemplate DataType="luna:DashboardGroupModel">
               <StackPanel>
                 <enyo:SwipeableItem Classes="dashrow" Height="52" Padding="0" Tag="{Binding}" Swiped="OnGroupSwiped">
-                  <DockPanel Background="Transparent" Tag="{Binding}" PointerReleased="OnGroupTapped">
-                    <Border DockPanel.Dock="Left" Width="50" Background="Transparent" Tag="{Binding}" PointerReleased="OnBadge">
+                  <DockPanel Background="Transparent" Tag="{Binding}" PointerReleased="OnGroupTapped" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnGroupInvoked">
+                    <Border DockPanel.Dock="Left" Width="50" Background="Transparent" Tag="{Binding}" PointerReleased="OnBadge" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Expand" ui:ChromeAutomation.Invoked="OnBadgeInvoked">
                       <Panel Width="32" Height="32">
                         <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" />
                         <Border CornerRadius="8" Background="#4B4B4B" IsVisible="{Binding !HasIcon}">
@@ -35,7 +36,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="luna:DashboardItemModel">
                       <enyo:SwipeableItem Classes="dashrow" Height="52" Padding="0" Tag="{Binding}" Swiped="OnItemSwiped">
-                        <StackPanel Background="Transparent" VerticalAlignment="Center" Tag="{Binding}" PointerReleased="OnItemTapped">
+                        <StackPanel Background="Transparent" VerticalAlignment="Center" Tag="{Binding}" PointerReleased="OnItemTapped" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnItemInvoked">
                           <TextBlock Classes="dashsummary" Text="{Binding Summary}" />
                           <TextBlock Classes="dashbody" Text="{Binding Body}" IsVisible="{Binding HasBody}" />
                         </StackPanel>

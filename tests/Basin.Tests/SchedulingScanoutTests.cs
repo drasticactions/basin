@@ -398,6 +398,41 @@ public sealed class OutputSchedulerTests
     }
 
     [Fact]
+    public void An_idle_gap_after_a_repaint_that_committed_nothing_is_not_a_missed_vblank()
+    {
+        using var host = new CompositorTestHost();
+        using var scheduler = new OutputScheduler(host.Loop, host.Output);
+        var commit = true;
+        var fired = false;
+        scheduler.Repaint += () =>
+        {
+            fired = true;
+            if (commit)
+            {
+                scheduler.NotifyCommitted();
+            }
+        };
+
+        scheduler.ScheduleRepaint();
+        SpinUntil(host, () => fired);
+        scheduler.ScheduleRepaint();
+        host.Output.StepFrame();
+
+        commit = false;
+        fired = false;
+        SpinUntil(host, () => fired);
+        System.Threading.Thread.Sleep(40);
+
+        commit = true;
+        fired = false;
+        scheduler.ScheduleRepaint();
+        SpinUntil(host, () => fired);
+        host.Output.StepFrame();
+
+        Assert.Equal(0, scheduler.MissedVblanks);
+    }
+
+    [Fact]
     public void A_cycle_lost_while_a_repaint_was_pending_is_a_missed_vblank()
     {
         using var host = new CompositorTestHost();

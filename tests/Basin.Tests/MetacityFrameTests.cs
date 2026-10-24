@@ -539,13 +539,7 @@ public sealed class MetacityFrameTests
             host.RenderFrame();
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 1000; i++)
-        {
-            host.RenderFrame();
-        }
-
-        var idle = GC.GetAllocatedBytesForCurrentThread() - before;
+        ZeroAllocationTests.NothingAllocated(1000, _ => host.RenderFrame());
 
         var close = rig.Renderer.PartBounds(FramePart.Close);
         var hotX = 20 - frame.Insets.Left + close.X + 1;
@@ -556,19 +550,13 @@ public sealed class MetacityFrameTests
             frame.PointerMotion(90, hotY);
         }
 
-        before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 200; i++)
+        ZeroAllocationTests.NothingAllocated(200, _ =>
         {
             frame.PointerMotion(hotX, hotY);
             frame.PointerMotion(90, hotY);
-        }
-
-        var hover = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
         frame.Dispose();
         client.Destroy();
-
-        Assert.Equal(0, idle);
-        Assert.Equal(0, hover);
     }
 
     [Fact]

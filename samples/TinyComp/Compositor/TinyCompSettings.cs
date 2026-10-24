@@ -164,6 +164,7 @@ internal sealed partial class TinyComp
 
         ApplyTouchSettings();
         ApplyXWaylandScale();
+        ApplyAppearance();
 
         if (background)
         {
@@ -209,6 +210,7 @@ internal sealed partial class TinyComp
         ApplyQuill(next);
         ApplyGlass(glassBefore, next);
         ApplyFrameStyle(next.FrameStyle);
+        ApplyFlatContrast(next.Accessibility.HighContrast);
         if (chromeBefore != (_frameStyle, _frameTheme, _metacity, _msstyles, _quillTheme))
         {
             RebuildHostChrome();
@@ -462,6 +464,25 @@ internal sealed partial class TinyComp
             {
                 xwindow.RebuildFrame();
             }
+        }
+    }
+
+    private void ApplyFlatContrast(bool highContrast)
+    {
+        if (_flatTheme is not { } flat || flat.HighContrast == highContrast)
+        {
+            return;
+        }
+
+        flat.HighContrast = highContrast;
+        foreach (var window in _windows)
+        {
+            window.RebuildFrame();
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            xwindow.RebuildFrame();
         }
     }
 

@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
 namespace LunaWm;
@@ -65,6 +66,24 @@ public sealed partial class SystemMenuView : UserControl
     }
 
     private void OnAction(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Control { Tag: ActionRow row, IsEffectivelyEnabled: true })
+        {
+            row.Invoked?.Invoke();
+            Model?.Choose(row);
+        }
+    }
+
+    private void OnToggleInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: ToggleRow row })
+        {
+            row.Toggle();
+            Model?.Choose(row);
+        }
+    }
+
+    private void OnActionInvoked(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { Tag: ActionRow row, IsEffectivelyEnabled: true })
         {

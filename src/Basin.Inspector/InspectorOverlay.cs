@@ -11,7 +11,7 @@ namespace Basin.Inspector;
 /// <summary>
 /// The inspector: one ImGui surface that covers one output and draws a menu bar and each shown <see cref="IInspectorPanel"/>. Input passes through it except over a panel, the menu bar or a popup.
 /// </summary>
-public sealed unsafe class InspectorOverlay : IImGuiContent, IDisposable
+public sealed unsafe class InspectorOverlay : IImGuiContent, Basin.Capabilities.IAccessibleChrome, IDisposable
 {
     private readonly ImGuiUIHost _host;
     private readonly SceneTree _layer;
@@ -89,6 +89,33 @@ public sealed unsafe class InspectorOverlay : IImGuiContent, IDisposable
     /// Occurs when the overlay opens or closes, or when a panel is shown or hidden from code, the menu or its close button.
     /// </summary>
     public event Action? Changed;
+
+    /// <summary>
+    /// Describes the open overlay to a screen reader as one window with a label that names the shown panels.
+    /// Dear ImGui keeps no accessibility tree, so the panels' contents are not described.
+    /// </summary>
+    /// <param name="tree">The builder to write into.</param>
+    public void Describe(Basin.Capabilities.AccessibleTreeBuilder tree)
+    {
+        if (!_shown || _node is not { } node || node.Width <= 0)
+        {
+            return;
+        }
+
+        var box = new Box(node.X, node.Y, node.Width, node.Height);
+        var shown = new List<string>();
+        for (var i = 0; i < _panels.Count; i++)
+        {
+            if (_open[i])
+            {
+                shown.Add(System.Text.Encoding.UTF8.GetString(_panels[i].Name));
+            }
+        }
+
+        var window = tree.Add(-1, new Basin.Capabilities.AccessibleNode(Basin.Capabilities.AccessibleRole.Window, "Inspector", box));
+        var text = shown.Count == 0 ? "No panel is shown" : "Panels: " + string.Join(", ", shown);
+        tree.Add(window, new Basin.Capabilities.AccessibleNode(Basin.Capabilities.AccessibleRole.Label, text, box));
+    }
 
     /// <summary>
     /// Adds a panel. <see cref="Dispose"/> disposes each panel that is <see cref="IDisposable"/>.

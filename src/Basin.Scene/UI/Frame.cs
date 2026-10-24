@@ -11,12 +11,15 @@ namespace Basin.Scene;
 /// <remarks>
 /// All members must be called on the thread that created the frame. A renderer or host exception faults the frame for good and raises <see cref="Faulted"/>.
 /// </remarks>
-public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, IDisposable
+public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, IAccessibleChrome, IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly FrameHosts _hosts;
     private readonly IFrameRenderer _renderer;
     private readonly SceneTree _tree;
+    private static readonly FramePart[] AccessibleParts = [FramePart.Menu, FramePart.Shade, FramePart.Minimize, FramePart.Maximize, FramePart.Close];
+    private Box _describedBounds;
+    private FrameState _describedState;
     private readonly SceneBuffer[] _strips;
     private readonly Box[] _stripBoxes;
     private readonly PixmanRegion32 _scratch = new();
@@ -195,6 +198,87 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     /// <returns>The strip box from the last <see cref="Commit"/>.</returns>
     /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside 0 to 3.</exception>
     public Box StripBounds(int index) => _stripBoxes[index];
+
+    /// <summary>
+    /// Occurs after a <see cref="Commit"/> that changes the title, the active or maximized state, or the outer box, while a screen reader tree listens.
+    /// </summary>
+    public event Action? Changed;
+
+    /// <summary>
+    /// Describes the frame as a group named after the window title, with one button for each caption button that the renderer drew.
+    /// It writes nothing before the first commit or while the frame is hidden.
+    /// </summary>
+    /// <param name="tree">The builder to write into.</param>
+    public void Describe(AccessibleTreeBuilder tree)
+    {
+        _thread.Assert();
+        if (!_shownValid || _faulted || _disposed || !_tree.Enabled)
+        {
+            return;
+        }
+
+        var state = _shownState;
+        var name = state.Title is { Length: > 0 } title ? title : state.AppId;
+        var frame = tree.Add(-1, new AccessibleNode(AccessibleRole.Group, name, ToScene(OuterBounds), state.Active ? AccessibleStates.Focused : AccessibleStates.None));
+        var surfaceX = _shownGeometry.X - _shownInsets.Left - _shownOutsets.Left;
+        var surfaceY = _shownGeometry.Y - _shownInsets.Top - _shownOutsets.Top;
+        foreach (var part in AccessibleParts)
+        {
+            Box box;
+            try
+            {
+                box = _renderer.PartBounds(part);
+            }
+            catch (Exception e)
+            {
+                Fault(e);
+                return;
+            }
+
+            if (box.Width <= 0 || box.Height <= 0)
+            {
+                continue;
+            }
+
+            var label = part switch
+            {
+                FramePart.Close => "Close",
+                FramePart.Maximize => state.Maximized ? "Restore" : "Maximize",
+                FramePart.Minimize => "Minimize",
+                FramePart.Shade => "Shade",
+                _ => "Window menu",
+            };
+            var pressed = part;
+            tree.Add(frame, new AccessibleNode(AccessibleRole.Button, label, ToScene(new Box(surfaceX + box.X, surfaceY + box.Y, box.Width, box.Height)), Press: () => Invoke(pressed)));
+        }
+    }
+
+    /// <summary>
+    /// Runs a caption button's action as a click on it does: <see cref="Requested"/> gets close, maximize, minimize or shade.
+    /// A part with no action does nothing.
+    /// </summary>
+    /// <param name="part">The caption button.</param>
+    public void Invoke(FramePart part)
+    {
+        _thread.Assert();
+        if (_disposed)
+        {
+            return;
+        }
+
+        FrameActionKind? kind = part switch
+        {
+            FramePart.Close => FrameActionKind.Close,
+            FramePart.Maximize => FrameActionKind.ToggleMaximize,
+            FramePart.Minimize => FrameActionKind.Minimize,
+            FramePart.Shade => FrameActionKind.ToggleShade,
+            _ => null,
+        };
+        if (kind is { } action)
+        {
+            Requested?.Invoke(new FrameAction(action));
+        }
+    }
 
     /// <summary>
     /// Gets the box of the client plus the chrome, outsets excluded, from the last <see cref="Commit"/>. It is in parent tree coordinates.
@@ -536,6 +620,13 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
 
         DismissMenu();
         Committed?.Invoke();
+        if (Changed is not null && (outer != _describedBounds || _shownState.Title != _describedState.Title || _shownState.Active != _describedState.Active || _shownState.Maximized != _describedState.Maximized))
+        {
+            _describedBounds = outer;
+            _describedState = _shownState;
+            Changed.Invoke();
+        }
+
         RedrawPlacement();
     }
 
@@ -734,6 +825,8 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         var sy = y - (_shownGeometry.Y - _shownInsets.Top - o.Top);
         return SurfacePartAt(sx, sy);
     }
+
+    private Box ToScene(in Box box) => _tree.Parent is { } parent ? parent.MapToScene(box) : box;
 
     private FramePart SurfacePartAt(double sx, double sy)
     {

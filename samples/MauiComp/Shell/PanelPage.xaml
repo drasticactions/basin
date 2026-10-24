@@ -21,6 +21,9 @@
       <Border.GestureRecognizers>
         <TapGestureRecognizer Tapped="OnLauncherTapped" />
       </Border.GestureRecognizers>
+      <Border.Behaviors>
+        <shell:ReaderButton Label="Start" Invoked="OnLauncherInvoked" />
+      </Border.Behaviors>
       <Label Text=".NET MAUI"
              FontSize="15"
              FontAttributes="Bold"
@@ -53,6 +56,9 @@
             <Border.GestureRecognizers>
               <TapGestureRecognizer Command="{Binding Activate}" />
             </Border.GestureRecognizers>
+            <Border.Behaviors>
+              <shell:ReaderButton Label="{Binding Title}" />
+            </Border.Behaviors>
             <Label Text="{Binding Title}"
                    FontSize="13"
                    TextColor="White"

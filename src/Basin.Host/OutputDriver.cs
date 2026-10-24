@@ -1371,6 +1371,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
             _scene.Damaged -= damage;
         }
 
+        view.Zoom?.Dispose();
+        view.Zoom = null;
+
         view.Scheduler?.Dispose();
         RenderFences.CloseFence(view.RenderFence);
         view.RenderFence = -1;
@@ -1517,6 +1520,8 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
             _secondaryDamage[view] = OnDamage;
             _scene.Damaged += OnDamage;
+            view.Zoom = new ZoomView(_scene, view.Output) { Position = new Point(view.Box.X, view.Box.Y) };
+            view.Zoom.Changed += scheduler.ScheduleRepaint;
             view.Color = new OutputColorTables(_scene);
             view.Color.Rebuilt += scheduler.ScheduleRepaint;
             scheduler.ScheduleRepaint();
@@ -1831,12 +1836,28 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
                 return;
             }
         }
+        else if (_scene.Curtain is { IsDrawn: true })
+        {
+            var pass = _renderer.BeginBufferPass(buffer, new RenderPassOptions());
+            pass.AddRect(RenderColor.Black, new Box(0, 0, buffer.Width, buffer.Height));
+            if (!pass.Submit())
+            {
+                return;
+            }
+        }
         else
         {
+            var projection = OutputProjection.For(view.Output);
+            if (view.Zoom is { } zoom)
+            {
+                zoom.Position = new Point(view.Box.X, view.Box.Y);
+                projection = zoom.Projection;
+            }
+
             var rendered = _scene.Render(_renderer, buffer, new SceneRenderOptions
             {
                 Background = Background,
-                Projection = OutputProjection.For(view.Output),
+                Projection = projection,
                 Luts = view.Color,
                 ColorDescription = view.Color?.ColorDescription,
                 OriginX = view.Box.X,

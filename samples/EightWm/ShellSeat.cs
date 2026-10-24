@@ -190,6 +190,10 @@ internal sealed partial class ShellSeat :
 
     internal SeatInjector Injector => _injector;
 
+    internal SeatBinder Binder => _binder;
+
+    internal CursorController Cursor => _cursor;
+
     internal void InjectKey(uint code, bool pressed) => _injector.Key(code, pressed);
 
     internal void ClickAt()

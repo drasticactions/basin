@@ -37,7 +37,10 @@ internal sealed partial class TinyComp
         keyboard.Key += (time, key, pressed) =>
         {
             _seat.Keyboard.Activate(null);
-            HandleKey(time, key, pressed);
+            if (!_seat.Keyboard.IsKeyBlocked(time, key, pressed))
+            {
+                HandleKey(time, key, pressed);
+            }
         };
     }
 
@@ -436,6 +439,26 @@ internal sealed partial class TinyComp
                 ToggleInspector();
                 return true;
 
+            case KeyAction.ScreenReader:
+                _access?.Run("screen-reader");
+                return true;
+
+            case KeyAction.Magnifier:
+                _access?.Run("magnifier");
+                return true;
+
+            case KeyAction.MagnifierIn:
+                _access?.Run("magnifier-in");
+                return true;
+
+            case KeyAction.MagnifierOut:
+                _access?.Run("magnifier-out");
+                return true;
+
+            case KeyAction.ScreenCurtain:
+                _access?.Run("screen-curtain");
+                return true;
+
             case KeyAction.Settings:
                 if (ToggleSettings() is { } unavailable)
                 {
@@ -467,6 +490,7 @@ internal sealed partial class TinyComp
 
         var index = _focused is null ? 0 : (members.IndexOf(_focused) + 1) % members.Count;
         FocusWindow(members[index]);
+        AccessibleChrome?.Announce(members[index].Toplevel.Title is { Length: > 0 } title ? title : members[index].Toplevel.AppId ?? "Window");
     }
 
     private readonly List<IGrabTarget> _switcherWindows = [];

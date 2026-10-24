@@ -210,7 +210,7 @@ internal sealed partial class TabWm
     {
         var model = CreateLauncherViewModel(() => SetOf(set.Output)?.Active, overlay: true);
         var view = new LauncherView { DataContext = model };
-        if (OpenOverlay(set, view, model, 900, 640))
+        if (OpenOverlay(set, view, model, "Launcher", 900, 640))
         {
             view.FocusSearch();
             BasinReport.Line($"LAUNCHER overlay shown output={set.Output.Name}");
@@ -221,7 +221,7 @@ internal sealed partial class TabWm
         }
     }
 
-    private bool OpenOverlay(TabSet set, Control view, LauncherViewModel? model, int maxWidth, int maxHeight)
+    private bool OpenOverlay(TabSet set, Control view, LauncherViewModel? model, string name, int maxWidth, int maxHeight)
     {
         CloseOverlay();
         var work = set.Work;
@@ -235,6 +235,7 @@ internal sealed partial class TabWm
 
         var dim = new SceneRect(_layers.Launcher, work.Width, work.Height, new RenderColor(0f, 0f, 0f, 0.4f));
         dim.SetPosition(work.X, work.Y);
+        surface.AccessibleName = name;
         surface.Content = view;
         surface.SetPosition(box.X, box.Y);
         var node = new UISurfaceNode(_layers.Launcher, surface, _index) { PreciseDamage = true };

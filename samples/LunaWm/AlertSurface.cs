@@ -15,7 +15,7 @@ internal sealed class AlertSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = model;
         View = new AlertView { DataContext = model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Alert") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

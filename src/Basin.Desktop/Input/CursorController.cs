@@ -158,6 +158,11 @@ public sealed class CursorController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(output);
         _outputs.Add((output, scene));
+        if (scene is not null)
+        {
+            scene.ZoomChanged += OnZoomChanged;
+        }
+
         output.Committed += OnOutputCommitted;
         output.Frame += OnOutputFrame;
         Refresh();
@@ -172,6 +177,11 @@ public sealed class CursorController : IDisposable
         ArgumentNullException.ThrowIfNull(output);
         output.Committed -= OnOutputCommitted;
         output.Frame -= OnOutputFrame;
+        if (SceneOf(output) is { } scene)
+        {
+            scene.ZoomChanged -= OnZoomChanged;
+        }
+
         _outputs.RemoveAll(entry => ReferenceEquals(entry.Output, output));
         if (ReferenceEquals(_cursorOn, output))
         {
@@ -398,6 +408,56 @@ public sealed class CursorController : IDisposable
     public bool IsHidden => _hidden;
 
     /// <summary>
+    /// Gets or sets the screen curtain. The cursor leaves every output while the curtain is drawn.
+    /// </summary>
+    public IScreenCurtain? Curtain
+    {
+        get => _curtain;
+        set
+        {
+            if (_curtain is { } previous)
+            {
+                previous.Changed -= OnCurtainChanged;
+            }
+
+            _curtain = value;
+            if (value is not null)
+            {
+                value.Changed += OnCurtainChanged;
+            }
+
+            OnCurtainChanged();
+        }
+    }
+
+    private IScreenCurtain? _curtain;
+    private bool _curtained;
+
+    private void OnCurtainChanged()
+    {
+        var drawn = _curtain is { IsDrawn: true };
+        if (drawn == _curtained)
+        {
+            return;
+        }
+
+        _curtained = drawn;
+        if (_parentMode)
+        {
+            return;
+        }
+
+        if (drawn)
+        {
+            Withdraw();
+        }
+        else if (!_hidden)
+        {
+            Present(force: true);
+        }
+    }
+
+    /// <summary>
     /// Hides the cursor on every output, or on the host in parent mode, until <see cref="Reveal"/>.
     /// </summary>
     public void Hide()
@@ -489,10 +549,20 @@ public sealed class CursorController : IDisposable
     public void Dispose()
     {
         _layout.Changed -= Refresh;
+        if (_curtain is { } curtain)
+        {
+            curtain.Changed -= OnCurtainChanged;
+            _curtain = null;
+        }
+
         foreach (var entry in _outputs)
         {
             entry.Output.Committed -= OnOutputCommitted;
             entry.Output.Frame -= OnOutputFrame;
+            if (entry.Scene is { } scene)
+            {
+                scene.ZoomChanged -= OnZoomChanged;
+            }
         }
 
         _outputs.Clear();
@@ -507,6 +577,14 @@ public sealed class CursorController : IDisposable
         _images = null;
         _allocator?.Dispose();
         _allocator = null;
+    }
+
+    private void OnZoomChanged(SceneOutput scene)
+    {
+        if (_cursorOn is { } output && ReferenceEquals(SceneOf(output), scene) && _software != scene.IsZoomed && !_hidden && !_parentMode)
+        {
+            Present(force: true);
+        }
     }
 
     private void ApplyClientCursor(bool force = false)
@@ -609,7 +687,7 @@ public sealed class CursorController : IDisposable
 
     private void Present(bool force = false)
     {
-        if (_hidden || _showing is not { } image)
+        if (_hidden || _curtained || _showing is not { } image)
         {
             return;
         }
@@ -652,6 +730,7 @@ public sealed class CursorController : IDisposable
         {
             if (!image.Clipped &&
                 output.Transform == OutputTransform.Normal &&
+                scene is not { IsZoomed: true } &&
                 output is IHardwareCursor plane &&
                 plane.SetCursor(image.Buffer, image.HotspotX, image.HotspotY))
             {
@@ -676,6 +755,12 @@ public sealed class CursorController : IDisposable
         var scale = output.Scale;
         var x = (int)((_x - box.X) * scale);
         var y = (int)((_y - box.Y) * scale);
+        if (!_software && scene is null && ZoomOf(output) is { ZoomFactor: > 1.0 } zoom)
+        {
+            var (left, top, _, _) = zoom.ZoomArea;
+            x = (int)((_x - left) * scale * zoom.ZoomFactor);
+            y = (int)((_y - top) * scale * zoom.ZoomFactor);
+        }
         if (_software)
         {
             scene?.MoveSoftwareCursor(x, y);
@@ -715,6 +800,27 @@ public sealed class CursorController : IDisposable
                 image.Width,
                 image.Height,
                 IsVisible: true));
+    }
+
+    private IZoomable? ZoomOf(IOutput output)
+    {
+        foreach (var entry in _outputs)
+        {
+            if (entry.Scene is { } any)
+            {
+                foreach (var zoomable in any.Scene.Zoomables)
+                {
+                    if (ReferenceEquals(zoomable.Output, output))
+                    {
+                        return zoomable;
+                    }
+                }
+
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private SceneOutput? SceneOf(IOutput output)

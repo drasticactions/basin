@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/Westonia/Westonia.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.Portal.Prompts.Avalonia/Basin.Portal.Prompts.Avalonia.csproj" />

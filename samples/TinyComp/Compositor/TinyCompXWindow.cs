@@ -471,6 +471,11 @@ internal sealed partial class TinyComp
             _cornerRig?.Dispose();
             _cornerRig = null;
             _comp.ForgetFrameBackdrop(_frame);
+            if (_frame is not null)
+            {
+                _comp.AccessibleChrome?.Remove(_frame);
+            }
+
             _frame?.Dispose();
             _frame = null;
             RefreshShadow();
@@ -516,6 +521,7 @@ internal sealed partial class TinyComp
                 ? (int)Math.Round(glassRenderer.Theme.ResolvedContentRadius)
                 : -1;
             _frame.Requested += OnFrameAction;
+            _comp.AccessibleChrome?.Add(_frame);
             _frame.Faulted += e => _comp.Log.Error(e, $"frame: faulted for {XWin.Class}");
             Outer.RaiseToTop();
             Layout();

@@ -565,10 +565,26 @@ internal static class Program
             PointerPosition = () => (pointer.X, pointer.Y),
         });
 
+        Basin.Accessibility.DesktopAccessibility? access = null;
+        var accessKeys = new HashSet<uint>();
+
         void DeliverKey(uint timeMs, uint key, bool pressed, bool fromInputMethod = false)
         {
             if (inspector.Input.Key(timeMs, key, pressed))
             {
+                return;
+            }
+
+            if (!pressed && accessKeys.Remove(key))
+            {
+                return;
+            }
+
+            if (pressed && access is { } suite && seat.Keyboard.State is { } state &&
+                state.IsModActive("Mod4") && state.IsModActive("Mod1") &&
+                Basin.Accessibility.DesktopAccessibility.DefaultActionForKey(key) is { } action && suite.Run(action))
+            {
+                accessKeys.Add(key);
                 return;
             }
 
@@ -664,6 +680,7 @@ internal static class Program
             Constraints = services.Find<Basin.Desktop.PointerConstraintDriver>(),
         };
         touchBinder.Key += (timeMs, key, pressed) => DeliverKey(timeMs, key, pressed);
+        touchBinder.UseKeyboardAids(loop);
         touchBinder.Motion += (timeMs, _, _, _, _) => PointerMoved(timeMs);
         touchBinder.Button += DeliverPointerButton;
         touchBinder.Axis += (timeMs, axis) =>
@@ -901,6 +918,24 @@ internal static class Program
             Settle = settle,
         });
         ipc.SyntheticInput = injector;
+        using var processes = new ProcessTracker(loop, () => ProcessTracker.SessionEnvironment(socket, xServer?.DisplayName, ipc.Path));
+        access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "inlet",
+            Host = host,
+            Scene = scene,
+            Seat = seat,
+            Pointer = pointer,
+            Processes = processes,
+            TextInput = services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = toplevels,
+            Aids = touchBinder.Aids,
+            Log = log,
+        });
+        access.Apply(new Basin.Config.AccessibilitySettings());
+        cursor.Curtain = access.Curtain;
+        ipc.GuardWithCurtain(access.Curtain);
+        _ = access.StartAsync(Basin.AccessibilityMode.Auto);
         lineReport.AddInputLines(ipc.Methods);
         inspector.Register(ipc.Methods);
         lineReport.AddSessionLines(ipc.Methods);
@@ -938,6 +973,7 @@ internal static class Program
             }
         }
 
+        access.Dispose();
         host.DisconnectClients();
         totalRendered = driver.PrimaryRendered;
 

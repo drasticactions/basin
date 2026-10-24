@@ -35,7 +35,7 @@ internal static class Program
             cli.ConfigureLogging(result, trace);
             if (result.GetValue(installOption))
             {
-                var (portalPath, configPath, servicePath) = PortalRegistration.Write(PortalRegistration.AllInterfaces, Environment.ProcessPath);
+                var (portalPath, configPath, servicePath) = PortalRegistration.Write([.. PortalRegistration.AllInterfaces.Where(static name => name != "org.freedesktop.impl.portal.Settings")], Environment.ProcessPath);
                 BasinReport.Line($"PORTAL {portalPath}");
                 BasinReport.Line($"PORTAL {configPath}");
                 if (servicePath is not null)

@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Reflection;
 using AvaUnion.Engine;
 using Avalonia;
+using Basin;
+using Basin.Capabilities;
 using Basin.Config;
 using Basin.Diagnostics;
 using Basin.Freedesktop;
@@ -21,7 +23,7 @@ internal sealed partial class TabWm
     {
         var model = CreateSettingsModel(section);
         var view = new SettingsView { DataContext = model };
-        if (OpenOverlay(set, view, null, 760, 620))
+        if (OpenOverlay(set, view, null, "Settings", 760, 620))
         {
             BasinReport.Line($"SETTINGS shown section={SectionName(section)} output={set.Output.Name}");
         }
@@ -82,6 +84,8 @@ internal sealed partial class TabWm
             model.Terminal = file.Terminal ?? string.Empty;
             model.LockCommand = file.LockCommand ?? string.Empty;
             model.XWayland = file.XWayland;
+            model.HighContrast = file.Accessibility.HighContrast;
+            model.ReducedMotion = file.Accessibility.ReducedMotion;
         });
         model.Changed = (name, value) => OnSettingChanged(model, name, value, schemes);
         model.Dismiss = CloseOverlay;
@@ -96,6 +100,7 @@ internal sealed partial class TabWm
                 _config.Variant = (ThemeVariantChoice)(int)value;
                 Save(model, "theme", "variant", TomlValue.From(_config.Variant.ToString().ToLowerInvariant()));
                 ApplyTheme();
+                ApplyAppearance();
                 break;
             case nameof(SettingsViewModel.ColorScheme):
                 var scheme = (int)value is > 0 and var index && index <= schemes.Count ? schemes[index - 1] : null;
@@ -126,6 +131,17 @@ internal sealed partial class TabWm
                 var lockCommand = ((string)value).Trim();
                 _config.LockCommand = lockCommand;
                 Save(model, "session", "lock-command", TomlValue.From(lockCommand));
+                break;
+            case nameof(SettingsViewModel.HighContrast):
+                _config.Accessibility = _config.Accessibility with { HighContrast = (bool)value };
+                Save(model, "accessibility", "high-contrast", TomlValue.From((bool)value));
+                ApplyTheme();
+                ApplyAppearance();
+                break;
+            case nameof(SettingsViewModel.ReducedMotion):
+                _config.Accessibility = _config.Accessibility with { ReducedMotion = (bool)value };
+                Save(model, "accessibility", "reduced-motion", TomlValue.From((bool)value));
+                ApplyAppearance();
                 break;
             case nameof(SettingsViewModel.XWayland):
                 Save(model, "shell", "xwayland", TomlValue.From((bool)value));
@@ -167,7 +183,43 @@ internal sealed partial class TabWm
         _outputs.ScheduleAll();
     }
 
-    internal static string? EffectiveColorScheme(TabWmConfig config) => config.ColorScheme ?? config.Variant switch
+    private void ApplyAppearance()
+    {
+        var accessibility = _config.Accessibility;
+        ReducedMotion.IsOn = accessibility.ReducedMotion;
+        _access?.Apply(accessibility);
+
+        _appearance.Set(new AppearancePreferences(
+            _config.Variant switch
+            {
+                ThemeVariantChoice.Dark => ColorSchemePreference.Dark,
+                ThemeVariantChoice.Light => ColorSchemePreference.Light,
+                _ => ColorSchemePreference.None,
+            },
+            null,
+            accessibility.HighContrast,
+            accessibility.ReducedMotion));
+    }
+
+    internal static string HighContrastScheme()
+    {
+        var cache = Environment.GetEnvironmentVariable("XDG_CACHE_HOME") is { Length: > 0 } set
+            ? set
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache");
+        var path = Path.Combine(cache, "tab-wm", "HighContrast.colors");
+        if (!File.Exists(path))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var source = typeof(TabWm).Assembly.GetManifestResourceStream("HighContrast.colors")
+                ?? throw new InvalidOperationException("The high-contrast color scheme is not embedded in the program.");
+            using var target = File.Create(path);
+            source.CopyTo(target);
+        }
+
+        return path;
+    }
+
+    internal static string? EffectiveColorScheme(TabWmConfig config) => config.Accessibility.HighContrast ? HighContrastScheme() : config.ColorScheme ?? config.Variant switch
     {
         ThemeVariantChoice.Light => "BreezeLight",
         ThemeVariantChoice.Dark => "BreezeDark",

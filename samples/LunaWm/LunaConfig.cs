@@ -21,6 +21,8 @@ internal sealed class LunaConfig
 
     public HandoffSettings Handoff { get; private set; } = new();
 
+    public AccessibilitySettings Accessibility { get; private set; } = new();
+
     public bool XWayland { get; private set; } = true;
 
     public Basin.XWayland.XWaylandScale XWaylandScale { get; private set; }
@@ -282,6 +284,7 @@ internal sealed class LunaConfig
 
         Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
         Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        Accessibility = AccessibilitySettings.Read(reader.Section("accessibility"));
         reader.ReportUnknown();
     }
 

@@ -228,7 +228,28 @@ internal sealed partial class LunaShell : IDisposable
         {
             parent.ParentGone += Stop;
         }
+
+        _seat.Binder.UseKeyboardAids(_host.Loop);
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "luna-wm",
+            Host = _host,
+            Scene = _scene,
+            Seat = Seat,
+            Pointer = _seat.Binder.Pointer,
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = _services.Find<IToplevelModel>(),
+            Aids = _seat.Binder.Aids,
+            StartToolkit = _ui.StartAccessibilityAsync,
+            Log = _log,
+        });
+        _access.Apply(_config.Accessibility);
+        _seat.Cursor.Curtain = _access.Curtain;
+        _ = _access.StartAsync(_config.Accessibility.Enabled);
     }
+
+    private Basin.Accessibility.DesktopAccessibility? _access;
 
     internal Basin.Seat.Seat Seat { get; }
 
@@ -411,6 +432,8 @@ internal sealed partial class LunaShell : IDisposable
         _host.DisconnectClients();
         _ipc?.Dispose();
         _ipc = null;
+        _access?.Dispose();
+        _access = null;
         _colorPack.Luts.Dispose();
         _initProcess?.Stop(_log);
         _initProcess = null;

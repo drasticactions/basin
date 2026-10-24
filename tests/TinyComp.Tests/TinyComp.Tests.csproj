@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/TinyComp/TinyComp.csproj" />
     <ProjectReference Include="../../samples/BasinHeadless/BasinHeadless.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../samples/BasinCtl/BasinCtl.csproj" ReferenceOutputAssembly="false" />

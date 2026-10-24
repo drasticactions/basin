@@ -40,8 +40,8 @@ internal sealed class ClientFrame : IDisposable
         _bottom = new DeviceRect(parent, 0xff000000);
         _shadowRight = new DeviceRect(parent, 0xff000000);
         _shadowBottom = new DeviceRect(parent, 0xff000000);
-        _strip = new ChromeSurface(parent, host, index, () => new Panel { Children = { _title } });
-        _grow = new ChromeSurface(parent, host, index, () => new System7GrowBox());
+        _strip = new ChromeSurface(parent, host, index, () => new Panel { Children = { _title } }, "");
+        _grow = new ChromeSurface(parent, host, index, () => new System7GrowBox(), null);
         _grow.Enabled = false;
         _title.CloseRequested += (_, _) => CloseRequested?.Invoke();
         _title.ZoomRequested += (_, _) => ZoomRequested?.Invoke();
@@ -87,6 +87,7 @@ internal sealed class ClientFrame : IDisposable
         Chrome = DevicePlacement.ChromeScale(scale);
         var n = Chrome;
         _title.Title = title;
+        _strip.AccessibleName = title;
         _title.IsActive = active;
         _title.CanClose = canClose;
         _title.CanZoom = canZoom;

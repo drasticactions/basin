@@ -254,6 +254,7 @@ public sealed class AvaloniaPortalPrompts : IPortalPrompts, IDisposable
         }
 
         view.DataContext = model;
+        surface.AccessibleName = model.Title;
         surface.Content = view;
         var shown = new Shown(surface, model, new TaskCompletionSource<PromptResponse>());
         _shown.Add(shown);

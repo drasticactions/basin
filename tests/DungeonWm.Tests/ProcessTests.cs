@@ -500,6 +500,32 @@ public sealed class ProcessTests
         return null;
     }
 
+    [Theory]
+    [MemberData(nameof(Rows))]
+    public async Task Super_alt_8_zooms_and_super_alt_c_draws_the_screen_curtain(string row)
+    {
+        var (compositor, client) = Prerequisites(row, "ssdwin");
+        using var session = new Session(compositor, row, client);
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("SOCKET ", StringComparison.Ordinal)));
+        async Task AccessChord(int key)
+        {
+            foreach (var (code, pressed) in new[] { (125, "true"), (56, "true"), (key, "true"), (key, "false"), (56, "false"), (125, "false") })
+            {
+                await session.SendAsync($"key {code} {pressed}");
+            }
+        }
+
+        await AccessChord(9);
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=2"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN on"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForAsync(line => line == "CURTAIN off"));
+        await AccessChord(12);
+        Assert.NotNull(await session.WaitForAsync(line => line == "ZOOM factor=1.6"));
+        await session.Quit();
+    }
+
     internal sealed class Session : IDisposable
     {
         private readonly Process _process;

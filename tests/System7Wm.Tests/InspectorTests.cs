@@ -88,4 +88,28 @@ public sealed class InspectorTests
         Assert.NotNull(await session.WaitForAsync(l => l.StartsWith("INSPECTOR open=no host=none", StringComparison.Ordinal)));
         await session.QuitCleanlyAsync();
     }
+
+    [Fact]
+    public async Task Super_alt_8_zooms_and_super_alt_c_draws_the_screen_curtain()
+    {
+        using var session = new Session(Prerequisites.Compositor());
+        await session.DisplayAsync();
+        async Task AccessChord(int key)
+        {
+            foreach (var (code, pressed) in new[] { (125, 1), (56, 1), (key, 1), (key, 0), (56, 0), (125, 0) })
+            {
+                await session.SendAsync($"key {code} {pressed}");
+            }
+        }
+
+        await AccessChord(9);
+        Assert.NotNull(await session.WaitForLineAsync("ZOOM factor=2"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForLineAsync("CURTAIN on"));
+        await AccessChord(46);
+        Assert.NotNull(await session.WaitForLineAsync("CURTAIN off"));
+        await AccessChord(12);
+        Assert.NotNull(await session.WaitForLineAsync("ZOOM factor=1.6"));
+        await session.QuitCleanlyAsync();
+    }
 }

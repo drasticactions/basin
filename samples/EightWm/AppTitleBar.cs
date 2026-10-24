@@ -22,7 +22,7 @@ internal sealed class AppTitleBar : IDisposable
         Frame = frame;
         Model = new TitleModel(close);
         _view = new TitleBarView { DataContext = Model };
-        _chrome = new AvaloniaChrome(frame, host, index, _view) { Enabled = false };
+        _chrome = new AvaloniaChrome(frame, host, index, _view, "Title bar") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

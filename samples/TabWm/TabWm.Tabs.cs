@@ -77,6 +77,7 @@ internal sealed partial class TabWm
             return false;
         }
 
+        var moved = set.ActiveIndex != index;
         set.ActiveIndex = index;
         foreach (var other in set.Tabs)
         {
@@ -103,6 +104,11 @@ internal sealed partial class TabWm
         UpdatePage(set);
         _workspaces.Changed();
         _outputs.ScheduleAll();
+        if (moved)
+        {
+            _access?.Tree?.Announce($"Tab {index + 1}, {tab.Label}");
+        }
+
         return true;
     }
 

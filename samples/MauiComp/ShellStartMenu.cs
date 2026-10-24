@@ -92,6 +92,8 @@ internal sealed class ShellStartMenu : IDisposable
             return;
         }
 
+        _surface.AccessibleName = "Start menu";
+
         _page = new StartMenuPage { BindingContext = _model, Programs = BuildPrograms() };
         _scope = _surfaces.Attach(_surface, _page);
         _node = new UISurfaceNode(_layer, _surface, _index) { PreciseDamage = true };

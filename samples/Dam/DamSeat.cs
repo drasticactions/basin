@@ -181,6 +181,14 @@ internal sealed class DamSeat :
         _binder.BindLibinput(libinput);
     }
 
+    private readonly HashSet<uint> _accessKeys = [];
+
+    internal Func<uint, bool>? AccessChord { get; set; }
+
+    internal SeatBinder Binder => _binder;
+
+    internal CursorController Cursor => _cursor;
+
     internal void OnKey(uint timeMs, uint key, bool pressed)
     {
         _idle.NotifyActivity();
@@ -196,6 +204,18 @@ internal sealed class DamSeat :
 
         if (Inspector?.Key(timeMs, key, pressed) == true)
         {
+            return;
+        }
+
+        if (!pressed && _accessKeys.Remove(key))
+        {
+            return;
+        }
+
+        if (pressed && _seat.Keyboard.State is { } state && state.IsModActive("Mod4") && state.IsModActive("Mod1") &&
+            AccessChord?.Invoke(key) == true)
+        {
+            _accessKeys.Add(key);
             return;
         }
 

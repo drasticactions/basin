@@ -1,3 +1,4 @@
+using Basin.Host;
 using Basin.UI.Avalonia;
 using Xunit;
 
@@ -30,7 +31,7 @@ public sealed class ScreenReaderTests
             using (var off = new ScreenReader(processes, ["sleep"], "off"))
             {
                 off.AccessibilityStarted(true);
-                Assert.Equal("[accessibility] screen_reader is off", off.Unavailable);
+                Assert.Equal("the screen reader is off", off.Unavailable);
             }
 
             using var reader = new ScreenReader(processes, ["sleep"], "toggle");

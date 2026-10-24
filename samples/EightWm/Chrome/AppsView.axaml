@@ -82,6 +82,7 @@
       </win:ListView.Layout>
     </win:ListView>
     <Button x:Name="StartArrow"
+            AutomationProperties.Name="Back to Start"
             Classes="pagearrow"
             Margin="60,0,0,24"
             HorizontalAlignment="Left"

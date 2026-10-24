@@ -5,7 +5,7 @@ namespace DungeonWm;
 
 internal sealed class DungeonWmBindings
 {
-    public static readonly string[] Actions = ["leave-takeover", "next-room", "previous-room", "takeover", "close", "throw-back", "look-reset", "use", "release", "rotate", "square", "inspector"];
+    public static readonly string[] Actions = ["leave-takeover", "next-room", "previous-room", "takeover", "close", "throw-back", "look-reset", "use", "release", "rotate", "square", "inspector", "screen-reader", "magnifier", "magnifier-in", "magnifier-out", "screen-curtain"];
 
     private readonly List<Hotkey> _bindings = [];
 

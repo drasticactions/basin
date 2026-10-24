@@ -513,6 +513,11 @@ public sealed partial class Scene
     /// <returns>The result of <see cref="IRenderPass.Submit"/>.</returns>
     public bool Render(IRenderer renderer, IBuffer target, in SceneRenderOptions options)
     {
+        if (HidesCaptures)
+        {
+            return RenderCurtain(renderer, target);
+        }
+
         var projection = options.Projection;
         _renderList.Clear();
         CollectTree(Root, Root.X - options.OriginX, Root.Y - options.OriginY, Unclipped, _renderList);
@@ -544,6 +549,11 @@ public sealed partial class Scene
         IRenderer renderer, SceneNode? content, SceneNode? popups, Box? popupClip, IBuffer target,
         int originX, int originY, double scale, RenderColor background, IColorLutTable? luts)
     {
+        if (HidesCaptures)
+        {
+            return RenderCurtain(renderer, target);
+        }
+
         var list = RentList();
         try
         {
@@ -588,6 +598,23 @@ public sealed partial class Scene
         {
             ReturnList(list);
         }
+    }
+
+    /// <summary>
+    /// Gets the screen curtain of the scene, or <see langword="null"/> when no <see cref="SceneCurtain"/> was made for it.
+    /// </summary>
+    public SceneCurtain? Curtain { get; internal set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the curtain is drawn and no pass is open, so a render for a capture or a screenshot is black.
+    /// </summary>
+    public bool HidesCaptures => Curtain is { CapturesSee: false };
+
+    internal static bool RenderCurtain(IRenderer renderer, IBuffer target)
+    {
+        var pass = renderer.BeginBufferPass(target, new RenderPassOptions());
+        pass.AddRect(RenderColor.Black, new Box(0, 0, target.Width, target.Height));
+        return pass.Submit();
     }
 
     private static readonly Stack<List<RenderEntry>> ListPool = new();

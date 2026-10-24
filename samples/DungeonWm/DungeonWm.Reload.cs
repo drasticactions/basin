@@ -126,6 +126,7 @@ internal sealed partial class DungeonWm
         }
 
         _bindings = new DungeonWmBindings(_settings.Bindings, _log);
+        _access?.Apply(_settings.Accessibility);
         DefineReticles();
         Relock();
         if (sizeChanged)

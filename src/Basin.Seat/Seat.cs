@@ -104,6 +104,12 @@ public sealed class Seat : IDisposable
     public SeatKeyboard Keyboard { get; }
 
     /// <summary>
+    /// Gets or sets the monitor that sees each key before the compositor's bindings and the client, or <see langword="null"/> for none.
+    /// The seat backends consult it for every key source.
+    /// </summary>
+    public IKeyMonitor? KeyMonitor { get; set; }
+
+    /// <summary>
     /// Gets the touch device. It exists whether or not the touch capability is advertised.
     /// </summary>
     public SeatTouch Touch { get; }

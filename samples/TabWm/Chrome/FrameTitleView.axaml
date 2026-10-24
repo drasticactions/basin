@@ -15,9 +15,9 @@
                TextTrimming="CharacterEllipsis"
                Margin="100,0" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0" union:Union.Type="titlebar" union:Union.Hints="{Binding Hints}">
-      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="minimizebutton" Command="{Binding MinimizeCommand}" />
-      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="maximizebutton" union:Union.Hints="{Binding MaximizeHints}" Command="{Binding MaximizeCommand}" />
-      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="closebutton" Command="{Binding CloseCommand}" />
+      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="minimizebutton" AutomationProperties.Name="Minimize" Command="{Binding MinimizeCommand}" />
+      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="maximizebutton" AutomationProperties.Name="Maximize" union:Union.Hints="{Binding MaximizeHints}" Command="{Binding MaximizeCommand}" />
+      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="closebutton" AutomationProperties.Name="Close" Command="{Binding CloseCommand}" />
     </StackPanel>
   </Panel>
 </UserControl>

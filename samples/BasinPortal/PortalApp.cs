@@ -167,7 +167,19 @@ internal sealed class PortalApp : IDisposable
         var prompts = new AvaloniaPortalPrompts(_avaloniaHost, _outputs.Layout, ui);
         _owned.Add(prompts);
         _log.Info($"prompts drawn by Avalonia");
+        _ = StartAccessibilityAsync(ui);
         return prompts;
+    }
+
+    private async Task StartAccessibilityAsync(AvaloniaUIHost ui)
+    {
+        if (await ui.StartAccessibilityAsync() is { } reason)
+        {
+            _log.Info($"accessibility: no tree, {reason}");
+            return;
+        }
+
+        _log.Info($"accessibility: the prompts are on the accessibility bus");
     }
 
     private void WireSeat()

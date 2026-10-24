@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:Basin.UI.Avalonia"
              xmlns:luna="using:LunaWm"
              x:Class="LunaWm.QuickLaunchView"
              x:DataType="luna:QuickLaunchModel"
@@ -15,7 +16,7 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="luna:LauncherIconModel">
-            <Panel Width="100" Height="80" Background="Transparent" Tag="{Binding}" PointerReleased="OnIcon">
+            <Panel Width="100" Height="80" Background="Transparent" Tag="{Binding}" PointerReleased="OnIcon" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="{Binding Name}" ui:ChromeAutomation.Invoked="OnIconInvoked">
               <Image Source="{Binding Icon}" Width="64" Height="64" IsVisible="{Binding HasIcon}" />
               <Border Width="64" Height="64" CornerRadius="14" Background="{Binding Tile}" IsVisible="{Binding !HasIcon}">
                 <TextBlock Text="{Binding Letter}" FontSize="32" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -24,7 +25,7 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <Panel Width="100" Height="80" Background="Transparent" PointerReleased="OnLauncher">
+      <Panel Width="100" Height="80" Background="Transparent" PointerReleased="OnLauncher" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Launcher" ui:ChromeAutomation.Invoked="OnLauncherInvoked">
         <Border Width="52" Height="52" CornerRadius="26" Background="#33FFFFFF" BorderBrush="#66FFFFFF" BorderThickness="1">
           <Path Data="M 0,12 L 12,0 L 24,12" Stroke="White" StrokeThickness="3" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>

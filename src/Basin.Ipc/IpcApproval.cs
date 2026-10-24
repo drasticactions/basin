@@ -49,6 +49,11 @@ public sealed class IpcApproval
     /// </summary>
     public event Action<IpcApproval>? Answered;
 
+    /// <summary>
+    /// Occurs once, after a person allowed the call and before the call runs.
+    /// </summary>
+    public event Action<IpcApproval>? Allowing;
+
     internal IpcHeldCall Call { get; }
 
     internal IEventSource? Timer { get; set; }
@@ -56,4 +61,6 @@ public sealed class IpcApproval
     internal void Record(IpcApprovalAnswer answer) => Answer = answer;
 
     internal void Finish() => Answered?.Invoke(this);
+
+    internal void Allow() => Allowing?.Invoke(this);
 }

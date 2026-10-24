@@ -9,6 +9,7 @@ internal sealed class LunaBindings
     [
         "card_view", "launcher", "quick_launch", "maximize", "back", "next", "previous",
         "home", "dashboard", "lock", "close", "keyboard", "inspector",
+        "screen-reader", "magnifier", "magnifier-in", "magnifier-out", "screen-curtain",
     ];
 
     private static readonly (string Chord, string Action)[] Defaults =
@@ -26,6 +27,11 @@ internal sealed class LunaBindings
         ("Super+q", "close"),
         ("Super+k", "keyboard"),
         ("Super+F12", "inspector"),
+        ("Super+Alt+s", "screen-reader"),
+        ("Super+Alt+8", "magnifier"),
+        ("Super+Alt+equal", "magnifier-in"),
+        ("Super+Alt+minus", "magnifier-out"),
+        ("Super+Alt+c", "screen-curtain"),
     ];
 
     private readonly List<Hotkey> _bindings = [];

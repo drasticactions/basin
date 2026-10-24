@@ -6,9 +6,10 @@ namespace Basin.Tests;
 
 public sealed class FrameColorSchemeTests
 {
-    private static uint TitlePixel(FrameColorScheme scheme)
+    private static uint TitlePixel(FrameColorScheme scheme, bool highContrast = false)
     {
         using var theme = FlatFrameTheme.Default();
+        theme.HighContrast = highContrast;
         using var host = new SkiaUIHost();
         var renderer = new FlatFrameRenderer(theme);
         var state = new FrameState { Title = "t", Active = true, ColorScheme = scheme };
@@ -52,5 +53,12 @@ public sealed class FrameColorSchemeTests
         Assert.Equal(standard, TitlePixel(FrameColorScheme.Dark));
         Assert.Equal(0xECEDF0u, TitlePixel(FrameColorScheme.Light));
         Assert.Equal(0x23252Bu, standard);
+    }
+
+    [Fact]
+    public void High_contrast_makes_the_flat_frame_black_whatever_scheme_the_window_asks_for()
+    {
+        Assert.Equal(0x000000u, TitlePixel(FrameColorScheme.Light, highContrast: true));
+        Assert.Equal(0x000000u, TitlePixel(FrameColorScheme.Dark, highContrast: true));
     }
 }

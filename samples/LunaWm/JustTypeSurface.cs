@@ -13,7 +13,7 @@ internal sealed class JustTypeSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = model;
         View = new JustTypeView { DataContext = model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Just type") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

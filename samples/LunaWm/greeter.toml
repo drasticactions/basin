@@ -55,6 +55,15 @@ text_scale = 1.0
 screen_reader = "toggle"
 orca = ["orca", "--replace"]
 
+# Keyboard aids for physical keys at login. Every aid is off by default.
+# [accessibility.keyboard]
+# sticky = false           # a modifier tapped alone stays down for the next key, a second tap locks it
+# sticky_shortcut = false  # five taps of Shift turn sticky keys on and off
+# slow_ms = 0              # a key counts only after it stays down this long
+# bounce_ms = 0            # a new press of a key this soon after its release is ignored
+# mouse_keys = false       # the keypad moves the pointer, 5 clicks, / * - choose the button
+# mouse_keys_speed = 1000  # the highest pointer speed in logical pixels per second
+
 [render]
 # A renderer name, or "" for the fallback chain vulkan, gl, pixman.
 renderer = ""

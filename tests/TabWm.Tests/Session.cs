@@ -170,6 +170,9 @@ internal sealed class Session : IDisposable
 
     public async Task<List<string>> AskAsync(string command, string prefix)
     {
+        var settled = Mark();
+        await SendAsync("framecount");
+        await WaitForPrefixAsync("FRAMECOUNT ", settled);
         var mark = Mark();
         await SendAsync(command);
         await SendAsync("framecount");

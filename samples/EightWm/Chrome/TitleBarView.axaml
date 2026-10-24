@@ -29,6 +29,7 @@
                    VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
         <Button x:Name="CloseButton"
+                AutomationProperties.Name="Close"
                 Grid.Column="1"
                 Classes="close"
                 Command="{Binding CloseCommand}">

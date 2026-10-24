@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Basin.Accessibility/Basin.Accessibility.csproj" />
     <ProjectReference Include="../Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
     <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../Basin.Greetd/Basin.Greetd.csproj" />

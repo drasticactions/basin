@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Basin.Accessibility</PackageId>
+    <RootNamespace>Basin.Accessibility</RootNamespace>
+    <Description>The accessibility of a basin desktop: the org.freedesktop.a11y interfaces, the compositor's own accessible window, focus tracking, and the suite that wires the screen reader, zoom, the screen curtain and the keyboard aids.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Basin.Tests" />
+    <ProjectReference Include="../Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../Basin.Desktop/Basin.Desktop.csproj" />
+    <PackageReference Include="Tmds.DBus.Protocol" />
+    <PackageReference Include="accesskit-dotnet" />
+  </ItemGroup>
+
+</Project>

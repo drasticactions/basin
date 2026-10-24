@@ -1,3 +1,4 @@
+using Basin.Host;
 using Basin;
 using Basin.Diagnostics;
 using Basin.UI.Avalonia;

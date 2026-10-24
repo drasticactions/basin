@@ -9,6 +9,8 @@ public sealed class SettingsViewModel : ObservableModel
     private int _colorScheme;
     private int _engine;
     private bool _closeWhenEmpty;
+    private bool _highContrast;
+    private bool _reducedMotion;
     private decimal _closeTimeoutSeconds = 5;
     private bool _restore = true;
     private string _terminal = string.Empty;
@@ -84,6 +86,18 @@ public sealed class SettingsViewModel : ObservableModel
     {
         get => _closeTimeoutSeconds;
         set => Update(ref _closeTimeoutSeconds, value);
+    }
+
+    public bool HighContrast
+    {
+        get => _highContrast;
+        set => Update(ref _highContrast, value);
+    }
+
+    public bool ReducedMotion
+    {
+        get => _reducedMotion;
+        set => Update(ref _reducedMotion, value);
     }
 
     public bool Restore

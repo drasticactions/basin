@@ -448,6 +448,14 @@ internal sealed partial class System7Shell
             return false;
         }
 
+        if (HeldModifiers == (Basin.Config.Modifiers.Mod4 | Basin.Config.Modifiers.Mod1) &&
+            Basin.Accessibility.DesktopAccessibility.DefaultActionForKey(key) is { } action &&
+            _access?.Run(action) == true)
+        {
+            _consumedKeys.Add(key);
+            return true;
+        }
+
         if (TryTerminalChord(key))
         {
             _consumedKeys.Add(key);

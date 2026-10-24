@@ -1,6 +1,6 @@
 using Basin.Diagnostics;
 
-namespace Basin.UI.Avalonia;
+namespace Basin.Host;
 
 /// <summary>
 /// Starts and stops a screen reader process when the chrome accessibility tree is on the session bus.
@@ -209,7 +209,7 @@ public sealed class ScreenReader : IDisposable
     {
         if (_mode == "off")
         {
-            return "[accessibility] screen_reader is off";
+            return "the screen reader is off";
         }
 
         if (Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS") is not { Length: > 0 })

@@ -201,7 +201,7 @@ internal sealed partial class Shell
             content = pair;
         }
 
-        var chrome = new AvaloniaChrome(_ownLockLayer, _ui, _chromeIndex, content) { Enabled = true };
+        var chrome = new AvaloniaChrome(_ownLockLayer, _ui, _chromeIndex, content, "Lock screen") { Enabled = true };
         chrome.Place(view.Box, view.Scale);
         _lockScreens[view] = chrome;
     }

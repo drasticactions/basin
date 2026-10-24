@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:Basin.UI.Avalonia"
              xmlns:luna="using:LunaWm"
              x:Class="LunaWm.StatusBarView"
              x:DataType="luna:StatusBarModel"
@@ -16,12 +17,12 @@
       </LinearGradientBrush>
     </Grid.Background>
     <Border x:Name="TitleHit" Grid.Column="0" Classes="barhit" HorizontalAlignment="Left" Padding="10,0" MaxWidth="400"
-            IsVisible="{Binding TitleShown}" PointerReleased="OnTitle">
+            IsVisible="{Binding TitleShown}" PointerReleased="OnTitle" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnTitleInvoked">
       <TextBlock Classes="bar bartitle" Text="{Binding Title}" />
     </Border>
     <TextBlock Grid.Column="1" Classes="bar" Text="{Binding Clock}" HorizontalAlignment="Center" />
     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="0">
-      <Border x:Name="BannerBox" Classes="banner" MaxWidth="420" IsVisible="{Binding BannerShown}" PointerReleased="OnNotifications">
+      <Border x:Name="BannerBox" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnNotificationsInvoked" Classes="banner" MaxWidth="420" IsVisible="{Binding BannerShown}" PointerReleased="OnNotifications">
         <DockPanel>
           <Image DockPanel.Dock="Left" Source="{Binding BannerIcon}" Width="18" Height="18" Margin="0,0,6,0" IsVisible="{Binding HasBannerIcon}" />
           <Canvas x:Name="BannerTrack" Height="28" ClipToBounds="True">
@@ -29,7 +30,7 @@
           </Canvas>
         </DockPanel>
       </Border>
-      <Border x:Name="NotificationHit" Classes="barhit" Padding="4,0" PointerReleased="OnNotifications" IsVisible="{Binding IconsShown}">
+      <Border x:Name="NotificationHit" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Notifications" ui:ChromeAutomation.Invoked="OnNotificationsInvoked" Classes="barhit" Padding="4,0" PointerReleased="OnNotifications" IsVisible="{Binding IconsShown}">
         <ItemsControl ItemsSource="{Binding NotificationIcons}" VerticalAlignment="Center">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
@@ -48,16 +49,16 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </Border>
-      <Border x:Name="BluetoothHit" Classes="barhit" Padding="5,0" IsVisible="{Binding BluetoothShown}" PointerReleased="OnBluetooth">
+      <Border x:Name="BluetoothHit" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Bluetooth" ui:ChromeAutomation.Invoked="OnBluetoothInvoked" Classes="barhit" Padding="5,0" IsVisible="{Binding BluetoothShown}" PointerReleased="OnBluetooth">
         <luna:BluetoothGlyph Connected="{Binding BluetoothConnected}" VerticalAlignment="Center" />
       </Border>
-      <Border x:Name="WifiHit" Classes="barhit" Padding="5,0" IsVisible="{Binding WifiShown}" PointerReleased="OnWifi">
+      <Border x:Name="WifiHit" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Wi-Fi" ui:ChromeAutomation.Invoked="OnWifiInvoked" Classes="barhit" Padding="5,0" IsVisible="{Binding WifiShown}" PointerReleased="OnWifi">
         <luna:WifiGlyph Bars="{Binding WifiBars}" Connecting="{Binding WifiConnecting}" VerticalAlignment="Center" />
       </Border>
-      <Border x:Name="SoundHit" Classes="barhit" Padding="5,0" IsVisible="{Binding VolumeShown}" PointerReleased="OnSound">
+      <Border x:Name="SoundHit" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Sound" ui:ChromeAutomation.Invoked="OnSoundInvoked" Classes="barhit" Padding="5,0" IsVisible="{Binding VolumeShown}" PointerReleased="OnSound">
         <luna:VolumeGlyph Muted="{Binding Muted}" Level="{Binding Volume}" VerticalAlignment="Center" />
       </Border>
-      <Border x:Name="BatteryHit" Classes="barhit" Padding="5,0,8,0" PointerReleased="OnBattery">
+      <Border x:Name="BatteryHit" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Battery" ui:ChromeAutomation.Invoked="OnBatteryInvoked" Classes="barhit" Padding="5,0,8,0" PointerReleased="OnBattery">
         <Panel>
           <luna:BatteryGlyph Level="{Binding BatteryLevel}" Charging="{Binding BatteryCharging}" Error="{Binding BatteryError}"
                              IsVisible="{Binding BatteryShown}" VerticalAlignment="Center" />

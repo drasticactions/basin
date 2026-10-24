@@ -286,6 +286,8 @@ internal static class SettingsCatalog
                 Default = "0", Min = 0, Max = 6500, Step = 100,
             },
 
+            Flag(Effects, "accessibility", "reduced-motion", "Reduce motion", "Accessibility"),
+            Flag(Effects, "accessibility", "high-contrast", "High contrast frames", "Accessibility"),
             Flag(Effects, "effects", "wobbly", "Wobbly windows", "Window animations"),
             new(Effects, "effects", "open", "Open", SettingKind.Choice) { Default = "\"none\"", Choices = Animations, Group = "Window animations" },
             new(Effects, "effects", "close", "Close", SettingKind.Choice) { Default = "\"none\"", Choices = Closings, Group = "Window animations" },

@@ -13,7 +13,7 @@ internal sealed class KeyboardSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = model;
         View = new KeyboardView { Model = model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false, InputEnabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Keyboard") { Enabled = false, InputEnabled = false };
     }
 
     public SceneTransform Frame { get; }

@@ -18,6 +18,7 @@
   <Border union:Union.Type="applicationwindow" Background="{union:Style Background.Color}">
     <DockPanel Margin="24,20">
       <TextBox Name="Search"
+               AutomationProperties.Name="Search apps"
                DockPanel.Dock="Top"
                Classes="launcher-search"
                CaretBlinkInterval="0:0:0"
@@ -28,6 +29,7 @@
       <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Panel>
           <ListBox Name="Results"
+                   AutomationProperties.Name="Results"
                    IsVisible="{Binding Searching}"
                    ItemsSource="{Binding Results}"
                    MaxWidth="640"
@@ -45,8 +47,9 @@
             </ListBox.ItemTemplate>
           </ListBox>
           <StackPanel IsVisible="{Binding !Searching}" Spacing="12">
-            <TextBlock Classes="launcher-heading" Text="Pinned" IsVisible="{Binding HasPinned}" />
+            <TextBlock Classes="launcher-heading" AutomationProperties.HeadingLevel="2" Text="Pinned" IsVisible="{Binding HasPinned}" />
             <ListBox Name="Pinned"
+                     AutomationProperties.Name="Pinned"
                      ItemsSource="{Binding Pinned}"
                      ItemTemplate="{StaticResource Tile}"
                      IsVisible="{Binding HasPinned}"
@@ -61,8 +64,9 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="chrome:LauncherCategoryModel">
                   <StackPanel Spacing="6" Margin="0,8,0,0">
-                    <TextBlock Classes="launcher-heading" Text="{Binding Name}" />
+                    <TextBlock Classes="launcher-heading" AutomationProperties.HeadingLevel="2" Text="{Binding Name}" />
                     <ListBox Classes="launcher-category"
+                             AutomationProperties.Name="{Binding Name}"
                              ItemsSource="{Binding Items}"
                              ItemTemplate="{StaticResource Tile}"
                              Background="Transparent">

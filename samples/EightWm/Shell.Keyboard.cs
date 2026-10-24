@@ -200,7 +200,7 @@ internal sealed partial class Shell
             Clock = () => _kbSession.Now,
         };
         view.KeyboardCanvas = canvas;
-        view.Keyboard = new AvaloniaChrome(view.KeyboardFrame, _ui, _chromeIndex, canvas) { Enabled = true };
+        view.Keyboard = new AvaloniaChrome(view.KeyboardFrame, _ui, _chromeIndex, canvas, "Keyboard") { Enabled = true };
     }
 
     private KeyboardMetrics KeyboardMetricsFor(ShellView view) =>

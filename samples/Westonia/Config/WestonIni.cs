@@ -26,6 +26,8 @@ public sealed class WestonIni
 
     public Basin.Inspector.InspectorSettings Inspector { get; set; } = new();
 
+    public Basin.AccessibilityMode Accessibility { get; set; }
+
     public string? XWaylandPath { get; set; }
 
     public bool XWaylandLowDensity { get; set; } = true;
@@ -266,6 +268,23 @@ public sealed class WestonIni
 
             case "inspector":
                 ApplyInspector(key, value);
+                return;
+            case "accessibility":
+                if (key != "enabled")
+                {
+                    Refuse(section, key);
+                    return;
+                }
+
+                if (Basin.Config.AccessibilitySettings.ParseEnabled(value) is { } mode)
+                {
+                    Accessibility = mode;
+                }
+                else
+                {
+                    Refusals.Add($"weston.ini: [accessibility] enabled={value} is not auto, on or off, ignored");
+                }
+
                 return;
             case "autolaunch":
                 switch (key)

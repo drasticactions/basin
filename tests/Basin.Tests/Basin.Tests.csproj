@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <Compile Include="../Shared/*.cs" LinkBase="Shared" />
+    <Using Include="Basin.Testing" />
   </ItemGroup>
 
   <ItemGroup>
@@ -70,6 +71,7 @@
     <ProjectReference Include="../../src/Basin.Inspector.Ipc/Basin.Inspector.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.Inspector.Host/Basin.Inspector.Host.csproj" />
     <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
+    <ProjectReference Include="../../src/Basin.Accessibility/Basin.Accessibility.csproj" />
     <ProjectReference Include="../../src/Basin.Transport.Waypipe/Basin.Transport.Waypipe.csproj" />
     <ProjectReference Include="../../src/Basin.Video.FFmpeg/Basin.Video.FFmpeg.csproj" />
     <ProjectReference Include="../../src/Basin.Video.VideoToolbox/Basin.Video.VideoToolbox.csproj" />

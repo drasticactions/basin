@@ -79,6 +79,7 @@ internal sealed partial class TabWm
         BasinReport.Line($"BANNER tab={tab.Id} windows={tab.Windows.Count(window => window.Mapped)}");
         SelectTab(tab);
         ShowBanner(tab);
+        _access?.Tree?.Announce($"{tab.Label} did not close. Its windows are still open.", Basin.Capabilities.AnnouncePriority.Assertive);
         RefreshTab(tab);
     }
 
@@ -143,7 +144,7 @@ internal sealed partial class TabWm
             }
         }
 
-        var banner = new OutputUISurface(_layers.Strip, _ui, _index) { PreciseDamage = true };
+        var banner = new OutputUISurface(_layers.Strip, _ui, _index) { PreciseDamage = true, AccessibleName = "Closing tab" };
         banner.Realized += surface => ((AvaloniaUISurface)surface).Content = new BannerView { DataContext = model };
         set.Banner = banner;
         banner.PlaceAt(BannerBox(set), set.Output.Scale);

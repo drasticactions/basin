@@ -22,11 +22,18 @@ internal sealed class Config
         ("Alt+n", "workspace-new"),
         ("Super+comma", "settings"),
         ("Super+F12", "inspector"),
+        ("Super+Alt+s", "screen-reader"),
+        ("Super+Alt+8", "magnifier"),
+        ("Super+Alt+equal", "magnifier-in"),
+        ("Super+Alt+minus", "magnifier-out"),
+        ("Super+Alt+c", "screen-curtain"),
     ];
 
     public string Renderer { get; set; } = "vulkan";
 
     public HandoffSettings Handoff { get; set; } = new();
+
+    public AccessibilitySettings Accessibility { get; set; } = new();
 
     public int Outputs { get; set; } = 1;
 
@@ -378,6 +385,11 @@ internal sealed class Config
         "unshelve" => KeyAction.Unshelve,
         "settings" => KeyAction.Settings,
         "inspector" => KeyAction.Inspector,
+        "screen-reader" => KeyAction.ScreenReader,
+        "magnifier" => KeyAction.Magnifier,
+        "magnifier-in" => KeyAction.MagnifierIn,
+        "magnifier-out" => KeyAction.MagnifierOut,
+        "screen-curtain" => KeyAction.ScreenCurtain,
         "gravity" => KeyAction.Gravity,
         "physics-freeze" => KeyAction.PhysicsFreeze,
         "rotate-left" => KeyAction.RotateLeft,
@@ -394,7 +406,8 @@ internal sealed class Config
         "mark-clear", "bell", "canvas-toggle", "park-left", "park-right", "park-up", "park-down", "recall",
         "shelf-smaller", "shelf-larger", "shelf-reset", "canvas-mode", "overview", "shelve-left",
         "shelve-right", "shelve-top", "shelve-bottom", "unshelve", "settings", "gravity", "physics-freeze",
-        "rotate-left", "rotate-right", "upright", "stop-spin", "inspector",
+        "rotate-left", "rotate-right", "upright", "stop-spin", "inspector", "screen-reader",
+        "magnifier", "magnifier-in", "magnifier-out", "screen-curtain",
     ];
 
     private static readonly string[] SharedKeys =
@@ -971,6 +984,7 @@ internal sealed class Config
         Launch = LaunchRules.Read(reader.FreeArray(LaunchRules.Table), log);
 
         Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        Accessibility = AccessibilitySettings.Read(reader.Section("accessibility"));
         reader.ReportUnknown();
         WarnOverviewAgainstCanvas(log);
     }

@@ -165,7 +165,7 @@ public sealed class SettingsPanelTests
         Assert.Contains("[bindings]", draft.Text, StringComparison.Ordinal);
         var parsed = TinyComp.Config.Parse(draft.Text, BasinLog.For("t"), out var fatal);
         Assert.Null(fatal);
-        Assert.Equal(10, parsed.Bindings.Count);
+        Assert.Equal(15, parsed.Bindings.Count);
     }
 
     [Fact]

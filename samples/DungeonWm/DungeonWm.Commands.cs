@@ -36,6 +36,10 @@ internal sealed partial class DungeonWm
             Processes = _processes,
         });
         _ipc.SyntheticInput = _injector;
+        if (_access is { } access)
+        {
+            _ipc.GuardWithCurtain(access.Curtain);
+        }
         foreach (var name in EventNames)
         {
             _ipc.Events.Declare(name);

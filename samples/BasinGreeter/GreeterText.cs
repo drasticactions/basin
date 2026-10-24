@@ -32,5 +32,6 @@ internal static class GreeterText
     public const string TextSize = "Text size";
     public const string Accessibility = "Accessibility";
     public const string LoginWindow = "Log in";
+    public const string BackgroundWindow = "Background";
     public const string NoSessions = "No desktop sessions are installed. Ask your administrator to install one.";
 }

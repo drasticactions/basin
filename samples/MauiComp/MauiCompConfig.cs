@@ -9,6 +9,8 @@ internal sealed class MauiCompConfig
 
     public HandoffSettings Handoff { get; set; } = new();
 
+    public AccessibilitySettings Accessibility { get; set; } = new();
+
     public string? Background { get; set; }
 
     public int BlurStrength { get; set; } = 5;
@@ -89,6 +91,7 @@ internal sealed class MauiCompConfig
         }
 
         Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        Accessibility = AccessibilitySettings.Read(reader.Section("accessibility"));
         Inspector = Basin.Inspector.InspectorSettings.Read(reader.Section("inspector"));
         reader.ReportUnknown();
     }

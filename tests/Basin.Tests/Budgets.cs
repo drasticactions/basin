@@ -36,7 +36,7 @@ internal static class Budgets
     [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only reach into CoreLib; absent under NativeAOT, where it returns early.")]
     [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2057", Justification = "Test-only reach into CoreLib; absent under NativeAOT, where it returns early.")]
     [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only reach into CoreLib; absent under NativeAOT, where it returns early.")]
-    private static void SettleRuntimeCaches()
+    internal static void SettleRuntimeCaches()
     {
         if (_settled)
         {

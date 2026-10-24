@@ -140,6 +140,7 @@ internal sealed class ShellLock : IDisposable
             return;
         }
 
+        _dialog.AccessibleName = "Unlock";
         _dialog.Content = new UnlockView { DataContext = new UnlockModel(Unlock) };
         _dialog.SetPosition(box.X, box.Y);
         _dialogNode = new UISurfaceNode(_layers.Lock, _dialog, _index) { PreciseDamage = true };

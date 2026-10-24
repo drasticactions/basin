@@ -139,7 +139,7 @@ public struct Fling
     }
 
     /// <summary>
-    /// Advances the motion by an elapsed time. When the motion reaches its stop time, the position is <see cref="ProjectedRest"/> exactly.
+    /// Advances the motion by an elapsed time. When the motion reaches its stop time, or while <see cref="ReducedMotion.IsOn"/> is set, the position is <see cref="ProjectedRest"/> exactly.
     /// </summary>
     /// <param name="nanos">The elapsed time in nanoseconds. A value that is not positive does nothing.</param>
     public void Advance(long nanos)
@@ -150,7 +150,7 @@ public struct Fling
         }
 
         _elapsedNanos += nanos;
-        if (_elapsedNanos >= _durationNanos)
+        if (_elapsedNanos >= _durationNanos || ReducedMotion.IsOn)
         {
             (X, Y) = RestFrom(_x0, _y0, _vx0, _vy0, EffectiveFriction, EffectiveStopSpeed);
             VelocityX = VelocityY = 0;

@@ -106,6 +106,52 @@ public sealed class HostOriginatedInputTests
     }
 
     [Fact]
+    public void A_client_caret_reaches_zoom_in_layout_coordinates_without_an_accessibility_tree()
+    {
+        using var host = new CompositorTestHost();
+        var method = new RecordingMethod();
+        using var manager = new TextInputManager(host.Display, host.Seat, method);
+        var window = MappedToplevel.Map(host, host.Client);
+        host.PumpToServer();
+        var shown = host.SurfaceScenes.Single(scene => scene.Surface == window.ServerSurface);
+        shown.Tree.SetPosition(30, 20);
+        using var caret = new TextInputCaret(manager, host.Scene);
+        var moves = new List<(Box Box, AccessibleFocusKind Kind)>();
+        caret.Moved += (box, kind) => moves.Add((box, kind));
+        var pointer = new LayoutPointer(host.Layout);
+        pointer.Warp(10, 10);
+        _ = host.SceneOutput;
+        using var zoom = new Basin.Scene.OutputZoom(host.Scene, pointer);
+        zoom.Track(caret);
+        zoom.SetFactor(4);
+
+        var textInputManager = Bind<Basin.Desktop.Protocol.ZwpTextInputManagerV3>(host, "zwp_text_input_manager_v3");
+        var textInput = textInputManager.GetTextInput(host.Client.Seat!);
+        host.PumpToServer();
+        host.Seat.Keyboard.NotifyEnter(window.ServerSurface);
+        manager.NotifyFocus(window.ServerSurface);
+        host.PumpToClient();
+
+        textInput.Enable();
+        textInput.SetCursorRectangle(100, 70, 2, 16);
+        textInput.Commit();
+        host.PumpUntil(() => moves.Count > 0);
+
+        Assert.Equal((new Box(130, 90, 2, 16), AccessibleFocusKind.Caret), moves[^1]);
+        var (x, y, width, height) = host.SceneOutput.ZoomArea;
+        Assert.True(x <= 130 && 132 <= x + width && y <= 90 && 106 <= y + height, $"the caret is outside the zoomed area {x},{y} {width}x{height}");
+
+        textInput.SetCursorRectangle(100, 70, 2, 16);
+        textInput.Commit();
+        host.PumpToServer();
+        Assert.Single(moves);
+
+        textInput.Dispose();
+        textInputManager.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
     public void A_caret_that_moves_is_reported_again()
     {
         using var host = new CompositorTestHost();

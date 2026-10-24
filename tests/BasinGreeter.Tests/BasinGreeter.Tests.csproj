@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/BasinGreeter/BasinGreeter.csproj" />
     <ProjectReference Include="../../samples/Dam/Dam.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
@@ -26,10 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="Basin.Testing" />
     <Compile Include="../Basin.Tests/Greetd/FakeGreetd.cs" Link="FakeGreetd.cs" />
     <Compile Include="../Basin.Tests/VkmsCard.cs" Link="VkmsCard.cs" />
     <Compile Include="../Basin.Tests/SystemStatus/MockSystemService.cs" Link="MockSystemService.cs" />
-    <Compile Include="../Basin.Tests/Portal/PrivateBus.cs" Link="PrivateBus.cs" />
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Goldens/**" />
   </ItemGroup>

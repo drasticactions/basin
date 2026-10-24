@@ -25,6 +25,7 @@ internal sealed partial class TabWm
             Processes = _processes,
         });
         _ipc.SyntheticInput = _seat?.Injector;
+        _ipc.GuardWithCurtain(_curtain);
         RegisterCommands(_ipc.Methods);
         _ipc.Start();
         _ipc.StartLineFront();

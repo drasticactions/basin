@@ -52,7 +52,7 @@ internal sealed partial class Shell
             var holder = new SceneTree(_shell._scene.Root) { ClipBox = new Box(0, 0, box.Width, box.Height) };
             holder.SetPosition(box.X, box.Y);
             var sheet = new SceneTransform(holder) { Matrix = RenderTransform.Translation(box.Width, 0) };
-            var chrome = new AvaloniaChrome(sheet, _shell._ui, _shell._chromeIndex, new SignOutView()) { Enabled = true, InputEnabled = false };
+            var chrome = new AvaloniaChrome(sheet, _shell._ui, _shell._chromeIndex, new SignOutView(), null) { Enabled = true, InputEnabled = false };
             chrome.Place(new Box(0, 0, box.Width, box.Height), shell.Scale);
             holder.RaiseToTop();
             _slides[shell] = new Slide(holder, sheet, chrome, box.Width);

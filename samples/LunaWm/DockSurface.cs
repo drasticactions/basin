@@ -13,7 +13,7 @@ internal sealed class DockSurface : IDisposable
         Frame = new SceneTransform(parent);
         Model = model;
         View = new QuickLaunchView { DataContext = model };
-        _chrome = new ChromeSurface(Frame, host, index, View) { Enabled = false };
+        _chrome = new ChromeSurface(Frame, host, index, View, "Quick launch") { Enabled = false };
     }
 
     public SceneTransform Frame { get; }

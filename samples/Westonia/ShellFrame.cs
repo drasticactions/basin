@@ -34,7 +34,7 @@ internal sealed class ShellFrame : IDisposable
     {
         _window = window;
         _title.Title = window.Window.Title;
-        _frame = new UIStripFrame(host, parent, new UIStripFrameMetrics(Margin, BorderWidth, TitlebarHeight), Fill, index);
+        _frame = new UIStripFrame(host, parent, new UIStripFrameMetrics(Margin, BorderWidth, TitlebarHeight), Fill, index) { AccessibleTitle = _title.Title };
     }
 
     public SceneTree Parent => _frame.Parent;
@@ -52,7 +52,11 @@ internal sealed class ShellFrame : IDisposable
         }
     }
 
-    public void SetTitle(string title) => _title.Title = title;
+    public void SetTitle(string title)
+    {
+        _title.Title = title;
+        _frame.AccessibleTitle = title;
+    }
 
     public bool Update(double scale)
     {

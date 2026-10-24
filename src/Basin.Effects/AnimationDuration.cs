@@ -13,9 +13,9 @@ public readonly record struct AnimationDuration(double BaseMillis, double Factor
     public static AnimationDuration Zero => new(0);
 
     /// <summary>
-    /// Gets the scaled duration in milliseconds. Negative inputs count as zero.
+    /// Gets the scaled duration in milliseconds. Negative inputs count as zero. It is zero while <see cref="ReducedMotion.IsOn"/> is set.
     /// </summary>
-    public double Millis => Math.Max(0, BaseMillis) * Math.Max(0, Factor);
+    public double Millis => ReducedMotion.IsOn ? 0 : Math.Max(0, BaseMillis) * Math.Max(0, Factor);
 
     /// <summary>
     /// Gets the scaled duration in nanoseconds, rounded to the nearest nanosecond.

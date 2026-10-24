@@ -15,6 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Accessibility/Basin.Accessibility.csproj" />
     <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Using Include="Basin.Testing" />
     <Compile Include="../Basin.Tests/Shared/InspectorScroll.cs" Link="InspectorScroll.cs" />
     <PackageReference Include="Avalonia.Headless.XUnit" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -18,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
     <ProjectReference Include="../../samples/LunaWm/LunaWm.csproj" />
     <ProjectReference Include="../../samples/BasinCtl/BasinCtl.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../samples/BasinMcp/BasinMcp.csproj" ReferenceOutputAssembly="false" />
@@ -31,11 +33,8 @@
     <None Include="Goldens/**" />
     <Compile Include="../BasinGreeter.Tests/FakeSystem.cs" Link="FakeSystem.cs" />
     <Compile Include="../Basin.Tests/Greetd/FakeGreetd.cs" Link="FakeGreetd.cs" />
-    <Compile Include="../BasinGreeter.Tests/AccessibilityBus.cs" Link="AccessibilityBus.cs" />
-    <Compile Include="../BasinGreeter.Tests/AtSpiTree.cs" Link="AtSpiTree.cs" />
     <Compile Include="../BasinGreeter.Tests/TempDir.cs" Link="TempDir.cs" />
     <Compile Include="../Basin.Tests/SystemStatus/MockSystemService.cs" Link="MockSystemService.cs" />
-    <Compile Include="../Basin.Tests/Portal/PrivateBus.cs" Link="SystemPrivateBus.cs" />
   </ItemGroup>
 
 </Project>

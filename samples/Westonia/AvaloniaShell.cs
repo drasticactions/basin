@@ -75,8 +75,10 @@ internal sealed class AvaloniaShell : IDisposable
             },
         };
         _elements[output] = elements;
+        elements.BackgroundSurface.Accessible = false;
         elements.BackgroundSurface.Realized += surface =>
             ((AvaloniaUISurface)surface).Content = new BackgroundView { DataContext = elements.Background };
+        elements.PanelSurface.AccessibleName = "Panel";
         elements.PanelSurface.Realized += surface =>
             ((AvaloniaUISurface)surface).Content = new PanelView { DataContext = elements.Panel };
 

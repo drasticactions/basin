@@ -82,6 +82,7 @@ internal sealed class HostWindow : HostFrameChrome, IUISurfaceObserver
             Setters = { new Setter(Layoutable.UseLayoutRoundingProperty, false) },
         });
         System7Theme.SetColorDepth(root, _depth);
+        ((AvaloniaUISurface)surface).AccessibleName = _window.Title;
         ((AvaloniaUISurface)surface).Content = root;
     }
 

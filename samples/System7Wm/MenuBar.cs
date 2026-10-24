@@ -35,7 +35,7 @@ internal sealed class MenuBar : IDisposable
         System7Theme.SetUseNativeMenuTracking(_menu, true);
         System7Theme.SetUseMenuFlash(_menu, true);
         _root.Children.Add(_menu);
-        _surface = new ChromeSurface(layer, host, index, () => _root);
+        _surface = new ChromeSurface(layer, host, index, () => _root, "Menu bar");
         _menu.Opened += (_, _) => Opened?.Invoke();
         _menu.Closed += (_, _) => Dispatcher.UIThread.Post(OnClosed, DispatcherPriority.Background);
     }
@@ -142,6 +142,7 @@ internal sealed class MenuBar : IDisposable
         {
             var item = Build(apple, Apple);
             item.Header = "\u0014";
+            global::Avalonia.Automation.AutomationProperties.SetName(item, "Apple");
             System7Theme.SetIsAppleMenu(item, true);
             Add(item, apple, Apple);
         }
@@ -170,6 +171,7 @@ internal sealed class MenuBar : IDisposable
             if (ApplicationTitle is { } icon)
             {
                 item.Header = icon();
+                global::Avalonia.Automation.AutomationProperties.SetName(item, "Application");
             }
 
             System7Theme.SetMenuBarDock(item, HorizontalAlignment.Right);

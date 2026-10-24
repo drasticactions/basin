@@ -19,6 +19,7 @@ internal sealed partial class TinyComp
     private PaperClipboard? _paperClipboard;
     private UISurfaceNode? _settingsNode;
     private PaperSurface? _settingsSurface;
+    private Basin.UI.Paper.PaperAccessibility? _settingsReader;
     private SettingsDraft? _settingsDraft;
     private SettingsForm? _settingsForm;
     private string? _settingsUnavailable;
@@ -153,6 +154,12 @@ internal sealed partial class TinyComp
 
         _settingsNode = node;
         _settingsSurface = surface;
+        if (AccessibleChrome is { } tree)
+        {
+            _settingsReader = new Basin.UI.Paper.PaperAccessibility(surface, "Settings");
+            tree.Add(_settingsReader);
+        }
+
         _chordCapture.Changed += OnChordCaptureChanged;
         FocusUISurface(surface);
         RefreshPointer();
@@ -172,6 +179,13 @@ internal sealed partial class TinyComp
         if (ReferenceEquals(_uiRouter?.KeyboardFocus, _settingsSurface))
         {
             ReleaseUIKeyboard(restore: true);
+        }
+
+        if (_settingsReader is { } reader)
+        {
+            AccessibleChrome?.Remove(reader);
+            reader.Dispose();
+            _settingsReader = null;
         }
 
         _settingsNode = null;

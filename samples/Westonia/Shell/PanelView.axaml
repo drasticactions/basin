@@ -11,7 +11,7 @@
                  Margin="10,0,10,0"
                  IsVisible="{Binding ClockVisible}"
                  Text="{Binding Clock}" />
-      <ItemsControl ItemsSource="{Binding Launchers}">
+      <ItemsControl ItemsSource="{Binding Launchers}" AutomationProperties.Name="Launchers">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <StackPanel Orientation="Horizontal" />
@@ -19,7 +19,7 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="shell:LauncherModel">
-            <Button Classes="weston-launcher" Command="{Binding Launch}" ToolTip.Tip="{Binding DisplayName}">
+            <Button Classes="weston-launcher" Command="{Binding Launch}" ToolTip.Tip="{Binding DisplayName}" AutomationProperties.Name="{Binding DisplayName}">
               <Image Source="{Binding Icon}" Width="24" Height="24" />
             </Button>
           </DataTemplate>

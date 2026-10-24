@@ -23,6 +23,29 @@ public sealed partial class Scene
         NodeAt(Root, x - Root.X, y - Root.Y, surfacesOnly: true) is { Node: SceneBuffer } hit ? hit : null;
 
     /// <summary>
+    /// Maps a box in the local coordinates of a surface that the scene shows to scene coordinates, through every transform above it.
+    /// </summary>
+    /// <param name="surface">The surface.</param>
+    /// <param name="local">The box in surface-local logical pixels.</param>
+    /// <param name="scene">The box in scene coordinates, or the default value on failure.</param>
+    /// <returns><see langword="false"/> when the scene has no live, enabled node for <paramref name="surface"/>.</returns>
+    public bool TryMapFromSurface(Surface surface, in Box local, out Box scene)
+    {
+        for (var i = 0; i < _surfaces.Count; i++)
+        {
+            var shown = _surfaces[i];
+            if (ReferenceEquals(shown.Surface, surface) && !shown.IsDestroyed && shown.Tree.Enabled)
+            {
+                scene = shown.Tree.MapToScene(local);
+                return true;
+            }
+        }
+
+        scene = default;
+        return false;
+    }
+
+    /// <summary>
     /// Maps a scene point into the local coordinates of a surface that the scene shows, through every transform above it.
     /// </summary>
     /// <param name="surface">The surface to map into.</param>

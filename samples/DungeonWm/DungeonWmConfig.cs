@@ -340,6 +340,11 @@ internal static class DungeonWmConfig
         }
 
         settings.Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        if (reader.Section("accessibility") is { } accessibility)
+        {
+            settings.Accessibility = Basin.Config.AccessibilitySettings.Read(accessibility);
+        }
+
         reader.ReportUnknown();
     }
 

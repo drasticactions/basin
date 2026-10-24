@@ -456,7 +456,7 @@ internal static class FdSnapshot
                 continue;
             }
 
-            if (target is null || target.EndsWith(".dll", StringComparison.Ordinal))
+            if (target is null || target.EndsWith(".dll", StringComparison.Ordinal) || target.EndsWith(".pdb", StringComparison.Ordinal))
             {
                 continue;
             }

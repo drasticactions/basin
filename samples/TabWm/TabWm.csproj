@@ -19,9 +19,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="tab-wm.toml" LogicalName="tab-wm.toml" />
+    <EmbeddedResource Include="HighContrast.colors" LogicalName="HighContrast.colors" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Accessibility/Basin.Accessibility.csproj" />
+    <ProjectReference Include="../../src/Basin.Portal/Basin.Portal.csproj" />
     <ProjectReference Include="../../src/Basin.Audio.PipeWire/Basin.Audio.PipeWire.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
     <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />

@@ -89,6 +89,13 @@ internal sealed partial class Shell
             return true;
         }
 
+        if (super && alt && !shift && !control &&
+            Basin.Accessibility.DesktopAccessibility.DefaultActionForKeysym(symbol.Value) is { } action &&
+            _access?.Run(action) == true)
+        {
+            return true;
+        }
+
         if (!super)
         {
             return !control && !alt && TypeOnStart(view, symbol, shift);

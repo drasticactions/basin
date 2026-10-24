@@ -117,4 +117,27 @@ public sealed class ReaderTests
 
         Assert.False(Directory.Exists($"/proc/{pid}"), $"the reader {pid} outlived the login");
     }
+
+    [Fact]
+    public async Task Super_alt_8_zooms_the_greeter_and_super_alt_c_draws_the_screen_curtain()
+    {
+        using var fixture = new Fixture("[accessibility]\nscreen_reader = \"off\"\n");
+        using var greeter = fixture.Start();
+        async Task AccessChord(uint key)
+        {
+            foreach (var (code, pressed) in new[] { (LeftMeta, 1), (LeftAlt, 1), (key, 1), (key, 0), (LeftAlt, 0), (LeftMeta, 0) })
+            {
+                await greeter.SendAsync($"key {code} {pressed}");
+            }
+        }
+
+        await AccessChord(9);
+        await greeter.ExpectAsync("ZOOM factor=2");
+        await AccessChord(46);
+        await greeter.ExpectAsync("CURTAIN on");
+        await AccessChord(46);
+        await greeter.ExpectAsync("CURTAIN off");
+        await AccessChord(12);
+        await greeter.ExpectAsync("ZOOM factor=1.6");
+    }
 }

@@ -104,6 +104,11 @@ public sealed class GreeterSettings
     public IReadOnlyList<string> Orca { get; private set; } = ["orca", "--replace"];
 
     /// <summary>
+    /// Gets the keyboard aids of the <c>[accessibility.keyboard]</c> table: <c>sticky</c>, <c>sticky_shortcut</c>, <c>slow_ms</c>, <c>bounce_ms</c>, <c>mouse_keys</c> and <c>mouse_keys_speed</c>. Every aid is off by default.
+    /// </summary>
+    public Basin.Capabilities.KeyboardAidOptions KeyboardAids { get; private set; } = new();
+
+    /// <summary>
     /// Gets the settings of the <c>[handoff]</c> table, which control what the greeter leaves on screen for the session.
     /// </summary>
     public HandoffSettings Handoff { get; private set; } = new();
@@ -162,6 +167,19 @@ public sealed class GreeterSettings
             settings.TextScale = Math.Clamp(accessibility.Number("text_scale", settings.TextScale), 1.0, 2.0);
             settings.ScreenReader = accessibility.Choice("screen_reader", settings.ScreenReader, "off", "toggle", "on");
             settings.Orca = List(accessibility, "orca") ?? settings.Orca;
+            if (accessibility.Section("keyboard") is { } keys)
+            {
+                var aids = settings.KeyboardAids;
+                settings.KeyboardAids = aids with
+                {
+                    Sticky = keys.Flag("sticky", aids.Sticky),
+                    StickyShortcut = keys.Flag("sticky_shortcut", aids.StickyShortcut),
+                    SlowMs = Math.Max(0, keys.Number("slow_ms", aids.SlowMs)),
+                    BounceMs = Math.Max(0, keys.Number("bounce_ms", aids.BounceMs)),
+                    MouseKeys = keys.Flag("mouse_keys", aids.MouseKeys),
+                    MouseKeysMaxSpeed = Math.Max(1.0, keys.Number("mouse_keys_speed", aids.MouseKeysMaxSpeed)),
+                };
+            }
         }
 
         settings.Handoff = HandoffSettings.Read(root.Section("handoff"));

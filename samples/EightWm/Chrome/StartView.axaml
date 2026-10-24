@@ -61,6 +61,7 @@
       </win:SemanticZoom.ZoomedOutView>
     </win:SemanticZoom>
     <Button x:Name="AppsArrow"
+            AutomationProperties.Name="All apps"
             Classes="pagearrow"
             Margin="60,0,0,24"
             HorizontalAlignment="Left"

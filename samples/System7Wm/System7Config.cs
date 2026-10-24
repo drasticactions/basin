@@ -14,6 +14,9 @@ internal sealed class System7Config
 
     public HandoffSettings Handoff { get; private set; } = new();
 
+
+    public AccessibilitySettings Accessibility { get; private set; } = new();
+
     public void SetMainOutput(string name) => MainOutput = name;
 
     public System7ColorDepth Depth { get; set; } = System7ColorDepth.Indexed8;
@@ -255,6 +258,7 @@ internal sealed class System7Config
 
         config.Rules.AddRange(WindowRule.MostSpecificFirst(rules));
         config.Handoff = HandoffSettings.Read(reader.Section("handoff"));
+        config.Accessibility = AccessibilitySettings.Read(reader.Section("accessibility"));
         reader.ReportUnknown();
         return config;
     }

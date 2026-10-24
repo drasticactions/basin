@@ -37,6 +37,10 @@ internal sealed partial class LunaShell
             Processes = _processes,
         });
         _ipc.SyntheticInput = _seat.Injector;
+        if (_access is { } access)
+        {
+            _ipc.GuardWithCurtain(access.Curtain);
+        }
         _ipc.Events.Declare(KeyboardEvent);
         RegisterCommands(_ipc.Methods);
         _inspector?.Register(_ipc.Methods);

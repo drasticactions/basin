@@ -30,6 +30,11 @@ public sealed class OutputView
     public SceneOutput? Scene { get; internal set; }
 
     /// <summary>
+    /// Gets the zoom of a secondary output, which renders without a <see cref="SceneOutput"/>. It is <see langword="null"/> for every other output.
+    /// </summary>
+    public ZoomView? Zoom { get; internal set; }
+
+    /// <summary>
     /// Gets the color lookup tables of the output. Every path has one: it is <see cref="SceneOutput.Color"/> of <see cref="Scene"/> when that exists.
     /// It is <see langword="null"/> only before the driver wires the view.
     /// </summary>

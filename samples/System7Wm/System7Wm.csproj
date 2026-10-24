@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Accessibility/Basin.Accessibility.csproj" />
     <ProjectReference Include="../../external/System7.Avalonia/src/System7.Avalonia/System7.Avalonia.csproj" />
     <ProjectReference Include="../../src/Basin.AppMenu/Basin.AppMenu.csproj" />
     <ProjectReference Include="../../src/Basin.Audio.PipeWire/Basin.Audio.PipeWire.csproj" />

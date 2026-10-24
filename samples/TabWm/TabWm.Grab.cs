@@ -259,6 +259,7 @@ internal sealed partial class TabWm
             return;
         }
 
+        _ghost.Accessible = false;
         _ghost.Content = new GhostView { DataContext = label };
         _ghostNode = new UISurfaceNode(_layers.Popups, _ghost, _index) { PreciseDamage = true };
         _ghostNode.Node.InputBox = default;

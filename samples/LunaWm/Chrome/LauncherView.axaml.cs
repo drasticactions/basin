@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -253,4 +254,39 @@ public sealed partial class LauncherView : UserControl
     }
 
     private static double Distance(Point a, Point b) => Math.Sqrt(((a.X - b.X) * (a.X - b.X)) + ((a.Y - b.Y) * (a.Y - b.Y)));
+
+    private void OnTabInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: LauncherTabModel tab } && Model is { } model)
+        {
+            model.Current = tab;
+        }
+    }
+
+    private void OnDoneInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (Model is { } model)
+        {
+            model.Reordering = false;
+        }
+    }
+
+    private void OnSearchInvoked(object? sender, RoutedEventArgs e) => Model?.Search();
+
+    private void OnIconInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: LauncherIconModel icon } && Model is { Reordering: false } model)
+        {
+            model.Launch(icon);
+        }
+    }
+
+    private void OnHideInvoked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: LauncherIconModel icon } && Model is { Reordering: true } model)
+        {
+            e.Handled = true;
+            model.Hide(icon);
+        }
+    }
 }

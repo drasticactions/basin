@@ -247,14 +247,16 @@ public sealed class GreeterProcessTests
         await Expect(session, "AUTH secret Password: ");
         await session.SendAsync("curtain up");
         await session.SettleAsync();
-        await AtSpiTree.Where(a11y, nodes => nodes.Any(node => node.Role == "entry" && node.Name == "Password"));
+        await a11y.WhereAsync(nodes => nodes.Any(node => node.Role == "password text" && node.Name == "Password"));
         await session.SendAsync("type hunter2");
         await session.SendAsync("reveal on");
         await Expect(session, "REVEAL on allowed=yes");
         await session.SettleAsync();
-        var texts = await AtSpiTree.Texts(a11y);
+        var texts = await a11y.TextsAsync();
+        var tree = await a11y.TreeAsync();
         Assert.Contains("●●●●●●●", texts);
         Assert.DoesNotContain(texts, text => text.Contains("hunter2", StringComparison.Ordinal));
+        Assert.DoesNotContain(tree, node => node.Name.Contains("hunter2", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -20,7 +20,8 @@ internal sealed class TabFrame : IDisposable
     public TabFrame(IUIHost host, SceneTree parent, UISurfaceIndex index, FrameModel model)
     {
         Model = model;
-        _frame = new UIStripFrame(host, parent, new UIStripFrameMetrics(0, Border, Titlebar), Fill, index);
+        _frame = new UIStripFrame(host, parent, new UIStripFrameMetrics(0, Border, Titlebar), Fill, index) { AccessibleTitle = model.Title };
+        Model.PropertyChanged += OnModelChanged;
     }
 
     public FrameModel Model { get; }
@@ -51,7 +52,19 @@ internal sealed class TabFrame : IDisposable
 
     public FrameEdges EdgeAt(double x, double y) => _frame.EdgeAt(x, y);
 
-    public void Dispose() => _frame.Dispose();
+    public void Dispose()
+    {
+        Model.PropertyChanged -= OnModelChanged;
+        _frame.Dispose();
+    }
+
+    private void OnModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FrameModel.Title))
+        {
+            _frame.AccessibleTitle = Model.Title;
+        }
+    }
 
     private void Fill(UIFrameStrip strip, IUISurface surface)
     {

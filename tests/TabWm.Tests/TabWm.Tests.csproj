@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="../../samples/TabWm/TabWm.csproj" />
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Testing/Basin.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

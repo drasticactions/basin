@@ -84,7 +84,7 @@ public sealed class DamInspectorProcessTests
         await dam.Quit();
     }
 
-    private sealed class DamProcess : IDisposable
+    internal sealed class DamProcess : IDisposable
     {
         private readonly Process _process;
         private readonly BlockingCollection<string> _queue = [];

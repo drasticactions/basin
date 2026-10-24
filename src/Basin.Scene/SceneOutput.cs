@@ -8,7 +8,7 @@ namespace Basin.Scene;
 /// Draws a <see cref="Scene"/> onto one <see cref="IOutput"/> and commits only the damaged parts.
 /// It also picks direct scanout and overlay planes, and it disposes itself when the output is destroyed.
 /// </summary>
-public sealed class SceneOutput : IDisposable, IColorLutTable
+public sealed class SceneOutput : IDisposable, IColorLutTable, IZoomable
 {
     private readonly Scene _scene;
     private readonly List<Scene.RenderEntry> _renderList = [];
@@ -63,6 +63,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     /// Gets the output that this object draws to.
     /// </summary>
     public IOutput Output { get; }
+
+    /// <summary>
+    /// Gets the scene that this object draws.
+    /// </summary>
+    public Scene Scene => _scene;
 
     /// <summary>
     /// Gets the color lookup tables of this output. The members below forward to it.
@@ -133,6 +138,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             if (_position != value)
             {
                 _position = value;
+                _projection = ComputeProjection();
                 Ring.AddWhole();
                 DamagePending?.Invoke();
             }
@@ -172,11 +178,91 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     private Box? _replicationSource;
 
+    /// <summary>
+    /// The largest zoom factor that <see cref="SetZoom"/> accepts.
+    /// </summary>
+    public const double MaxZoom = ZoomGeometry.MaxZoom;
+
+    private double _zoom = 1.0;
+    private double _zoomCenterX;
+    private double _zoomCenterY;
+
+    /// <summary>
+    /// Gets the zoom factor. It is 1 when the output shows its whole area.
+    /// </summary>
+    public double ZoomFactor => _zoom;
+
+    /// <summary>
+    /// Gets a value indicating whether the zoom factor is above 1.
+    /// </summary>
+    public bool IsZoomed => _zoom > 1.0;
+
+    /// <summary>
+    /// Occurs after <see cref="SetZoom"/> changed the factor or the visible area.
+    /// </summary>
+    public event Action<SceneOutput>? ZoomChanged;
+
+    /// <summary>
+    /// Gets the whole area of the output in logical layout coordinates, whatever the zoom factor is.
+    /// </summary>
+    public (double X, double Y, double Width, double Height) LogicalArea
+    {
+        get
+        {
+            var (width, height) = ZoomGeometry.LogicalSize(Output);
+            return (_position.X, _position.Y, width, height);
+        }
+    }
+
+    /// <summary>
+    /// Gets the area of the layout that the output shows, in logical layout coordinates. It is the whole output while the zoom factor is 1.
+    /// </summary>
+    public (double X, double Y, double Width, double Height) ZoomArea
+    {
+        get => ZoomGeometry.Area(Output, _position, _zoom, _zoomCenterX, _zoomCenterY);
+    }
+
+    /// <summary>
+    /// Magnifies the output about a point. The output keeps the visible area inside its own area, so a center near an edge moves inward. A disposed output ignores the call.
+    /// A change damages the whole output and raises <see cref="DamagePending"/>. Overlay planes and direct scanout stay off while the factor is above 1.
+    /// </summary>
+    /// <param name="factor">The zoom factor. It is clamped to the range from 1 to <see cref="MaxZoom"/>.</param>
+    /// <param name="centerX">The horizontal center in logical layout coordinates.</param>
+    /// <param name="centerY">The vertical center in logical layout coordinates.</param>
+    public void SetZoom(double factor, double centerX, double centerY)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        factor = ZoomGeometry.ClampFactor(factor);
+        (centerX, centerY) = ZoomGeometry.ClampCenter(Output, _position, factor, centerX, centerY);
+
+        if (factor == _zoom && (factor == 1.0 || (centerX == _zoomCenterX && centerY == _zoomCenterY)))
+        {
+            return;
+        }
+
+        var before = _projection;
+        _zoom = factor;
+        _zoomCenterX = centerX;
+        _zoomCenterY = centerY;
+        _projection = ComputeProjection();
+        if (_projection != before)
+        {
+            Ring.AddWhole();
+            DamagePending?.Invoke();
+        }
+
+        ZoomChanged?.Invoke(this);
+    }
+
     private OutputProjection ComputeProjection()
     {
         if (_replicationSource is not { } box || box.Width <= 0 || box.Height <= 0)
         {
-            return OutputProjection.For(Output);
+            return ZoomGeometry.Project(Output, _position, _zoom, _zoomCenterX, _zoomCenterY);
         }
 
         var mode = Output.CurrentMode;
@@ -453,7 +539,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     private int _cursorX, _cursorY, _cursorHotspotX, _cursorHotspotY;
 
     /// <summary>
-    /// Sets the cursor image that composed frames draw on top. The output locks the buffer until the next call or disposal.
+    /// Sets the cursor image that composed frames draw on top. The output locks the buffer until the next call or disposal. A disposed output ignores the call.
     /// A software cursor turns off direct scanout and plane offload.
     /// </summary>
     /// <param name="image">The cursor image, or <see langword="null"/> to remove the cursor.</param>
@@ -461,6 +547,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     /// <param name="hotspotY">The vertical hotspot in image pixels.</param>
     public void SetSoftwareCursor(IBuffer? image, int hotspotX, int hotspotY)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         DamageCursor();
         _softwareCursorTexture?.Dispose();
         _softwareCursorTexture = null;
@@ -472,13 +563,13 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     }
 
     /// <summary>
-    /// Moves the software cursor hotspot and damages the old and new cursor areas.
+    /// Moves the software cursor hotspot and damages the old and new cursor areas. A disposed output ignores the call.
     /// </summary>
     /// <param name="x">The horizontal position in output-local physical pixels.</param>
     /// <param name="y">The vertical position in output-local physical pixels.</param>
     public void MoveSoftwareCursor(int x, int y)
     {
-        if (x == _cursorX && y == _cursorY)
+        if (_disposed || (x == _cursorX && y == _cursorY))
         {
             return;
         }
@@ -489,13 +580,20 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         DamageCursor();
     }
 
+    private bool IsCurtained => _scene.Curtain is { IsDrawn: true };
+
+    internal void Repaint()
+    {
+        Ring.AddWhole();
+        DamagePending?.Invoke();
+    }
+
     private void DamageCursor()
     {
         if (_softwareCursor.Buffer is { } image)
         {
             var wasEmpty = Ring.IsEmpty;
-            Ring.Add(_projection.MapPixels(
-                new Box(_cursorX - _cursorHotspotX, _cursorY - _cursorHotspotY, image.Width, image.Height)));
+            Ring.Add(_projection.MapPixels(CursorBox(image)));
             if (wasEmpty && !Ring.IsEmpty)
             {
                 DamagePending?.Invoke();
@@ -873,11 +971,16 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _blendsLinear = renderer.BlendSpace == RenderBlendSpace.Linear;
         Ring.Resize(mode.Width, mode.Height);
         _renderList.Clear();
+        var curtained = IsCurtained;
         AllocationScope.Pause();
         try
         {
-            _scene.CollectRenderList(_renderList, -_position.X, -_position.Y);
-            _scene.PrepareCaptures(renderer, _renderList, _projection.Scale);
+            if (!curtained)
+            {
+                _scene.CollectRenderList(_renderList, -_position.X, -_position.Y);
+                _scene.PrepareCaptures(renderer, _renderList, _projection.Scale);
+            }
+
             RecordPresented(mode);
         }
         finally
@@ -896,7 +999,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             Ring.AddWhole();
         }
 
-        var filter = _frameFilter is { IsSupported: true } installed && renderer.SupportsFrameFilters
+        var filter = !curtained && _frameFilter is { IsSupported: true } installed && renderer.SupportsFrameFilters
             ? installed
             : null;
         if (filter is not null && (filter.NeedsContinuousRepaint || (!Ring.IsEmpty && filter.NeedsFullFrame)))
@@ -904,7 +1007,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             Ring.AddWhole();
         }
 
-        if (_postStages.Count == 0 && filter is null && !_projection.IsTransformed && _replicationSource is null &&
+        if (_postStages.Count == 0 && filter is null && !_projection.IsTransformed && _replicationSource is null && !IsZoomed && !curtained &&
             options.AllowDirectScanout && _softwareCursor.Buffer is null && TryDirectScanout(state))
         {
             return true;
@@ -922,8 +1025,10 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _layers.Clear();
         var sendLayers = false;
         OffloadSkipped = !options.AllowPlaneOffload ? "offload off"
+            : curtained ? "screen curtain"
             : _projection.IsTransformed ? "output transform"
             : _replicationSource is not null ? "replicated output"
+            : IsZoomed ? "zoomed output"
             : _softwareCursor.Buffer is not null ? "software cursor"
             : _postStages.Count > 0 ? "post stage"
             : filter is not null ? "frame filter"
@@ -1002,7 +1107,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         {
             RenderFiltered(renderer, filter, target, options, mode, tick);
         }
-        else if (_postStages.Count > 0)
+        else if (_postStages.Count > 0 && !curtained)
         {
             RenderWithPost(renderer, target, options, mode, tick);
         }
@@ -1653,6 +1758,18 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _ => 0,
     };
 
+    private Box CursorBox(IBuffer image)
+    {
+        if (!IsZoomed)
+        {
+            return new Box(_cursorX - _cursorHotspotX, _cursorY - _cursorHotspotY, image.Width, image.Height);
+        }
+
+        var left = (int)Math.Round((_cursorX - _cursorHotspotX) * _zoom);
+        var top = (int)Math.Round((_cursorY - _cursorHotspotY) * _zoom);
+        return new Box(left, top, (int)Math.Round(image.Width * _zoom), (int)Math.Round(image.Height * _zoom));
+    }
+
     private void DrawSoftwareCursor(IRenderer renderer, IRenderPass pass)
     {
         if (_softwareCursor.Buffer is not { } cursorImage)
@@ -1677,7 +1794,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         {
             pass.AddTexture(cursorTexture, new TextureRenderOptions
             {
-                DstBox = new Box(_cursorX - _cursorHotspotX, _cursorY - _cursorHotspotY, cursorImage.Width, cursorImage.Height),
+                DstBox = CursorBox(cursorImage),
                 Transform = _projection.MapsPixels ? _projection.Matrix : RenderTransform.Identity,
                 Clip = _damage,
             });
@@ -1778,10 +1895,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             _ = CloseFd(waitFence);
         }
 
-        if (!anyBackground.IsEmpty && options.Background.A > 0)
+        var background = IsCurtained ? RenderColor.Black : options.Background;
+        if (!anyBackground.IsEmpty && background.A > 0)
         {
             var extents = anyBackground.Extents;
-            pass.AddRect(options.Background, new Box(extents.X1, extents.Y1, extents.X2 - extents.X1, extents.Y2 - extents.Y1), anyBackground);
+            pass.AddRect(background, new Box(extents.X1, extents.Y1, extents.X2 - extents.X1, extents.Y2 - extents.Y1), anyBackground);
         }
 
         for (var i = 0; i < _renderList.Count; i++)
@@ -1793,7 +1911,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             }
         }
 
-        if (drawCursor)
+        if (drawCursor && !IsCurtained)
         {
             DrawSoftwareCursor(renderer, pass);
         }
@@ -2123,6 +2241,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     private void OnSceneDamaged(SceneNode? source, Box box)
     {
+        if (IsCurtained)
+        {
+            return;
+        }
+
         var local = _projection.ProjectExpanded(
             new Box(box.X - _position.X, box.Y - _position.Y, box.Width, box.Height));
         if (local.X >= Ring.Width || local.Y >= Ring.Height || local.Right <= 0 || local.Bottom <= 0)

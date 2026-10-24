@@ -49,6 +49,7 @@ internal sealed partial class TinyComp :
     private readonly IAllocator? _allocator;
     private readonly Basin.Host.OutputDriver _driver;
     private readonly Scene _scene = new();
+    private readonly Basin.Scene.SceneCurtain _curtain;
     private PointerRefresh? _pointerRefresh;
     private SceneLayers _layers = null!;
     private SceneTree _wallpapers = null!;
@@ -259,9 +260,11 @@ internal sealed partial class TinyComp :
 
     private static Basin.Frames.Quill.QuillFrameTheme QuillThemeOf(Config config, string palette)
     {
-        var theme = palette == "light"
-            ? Basin.Frames.Quill.QuillFrameTheme.Light()
-            : new Basin.Frames.Quill.QuillFrameTheme();
+        var theme = config.Accessibility.HighContrast
+            ? Basin.Frames.Quill.QuillFrameTheme.HighContrast()
+            : palette == "light"
+                ? Basin.Frames.Quill.QuillFrameTheme.Light()
+                : new Basin.Frames.Quill.QuillFrameTheme();
         theme.CornerRadius = (float)config.QuillCornerRadius;
         theme.FontSize = (float)config.QuillFontSize;
         theme.Frosted = config.QuillBackdropBlur > 0;
@@ -380,8 +383,8 @@ internal sealed partial class TinyComp :
 
     private Basin.UI.Skia.FlatFrameTheme FlatThemeOrLoad() => _flatTheme ??= FlatThemeOf(FrameThemeOrLoad());
 
-    private static Basin.UI.Skia.FlatFrameTheme FlatThemeOf(FrameTheme theme) =>
-        new(theme.Typeface, theme.FontSize) { Icons = theme.IconFor };
+    private Basin.UI.Skia.FlatFrameTheme FlatThemeOf(FrameTheme theme) =>
+        new(theme.Typeface, theme.FontSize) { Icons = theme.IconFor, HighContrast = _config.Accessibility.HighContrast };
 
     internal Basin.Capabilities.IUIHost UIHost => _uiHost ??= SkiaUIHosts.For(_renderer);
 
@@ -533,6 +536,7 @@ internal sealed partial class TinyComp :
     {
         ArgumentNullException.ThrowIfNull(config);
         var drm = backend == BackendKind.Drm;
+        _curtain = new Basin.Scene.SceneCurtain(_scene);
         _config = config;
         _configPath = configPath;
         _init = init;
@@ -838,6 +842,8 @@ internal sealed partial class TinyComp :
         };
         _densityControl.RulesWritten += rules => _config.Launch = rules;
         _services.Use<Basin.Capabilities.IX11DensityControl>(_densityControl);
+        _services.Use<Basin.Capabilities.IAppearanceSettings>(_appearance);
+        ApplyAppearance();
         _services.Freeze();
         _dmabufGlobal = dmabufModule?.Global;
         WireInputCapture();
@@ -1027,7 +1033,7 @@ internal sealed partial class TinyComp :
 
             RaiseHostWindow(window);
         };
-        _cursor = new Basin.Desktop.CursorController(_layout) { Capture = _capture };
+        _cursor = new Basin.Desktop.CursorController(_layout) { Capture = _capture, Curtain = _curtain };
         ApplyCursorIdle();
         _cursorShapes = _services.Require<Basin.Desktop.CursorShapeManager>();
         _cursorShapes.CursorRequested += _cursor.ShowImage;
@@ -1157,10 +1163,70 @@ internal sealed partial class TinyComp :
 
     private IReadOnlyList<Basin.Host.OutputView> Views => _driver.Views;
 
+    private void ApplyAppearance()
+    {
+        var accessibility = _config.Accessibility;
+        ReducedMotion.IsOn = accessibility.ReducedMotion;
+        _access?.Apply(accessibility);
+
+        _appearance.Set(new Basin.Capabilities.AppearancePreferences(
+            _config.QuillPalette == "light" ? Basin.Capabilities.ColorSchemePreference.Light : Basin.Capabilities.ColorSchemePreference.Dark,
+            null,
+            accessibility.HighContrast,
+            accessibility.ReducedMotion));
+    }
+
+    private void StartAccessibility()
+    {
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "tinycomp",
+            Host = _host,
+            Scene = _scene,
+            Seat = _seat,
+            Pointer = _touchBinder?.Pointer ?? _pointer ?? new LayoutPointer(_layout),
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = _toplevels,
+            Aids = _touchBinder?.Aids,
+            Log = _log,
+        });
+        _access.TreeStarted += tree =>
+        {
+            foreach (var window in _windows)
+            {
+                if (window.Frame is { } frame)
+                {
+                    tree.Add(frame);
+                }
+            }
+
+            foreach (var window in _xwindows)
+            {
+                if (window.Frame is { } frame)
+                {
+                    tree.Add(frame);
+                }
+            }
+
+            if (_inspector is { } inspector)
+            {
+                tree.Add(inspector);
+            }
+        };
+        _access.Apply(_config.Accessibility);
+        _ = _access.StartAsync(_config.Accessibility.Enabled);
+        if (_host.Drm is not null)
+        {
+            _settingsPortal = Basin.Portal.PortalSettingsService.TryStart(_loop, _appearance, null, null, out _);
+        }
+    }
+
     public int Run()
     {
         _report.Line(CompositorLines.Socket(_socket));
         StartIpc();
+        StartAccessibility();
         Basin.Cli.CurrentDesktop.Export("basin", _host.Drm is null ? null : _socket);
 
         if (_channelEndpoint is { } endpoint)
@@ -1244,6 +1310,10 @@ internal sealed partial class TinyComp :
         _ipc?.Dispose();
         _settle?.Dispose();
         _ipc = null;
+        _access?.Dispose();
+        _access = null;
+        _settingsPortal?.Dispose();
+        _settingsPortal = null;
         _adoption?.Dispose();
         _adoption = null;
         _channels?.Dispose();
@@ -1337,6 +1407,12 @@ internal sealed partial class TinyComp :
     private static readonly bool TraceEnabled = Basin.Diagnostics.BasinDiagnostics.TraceEnabled;
 
     private readonly BasinLogger _log;
+    private Basin.Accessibility.DesktopAccessibility? _access;
+    private Basin.Portal.PortalSettingsService? _settingsPortal;
+
+    private readonly Basin.Capabilities.Defaults.AppearanceSettingsStore _appearance = new();
+
+    internal Basin.Accessibility.CompositorAccessibility? AccessibleChrome => _access?.Tree;
 
     internal BasinLogger Log => _log;
 

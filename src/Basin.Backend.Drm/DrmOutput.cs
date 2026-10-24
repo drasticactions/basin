@@ -2238,7 +2238,27 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             pool[i].Disable();
         }
 
-        if (!output.TryApply(builder.Request, DrmAtomicCommitFlags.None, out var errno))
+        var logged = Log.IsEnabled(BasinLogLevel.Debug);
+        if (logged)
+        {
+            AllocationScope.Pause();
+        }
+
+        bool applied;
+        int errno;
+        try
+        {
+            applied = output.TryApply(builder.Request, DrmAtomicCommitFlags.None, out errno);
+        }
+        finally
+        {
+            if (logged)
+            {
+                AllocationScope.Resume();
+            }
+        }
+
+        if (!applied)
         {
             Log.Warn($"{Name}: liftoff apply failed (errno {errno}), all layers composited");
             return false;

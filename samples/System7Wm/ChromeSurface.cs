@@ -12,12 +12,27 @@ internal sealed class ChromeSurface : IDisposable
     private readonly UISurfaceNode _node;
     private readonly Func<Control> _content;
     private Control? _root;
+    private string? _name;
     private bool _disposed;
 
-    public ChromeSurface(SceneTree parent, AvaloniaUIHost host, UISurfaceIndex index, Func<Control> content)
+    public ChromeSurface(SceneTree parent, AvaloniaUIHost host, UISurfaceIndex index, Func<Control> content, string? name)
     {
         _node = new UISurfaceNode(parent, host, index) { PreciseDamage = false };
         _content = content;
+        _name = name;
+    }
+
+    public string? AccessibleName
+    {
+        get => _name;
+        set
+        {
+            _name = value;
+            if (Surface is { } surface)
+            {
+                surface.AccessibleName = value;
+            }
+        }
     }
 
     public UISurfaceNode Node => _node;
@@ -64,6 +79,8 @@ internal sealed class ChromeSurface : IDisposable
             surface.SetPosition(device.X / (double)chrome, device.Y / (double)chrome);
             if (_root is null)
             {
+                surface.Accessible = _name is not null;
+                surface.AccessibleName = _name;
                 _root = _content();
                 surface.Content = _root;
             }

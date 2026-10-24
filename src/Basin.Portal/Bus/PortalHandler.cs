@@ -13,6 +13,7 @@ internal sealed class PortalHandler : DBusHandler,
     IInputCaptureHandler,
     IGlobalShortcutsHandler,
     IAccessHandler,
+    ISettingsHandler,
     IRequestHandler,
     ISessionHandler,
     ISessionProperties
@@ -24,7 +25,8 @@ internal sealed class PortalHandler : DBusHandler,
         DBusInterface.OrgFreedesktopImplPortalClipboard |
         DBusInterface.OrgFreedesktopImplPortalInputCapture |
         DBusInterface.OrgFreedesktopImplPortalGlobalShortcuts |
-        DBusInterface.OrgFreedesktopImplPortalAccess;
+        DBusInterface.OrgFreedesktopImplPortalAccess |
+        DBusInterface.OrgFreedesktopImplPortalSettings;
 
     private readonly PortalBus _bus;
 
@@ -413,6 +415,34 @@ internal sealed class PortalHandler : DBusHandler,
 
         return default;
     }
+
+    ValueTask ISettingsHandler.HandleGetPropertyAsync(ISettingsHandler.GetPropertyContext context)
+    {
+        if (TryModule<ISettingsProperties>(out var properties))
+        {
+            return context.Handle(properties);
+        }
+
+        NoInterface(context.MethodContext, "org.freedesktop.impl.portal.Settings");
+        return default;
+    }
+
+    ValueTask ISettingsHandler.HandleGetAllPropertiesAsync(ISettingsHandler.GetAllPropertiesContext context)
+    {
+        if (TryModule<ISettingsProperties>(out var properties))
+        {
+            return context.Handle(properties);
+        }
+
+        NoInterface(context.MethodContext, "org.freedesktop.impl.portal.Settings");
+        return default;
+    }
+
+    ValueTask<Dictionary<string, Dictionary<string, VariantValue>>> ISettingsHandler.ReadAllAsync(string[] namespaces) =>
+        Module<ISettingsHandler>("Settings").ReadAllAsync(namespaces);
+
+    ValueTask<VariantValue> ISettingsHandler.ReadAsync(string @namespace, string key) =>
+        Module<ISettingsHandler>("Settings").ReadAsync(@namespace, key);
 
     ValueTask ISessionHandler.HandleGetPropertyAsync(ISessionHandler.GetPropertyContext context) =>
         _bus.SessionAt(_bus.Current.Path) is not null

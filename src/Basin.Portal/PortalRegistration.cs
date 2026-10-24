@@ -24,6 +24,7 @@ public static class PortalRegistration
         "org.freedesktop.impl.portal.InputCapture",
         "org.freedesktop.impl.portal.GlobalShortcuts",
         "org.freedesktop.impl.portal.Access",
+        "org.freedesktop.impl.portal.Settings",
     ];
 
     /// <summary>
@@ -51,7 +52,15 @@ public static class PortalRegistration
     }
 
     /// <summary>
+    /// The name of the portal that the compositor serves itself through <see cref="PortalSettingsService"/>. Its file is <c>basin-settings.portal</c>.
+    /// </summary>
+    public const string SettingsPortalName = "basin-settings";
+
+    private const string SettingsInterface = "org.freedesktop.impl.portal.Settings";
+
+    /// <summary>
     /// Creates the text of the <c>basin-portals.conf</c> file, which prefers basin for each interface and gtk, kde or gnome for the rest.
+    /// When the interfaces leave Settings out, Settings goes to <see cref="SettingsPortalName"/>.
     /// </summary>
     /// <param name="interfaces">The interfaces that basin serves.</param>
     /// <returns>The file text.</returns>
@@ -65,6 +74,11 @@ public static class PortalRegistration
         foreach (var name in interfaces)
         {
             text.Append(name).Append('=').Append(DesktopName).Append(";\n");
+        }
+
+        if (!interfaces.Contains(SettingsInterface))
+        {
+            text.Append(SettingsInterface).Append('=').Append(SettingsPortalName).Append(";\n");
         }
 
         return text.ToString();
@@ -104,6 +118,7 @@ public static class PortalRegistration
 
     /// <summary>
     /// Writes the <c>.portal</c> file and the config file, and the service file when an executable is given. The files use the default bus name.
+    /// When the interfaces leave Settings out, it also writes <c>basin-settings.portal</c>, which names <see cref="PortalSettingsService.BusName"/>.
     /// </summary>
     /// <param name="interfaces">The interfaces that basin serves.</param>
     /// <param name="executable">The command line of the backend, or <see langword="null"/> to write no service file.</param>
@@ -121,6 +136,10 @@ public static class PortalRegistration
         var configPath = Path.Combine(root, DesktopName + "-portals.conf");
         File.WriteAllText(portalPath, PortalFile(interfaces));
         File.WriteAllText(configPath, ConfigFile(interfaces));
+        if (!interfaces.Contains(SettingsInterface))
+        {
+            File.WriteAllText(Path.Combine(portalsDirectory, SettingsPortalName + ".portal"), PortalFile([SettingsInterface], PortalSettingsService.BusName));
+        }
         string? servicePath = null;
         if (!string.IsNullOrEmpty(executable))
         {

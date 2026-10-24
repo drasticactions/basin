@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:Basin.UI.Avalonia"
              xmlns:enyo="https://github.com/avaenyo"
              xmlns:luna="using:LunaWm"
              x:Class="LunaWm.LauncherView"
@@ -39,17 +40,17 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate DataType="luna:LauncherTabModel">
-              <Border Classes="tab" Classes.selected="{Binding Selected}" Tag="{Binding}" PointerReleased="OnTab">
+              <Border Classes="tab" Classes.selected="{Binding Selected}" Tag="{Binding}" PointerReleased="OnTab" ui:ChromeAutomation.IsButton="True" ui:ChromeAutomation.Invoked="OnTabInvoked">
                 <TextBlock Text="{Binding Name}" />
               </Border>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <Border Grid.Column="1" Classes="done" Margin="0,0,16,0" IsVisible="{Binding Reordering}" PointerReleased="OnDone">
+        <Border Grid.Column="1" Classes="done" Margin="0,0,16,0" IsVisible="{Binding Reordering}" PointerReleased="OnDone" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Done" ui:ChromeAutomation.Invoked="OnDoneInvoked">
           <TextBlock Text="Done" />
         </Border>
       </Grid>
-      <Border DockPanel.Dock="Top" Classes="searchpill" HorizontalAlignment="Center" Margin="0,0,0,10" PointerReleased="OnSearch">
+      <Border DockPanel.Dock="Top" Classes="searchpill" HorizontalAlignment="Center" Margin="0,0,0,10" PointerReleased="OnSearch" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Search" ui:ChromeAutomation.Invoked="OnSearchInvoked">
         <TextBlock Text="Just type..." />
       </Border>
       <Grid x:Name="DockRow" DockPanel.Dock="Bottom" Height="88" IsVisible="{Binding Reordering}">
@@ -92,7 +93,8 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate DataType="luna:LauncherIconModel">
               <Panel Height="118" Margin="0,0,0,10" Background="Transparent" Tag="{Binding}" Opacity="{Binding Opacity}"
-                     PointerPressed="OnIconPressed" PointerMoved="OnIconMoved" PointerReleased="OnIconReleased" PointerCaptureLost="OnIconLost">
+                     PointerPressed="OnIconPressed" PointerMoved="OnIconMoved" PointerReleased="OnIconReleased" PointerCaptureLost="OnIconLost"
+                     ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="{Binding Name}" ui:ChromeAutomation.Invoked="OnIconInvoked">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Spacing="2">
                   <Panel Width="64" Height="64" HorizontalAlignment="Center">
                     <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" />
@@ -103,7 +105,7 @@
                   <TextBlock Classes="iconlabel" Text="{Binding Name}" />
                 </StackPanel>
                 <Border Classes="badge" IsVisible="{Binding Reordering}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,0,0,0"
-                        Tag="{Binding}" PointerReleased="OnHide">
+                        Tag="{Binding}" PointerReleased="OnHide" ui:ChromeAutomation.IsButton="True" AutomationProperties.Name="Hide" ui:ChromeAutomation.Invoked="OnHideInvoked">
                   <TextBlock Text="&#x2715;" />
                 </Border>
               </Panel>

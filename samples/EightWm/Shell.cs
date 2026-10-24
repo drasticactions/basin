@@ -287,7 +287,28 @@ internal sealed partial class Shell : IDisposable
         {
             parent.ParentGone += Stop;
         }
+
+        _seat.Binder.UseKeyboardAids(_host.Loop);
+        _access = new Basin.Accessibility.DesktopAccessibility(new Basin.Accessibility.DesktopAccessibilityOptions
+        {
+            Name = "eight-wm",
+            Host = _host,
+            Scene = _scene,
+            Seat = Seat,
+            Pointer = _seat.Binder.Pointer,
+            Processes = _processes,
+            TextInput = _services.Find<Basin.Desktop.TextInputManager>(),
+            Toplevels = _services.Find<Basin.Capabilities.IToplevelModel>(),
+            Aids = _seat.Binder.Aids,
+            StartToolkit = _ui.StartAccessibilityAsync,
+            Log = _log,
+        });
+        _access.Apply(_config.Accessibility);
+        _seat.Cursor.Curtain = _access.Curtain;
+        _ = _access.StartAsync(_config.Accessibility.Enabled);
     }
+
+    private Basin.Accessibility.DesktopAccessibility? _access;
 
     internal Basin.Seat.Seat Seat { get; }
 
@@ -437,6 +458,8 @@ internal sealed partial class Shell : IDisposable
 
     public void Dispose()
     {
+        _access?.Dispose();
+        _access = null;
         _xwayland.Dispose();
         _host.DisconnectClients();
         _processes.TerminateAll(TimeSpan.FromMilliseconds(500));

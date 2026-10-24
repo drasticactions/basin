@@ -118,7 +118,14 @@ internal sealed class DungeonWmSettings
         ["R"] = "rotate",
         ["Shift+R"] = "square",
         ["Super+F12"] = "inspector",
+        ["Super+Alt+S"] = "screen-reader",
+        ["Super+Alt+8"] = "magnifier",
+        ["Super+Alt+equal"] = "magnifier-in",
+        ["Super+Alt+minus"] = "magnifier-out",
+        ["Super+Alt+C"] = "screen-curtain",
     };
+
+    public Basin.Config.AccessibilitySettings Accessibility { get; set; } = new();
 
     public static IReadOnlyList<string> InspectorPanelNames { get; } =
         ["outputs", "windows", "clients", "scene", "memory", "physics", "camera", "rooms", "audio", "pose"];

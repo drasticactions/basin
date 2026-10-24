@@ -41,6 +41,11 @@ internal static class TabBindings
         ("Super+H", "minimize"),
         ("Super+Shift+M", "mute-tab"),
         ("Super+Escape", "lock"),
+        ("Super+Alt+S", "screen-reader"),
+        ("Super+Alt+8", "magnifier"),
+        ("Super+Alt+equal", "magnifier-in"),
+        ("Super+Alt+minus", "magnifier-out"),
+        ("Super+Alt+C", "screen-curtain"),
     ];
 
     public static List<TabBinding> Build(TomlTable? keys, BasinLogger log)
@@ -116,6 +121,11 @@ internal static class TabBindings
             case "minimize": return (TabAction.Minimize, 0);
             case "mute-tab": return (TabAction.MuteTab, 0);
             case "lock": return (TabAction.Lock, 0);
+            case "screen-reader": return (TabAction.ScreenReader, 0);
+            case "magnifier": return (TabAction.Magnifier, 0);
+            case "magnifier-in": return (TabAction.MagnifierIn, 0);
+            case "magnifier-out": return (TabAction.MagnifierOut, 0);
+            case "screen-curtain": return (TabAction.ScreenCurtain, 0);
         }
 
         if (name.StartsWith("move-to-tab-", StringComparison.Ordinal) &&
