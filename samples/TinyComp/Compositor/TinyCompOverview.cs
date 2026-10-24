@@ -2,6 +2,7 @@ using System.Globalization;
 using Basin;
 using Basin.Effects;
 using Basin.Host;
+using Basin.Kinematics;
 using Basin.Scene;
 using Basin.Seat;
 using Basin.Shell.Xdg;
@@ -1538,6 +1539,9 @@ internal sealed partial class TinyComp
 
     private SwipeRecognizer _overviewSwipeRecognizer = new(OverviewSetting.DefaultFingers) { Axis = SwipeAxis.Vertical };
 
+    private double OverviewSwipePosition(SwipeRecognizer recognizer) =>
+        (_overviewSwipeOpening ? 0.0 : 1.0) - recognizer.RawProgress;
+
     private bool UpdateOverviewSwipe(double dx, double dy, uint timeMs)
     {
         var recognizer = _overviewSwipeRecognizer;
@@ -1554,6 +1558,15 @@ internal sealed partial class TinyComp
         var overview = OverviewOf(view);
         var progress = recognizer.Progress;
         var travel = _overviewSwipeOpening ? Math.Clamp(-progress, 0.0, 1.0) : Math.Clamp(progress, 0.0, 1.0);
+        var shown = _overviewSwipeOpening ? travel : 1.0 - travel;
+        if (SwipeProjects)
+        {
+            var position = OverviewSwipePosition(recognizer);
+            var banded = SwipeProjection.RubberBand(position, 0, 1);
+            shown = _overviewSwipeOpening ? Math.Max(0, banded) : Math.Clamp(banded, 0, 1);
+            travel = _overviewSwipeOpening ? shown : 1.0 - shown;
+        }
+
         if (!overview.Tracking && travel > 0)
         {
             if (_overviewSwipeOpening)
@@ -1570,13 +1583,14 @@ internal sealed partial class TinyComp
             return true;
         }
 
-        overview.Value = _overviewSwipeOpening ? travel : 1.0 - travel;
+        overview.Value = shown;
         LayoutCanvas(view, animating: true);
         return true;
     }
 
     private bool EndOverviewSwipe(bool cancelled, uint timeMs)
     {
+        var position = OverviewSwipePosition(_overviewSwipeRecognizer);
         var outcome = _overviewSwipeRecognizer.End(cancelled, timeMs);
         if (outcome == SwipeOutcome.None)
         {
@@ -1585,6 +1599,19 @@ internal sealed partial class TinyComp
 
         var view = _overviewSwipeView;
         var opening = _overviewSwipeOpening;
+        var velocity = -_overviewSwipeRecognizer.ReleaseVelocity;
+        if (SwipeProjects && !cancelled)
+        {
+            var landing = SwipeProjection.Release(position, -_overviewSwipeRecognizer.DrainedReleaseVelocity, 0, 1);
+            outcome = (landing.Target == 1) == opening ? SwipeOutcome.Commit : SwipeOutcome.Cancel;
+            velocity = landing.Velocity;
+        }
+
+        if (!cancelled)
+        {
+            _report.Line(
+                $"SWIPE overview {(SwipeProjects ? "projection" : "threshold")} position={position:F2} velocity={velocity:F2} {(outcome == SwipeOutcome.Commit ? "commit" : "cancel")}");
+        }
         _overviewSwipeView = null;
         if (view is null)
         {
@@ -1605,7 +1632,7 @@ internal sealed partial class TinyComp
             var nanos = CanvasAnimationNanos(view);
             if (nanos > 0)
             {
-                overview.Progress.Settle(overview.Value, open ? 1.0 : 0.0, -_overviewSwipeRecognizer.ReleaseVelocity);
+                overview.Progress.Settle(overview.Value, open ? 1.0 : 0.0, velocity);
             }
             else
             {

@@ -1,5 +1,6 @@
 using Basin;
 using Basin.Config;
+using Basin.Kinematics;
 
 namespace LunaWm;
 
@@ -8,6 +9,8 @@ internal sealed partial class LunaShell
     internal const double TapSlop = 10;
     internal const int HoldMillis = 500;
     internal const double HoldSlop = 12;
+    internal const double EdgeSwipeStep = 120;
+    private const long EdgeDrainSpanNanos = 50_000_000;
     internal const double CloseVelocity = CardFlick.CloseVelocity;
 
     private readonly HashSet<uint> _consumedKeys = [];
@@ -39,6 +42,7 @@ internal sealed partial class LunaShell
         public double RestX;
         public double RestY;
         public bool RaisesKeyboard;
+        public Basin.Seat.VelocityTracker Tracker;
     }
 
     private void TakeChromeKeyboard(ChromeSurface chrome)
@@ -729,6 +733,8 @@ internal sealed partial class LunaShell
         _edge.Y = y;
         _edge.StartTime = timeMs;
         _edge.QuickLaunch = false;
+        _edge.Tracker.Reset();
+        _edge.Tracker.Add(x, y, 0);
         if (edge == LunaEdge.Bottom && axis == EdgeAxis.Inward && !_edge.RaisesKeyboard && !KeyboardShown)
         {
             var timer = _host.Loop.AddTimer(FireQuickLaunch);
@@ -761,6 +767,7 @@ internal sealed partial class LunaShell
     {
         _edge.X = x;
         _edge.Y = y;
+        _edge.Tracker.Add(x, y, EdgeNanos(_edge, timeMs));
         if (_edge.QuickLaunch && _edge.View is { } view)
         {
             DockFollow(view, x - view.Box.X, y - view.Box.Y);
@@ -793,10 +800,20 @@ internal sealed partial class LunaShell
 
         var dx = state.X - state.X0;
         var dy = state.Y - state.Y0;
+        var project = _config.SwipeRelease == SwipeReleaseMode.Projection;
+        var drained = state.Tracker;
+        drained.MinSpanNanos = EdgeDrainSpanNanos;
+        drained.Add(state.X, state.Y, EdgeNanos(state, timeMs));
+        var (drainedX, drainedY) = drained.Velocity(EdgeNanos(state, timeMs));
+        if (project)
+        {
+            _report.Line($"EDGE release projection dx={dx:F0} dy={dy:F0} vx={drainedX:F0} vy={drainedY:F0}");
+        }
+
         switch (state.Edge)
         {
             case LunaEdge.Bottom when state.RaisesKeyboard && state.Axis == EdgeAxis.Inward:
-                if (dy < 0)
+                if (project ? EdgeLands(-dy, -drainedY) : dy < 0)
                 {
                     RaiseKeyboard();
                 }
@@ -804,6 +821,15 @@ internal sealed partial class LunaShell
                 break;
             case LunaEdge.Bottom when state.QuickLaunch:
                 DockRelease(view, state.X - view.Box.X, state.Y - view.Box.Y);
+                break;
+            case LunaEdge.Bottom when state.Axis == EdgeAxis.Along && project:
+                var width = Math.Max(1, view.Box.Width);
+                var landing = SwipeProjection.Release(-dx / width, -drainedX / width, -1, 1);
+                if (landing.Target != 0)
+                {
+                    SwitchCard(view, landing.Target);
+                }
+
                 break;
             case LunaEdge.Bottom when state.Axis == EdgeAxis.Along:
                 if (Math.Abs(dx) > view.Box.Width / 2.0 || Math.Abs(velocityX) > 1500)
@@ -813,7 +839,7 @@ internal sealed partial class LunaShell
 
                 break;
             case LunaEdge.Bottom:
-                if (velocityY > 300 && dy > 0)
+                if (project ? !EdgeLands(-dy, -drainedY) : velocityY > 300 && dy > 0)
                 {
                     break;
                 }
@@ -828,9 +854,14 @@ internal sealed partial class LunaShell
                 }
 
                 break;
+            case LunaEdge.Left or LunaEdge.Right when project && !EdgeLands(
+                state.Edge == LunaEdge.Left ? dx : -dx, state.Edge == LunaEdge.Left ? drainedX : -drainedX):
+                break;
             case LunaEdge.Left:
             case LunaEdge.Right:
                 Back(view);
+                break;
+            case LunaEdge.Top when project && !EdgeLands(dy, drainedY):
                 break;
             case LunaEdge.Top:
                 view.BarRevealed = true;
@@ -838,6 +869,11 @@ internal sealed partial class LunaShell
                 break;
         }
     }
+
+    private static bool EdgeLands(double inward, double speed) =>
+        SwipeProjection.Release(inward / EdgeSwipeStep, speed / EdgeSwipeStep, 0, 1).Target == 1;
+
+    private static long EdgeNanos(in EdgeState state, uint timeMs) => (long)(uint)(timeMs - state.StartTime) * 1_000_000;
 
     internal bool PinchAccepts(double x, double y)
     {

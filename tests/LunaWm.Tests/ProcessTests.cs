@@ -158,6 +158,34 @@ public sealed class ProcessTests
         Assert.NotNull(await session.WaitForAsync(line => Starts(line, "FRAMES ")));
     }
 
+    [Theory]
+    [InlineData("projection", false)]
+    [InlineData("threshold", true)]
+    public async Task A_short_side_swipe_held_before_the_lift_goes_back_only_under_the_threshold_rule(string rule, bool back)
+    {
+        var ssdwin = WlClient("ssdwin");
+        using var config = new TempConfig(TempConfig.Quiet + $"\n\n[gestures]\nswipe_release = \"{rule}\"\n");
+        using var session = new LunaSession(LunaSession.Compositor(), config.Path, config.Environment, "-c", ssdwin);
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "CARD + 1 ")));
+        await session.SettleAsync();
+
+        var held = session.Mark();
+        await session.SendAsync("edge left 0.05 hold 300");
+        Assert.NotNull(await session.WaitForAsync(line => line == "EDGE end", since: held));
+        var flick = session.Mark();
+        await session.SendAsync("edge left 0.05");
+        Assert.NotNull(await session.WaitForAsync(line => line == "EDGE end", since: flick));
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "BACK "), since: flick));
+
+        var lines = session.Lines()[held..];
+        var first = lines.IndexOf("EDGE end");
+        var second = lines.IndexOf("EDGE end", first + 1);
+        Assert.Equal(back, lines[first..second].Exists(line => Starts(line, "BACK ")));
+        Assert.Contains(lines[second..], line => Starts(line, "BACK "));
+        await session.SendAsync("quit");
+        Assert.NotNull(await session.WaitForAsync(line => Starts(line, "FRAMES ")));
+    }
+
     [Fact]
     public async Task The_bottom_edge_side_edges_and_keys_drive_the_cards()
     {

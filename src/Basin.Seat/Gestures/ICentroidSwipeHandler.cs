@@ -15,7 +15,7 @@ public interface ICentroidSwipeHandler
     bool Begin(double centroidX, double centroidY, uint timeMs);
 
     /// <summary>
-    /// Called for each contact motion while the swipe is claimed.
+    /// Called for each contact motion while the swipe is claimed. The first call comes right after <see cref="Begin"/> and carries the travel along the axis that passed the slop.
     /// </summary>
     /// <param name="dx">The horizontal move of the contact center since the previous event.</param>
     /// <param name="dy">The vertical move of the contact center since the previous event.</param>

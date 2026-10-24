@@ -266,6 +266,10 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
                 await connection.ReleaseNameAsync(BusName).ConfigureAwait(false);
             }
         }
+        catch (Exception error) when (error is DBusConnectionClosedException or ObjectDisposedException)
+        {
+            Log.Debug($"registrar: the connection closed first, and the bus drops {BusName} with it");
+        }
         catch (Exception error) when (error is DBusExceptionBase or IOException or InvalidOperationException)
         {
             Log.Warn(error, $"registrar: cannot release {BusName}");

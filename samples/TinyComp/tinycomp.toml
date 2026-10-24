@@ -309,6 +309,11 @@ hold_move      = true        # two fingers held still on a window, then slid, mo
 hold_ms        = 300         # how long the fingers rest before a slide moves the window
 hold_move_turn = true        # turning the held fingers also turns the window
 
+# How a released workspace or overview swipe lands. projection rounds the point
+# where the swipe would coast to rest. threshold needs half the travel or a fast flick.
+[gestures]
+swipe_release = "projection" # projection | threshold
+
 [settings]
 palette   = "dark"           # dark | light
 font_size = 14               # logical pixels

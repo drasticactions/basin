@@ -154,6 +154,25 @@ public sealed class ProcessTests
         }
     }
 
+    [Theory]
+    [InlineData("projection", "EDGE Right In ")]
+    [InlineData("threshold", "EDGE Right Cancelled ")]
+    public async Task A_short_quick_right_edge_swipe_lands_by_the_release_rule(string rule, string expected)
+    {
+        var (compositor, _) = Prerequisites()!.Value;
+        using var config = new TempFile(Config + $"\n\n[shell]\nswipe_release = \"{rule}\"\n");
+        using var session = new Session(compositor, config.Path);
+        Assert.NotNull(await session.WaitForAsync(Realized, poke: "tiles"));
+
+        var mark = session.Mark();
+        await session.SendAsync("touchdrag 0.995 0.5 -0.04 0");
+        var edge = await session.WaitForAsync(line => line.StartsWith("EDGE Right ", StringComparison.Ordinal), since: mark);
+        Assert.NotNull(edge);
+        Assert.StartsWith(expected, edge, StringComparison.Ordinal);
+        await session.SendAsync("quit");
+        Assert.NotNull(await session.WaitForAsync(line => line.StartsWith("FRAMES ", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public async Task A_touch_swipe_on_a_tile_selects_and_a_long_one_reorders()
     {

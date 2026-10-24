@@ -80,6 +80,7 @@ public sealed class CentroidSwipeGesture : ITouchGestures
                     handler.Begin(centerX, centerY, timeMs))
                 {
                     _phase = Phase.Claimed;
+                    handler.Update(Axis == SwipeAxis.Vertical ? 0 : _travel, Axis == SwipeAxis.Vertical ? _travel : 0, timeMs);
                     return TouchGestureVerdict.Claim;
                 }
 

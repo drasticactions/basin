@@ -38,6 +38,8 @@ edge_band = 24
 quick_launch_hold_ms = 250
 # A horizontal swipe on the bottom edge switches to the next or previous card while maximized: true or false.
 next_previous = true
+# How a released edge swipe lands: projection or threshold. projection rounds the point where the swipe would coast to rest.
+swipe_release = "projection"
 # Key sent to the focused app for Back when no shell UI is open, as an xkb keysym name.
 back_key = "XF86Back"
 

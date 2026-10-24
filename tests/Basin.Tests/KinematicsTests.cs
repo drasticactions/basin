@@ -1,4 +1,5 @@
 using Basin.Kinematics;
+using Basin.Seat;
 using Xunit;
 
 namespace Basin.Tests;
@@ -249,5 +250,123 @@ public sealed class KinematicsTests
         }
 
         Assert.Equal(before, GC.GetAllocatedBytesForCurrentThread());
+    }
+
+    private const double SwipeStep = 300;
+
+    private static SwipeRecognizer Swiped(double dx, int count, uint holdMs, out uint releaseMs)
+    {
+        var swipe = new SwipeRecognizer(fingers: 3);
+        Assert.True(swipe.Begin(3, SwipeStep, 0));
+        uint time = 0;
+        for (var i = 0; i < count; i++)
+        {
+            time += 10;
+            Assert.True(swipe.Update(dx, 0, time));
+        }
+
+        releaseMs = time + Math.Max(holdMs, 1);
+        return swipe;
+    }
+
+    [Fact]
+    public void A_slow_drag_that_stops_before_the_release_falls_back()
+    {
+        var swipe = Swiped(3, 40, holdMs: 100, out var release);
+        var position = swipe.RawProgress;
+        _ = swipe.End(cancelled: false, release);
+
+        var landing = SwipeProjection.Release(position, swipe.DrainedReleaseVelocity, -1, 1);
+
+        Assert.Equal(0.4, position, 6);
+        Assert.Equal(0, swipe.DrainedReleaseVelocity);
+        Assert.Equal(0, landing.Target);
+        Assert.Equal(0, landing.Velocity);
+    }
+
+    [Fact]
+    public void A_fast_flick_over_a_fifth_of_a_step_crosses()
+    {
+        var swipe = Swiped(10, 6, holdMs: 10, out var release);
+        var position = swipe.RawProgress;
+        _ = swipe.End(cancelled: false, release);
+
+        var landing = SwipeProjection.Release(position, swipe.DrainedReleaseVelocity, -1, 1);
+
+        Assert.Equal(0.2, position, 6);
+        Assert.Equal(1, landing.Target);
+        Assert.True(landing.Velocity > 0);
+    }
+
+    [Fact]
+    public void A_flick_past_the_last_step_lands_there_with_a_damped_speed()
+    {
+        var swipe = Swiped(45, 20, holdMs: 10, out var release);
+        var position = swipe.RawProgress;
+        _ = swipe.End(cancelled: false, release);
+        var finger = swipe.DrainedReleaseVelocity;
+
+        var landing = SwipeProjection.Release(position, finger, 0, 1);
+
+        Assert.True(position > 2);
+        Assert.Equal(1, landing.Target);
+        Assert.InRange(landing.Position, 1, 1 + SwipeProjection.OverscrollLimit);
+        Assert.True(landing.Velocity > 0);
+        Assert.True(landing.Velocity < finger * 0.5);
+    }
+
+    [Fact]
+    public void Fingers_that_stop_before_the_lift_drain_the_release_speed()
+    {
+        var paused = Swiped(10, 10, holdMs: 40, out var release);
+        _ = paused.End(cancelled: false, release);
+        Assert.True(paused.ReleaseVelocity > 0);
+        Assert.True(paused.DrainedReleaseVelocity < paused.ReleaseVelocity * 0.8);
+
+        var moving = Swiped(10, 10, holdMs: 10, out release);
+        _ = moving.End(cancelled: false, release);
+        Assert.True(moving.DrainedReleaseVelocity > paused.DrainedReleaseVelocity);
+
+        var rested = Swiped(10, 10, holdMs: 100, out release);
+        _ = rested.End(cancelled: false, release);
+        Assert.Equal(0, rested.DrainedReleaseVelocity);
+    }
+
+    [Theory]
+    [InlineData(0.01)]
+    [InlineData(0.5)]
+    [InlineData(3)]
+    [InlineData(1000)]
+    public void The_rubber_band_approaches_its_limit_and_never_reaches_it(double excess)
+    {
+        var past = SwipeProjection.RubberBand(1 + excess, 0, 1) - 1;
+        var before = -SwipeProjection.RubberBand(-excess, 0, 1);
+
+        Assert.InRange(past, double.Epsilon, SwipeProjection.OverscrollLimit);
+        Assert.True(past < SwipeProjection.OverscrollLimit);
+        Assert.Equal(past, before, 12);
+        Assert.Equal(0.5, SwipeProjection.RubberBand(0.5, 0, 1));
+        Assert.True(SwipeProjection.RubberBandSlope(1 + excess, 0, 1) < 1);
+        Assert.True(SwipeProjection.RubberBand(1 + excess + 0.1, 0, 1) > SwipeProjection.RubberBand(1 + excess, 0, 1));
+    }
+
+    [Fact]
+    public void A_fast_flick_over_more_than_a_step_lands_two_or_more_steps_away()
+    {
+        var landing = SwipeProjection.Release(1.2, 4, 0, 4);
+
+        Assert.True(landing.Target >= 2);
+        Assert.Equal(1.2, landing.Position, 12);
+        Assert.Equal(4, landing.Velocity, 12);
+    }
+
+    [Fact]
+    public void A_release_inside_the_range_rounds_to_the_nearest_step()
+    {
+        Assert.Equal(0, SwipeProjection.Release(0.49, 0, -1, 1).Target);
+        Assert.Equal(1, SwipeProjection.Release(0.5, 0, -1, 1).Target);
+        Assert.Equal(-1, SwipeProjection.Release(-0.6, 0, -1, 1).Target);
+        Assert.Equal(0, SwipeProjection.Release(0, double.NaN, 0, 0).Target);
+        Assert.Equal(4, SwipeProjection.Release(10, 0, 0, 4).Target);
     }
 }

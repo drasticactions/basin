@@ -40,11 +40,11 @@ public sealed class CentroidSwipeGestureTests
 
         Assert.True(gesture.IsClaimed);
         Assert.Equal("cancel", log[^1]);
-        Assert.Equal(["begin 50,10"], handler.Log);
+        Assert.Equal(["begin 50,10", "update 30,0"], handler.Log);
 
         router.Motion(7, 0, 70, 10);
-        Assert.Equal(2, handler.Log.Count);
-        Assert.StartsWith("update", handler.Log[1]);
+        Assert.Equal(3, handler.Log.Count);
+        Assert.StartsWith("update", handler.Log[2]);
 
         router.Up(8, 0);
         Assert.Equal("end false", handler.Log[^1]);
@@ -146,7 +146,8 @@ public sealed class CentroidSwipeGestureTests
         Assert.Equal(TouchGestureVerdict.Pass, gesture.Motion(1, 2, 110, 440));
         Assert.Equal(TouchGestureVerdict.Claim, gesture.Motion(2, 3, 120, 380));
         Assert.True(gesture.IsClaimed);
-        Assert.Single(handler.Log);
+        Assert.Equal(2, handler.Log.Count);
+        Assert.Equal("update 0,-45", handler.Log[1]);
     }
 
     [Fact]
@@ -200,7 +201,8 @@ public sealed class CentroidSwipeGestureTests
 
         Assert.Equal(TouchGestureVerdict.Claim, set.Motion(10, 6, 170, 500));
         Assert.Same(horizontal, set.Owner);
-        Assert.Single(three.Log);
+        Assert.Equal(2, three.Log.Count);
+        Assert.StartsWith("update", three.Log[1]);
     }
 
     private sealed class RecordingHandler : ICentroidSwipeHandler

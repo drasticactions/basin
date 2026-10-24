@@ -53,6 +53,8 @@ internal sealed class LunaConfig
 
     public bool NextPrevious { get; private set; } = true;
 
+    public Basin.Kinematics.SwipeReleaseMode SwipeRelease { get; private set; } = Basin.Kinematics.SwipeReleaseMode.Projection;
+
     public string BackKey { get; private set; } = "XF86Back";
 
     public bool Clock24 { get; private set; }
@@ -171,6 +173,9 @@ internal sealed class LunaConfig
             EdgeBand = Math.Clamp(gestures.Number("edge_band", EdgeBand), 4, 200);
             QuickLaunchHoldMs = Math.Clamp(gestures.Number("quick_launch_hold_ms", QuickLaunchHoldMs), 0, 5000);
             NextPrevious = gestures.Flag("next_previous", NextPrevious);
+            SwipeRelease = gestures.Choice("swipe_release", "projection", "projection", "threshold") == "threshold"
+                ? Basin.Kinematics.SwipeReleaseMode.Threshold
+                : Basin.Kinematics.SwipeReleaseMode.Projection;
             BackKey = gestures.Text("back_key") is { Length: > 0 } back ? back : BackKey;
             if (Keysym.FromName(BackKey) == 0)
             {

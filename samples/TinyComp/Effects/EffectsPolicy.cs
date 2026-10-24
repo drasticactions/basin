@@ -78,6 +78,10 @@ internal sealed class EffectsPolicy : IDisposable
 
     public bool SlideDragging => _slide.IsInteractive;
 
+    public bool SlideAnimating => _slide.IsAnimating;
+
+    public bool SlideOffsetOf(SceneTree tree, out double offset) => _slide.TryGetOffset(_runner.StackFor(tree), out offset);
+
     public void SettleSlide(bool commit, double velocity, Action done)
     {
         _slideDone = done;

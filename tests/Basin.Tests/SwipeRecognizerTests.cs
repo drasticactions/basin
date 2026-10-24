@@ -249,4 +249,18 @@ public sealed class HorizontalSwipeRecognizerTests : SwipeRecognizerTests
 public sealed class VerticalSwipeRecognizerTests : SwipeRecognizerTests
 {
     protected override SwipeAxis Axis => SwipeAxis.Vertical;
+
+    [Fact]
+    public void Raw_progress_ignores_the_clamps_and_the_damping()
+    {
+        var swipe = new SwipeRecognizer(fingers: 3);
+        Assert.True(swipe.Begin(3, 100, 0));
+        swipe.ClampHigh = true;
+
+        Assert.True(swipe.Update(150, 0, 10));
+
+        Assert.Equal(1.5, swipe.RawProgress, 6);
+        Assert.True(swipe.Progress < 0.25);
+        Assert.Equal(100, swipe.Width);
+    }
 }

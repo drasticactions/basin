@@ -6,6 +6,7 @@ namespace Basin.Seat;
 public sealed class SwipeRecognizer
 {
     private const double RubberBandFalloff = 4.0;
+    private const long DrainSpanNanos = 50_000_000;
 
     private double _raw;
     private double _width = 1;
@@ -53,6 +54,16 @@ public sealed class SwipeRecognizer
     }
 
     /// <summary>
+    /// Gets the travel divided by the width, with no limit, no damping and no effect from the clamps.
+    /// </summary>
+    public double RawProgress => _raw;
+
+    /// <summary>
+    /// Gets the travel that gives a progress of 1, in input units, as given to <see cref="Begin"/>.
+    /// </summary>
+    public double Width => _width;
+
+    /// <summary>
     /// Gets the sign of the travel: 1, -1, or 0 with no travel.
     /// </summary>
     public int Direction => Math.Sign(_raw);
@@ -66,6 +77,11 @@ public sealed class SwipeRecognizer
     /// Gets the speed at the last <see cref="End"/> as widths per second. It is zero after a cancel.
     /// </summary>
     public double ReleaseVelocity { get; private set; }
+
+    /// <summary>
+    /// Gets the speed at the last <see cref="End"/> as widths per second, after a sample with no motion at the release time. A finger that stopped before the lift gives a lower speed. It is zero after a cancel.
+    /// </summary>
+    public double DrainedReleaseVelocity { get; private set; }
 
     /// <summary>
     /// Gets or sets the absolute progress at or past which a release commits.
@@ -98,6 +114,7 @@ public sealed class SwipeRecognizer
     {
         Abort();
         ReleaseVelocity = 0;
+        DrainedReleaseVelocity = 0;
         if (fingers != Fingers || width <= 0)
         {
             return false;
@@ -145,8 +162,13 @@ public sealed class SwipeRecognizer
         }
 
         var progress = Progress;
-        var velocity = _tracker.Velocity(Nanos(timeMs)).X;
+        var now = Nanos(timeMs);
+        var velocity = _tracker.Velocity(now).X;
         ReleaseVelocity = cancelled ? 0 : velocity / _width;
+        var drained = _tracker;
+        drained.MinSpanNanos = DrainSpanNanos;
+        drained.Add(_travel, 0, now);
+        DrainedReleaseVelocity = cancelled ? 0 : drained.Velocity(now).X / _width;
         var againstLimit = (_raw > 0 && ClampHigh) || (_raw < 0 && ClampLow);
         Abort();
 

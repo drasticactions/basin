@@ -407,6 +407,11 @@ internal static class SettingsCatalog
             new(Touch, "touch", "hold_move", "Hold two fingers, then slide, to move", SettingKind.Flag) { Default = "true" },
             new(Touch, "touch", "hold_ms", "Hold before a move (ms)", SettingKind.Integer) { Default = "300", Min = 50, Max = 2000 },
             new(Touch, "touch", "hold_move_turn", "Turn while moving", SettingKind.Flag) { Default = "true" },
+            new(Touch, "gestures", "swipe_release", "Swipe release", SettingKind.Choice)
+            {
+                Default = "\"projection\"", Choices = ["projection", "threshold"],
+                Note = "Projection lands where the swipe would coast to. Threshold needs half the travel or a fast flick.",
+            },
             new(Physics, "physics", "enable", "Physics", SettingKind.Flag) { Default = "false" },
             new(Physics, "physics", "engine", "Engine", SettingKind.Choice) { Default = "\"bepu\"", Choices = PhysicsSetting.EngineNames },
             new(Physics, "physics", "gravity", "Gravity", SettingKind.Real) { Default = "0", Min = -10000, Max = 10000, Step = 100 },

@@ -65,6 +65,8 @@ internal sealed class Config
 
     public bool HoldMoveTurn { get; set; } = true;
 
+    public Basin.Kinematics.SwipeReleaseMode SwipeRelease { get; set; } = Basin.Kinematics.SwipeReleaseMode.Projection;
+
     public bool QuillDemo { get; set; }
 
     public bool ImGuiDemo { get; set; }
@@ -843,6 +845,13 @@ internal sealed class Config
             HoldMove = touch.Flag("hold_move", HoldMove);
             HoldMillis = Math.Clamp(touch.Number("hold_ms", HoldMillis), 50, 2000);
             HoldMoveTurn = touch.Flag("hold_move_turn", HoldMoveTurn);
+        }
+
+        if (reader.Section("gestures") is { } gestures)
+        {
+            SwipeRelease = gestures.Choice("swipe_release", "projection", "projection", "threshold") == "threshold"
+                ? Basin.Kinematics.SwipeReleaseMode.Threshold
+                : Basin.Kinematics.SwipeReleaseMode.Projection;
         }
 
         if (reader.Section("settings") is { } settings)

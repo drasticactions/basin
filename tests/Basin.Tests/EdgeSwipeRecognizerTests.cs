@@ -250,6 +250,42 @@ public class EdgeSwipeRecognizerTests
         Assert.Equal(EdgeSwipeOutcome.Cancelled, edges.Outcome);
     }
 
+    [Fact]
+    public void Raw_progress_and_the_release_speed_are_what_a_projection_needs()
+    {
+        var edges = Claimed(new EdgeSwipeRecognizer { RevealDistance = 100 });
+
+        edges.Update(1, 250, 400, 40);
+        Assert.Equal(1, edges.Progress);
+        Assert.Equal(2.5, edges.RawProgress, 6);
+
+        Assert.Equal(EdgeSwipeAction.Finish, edges.End(1, 50));
+        Assert.True(edges.ReleaseVelocity > 0);
+        Assert.False(edges.ContactCancelled);
+    }
+
+    [Fact]
+    public void A_finger_that_rests_before_the_lift_releases_with_no_speed()
+    {
+        var edges = Claimed(new EdgeSwipeRecognizer { RevealDistance = 100 });
+
+        edges.Update(1, 60, 400, 40);
+
+        Assert.Equal(EdgeSwipeAction.Finish, edges.End(1, 300));
+        Assert.Equal(0, edges.ReleaseVelocity);
+    }
+
+    [Fact]
+    public void A_cancelled_contact_is_marked_and_has_no_release_speed()
+    {
+        var edges = Claimed(new EdgeSwipeRecognizer { RevealDistance = 100 });
+        edges.Update(1, 90, 400, 30);
+
+        Assert.Equal(EdgeSwipeAction.Finish, edges.End(1, 40, cancelled: true));
+        Assert.True(edges.ContactCancelled);
+        Assert.Equal(0, edges.ReleaseVelocity);
+    }
+
     [Theory]
     [InlineData(500, 780, EdgeSwipeZone.Bottom)]
     [InlineData(100, 300, EdgeSwipeZone.Left)]

@@ -1,4 +1,5 @@
 using Basin;
+using Basin.Kinematics;
 using Basin.Seat;
 
 using Basin.Diagnostics;
@@ -310,11 +311,12 @@ internal sealed partial class Shell
 
     internal void FinishEdgeGesture(ShellView view, EdgeSwipeRecognizer edges)
     {
-        _report.Line($"EDGE {edges.Edge} {edges.Outcome} zone={edges.Zone} progress={edges.Progress:F2}");
+        var outcome = EdgeLanding(edges);
+        _report.Line($"EDGE {edges.Edge} {outcome} zone={edges.Zone} progress={edges.Progress:F2}");
         switch (edges.Edge)
         {
             case ScreenEdge.Left:
-                switch (edges.Outcome)
+                switch (outcome)
                 {
                     case EdgeSwipeOutcome.In:
                         DockSwitcher(view, false);
@@ -334,14 +336,14 @@ internal sealed partial class Shell
                 break;
 
             case ScreenEdge.Right:
-                if (edges.Outcome is EdgeSwipeOutcome.In or EdgeSwipeOutcome.Hold)
+                if (outcome is EdgeSwipeOutcome.In or EdgeSwipeOutcome.Hold)
                 {
                     ShowCharms(view, true);
                 }
 
                 break;
 
-            case ScreenEdge.Top when FinishTopEdge(view, edges):
+            case ScreenEdge.Top when FinishTopEdge(view, edges, outcome):
                 break;
 
             case ScreenEdge.Top:
@@ -374,6 +376,18 @@ internal sealed partial class Shell
 
                 break;
         }
+    }
+
+    private EdgeSwipeOutcome EdgeLanding(EdgeSwipeRecognizer edges)
+    {
+        if (_config.SwipeRelease != SwipeReleaseMode.Projection || edges.ContactCancelled ||
+            edges.Outcome is not (EdgeSwipeOutcome.In or EdgeSwipeOutcome.Cancelled))
+        {
+            return edges.Outcome;
+        }
+
+        var landing = SwipeProjection.Release(edges.RawProgress, edges.ReleaseVelocity, 0, 1);
+        return landing.Target == 1 ? EdgeSwipeOutcome.In : EdgeSwipeOutcome.Cancelled;
     }
 
     private readonly EdgeSwipeRecognizer _synthetic = new();

@@ -13,6 +13,8 @@ public sealed class EdgeSwipeRecognizer
     /// </summary>
     public const int WithheldCapacity = 32;
 
+    private const long DrainSpanNanos = 50_000_000;
+
     private readonly EdgeSwipeSample[] _withheld = new EdgeSwipeSample[WithheldCapacity];
     private int _withheldCount;
     private int _id;
@@ -146,6 +148,28 @@ public sealed class EdgeSwipeRecognizer
     }
 
     /// <summary>
+    /// Gets the inward distance from the edge divided by the reveal distance, with no clamp.
+    /// </summary>
+    public double RawProgress
+    {
+        get
+        {
+            var reveal = RevealDistance * Scale;
+            return reveal <= 0 ? 0 : _in / reveal;
+        }
+    }
+
+    /// <summary>
+    /// Gets the inward speed at the release of the last claimed swipe, in reveal distances per second. It comes after a sample with no motion at the release time, so a finger that stopped before the lift gives a lower speed. It is zero after a cancel.
+    /// </summary>
+    public double ReleaseVelocity { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the input device cancelled the last claimed swipe.
+    /// </summary>
+    public bool ContactCancelled { get; private set; }
+
+    /// <summary>
     /// Gets the smoothed inward speed in area units per second. It is zero until two samples exist.
     /// </summary>
     public double Velocity => _tracker.Smoothed.X;
@@ -200,6 +224,8 @@ public sealed class EdgeSwipeRecognizer
         _height = height;
         Outcome = EdgeSwipeOutcome.None;
         Zone = EdgeSwipeZone.None;
+        ReleaseVelocity = 0;
+        ContactCancelled = false;
         _tracker.Reset();
         _held = false;
         _reachedIn = false;
@@ -293,6 +319,8 @@ public sealed class EdgeSwipeRecognizer
         }
 
         Outcome = cancelled ? EdgeSwipeOutcome.Cancelled : Settle(timeMs);
+        ContactCancelled = cancelled;
+        ReleaseVelocity = cancelled ? 0 : DrainedVelocity(timeMs);
         Zone = ZoneOf(_releaseX, _releaseY);
         _phase = Phase.Idle;
         return EdgeSwipeAction.Finish;
@@ -399,6 +427,21 @@ public sealed class EdgeSwipeRecognizer
 
         var velocity = _tracker.Velocity(Nanos(timeMs)).X;
         return velocity >= FlingPerSecond * Scale ? EdgeSwipeOutcome.In : EdgeSwipeOutcome.Cancelled;
+    }
+
+    private double DrainedVelocity(uint timeMs)
+    {
+        var reveal = RevealDistance * Scale;
+        if (reveal <= 0)
+        {
+            return 0;
+        }
+
+        var now = Nanos(timeMs);
+        var drained = _tracker;
+        drained.MinSpanNanos = DrainSpanNanos;
+        drained.Add(_in, 0, now);
+        return drained.Velocity(now).X / reveal;
     }
 
     private long Nanos(uint timeMs) => (long)(uint)(timeMs - _beganMillis) * 1_000_000;

@@ -1,5 +1,6 @@
 using Basin;
 using Basin.Host;
+using Basin.Kinematics;
 using Basin.Capabilities;
 using Basin.Scene;
 using Basin.Seat;
@@ -27,6 +28,13 @@ internal sealed partial class TinyComp
     private int _swipeDirection;
     private bool _swipeArmed;
     private bool _swipeVisual;
+    private double _swipeOrigin;
+    private int _swipeFirst;
+    private int _swipeLast;
+
+    private bool SwipeProjects => _config.SwipeRelease == SwipeReleaseMode.Projection;
+
+    private double SwipePosition => _swipeOrigin + _swipe.RawProgress;
 
     internal sealed class Workspace
     {
@@ -493,7 +501,58 @@ internal sealed partial class TinyComp
         _swipeDirection = 0;
         _swipeArmed = false;
         _swipeVisual = false;
+        _swipeOrigin = 0;
+        _swipeFirst = index < view.Workspaces.Count - 1 ? -1 : 0;
+        _swipeLast = index > 0 ? 1 : 0;
+        if (SwipeProjects)
+        {
+            _swipeOrigin = SettlingOffset(view, active, index);
+            if (_swipeOrigin != 0)
+            {
+                ArmWorkspaceSwipe(view, active, Math.Sign(_swipeOrigin));
+                ShowSwipe(view);
+            }
+        }
+
         return true;
+    }
+
+    private double SettlingOffset(OutputView view, Workspace active, int index)
+    {
+        if (_slidingView != view || !_effects.SlideAnimating || !_effects.SlideOffsetOf(active.Tree, out var offset))
+        {
+            return 0;
+        }
+
+        var other = _slidingFrom == active ? _slidingTo : _slidingFrom;
+        var width = _layout.BoxOf(view.Output).Width;
+        if (other is null || other.Tree.IsDestroyed || width <= 0)
+        {
+            return 0;
+        }
+
+        var otherIndex = view.Workspaces.IndexOf(other);
+        if (otherIndex < 0 || Math.Abs(otherIndex - index) != 1)
+        {
+            return 0;
+        }
+
+        var origin = Math.Clamp(offset / width, -1, 1);
+        return Math.Sign(origin) == (otherIndex < index ? 1 : -1) ? origin : 0;
+    }
+
+    private void ShowSwipe(OutputView view)
+    {
+        if (!_swipeVisual)
+        {
+            return;
+        }
+
+        var shown = SwipeProjects
+            ? SwipeProjection.RubberBand(SwipePosition, _swipeFirst, _swipeLast)
+            : _swipe.Progress;
+        _effects.SlideProgress = Math.Max(0, shown * _swipeDirection);
+        view.Scheduler?.ScheduleRepaint();
     }
 
     private bool UpdateWorkspaceSwipe(double dx, double dy, uint timeMs)
@@ -508,18 +567,29 @@ internal sealed partial class TinyComp
             return true;
         }
 
-        if (!_swipeArmed && _swipe.Direction != 0)
+        var direction = SwipeProjects ? Math.Sign(SwipePosition) : _swipe.Direction;
+        if (direction != 0 && (!_swipeArmed || (SwipeProjects && direction != _swipeDirection)))
         {
-            ArmWorkspaceSwipe(view, from, _swipe.Direction);
+            DisarmWorkspaceSwipe(view, from);
+            ArmWorkspaceSwipe(view, from, direction);
         }
 
-        if (_swipeVisual)
-        {
-            _effects.SlideProgress = Math.Max(0, _swipe.Progress * _swipeDirection);
-            view.Scheduler?.ScheduleRepaint();
-        }
-
+        ShowSwipe(view);
         return true;
+    }
+
+    private void DisarmWorkspaceSwipe(OutputView view, Workspace from)
+    {
+        if (!_swipeArmed || _swipeTo is not { } shown || shown == from || shown.Tree.IsDestroyed)
+        {
+            return;
+        }
+
+        shown.Tree.ClipBox = default;
+        if (view.Active != shown)
+        {
+            shown.Tree.Enabled = false;
+        }
     }
 
     private void ArmWorkspaceSwipe(OutputView view, Workspace from, int direction)
@@ -550,6 +620,7 @@ internal sealed partial class TinyComp
 
     private bool EndWorkspaceSwipe(bool cancelled, uint timeMs)
     {
+        var position = SwipePosition;
         var outcome = _swipe.End(cancelled, timeMs);
         if (outcome == SwipeOutcome.None)
         {
@@ -561,6 +632,22 @@ internal sealed partial class TinyComp
         var to = _swipeTo;
         var visual = _swipeVisual;
         var velocity = _swipe.ReleaseVelocity * _swipeDirection;
+        if (SwipeProjects && !cancelled)
+        {
+            var landing = SwipeProjection.Release(position, _swipe.DrainedReleaseVelocity, _swipeFirst, _swipeLast);
+            outcome = landing.Target != 0 && Math.Sign(landing.Target) == _swipeDirection
+                ? SwipeOutcome.Commit
+                : SwipeOutcome.Cancel;
+            velocity = landing.Velocity * _swipeDirection;
+        }
+
+        if (!cancelled)
+        {
+            _report.Line(
+                $"SWIPE {(SwipeProjects ? "projection" : "threshold")} position={position:F2} velocity={velocity:F2} {(outcome == SwipeOutcome.Commit ? "commit" : "cancel")}");
+        }
+
+        _swipeOrigin = 0;
         _swipeView = null;
         _swipeFrom = null;
         _swipeTo = null;

@@ -34,6 +34,7 @@
     <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
     <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" />
     <ProjectReference Include="../../src/Basin.Effects/Basin.Effects.csproj" />
+    <ProjectReference Include="../../src/Basin.Kinematics/Basin.Kinematics.csproj" />
     <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
     <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
     <ProjectReference Include="../../src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />

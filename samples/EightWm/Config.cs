@@ -31,6 +31,8 @@ internal sealed class Config
 
     public double EdgeBand { get; private set; } = 20;
 
+    public Basin.Kinematics.SwipeReleaseMode SwipeRelease { get; private set; } = Basin.Kinematics.SwipeReleaseMode.Projection;
+
     public int MinWidth { get; private set; } = 500;
 
     public int MaxCells { get; private set; } = 4;
@@ -88,6 +90,9 @@ internal sealed class Config
             config.HotCorners = shell.Flag("hot_corners", config.HotCorners);
             config.Animations = shell.Flag("animations", config.Animations);
             config.EdgeBand = shell.Number("edge_band", (int)config.EdgeBand);
+            config.SwipeRelease = shell.Choice("swipe_release", "projection", "projection", "threshold") == "threshold"
+                ? Basin.Kinematics.SwipeReleaseMode.Threshold
+                : Basin.Kinematics.SwipeReleaseMode.Projection;
             config.MinWidth = shell.Number("min_width", config.MinWidth);
             config.MaxCells = Math.Clamp(shell.Number("max_cells", config.MaxCells), 1, 8);
             config.StartOutput = Math.Max(0, shell.Number("start_output", config.StartOutput));

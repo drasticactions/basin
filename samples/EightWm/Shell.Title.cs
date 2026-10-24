@@ -261,14 +261,14 @@ internal sealed partial class Shell
         TitleMove(view, edges.X, edges.Y, EdgeContact);
     }
 
-    private bool FinishTopEdge(ShellView view, EdgeSwipeRecognizer edges)
+    private bool FinishTopEdge(ShellView view, EdgeSwipeRecognizer edges, EdgeSwipeOutcome outcome)
     {
         if (_titleTouch != EdgeContact)
         {
             return false;
         }
 
-        if (edges.Outcome == EdgeSwipeOutcome.Cancelled)
+        if (outcome == EdgeSwipeOutcome.Cancelled)
         {
             TitleCancel();
         }

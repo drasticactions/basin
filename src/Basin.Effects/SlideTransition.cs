@@ -141,6 +141,35 @@ public sealed class SlideTransition
     }
 
     /// <summary>
+    /// Gets the horizontal offset that the slide applies to a workspace now.
+    /// </summary>
+    /// <param name="stack">The transform stack of the workspace.</param>
+    /// <param name="offset">The offset in layout units, or zero when the workspace is not part of the slide.</param>
+    /// <returns><see langword="false"/> when no slide runs or the workspace is not part of it.</returns>
+    public bool TryGetOffset(TransformStack stack, out double offset)
+    {
+        offset = 0;
+        if (_outgoing is null || stack is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(stack, _outgoing))
+        {
+            offset = _outApplied;
+            return true;
+        }
+
+        if (ReferenceEquals(stack, _incoming))
+        {
+            offset = _inApplied;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Ends a gesture and runs the slide on the timeline to the end or back to the start. It does nothing when the slide is not interactive.
     /// </summary>
     /// <param name="commit"><see langword="true"/> to finish the switch. It counts as <see langword="false"/> when there is no incoming workspace.</param>
