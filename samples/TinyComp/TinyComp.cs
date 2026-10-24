@@ -994,7 +994,7 @@ internal sealed partial class TinyComp :
         _colorPack.Surfaces.CountChanged += attached => _report.Line(CompositorLines.Luts(attached));
         foreach (var view in Views)
         {
-            _colorPack.AddOutput(view.Global, view.Output, view.Scene);
+            _colorPack.AddOutput(view.Global, view.Output, view.Color);
             SyncBlendSpace(view);
         }
 

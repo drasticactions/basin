@@ -418,7 +418,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     public event Action<OutputView, OutputTransform>? TransformChanged;
 
     /// <summary>
-    /// Occurs before each frame commit of a primary output. A handler can add state, for example HDR metadata, to the commit.
+    /// Occurs before each frame commit of a primary output, after the scene output filled the state. A handler can add state, for example HDR metadata, to the commit.
     /// </summary>
     public event Action<OutputView, OutputState>? StampFrame;
 
@@ -1372,6 +1372,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         RenderFences.CloseFence(view.RenderFence);
         view.RenderFence = -1;
         view.Scene?.Dispose();
+        view.Color?.Dispose();
         _host.PresentedSets.Retire(view.Output);
         view.Swapchain?.Dispose();
         if (retire)
@@ -1477,6 +1478,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
         if (FullRepaint)
         {
+            view.Color = new OutputColorTables(_scene);
             view.Output.Frame += () => OracleRepaint(view);
             return;
         }
@@ -1512,6 +1514,8 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
             _secondaryDamage[view] = OnDamage;
             _scene.Damaged += OnDamage;
+            view.Color = new OutputColorTables(_scene);
+            view.Color.Rebuilt += scheduler.ScheduleRepaint;
             scheduler.ScheduleRepaint();
             return;
         }
@@ -1524,6 +1528,8 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
             SurfaceHints = Hints(),
         };
         view.Scene = sceneOutput;
+        view.Color = sceneOutput.Color;
+        sceneOutput.Committing += state => Stamp(view, state);
         sceneOutput.ScanoutCandidateChanged += surface => view.ScanoutCandidate = surface;
         view.Output.Frame += () => ReportRenderTime(view);
         sceneOutput.DamagePending += () =>
@@ -1692,15 +1698,6 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
         _frameState.Clear();
         StampPacing(view);
-        AllocationScope.Pause();
-        try
-        {
-            StampFrame?.Invoke(view, _frameState);
-        }
-        finally
-        {
-            AllocationScope.Resume();
-        }
 
         var renderStart = MonotonicClock.Nanos;
         var composedBefore = view.Scene.ComposedCommits;
@@ -1837,8 +1834,8 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
             {
                 Background = Background,
                 Projection = OutputProjection.For(view.Output),
-                Luts = view.Scene,
-                ColorDescription = view.Scene?.ColorDescription,
+                Luts = view.Color,
+                ColorDescription = view.Color?.ColorDescription,
                 OriginX = view.Box.X,
                 OriginY = view.Box.Y,
             });
@@ -1940,6 +1937,19 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    private void Stamp(OutputView view, OutputState state)
+    {
+        AllocationScope.Pause();
+        try
+        {
+            StampFrame?.Invoke(view, state);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+    }
+
     private void TrackRenderFence(OutputView view, long renderStart)
     {
         if (_renderer.FencePrecision == RenderFencePrecision.None)
@@ -1993,6 +2003,17 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
             return;
         }
 
+        StepHandoff(view);
+        AllocationScope.Pause();
+        try
+        {
+            StepRetain(view);
+        }
+        finally
+        {
+            AllocationScope.Resume();
+        }
+
         _preparing = view;
         try
         {
@@ -2014,8 +2035,8 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         {
             Background = Background,
             Projection = OutputProjection.For(view.Output),
-            Luts = view.Scene,
-            ColorDescription = view.Scene?.ColorDescription,
+            Luts = view.Color,
+            ColorDescription = view.Color?.ColorDescription,
         });
         _scene.Root.SetPosition(0, 0);
         if (!rendered)
@@ -2024,12 +2045,24 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
 
         _frameState.Clear();
-        StampFrame?.Invoke(view, _frameState);
+        Stamp(view, _frameState);
         if (view.Output.Commit(_frameState.SetBuffer(target)))
         {
             view.Swapchain.Presented(target);
             view.LastPresentedBuffer = target;
             view.Rendered++;
+            if (_initialCreated && !_host.Ready && AllRendered())
+            {
+                AllocationScope.Pause();
+                try
+                {
+                    _host.NotifyReady();
+                }
+                finally
+                {
+                    AllocationScope.Resume();
+                }
+            }
         }
 
         RaisePainted(view);

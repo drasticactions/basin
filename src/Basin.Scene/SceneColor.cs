@@ -8,6 +8,7 @@ namespace Basin.Scene;
 public sealed partial class Scene
 {
     private readonly List<SceneOutput> _outputs = [];
+    private readonly List<OutputColorTables> _colorTables = [];
     private IColorTransformResolver? _colorTransforms;
 
     /// <summary>
@@ -21,7 +22,7 @@ public sealed partial class Scene
     public event Action<SceneBuffer>? ColorDescriptionChanged;
 
     /// <summary>
-    /// Gets or sets the resolver that builds color transforms between descriptions. Setting it rebuilds the lookup tables of every attached output.
+    /// Gets or sets the resolver that builds color transforms between descriptions. Setting it rebuilds every attached <see cref="OutputColorTables"/>.
     /// </summary>
     public IColorTransformResolver? ColorTransforms
     {
@@ -34,24 +35,24 @@ public sealed partial class Scene
             }
 
             _colorTransforms = value;
-            foreach (var output in _outputs)
+            foreach (var tables in _colorTables)
             {
-                output.RebuildLuts();
+                tables.RebuildLuts();
             }
         }
     }
 
     /// <summary>
-    /// Gets the total number of color lookup tables that the attached outputs hold.
+    /// Gets the total number of color lookup tables that the attached <see cref="OutputColorTables"/> hold.
     /// </summary>
     public int LutCount
     {
         get
         {
             var count = 0;
-            foreach (var output in _outputs)
+            foreach (var tables in _colorTables)
             {
-                count += output.LutCount;
+                count += tables.LutCount;
             }
 
             return count;
@@ -84,6 +85,10 @@ public sealed partial class Scene
     internal void Attach(SceneOutput output) => _outputs.Add(output);
 
     internal void Detach(SceneOutput output) => _outputs.Remove(output);
+
+    internal void AttachColorTables(OutputColorTables tables) => _colorTables.Add(tables);
+
+    internal void DetachColorTables(OutputColorTables tables) => _colorTables.Remove(tables);
 
     internal void NotifyColorDescription(SceneBuffer node) => ColorDescriptionChanged?.Invoke(node);
 

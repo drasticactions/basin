@@ -50,9 +50,9 @@ public sealed class WaylandSeamTextInput : ITextInputMethod, IDisposable
     public Func<Surface, Box, (WaylandOutput Output, Box Rect)?>? LocateCursorRectangle { get; set; }
 
     /// <summary>
-    /// Gets a value indicating whether the parent text input object exists and the bridge is not disposed. It does not show parent keyboard focus.
+    /// Gets a value indicating whether the parent text input object exists, the parent focuses one of the outputs, and the bridge is not disposed.
     /// </summary>
-    public bool IsAvailable => !_disposed && _textInput is { IsDestroyed: false };
+    public bool IsAvailable => !_disposed && _parentFocused && _textInput is { IsDestroyed: false };
 
     /// <summary>
     /// Gets a value indicating whether the bridge grabs the keyboard. It is always <see langword="false"/>, because the host's input method grabs the parent keyboard.
@@ -74,7 +74,8 @@ public sealed class WaylandSeamTextInput : ITextInputMethod, IDisposable
     public event Action? Done;
 
     /// <summary>
-    /// Occurs when the parent text input focus moves onto or off this compositor's outputs. The bridge is disabled after each change.
+    /// Occurs when the parent text input focus moves onto or off this compositor's outputs, which changes <see cref="IsAvailable"/>.
+    /// The bridge is disabled after each change, and a text input manager must call <see cref="Activate"/> again after the parent focus returns.
     /// </summary>
     public event Action? AvailabilityChanged;
 
@@ -119,12 +120,14 @@ public sealed class WaylandSeamTextInput : ITextInputMethod, IDisposable
         Push(textInput);
     }
 
-    /// <summary>
-    /// Clears the active guest and disables the parent text input. It does not compare <paramref name="surface"/> with the active guest.
-    /// </summary>
-    /// <param name="surface">The guest surface that lost text input focus.</param>
+    /// <inheritdoc/>
     public void Deactivate(Surface surface)
     {
+        if (!ReferenceEquals(surface, _active))
+        {
+            return;
+        }
+
         _active = null;
         if (Ready() is not { } textInput || !_enabled)
         {

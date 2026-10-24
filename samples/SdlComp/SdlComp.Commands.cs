@@ -5,7 +5,6 @@ namespace SdlComp;
 internal sealed partial class SdlComp
 {
     private readonly IpcLineReport _report = new();
-    private IpcPendingReply? _shotReply;
 
     private void StartIpc()
     {
@@ -50,23 +49,9 @@ internal sealed partial class SdlComp
                 return;
             }
 
-            if (_shotReply is { } superseded)
-            {
-                _shotReply = null;
-                _ = IpcLineReport.Complete(superseded);
-            }
-
-            _shotReply = reply.Defer();
+            var pending = reply.Defer();
             _host.RequestScreenshot(path, written =>
-            {
-                if (_shotReply is not { } pending)
-                {
-                    return;
-                }
-
-                _shotReply = null;
-                _ = written ? IpcLineReport.Complete(pending, $"SHOT {path}") : IpcLineReport.Complete(pending);
-            });
+                _ = written ? IpcLineReport.Complete(pending, $"SHOT {path}") : IpcLineReport.Complete(pending));
             foreach (var window in OutputWindows)
             {
                 window.View.RequestRender?.Invoke();

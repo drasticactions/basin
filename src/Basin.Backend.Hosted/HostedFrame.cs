@@ -86,7 +86,7 @@ public sealed class HostedFrame : IDisposable
     public void RequestWakeup() => WakeupRequested?.Invoke();
 
     /// <summary>
-    /// Runs one tick: dispatches the clients, raises <see cref="BeforeDispatch"/>, begins the frame on <see cref="Frames"/>, composites, runs idle callbacks and flushes the clients.
+    /// Runs one tick: dispatches the clients, raises <see cref="BeforeDispatch"/>, begins the frame on <see cref="Frames"/>, composites, ends the frame on <see cref="Frames"/> when it composited, runs idle callbacks and flushes the clients.
     /// Direct scanout and plane offload are always off.
     /// </summary>
     /// <param name="renderer">The renderer that composites the frame.</param>
@@ -116,6 +116,7 @@ public sealed class HostedFrame : IDisposable
         if (composited)
         {
             Composited++;
+            Frames?.EndFrame(_output.Output, 0);
         }
 
         _loop.DispatchIdle();

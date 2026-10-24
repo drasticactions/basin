@@ -108,6 +108,7 @@ internal static class Program
             }
         }
 
+        using var decoderLifetime = decoder as IDisposable;
         using var host = Basin.Host.BasinHost.Create(new Basin.Host.HostOptions
         {
             Transport = channelEndpoint is not null || transport.Kind == TransportKind.Managed
@@ -276,6 +277,7 @@ internal static class Program
         target.Destroy();
         scene.Root.Destroy();
         frameState.Dispose();
+        decoderLifetime?.Dispose();
 
         BasinReport.Line(CompositorLines.Frames(rendered));
 

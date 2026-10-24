@@ -164,7 +164,7 @@ internal sealed partial class TinyComp
 
             view.ColorDescription = DescriptionOf(view.Output);
             view.KmsColorRouted = _colorConfiguration is { } routing && routing.RouteKmsPipeline(view.Output);
-            _colorPack.AddOutput(view.Global, view.Output, view.Scene);
+            _colorPack.AddOutput(view.Global, view.Output, view.Color);
             SyncBlendSpace(view);
             RefreshSurfaceLuts();
             if (_panels.Match(drmOutput) is { } panel)
@@ -191,7 +191,7 @@ internal sealed partial class TinyComp
             }
         }
 
-        _colorPack.AddOutput(view.Global, view.Output, view.Scene);
+        _colorPack.AddOutput(view.Global, view.Output, view.Color);
         if (view.Output.Scale != 1)
         {
             _report.Line($"SCALE {view.Output.Name} {view.Output.Scale}");

@@ -11,11 +11,6 @@ namespace Basin.Scene;
 public sealed class SceneOutput : IDisposable, IColorLutTable
 {
     private readonly Scene _scene;
-    private readonly Dictionary<ImageDescription, IColorLut?> _luts = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<ImageDescription> _descriptionScratch = [];
-    private IColorLut? _defaultLut;
-    private ImageDescription? _colorDescription;
-    private IColorTransformResolver? _resolver;
     private readonly List<Scene.RenderEntry> _renderList = [];
     private readonly List<PixmanRegion32> _regionPool = [];
     private readonly PixmanRegion32 _damage = new();
@@ -57,11 +52,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         Ring = new DamageRing(output.CurrentMode.Width, output.CurrentMode.Height);
         scene.Damaged += OnSceneDamaged;
         scene.FrameRequested += OnFrameRequested;
-        scene.ColorDescriptionChanged += OnColorDescriptionChanged;
         output.Committed += OnOutputCommitted;
         output.Destroyed += Dispose;
         scene.Attach(this);
-        RebuildLuts();
+        Color = new OutputColorTables(scene);
+        Color.Rebuilt += OnColorRebuilt;
     }
 
     /// <summary>
@@ -70,25 +65,18 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     public IOutput Output { get; }
 
     /// <summary>
+    /// Gets the color lookup tables of this output. The members below forward to it.
+    /// </summary>
+    public OutputColorTables Color { get; }
+
+    /// <summary>
     /// Gets or sets the color space of the output. <see langword="null"/> means the default SDR description.
     /// A change in content rebuilds the color lookup tables and damages the whole output.
     /// </summary>
     public ImageDescription? ColorDescription
     {
-        get => _colorDescription;
-        set
-        {
-            if (ReferenceEquals(_colorDescription, value) ||
-                (_colorDescription is not null && value is not null &&
-                 ImageDescription.ContentComparer.Equals(_colorDescription, value)))
-            {
-                _colorDescription = value;
-                return;
-            }
-
-            _colorDescription = value;
-            RebuildLuts();
-        }
+        get => Color.ColorDescription;
+        set => Color.ColorDescription = value;
     }
 
     /// <summary>
@@ -97,35 +85,14 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     /// </summary>
     public IColorTransformResolver? Resolver
     {
-        get => _resolver ?? _scene.ColorTransforms;
-        set
-        {
-            if (ReferenceEquals(_resolver, value))
-            {
-                return;
-            }
-
-            _resolver = value;
-            RebuildLuts();
-        }
+        get => Color.Resolver;
+        set => Color.Resolver = value;
     }
 
     /// <summary>
     /// Gets the number of color lookup tables that this output holds now. A buffer with no transform adds no table.
     /// </summary>
-    public int LutCount
-    {
-        get
-        {
-            var count = _defaultLut is null ? 0 : 1;
-            foreach (var lut in _luts.Values)
-            {
-                count += lut is null ? 0 : 1;
-            }
-
-            return count;
-        }
-    }
+    public int LutCount => Color.LutCount;
 
     /// <summary>
     /// Gets the color lookup table that converts the content of a buffer node to the color space of this output.
@@ -133,46 +100,18 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     /// <param name="node">The buffer node to draw.</param>
     /// <returns>The table for the color description of the node, or <see langword="null"/> when no conversion is necessary.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
-    public IColorLut? LutFor(SceneBuffer node)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        return node.ColorDescription is { } description
-            ? _luts.GetValueOrDefault(description)
-            : _defaultLut;
-    }
+    public IColorLut? LutFor(SceneBuffer node) => Color.LutFor(node);
 
     /// <summary>
     /// Makes the color lookup tables again for every color description in the scene.
     /// When a table existed before or exists after, it damages the whole output and raises <see cref="DamagePending"/>.
     /// </summary>
-    public void RebuildLuts()
-    {
-        var resolver = Resolver;
-        var output = _colorDescription ?? ImageDescription.SdrDefault;
-        var before = LutCount;
-        _luts.Clear();
-        _defaultLut = resolver?.Resolve(ImageDescription.SdrDefault, output);
-        _descriptionScratch.Clear();
-        _scene.CollectColorDescriptions(_descriptionScratch);
-        foreach (var description in _descriptionScratch)
-        {
-            _luts[description] = resolver?.Resolve(description, output);
-        }
+    public void RebuildLuts() => Color.RebuildLuts();
 
-        _descriptionScratch.Clear();
-        if (before != 0 || LutCount != 0)
-        {
-            Ring.AddWhole();
-            DamagePending?.Invoke();
-        }
-    }
-
-    private void OnColorDescriptionChanged(SceneBuffer node)
+    private void OnColorRebuilt()
     {
-        if (node.ColorDescription is { } description && !_luts.ContainsKey(description))
-        {
-            _luts[description] = Resolver?.Resolve(description, _colorDescription ?? ImageDescription.SdrDefault);
-        }
+        Ring.AddWhole();
+        DamagePending?.Invoke();
     }
 
     /// <summary>
@@ -502,6 +441,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     /// </summary>
     public event Action? DamagePending;
 
+    /// <summary>
+    /// Occurs before each commit to the output, after this object filled the state. A handler can add fields, for example HDR metadata or an out-fence request.
+    /// </summary>
+    public event Action<OutputState>? Committing;
+
     private BufferLock _softwareCursor;
     private ITexture? _softwareCursorTexture;
 
@@ -573,9 +517,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _scene.Detach(this);
         _scene.Damaged -= OnSceneDamaged;
         _scene.FrameRequested -= OnFrameRequested;
-        _scene.ColorDescriptionChanged -= OnColorDescriptionChanged;
-        _luts.Clear();
-        _defaultLut = null;
+        Color.Rebuilt -= OnColorRebuilt;
+        Color.Dispose();
         Output.Committed -= OnOutputCommitted;
         Output.Destroyed -= Dispose;
         _softwareCursorTexture?.Dispose();
@@ -1020,6 +963,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
                 state.Clear();
                 state.SetBuffer(unchanged);
                 state.SetLayers(_layers);
+                Committing?.Invoke(state);
                 if (!Output.Commit(state))
                 {
                     return false;
@@ -1095,6 +1039,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
         try
         {
+            Committing?.Invoke(state);
             if (!Output.Commit(state))
             {
                 return false;
@@ -1826,7 +1771,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
 
         var pass = renderer.BeginBufferPass(
-            target, new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = _colorDescription });
+            target, new RenderPassOptions { WaitFenceFd = waitFence, ColorDescription = Color.ColorDescription });
         if (ownsFence)
         {
             _ = CloseFd(waitFence);
@@ -2080,6 +2025,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             state.SetLayers(_layers);
         }
 
+        Committing?.Invoke(state);
         if ((!_scanningOut && !Output.TestCommit(state)) || !Output.Commit(state))
         {
             _scanoutStreak = 0;

@@ -3,35 +3,34 @@ using Seatd;
 namespace Basin.Session;
 
 /// <summary>
-/// An <see cref="ISession"/> through libseat, which uses seatd or logind. Seat events dispatch on the compositor loop when the session has one.
+/// An <see cref="ISession"/> through libseat, which uses seatd or logind. Seat events dispatch on the compositor loop.
 /// </summary>
 public sealed class SeatdSession : ISession
 {
     private readonly Seat _seat;
-    private readonly IEventSource? _source;
-    private readonly CompositorSynchronizationContext? _context;
+    private readonly IEventSource _source;
+    private readonly CompositorSynchronizationContext _context;
     private readonly object _lock = new();
     private bool _active;
     private bool _disposed;
 
-    private SeatdSession(Seat seat, ICompositorEventLoop? loop)
+    private SeatdSession(Seat seat, ICompositorEventLoop loop)
     {
         _seat = seat;
-        if (loop is not null)
-        {
-            _context = new CompositorSynchronizationContext(loop);
-            _source = loop.AddFd(_seat.PollFd, FdReadiness.Readable, (_, _) => TryDispatch());
-        }
+        _context = new CompositorSynchronizationContext(loop);
+        _source = loop.AddFd(_seat.PollFd, FdReadiness.Readable, (_, _) => TryDispatch());
     }
 
     /// <summary>
     /// Opens the seat and waits up to five seconds for it to become active.
     /// </summary>
-    /// <param name="loop">The loop that dispatches seat events, or <see langword="null"/>. Without a loop, <see cref="Enabled"/> and <see cref="Disabled"/> do not occur after this call returns.</param>
+    /// <param name="loop">The loop that watches the seat and dispatches its events, so that <see cref="Enabled"/> and <see cref="Disabled"/> occur.</param>
     /// <returns>The open session, which the caller owns. It can still be inactive when the wait expired.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">No seat manager is available.</exception>
-    public static SeatdSession Open(ICompositorEventLoop? loop = null)
+    public static SeatdSession Open(ICompositorEventLoop loop)
     {
+        ArgumentNullException.ThrowIfNull(loop);
         SeatdSession session = null!;
         Seat seat;
         try
@@ -60,12 +59,12 @@ public sealed class SeatdSession : ISession
     public bool IsActive => _active;
 
     /// <summary>
-    /// Occurs when the session changes from inactive to active. It occurs on the thread that dispatches the seat, normally the loop thread.
+    /// Occurs when the session changes from inactive to active. It occurs on the loop thread.
     /// </summary>
     public event Action? Enabled;
 
     /// <summary>
-    /// Occurs when the seat manager disables the session. It occurs on the thread that dispatches the seat, normally the loop thread.
+    /// Occurs when the seat manager disables the session. It occurs on the loop thread.
     /// </summary>
     public event Action? Disabled;
 
@@ -101,7 +100,7 @@ public sealed class SeatdSession : ISession
             }
             finally
             {
-                _context?.Post(_ => TryDispatch(), null);
+                _context.Post(_ => TryDispatch(), null);
             }
         });
     }
@@ -139,8 +138,8 @@ public sealed class SeatdSession : ISession
             }
 
             _disposed = true;
-            _source?.Remove();
-            _context?.Dispose();
+            _source.Remove();
+            _context.Dispose();
             _seat.Dispose();
         }
     }

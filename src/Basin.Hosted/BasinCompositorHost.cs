@@ -397,7 +397,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
     private Action<bool>? _screenshotDone;
 
     /// <summary>
-    /// Asks the next frame to write the first view output to a PNG file. A second request before that frame replaces the first, and the first callback never runs.
+    /// Asks the next frame to write the first view output to a PNG file. A second request before that frame replaces the first, and the first callback then receives <see langword="false"/>.
     /// </summary>
     /// <param name="path">The PNG file to write.</param>
     /// <param name="done">The callback that receives <see langword="true"/> when the file was written.</param>
@@ -406,6 +406,10 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(done);
         _thread.Assert();
+        var replaced = _screenshotDone;
+        _screenshotPath = null;
+        _screenshotDone = null;
+        replaced?.Invoke(false);
         _screenshotPath = path;
         _screenshotDone = done;
     }

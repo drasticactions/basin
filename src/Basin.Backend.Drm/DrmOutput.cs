@@ -18,9 +18,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     /// <summary>
     /// Gets the out-fence fd of the last frame commit. It is -1 when that commit did not request an out fence, the CRTC has none, or the flip was asynchronous.
-    /// The output never closes it. The next commit replaces the value.
+    /// The output owns the fd: it closes it at the next frame commit and when it is destroyed. A caller that needs the fence longer duplicates it.
     /// </summary>
     public int LastOutFenceFd { get; private set; } = -1;
+
+    private readonly FdLedger _outFences = new();
 
     private bool _lastFlipWasAsync;
 
@@ -825,7 +827,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                 _lastFlipWasAsync = true;
                 _flipPending = true;
                 _lastFrameCommitTick = Environment.TickCount64;
-                LastOutFenceFd = -1;
+                ReplaceOutFence(-1);
                 _pendingScanout.Dispose();
                 _pendingScanout = buffer!.Lock();
                 if (state != _queuedFrame)
@@ -983,7 +985,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             _layerFlipPending = true;
         }
 
-        LastOutFenceFd = wantOutFence ? (int)_outFenceSlot[0] : -1;
+        ReplaceOutFence(wantOutFence ? (int)_outFenceSlot[0] : -1);
         if (colorDirty)
         {
             ClearColorDirty();
@@ -1099,6 +1101,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         if ((fields & OutputStateFields.AdaptiveSync) != 0)
         {
             _queuedFrame.SetAdaptiveSync(adaptiveSync);
+        }
+
+        if ((fields & OutputStateFields.OutFence) != 0)
+        {
+            _queuedFrame.RequestOutFence();
         }
 
         if (fence >= 0)
@@ -2123,6 +2130,21 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         return duplicate;
     }
 
+    private void ReplaceOutFence(int fd)
+    {
+        if (LastOutFenceFd >= 0)
+        {
+            _outFences.Closed(LastOutFenceFd);
+            _ = close(LastOutFenceFd);
+        }
+
+        LastOutFenceFd = fd;
+        if (fd >= 0)
+        {
+            _outFences.Acquired(fd, "out fence");
+        }
+    }
+
     private void ReleaseStagedFences()
     {
         foreach (var fence in _stagedFences)
@@ -2314,6 +2336,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         DestroyColorBlobs();
+        ReplaceOutFence(-1);
     }
 
     private void ReplaceModeBlob(DrmModeInfo mode)

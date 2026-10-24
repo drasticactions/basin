@@ -36,8 +36,10 @@ internal static class Program
             Console.Error.WriteLine($"port-comp: no video: {whyNot}");
         }
 
-        return AppBuilder.Configure<PortCompApp>()
+        var exitCode = AppBuilder.Configure<PortCompApp>()
             .UsePlatformDetect()
             .StartWithClassicDesktopLifetime(args);
+        (PortCompApp.VideoDecoder as IDisposable)?.Dispose();
+        return exitCode;
     }
 }

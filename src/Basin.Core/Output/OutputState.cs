@@ -415,6 +415,7 @@ public sealed class OutputState : IDisposable
 
     /// <summary>
     /// Asks the commit for a fence that signals when the frame is on the screen. An output that cannot give one ignores the request.
+    /// The output owns the fence fd and closes it at its next frame commit, so a caller that keeps the fence duplicates it.
     /// </summary>
     /// <returns>This state, for chained calls.</returns>
     public OutputState RequestOutFence()

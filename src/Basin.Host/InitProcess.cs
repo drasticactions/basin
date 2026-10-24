@@ -155,13 +155,11 @@ public sealed class InitProcess
     /// </summary>
     /// <param name="directories">The directory names to search, for example the binary name.</param>
     /// <param name="log">The log for the errors and the paths that were tried.</param>
-    /// <param name="found">The path of the first executable <c>init</c>, or <see langword="null"/> when there is none.</param>
-    /// <returns><see langword="false"/> only when an <c>init</c> file exists but is not executable. A search that finds nothing returns <see langword="true"/>.</returns>
+    /// <returns>The first executable <c>init</c>, nothing, or an <c>init</c> file that exists but is not executable, which stops the search.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="directories"/> is <see langword="null"/>.</exception>
-    public static bool TryFind(IReadOnlyList<string> directories, BasinLogger log, out string? found)
+    public static InitSearch Find(IReadOnlyList<string> directories, BasinLogger log)
     {
         ArgumentNullException.ThrowIfNull(directories);
-        found = null;
 
         var root = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
         if (string.IsNullOrEmpty(root))
@@ -169,7 +167,7 @@ public sealed class InitProcess
             var home = Environment.GetEnvironmentVariable("HOME");
             if (string.IsNullOrEmpty(home))
             {
-                return true;
+                return default;
             }
 
             root = Path.Combine(home, ".config");
@@ -180,15 +178,14 @@ public sealed class InitProcess
             var path = Path.Combine(root, directory, "init");
             if (access(path, FileExecutable) == 0)
             {
-                found = path;
-                return true;
+                return new InitSearch(path, NotExecutable: false);
             }
 
             var error = Marshal.GetLastPInvokeError();
             if (error == ErrorAccess && access(path, FileExists) == 0)
             {
                 log.Error($"failed to run init executable {path}: the file is not executable");
-                return false;
+                return new InitSearch(null, NotExecutable: true);
             }
 
             if (error is ErrorNoEntry or ErrorNotDirectory)
@@ -201,7 +198,7 @@ public sealed class InitProcess
             }
         }
 
-        return true;
+        return default;
     }
 
     /// <summary>

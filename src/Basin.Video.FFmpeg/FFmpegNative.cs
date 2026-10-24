@@ -148,7 +148,8 @@ internal static unsafe class FFmpegNative
                 PacketData: 24,
                 PacketSize: 32,
                 ContextGetFormat: 152,
-                ContextHwDeviceCtx: 864)
+                ContextHwDeviceCtx: 864,
+                ContextOpaque: 48)
             : new FFmpegLayout(
                 FrameData: 0,
                 FrameLinesize: 64,
@@ -158,7 +159,8 @@ internal static unsafe class FFmpegNative
                 PacketData: 24,
                 PacketSize: 32,
                 ContextGetFormat: 192,
-                ContextHwDeviceCtx: 560);
+                ContextHwDeviceCtx: 560,
+                ContextOpaque: 48);
 
         av_log_set_level(LogWarning);
         av_log_set_callback((nint)(delegate* unmanaged[Cdecl]<nint, int, byte*, byte*, void>)&LogCallback);
@@ -225,8 +227,6 @@ internal static unsafe class FFmpegNative
         }
     }
 
-    internal static int HardwarePixelFormat = int.MinValue;
-
     internal static nint ChooseFormatPointer =>
         (nint)(delegate* unmanaged[Cdecl]<nint, nint, int>)&ChooseFormat;
 
@@ -235,11 +235,12 @@ internal static unsafe class FFmpegNative
     {
         try
         {
+            var wanted = (int)*(nint*)(context + Layout.ContextOpaque);
             var list = (int*)formats;
             var fallback = -1;
             for (var i = 0; list[i] != -1; i++)
             {
-                if (list[i] == HardwarePixelFormat)
+                if (list[i] == wanted)
                 {
                     return list[i];
                 }

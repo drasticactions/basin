@@ -125,6 +125,42 @@ public sealed class HostedTickTests
     }
 
     [Fact]
+    public void A_composited_tick_ends_the_frame_on_the_clock_and_an_undamaged_one_does_not()
+    {
+        using var host = new CompositorTestHost();
+        using var hosted = new Hosted(host);
+        var clock = new Capabilities.Defaults.FrameClock();
+        var sink = new RecordingSink();
+        clock.Add(sink);
+        hosted.Frame.Frames = clock;
+
+        var node = new SceneRect(host.Scene.Root, 20, 20, new RenderColor(0.2f, 0.4f, 0.8f, 1f));
+        Assert.True(hosted.Tick());
+        Assert.Equal(1, sink.Begun);
+        Assert.Equal(1, sink.Ended);
+
+        Assert.False(hosted.Tick(age: 1));
+        Assert.Equal(2, sink.Begun);
+        Assert.Equal(1, sink.Ended);
+
+        node.SetPosition(30, 30);
+        Assert.True(hosted.Tick(age: 1));
+        Assert.Equal(2, sink.Ended);
+        node.Destroy();
+    }
+
+    private sealed class RecordingSink : Capabilities.IFrameSink
+    {
+        public int Begun { get; private set; }
+
+        public int Ended { get; private set; }
+
+        public void BeginFrame(IOutput output, long predictedVblankNanos) => Begun++;
+
+        public void EndFrame(IOutput output, long presentedNanos) => Ended++;
+    }
+
+    [Fact]
     public void A_client_request_reaches_the_compositor_inside_the_tick()
     {
         using var host = new CompositorTestHost();

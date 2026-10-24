@@ -174,6 +174,38 @@ public sealed class HeadlessDriverTests
         }
     }
 
+    [Fact]
+    public async Task A_second_screenshot_request_fails_the_first_and_writes_its_own()
+    {
+        using var rig = new Rig();
+        var (toplevel, xdgSurface, surface) = MapColored(rig, 0xFF3366AA);
+        var first = Path.Combine(Path.GetTempPath(), $"basin-headless-{Environment.ProcessId}-{Guid.NewGuid():N}.png");
+        var second = Path.Combine(Path.GetTempPath(), $"basin-headless-{Environment.ProcessId}-{Guid.NewGuid():N}.png");
+        try
+        {
+            var firstWritten = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var secondWritten = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            rig.Driver.Post(() =>
+            {
+                rig.Driver.Host.RequestScreenshot(first, firstWritten.SetResult);
+                rig.Driver.Host.RequestScreenshot(second, secondWritten.SetResult);
+            });
+
+            Assert.False(await firstWritten.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.True(await secondWritten.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.False(File.Exists(first));
+            Assert.True(File.Exists(second));
+        }
+        finally
+        {
+            File.Delete(first);
+            File.Delete(second);
+            toplevel.Dispose();
+            xdgSurface.Dispose();
+            surface.Dispose();
+        }
+    }
+
     private static (Basin.Shell.Xdg.Protocol.XdgToplevel, Basin.Shell.Xdg.Protocol.XdgSurface, Wayland.WlSurface) MapColored(Rig rig, uint argb)
     {
         var client = rig.Client;

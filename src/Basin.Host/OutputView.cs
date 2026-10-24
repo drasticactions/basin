@@ -30,6 +30,12 @@ public sealed class OutputView
     public SceneOutput? Scene { get; internal set; }
 
     /// <summary>
+    /// Gets the color lookup tables of the output. Every path has one: it is <see cref="SceneOutput.Color"/> of <see cref="Scene"/> when that exists.
+    /// It is <see langword="null"/> only before the driver wires the view.
+    /// </summary>
+    public OutputColorTables? Color { get; internal set; }
+
+    /// <summary>
     /// Gets the scheduler that paces repaints. It is <see langword="null"/> in full-repaint mode.
     /// </summary>
     public OutputScheduler? Scheduler { get; internal set; }

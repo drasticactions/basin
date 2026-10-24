@@ -6,10 +6,12 @@ namespace Basin.Video.FFmpeg;
 
 /// <summary>
 /// Decodes video through the system FFmpeg libraries, loaded at run time by soname. It can decode on a hardware device when one opens.
+/// The decoder owns that device. Each session holds its own reference, so a session stays usable after the decoder is disposed.
 /// </summary>
-public sealed class FFmpegVideoDecoder : IVideoDecoder
+public sealed class FFmpegVideoDecoder : IVideoDecoder, IDisposable
 {
     private readonly FFmpegHardware? _hardware;
+    private bool _disposed;
 
     private FFmpegVideoDecoder(FFmpegHardware? hardware) => _hardware = hardware;
 
@@ -20,6 +22,7 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder
 
     /// <summary>
     /// Creates a decoder when the FFmpeg libraries load. With <paramref name="preferHardware"/>, it tries VAAPI, CUDA, D3D11VA or VideoToolbox, and falls back to software.
+    /// A hardware device belongs to the decoder, and <see cref="Dispose"/> releases it. Decoders on different device types can live together.
     /// </summary>
     /// <param name="preferHardware"><see langword="true"/> to try a hardware decode device.</param>
     /// <param name="whyNot">The reason for a <see langword="null"/> result, or <see langword="null"/> on success.</param>
@@ -41,7 +44,6 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder
             }
             else
             {
-                FFmpegNative.HardwarePixelFormat = hardware.PixelFormat;
                 Log.Debug($"hardware decode over {hardware.Name}");
             }
         }
@@ -74,6 +76,13 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder
         }
     }
 
+    /// <summary>Releases the decoder's reference to its hardware device. Open sessions keep their own reference. A second call does nothing.</summary>
+    public void Dispose()
+    {
+        _disposed = true;
+        _hardware?.Dispose();
+    }
+
     /// <summary>Opens a session that decodes one stream into buffers of one size and format.</summary>
     /// <param name="codec">The codec of the stream.</param>
     /// <param name="width">The destination width in pixels. Larger decoded frames are cropped.</param>
@@ -81,8 +90,12 @@ public sealed class FFmpegVideoDecoder : IVideoDecoder
     /// <param name="format">The destination pixel format.</param>
     /// <returns>The session. The caller disposes it.</returns>
     /// <exception cref="NotSupportedException">FFmpeg has no decoder for <paramref name="codec"/> or swscale cannot write <paramref name="format"/>.</exception>
-    public IVideoDecodeSession Open(VideoCodec codec, int width, int height, DrmFormat format) =>
-        new FFmpegDecodeSession(CodecName(codec), width, height, format, _hardware);
+    /// <exception cref="ObjectDisposedException">The decoder is disposed.</exception>
+    public IVideoDecodeSession Open(VideoCodec codec, int width, int height, DrmFormat format)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return new FFmpegDecodeSession(CodecName(codec), width, height, format, _hardware);
+    }
 
     internal static string CodecName(VideoCodec codec) => codec switch
     {

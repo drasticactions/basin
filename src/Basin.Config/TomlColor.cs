@@ -46,10 +46,10 @@ public static class TomlColor
     }
 
     /// <summary>
-    /// Reads an ARGB color from hexadecimal digits with an optional <c>#</c>. Six or fewer digits give an opaque color.
+    /// Reads an ARGB color from hexadecimal digits with an optional <c>#</c>: three digits (<c>rgb</c>) or six (<c>rrggbb</c>) give an opaque color, and eight are <c>aarrggbb</c>.
     /// </summary>
     /// <param name="text">The color text.</param>
-    /// <param name="fallback">The color to return when the text is empty or not hexadecimal.</param>
+    /// <param name="fallback">The color to return when the text is empty, not hexadecimal, or another length.</param>
     /// <returns>The color as <c>0xAARRGGBB</c>.</returns>
     public static uint Argb(string? text, uint fallback)
     {
@@ -58,12 +58,21 @@ public static class TomlColor
             return fallback;
         }
 
-        var digits = text.TrimStart('#');
-        if (!uint.TryParse(digits, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+        var digits = text.StartsWith('#') ? text.AsSpan(1) : text.AsSpan();
+        if (digits.Length is not (3 or 6 or 8) ||
+            !uint.TryParse(digits, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value))
         {
             return fallback;
         }
 
-        return digits.Length <= 6 ? 0xff000000u | value : value;
+        return digits.Length switch
+        {
+            3 => 0xff000000u
+                | (((value >> 8) & 0xf) * 0x11 << 16)
+                | (((value >> 4) & 0xf) * 0x11 << 8)
+                | ((value & 0xf) * 0x11),
+            6 => 0xff000000u | value,
+            _ => value,
+        };
     }
 }

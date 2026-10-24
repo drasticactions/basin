@@ -15,6 +15,11 @@ internal sealed class Rule : WindowRule
 
     public bool Matches(string? appId, string? title, DecorationHint hint, bool hasParent)
     {
+        if (!HasAppCriteria && !HasTitleCriteria && !string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(title))
+        {
+            return false;
+        }
+
         if (!MatchesText(appId, title))
         {
             return false;

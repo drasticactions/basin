@@ -113,6 +113,104 @@ public class NestedSeamTests
     }
 
     [Fact]
+    public void A_v1_guest_enables_the_parent_text_input_again_after_the_parent_refocuses()
+    {
+        using var nested = new NestedBackendTestHost(NestedParentOptions.Undecorating with { Keyboard = true, TextInput = true });
+        _ = nested.CreateOutput();
+        using var bridge = new WaylandSeamTextInput(nested.Backend);
+        using var guest = new CompositorTestHost();
+        using var manager = new Basin.Desktop.TextInputV1Manager(guest.Display, guest.Seat, bridge);
+        var window = MappedToplevel.Map(guest, guest.Client);
+        var textInput = BindTextInputV1(guest).CreateTextInput();
+        guest.PumpToServer();
+
+        nested.Parent.FocusToplevel(true);
+        nested.Pump();
+        textInput.Activate(guest.Client.Seat!, window.Surface);
+        guest.Seat.Keyboard.NotifyEnter(window.ServerSurface);
+        guest.PumpToServer();
+        nested.Pump();
+        Assert.Equal(["activate"], ParentCalls(nested));
+
+        nested.Parent.FocusToplevel(false);
+        nested.Pump();
+        nested.Parent.FocusToplevel(true);
+        nested.Pump();
+        nested.Pump();
+
+        Assert.Equal(["activate", "deactivate", "activate"], ParentCalls(nested));
+        textInput.Dispose();
+        guest.PumpToServer();
+    }
+
+    [Fact]
+    public void The_bridge_is_unavailable_while_the_parent_focuses_another_surface()
+    {
+        using var nested = new NestedBackendTestHost(NestedParentOptions.Undecorating with { Keyboard = true, TextInput = true });
+        _ = nested.CreateOutput();
+        using var bridge = new WaylandSeamTextInput(nested.Backend);
+        var changes = 0;
+        bridge.AvailabilityChanged += () => changes++;
+        nested.Pump();
+        Assert.False(bridge.IsAvailable);
+
+        nested.Parent.FocusToplevel(true);
+        nested.Pump();
+        Assert.True(bridge.IsAvailable);
+
+        nested.Parent.FocusToplevel(false);
+        nested.Pump();
+        Assert.False(bridge.IsAvailable);
+
+        nested.Parent.FocusToplevel(true);
+        nested.Pump();
+        Assert.True(bridge.IsAvailable);
+        Assert.Equal(3, changes);
+    }
+
+    [Fact]
+    public void Deactivating_a_surface_that_is_not_active_leaves_the_parent_enabled()
+    {
+        using var nested = new NestedBackendTestHost(NestedParentOptions.Undecorating with { Keyboard = true, TextInput = true });
+        _ = nested.CreateOutput();
+        using var bridge = new WaylandSeamTextInput(nested.Backend);
+        using var guest = new CompositorTestHost();
+        var a = MappedToplevel.Map(guest, guest.Client);
+        var b = MappedToplevel.Map(guest, guest.Client);
+        nested.Parent.FocusToplevel(true);
+        nested.Pump();
+
+        bridge.Activate(a.ServerSurface);
+        nested.Pump();
+        bridge.Deactivate(b.ServerSurface);
+        nested.Pump();
+
+        Assert.Equal(["activate"], ParentCalls(nested));
+        bridge.Deactivate(a.ServerSurface);
+        nested.Pump();
+        Assert.Equal(["activate", "deactivate"], ParentCalls(nested));
+    }
+
+    private static List<string> ParentCalls(NestedBackendTestHost nested) =>
+        nested.Parent.Invoke(() => nested.Parent.TextInputCalls.Calls.ToList());
+
+    private static Basin.Desktop.Protocol.ZwpTextInputManagerV1 BindTextInputV1(CompositorTestHost host)
+    {
+        Basin.Desktop.Protocol.ZwpTextInputManagerV1? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "zwp_text_input_manager_v1")
+            {
+                proxy = registry.Bind<Basin.Desktop.Protocol.ZwpTextInputManagerV1>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+        Assert.NotNull(proxy);
+        return proxy!;
+    }
+
+    [Fact]
     public void A_parent_with_no_pointer_constraints_declines_the_lock()
     {
         using var host = new NestedBackendTestHost(NestedParentOptions.Undecorating);

@@ -832,7 +832,12 @@ public sealed class WaypipeChannelTests
     }
 
     [Fact]
-    public async Task A_web_socket_is_read_as_a_byte_stream_under_the_async_pump()
+    public Task A_web_socket_is_read_as_a_byte_stream_under_the_async_pump() => WebSocketRoundTrip(WaypipePump.Async);
+
+    [Fact]
+    public Task A_web_socket_is_read_as_a_byte_stream_under_the_default_pump() => WebSocketRoundTrip(null);
+
+    private static async Task WebSocketRoundTrip(WaypipePump? pump)
     {
         var cancellation = TestContext.Current.CancellationToken;
         var toHost = new System.IO.Pipelines.Pipe();
@@ -849,7 +854,7 @@ public sealed class WaypipeChannelTests
             keepAliveInterval: TimeSpan.Zero);
 
         using var channel = WaypipeChannel.AttachChannel(
-            new WebSocketStream(hostSide), WaypipeCompression.None, pump: WaypipePump.Async);
+            new WebSocketStream(hostSide), WaypipeCompression.None, pump: pump);
 
         var contents = new byte[1024];
         for (var i = 0; i < contents.Length; i++)

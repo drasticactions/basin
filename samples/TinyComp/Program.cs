@@ -195,10 +195,15 @@ internal static class Program
             }
 
             var init = result.GetValue(commandOption);
-            if (init is null && result.GetValue(configPath) is null
-                && !Basin.Host.InitProcess.TryFind(["tinycomp"], log, out init))
+            if (init is null && result.GetValue(configPath) is null)
             {
-                return 1;
+                var search = Basin.Host.InitProcess.Find(["tinycomp"], log);
+                if (search.NotExecutable)
+                {
+                    return 1;
+                }
+
+                init = search.Path;
             }
 
             int status;

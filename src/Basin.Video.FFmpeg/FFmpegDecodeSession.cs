@@ -67,6 +67,7 @@ internal sealed unsafe class FFmpegDecodeSession : IVideoDecodeSession
                 var layoutForContext = FFmpegNative.Layout;
                 *(nint*)(_context + layoutForContext.ContextGetFormat) = FFmpegNative.ChooseFormatPointer;
                 *(nint*)(_context + layoutForContext.ContextHwDeviceCtx) = device;
+                *(nint*)(_context + layoutForContext.ContextOpaque) = hardware.PixelFormat;
                 _hardwareFormat = hardware.PixelFormat;
                 _transferFrame = FFmpegNative.av_frame_alloc();
                 FFmpegCensus.Track();

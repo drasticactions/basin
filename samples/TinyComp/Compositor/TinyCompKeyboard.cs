@@ -149,7 +149,7 @@ internal sealed partial class TinyComp
         var written = _shotHdr
             ? SceneScreenshot.Write16(
                 _scene, _renderer, path, view.Width, view.Height,
-                SceneOptions(view.Output) with { ColorDescription = view.Scene?.ColorDescription, Luts = view.Scene },
+                SceneOptions(view.Output) with { ColorDescription = view.Color?.ColorDescription, Luts = view.Color },
                 view.Scene?.ContentHdrMetadata ?? view.Scene?.OutputHdrMetadata)
             : SceneScreenshot.Write(_scene, _renderer, path, view.Width, view.Height, SceneOptions(view.Output));
         _shotHdr = false;

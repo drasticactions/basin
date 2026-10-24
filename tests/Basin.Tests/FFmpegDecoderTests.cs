@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Basin.Capabilities;
+using Basin.Diagnostics;
 using Basin.Video.FFmpeg;
 using Xunit;
 
@@ -218,6 +219,45 @@ public sealed class FFmpegDecoderTests
         }
 
         Assert.True(worst <= 20, $"the worst per-channel error is {worst}");
+    }
+
+    [Fact]
+    public void Disposing_a_hardware_decoder_releases_its_device_while_a_session_keeps_decoding()
+    {
+        using (var warm = FFmpegVideoDecoder.TryCreate(preferHardware: true, out var whyNot))
+        {
+            Assert.SkipWhen(warm is null, $"no usable system FFmpeg: {whyNot}");
+            Assert.SkipWhen(warm!.HardwareName is null, "no hardware decode device opens on this box");
+            Assert.SkipWhen(!HasFFmpegCli.Value, "no ffmpeg executable to encode the reference stream with");
+            Assert.SkipWhen(!warm.Supports(VideoCodec.H264), "the system FFmpeg decodes no H.264");
+        }
+
+        const int width = 128, height = 80, stride = width * 4;
+        var packet = EncodeH264(Gradient(width, height), width, height);
+        var live = BasinCounters.LiveObjects;
+        var before = FdSnapshot.Take();
+
+        var decoder = FFmpegVideoDecoder.TryCreate(preferHardware: true, out _)!;
+        var session = decoder.Open(VideoCodec.H264, width, height, DrmFormat.Xrgb8888);
+        decoder.Dispose();
+        decoder.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => decoder.Open(VideoCodec.H264, width, height, DrmFormat.Xrgb8888));
+
+        var decoded = new byte[height * stride];
+        unsafe
+        {
+            fixed (byte* destination = decoded)
+            {
+                Assert.True(session.Decode(packet, (nint)destination, stride));
+                Assert.True(session.Decode(packet, (nint)destination, stride));
+            }
+        }
+
+        Assert.True(((FFmpegDecodeSession)session).DecodedOnHardware, "the session picked the device format through its own context");
+        session.Dispose();
+
+        LeakTracking.Expect(live, BasinCounters.LiveObjects);
+        Assert.Empty(FdSnapshot.Diff(before, FdSnapshot.Take()));
     }
 
     [Fact]

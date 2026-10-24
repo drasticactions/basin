@@ -99,7 +99,7 @@ public class WindowRule
     public int Specificity => (HasAppCriteria ? 2 : 0) + (HasTitleCriteria ? 1 : 0) + (4 * FactCriteriaCount);
 
     /// <summary>
-    /// Matches a window that is known only by its app ID and title. A rule with a fact criterion never matches.
+    /// Matches a window that is known only by its app ID and title. A rule with a fact criterion never matches, and a rule with no criteria matches every window.
     /// </summary>
     /// <param name="appId">The app ID, or <see langword="null"/>.</param>
     /// <param name="title">The title, or <see langword="null"/>.</param>
@@ -107,7 +107,7 @@ public class WindowRule
     public bool MatchesText(string? appId, string? title) => Matches(new WindowFacts { AppId = appId, Title = title });
 
     /// <summary>
-    /// Tells whether the rule matches a window. A rule with no criteria matches only a window whose app ID or title is empty.
+    /// Tells whether the rule matches a window. A rule with no criteria matches every window.
     /// </summary>
     /// <param name="facts">The facts of the window.</param>
     /// <returns><see langword="true"/> when every criterion of the rule matches.</returns>
@@ -171,7 +171,7 @@ public class WindowRule
     {
         if (!HasAppCriteria && !HasTitleCriteria)
         {
-            return string.IsNullOrEmpty(appId) || string.IsNullOrEmpty(title);
+            return true;
         }
 
         if (HasAppCriteria)

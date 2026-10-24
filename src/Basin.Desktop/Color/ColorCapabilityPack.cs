@@ -110,6 +110,15 @@ public sealed class ColorCapabilityPack : ICapabilityPack
         Outputs?.Add(global, output, scene);
 
     /// <summary>
+    /// Adds an output to the output driver with the color tables that get the blend space. It does nothing before a successful <see cref="Attach"/>.
+    /// </summary>
+    /// <param name="global">The output's global.</param>
+    /// <param name="output">The output to describe.</param>
+    /// <param name="tables">The color tables that get the blend space, or <see langword="null"/>.</param>
+    public void AddOutput(OutputGlobal global, IOutput output, OutputColorTables? tables) =>
+        Outputs?.Add(global, output, tables);
+
+    /// <summary>
     /// Removes an output from the output driver. It does nothing before a successful <see cref="Attach"/>.
     /// </summary>
     /// <param name="global">The output's global.</param>

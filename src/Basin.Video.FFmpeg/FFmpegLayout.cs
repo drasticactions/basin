@@ -13,4 +13,5 @@ internal readonly record struct FFmpegLayout(
     int PacketData,
     int PacketSize,
     int ContextGetFormat,
-    int ContextHwDeviceCtx);
+    int ContextHwDeviceCtx,
+    int ContextOpaque);

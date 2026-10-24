@@ -178,6 +178,7 @@ public sealed class MainView : UserControl
         new(new BasinCompositorOptions
         {
             AppName = "port-comp",
+            ManagedTransport = true,
             TextInput = _textInput,
             ConfigureServices = (_, services) => services
                 .Without("zwlr_layer_shell_v1")

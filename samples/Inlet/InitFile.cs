@@ -13,9 +13,15 @@ internal static class InitFile
         {
             startup = command;
         }
-        else if (!InitProcess.TryFind(["inlet", "river"], log, out startup))
+        else
         {
-            return false;
+            var search = InitProcess.Find(["inlet", "river"], log);
+            if (search.NotExecutable)
+            {
+                return false;
+            }
+
+            startup = search.Path;
         }
 
         if (startup is null)

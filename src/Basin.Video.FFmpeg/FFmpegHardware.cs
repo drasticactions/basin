@@ -3,16 +3,19 @@ using static Basin.Video.FFmpeg.FFmpegLog;
 
 namespace Basin.Video.FFmpeg;
 
-internal sealed unsafe class FFmpegHardware
+internal sealed unsafe class FFmpegHardware : IDisposable
 {
+    private nint _device;
+
     private FFmpegHardware(nint device, int pixelFormat, string name)
     {
-        Device = device;
+        _device = device;
         PixelFormat = pixelFormat;
         Name = name;
+        FFmpegCensus.Track();
     }
 
-    internal nint Device { get; }
+    internal nint Device => _device;
 
     internal int PixelFormat { get; }
 
@@ -52,6 +55,19 @@ internal sealed unsafe class FFmpegHardware
         }
 
         return null;
+    }
+
+    public void Dispose()
+    {
+        if (_device == 0)
+        {
+            return;
+        }
+
+        var device = _device;
+        _device = 0;
+        FFmpegNative.av_buffer_unref(&device);
+        FFmpegCensus.Untrack();
     }
 
     private static int TypeByName(string name)

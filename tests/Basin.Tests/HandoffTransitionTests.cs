@@ -23,7 +23,7 @@ public sealed class HandoffTransitionTests
 
     private sealed class Rig : IDisposable
     {
-        public Rig(HandoffHold hold = HandoffHold.Ready, TimeSpan? limit = null)
+        public Rig(HandoffHold hold = HandoffHold.Ready, TimeSpan? limit = null, bool fullRepaint = false)
         {
             Host = BasinHost.Create(HostOptions.ForBackend("headless"));
             Renderer = new Basin.Render.Pixman.PixmanRenderer();
@@ -33,6 +33,7 @@ public sealed class HandoffTransitionTests
                 HandoffHold = hold,
                 HandoffHoldLimit = limit ?? TimeSpan.FromSeconds(3),
                 HandoffClock = () => Now,
+                FullRepaint = fullRepaint,
             };
             Driver.HandoffEnded += _ => Ended++;
             Driver.CreateInitialOutputs();
@@ -105,6 +106,30 @@ public sealed class HandoffTransitionTests
         var frame = new HandoffFrame("X", 64, 48, 64, 48);
         transition.Step(frame, 0.25);
         Assert.Equal(0.75f, frame.Opacity, 3);
+    }
+
+    [Fact]
+    public void The_oracle_steps_the_crossfade_and_ends_it()
+    {
+        Assert.SkipWhen(!CompositorTestHost.HasWaylandServer, "this host has no libwayland server, and the driver hosts a real display");
+        using var rig = new Rig(fullRepaint: true);
+        var frame = new MemoryBuffer(64, 48, DrmFormat.Xrgb8888);
+        rig.Owner.Buffer = frame;
+        Assert.True(rig.Driver.StartHandoff(rig.View, frame, 64, 48, rig.Owner));
+
+        rig.Pump();
+        Assert.True(rig.Host.Ready);
+        Assert.Equal(rig.Now, rig.Run!.Started);
+
+        rig.Now += 200_000_000;
+        rig.Pump();
+        Assert.Equal(0.125f, rig.Run!.Frame.Opacity, 3);
+
+        rig.Now += 300_000_000;
+        rig.Pump();
+        Assert.False(rig.View.HandoffActive);
+        Assert.Equal(1, rig.Ended);
+        Assert.Equal(1, rig.Owner.Disposed);
     }
 
     [Fact]

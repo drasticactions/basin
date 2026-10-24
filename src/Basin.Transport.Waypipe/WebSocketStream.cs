@@ -12,6 +12,7 @@ public sealed class WebSocketStream : Stream
     private readonly int _id = Interlocked.Increment(ref _nextId);
     private readonly WebSocket _socket;
     private readonly bool _ownsSocket;
+    private byte[]? _receiveScratch;
     private bool _disposed;
 
     /// <summary>
@@ -55,7 +56,7 @@ public sealed class WebSocketStream : Stream
     public WebSocket Socket => _socket;
 
     /// <summary>
-    /// Gets a value indicating whether the stream can read. This value is always <see langword="true"/>, but only the asynchronous reads work.
+    /// Gets a value indicating whether the stream can read. This value is always <see langword="true"/>. In the browser, only the asynchronous reads work.
     /// </summary>
     public override bool CanRead => true;
 
@@ -90,22 +91,41 @@ public sealed class WebSocketStream : Stream
     public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Always raises <see cref="NotSupportedException"/>, because a WebSocket is read only asynchronously.
+    /// Receives the next bytes and blocks until they arrive. It raises <see cref="PlatformNotSupportedException"/> in the browser, because a block on the one thread is a deadlock.
     /// </summary>
-    /// <param name="buffer">The destination buffer, which is not used.</param>
-    /// <param name="offset">The offset in the buffer, which is not used.</param>
-    /// <param name="count">The byte count, which is not used.</param>
-    /// <returns>No value. The method always raises an exception.</returns>
-    public override int Read(byte[] buffer, int offset, int count) =>
-        throw new NotSupportedException("a WebSocket is read asynchronously; attach it with the Async pump");
+    /// <param name="buffer">The destination buffer.</param>
+    /// <param name="offset">The offset in the buffer.</param>
+    /// <param name="count">The maximum byte count.</param>
+    /// <returns>The number of bytes received, or 0 when the socket closed.</returns>
+    /// <exception cref="IOException">The WebSocket failed.</exception>
+    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
 
     /// <summary>
-    /// Always raises <see cref="NotSupportedException"/>, because a WebSocket is read only asynchronously.
+    /// Receives the next bytes, at most 64 KiB, and blocks until they arrive. It raises <see cref="PlatformNotSupportedException"/> in the browser, because a block on the one thread is a deadlock.
     /// </summary>
-    /// <param name="buffer">Not used.</param>
-    /// <returns>No value. The method always raises an exception.</returns>
-    public override int Read(Span<byte> buffer) =>
-        throw new NotSupportedException("a WebSocket is read asynchronously; attach it with the Async pump");
+    /// <param name="buffer">The destination.</param>
+    /// <returns>The number of bytes received, or 0 when the socket closed.</returns>
+    /// <exception cref="IOException">The WebSocket failed.</exception>
+    public override int Read(Span<byte> buffer)
+    {
+        if (!PlatformFacts.HasThreads)
+        {
+            throw new PlatformNotSupportedException("a WebSocket in the browser is read asynchronously; attach it with the Async pump");
+        }
+
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (buffer.IsEmpty)
+        {
+            return 0;
+        }
+
+        _receiveScratch ??= new byte[ReceiveChunk];
+        var slice = _receiveScratch.AsMemory(0, Math.Min(buffer.Length, ReceiveChunk));
+        var pending = ReadAsync(slice, CancellationToken.None);
+        var count = pending.IsCompletedSuccessfully ? pending.Result : pending.AsTask().GetAwaiter().GetResult();
+        _receiveScratch.AsSpan(0, count).CopyTo(buffer);
+        return count;
+    }
 
     /// <inheritdoc/>
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>

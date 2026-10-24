@@ -18,6 +18,17 @@ public sealed class WindowRuleTests
     }
 
     [Fact]
+    public void A_rule_with_no_criteria_matches_every_window()
+    {
+        var rule = new WindowRule();
+
+        Assert.True(rule.Matches(new WindowFacts { AppId = "firefox", Title = "Mozilla Firefox" }));
+        Assert.True(rule.Matches(new WindowFacts { AppId = "firefox" }));
+        Assert.True(rule.Matches(default));
+        Assert.True(rule.MatchesText("org.gnome.Nautilus", "Home"));
+    }
+
+    [Fact]
     public void A_steam_game_rule_matches_only_that_game()
     {
         var rule = new WindowRule { SteamGames = [570] };

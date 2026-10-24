@@ -34,6 +34,8 @@ internal readonly record struct NestedParentOptions
 
     public bool ToplevelIcons { get; init; }
 
+    public bool TextInput { get; init; }
+
     public int Width { get; init; }
 
     public int Height { get; init; }
@@ -126,6 +128,64 @@ internal sealed class NestedParent : IDisposable
     public Basin.Desktop.ColorManager? Color { get; private set; }
 
     public List<string?> IconNames { get; } = [];
+
+    public Basin.Desktop.TextInputManager? TextInputs { get; private set; }
+
+    public RecordingTextInputMethod TextInputCalls { get; } = new();
+
+    public void FocusToplevel(bool focused) => Invoke(() =>
+    {
+        var surface = focused ? Toplevels[0].Surface : null;
+        Seat!.Keyboard.NotifyEnter(surface);
+        TextInputs?.NotifyFocus(surface);
+    });
+
+    internal sealed class RecordingTextInputMethod : Basin.Capabilities.ITextInputMethod
+    {
+        public List<string> Calls { get; } = [];
+
+        public bool IsAvailable => true;
+
+        public bool HasKeyboardGrab => false;
+
+        public event Action<Basin.Capabilities.PreeditString>? Preedit { add { } remove { } }
+
+        public event Action<string>? CommitString { add { } remove { } }
+
+        public event Action<uint, uint>? DeleteSurroundingText { add { } remove { } }
+
+        public event Action? Done { add { } remove { } }
+
+        public event Action? AvailabilityChanged { add { } remove { } }
+
+        public void Activate(Surface surface) => Calls.Add("activate");
+
+        public void Deactivate(Surface surface) => Calls.Add("deactivate");
+
+        public void SurroundingText(string text, uint cursor, uint anchor)
+        {
+        }
+
+        public void ContentType(uint hint, uint purpose)
+        {
+        }
+
+        public void CursorRectangle(in Box rect)
+        {
+        }
+
+        public void Commit(uint serial)
+        {
+        }
+
+        public void ForwardKey(uint timeMs, uint keycode, bool pressed)
+        {
+        }
+
+        public void ForwardModifiers(uint depressed, uint latched, uint locked, uint group)
+        {
+        }
+    }
 
     private sealed class ConvertingResolver : Basin.Capabilities.IColorTransformResolver
     {
@@ -251,6 +311,7 @@ internal sealed class NestedParent : IDisposable
         Basin.Seat.DataDeviceManager? dataDevices = null;
         Basin.Desktop.ColorManager? color = null;
         XdgToplevelIconManager? icons = null;
+        Basin.Desktop.TextInputManager? textInputs = null;
         IEventSource? wake = null;
         try
         {
@@ -318,6 +379,12 @@ internal sealed class NestedParent : IDisposable
                 Color = color;
             }
 
+            if (_options.TextInput)
+            {
+                textInputs = new Basin.Desktop.TextInputManager(display, seat, TextInputCalls);
+                TextInputs = textInputs;
+            }
+
             if (_options.ToplevelIcons)
             {
                 icons = new XdgToplevelIconManager(display);
@@ -370,6 +437,7 @@ internal sealed class NestedParent : IDisposable
         finally
         {
             wake?.Remove();
+            textInputs?.Dispose();
             icons?.Dispose();
             color?.Dispose();
             dataDevices?.Dispose();

@@ -10,6 +10,20 @@ namespace Basin.Tests;
 
 public sealed class ConfigParserTests
 {
+    [Theory]
+    [InlineData("#fff", 0xFFFFFFFFu)]
+    [InlineData("fff", 0xFFFFFFFFu)]
+    [InlineData("#123456", 0xFF123456u)]
+    [InlineData("#80123456", 0x80123456u)]
+    [InlineData("#12345", 0xDEADBEEFu)]
+    [InlineData("#1", 0xDEADBEEFu)]
+    [InlineData("#1234567", 0xDEADBEEFu)]
+    [InlineData("##fff", 0xDEADBEEFu)]
+    [InlineData("#ggg", 0xDEADBEEFu)]
+    [InlineData("", 0xDEADBEEFu)]
+    public void An_argb_color_reads_three_six_or_eight_digits(string text, uint expected) =>
+        Assert.Equal(expected, TomlColor.Argb(text, 0xDEADBEEFu));
+
     private sealed class CollectingSink : IBasinLogSink
     {
         public List<string> Lines { get; } = [];

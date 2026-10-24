@@ -1,15 +1,12 @@
 using Basin.Capabilities;
-using Drm;
 
 namespace Basin.Backend.Drm;
 
 /// <summary>
-/// Turns outputs on and off with an output-state commit, and remembers the last state that it set.
+/// Turns outputs on and off with an output-state commit. It keeps no state, so the power state is the output's enabled state.
 /// </summary>
 public sealed class DrmOutputPower : IOutputPower
 {
-    private readonly Dictionary<IOutput, bool> _states = [];
-
     /// <summary>
     /// Occurs after <see cref="SetOn"/> commits a new state.
     /// </summary>
@@ -19,11 +16,11 @@ public sealed class DrmOutputPower : IOutputPower
     /// Gets the power state of an output.
     /// </summary>
     /// <param name="output">The output.</param>
-    /// <returns>The last state that <see cref="SetOn"/> set, or the output's enabled state when it set none.</returns>
+    /// <returns>The output's enabled state.</returns>
     public bool IsOn(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
-        return _states.GetValueOrDefault(output, output.Enabled);
+        return output.Enabled;
     }
 
     /// <summary>
@@ -42,7 +39,6 @@ public sealed class DrmOutputPower : IOutputPower
             return false;
         }
 
-        _states[output] = on;
         PowerChanged?.Invoke(output);
         return true;
     }

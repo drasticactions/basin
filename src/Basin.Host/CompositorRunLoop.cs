@@ -82,11 +82,6 @@ public sealed class CompositorRunLoop
     public HandoffStop Stopping { get; set; } = HandoffStop.Orderly;
 
     /// <summary>
-    /// Gets a value indicating whether the retain sequence ran on a DRM backend. Each output can still refuse the retention at exit, which <see cref="BasinHost.HandoffRetained"/> reports.
-    /// </summary>
-    public bool Retained { get; private set; }
-
-    /// <summary>
     /// Gets the number of rendered frames from <see cref="RenderedFrames"/> or the first primary output, or 0 when neither exists.
     /// </summary>
     public long Rendered => RenderedFrames?.Invoke() ?? _outputs?.PrimaryRendered ?? 0;
@@ -148,7 +143,5 @@ public sealed class CompositorRunLoop
             Iterated?.Invoke();
             _host.Parent?.Flush();
         }
-
-        Retained = _host.Drm is not null;
     }
 }

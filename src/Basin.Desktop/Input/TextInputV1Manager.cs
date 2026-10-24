@@ -43,7 +43,7 @@ public sealed class TextInputV1Manager : IDisposable
             live.Preedit += OnPreedit;
             live.CommitString += OnCommitString;
             live.DeleteSurroundingText += OnDeleteSurrounding;
-            live.AvailabilityChanged += Sync;
+            live.AvailabilityChanged += OnAvailabilityChanged;
         }
     }
 
@@ -72,13 +72,24 @@ public sealed class TextInputV1Manager : IDisposable
             live.Preedit -= OnPreedit;
             live.CommitString -= OnCommitString;
             live.DeleteSurroundingText -= OnDeleteSurrounding;
-            live.AvailabilityChanged -= Sync;
+            live.AvailabilityChanged -= OnAvailabilityChanged;
         }
 
         _global.Dispose();
     }
 
     private void OnFocusChanged(Surface? surface) => Sync();
+
+    private void OnAvailabilityChanged()
+    {
+        var before = _active;
+        Sync();
+        if (ReferenceEquals(_active, before) && _active is { } surface && ActiveTextInput() is { } active)
+        {
+            _method?.Activate(surface);
+            SendState(active);
+        }
+    }
 
     private void Sync()
     {

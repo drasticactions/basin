@@ -11,7 +11,7 @@ public sealed class OutputColorDriver
 {
     private readonly ColorManager _color;
     private readonly ColorOutputConfiguration _configuration;
-    private readonly List<(OutputGlobal Global, IOutput Output, SceneOutput? Scene)> _outputs = [];
+    private readonly List<(OutputGlobal Global, IOutput Output, OutputColorTables? Scene)> _outputs = [];
     private readonly Dictionary<OutputGlobal, ImageDescription> _blendSpaces = [];
 
     /// <summary>
@@ -41,9 +41,18 @@ public sealed class OutputColorDriver
     /// </summary>
     /// <param name="global">The output's global.</param>
     /// <param name="output">The output to describe.</param>
-    /// <param name="scene">The scene output that gets the blend space, or <see langword="null"/>.</param>
+    /// <param name="scene">The scene output whose color tables get the blend space, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="global"/> or <paramref name="output"/> is <see langword="null"/>.</exception>
-    public void Add(OutputGlobal global, IOutput output, SceneOutput? scene = null)
+    public void Add(OutputGlobal global, IOutput output, SceneOutput? scene = null) => Add(global, output, scene?.Color);
+
+    /// <summary>
+    /// Adds an output and sends its description. For a known global, it only replaces different non-null color tables.
+    /// </summary>
+    /// <param name="global">The output's global.</param>
+    /// <param name="output">The output to describe.</param>
+    /// <param name="scene">The color tables that get the blend space, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="global"/> or <paramref name="output"/> is <see langword="null"/>.</exception>
+    public void Add(OutputGlobal global, IOutput output, OutputColorTables? scene)
     {
         ArgumentNullException.ThrowIfNull(global);
         ArgumentNullException.ThrowIfNull(output);
@@ -117,7 +126,7 @@ public sealed class OutputColorDriver
         }
     }
 
-    private void Describe((OutputGlobal Global, IOutput Output, SceneOutput? Scene) entry)
+    private void Describe((OutputGlobal Global, IOutput Output, OutputColorTables? Scene) entry)
     {
         var description = _configuration.DescriptionOf(entry.Output);
         _color.SetOutputDescription(entry.Global, description);
