@@ -409,7 +409,7 @@ public sealed class NestedShellTests
 
         shell.WindowSuffix = client => ReferenceEquals(client, window.Client) ? "box" : null;
         Assert.Equal("box", window.Suffix);
-        Assert.Equal("notes — box", window.DecoratedTitle);
+        Assert.Equal("notes · box", window.DecoratedTitle);
         Assert.Equal("box", Assert.Single(shell.SnapshotWindows()).Suffix);
 
         shell.WindowSuffix = null;

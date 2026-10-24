@@ -197,10 +197,10 @@ public sealed class ManagedWindow
     public string Title => Content.Title is { Length: > 0 } title ? title : Content.AppId;
 
     /// <summary>
-    /// Gets the title that the frame shows: <see cref="Title"/>, then a dash and <see cref="Suffix"/> when a suffix is set.
+    /// Gets the title that the frame shows: <see cref="Title"/>, then a middle dot and <see cref="Suffix"/> when a suffix is set.
     /// </summary>
     public string DecoratedTitle =>
-        Suffix is { } suffix ? $"{Title} — {suffix}" : Title;
+        Suffix is { } suffix ? $"{Title} · {suffix}" : Title;
 
     /// <summary>
     /// Gets the content geometry relative to the window tree origin.
