@@ -5,7 +5,7 @@ using Pixman;
 namespace Basin.Effects;
 
 /// <summary>
-/// Draws KWin's show-paint overlay. It tints the damaged region of each frame with the next color of a six-color cycle.
+/// Draws the show-paint overlay. It tints the damaged region of each frame with the next color of a six-color cycle.
 /// </summary>
 public sealed class ShowPaintStage : IPostStage
 {

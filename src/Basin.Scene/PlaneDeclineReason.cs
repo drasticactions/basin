@@ -49,7 +49,7 @@ public enum PlaneDeclineReason
     /// <summary>The node has an alpha below 1, or a transform that is not an axis-aligned scale.</summary>
     Transformed,
 
-    /// <summary>The node has a texture shader.</summary>
+    /// <summary>The node has a texture shader, corners, or a brightness or saturation change.</summary>
     PixelShader,
 
     /// <summary>The node is drawn through a mirror.</summary>

@@ -158,6 +158,16 @@ public static class SceneDump
             text.Append(" shader");
         }
 
+        if (!buffer.Corners.IsEmpty)
+        {
+            text.Append(" corners");
+        }
+
+        if (buffer.Brightness != 1f || buffer.Saturation != 1f)
+        {
+            text.Append(" modulated");
+        }
+
         if (buffer.InputSurface is not null)
         {
             text.Append(" surface");

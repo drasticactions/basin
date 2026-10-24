@@ -6,7 +6,7 @@ namespace Basin.Effects;
 public readonly record struct BlurOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="BlurOptions"/> struct with the KWin defaults.
+    /// Initializes a new instance of the <see cref="BlurOptions"/> struct with the default values.
     /// </summary>
     public BlurOptions()
     {

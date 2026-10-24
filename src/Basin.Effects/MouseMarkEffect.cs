@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's mouse mark effect. It keeps freehand lines and arrows that the user draws in the feedback overlay until they are cleared.
+/// Runs the mouse mark effect. It keeps freehand lines and arrows that the user draws in the feedback overlay until they are cleared.
 /// </summary>
 public sealed class MouseMarkEffect : IMeshSource
 {
@@ -22,16 +22,42 @@ public sealed class MouseMarkEffect : IMeshSource
     private readonly List<(double X, double Y)> _drawing = [];
     private SceneMesh? _mesh;
     private (double X, double Y)? _arrowStart;
+    private double _lineWidth = DefaultLineWidth;
+    private RenderColor _color = new(1f, 0f, 0f, 1f);
 
     /// <summary>
-    /// Gets or sets the line width, in pixels. A change shows at the next change of the marks.
+    /// Gets or sets the line width, in pixels. A change shows at the next frame.
     /// </summary>
-    public double LineWidth { get; set; } = DefaultLineWidth;
+    public double LineWidth
+    {
+        get => _lineWidth;
+        set
+        {
+            _thread.Assert();
+            if (_lineWidth != value)
+            {
+                _lineWidth = value;
+                Refresh();
+            }
+        }
+    }
 
     /// <summary>
-    /// Gets or sets the line color. The default is red.
+    /// Gets or sets the line color. The default is red. A change shows at the next frame.
     /// </summary>
-    public RenderColor Color { get; set; } = new(1f, 0f, 0f, 1f);
+    public RenderColor Color
+    {
+        get => _color;
+        set
+        {
+            _thread.Assert();
+            if (_color != value)
+            {
+                _color = value;
+                Refresh();
+            }
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether there is a finished mark or a line in progress.

@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's full-screen zoom as a post stage. It scales the whole frame and moves the view with the cursor or a focus rectangle.
+/// Runs the full-screen zoom as a post stage. It scales the whole frame and moves the view with the cursor or a focus rectangle.
 /// </summary>
 public sealed class ZoomStage : IPostStage
 {
@@ -216,7 +216,7 @@ public sealed class ZoomStage : IPostStage
 
         var trackX = _cursorX;
         var trackY = _cursorY;
-        if ((_options.FocusTracking || _options.TextCaretTracking) &&
+        if (_options.FocusTracking &&
             Target is { } target &&
             target.TryGetFocus(out var focus, out var reportedAt) &&
             !focus.IsEmpty)

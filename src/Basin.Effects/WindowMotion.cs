@@ -1,7 +1,7 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Integrates KWin's window motion on one axis. Each 5 ms Euler step blends the velocity toward the distance times a strength, so the value can overshoot a little.
+/// Integrates a window motion on one axis. Each 5 ms Euler step blends the velocity toward the distance times a strength, so the value can overshoot a little.
 /// </summary>
 public struct WindowMotion
 {
@@ -96,7 +96,7 @@ public struct WindowMotion
     }
 
     /// <summary>
-    /// Tests KWin's stop rule, which looks at the remaining distance and the speed in the direction of travel.
+    /// Tests the stop rule, which looks at the remaining distance and the speed in the direction of travel.
     /// </summary>
     /// <returns><see langword="true"/> when the distance is zero, or the distance is below 0.5 and the velocity below 0.2 in that direction.</returns>
     public readonly bool IsSettled()

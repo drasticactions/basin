@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's sheet animation for a modal dialog. The dialog unfolds from a hinge at its top edge and fades in, and the reverse closes it.
+/// Runs the sheet animation for a modal dialog. The dialog unfolds from a hinge at its top edge and fades in, and the reverse closes it.
 /// </summary>
 public sealed class SheetEffect
 {

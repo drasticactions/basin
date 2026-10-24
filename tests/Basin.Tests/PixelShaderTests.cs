@@ -137,6 +137,73 @@ public sealed class PixelShaderTests
 
     [Theory]
     [MemberData(nameof(Renderers))]
+    public void An_instance_keeps_its_own_uniforms_and_outlives_its_source(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var shader = host.Renderer.CompilePixelShader(SplitSource, SplitUniforms);
+        Assert.SkipWhen(shader is null, $"{renderer} compiles no dialect of the test shader");
+        using var instance = shader.CreateInstance();
+        Assert.NotNull(instance);
+
+        shader.SetUniforms([0f]);
+        instance!.SetUniforms([1f]);
+        var source = new MemoryBuffer(32, 32, DrmFormat.Argb8888);
+        Assert.True(source.BeginDataAccess(BufferDataAccess.Write, out var view));
+        unsafe
+        {
+            for (var y = 0; y < 32; y++)
+            {
+                new Span<uint>((void*)(view.Data + (y * view.Stride)), 32).Fill(0xFFFF0000u);
+            }
+        }
+
+        source.EndDataAccess();
+        using var sourceGuard = new DeferDestroy(source);
+        var texture = host.Renderer.ImportTexture(source);
+        Assert.NotNull(texture);
+
+        var target = new MemoryBuffer(64, 32, DrmFormat.Xrgb8888);
+        using var guard = new DeferDestroy(target);
+        var pass = host.Renderer.BeginBufferPass(target, new RenderPassOptions());
+        pass.AddTexture(texture!, new TextureRenderOptions { DstBox = new Box(0, 0, 32, 32), Shader = shader });
+        pass.AddTexture(texture!, new TextureRenderOptions { DstBox = new Box(32, 0, 32, 32), Shader = instance });
+        Assert.True(pass.Submit());
+        var rgba = Basin.Diagnostics.BufferCapture.ReadRgba(target);
+        int[] Pixel(int x) => [rgba[((16 * 64) + x) * 4], rgba[(((16 * 64) + x) * 4) + 1], rgba[(((16 * 64) + x) * 4) + 2]];
+        Assert.True(Math.Abs(Pixel(16)[0] - Pixel(16)[1]) <= 2, "the source draws gray at split 0");
+        Assert.True(Pixel(48)[0] > 200 && Pixel(48)[1] < 30, "the instance draws red at split 1");
+
+        shader.Dispose();
+        pass = host.Renderer.BeginBufferPass(target, new RenderPassOptions());
+        pass.AddRect(new RenderColor(0f, 0f, 0f, 1f), new Box(0, 0, 64, 32));
+        pass.AddTexture(texture!, new TextureRenderOptions { DstBox = new Box(0, 0, 32, 32), Shader = instance });
+        Assert.True(pass.Submit());
+        rgba = Basin.Diagnostics.BufferCapture.ReadRgba(target);
+        Assert.True(Pixel(16)[0] > 200 && Pixel(16)[1] < 30, "the instance still draws after its source is disposed");
+        texture!.Dispose();
+    }
+
+    [Fact]
+    public void Instance_default_is_null_for_a_shader_that_cannot_share()
+    {
+        IPixelShader shader = new UnsharedShader();
+        Assert.Null(shader.CreateInstance());
+    }
+
+    private sealed class UnsharedShader : IPixelShader
+    {
+        public void SetUniforms(ReadOnlySpan<PixelShaderUniformValue> values)
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Renderers))]
     public void Uniform_count_mismatch_throws(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

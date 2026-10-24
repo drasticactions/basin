@@ -872,7 +872,10 @@ public sealed partial class Scene
                             ColorDescription = buffer.ColorDescription,
                             Shader = buffer.TextureShader,
                             Filter = entry.Filter,
-                            Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
+                            Corners = buffer.Corners.Scale(scale),
+                            Brightness = buffer.Brightness,
+                            Saturation = buffer.Saturation,
+                            Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.KeepsOpacity,
                         });
                     }
                     else
@@ -890,7 +893,10 @@ public sealed partial class Scene
                             ColorDescription = buffer.ColorDescription,
                             Shader = buffer.TextureShader,
                             Filter = entry.Filter,
-                            Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.TextureShader is null,
+                            Corners = buffer.Corners.Scale(scale),
+                            Brightness = buffer.Brightness,
+                            Saturation = buffer.Saturation,
+                            Opaque = entry.Alpha >= 1f && buffer.IsOpaque && buffer.KeepsOpacity,
                         });
                     }
                 }

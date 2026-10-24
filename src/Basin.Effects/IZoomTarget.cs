@@ -1,7 +1,7 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Reports the rectangle that the full-screen zoom follows for focus and caret tracking. The consumer decides what is worth following.
+/// Reports the rectangle that the full-screen zoom follows when <see cref="ZoomOptions.FocusTracking"/> is set. The consumer chooses the focus, the text caret, or either.
 /// </summary>
 public interface IZoomTarget
 {

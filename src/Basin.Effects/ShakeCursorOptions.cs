@@ -1,12 +1,12 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Holds the settings of a <see cref="ShakeCursorEffect"/>. The defaults are KWin's.
+/// Holds the settings of a <see cref="ShakeCursorEffect"/>.
 /// </summary>
 public readonly record struct ShakeCursorOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ShakeCursorOptions"/> struct with KWin's defaults.
+    /// Initializes a new instance of the <see cref="ShakeCursorOptions"/> struct with the default values.
     /// </summary>
     public ShakeCursorOptions()
     {

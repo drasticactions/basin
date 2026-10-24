@@ -1,7 +1,7 @@
 namespace Basin.Themes.MsStyles;
 
 /// <summary>
-/// Maps theme names to IDs: property names, enumeration value names, and the part and state names of each class. The tables are a port of wine's uxtheme style map. Names match without case.
+/// Maps theme names to IDs: property names, enumeration value names, and the part and state names of each class. Names match without case.
 /// </summary>
 public static partial class MsStylesStyleMap
 {

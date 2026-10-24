@@ -37,4 +37,28 @@ internal static class SkiaShaderNative
 
     [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_paint_set_shader")]
     public static extern void SetPaintShader(nint paint, nint shader);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_paint_set_colorfilter")]
+    public static extern void SetPaintColorFilter(nint paint, nint filter);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_colorfilter_new_color_matrix")]
+    public static extern unsafe nint ColorMatrix(float* matrix);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_colorfilter_new_compose")]
+    public static extern nint ComposeColorFilters(nint outer, nint inner);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_colorfilter_unref")]
+    public static extern void UnrefColorFilter(nint filter);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_rrect_new")]
+    public static extern nint NewRoundRect();
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_rrect_delete")]
+    public static extern void DeleteRoundRect(nint rrect);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_rrect_set_rect_xy")]
+    public static extern unsafe void SetRoundRect(nint rrect, SKRect* rect, float radiusX, float radiusY);
+
+    [System.Runtime.InteropServices.DllImport("libSkiaSharp", EntryPoint = "sk_canvas_clip_rrect_with_operation")]
+    public static extern void ClipRoundRect(nint canvas, nint rrect, SKClipOperation operation, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.U1)] bool antialias);
 }

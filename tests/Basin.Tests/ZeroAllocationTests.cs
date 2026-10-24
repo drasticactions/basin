@@ -79,6 +79,42 @@ public sealed partial class ZeroAllocationTests
     [InlineData("skia-gl")]
     [InlineData("skia-vulkan")]
     [InlineData("skia-graphite")]
+    public void Animated_corners_and_brightness_allocate_nothing_over_1000_frames(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var tree = new Scene.SceneTree(host.Scene.Root);
+        var node = new Scene.SceneBuffer(tree);
+        var content = new MemoryBuffer(48, 48, DrmFormat.Argb8888);
+        node.SetBuffer(content);
+        node.Corners = new CornerClip(8, 60, 70, 6, 16);
+
+        void Frame(int i)
+        {
+            node.Brightness = 0.5f + ((i % 50) / 100f);
+            node.Saturation = 1f - ((i % 40) / 100f);
+            tree.SetPosition(i % 2, 0);
+            host.CommitFrame();
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            Frame(i);
+        }
+
+        NothingAllocated(1000, Frame);
+        node.Destroy();
+        content.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
     public void A_nearest_filtered_upscale_allocates_nothing_over_1000_frames(string renderer)
     {
         CompositorTestHost.SkipUnlessRunnable(renderer);

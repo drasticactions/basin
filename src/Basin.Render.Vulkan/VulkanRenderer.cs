@@ -222,7 +222,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         };
         VulkanDevice.Check(vk.CreateDescriptorSetLayout(device, in inputLayoutInfo, null, out InputSetLayout), "vkCreateDescriptorSetLayout(input)");
 
-        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, 112);
+        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, 128);
         var setLayout = SetLayout;
         var layoutInfo = new PipelineLayoutCreateInfo
         {
@@ -730,7 +730,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         };
         VulkanDevice.Check(vk.CreateDescriptorSetLayout(Dev.Device, in uboLayoutInfo, null, out _shaderUboSetLayout), "vkCreateDescriptorSetLayout(shader)");
 
-        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, 112);
+        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, 128);
         var uboSetLayout = _shaderUboSetLayout;
         var layoutInfo = new PipelineLayoutCreateInfo
         {
@@ -891,7 +891,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         };
         VulkanDevice.Check(vk.CreateDescriptorSetLayout(device, in setLayoutInfo, null, out bundle.SetLayout), "vkCreateDescriptorSetLayout(ycbcr)");
 
-        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, 112);
+        var pushRange = new PushConstantRange(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0, 128);
         var setLayout = bundle.SetLayout;
         var layoutInfo = new PipelineLayoutCreateInfo
         {

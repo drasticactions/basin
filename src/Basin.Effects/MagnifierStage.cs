@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's magnifier as a post stage. It draws an enlarged lens of the frame around a center point, and ramps its zoom toward a target.
+/// Runs the magnifier as a post stage. It draws an enlarged lens of the frame around a center point, and ramps its zoom toward a target.
 /// </summary>
 public sealed class MagnifierStage : IPostStage
 {

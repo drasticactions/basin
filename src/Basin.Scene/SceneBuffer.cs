@@ -310,6 +310,69 @@ public sealed class SceneBuffer : SceneNode
         }
     }
 
+    /// <summary>
+    /// Damages the node so that the next frame draws it again through <see cref="TextureShader"/>, for example after a uniform of the shader changes.
+    /// </summary>
+    public void NotifyTextureShaderChanged() => DamageSubtree();
+
+    private CornerClip _corners;
+
+    /// <summary>
+    /// Gets or sets the rounded rectangle that clips the content, in the units of the node. A node with corners is not opaque and never goes to a plane.
+    /// </summary>
+    public CornerClip Corners
+    {
+        get => _corners;
+        set
+        {
+            if (_corners != value)
+            {
+                _corners = value;
+                DamageSubtree();
+            }
+        }
+    }
+
+    private float _brightness = 1f;
+
+    /// <summary>
+    /// Gets or sets the factor that multiplies the color of the content. 1 leaves the color as it is. A node with another value never goes to a plane.
+    /// </summary>
+    public float Brightness
+    {
+        get => _brightness;
+        set
+        {
+            if (_brightness != value)
+            {
+                _brightness = value;
+                DamageSubtree();
+            }
+        }
+    }
+
+    private float _saturation = 1f;
+
+    /// <summary>
+    /// Gets or sets the saturation of the content, from 0 for gray to 1 for the color as it is. A node with another value never goes to a plane.
+    /// </summary>
+    public float Saturation
+    {
+        get => _saturation;
+        set
+        {
+            if (_saturation != value)
+            {
+                _saturation = value;
+                DamageSubtree();
+            }
+        }
+    }
+
+    internal bool HasTextureEffects => _textureShader is not null || !_corners.IsEmpty || _brightness != 1f || _saturation != 1f;
+
+    internal bool KeepsOpacity => _textureShader is null && _corners.IsEmpty;
+
     private IBackdropEffect? _backdropEffect;
     private PixmanRegion32? _backdropRegion;
 

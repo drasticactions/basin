@@ -3,7 +3,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs the Compiz wobbly window model. A 4 by 4 grid of point masses on springs deforms the window through a bicubic patch. A resting model removes its deformer and costs nothing.
+/// Runs the wobbly window model. A 4 by 4 grid of point masses on springs deforms the window through a bicubic patch. A resting model removes its deformer and costs nothing.
 /// </summary>
 public sealed class WobblyEffect : IMeshTransform
 {
@@ -66,8 +66,10 @@ public sealed class WobblyEffect : IMeshTransform
     /// Adds the effect node to a window. The model takes its size from the content at the next grab or activation.
     /// </summary>
     /// <param name="stack">The transform stack of the window.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void Attach(TransformStack stack)
     {
+        ArgumentNullException.ThrowIfNull(stack);
         _node = stack.Get("wobbly") ?? stack.Add(TransformStack.ZOrder.Effect, "wobbly");
         _sized = false;
         _hasLast = false;

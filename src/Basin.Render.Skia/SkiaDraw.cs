@@ -93,6 +93,7 @@ internal static class SkiaDraw
             return;
         }
 
+        nint modulation = 0;
         try
         {
             var src = options.SrcBox.IsEmpty
@@ -111,31 +112,48 @@ internal static class SkiaDraw
             paint.BlendMode = SKBlendMode.SrcOver;
             paint.SetColor(new SKColorF(1f, 1f, 1f, Math.Clamp(options.Alpha, 0f, 1f)), null);
 
+            SKColorFilter? chosen = null;
             if (options.Lut is SkiaColorLut lut)
             {
-                paint.ColorFilter = lut.Filter;
+                chosen = lut.Filter;
             }
             else if (transform is not null)
             {
-                paint.ColorFilter = transform.Filter;
+                chosen = transform.Filter;
             }
             else if (opaqueAlpha is not null && options.Alpha >= 1f && image.AlphaType == SKAlphaType.Opaque)
             {
-                paint.ColorFilter = opaqueAlpha;
+                chosen = opaqueAlpha;
+            }
+
+            modulation = Modulation(options, chosen);
+            if (modulation != 0)
+            {
+                SkiaShaderNative.SetPaintColorFilter(paint.Handle, modulation);
+            }
+            else if (chosen is not null)
+            {
+                paint.ColorFilter = chosen;
             }
 
             var matrix = ToMatrix(options.Transform);
             var sampling = options.Filter != TextureFilter.Linear ? NearestSampling : LinearSampling;
             if (options.Clip is null)
             {
-                if (transformed)
+                var saved = transformed || !options.Corners.IsEmpty;
+                if (saved)
                 {
                     canvas.Save();
+                }
+
+                if (transformed)
+                {
                     canvas.Concat(matrix);
                 }
 
+                ClipCorners(canvas, options.DstBox, options.Corners);
                 canvas.DrawImage(image, srcRect, dstRect, sampling, paint);
-                if (transformed)
+                if (saved)
                 {
                     canvas.Restore();
                 }
@@ -152,13 +170,19 @@ internal static class SkiaDraw
                     canvas.Concat(matrix);
                 }
 
+                ClipCorners(canvas, options.DstBox, options.Corners);
                 canvas.DrawImage(image, srcRect, dstRect, sampling, paint);
                 canvas.Restore();
             }
         }
         finally
         {
-            if (paint.ColorFilter is not null)
+            if (modulation != 0)
+            {
+                SkiaShaderNative.SetPaintColorFilter(paint.Handle, 0);
+                SkiaShaderNative.UnrefColorFilter(modulation);
+            }
+            else if (paint.ColorFilter is not null)
             {
                 paint.ColorFilter = null;
             }
@@ -226,17 +250,30 @@ internal static class SkiaDraw
         }
 
         nint built = 0;
+        nint modulation = 0;
         try
         {
             built = skiaShader.RealizeWithChild(options.DstBox.Width, options.DstBox.Height, child, src);
             paint.BlendMode = SKBlendMode.SrcOver;
             paint.SetColor(new SKColorF(1f, 1f, 1f, Math.Clamp(options.Alpha, 0f, 1f)), null);
             SkiaShaderNative.SetPaintShader(paint.Handle, built);
-            DrawShaderRect(canvas, paint, options.DstBox, options.Clip, !options.Transform.IsIdentity, ToMatrix(options.Transform));
+            modulation = Modulation(options, null);
+            if (modulation != 0)
+            {
+                SkiaShaderNative.SetPaintColorFilter(paint.Handle, modulation);
+            }
+
+            DrawShaderRect(canvas, paint, options.DstBox, options.Clip, !options.Transform.IsIdentity, ToMatrix(options.Transform), options.Corners);
         }
         finally
         {
             SkiaShaderNative.SetPaintShader(paint.Handle, 0);
+            if (modulation != 0)
+            {
+                SkiaShaderNative.SetPaintColorFilter(paint.Handle, 0);
+                SkiaShaderNative.UnrefColorFilter(modulation);
+            }
+
             if (built != 0)
             {
                 SkiaShaderNative.UnrefShader(built);
@@ -247,7 +284,7 @@ internal static class SkiaDraw
         }
     }
 
-    private static void DrawShaderRect(SKCanvas canvas, SKPaint paint, in Box box, PixmanRegion32? clip, bool transformed, in SKMatrix matrix)
+    private static void DrawShaderRect(SKCanvas canvas, SKPaint paint, in Box box, PixmanRegion32? clip, bool transformed, in SKMatrix matrix, CornerClip corners = default)
     {
         var rect = SKRect.Create(0f, 0f, box.Width, box.Height);
         if (clip is null)
@@ -258,6 +295,7 @@ internal static class SkiaDraw
                 canvas.Concat(matrix);
             }
 
+            ClipCorners(canvas, box, corners);
             canvas.Translate(box.X, box.Y);
             canvas.DrawRect(rect, paint);
             canvas.Restore();
@@ -273,10 +311,79 @@ internal static class SkiaDraw
                 canvas.Concat(matrix);
             }
 
+            ClipCorners(canvas, box, corners);
             canvas.Translate(box.X, box.Y);
             canvas.DrawRect(rect, paint);
             canvas.Restore();
         }
+    }
+
+    private static unsafe void ClipCorners(SKCanvas canvas, in Box box, in CornerClip corners)
+    {
+        if (corners.IsEmpty)
+        {
+            return;
+        }
+
+        var outer = corners.OuterWidth > 0 && corners.OuterHeight > 0;
+        var x = box.X - (outer ? corners.OffsetX : 0);
+        var y = box.Y - (outer ? corners.OffsetY : 0);
+        var rect = SKRect.Create((float)x, (float)y, (float)(outer ? corners.OuterWidth : box.Width), (float)(outer ? corners.OuterHeight : box.Height));
+        var shape = SkiaShaderNative.NewRoundRect();
+        try
+        {
+            SkiaShaderNative.SetRoundRect(shape, &rect, (float)corners.Radius, (float)corners.Radius);
+            SkiaShaderNative.ClipRoundRect(canvas.Handle, shape, SKClipOperation.Intersect, true);
+        }
+        finally
+        {
+            SkiaShaderNative.DeleteRoundRect(shape);
+        }
+    }
+
+    private static unsafe nint Modulation(in TextureRenderOptions options, SKColorFilter? inner)
+    {
+        var brightness = options.Brightness;
+        var saturation = options.Saturation;
+        if (brightness == 1f && saturation == 1f)
+        {
+            return 0;
+        }
+
+        const float LumaR = 0.2126f;
+        const float LumaG = 0.7152f;
+        const float LumaB = 0.0722f;
+        var gray = 1f - saturation;
+        var matrix = stackalloc float[20];
+        matrix[0] = brightness * ((LumaR * gray) + saturation);
+        matrix[1] = brightness * LumaG * gray;
+        matrix[2] = brightness * LumaB * gray;
+        matrix[3] = 0f;
+        matrix[4] = 0f;
+        matrix[5] = brightness * LumaR * gray;
+        matrix[6] = brightness * ((LumaG * gray) + saturation);
+        matrix[7] = brightness * LumaB * gray;
+        matrix[8] = 0f;
+        matrix[9] = 0f;
+        matrix[10] = brightness * LumaR * gray;
+        matrix[11] = brightness * LumaG * gray;
+        matrix[12] = brightness * ((LumaB * gray) + saturation);
+        matrix[13] = 0f;
+        matrix[14] = 0f;
+        matrix[15] = 0f;
+        matrix[16] = 0f;
+        matrix[17] = 0f;
+        matrix[18] = 1f;
+        matrix[19] = 0f;
+        var filter = SkiaShaderNative.ColorMatrix(matrix);
+        if (inner is null || filter == 0)
+        {
+            return filter;
+        }
+
+        var composed = SkiaShaderNative.ComposeColorFilters(filter, inner.Handle);
+        SkiaShaderNative.UnrefColorFilter(filter);
+        return composed;
     }
 
     private static SKPoint[] _positions = [];

@@ -14,12 +14,12 @@ public interface IPostStage
     void Render(IRenderPass pass, ITexture frame, in PostContext context);
 
     /// <summary>
-    /// Maps a box in the composited frame to where the effect draws it on the output. The default implementation maps nothing.
+    /// Maps a box in the composited frame to where the effect draws it on the output. The default implementation declines.
     /// </summary>
     /// <param name="scene">The box in the composited frame, in physical pixels.</param>
     /// <param name="context">The frame size, timing and damage.</param>
     /// <param name="output">The mapped box, or <paramref name="scene"/> when the stage cannot map it.</param>
-    /// <returns><see langword="true"/> when the stage moved the box. <see langword="false"/> when it leaves the geometry as it is.</returns>
+    /// <returns><see langword="true"/> when the stage knows where the box lands on the output, also when it lands in the same place. <see langword="false"/> when the stage cannot map it.</returns>
     bool TryMapBox(in Box scene, in PostContext context, out Box output)
     {
         output = scene;

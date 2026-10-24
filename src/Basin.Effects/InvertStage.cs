@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Applies KWin's color inversion to the whole output as a post stage.
+/// Applies a color inversion to the whole output as a post stage.
 /// </summary>
 public sealed class InvertStage : IPostStage
 {

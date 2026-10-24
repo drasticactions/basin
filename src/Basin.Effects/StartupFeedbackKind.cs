@@ -1,7 +1,7 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Selects the launch feedback that a <see cref="StartupFeedbackEffect"/> draws beside the cursor. The values are KWin's.
+/// Selects the launch feedback that a <see cref="StartupFeedbackEffect"/> draws beside the cursor.
 /// </summary>
 public enum StartupFeedbackKind
 {

@@ -71,6 +71,12 @@ public sealed class WobblyEffectTests
     }
 
     [Fact]
+    public void Attach_rejects_a_null_stack()
+    {
+        Assert.Throws<ArgumentNullException>(() => new WobblyEffect().Attach(null!));
+    }
+
+    [Fact]
     public void A_settled_wobble_damages_nothing_on_later_frames()
     {
         var (host, _, effect, _) = Attach();
@@ -315,6 +321,137 @@ public sealed class FireEffectTests
         Assert.Null(stack.Get("fire"));
         window.Destroy();
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    public void Fire_restarts_on_the_same_stack(string? shaderRenderer)
+    {
+        using var rig = FireRig.Create(shaderRenderer);
+        var (fire, stack, window, content) = (rig.Fire, rig.Stack, rig.Window, rig.Content);
+
+        fire.Begin(stack, hiding: false, Tick(0), 200_000_000);
+        for (var frame = 1; frame <= 3; frame++)
+        {
+            fire.Step(stack, Tick(frame * 16));
+        }
+
+        fire.Begin(stack, hiding: false, Tick(48), 200_000_000);
+        Assert.True(fire.IsRunning);
+        Assert.Equal(1, CountNamed(window, "fire"));
+
+        var step = 4;
+        while (fire.Step(stack, Tick(step * 16)) && step < 2000)
+        {
+            step++;
+        }
+
+        Assert.False(fire.IsRunning);
+        Assert.Equal(0, CountNamed(window, "fire"));
+        Assert.Same(window, content.Parent);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    public void Fire_end_removes_its_node(string? shaderRenderer)
+    {
+        using var rig = FireRig.Create(shaderRenderer);
+        var (fire, stack, window, content) = (rig.Fire, rig.Stack, rig.Window, rig.Content);
+
+        fire.Begin(stack, hiding: true, Tick(0), 200_000_000);
+        fire.Step(stack, Tick(16));
+        fire.End(stack);
+
+        Assert.False(fire.IsRunning);
+        Assert.Null(stack.Get("fire"));
+        Assert.Same(window, content.Parent);
+    }
+
+    [Fact]
+    public void Fire_leaves_a_node_from_another_effect_in_place()
+    {
+        using var host = new CompositorTestHost();
+        var window = new SceneTree(host.Scene.Root);
+        _ = new SceneRect(window, 60, 40, new RenderColor(0.2f, 0.4f, 0.8f, 1f));
+        var stack = new TransformStack(window);
+
+        var first = new FireEffect(new FireOptions { ParticleCount = 64 });
+        var second = new FireEffect(new FireOptions { ParticleCount = 64 });
+        first.Begin(stack, hiding: false, Tick(0), 200_000_000);
+        Assert.Throws<InvalidOperationException>(() => second.Begin(stack, hiding: false, Tick(0), 200_000_000));
+        Assert.True(first.IsRunning);
+
+        first.End(stack);
+        Assert.Null(stack.Get("fire"));
+    }
+
+    private static int CountNamed(SceneNode node, string name)
+    {
+        var count = node.DebugName == name ? 1 : 0;
+        if (node is SceneTree tree)
+        {
+            foreach (var child in tree.Children)
+            {
+                count += CountNamed(child, name);
+            }
+        }
+
+        return count;
+    }
+
+    private sealed class FireRig : IDisposable
+    {
+        private FireRig(CompositorTestHost host, IPixelShader? shader)
+        {
+            Host = host;
+            Shader = shader;
+            Window = new SceneTree(host.Scene.Root);
+            Window.SetPosition(30, 30);
+            Content = new SceneRect(Window, 60, 40, new RenderColor(0.2f, 0.4f, 0.8f, 1f));
+            Stack = new TransformStack(Window);
+            Fire = shader is null
+                ? new FireEffect(new FireOptions { ParticleCount = 64 })
+                : new FireEffect(new FireOptions { Padding = 20 }) { Shader = shader };
+        }
+
+        public CompositorTestHost Host { get; }
+
+        public IPixelShader? Shader { get; }
+
+        public SceneTree Window { get; }
+
+        public SceneRect Content { get; }
+
+        public TransformStack Stack { get; }
+
+        public FireEffect Fire { get; }
+
+        public static FireRig Create(string? shaderRenderer)
+        {
+            if (shaderRenderer is null)
+            {
+                return new FireRig(new CompositorTestHost(), null);
+            }
+
+            CompositorTestHost.SkipUnlessRunnable(shaderRenderer);
+            var host = new CompositorTestHost(renderer: shaderRenderer);
+            var shader = host.Renderer.CompilePixelShader(FireShader.Source, FireShader.Uniforms);
+            Assert.NotNull(shader);
+            return new FireRig(host, shader);
+        }
+
+        public void Dispose()
+        {
+            Window.Destroy();
+            Shader?.Dispose();
+            Host.Dispose();
+        }
+    }
 }
 
 public sealed class OpenCloseAnimationTests
@@ -532,6 +669,22 @@ public sealed class OpenCloseAnimationTests
             spring.Update(nanos);
             Assert.True(spring.Current <= 1.0);
         }
+    }
+
+    [Fact]
+    public void A_clamped_spring_stops_at_its_lower_limit()
+    {
+        var spring = new Spring(400.0, 0.8, 0.1) { Min = 0.4, Friction = 40.0, Clip = SpringClip.Clamp };
+        var nanos = 0L;
+        spring.Update(nanos);
+        for (var i = 0; i < 400; i++)
+        {
+            nanos += 8_000_000L;
+            spring.Update(nanos);
+            Assert.True(spring.Current >= 0.4);
+        }
+
+        Assert.Equal(0.4, spring.Current);
     }
 
     [Fact]
@@ -1856,38 +2009,451 @@ public sealed class DimAndHighlightTests
 {
     private static FrameTick Tick(long millis) => new(millis * 1_000_000, 16_666_667);
 
+    private static readonly DimInactiveWindow NormalWindow = new(DimInactiveWindowKind.Normal);
+
     [Fact]
-    public void The_dim_strength_is_clamped_to_kwins_range()
+    public void The_dim_strength_is_clamped_to_its_range()
     {
-        Assert.Equal(0.25, new DimInactiveEffect(null).Strength, 6);
-        Assert.Equal(0.1, new DimInactiveEffect(null, new DimInactiveOptions { Strength = 0 }).Strength, 6);
-        Assert.Equal(0.9, new DimInactiveEffect(null, new DimInactiveOptions { Strength = 200 }).Strength, 6);
+        Assert.Equal(0.25, new DimInactiveEffect<Win>().Strength, 6);
+        Assert.Equal(0.1, new DimInactiveEffect<Win>(new DimInactiveOptions { Strength = 0 }).Strength, 6);
+        Assert.Equal(0.9, new DimInactiveEffect<Win>(new DimInactiveOptions { Strength = 200 }).Strength, 6);
     }
 
     [Fact]
-    public void The_dim_factor_fades_between_none_and_full()
+    public void A_new_window_takes_its_dim_at_once_and_the_active_one_stays_bright()
     {
-        var effect = new DimInactiveEffect(null);
-        Assert.Equal(1.0, effect.Dim, 6);
+        var (effect, target) = Rig();
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(b, Tick(0));
 
-        effect.FadeTo(1.0, Tick(0), new AnimationDuration(160));
+        Assert.Equal(0.75, effect.BrightnessOf(a), 6);
+        Assert.Equal(1.0, effect.BrightnessOf(b), 6);
+        Assert.Equal(0.75f, target.BrightnessOf(a), 5);
+        Assert.Equal(1f, target.BrightnessOf(b), 5);
+        Assert.False(effect.IsAnimating);
+    }
+
+    [Fact]
+    public void Each_window_fades_on_its_own_with_its_own_duration()
+    {
+        var (effect, target) = Rig();
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(a, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.Activate(b, Tick(100));
         Assert.True(effect.IsAnimating);
-        effect.Step(Tick(80));
-        Assert.True(effect.Dim < 1.0 && effect.Dim > 0.75, $"halfway dim {effect.Dim}");
-
         effect.Step(Tick(180));
-        effect.Step(Tick(200));
-        Assert.Equal(0.75, effect.Dim, 6);
-        Assert.False(effect.IsAnimating);
+        var fading = effect.BrightnessOf(a);
+        var waking = effect.BrightnessOf(b);
+        Assert.InRange(fading, 0.76, 0.99);
+        Assert.InRange(waking, 0.76, 0.99);
+        var wakingProgress = (waking - 0.75) / 0.25;
+        var fadingProgress = (1.0 - fading) / 0.25;
+        Assert.True(wakingProgress > fadingProgress, $"the 160 ms fade in is further on its way than the 250 ms fade out: {wakingProgress} against {fadingProgress}");
+        Assert.Equal((float)fading, target.BrightnessOf(a), 5);
+        Assert.Equal((float)waking, target.BrightnessOf(b), 5);
+        Assert.Equal(target.BrightnessOf(a), target.SaturationOf(a), 5);
+
+        effect.Step(Tick(260));
+        Assert.Equal(1.0, effect.BrightnessOf(b), 6);
+        Assert.Equal(1f, target.BrightnessOf(b), 5);
+        Assert.True(effect.Step(Tick(350)), "the tick that ends the fade still asks for its frame");
+        Assert.Equal(0.75, effect.BrightnessOf(a), 6);
+        Assert.False(effect.Step(Tick(370)));
     }
 
     [Fact]
-    public void A_zero_duration_dims_at_once_rather_than_refusing()
+    public void A_fade_without_a_tick_starts_at_the_next_step_after_an_idle_spell()
     {
-        var effect = new DimInactiveEffect(null);
-        effect.FadeTo(1.0, Tick(0), new AnimationDuration(160).WithFactor(0));
-        Assert.Equal(0.75, effect.Dim, 6);
+        var (effect, _) = Rig();
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(a, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.Activate(b);
+        Assert.True(effect.Step(Tick(10_000)));
+        Assert.InRange(effect.BrightnessOf(a), 0.95, 0.9999);
+        effect.Step(Tick(10_000 + 260));
+        Assert.Equal(0.75, effect.BrightnessOf(a), 6);
+    }
+
+    [Fact]
+    public void A_reversed_fade_continues_from_where_it_is()
+    {
+        var (effect, _) = Rig();
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(a, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.Activate(b, Tick(0));
+        effect.Step(Tick(100));
+        var midway = effect.BrightnessOf(a);
+        effect.Activate(a, Tick(100));
+        effect.Step(Tick(101));
+        Assert.True(Math.Abs(effect.BrightnessOf(a) - midway) < 0.01, "no jump when the fade turns around");
+    }
+
+    [Fact]
+    public void The_group_of_the_active_window_stays_bright_and_dims_together()
+    {
+        var (effect, _) = Rig();
+        var app = new Win("app");
+        var dialog = new Win("dialog");
+        var other = new Win("other");
+        effect.Add(app, NormalWindow with { Group = 7 });
+        effect.Add(dialog, new DimInactiveWindow(DimInactiveWindowKind.Dialog, Group: 7));
+        effect.Add(other, NormalWindow with { Group = 9 });
+        effect.Activate(dialog, Tick(0));
+        effect.Step(Tick(0));
+
+        Assert.Equal(1.0, effect.BrightnessOf(app), 6);
+        Assert.Equal(1.0, effect.BrightnessOf(dialog), 6);
+        Assert.Equal(0.75, effect.BrightnessOf(other), 6);
+
+        effect.Activate(app, Tick(10));
+        Assert.False(effect.IsAnimating, "focus inside the group changes nothing");
+
+        effect.Activate(other, Tick(20));
+        effect.Step(Tick(400));
+        effect.Step(Tick(420));
+        Assert.Equal(0.75, effect.BrightnessOf(app), 6);
+        Assert.Equal(0.75, effect.BrightnessOf(dialog), 6);
+        Assert.Equal(1.0, effect.BrightnessOf(other), 6);
+    }
+
+    [Fact]
+    public void Without_dim_by_group_a_dialog_parent_dims()
+    {
+        var (effect, _) = Rig(new DimInactiveOptions { DimByGroup = false });
+        var app = new Win("app");
+        var dialog = new Win("dialog");
+        effect.Add(app, NormalWindow with { Group = 7 });
+        effect.Add(dialog, new DimInactiveWindow(DimInactiveWindowKind.Dialog, Group: 7));
+        effect.Activate(dialog, Tick(0));
+        Assert.True(effect.IsDimmed(app));
+    }
+
+    [Theory]
+    [InlineData(DimInactiveWindowKind.Panel, false, false, false)]
+    [InlineData(DimInactiveWindowKind.Desktop, false, false, false)]
+    [InlineData(DimInactiveWindowKind.Popup, false, false, false)]
+    [InlineData(DimInactiveWindowKind.InputMethod, false, false, false)]
+    [InlineData(DimInactiveWindowKind.Unmanaged, false, false, false)]
+    [InlineData(DimInactiveWindowKind.Utility, false, false, true)]
+    [InlineData(DimInactiveWindowKind.Normal, true, false, false)]
+    [InlineData(DimInactiveWindowKind.Normal, false, true, true)]
+    public void The_default_rules_choose_which_inactive_windows_dim(DimInactiveWindowKind kind, bool keepAbove, bool fullScreen, bool dims)
+    {
+        var (effect, _) = Rig();
+        var window = new Win("window");
+        var focused = new Win("focused");
+        effect.Add(window, new DimInactiveWindow(kind, KeepAbove: keepAbove, FullScreen: fullScreen));
+        effect.Add(focused, NormalWindow);
+        effect.Activate(focused, Tick(0));
+        Assert.Equal(dims, effect.IsDimmed(window));
+    }
+
+    [Fact]
+    public void The_switches_turn_on_and_off_each_rule()
+    {
+        var (effect, _) = Rig(new DimInactiveOptions { DimPanels = true, DimDesktop = true, DimKeepAbove = true, DimFullScreen = false });
+        var panel = new Win("panel");
+        var desktop = new Win("desktop");
+        var above = new Win("above");
+        var full = new Win("full");
+        var focused = new Win("focused");
+        effect.Add(panel, new DimInactiveWindow(DimInactiveWindowKind.Panel));
+        effect.Add(desktop, new DimInactiveWindow(DimInactiveWindowKind.Desktop));
+        effect.Add(above, NormalWindow with { KeepAbove = true });
+        effect.Add(full, NormalWindow with { FullScreen = true });
+        effect.Add(focused, NormalWindow);
+        effect.Activate(focused, Tick(0));
+
+        Assert.True(effect.IsDimmed(panel));
+        Assert.True(effect.IsDimmed(desktop));
+        Assert.True(effect.IsDimmed(above));
+        Assert.False(effect.IsDimmed(full));
+
+        effect.Update(full, NormalWindow);
+        Assert.True(effect.IsDimmed(full));
+    }
+
+    [Fact]
+    public void Focus_on_a_window_that_cannot_dim_dims_the_previous_one()
+    {
+        var (effect, _) = Rig();
+        var app = new Win("app");
+        var panel = new Win("panel");
+        effect.Add(app, NormalWindow);
+        effect.Add(panel, new DimInactiveWindow(DimInactiveWindowKind.Panel));
+        effect.Activate(app, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.Activate(panel, Tick(0));
+        Assert.Null(effect.Active);
+        effect.Step(Tick(300));
+        effect.Step(Tick(320));
+        Assert.Equal(0.75, effect.BrightnessOf(app), 6);
+        Assert.Equal(1.0, effect.BrightnessOf(panel), 6);
+
+        effect.Activate(null, Tick(400));
+        Assert.Equal(0.75, effect.BrightnessOf(app), 6);
+    }
+
+    [Fact]
+    public void A_full_screen_effect_fades_every_dim_away_and_back()
+    {
+        var (effect, _) = Rig();
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(b, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.SetFullScreenEffect(true, Tick(0));
+        effect.Step(Tick(125));
+        Assert.InRange(effect.BrightnessOf(a), 0.86, 0.89);
+        effect.Step(Tick(250));
+        Assert.Equal(1.0, effect.BrightnessOf(a), 6);
+
+        effect.SetFullScreenEffect(false, Tick(300));
+        effect.Step(Tick(550));
+        Assert.Equal(0.75, effect.BrightnessOf(a), 6);
+    }
+
+    [Fact]
+    public void A_closed_window_keeps_its_dim_until_it_is_removed()
+    {
+        var (effect, target) = Rig();
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(b, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.Close(a);
+        effect.Activate(a, Tick(10));
+        effect.Step(Tick(400));
+        Assert.Equal(0.75, effect.BrightnessOf(a), 6);
+        Assert.Equal(0.75f, target.BrightnessOf(a), 5);
+
+        Assert.True(effect.Remove(a));
+        Assert.False(effect.Remove(a));
+        Assert.Equal(1.0, effect.BrightnessOf(a), 6);
+    }
+
+    [Fact]
+    public void A_zero_duration_factor_moves_every_dim_at_once()
+    {
+        var (effect, _) = Rig();
+        effect.DurationFactor = 0;
+        var a = new Win("a");
+        var b = new Win("b");
+        effect.Add(a, NormalWindow);
+        effect.Add(b, NormalWindow);
+        effect.Activate(a, Tick(0));
+        effect.Step(Tick(0));
+
+        effect.Activate(b, Tick(10));
         Assert.False(effect.IsAnimating);
+        Assert.Equal(0.75, effect.BrightnessOf(a), 6);
+        Assert.Equal(1.0, effect.BrightnessOf(b), 6);
+    }
+
+    [Fact]
+    public void Fading_allocates_nothing_over_1000_frames()
+    {
+        var (effect, _) = Rig();
+        var windows = new[] { new Win("a"), new Win("b"), new Win("c") };
+        foreach (var window in windows)
+        {
+            effect.Add(window, NormalWindow);
+        }
+
+        effect.Activate(windows[0], Tick(0));
+        effect.Step(Tick(0));
+        for (var warm = 1; warm <= 100; warm++)
+        {
+            effect.Activate(windows[warm % 3], Tick(warm * 16));
+            effect.Step(Tick(warm * 16));
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var frame = 101; frame <= 1100; frame++)
+        {
+            if (frame % 20 == 0)
+            {
+                effect.Activate(windows[frame % 3], Tick(frame * 16));
+            }
+
+            effect.Step(Tick(frame * 16));
+        }
+
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public void Each_window_draws_with_its_own_brightness(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(renderer: renderer);
+        var effect = new DimInactiveEffect<SceneBuffer> { Target = new SceneDimTarget() };
+
+        var white = new MemoryBuffer(40, 40, DrmFormat.Argb8888);
+        Assert.True(white.BeginDataAccess(BufferDataAccess.Write, out var view));
+        unsafe
+        {
+            for (var y = 0; y < 40; y++)
+            {
+                new Span<uint>((void*)(view.Data + (y * view.Stride)), 40).Fill(0xFFFFFFFFu);
+            }
+        }
+
+        white.EndDataAccess();
+        var nodes = new SceneBuffer[3];
+        for (var i = 0; i < 3; i++)
+        {
+            nodes[i] = new SceneBuffer(host.Scene.Root) { DestinationWidth = 40, DestinationHeight = 40 };
+            nodes[i].SetPosition(10 + (i * 50), 10);
+            nodes[i].SetBuffer(white);
+            effect.Add(nodes[i], NormalWindow);
+        }
+
+        effect.Activate(nodes[0], Tick(0));
+        effect.Step(Tick(0));
+        effect.Activate(nodes[1], Tick(16));
+        effect.Step(Tick(141));
+        host.RenderFrame();
+        var rgba = Basin.Diagnostics.BufferCapture.ReadRgba(host.Target);
+        int Gray(int x) => rgba[((30 * host.Target.Width) + x) * 4];
+        var fadingOut = Gray(30);
+        var fadingIn = Gray(80);
+        var dimmed = Gray(130);
+        Assert.InRange(dimmed, 185, 197);
+        Assert.True(fadingOut > dimmed + 3 && fadingOut < 252, $"the old window is midway to the dim: {fadingOut} against {dimmed}");
+        Assert.True(fadingIn > fadingOut, $"the new window is further on its way back: {fadingIn} against {fadingOut}");
+
+        foreach (var node in nodes)
+        {
+            effect.Remove(node);
+            node.Destroy();
+        }
+
+        white.Destroy();
+    }
+
+    [Theory]
+    [InlineData("pixman")]
+    [InlineData("gl")]
+    [InlineData("vulkan")]
+    [InlineData("skia")]
+    [InlineData("skia-gl")]
+    [InlineData("skia-vulkan")]
+    [InlineData("skia-graphite")]
+    public void A_dimmed_window_keeps_its_rounded_corners(string renderer)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        using var host = new CompositorTestHost(240, 180, renderer);
+        var effect = new DimInactiveEffect<SceneBuffer> { Target = new SceneDimTarget() };
+
+        var white = new MemoryBuffer(60, 60, DrmFormat.Argb8888);
+        Assert.True(white.BeginDataAccess(BufferDataAccess.Write, out var view));
+        unsafe
+        {
+            for (var y = 0; y < 60; y++)
+            {
+                new Span<uint>((void*)(view.Data + (y * view.Stride)), 60).Fill(0xFFFFFFFFu);
+            }
+        }
+
+        white.EndDataAccess();
+        var dimmed = new SceneBuffer(host.Scene.Root) { DestinationWidth = 60, DestinationHeight = 60 };
+        dimmed.SetPosition(10, 10);
+        dimmed.SetBuffer(white);
+        var focused = new SceneBuffer(host.Scene.Root) { DestinationWidth = 60, DestinationHeight = 60 };
+        focused.SetPosition(100, 10);
+        focused.SetBuffer(white);
+        var framed = new SceneBuffer(host.Scene.Root) { DestinationWidth = 60, DestinationHeight = 60 };
+        framed.SetPosition(10, 100);
+        framed.SetBuffer(white);
+        dimmed.Corners = new CornerClip(16);
+        framed.Corners = new CornerClip(24, 68, 94, 4, 30);
+        effect.Add(dimmed, NormalWindow);
+        effect.Add(framed, NormalWindow);
+        effect.Add(focused, NormalWindow);
+        effect.Activate(focused, Tick(0));
+
+        host.RenderFrame();
+        var rgba = Basin.Diagnostics.BufferCapture.ReadRgba(host.Target);
+        int Gray(int x, int y) => rgba[((y * host.Target.Width) + x) * 4];
+        var background = Gray(5, 5);
+        Assert.True(Math.Abs(Gray(11, 11) - background) <= 2, $"the corner shows the background: {Gray(11, 11)} against {background}");
+        Assert.True(Gray(40, 40) > background + 100 && Gray(40, 40) < 250, $"the middle is dimmed white: {Gray(40, 40)}");
+        Assert.True(Gray(40, 11) > background + 100, "the top edge between the corners is drawn");
+        Assert.True(Gray(11, 101) > background + 100, $"a content corner inside the outer clip is drawn: {Gray(11, 101)}");
+        Assert.True(Math.Abs(Gray(10, 159) - background) <= 8, $"a content corner on the outer clip's corner is cut: {Gray(10, 159)}");
+
+        effect.Remove(dimmed);
+        effect.Remove(framed);
+        effect.Remove(focused);
+        framed.Destroy();
+        dimmed.Destroy();
+        focused.Destroy();
+        white.Destroy();
+    }
+
+    private static (DimInactiveEffect<Win> Effect, DimRecorder Target) Rig(DimInactiveOptions? options = null)
+    {
+        var target = new DimRecorder();
+        var effect = new DimInactiveEffect<Win>(options) { Target = target };
+        return (effect, target);
+    }
+
+    private sealed class Win(string name)
+    {
+        public override string ToString() => name;
+    }
+
+    private sealed class DimRecorder : IDimInactiveTarget<Win>
+    {
+        public Dictionary<Win, (float Brightness, float Saturation)> Values { get; } = [];
+
+        public float BrightnessOf(Win window) => Values.TryGetValue(window, out var value) ? value.Brightness : 1f;
+
+        public float SaturationOf(Win window) => Values.TryGetValue(window, out var value) ? value.Saturation : 1f;
+
+        public void Apply(Win window, float brightness, float saturation) => Values[window] = (brightness, saturation);
+    }
+
+    private sealed class SceneDimTarget : IDimInactiveTarget<SceneBuffer>
+    {
+        public void Apply(SceneBuffer window, float brightness, float saturation)
+        {
+            window.Brightness = brightness;
+            window.Saturation = saturation;
+        }
     }
 
     [Fact]
@@ -2113,6 +2679,45 @@ public sealed class VisualizerEffectTests
         Assert.Equal(2 * 6, effect.VertexCount(bounds));
         effect.Clear();
         Assert.False(effect.IsActive);
+        effect.Detach(overlay);
+    }
+
+    [Fact]
+    public void A_mouse_mark_redraws_when_its_width_or_color_changes()
+    {
+        using var host = new CompositorTestHost();
+        var layers = new SceneLayers(host.Scene.Root);
+        using var overlay = new FeedbackOverlay(layers.Feedback);
+        var effect = new MouseMarkEffect();
+        effect.Attach(overlay);
+
+        effect.BeginFreehand(20, 40);
+        effect.Extend(80, 40);
+        effect.EndFreehand();
+        host.RenderFrame();
+        int[] Pixel(int x, int y)
+        {
+            var rgba = Basin.Diagnostics.BufferCapture.ReadRgba(host.Target);
+            var i = ((y * host.Target.Width) + x) * 4;
+            return [rgba[i], rgba[i + 1], rgba[i + 2]];
+        }
+
+        Assert.True(Pixel(50, 40)[0] > 200, "the default line is red");
+
+        var mesh = Assert.IsType<SceneMesh>(overlay.Tree.Children[0]);
+        var before = mesh.Bounds;
+        effect.LineWidth = 10;
+        var after = mesh.Bounds;
+        Assert.Equal(before.X - 7, after.X);
+        Assert.Equal(before.Y - 7, after.Y);
+        Assert.Equal(before.Width + 14, after.Width);
+        Assert.Equal(before.Height + 14, after.Height);
+
+        effect.Color = new RenderColor(0f, 0f, 1f, 1f);
+        host.RenderFrame();
+        var blue = Pixel(50, 44);
+        Assert.True(blue[2] > 200 && blue[0] < 50, $"the wide line is blue at once, read {blue[0]},{blue[1]},{blue[2]}");
+
         effect.Detach(overlay);
     }
 

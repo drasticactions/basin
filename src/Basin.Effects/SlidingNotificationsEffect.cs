@@ -5,7 +5,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's sliding notifications effect. A notification slides in or out and the others reflow, each through a spring-damper translation.
+/// Runs the sliding notifications effect. A notification slides in or out and the others reflow, each through a spring-damper translation.
 /// </summary>
 public sealed class SlidingNotificationsEffect
 {

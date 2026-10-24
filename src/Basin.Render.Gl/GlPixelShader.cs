@@ -11,6 +11,7 @@ internal sealed class GlPixelShader : IPixelShader
     private readonly int[] _lutLocations;
     private readonly PixelShaderUniformType[] _types;
     private readonly PixelShaderUniformValue[] _values;
+    private readonly SharedPrograms _shared;
     private bool _disposed;
 
     internal readonly ShaderProgram Program;
@@ -34,6 +35,22 @@ internal sealed class GlPixelShader : IPixelShader
             _types[i] = uniforms[i].Type;
         }
 
+        _shared = new SharedPrograms();
+        BasinCounters.Track();
+    }
+
+    private GlPixelShader(GlPixelShader source)
+    {
+        _renderer = source._renderer;
+        Program = source.Program;
+        LutProgram = source.LutProgram;
+        SamplesTexture = source.SamplesTexture;
+        _locations = source._locations;
+        _lutLocations = source._lutLocations;
+        _types = source._types;
+        _values = (PixelShaderUniformValue[])source._values.Clone();
+        _shared = source._shared;
+        _shared.References++;
         BasinCounters.Track();
     }
 
@@ -46,6 +63,12 @@ internal sealed class GlPixelShader : IPixelShader
         }
 
         values.CopyTo(_values);
+    }
+
+    public IPixelShader? CreateInstance()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return new GlPixelShader(this);
     }
 
     internal void WriteUniforms(GL gl, bool lut = false)
@@ -81,6 +104,11 @@ internal sealed class GlPixelShader : IPixelShader
 
         _disposed = true;
         BasinCounters.Untrack();
+        if (--_shared.References > 0)
+        {
+            return;
+        }
+
         _renderer.ReleaseShader(Program);
         if (LutProgram is not null)
         {
@@ -145,7 +173,20 @@ internal sealed class GlPixelShader : IPixelShader
         }
 
         builder.AppendLine(source);
-        builder.AppendLine("void main() { color = basin_pixel(v_uv * u_size) * u_alpha; }");
+        if (samplesTexture)
+        {
+            builder.AppendLine(GlShaders.Finish);
+            builder.AppendLine("void main() { color = basin_finish(basin_pixel(v_uv * u_size)) * u_alpha; }");
+        }
+        else
+        {
+            builder.AppendLine("void main() { color = basin_pixel(v_uv * u_size) * u_alpha; }");
+        }
         return builder.ToString();
+    }
+
+    private sealed class SharedPrograms
+    {
+        public int References { get; set; } = 1;
     }
 }

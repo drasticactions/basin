@@ -119,6 +119,7 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             (float)result.Source.Height / result.TextureHeight);
         _gl.Uniform1(program.Alpha, 1f);
         _gl.Uniform1(program.ForceOpaque, 1f);
+        WriteFinish(program, new TextureRenderOptions { DstBox = bounds });
         SetTransform(program.Transform, RenderTransform.Identity);
         DrawClipped(clip);
     }
@@ -331,13 +332,14 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             (float)(src.Height / texture.Height));
         _gl.Uniform1(program.Alpha, options.Alpha);
         _gl.Uniform1(program.ForceOpaque, forceOpaque ? 1f : 0f);
+        WriteFinish(program, options);
         if (program.Pixel >= 0)
         {
             _gl.Uniform1(program.Pixel, options.Filter == TextureFilter.Pixel ? 1f : 0f);
         }
 
         SetTransform(program.Transform, options.Transform);
-        var opaque = options.Opaque && options.Alpha >= 1f;
+        var opaque = options.Opaque && options.Alpha >= 1f && options.Corners.IsEmpty;
         if (opaque)
         {
             _gl.Disable(EnableCap.Blend);
@@ -587,6 +589,26 @@ internal sealed unsafe class GlRenderPass : IRenderPass
             (float)transform.M13, (float)transform.M23, (float)transform.M33,
         };
         _gl.UniformMatrix3(location, 1, false, matrix);
+    }
+
+    private void WriteFinish(ShaderProgram program, in TextureRenderOptions options)
+    {
+        var corners = options.Corners;
+        if (program.Corner >= 0)
+        {
+            _gl.Uniform4(program.Corner, (float)Math.Max(0, corners.Radius), (float)corners.OffsetX, (float)corners.OffsetY, 0f);
+            _gl.Uniform2(program.CornerOuter, (float)corners.OuterWidth, (float)corners.OuterHeight);
+        }
+
+        if (program.Dimming >= 0)
+        {
+            _gl.Uniform2(program.Dimming, 1f - options.Brightness, 1f - options.Saturation);
+        }
+
+        if (program.FinishSize >= 0)
+        {
+            _gl.Uniform2(program.FinishSize, (float)options.DstBox.Width, options.DstBox.Height);
+        }
     }
 
     private void DrawClipped(PixmanRegion32? clip)

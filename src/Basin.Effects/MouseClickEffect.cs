@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's mouse click effect. Each click draws growing, fading rings in the feedback overlay, colored by the button.
+/// Runs the mouse click effect. Each click draws growing, fading rings in the feedback overlay, colored by the button.
 /// </summary>
 public sealed class MouseClickEffect : IMeshSource
 {

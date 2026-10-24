@@ -13,7 +13,6 @@ internal sealed class EffectsPolicy : IDisposable
     private static readonly AnimationDuration FallApart = new(1000);
     private static readonly AnimationDuration Minimize = new(250);
     private static readonly AnimationDuration Highlight = new(150);
-    private static readonly AnimationDuration DimFade = new(160);
 
     private readonly OpenCloseRunner _runner = new();
     private readonly Dictionary<SceneTree, (TransformStack Stack, WobblyEffect Wobbly)> _wobblies = [];
@@ -48,9 +47,7 @@ internal sealed class EffectsPolicy : IDisposable
 
     public bool NotificationsEnabled { get; set; }
 
-    public DimInactiveEffect? Dim { get; set; }
-
-    public Action<double>? DimChanged { get; set; }
+    public DimInactiveEffect<object>? Dim { get; private set; }
 
     public bool Any =>
         WobblyEnabled || OpenKind is not null || CloseKind is not null || MinimizeKind is not null
@@ -307,11 +304,9 @@ internal sealed class EffectsPolicy : IDisposable
         _stretches.Remove(tree);
     }
 
-    public void FadeDim(bool inactive)
-    {
-        Dim?.FadeTo(inactive ? 1.0 : 0.0, _lastTick, DimFade);
-        DimChanged?.Invoke(Dim?.Dim ?? 1.0);
-    }
+    public void StartDim(DimInactiveEffect<object> dim) => Dim = dim;
+
+    public void StopDim() => Dim = null;
 
     public bool Step(in FrameTick tick)
     {
@@ -351,12 +346,11 @@ internal sealed class EffectsPolicy : IDisposable
         moving |= _slideBack.Step(tick);
         moving |= _notifications.Step(tick);
 
-        if (Dim is { IsAnimating: true } dim)
+        if (Dim is { } dim)
         {
-            _ = dim.Step(tick);
-            DimChanged?.Invoke(dim.Dim);
-            moving = true;
+            moving |= dim.Step(tick);
         }
+
 
         PruneDead();
         _lastMoving = moving;
@@ -366,6 +360,7 @@ internal sealed class EffectsPolicy : IDisposable
     public void Dispose()
     {
         _runner.Dispose();
+        Dim = null;
         _minimizing.Clear();
         _highlighted.Clear();
         _stretches.Clear();

@@ -6,7 +6,7 @@ namespace Basin.Effects;
 public enum BlurKernel
 {
     /// <summary>
-    /// The dual-Kawase pyramid of KWin. The strength sets the iteration count and the offset.
+    /// The dual-Kawase pyramid. The strength sets the iteration count and the offset.
     /// </summary>
     DualKawase,
     /// <summary>

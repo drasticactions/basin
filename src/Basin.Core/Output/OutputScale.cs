@@ -1,7 +1,7 @@
 namespace Basin;
 
 /// <summary>
-/// Chooses an automatic output scale from the panel size, as KWin does.
+/// Chooses an automatic output scale from the panel size.
 /// </summary>
 public static class OutputScale
 {

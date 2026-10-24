@@ -9,7 +9,7 @@ namespace Basin.Effects;
 public sealed class BlendChangesStage : IPostStage, IDisposable
 {
     /// <summary>
-    /// The KWin default crossfade duration in milliseconds.
+    /// The default crossfade duration in milliseconds.
     /// </summary>
     public const double DefaultMillis = 400;
 

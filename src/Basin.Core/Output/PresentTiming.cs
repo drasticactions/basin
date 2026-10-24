@@ -1,7 +1,7 @@
 namespace Basin;
 
 /// <summary>
-/// Holds the presentation-time arithmetic that fifo and commit-timing share, ported from gamescope. All times are monotonic nanoseconds.
+/// Holds the presentation-time arithmetic that fifo and commit-timing share. All times are monotonic nanoseconds.
 /// </summary>
 public static class PresentTiming
 {

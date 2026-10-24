@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's highlight window effect. It fades the windows that are not highlighted toward a ghost opacity, for example while a taskbar entry is hovered.
+/// Runs the highlight window effect. It fades the windows that are not highlighted toward a ghost opacity, for example while a taskbar entry is hovered.
 /// </summary>
 public sealed class HighlightWindowEffect
 {

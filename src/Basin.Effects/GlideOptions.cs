@@ -1,12 +1,12 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Holds the shape of a <see cref="GlideEffect"/>. The defaults are KWin's.
+/// Holds the shape of a <see cref="GlideEffect"/>.
 /// </summary>
 public readonly record struct GlideOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="GlideOptions"/> struct with KWin's defaults.
+    /// Initializes a new instance of the <see cref="GlideOptions"/> struct with the default values.
     /// </summary>
     public GlideOptions()
     {

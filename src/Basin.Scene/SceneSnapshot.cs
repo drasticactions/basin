@@ -145,6 +145,9 @@ public sealed class SceneSnapshot : IDisposable
                         IsOpaque = buffer.IsOpaque,
                         ColorDescription = buffer.ColorDescription,
                         TextureShader = buffer.TextureShader,
+                        Corners = buffer.Corners,
+                        Brightness = buffer.Brightness,
+                        Saturation = buffer.Saturation,
                     };
                     copy.SetPosition(buffer.X, buffer.Y);
                     copy.ClipBox = buffer.ClipBox;

@@ -63,4 +63,19 @@ public readonly record struct TextureRenderOptions
     /// Gets the filter for a scaled texture.
     /// </summary>
     public TextureFilter Filter { get; init; } = TextureFilter.Linear;
+
+    /// <summary>
+    /// Gets the rounded rectangle that clips the draw, in the pixels of <see cref="DstBox"/>. The clip applies after <see cref="Shader"/>.
+    /// </summary>
+    public CornerClip Corners { get; init; } = default;
+
+    /// <summary>
+    /// Gets the factor that multiplies the color of each texel after <see cref="Shader"/>. 1 leaves the color as it is.
+    /// </summary>
+    public float Brightness { get; init; } = 1f;
+
+    /// <summary>
+    /// Gets the saturation of each texel after <see cref="Shader"/>, from 0 for gray to 1 for the color as it is. The renderer applies it before <see cref="Brightness"/>.
+    /// </summary>
+    public float Saturation { get; init; } = 1f;
 }

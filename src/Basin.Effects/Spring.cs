@@ -3,7 +3,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Integrates weston's damped spring in fixed 4 ms steps, so the motion is the same at every refresh rate. The spring has no duration.
+/// Integrates a damped spring in fixed 4 ms steps, so the motion is the same at every refresh rate. The spring has no duration.
 /// </summary>
 public struct Spring
 {
@@ -40,7 +40,7 @@ public struct Spring
     public double K { get; set; }
 
     /// <summary>
-    /// Gets or sets the friction. weston's default of 400 rings at ordinary stiffness, so an opacity spring needs more.
+    /// Gets or sets the friction. The default of 400 rings at ordinary stiffness, so an opacity spring needs more.
     /// </summary>
     public double Friction { get; set; }
 
@@ -139,7 +139,7 @@ public struct Spring
                     Current = Max;
                     Previous = Max;
                 }
-                else if (Current < 0.0)
+                else if (Current < Min)
                 {
                     Current = Min;
                     Previous = Min;

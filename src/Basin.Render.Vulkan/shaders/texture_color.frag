@@ -1,12 +1,6 @@
 #version 450
-layout(push_constant) uniform Push {
-    vec4 dst;
-    vec4 src;
-    vec2 target;
-    float alpha;
-    float forceOpaque;
-    vec4 color;
-} pc;
+#extension GL_GOOGLE_include_directive : require
+#include "basin.glsl"
 layout(set = 0, binding = 0) uniform sampler2D u_texture;
 layout(set = 1, binding = 0) uniform Color {
     vec4 m0;
@@ -132,5 +126,5 @@ void main() {
     }
     vec3 encoded = clamp(encode(u.output_, nits), 0.0, 1.0);
     c.rgb = srgb_to_linear(encoded) * c.a;
-    color = c * pc.alpha;
+    color = basin_finish(c, v_uv) * pc.alpha;
 }

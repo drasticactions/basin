@@ -20,7 +20,29 @@ internal static class GlShaders
         }
         """;
 
-    public const string TextureFragment = """
+    public const string Finish = """
+        uniform vec4 u_corner;
+        uniform vec2 u_cornerOuter;
+        uniform vec2 u_dimming;
+        uniform vec2 u_finishSize;
+        vec4 basin_finish(vec4 c) {
+            if (u_dimming.x != 0.0 || u_dimming.y != 0.0) {
+                vec3 straight = c.a > 0.0 ? c.rgb / c.a : c.rgb;
+                float luma = dot(straight, vec3(0.2126, 0.7152, 0.0722));
+                c.rgb = mix(vec3(luma), straight, 1.0 - u_dimming.y) * (1.0 - u_dimming.x) * c.a;
+            }
+            if (u_corner.x > 0.0) {
+                vec2 coord = v_uv * u_finishSize;
+                vec2 halfSize = (u_cornerOuter.x > 0.0 ? u_cornerOuter : u_finishSize) * 0.5;
+                vec2 p = abs(coord + u_corner.yz - halfSize) - (halfSize - vec2(u_corner.x));
+                float d = length(max(p, vec2(0.0))) - u_corner.x;
+                c *= clamp(0.5 - d, 0.0, 1.0);
+            }
+            return c;
+        }
+        """;
+
+    public const string TextureFragment = $$"""
         #version 300 es
         precision highp float;
         uniform sampler2D u_texture;
@@ -43,14 +65,15 @@ internal static class GlShaders
         }
         in vec2 v_uv;
         out vec4 color;
+        {{Finish}}
         void main() {
             vec4 c = texture(u_texture, pixel_uv(u_src.xy + v_uv * u_src.zw));
             c.a = mix(c.a, 1.0, u_forceOpaque);
-            color = c * u_alpha;    // premultiplied
+            color = basin_finish(c) * u_alpha;    // premultiplied
         }
         """;
 
-    public const string TextureLutFragment = """
+    public const string TextureLutFragment = $$"""
         #version 300 es
         precision highp float;
         precision highp sampler3D;
@@ -126,16 +149,17 @@ internal static class GlShaders
 
         in vec2 v_uv;
         out vec4 color;
+        {{Finish}}
         void main() {
             vec4 c = texture(u_texture, pixel_uv(u_src.xy + v_uv * u_src.zw));
             c.a = mix(c.a, 1.0, u_forceOpaque);
             vec3 straight = c.a > 0.0 ? c.rgb / c.a : c.rgb;
             c.rgb = lut_tetrahedral(shape(straight, u_shaper)) * c.a;
-            color = c * u_alpha;    // premultiplied
+            color = basin_finish(c) * u_alpha;    // premultiplied
         }
         """;
 
-    public const string TextureColorFragment = """
+    public const string TextureColorFragment = $$"""
         #version 300 es
         precision highp float;
         uniform sampler2D u_texture;
@@ -164,6 +188,7 @@ internal static class GlShaders
         }
         in vec2 v_uv;
         out vec4 color;
+        {{Finish}}
         const float PQ_M1 = 2610.0 / 16384.0;
         const float PQ_M2 = 2523.0 / 4096.0 * 128.0;
         const float PQ_C1 = 3424.0 / 4096.0;
@@ -244,7 +269,7 @@ internal static class GlShaders
                 }
             }
             c.rgb = clamp(encode(u_output, nits), 0.0, 1.0) * c.a;
-            color = c * u_alpha;    // premultiplied
+            color = basin_finish(c) * u_alpha;    // premultiplied
         }
         """;
 

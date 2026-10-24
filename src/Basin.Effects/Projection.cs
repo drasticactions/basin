@@ -91,7 +91,7 @@ public static class Projection
     }
 
     /// <summary>
-    /// Projects a rectangle-local point at a depth through KWin's 60-degree frustum. At depth zero the result is the point itself, offset by the rectangle origin.
+    /// Projects a rectangle-local point at a depth through a 60-degree frustum. At depth zero the result is the point itself, offset by the rectangle origin.
     /// </summary>
     /// <param name="rect">The rectangle that is the viewport.</param>
     /// <param name="localX">The horizontal position relative to the rectangle.</param>

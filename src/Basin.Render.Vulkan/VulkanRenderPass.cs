@@ -21,6 +21,28 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
         public float T00, T10, T20, TPad0;
         public float T01, T11, T21, TPad1;
         public float T02, T12, T22, TPad2;
+        public uint Finish0, Finish1, Finish2, Finish3;
+    }
+
+    private static uint PackHalves(double low, double high) =>
+        BitConverter.HalfToUInt16Bits((Half)low) | ((uint)BitConverter.HalfToUInt16Bits((Half)high) << 16);
+
+    private static void WriteFinish(ref Push constants, in TextureRenderOptions options)
+    {
+        var corners = options.Corners;
+        double left = 0, top = 0, right = 0, bottom = 0;
+        if (!corners.IsEmpty && corners.OuterWidth > 0 && corners.OuterHeight > 0)
+        {
+            left = corners.OffsetX;
+            top = corners.OffsetY;
+            right = corners.OuterWidth - corners.OffsetX - options.DstBox.Width;
+            bottom = corners.OuterHeight - corners.OffsetY - options.DstBox.Height;
+        }
+
+        constants.Finish0 = PackHalves(Math.Max(0, corners.Radius), left);
+        constants.Finish1 = PackHalves(top, right);
+        constants.Finish2 = PackHalves(bottom, 1.0 - options.Brightness);
+        constants.Finish3 = PackHalves(1.0 - options.Saturation, 0);
     }
 
     private static void WriteTransform(ref Push constants, in RenderTransform transform)
@@ -348,6 +370,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             G = options.Lut is VulkanColorLut shapedLut ? shapedLut.ShaperNits : 0f,
         };
         WriteTransform(ref constants, options.Transform);
+        WriteFinish(ref constants, options);
         if (options.Shader is VulkanPixelShader vulkanShader && !hasLutOption)
         {
             RecordShader(vulkanShader, set, srgbDecode: kind == 2, options.DstBox, options.Alpha, constants, options.Clip);
@@ -360,7 +383,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             options.Lut is VulkanColorLut vulkanLut ? vulkanLut.Set : colorTransform?.Set ?? default,
             constants,
             options.Clip,
-            options.Opaque && options.Alpha >= 1f);
+            options.Opaque && options.Alpha >= 1f && options.Corners.IsEmpty);
     }
 
     public void AddMesh(ITexture? texture, ReadOnlySpan<MeshVertex> vertices, in MeshRenderOptions options)
@@ -523,6 +546,7 @@ internal sealed unsafe class VulkanRenderPass : IRenderPass
             ForceOpaque = 1f,
         };
         WriteTransform(ref constants, options.Transform);
+        WriteFinish(ref constants, options);
         vk.CmdPushConstants(
             _render,
             bundle.PipelineLayout,

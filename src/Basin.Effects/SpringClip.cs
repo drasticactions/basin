@@ -13,7 +13,7 @@ public enum SpringClip
     Overshoot,
 
     /// <summary>
-    /// Stops the spring dead at the limit.
+    /// Stops the spring at <see cref="Spring.Min"/> or <see cref="Spring.Max"/>.
     /// </summary>
     Clamp,
 

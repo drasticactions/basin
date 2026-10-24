@@ -57,8 +57,7 @@ internal sealed partial class TinyComp :
     private PostEffects _post = null!;
     private ScreenShader _shader = null!;
     private FeedbackEffects? _feedback;
-    private IPixelShader? _dimShader;
-    private bool _dimShaderTried;
+    private bool _dimOverview;
     private Basin.Effects.DropShadowTexture? _shadowTexture;
     private Basin.Desktop.SessionLockManager _sessionLock = null!;
     private Basin.Desktop.SessionLockSceneDriver _lockDriver = null!;
@@ -502,41 +501,7 @@ internal sealed partial class TinyComp :
     private Config _config;
     private readonly string? _configPath;
     private string _rendererName = "vulkan";
-    private bool _cornerShaderTried;
     private bool _fireShaderTried;
-
-    private readonly Dictionary<int, IPixelShader> _cornerShaders = [];
-
-    private IPixelShader? CornerShaderFor(int radius)
-    {
-        if (radius <= 0)
-        {
-            return null;
-        }
-
-        if (_cornerShaders.TryGetValue(radius, out var cached))
-        {
-            return cached;
-        }
-
-        if (_cornerShaderTried && _cornerShaders.Count == 0)
-        {
-            return null;
-        }
-
-        _cornerShaderTried = true;
-        var shader = _renderer.CompilePixelShader(CornerShader.Source, CornerShader.Uniforms);
-        if (shader is null)
-        {
-            _log.Warn($"{_rendererName} compiles no pixel shader dialect; corner_radius is ignored");
-            return null;
-        }
-
-        var cornerScale = _scales.Length > 0 ? _scales[0] : 1.0;
-        shader.SetUniforms([(float)(radius * cornerScale)]);
-        _cornerShaders[radius] = shader;
-        return shader;
-    }
 
     private void ApplyEffectShaders()
     {
@@ -545,8 +510,7 @@ internal sealed partial class TinyComp :
         _effects.FireShaderHandle = fire ? FireShaderHandle() : null;
     }
 
-    private void ApplyCornerRadius(int radius) =>
-        _cornerRadius = radius > 0 && CornerShaderFor(radius) is not null ? radius : 0;
+    private void ApplyCornerRadius(int radius) => _cornerRadius = Math.Max(0, radius);
 
     private IPixelShader? FireShaderHandle()
     {
@@ -1346,18 +1310,11 @@ internal sealed partial class TinyComp :
         _post.Dispose();
         _shader.Dispose();
         _shadowTexture?.Dispose();
-        _dimShader?.Dispose();
         _scene.SurfaceBackdrop = null;
         _blurEffect?.Dispose();
         _glassEffect?.Dispose();
         _glassShadowTexture?.Dispose();
         _glassGlowTexture?.Dispose();
-        foreach (var shader in _cornerShaders.Values)
-        {
-            shader.Dispose();
-        }
-
-        _cornerShaders.Clear();
         foreach (var shader in _glowShaders)
         {
             shader.Dispose();

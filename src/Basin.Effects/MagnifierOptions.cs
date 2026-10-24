@@ -1,12 +1,12 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Holds the settings of a <see cref="MagnifierStage"/>. The defaults are KWin's.
+/// Holds the settings of a <see cref="MagnifierStage"/>.
 /// </summary>
 public readonly record struct MagnifierOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="MagnifierOptions"/> struct with KWin's defaults.
+    /// Initializes a new instance of the <see cref="MagnifierOptions"/> struct with the default values.
     /// </summary>
     public MagnifierOptions()
     {

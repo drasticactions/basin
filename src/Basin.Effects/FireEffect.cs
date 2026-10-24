@@ -32,6 +32,7 @@ public sealed class FireEffect : IMeshSource
     private bool _hasLast;
 
     private SceneTransform? _node;
+    private TransformStack? _stack;
     private SceneTree? _wrapper;
     private SceneMesh? _flame;
     private SceneMesh? _scorch;
@@ -63,12 +64,14 @@ public sealed class FireEffect : IMeshSource
     public bool IsRunning => _node is { IsDestroyed: false };
 
     /// <summary>
-    /// Starts a burn anchored exactly at a tick.
+    /// Starts a burn anchored exactly at a tick. A running burn of this effect ends first.
     /// </summary>
     /// <param name="stack">The transform stack of the window.</param>
     /// <param name="hiding"><see langword="true"/> to burn the window away, <see langword="false"/> to burn it into view.</param>
     /// <param name="now">The tick that anchors the start.</param>
     /// <param name="durationNanos">The duration in nanoseconds for a window 400 pixels high. The effect scales it with the height.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The stack holds a <c>fire</c> node from another effect.</exception>
     public void Begin(TransformStack stack, bool hiding, in FrameTick now, long durationNanos)
     {
         Begin(stack, hiding, durationNanos);
@@ -76,21 +79,24 @@ public sealed class FireEffect : IMeshSource
     }
 
     /// <summary>
-    /// Starts a burn with an unanchored timeline. It adds a <c>fire</c> node to the stack, which must not already hold one.
+    /// Starts a burn with an unanchored timeline and adds a <c>fire</c> node to the stack. A running burn of this effect ends first.
     /// </summary>
     /// <param name="stack">The transform stack of the window.</param>
     /// <param name="hiding"><see langword="true"/> to burn the window away, <see langword="false"/> to burn it into view.</param>
     /// <param name="durationNanos">The duration in nanoseconds for a window 400 pixels high. The effect scales it with the height.</param>
-    /// <exception cref="InvalidOperationException">The stack already holds a <c>fire</c> node.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The stack holds a <c>fire</c> node from another effect.</exception>
     public void Begin(TransformStack stack, bool hiding, long durationNanos)
     {
-        End();
+        ArgumentNullException.ThrowIfNull(stack);
+        End(stack);
         _hiding = hiding;
         _hasLast = false;
         _alive = 0;
 
         var node = stack.Add(TransformStack.ZOrder.Effect + 1, "fire");
         _node = node;
+        _stack = stack;
         _contentBounds = node.ContentBounds;
 
         if (Shader is not null)
@@ -225,11 +231,13 @@ public sealed class FireEffect : IMeshSource
     }
 
     /// <summary>
-    /// Destroys the meshes, moves the window content back out of the clip wrapper, and frees the sprite.
+    /// Destroys the meshes, moves the window content back out of the clip wrapper, removes the <c>fire</c> node from the stack that holds it, and frees the sprite.
     /// </summary>
-    /// <param name="stack">The transform stack to remove the <c>fire</c> node from. When it is <see langword="null"/>, the node stays in the stack.</param>
-    public void End(TransformStack? stack = null)
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
+    public void End(TransformStack stack)
     {
+        ArgumentNullException.ThrowIfNull(stack);
         if (_node is { IsDestroyed: false } node)
         {
             _flame?.Destroy();
@@ -241,7 +249,7 @@ public sealed class FireEffect : IMeshSource
                 wrapper.Destroy();
             }
 
-            stack?.Remove("fire");
+            _stack?.Remove("fire");
         }
 
         _sprite?.Destroy();
@@ -251,6 +259,7 @@ public sealed class FireEffect : IMeshSource
         _shaderNode = null;
         _wrapper = null;
         _node = null;
+        _stack = null;
     }
 
     /// <inheritdoc/>

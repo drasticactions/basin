@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's slideback effect. A window moves through a translation from an offset back to its place with a <see cref="WindowMotion"/> on each axis.
+/// Runs the slideback effect. A window moves through a translation from an offset back to its place with a <see cref="WindowMotion"/> on each axis.
 /// </summary>
 public sealed class SlideBackEffect
 {

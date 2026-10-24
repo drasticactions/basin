@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's startup feedback while an application launches. It draws a plain square beside the cursor, not the application icon, until the launch ends or times out.
+/// Runs the startup feedback while an application launches. It draws a plain square beside the cursor, not the application icon, until the launch ends or times out.
 /// </summary>
 public sealed class StartupFeedbackEffect : IMeshSource
 {

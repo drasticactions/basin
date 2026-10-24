@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's glide open and close animation on one window. The window tilts about an edge in perspective, moves back and fades, through a transform node on its <see cref="TransformStack"/>.
+/// Runs the glide open and close animation on one window. The window tilts about an edge in perspective, moves back and fades, through a transform node on its <see cref="TransformStack"/>.
 /// </summary>
 public sealed class GlideEffect
 {

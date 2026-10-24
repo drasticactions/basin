@@ -4,12 +4,12 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// The KWin fall-apart close animation. The window breaks into blocks that fly outward, spin and fade.
+/// The fall-apart close animation. The window breaks into blocks that fly outward, spin and fade.
 /// </summary>
 public sealed class FallApartEffect : IMeshTransform
 {
     /// <summary>
-    /// The KWin default block size in pixels.
+    /// The default block size in pixels.
     /// </summary>
     public const int DefaultBlockSize = 40;
 

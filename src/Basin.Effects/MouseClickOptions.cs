@@ -1,12 +1,12 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Holds the settings of a <see cref="MouseClickEffect"/>. The defaults are KWin's.
+/// Holds the settings of a <see cref="MouseClickEffect"/>.
 /// </summary>
 public readonly record struct MouseClickOptions
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="MouseClickOptions"/> struct with KWin's defaults.
+    /// Initializes a new instance of the <see cref="MouseClickOptions"/> struct with the default values.
     /// </summary>
     public MouseClickOptions()
     {

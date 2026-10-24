@@ -573,47 +573,46 @@ internal sealed partial class TinyComp
 
     private void ApplyDim(bool wanted)
     {
+        var options = _config.DimOptions;
+        if (wanted && _effects.Dim is { } running && running.Options == options)
+        {
+            return;
+        }
+
+        ClearDim();
         if (!wanted)
         {
-            _effects.Dim = null;
-            foreach (var window in _windows)
-            {
-                window.SetDimmed(false);
-            }
-
-            foreach (var xwindow in _xwindows)
-            {
-                xwindow.SetDimmed(false);
-            }
-
             return;
         }
 
-        if (_effects.Dim is not null)
-        {
-            return;
-        }
-
-        if (_dimShader is null && !_dimShaderTried)
-        {
-            _dimShaderTried = true;
-            _dimShader = _renderer.CompilePixelShader(
-                Basin.Effects.DimShader.Source, Basin.Effects.DimShader.Uniforms);
-            if (_dimShader is null)
-            {
-                _log.Warn($"{_rendererName} compiles no pixel shader dialect; dim_inactive is ignored");
-            }
-        }
-
-        if (_dimShader is null)
-        {
-            return;
-        }
-
-        _effects.Dim = new Basin.Effects.DimInactiveEffect(_dimShader);
-        _effects.DimChanged = dim => _dimShader?.SetUniforms([(float)dim]);
-        _dimShader.SetUniforms([(float)_effects.Dim.Dim]);
+        _dimOverview = false;
+        _effects.StartDim(new Basin.Effects.DimInactiveEffect<object>(options) { Target = new DimTarget(this) });
         RefreshDim();
+    }
+
+    private void ClearDim()
+    {
+        if (_effects.Dim is null)
+        {
+            return;
+        }
+
+        foreach (var window in _windows)
+        {
+            window.ApplyDim(1f, 1f);
+        }
+
+        foreach (var xwindow in _xwindows)
+        {
+            xwindow.ApplyDim(1f, 1f);
+        }
+
+        foreach (var (layer, _) in _layerDriver.Surfaces)
+        {
+            ApplyLayerDim(layer, 1f, 1f);
+        }
+
+        _effects.StopDim();
     }
 
     private void ApplyDropShadows(bool wanted)
@@ -674,26 +673,100 @@ internal sealed partial class TinyComp
 
     internal void RefreshDim()
     {
-        if (_effects.Dim is null)
+        if (_effects.Dim is not { } dim)
         {
             return;
         }
 
-        var anyInactive = false;
         foreach (var window in _windows)
         {
-            var inactive = window != _focused;
-            window.SetDimmed(inactive);
-            anyInactive |= inactive;
+            if (window.SceneSurface is null)
+            {
+                continue;
+            }
+
+            var facts = DimFacts(window.Toplevel.Surface, window.Toplevel.Parent is null ? DimInactiveWindowKind.Normal : DimInactiveWindowKind.Dialog)
+                with { KeepAbove = window.Above, FullScreen = window.IsFullscreen };
+            if (!dim.Update(window, facts))
+            {
+                dim.Add(window, facts);
+            }
         }
 
         foreach (var xwindow in _xwindows)
         {
-            var inactive = xwindow != _focusedX;
-            xwindow.SetDimmed(inactive);
-            anyInactive |= inactive;
+            if (xwindow.SceneSurface.IsDestroyed)
+            {
+                continue;
+            }
+
+            var kind = xwindow.XWin.OverrideRedirect
+                ? DimInactiveWindowKind.Unmanaged
+                : DimInactiveWindow.KindOfWindowType(xwindow.XWin.WindowType);
+            var facts = DimFacts(xwindow.XWin.Surface, kind) with { FullScreen = xwindow.Fullscreen };
+            if (!dim.Update(xwindow, facts))
+            {
+                dim.Add(xwindow, facts);
+            }
         }
 
-        _effects.FadeDim(anyInactive);
+        foreach (var (layer, scene) in _layerDriver.Surfaces)
+        {
+            if (scene is null)
+            {
+                continue;
+            }
+
+            var facts = new DimInactiveWindow(layer.Layer switch
+            {
+                LayerKind.Background => DimInactiveWindowKind.Desktop,
+                LayerKind.Bottom or LayerKind.Top => DimInactiveWindowKind.Panel,
+                _ => DimInactiveWindowKind.Popup,
+            });
+            if (!dim.Update(layer, facts))
+            {
+                dim.Add(layer, facts);
+            }
+        }
+
+        dim.Activate(_focused is not null ? _focused : _focusedX);
+    }
+
+    private void ApplyLayerDim(LayerSurface layer, float brightness, float saturation)
+    {
+        if (_layerDriver.SceneOf(layer) is { } scene)
+        {
+            scene.Content.Brightness = brightness;
+            scene.Content.Saturation = saturation;
+        }
+    }
+
+    private DimInactiveWindow DimFacts(Surface? surface, DimInactiveWindowKind kind)
+    {
+        if (surface is not null && _toplevels.TryFind(surface, out var info))
+        {
+            return new DimInactiveWindow(kind, DimInactiveWindow.GroupOf(_toplevels, info));
+        }
+
+        return new DimInactiveWindow(kind);
+    }
+
+    private sealed class DimTarget(TinyComp comp) : IDimInactiveTarget<object>
+    {
+        public void Apply(object window, float brightness, float saturation)
+        {
+            switch (window)
+            {
+                case Window xdg:
+                    xdg.ApplyDim(brightness, saturation);
+                    break;
+                case XWindow x11:
+                    x11.ApplyDim(brightness, saturation);
+                    break;
+                case LayerSurface layer:
+                    comp.ApplyLayerDim(layer, brightness, saturation);
+                    break;
+            }
+        }
     }
 }

@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's touch points effect. A held contact shows a ring, and a lifted contact shows a ring that grows and fades.
+/// Runs the touch points effect. A held contact shows a ring, and a lifted contact shows a ring that grows and fades.
 /// </summary>
 public sealed class TouchPointsEffect : IMeshSource
 {

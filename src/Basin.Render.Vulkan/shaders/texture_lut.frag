@@ -1,15 +1,9 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 // The LUT is baked in the encoded domain (that is what ImportLut receives),
 // so this always samples through the UNORM view: apply it to encoded
 // straight values, then linearize the result for blending.
-layout(push_constant) uniform Push {
-    vec4 dst;
-    vec4 src;
-    vec2 target;
-    float alpha;
-    float forceOpaque;
-    vec4 color;
-} pc;
+#include "basin.glsl"
 layout(set = 0, binding = 0) uniform sampler2D u_texture;
 layout(set = 1, binding = 0) uniform sampler3D u_lut;
 layout(location = 0) in vec2 v_uv;
@@ -88,5 +82,5 @@ void main() {
     vec3 straight = c.a > 0.0 ? c.rgb / c.a : c.rgb;
     vec3 looked = lut_tetrahedral(shape(straight, pc.color.y));
     c.rgb = srgb_to_linear(clamp(looked, 0.0, 1.0)) * c.a;
-    color = c * pc.alpha;
+    color = basin_finish(c, v_uv) * pc.alpha;
 }

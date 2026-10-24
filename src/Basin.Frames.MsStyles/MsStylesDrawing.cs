@@ -4,7 +4,7 @@ using Basin.Themes.MsStyles;
 namespace Basin.Frames.MsStyles;
 
 /// <summary>
-/// A port of wine's <c>DrawThemeBackgroundEx</c>. It does not draw. It appends the operations for a theme part to an <see cref="MsStylesDrawList"/>.
+/// Implements <c>DrawThemeBackgroundEx</c> without drawing. It appends the operations for a theme part to an <see cref="MsStylesDrawList"/>.
 /// </summary>
 public static class MsStylesDrawing
 {

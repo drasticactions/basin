@@ -45,9 +45,9 @@ internal sealed partial class TinyComp
                 }
 
                 comp.RefreshSurfaceLuts();
-                comp.ApplyCorners(SceneSurface, ClientCornerRadius);
-                comp.OnWindowMapped(this);
+                ApplyContentShader();
                 comp._effects.CancelClosing(toplevel.Surface);
+                comp.OnWindowMapped(this);
                 SetDecorated(comp.IsServerDecorated(toplevel));
                 ReportGeometry();
                 RefreshShadow();
@@ -58,6 +58,7 @@ internal sealed partial class TinyComp
             {
                 comp._effects.OnClosing(
                     toplevel.Surface, Tree, comp._layers.Top, _cornerRig, Rule?.CloseFor(comp._effects.CloseKind));
+                comp._effects.Dim?.Remove(this);
                 _cornerRig = null;
                 _shadow?.Dispose();
                 _shadow = null;
@@ -118,6 +119,7 @@ internal sealed partial class TinyComp
                 }
 
                 toplevel.SetFullscreen(fullscreen);
+                comp.RefreshDim();
                 if (fullscreen)
                 {
                     var output = comp._layout.OutputAt(comp._cursorX, comp._cursorY) ?? comp.Views[0].Output;
@@ -423,7 +425,7 @@ internal sealed partial class TinyComp
                 _frame = null;
                 if (SceneSurface is not null)
                 {
-                    _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+                    ApplyContentShader();
                 }
 
                 RefreshShadow();
@@ -460,12 +462,13 @@ internal sealed partial class TinyComp
             {
                 if (SceneSurface is not null)
                 {
-                    _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+                    ApplyContentShader();
                 }
             }
             else if (CornerRadius > 0 && SceneSurface is not null)
             {
-                _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, CornerRadius);
+                _cornerRig = new FrameCornerRig(_frame, SceneSurface.Content, CornerRadius, ApplyContentShader);
+                ApplyContentShader();
             }
         }
 
@@ -490,22 +493,30 @@ internal sealed partial class TinyComp
             RefreshFrame();
         }
 
-        public void SetDimmed(bool dimmed)
+        public bool IsFullscreen => Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen);
+
+        internal Basin.CornerClip ContentClip =>
+            _cornerRig is { } rig ? rig.ContentClip : new Basin.CornerClip(ClientCornerRadius);
+
+        private void ApplyContentShader()
         {
-            if (_dimmed == dimmed || SceneSurface is null)
+            if (SceneSurface is null)
             {
                 return;
             }
 
-            _dimmed = dimmed;
-            if (dimmed)
+            SceneSurface.Content.Corners = ContentClip;
+        }
+
+        public void ApplyDim(float brightness, float saturation)
+        {
+            if (SceneSurface is null)
             {
-                SceneSurface.Content.TextureShader = _comp._dimShader;
+                return;
             }
-            else
-            {
-                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
-            }
+
+            SceneSurface.Content.Brightness = brightness;
+            SceneSurface.Content.Saturation = saturation;
         }
 
         public void RefreshShadow()
@@ -567,7 +578,6 @@ internal sealed partial class TinyComp
         private int _glassContentRadius = -1;
 
         public int ClientCornerRadius => _frame is not null && _glassContentRadius >= 0 ? _glassContentRadius : CornerRadius;
-        private bool _dimmed;
         private Basin.Effects.DropShadowEffect? _shadow;
 
         public void SetIconName(string? name)

@@ -7,7 +7,7 @@ namespace TinyComp;
 internal static class GridEasings
 {
     public static readonly string[] Names =
-        ["linear", "sigmoid", "circle", "in-curve", "out-curve", "in-cubic", "out-cubic", "in-out-cubic"];
+        ["linear", "sigmoid", "circle", "in-curve", "out-curve", "in-cubic", "out-cubic", "in-out-cubic", "in-out-sine"];
 
     public static EasingCurve? FromName(string name) => name switch
     {
@@ -19,6 +19,7 @@ internal static class GridEasings
         "in-cubic" => EasingCurve.InCubic,
         "out-cubic" => EasingCurve.OutCubic,
         "in-out-cubic" => EasingCurve.InOutCubic,
+        "in-out-sine" => EasingCurve.InOutSine,
         _ => null,
     };
 
@@ -40,6 +41,7 @@ internal static class GridEasings
         EasingKind.OutCurve => "out-curve",
         EasingKind.InCubic => "in-cubic",
         EasingKind.InOutCubic => "in-out-cubic",
+        EasingKind.InOutSine => "in-out-sine",
         EasingKind.CubicBezier => string.Create(
             CultureInfo.InvariantCulture, $"[{curve.X1}, {curve.Y1}, {curve.X2}, {curve.Y2}]"),
         _ => "out-cubic",

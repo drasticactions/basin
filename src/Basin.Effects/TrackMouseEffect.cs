@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's track mouse effect. While it is held, two half rings turn in opposite directions around the cursor.
+/// Runs the track mouse effect. While it is held, two half rings turn in opposite directions around the cursor.
 /// </summary>
 public sealed class TrackMouseEffect : IMeshSource
 {

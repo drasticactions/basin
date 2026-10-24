@@ -307,6 +307,7 @@ internal sealed partial class TinyComp
         window.Tree.RaiseToTop();
         RefreshAboveVisibility();
         window.RefreshFrame();
+        RefreshDim();
         _report.Line($"ABOVE {window.Toplevel.AppId} {(above ? "yes" : "no")}");
     }
 
@@ -661,15 +662,6 @@ internal sealed partial class TinyComp
         return null;
     }
 
-    private void ApplyCorners(SceneSurface scene, int radius)
-    {
-        var shader = CornerShaderFor(radius);
-        if (shader is not null || scene.Content.TextureShader is not null)
-        {
-            scene.Content.TextureShader = shader;
-        }
-    }
-
     private Window? FindWindow(Surface surface)
     {
         foreach (var window in _windows)
@@ -710,6 +702,7 @@ internal sealed partial class TinyComp
         _layerDriver.SceneCreated += (layer, scene) =>
         {
             RefreshSurfaceLuts();
+            RefreshDim();
             if (layer.Namespace.Contains("notification", StringComparison.OrdinalIgnoreCase) && scene is not null)
             {
                 _effects.OnNotificationMapped(scene.Tree, NotificationTravel, 0);
@@ -720,8 +713,9 @@ internal sealed partial class TinyComp
                 _seat.Keyboard.NotifyEnter(layer.Surface);
             }
         };
-        _layerDriver.Removed += _ =>
+        _layerDriver.Removed += layer =>
         {
+            _effects.Dim?.Remove(layer);
             if (_focused is { } focused)
             {
                 _seat.Keyboard.NotifyEnter(focused.Toplevel.Surface);

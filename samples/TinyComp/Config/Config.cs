@@ -190,6 +190,28 @@ internal sealed class Config
 
     public bool DimInactive { get; set; }
 
+    public int DimStrength { get; set; } = 25;
+
+    public bool DimPanels { get; set; }
+
+    public bool DimDesktop { get; set; }
+
+    public bool DimKeepAbove { get; set; }
+
+    public bool DimByGroup { get; set; } = true;
+
+    public bool DimFullScreen { get; set; } = true;
+
+    public Basin.Effects.DimInactiveOptions DimOptions => new()
+    {
+        Strength = DimStrength,
+        DimPanels = DimPanels,
+        DimDesktop = DimDesktop,
+        DimKeepAbove = DimKeepAbove,
+        DimByGroup = DimByGroup,
+        DimFullScreen = DimFullScreen,
+    };
+
     public bool DropShadow { get; set; }
 
     public string BlurKernel { get; set; } = "kawase";
@@ -687,6 +709,12 @@ internal sealed class Config
             Switcher = effects.Flag("switcher", Switcher);
             Highlight = effects.Flag("highlight", Highlight);
             DimInactive = effects.Flag("dim_inactive", DimInactive);
+            DimStrength = Math.Clamp(effects.Number("dim_strength", DimStrength), 10, 90);
+            DimPanels = effects.Flag("dim_panels", DimPanels);
+            DimDesktop = effects.Flag("dim_desktop", DimDesktop);
+            DimKeepAbove = effects.Flag("dim_keep_above", DimKeepAbove);
+            DimByGroup = effects.Flag("dim_by_group", DimByGroup);
+            DimFullScreen = effects.Flag("dim_full_screen", DimFullScreen);
             DropShadow = effects.Flag("drop_shadow", DropShadow);
             BlurKernel = effects.Choice("blur_kernel", "kawase", "kawase", "vista", "smol");
             SlideBack = effects.Flag("slide_back", SlideBack);

@@ -135,6 +135,8 @@ internal sealed partial class TinyComp
                 xwindow.Rule?.CloseFor(_effects.CloseKind));
         }
 
+        _effects.Dim?.Remove(xwindow);
+
         _effects.Forget(xwindow.Tree);
         xwindow.Destroy();
         if (_focusedX == xwindow)

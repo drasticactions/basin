@@ -1154,7 +1154,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             return PlaneDeclineReason.BackdropEffect;
         }
 
-        if (node.TextureShader is not null)
+        if (node.HasTextureEffects)
         {
             return PlaneDeclineReason.PixelShader;
         }
@@ -1753,7 +1753,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             }
             else if (!clip.IsEmpty && !entry.Transformed && !entry.Mirrored && entry.Alpha >= 1f &&
                 _projection.Scale == 1.0 && !_projection.IsTransformed &&
-                entry.Node is SceneBuffer { TextureShader: null } partialNode &&
+                entry.Node is SceneBuffer { KeepsOpacity: true } partialNode &&
                 !(partialNode.HasActiveBackdrop && _runsBackdropEffects) &&
                 partialNode.OpaqueRegion is { } partial)
             {
@@ -1860,7 +1860,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     private bool IsOpaqueEntry(SceneNode node) => node switch
     {
         SceneRect rect => rect.IsOpaque,
-        SceneBuffer buffer => buffer.IsOpaque && buffer.TextureShader is null && !(buffer.HasActiveBackdrop && _runsBackdropEffects),
+        SceneBuffer buffer => buffer.IsOpaque && buffer.KeepsOpacity && !(buffer.HasActiveBackdrop && _runsBackdropEffects),
         _ => false,
     };
 
@@ -2085,7 +2085,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             }
 
             if (!entry.Transformed && !entry.Mirrored && entry.Alpha >= 1f &&
-                entry.Node is SceneBuffer { TextureShader: null } buffer &&
+                entry.Node is SceneBuffer { HasTextureEffects: false } buffer &&
                 LutFor(buffer) is null &&
                 !(buffer.HasActiveBackdrop && _runsBackdropEffects) &&
                 CoversWholeNode(entry, physical) &&

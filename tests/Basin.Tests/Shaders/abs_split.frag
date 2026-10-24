@@ -1,12 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 layout(constant_id = 0) const int TEXTURE_TRANSFORM = 0;
-layout(push_constant) uniform Push {
-    vec4 dst;
-    vec4 src;
-    vec2 target;
-    float alpha;
-    float forceOpaque;
-} pc;
+#include "basin.glsl"
 layout(set = 0, binding = 0) uniform sampler2D u_texture;
 layout(std140, set = 1, binding = 0) uniform Basin {
     vec2 u_size;
@@ -31,5 +26,5 @@ void main() {
     float g = dot(disp, vec3(0.299, 0.587, 0.114));
     float mask = step(split, v_uv.x * u_size.x);
     vec3 outDisp = mix(disp, vec3(g), mask);
-    color = vec4(srgb_to_linear(outDisp) * c.a, c.a) * u_alpha;
+    color = basin_finish(vec4(srgb_to_linear(outDisp) * c.a, c.a), v_uv) * u_alpha;
 }

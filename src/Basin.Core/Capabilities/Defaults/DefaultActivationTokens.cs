@@ -15,7 +15,7 @@ public sealed class DefaultActivationTokens : IActivationTokens
     private readonly record struct Token(string Name, string? AppId, long MintedAtMs);
 
     /// <summary>
-    /// Gets or sets the time in milliseconds after which a token no longer redeems. The default is 30 000, as in wlroots.
+    /// Gets or sets the time in milliseconds after which a token no longer redeems. The default is 30 000.
     /// </summary>
     public long TimeoutMs { get; set; } = 30_000;
 

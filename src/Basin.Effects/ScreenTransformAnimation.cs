@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's screen transform effect as a post stage. It turns the new frame into place over a fading copy of the old one when the output transform changes, and it can also shake the screen.
+/// Runs the screen transform effect as a post stage. It turns the new frame into place over a fading copy of the old one when the output transform changes, and it can also shake the screen.
 /// </summary>
 public sealed class ScreenTransformAnimation : IPostStage, IDisposable
 {

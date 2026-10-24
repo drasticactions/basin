@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's magic lamp minimize animation. It deforms the window through a mesh that pours the window into the icon rectangle.
+/// Runs the magic lamp minimize animation. It deforms the window through a mesh that pours the window into the icon rectangle.
 /// </summary>
 public sealed class MagicLampEffect : IMeshTransform
 {

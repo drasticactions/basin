@@ -114,6 +114,8 @@ public sealed class InitProcess
 
     private const int ErrorAccess = 13;
 
+    private const int ErrorNoProcess = 3;
+
     [DllImport("libc", SetLastError = true)]
     private static extern int access([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
 
@@ -340,12 +342,12 @@ public sealed class InitProcess
     }
 
     /// <summary>
-    /// Sends <c>SIGTERM</c> to the process group and stops the exit watch. <see cref="Exited"/> does not occur after this call.
+    /// Sends <c>SIGTERM</c> to the process group and stops the exit watch. <see cref="Exited"/> does not occur after this call. A group with no process left is not a failure.
     /// </summary>
     /// <param name="log">The log for a failure of the signal.</param>
     public void Stop(BasinLogger log)
     {
-        if (kill(-_pgid, SignalTerminate) != 0)
+        if (kill(-_pgid, SignalTerminate) != 0 && Marshal.GetLastPInvokeError() != ErrorNoProcess)
         {
             log.Error($"failed to stop the init process group: {(Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError()))}");
         }

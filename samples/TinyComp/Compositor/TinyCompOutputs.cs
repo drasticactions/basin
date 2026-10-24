@@ -309,6 +309,12 @@ internal sealed partial class TinyComp
     private void StepEffects(OutputView view, FrameTick tick)
     {
         UpdatePlacements(view);
+        if (_effects.Dim is { } dim && AnyOverviewActive() != _dimOverview)
+        {
+            _dimOverview = !_dimOverview;
+            dim.SetFullScreenEffect(_dimOverview, tick);
+        }
+
         var running = _effects.Step(tick);
         if (_feedback is { } feedback)
         {

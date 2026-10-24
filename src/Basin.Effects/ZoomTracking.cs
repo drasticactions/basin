@@ -1,7 +1,7 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Selects how the full-screen zoom moves its view with the tracked point. The modes are KWin's.
+/// Selects how the full-screen zoom moves its view with the tracked point.
 /// </summary>
 public enum ZoomTracking
 {

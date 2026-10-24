@@ -28,7 +28,7 @@ public enum EasingKind
     CubicBezier,
 
     /// <summary>
-    /// A sample of the weston spring over its settle time.
+    /// A sample of a <see cref="Spring"/> over its settle time.
     /// </summary>
     Spring,
 
@@ -56,4 +56,9 @@ public enum EasingKind
     /// An exact cubic ease-in and ease-out.
     /// </summary>
     InOutCubic,
+
+    /// <summary>
+    /// An exact sine ease-in and ease-out.
+    /// </summary>
+    InOutSine,
 }

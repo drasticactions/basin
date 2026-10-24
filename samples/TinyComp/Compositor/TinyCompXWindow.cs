@@ -42,7 +42,7 @@ internal sealed partial class TinyComp
             Outer = comp._xSceneDriver.OuterOf(xwin) ?? scene.Tree;
             Outer.SetPosition(0, 0);
             comp.RefreshSurfaceLuts();
-            comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+            ApplyContentShader();
             RefreshShadow();
             ApplyQuirks();
             xwin.PropertiesChanged += ApplyQuirks;
@@ -121,22 +121,28 @@ internal sealed partial class TinyComp
 
         public int CornerRadius { get; }
 
-        public void SetDimmed(bool dimmed)
+        internal Basin.CornerClip ContentClip =>
+            _cornerRig is { } rig ? rig.ContentClip : new Basin.CornerClip(ClientCornerRadius);
+
+        private void ApplyContentShader()
         {
-            if (_dimmed == dimmed || SceneSurface.IsDestroyed)
+            if (SceneSurface.IsDestroyed)
             {
                 return;
             }
 
-            _dimmed = dimmed;
-            if (dimmed)
+            SceneSurface.Content.Corners = ContentClip;
+        }
+
+        public void ApplyDim(float brightness, float saturation)
+        {
+            if (SceneSurface.IsDestroyed)
             {
-                SceneSurface.Content.TextureShader = _comp._dimShader;
+                return;
             }
-            else
-            {
-                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
-            }
+
+            SceneSurface.Content.Brightness = brightness;
+            SceneSurface.Content.Saturation = saturation;
         }
 
         public void RefreshShadow()
@@ -188,7 +194,6 @@ internal sealed partial class TinyComp
             return rig;
         }
 
-        private bool _dimmed;
         private Basin.Effects.DropShadowEffect? _shadow;
 
         public Frame? Frame => _frame;
@@ -394,7 +399,7 @@ internal sealed partial class TinyComp
             if (noBorder)
             {
                 DisposeFrame();
-                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+                ApplyContentShader();
                 ReportDecoration();
                 ReportGeometry();
             }
@@ -431,6 +436,7 @@ internal sealed partial class TinyComp
 
                 _fullscreen = true;
                 XWin.SetFullscreen(true);
+                _comp.RefreshDim();
                 UpdateDecorations();
                 _comp.StraightenForFill(this);
                 var box = _comp._layout.BoxOf(view.Output);
@@ -440,6 +446,7 @@ internal sealed partial class TinyComp
 
             _fullscreen = false;
             XWin.SetFullscreen(false);
+            _comp.RefreshDim();
             UpdateDecorations();
             if (_maximized)
             {
@@ -486,7 +493,7 @@ internal sealed partial class TinyComp
             if (!WantsFrame)
             {
                 DisposeFrame();
-                _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+                ApplyContentShader();
                 ReportGeometry();
                 return;
             }
@@ -517,12 +524,13 @@ internal sealed partial class TinyComp
             {
                 if (SceneSurface is not null)
                 {
-                    _comp.ApplyCorners(SceneSurface, ClientCornerRadius);
+                    ApplyContentShader();
                 }
             }
             else if (CornerRadius > 0)
             {
-                _cornerRig = new FrameCornerRig(_comp._renderer, _frame, SceneSurface.Content, CornerRadius);
+                _cornerRig = new FrameCornerRig(_frame, SceneSurface.Content, CornerRadius, ApplyContentShader);
+                ApplyContentShader();
             }
         }
 

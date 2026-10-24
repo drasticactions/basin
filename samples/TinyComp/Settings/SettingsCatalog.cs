@@ -298,6 +298,15 @@ internal static class SettingsCatalog
             Flag(Effects, "effects", "slide_back", "Slide back", "Window animations"),
             Flag(Effects, "effects", "notifications", "Notification slide", "Window animations"),
             Flag(Effects, "effects", "dim_inactive", "Dim inactive windows", "Window appearance"),
+            new(Effects, "effects", "dim_strength", "Dim strength (%)", SettingKind.Integer)
+            {
+                Default = "25", Min = 10, Max = 90, Group = "Window appearance",
+            },
+            Flag(Effects, "effects", "dim_panels", "Dim panels", "Window appearance"),
+            Flag(Effects, "effects", "dim_desktop", "Dim the desktop", "Window appearance"),
+            Flag(Effects, "effects", "dim_keep_above", "Dim keep-above windows", "Window appearance"),
+            Flag(Effects, "effects", "dim_by_group", "Keep dialogs bright with their window", "Window appearance") with { Default = "true" },
+            Flag(Effects, "effects", "dim_full_screen", "Dim full-screen windows", "Window appearance") with { Default = "true" },
             Flag(Effects, "effects", "drop_shadow", "Drop shadows", "Window appearance"),
             Flag(Effects, "effects", "highlight", "Switcher highlight", "Window appearance"),
             new(Effects, "effects", "blur_kernel", "Client blur", SettingKind.Choice)

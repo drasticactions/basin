@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's stretch animation for maximize and restore. It holds the window in place until the client commits the new size, then maps the frame onto a rectangle that moves from the old box to the new one, with a cross-fade from a snapshot.
+/// Runs the stretch animation for maximize and restore. It holds the window in place until the client commits the new size, then maps the frame onto a rectangle that moves from the old box to the new one, with a cross-fade from a snapshot.
 /// </summary>
 public sealed class StretchEffect
 {

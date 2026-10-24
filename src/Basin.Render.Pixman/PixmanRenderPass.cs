@@ -66,6 +66,7 @@ internal sealed class PixmanRenderPass : IRenderPass
         var scaled = !src.IsPixelAligned
             || src.Width != options.DstBox.Width
             || src.Height != options.DstBox.Height;
+        var effects = !options.Corners.IsEmpty || options.Brightness != 1f || options.Saturation != 1f;
 
         if (!pixmanTexture.Acquire(out var image))
         {
@@ -86,9 +87,19 @@ internal sealed class PixmanRenderPass : IRenderPass
                 sourceY = src.Y - bounds.Y;
             }
 
+            if (effects)
+            {
+                RenderEffects(source, sourceX, sourceY, src, scaled, options);
+                source = _effectImage!;
+                sourceX = 0;
+                sourceY = 0;
+                src = new FBox(0, 0, options.DstBox.Width, options.DstBox.Height);
+                scaled = false;
+            }
+
             if (!options.Transform.IsIdentity)
             {
-                if (options.Lut is not PixmanColorLut &&
+                if (!effects && options.Lut is not PixmanColorLut &&
                     (src.X > 0 || src.Y > 0 || src.Width < texture.Width || src.Height < texture.Height))
                 {
                     var bounds = src.RoundedOut();
@@ -123,7 +134,7 @@ internal sealed class PixmanRenderPass : IRenderPass
             ApplyClip(options.Clip);
             var mask = options.Alpha < 1f ? AlphaMask(options.Alpha) : null;
             _image!.Composite(
-                options.Opaque && options.Alpha >= 1f ? PixmanOp.Src : PixmanOp.Over,
+                options.Opaque && options.Alpha >= 1f && options.Corners.IsEmpty ? PixmanOp.Src : PixmanOp.Over,
                 source,
                 mask,
                 scaled ? 0 : (int)sourceX,
@@ -146,6 +157,164 @@ internal sealed class PixmanRenderPass : IRenderPass
         {
             pixmanTexture.Release();
         }
+    }
+
+    private byte[]? _effect;
+    private System.Runtime.InteropServices.GCHandle _effectPin;
+    private PixmanImage? _effectImage;
+    private int _effectWidth;
+    private int _effectHeight;
+
+    private unsafe void RenderEffects(PixmanImage source, double sourceX, double sourceY, in FBox src, bool scaled, in TextureRenderOptions options)
+    {
+        var width = options.DstBox.Width;
+        var height = options.DstBox.Height;
+        EnsureEffect(width + 1, height + 1);
+        if (scaled)
+        {
+            var translate = PixmanTransform.CreateTranslate(sourceX, sourceY);
+            var scale = PixmanTransform.CreateScale(src.Width / width, src.Height / height);
+            var transform = PixmanTransform.Multiply(in translate, in scale);
+            source.SetTransform(in transform);
+            source.SetFilter(options.Filter != TextureFilter.Linear ? PixmanFilter.Nearest : PixmanFilter.Bilinear);
+            source.SetRepeat(PixmanRepeat.Pad);
+        }
+
+        _effectImage!.Composite(
+            PixmanOp.Src, source, null, scaled ? 0 : (int)sourceX, scaled ? 0 : (int)sourceY, 0, 0, 0, 0, width, height);
+        if (scaled)
+        {
+            source.ClearTransform();
+            source.SetFilter(PixmanFilter.Nearest);
+            source.SetRepeat(PixmanRepeat.None);
+        }
+
+        var pixels = (uint*)_effectPin.AddrOfPinnedObject();
+        var stride = _effectWidth;
+        if (options.Brightness != 1f || options.Saturation != 1f)
+        {
+            Modulate(pixels, stride, width, height, options.Brightness, options.Saturation);
+        }
+
+        if (!options.Corners.IsEmpty)
+        {
+            ClipCorners(pixels, stride, width, height, options.Corners);
+        }
+
+        new Span<uint>(pixels + (height * stride), width + 1).Clear();
+        for (var y = 0; y < height; y++)
+        {
+            pixels[(y * stride) + width] = 0;
+        }
+    }
+
+    private static unsafe void Modulate(uint* pixels, int stride, int width, int height, float brightness, float saturation)
+    {
+        for (var y = 0; y < height; y++)
+        {
+            var row = pixels + (y * stride);
+            for (var x = 0; x < width; x++)
+            {
+                var pixel = row[x];
+                var alpha = pixel >> 24;
+                if (alpha == 0)
+                {
+                    continue;
+                }
+
+                var scale = 1f / alpha;
+                var red = ((pixel >> 16) & 0xFF) * scale;
+                var green = ((pixel >> 8) & 0xFF) * scale;
+                var blue = (pixel & 0xFF) * scale;
+                var luma = (0.2126f * red) + (0.7152f * green) + (0.0722f * blue);
+                red = (luma + ((red - luma) * saturation)) * brightness;
+                green = (luma + ((green - luma) * saturation)) * brightness;
+                blue = (luma + ((blue - luma) * saturation)) * brightness;
+                row[x] = (alpha << 24)
+                    | (Channel(red, alpha) << 16)
+                    | (Channel(green, alpha) << 8)
+                    | Channel(blue, alpha);
+            }
+        }
+    }
+
+    private static uint Channel(float straight, uint alpha) => (uint)Math.Clamp((int)((straight * alpha) + 0.5f), 0, (int)alpha);
+
+    private static unsafe void ClipCorners(uint* pixels, int stride, int width, int height, in CornerClip corners)
+    {
+        var outer = corners.OuterWidth > 0 && corners.OuterHeight > 0;
+        var left = outer ? -corners.OffsetX : 0;
+        var top = outer ? -corners.OffsetY : 0;
+        var right = outer ? left + corners.OuterWidth : width;
+        var bottom = outer ? top + corners.OuterHeight : height;
+        var radius = Math.Min(corners.Radius, Math.Min(right - left, bottom - top) / 2);
+        var centerX = (left + right) / 2;
+        var centerY = (top + bottom) / 2;
+        var halfX = (right - left) / 2;
+        var halfY = (bottom - top) / 2;
+        for (var y = 0; y < height; y++)
+        {
+            var py = y + 0.5;
+            var inBand = py < top + radius || py > bottom - radius;
+            if (!inBand)
+            {
+                continue;
+            }
+
+            var row = pixels + (y * stride);
+            for (var x = 0; x < width; x++)
+            {
+                var px = x + 0.5;
+                var dx = Math.Max(Math.Abs(px - centerX) - (halfX - radius), 0);
+                var dy = Math.Max(Math.Abs(py - centerY) - (halfY - radius), 0);
+                var distance = Math.Sqrt((dx * dx) + (dy * dy)) - radius;
+                var coverage = Math.Clamp(0.5 - distance, 0, 1);
+                if (coverage >= 1)
+                {
+                    continue;
+                }
+
+                var pixel = row[x];
+                var a = (uint)(((pixel >> 24) * coverage) + 0.5);
+                var cr = (uint)((((pixel >> 16) & 0xFF) * coverage) + 0.5);
+                var cg = (uint)((((pixel >> 8) & 0xFF) * coverage) + 0.5);
+                var cb = (uint)(((pixel & 0xFF) * coverage) + 0.5);
+                row[x] = (a << 24) | (cr << 16) | (cg << 8) | cb;
+            }
+        }
+    }
+
+    private void EnsureEffect(int width, int height)
+    {
+        if (_effectImage is not null && width <= _effectWidth && height <= _effectHeight)
+        {
+            return;
+        }
+
+        var effectWidth = Math.Max(width, _effectWidth);
+        var effectHeight = Math.Max(height, _effectHeight);
+        DropEffect();
+        _effect = new byte[effectWidth * effectHeight * 4];
+        _effectPin = System.Runtime.InteropServices.GCHandle.Alloc(
+            _effect, System.Runtime.InteropServices.GCHandleType.Pinned);
+        _effectImage = PixmanImage.CreateBits(
+            PixmanFormat.A8R8G8B8, effectWidth, effectHeight, _effectPin.AddrOfPinnedObject(), effectWidth * 4);
+        _effectWidth = effectWidth;
+        _effectHeight = effectHeight;
+    }
+
+    private void DropEffect()
+    {
+        _effectImage?.Dispose();
+        _effectImage = null;
+        _effectWidth = 0;
+        _effectHeight = 0;
+        if (_effectPin.IsAllocated)
+        {
+            _effectPin.Free();
+        }
+
+        _effect = null;
     }
 
     private byte[]? _alphaMaskBits;
@@ -486,6 +655,7 @@ internal sealed class PixmanRenderPass : IRenderPass
     {
         _fullClip.Dispose();
         DropScratch();
+        DropEffect();
         DropAlphaMask();
     }
 

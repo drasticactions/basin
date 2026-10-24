@@ -53,6 +53,11 @@ public readonly record struct EasingCurve(EasingKind Kind, double X1, double Y1,
     public static readonly EasingCurve InOutCubic = new(EasingKind.InOutCubic, 0, 0, 0, 0);
 
     /// <summary>
+    /// An exact sine ease-in and ease-out.
+    /// </summary>
+    public static readonly EasingCurve InOutSine = new(EasingKind.InOutSine, 0, 0, 0, 0);
+
+    /// <summary>
     /// Creates a CSS cubic Bézier from 0,0 to 1,1.
     /// </summary>
     /// <param name="x1">The X of the first control point, from 0 to 1.</param>
@@ -64,14 +69,14 @@ public readonly record struct EasingCurve(EasingKind Kind, double X1, double Y1,
         new(EasingKind.CubicBezier, x1, y1, x2, y2);
 
     /// <summary>
-    /// Creates a spring curve with the weston default friction of 400. That friction is underdamped and rings at ordinary stiffness.
+    /// Creates a spring curve with the default friction of 400. That friction is underdamped and rings at ordinary stiffness.
     /// </summary>
     /// <param name="k">The spring stiffness.</param>
     /// <returns>The curve, which an opacity easing must not use.</returns>
     public static EasingCurve Spring(double k) => Spring(k, 400.0, 0.0);
 
     /// <summary>
-    /// Creates a curve that samples a weston spring over its settle time. The settle time is measured once, here.
+    /// Creates a curve that samples a <see cref="Basin.Effects.Spring"/> over its settle time. The settle time is measured once, here.
     /// </summary>
     /// <param name="k">The spring stiffness.</param>
     /// <param name="friction">The friction. An opacity easing needs a damped value, for example 1400 or 4000.</param>
@@ -126,6 +131,8 @@ public readonly record struct EasingCurve(EasingKind Kind, double X1, double Y1,
 
                 var rest = (-2 * t) + 2;
                 return 1 - (rest * rest * rest / 2);
+            case EasingKind.InOutSine:
+                return (1 - Math.Cos(t * Math.PI)) / 2;
             case EasingKind.CubicBezier:
                 return SampleBezier(t);
             case EasingKind.Spring:

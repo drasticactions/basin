@@ -26,6 +26,10 @@ internal sealed class ShaderProgram
     public readonly int Source;
     public readonly int Output;
     public readonly int Tone;
+    public readonly int Corner;
+    public readonly int CornerOuter;
+    public readonly int Dimming;
+    public readonly int FinishSize;
 
     public ShaderProgram(GL gl, string vertexSource, string fragmentSource)
     {
@@ -70,6 +74,10 @@ internal sealed class ShaderProgram
         Source = gl.GetUniformLocation(Program, "u_source");
         Output = gl.GetUniformLocation(Program, "u_output");
         Tone = gl.GetUniformLocation(Program, "u_tone");
+        Corner = gl.GetUniformLocation(Program, "u_corner");
+        CornerOuter = gl.GetUniformLocation(Program, "u_cornerOuter");
+        Dimming = gl.GetUniformLocation(Program, "u_dimming");
+        FinishSize = gl.GetUniformLocation(Program, "u_finishSize");
     }
 
     public void Dispose(GL gl) => gl.DeleteProgram(Program);

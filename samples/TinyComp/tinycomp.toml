@@ -96,6 +96,12 @@ notifications = false        # slide in notifications
 
 # Window appearance.
 dim_inactive = false         # dim unfocused windows
+dim_strength = 25            # dim strength in percent, 10 to 90
+dim_panels = false           # dim inactive panels and docks
+dim_desktop = false          # dim the desktop window
+dim_keep_above = false       # dim inactive windows that stay above the others
+dim_by_group = true          # keep a window's dialogs bright with it, and dim them together
+dim_full_screen = true       # dim inactive full-screen windows
 drop_shadow  = false         # window shadows
 highlight    = false         # ghost unselected switcher cards
 blur_kernel  = "kawase"      # client background blur: kawase | vista (Aero glass, no strength) | smol (Gaussian)

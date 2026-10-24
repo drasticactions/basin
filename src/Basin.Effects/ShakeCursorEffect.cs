@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's shake cursor scale animation. It does not detect shakes or draw the cursor. The consumer reports shakes and reads <see cref="Magnification"/>.
+/// Runs the shake cursor scale animation. It does not detect shakes or draw the cursor. The consumer reports shakes and reads <see cref="Magnification"/>.
 /// </summary>
 public sealed class ShakeCursorEffect
 {

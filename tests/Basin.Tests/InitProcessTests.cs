@@ -23,6 +23,51 @@ public sealed class InitProcessTests : IDisposable
     }
 
     [Fact]
+    public void Stopping_a_group_that_already_exited_logs_no_error()
+    {
+        using var host = new CompositorTestHost();
+        var sink = new ErrorSink();
+        var previousSink = BasinLog.Sink;
+        var previousLevel = BasinLog.Level;
+        BasinLog.Sink = sink;
+        BasinLog.Level = BasinLogLevel.Trace;
+        try
+        {
+            var init = InitProcess.Start("sleep 0.2", "wayland-none", null, _log);
+            Assert.NotNull(init);
+            Assert.True(init!.WatchExit(host.Loop));
+            var deadline = Environment.TickCount64 + 5000;
+            while (init.ExitStatus is null && Environment.TickCount64 < deadline)
+            {
+                host.Loop.Dispatch(50);
+            }
+
+            Assert.NotNull(init.ExitStatus);
+
+            init.Stop(_log);
+            Assert.Empty(sink.Errors);
+        }
+        finally
+        {
+            BasinLog.Sink = previousSink;
+            BasinLog.Level = previousLevel;
+        }
+    }
+
+    private sealed class ErrorSink : IBasinLogSink
+    {
+        public List<string> Errors { get; } = [];
+
+        public void Write(BasinLogLevel level, string category, ReadOnlySpan<char> message)
+        {
+            if (level == BasinLogLevel.Error)
+            {
+                Errors.Add(message.ToString());
+            }
+        }
+    }
+
+    [Fact]
     public void No_init_file_finds_nothing_and_is_not_an_error()
     {
         var search = InitProcess.Find(["first", "second"], _log);

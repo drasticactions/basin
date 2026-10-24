@@ -1,7 +1,7 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// One step of the KWin blur strength table. The fifteen steps spread over four downsample bands.
+/// One step of the blur strength table. The fifteen steps spread over four downsample bands.
 /// </summary>
 /// <param name="Iterations">The number of downsample passes, from 1 to 4.</param>
 /// <param name="Offset">The dual-Kawase sample offset in texels.</param>

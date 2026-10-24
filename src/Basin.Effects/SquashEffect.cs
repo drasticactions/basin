@@ -4,7 +4,7 @@ using Basin.Scene;
 namespace Basin.Effects;
 
 /// <summary>
-/// Runs KWin's squash minimize animation. The window scales onto the icon rectangle, moves onto its center and can fade.
+/// Runs the squash minimize animation. The window scales onto the icon rectangle, moves onto its center and can fade.
 /// </summary>
 public sealed class SquashEffect
 {

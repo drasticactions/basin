@@ -10,7 +10,8 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
     private readonly PixelShaderUniformValue[] _values;
     private readonly PixelShaderUniformType[] _types;
     private readonly int[] _offsets;
-    private readonly Pipeline[] _pipelines = new Pipeline[4];
+    private readonly Pipeline[] _pipelines;
+    private readonly SharedModule _shared;
     private bool _disposed;
 
     internal readonly bool SamplesTexture;
@@ -23,6 +24,8 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
         _values = new PixelShaderUniformValue[uniforms.Length];
         _types = new PixelShaderUniformType[uniforms.Length];
         _offsets = new int[uniforms.Length];
+        _pipelines = new Pipeline[4];
+        _shared = new SharedModule();
         var cursor = 12;
         for (var i = 0; i < uniforms.Length; i++)
         {
@@ -46,6 +49,26 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
         }
 
         BasinCounters.Track();
+    }
+
+    private VulkanPixelShader(VulkanPixelShader source)
+    {
+        _renderer = source._renderer;
+        _module = source._module;
+        SamplesTexture = source.SamplesTexture;
+        _values = (PixelShaderUniformValue[])source._values.Clone();
+        _types = source._types;
+        _offsets = source._offsets;
+        _pipelines = source._pipelines;
+        _shared = source._shared;
+        _shared.References++;
+        BasinCounters.Track();
+    }
+
+    public IPixelShader? CreateInstance()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return new VulkanPixelShader(this);
     }
 
     public void SetUniforms(ReadOnlySpan<PixelShaderUniformValue> values)
@@ -113,6 +136,12 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
         }
 
         _disposed = true;
+        BasinCounters.Untrack();
+        if (--_shared.References > 0)
+        {
+            return;
+        }
+
         var vk = _renderer.Dev.Api;
         var device = _renderer.Dev.Device;
         for (var i = 0; i < _pipelines.Length; i++)
@@ -125,6 +154,10 @@ internal sealed unsafe class VulkanPixelShader : IPixelShader
         }
 
         vk.DestroyShaderModule(device, _module, null);
-        BasinCounters.Untrack();
+    }
+
+    private sealed class SharedModule
+    {
+        public int References { get; set; } = 1;
     }
 }

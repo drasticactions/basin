@@ -13,6 +13,7 @@ internal sealed class SkiaPixelShader : IPixelShader
     private readonly int _sizeOffset;
     private readonly int _srcOffset;
     private readonly byte[] _block;
+    private readonly SharedEffect _shared;
     private nint _shader;
     private float _width = -1f;
     private float _height = -1f;
@@ -35,6 +36,21 @@ internal sealed class SkiaPixelShader : IPixelShader
             _types[i] = uniforms[i].Type;
             _offsets[i] = OffsetOf(effect, uniforms[i].Name);
         }
+
+        _shared = new SharedEffect();
+    }
+
+    private SkiaPixelShader(SkiaPixelShader source)
+    {
+        _effect = source._effect;
+        SamplesTexture = source.SamplesTexture;
+        _types = source._types;
+        _offsets = source._offsets;
+        _sizeOffset = source._sizeOffset;
+        _srcOffset = source._srcOffset;
+        _block = (byte[])source._block.Clone();
+        _shared = source._shared;
+        _shared.References++;
     }
 
     internal static SkiaPixelShader Create(in PixelShaderSource source, ReadOnlySpan<PixelShaderUniform> uniforms)
@@ -44,6 +60,12 @@ internal sealed class SkiaPixelShader : IPixelShader
             ?? throw new InvalidOperationException($"pixel shader failed to compile: {errors}");
         SkiaCensus.Track(effect);
         return new SkiaPixelShader(effect, uniforms, source.SamplesTexture);
+    }
+
+    public IPixelShader? CreateInstance()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return new SkiaPixelShader(this);
     }
 
     public void SetUniforms(ReadOnlySpan<PixelShaderUniformValue> values)
@@ -176,7 +198,10 @@ internal sealed class SkiaPixelShader : IPixelShader
             _shader = 0;
         }
 
-        SkiaCensus.Release(_effect);
+        if (--_shared.References == 0)
+        {
+            SkiaCensus.Release(_effect);
+        }
     }
 
     private static string BuildSksl(string source, ReadOnlySpan<PixelShaderUniform> uniforms, bool samplesTexture)
@@ -212,5 +237,10 @@ internal sealed class SkiaPixelShader : IPixelShader
         builder.AppendLine(source);
         builder.AppendLine("half4 main(float2 coord) { return basin_pixel(coord); }");
         return builder.ToString();
+    }
+
+    private sealed class SharedEffect
+    {
+        public int References { get; set; } = 1;
     }
 }

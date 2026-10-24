@@ -1,7 +1,7 @@
 namespace Basin.Effects;
 
 /// <summary>
-/// Holds KWin's invert pixel shader in GLSL, SkSL and SPIR-V. It inverts in gamma 2.2 on straight alpha, so the midtones keep their contrast.
+/// Holds the invert pixel shader in GLSL, SkSL and SPIR-V. It inverts in gamma 2.2 on straight alpha, so the midtones keep their contrast.
 /// </summary>
 public static class InvertShader
 {
