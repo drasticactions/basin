@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwlr_screencopy_manager_v1</c> global. It copies output contents into client buffers and accumulates damage for copies that wait for damage.
 /// </summary>
-public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
+public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable, IZwlrScreencopyManagerV1Handler
 {
     private static readonly BasinLogger Log = BasinLog.For("capture");
 
@@ -173,7 +173,7 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new ZwlrScreencopyManagerV1Resource(client, version, id);
+        var manager = new ZwlrScreencopyManagerV1Resource(client, version, id, this);
         manager.Destroyed += (_, _) =>
         {
             foreach (var key in _accumulated.Keys.Where(k => k.Manager == manager).ToList())
@@ -181,49 +181,71 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
                 _accumulated.Remove(key);
             }
         };
-        manager.CaptureOutput += (_, e) =>
-        {
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            var frame = new ZwlrScreencopyFrameV1Resource(client, manager.Version, e.Frame);
-            if (output is null)
-            {
-                frame.SendFailed();
-                return;
-            }
-
-            var mode = output.CurrentMode;
-            _ = new Frame(
-                this,
-                frame,
-                output,
-                new Box(0, 0, mode.Width, mode.Height),
-                AccumulatorFor(manager, output),
-                e.OverlayCursor != 0);
-        };
-        manager.CaptureOutputRegion += (_, e) =>
-        {
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            var frame = new ZwlrScreencopyFrameV1Resource(client, manager.Version, e.Frame);
-            if (output is null)
-            {
-                frame.SendFailed();
-                return;
-            }
-
-            var mode = output.CurrentMode;
-            var physical = OutputProjection.For(output).Project(new Box(e.X, e.Y, e.Width, e.Height));
-            var x = Math.Clamp(physical.X, 0, mode.Width);
-            var y = Math.Clamp(physical.Y, 0, mode.Height);
-            var region = new Box(
-                x,
-                y,
-                Math.Clamp(physical.Width, 0, mode.Width - x),
-                Math.Clamp(physical.Height, 0, mode.Height - y));
-            _ = new Frame(this, frame, output, region, AccumulatorFor(manager, output), e.OverlayCursor != 0);
-        };
     }
 
-    private sealed class Frame
+    void IZwlrScreencopyManagerV1Handler.CaptureOutput(ZwlrScreencopyManagerV1Resource resource, in ZwlrScreencopyManagerV1Resource.CaptureOutputEventArgs args)
+    {
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        if (output is null)
+        {
+            new ZwlrScreencopyFrameV1Resource(resource.Client, resource.Version, args.Frame, IgnoredFrame.Instance).SendFailed();
+            return;
+        }
+
+        var mode = output.CurrentMode;
+        _ = new Frame(
+            this,
+            resource,
+            args.Frame,
+            output,
+            new Box(0, 0, mode.Width, mode.Height),
+            AccumulatorFor(resource, output),
+            args.OverlayCursor != 0);
+    }
+
+    void IZwlrScreencopyManagerV1Handler.CaptureOutputRegion(ZwlrScreencopyManagerV1Resource resource, in ZwlrScreencopyManagerV1Resource.CaptureOutputRegionEventArgs args)
+    {
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        if (output is null)
+        {
+            new ZwlrScreencopyFrameV1Resource(resource.Client, resource.Version, args.Frame, IgnoredFrame.Instance).SendFailed();
+            return;
+        }
+
+        var mode = output.CurrentMode;
+        var physical = OutputProjection.For(output).Project(new Box(args.X, args.Y, args.Width, args.Height));
+        var x = Math.Clamp(physical.X, 0, mode.Width);
+        var y = Math.Clamp(physical.Y, 0, mode.Height);
+        var region = new Box(
+            x,
+            y,
+            Math.Clamp(physical.Width, 0, mode.Width - x),
+            Math.Clamp(physical.Height, 0, mode.Height - y));
+        _ = new Frame(this, resource, args.Frame, output, region, AccumulatorFor(resource, output), args.OverlayCursor != 0);
+    }
+
+    void IZwlrScreencopyManagerV1Handler.Destroy(ZwlrScreencopyManagerV1Resource resource)
+    {
+    }
+
+    private sealed class IgnoredFrame : IZwlrScreencopyFrameV1Handler
+    {
+        public static readonly IgnoredFrame Instance = new();
+
+        void IZwlrScreencopyFrameV1Handler.Copy(ZwlrScreencopyFrameV1Resource resource, in ZwlrScreencopyFrameV1Resource.CopyEventArgs args)
+        {
+        }
+
+        void IZwlrScreencopyFrameV1Handler.CopyWithDamage(ZwlrScreencopyFrameV1Resource resource, in ZwlrScreencopyFrameV1Resource.CopyWithDamageEventArgs args)
+        {
+        }
+
+        void IZwlrScreencopyFrameV1Handler.Destroy(ZwlrScreencopyFrameV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class Frame : IZwlrScreencopyFrameV1Handler
     {
         private readonly ScreencopyManager _owner;
         private readonly ZwlrScreencopyFrameV1Resource _resource;
@@ -234,13 +256,15 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
 
         public Frame(
             ScreencopyManager owner,
-            ZwlrScreencopyFrameV1Resource resource,
+            ZwlrScreencopyManagerV1Resource manager,
+            uint id,
             IOutput output,
             Box region,
             Accumulator accumulator,
             bool overlayCursor)
         {
             _owner = owner;
+            var resource = new ZwlrScreencopyFrameV1Resource(manager.Client, manager.Version, id, this);
             _resource = resource;
             Output = output;
             _region = region;
@@ -258,12 +282,20 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
                 resource.SendBufferDone();
             }
 
-            resource.Copy += (_, e) => OnCopy(e.BufferHandle, withDamage: false);
-            resource.CopyWithDamage += (_, e) => OnCopy(e.BufferHandle, withDamage: true);
             resource.Destroyed += (_, _) => _owner._waiting.Remove(this);
         }
 
         public IOutput Output { get; }
+
+        void IZwlrScreencopyFrameV1Handler.Copy(ZwlrScreencopyFrameV1Resource resource, in ZwlrScreencopyFrameV1Resource.CopyEventArgs args) =>
+            OnCopy(args.BufferHandle, withDamage: false);
+
+        void IZwlrScreencopyFrameV1Handler.CopyWithDamage(ZwlrScreencopyFrameV1Resource resource, in ZwlrScreencopyFrameV1Resource.CopyWithDamageEventArgs args) =>
+            OnCopy(args.BufferHandle, withDamage: true);
+
+        void IZwlrScreencopyFrameV1Handler.Destroy(ZwlrScreencopyFrameV1Resource resource)
+        {
+        }
 
         private void OnCopy(nint bufferHandle, bool withDamage)
         {

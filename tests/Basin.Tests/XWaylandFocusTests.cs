@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Basin.XWayland;
+using Wayland;
+using Xcb.Native;
 using Xunit;
 
 namespace Basin.Tests;
@@ -52,14 +55,16 @@ public sealed class XWaylandFocusTests
 
     private sealed class Rig : IDisposable
     {
-        public Rig()
+        public Rig(bool knowsClient = false)
         {
             Host = new CompositorTestHost();
             Shell = new XwaylandShellGlobal(Host.Display, Host.Compositor);
             Server = new XWaylandServer(Host.Display, Host.Loop);
             Server.Ready += fd =>
             {
-                Wm = new XWaylandWm(fd, Host.Loop, Shell, Host.Seat);
+                Wm = knowsClient
+                    ? new XWaylandWm(fd, Host.Loop, Shell, Host.Seat, new XWaylandWmOptions(), Server.Client)
+                    : new XWaylandWm(fd, Host.Loop, Shell, Host.Seat);
                 Wm.WindowMapped += Mapped.Add;
             };
         }
@@ -185,6 +190,182 @@ public sealed class XWaylandFocusTests
         using var client = new FocusClient(rig.Server.DisplayName, "stub");
         XWaylandTestSupport.Pump(rig.Host, () => stub is not null);
         Assert.True(stub!.IsOffscreenStub);
+    }
+
+    private sealed unsafe class FocusProbe : IDisposable
+    {
+        private readonly xcb_connection_t* _conn;
+        private readonly uint _root;
+        private readonly uint _activeAtom;
+
+        public FocusProbe(string display)
+        {
+            var bytes = System.Text.Encoding.ASCII.GetBytes(display + "\0");
+            fixed (byte* ptr = bytes)
+            {
+                _conn = Libxcb.xcb_connect((sbyte*)ptr, null);
+            }
+
+            Assert.Equal(0, Libxcb.xcb_connection_has_error(_conn));
+            _root = Libxcb.xcb_setup_roots_iterator(Libxcb.xcb_get_setup(_conn)).data->root;
+            var name = "_NET_ACTIVE_WINDOW"u8;
+            fixed (byte* ptr = name)
+            {
+                var reply = Libxcb.xcb_intern_atom_reply(_conn, Libxcb.xcb_intern_atom(_conn, 0, (ushort)name.Length, (sbyte*)ptr), null);
+                _activeAtom = reply->atom;
+                NativeMemory.Free(reply);
+            }
+        }
+
+        public uint InputFocus
+        {
+            get
+            {
+                var reply = Libxcb.xcb_get_input_focus_reply(_conn, Libxcb.xcb_get_input_focus(_conn), null);
+                Assert.True(reply != null);
+                var focus = reply->focus;
+                NativeMemory.Free(reply);
+                return focus;
+            }
+        }
+
+        public uint ActiveWindow
+        {
+            get
+            {
+                var reply = Libxcb.xcb_get_property_reply(_conn, Libxcb.xcb_get_property(_conn, 0, _root, _activeAtom, 33, 0, 1), null);
+                Assert.True(reply != null);
+                var value = Libxcb.xcb_get_property_value_length(reply) >= 4 ? *(uint*)Libxcb.xcb_get_property_value(reply) : 0u;
+                NativeMemory.Free(reply);
+                return value;
+            }
+        }
+
+        public void Dispose() => Libxcb.xcb_disconnect(_conn);
+    }
+
+    private const uint KeyA = 30;
+
+    private static void Focus(Rig rig, XWaylandWindow window)
+    {
+        window.Activate();
+        rig.Host.Seat.Keyboard.NotifyEnter(window.Surface);
+    }
+
+    private static void AssertXFocus(Rig rig, FocusProbe probe, uint window)
+    {
+        XWaylandTestSupport.Pump(rig.Host, () => probe.InputFocus == window && probe.ActiveWindow == window);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_native_window_taking_the_keyboard_moves_the_X_focus_to_none_after_its_enter(bool knowsClient)
+    {
+        XWaylandClassTests.SkipWithoutX11Focus();
+        using var rig = new Rig(knowsClient);
+        using var client = new FocusClient(rig.Server.DisplayName, "normal");
+        var x = rig.WaitMapped(1);
+        Assert.Equal(knowsClient, rig.Wm!.Client is not null);
+        using var probe = new FocusProbe(rig.Server.DisplayName);
+        var native = MappedToplevel.Map(rig.Host, rig.Host.Client);
+        var keyboard = rig.Host.Client.Seat!.GetKeyboard();
+        var enters = 0;
+        keyboard.Enter += (_, e) =>
+        {
+            if (e.Surface == native.Surface)
+            {
+                enters++;
+            }
+        };
+        rig.Host.PumpToClient();
+
+        Focus(rig, x);
+        AssertXFocus(rig, probe, x.WindowId);
+
+        rig.Host.Seat.Keyboard.NotifyEnter(native.ServerSurface);
+        Assert.Equal(0, rig.Wm!.FocusReleaseRuns);
+        Assert.Equal(x.WindowId, probe.InputFocus);
+        rig.Host.Display.FlushClients();
+        rig.Host.Client.Display.Dispatch();
+        Assert.Equal(1, enters);
+        Assert.Equal(0, rig.Wm.FocusReleaseRuns);
+        Assert.Equal(x.WindowId, probe.InputFocus);
+
+        XWaylandTestSupport.Pump(rig.Host, () => rig.Wm.FocusReleaseRuns == 1);
+        Assert.Equal(0u, probe.InputFocus);
+        Assert.Equal(0u, probe.ActiveWindow);
+
+        Focus(rig, x);
+        AssertXFocus(rig, probe, x.WindowId);
+        rig.Host.Seat.Keyboard.NotifyKey(1, KeyA, true);
+        rig.Host.Seat.Keyboard.NotifyKey(2, KeyA, false);
+        XWaylandTestSupport.Pump(rig.Host, () => client.Count($"KEY {KeyA + 8}") == 1);
+        rig.PumpFor(100);
+        Assert.Equal(1, rig.Wm.FocusReleaseRuns);
+    }
+
+    [Fact]
+    public void Focus_that_returns_to_X_before_the_release_runs_stays_on_the_X_window()
+    {
+        XWaylandClassTests.SkipWithoutX11Focus();
+        using var rig = new Rig();
+        using var client = new FocusClient(rig.Server.DisplayName, "normal");
+        var x = rig.WaitMapped(1);
+        using var probe = new FocusProbe(rig.Server.DisplayName);
+        var native = MappedToplevel.Map(rig.Host, rig.Host.Client);
+
+        Focus(rig, x);
+        AssertXFocus(rig, probe, x.WindowId);
+
+        rig.Host.Seat.Keyboard.NotifyEnter(native.ServerSurface);
+        Focus(rig, x);
+        rig.PumpFor(200);
+        Assert.Equal(0, rig.Wm!.FocusReleaseRuns);
+        Assert.Equal(x.WindowId, probe.InputFocus);
+        Assert.Equal(x.WindowId, probe.ActiveWindow);
+    }
+
+    [Fact]
+    public void Focus_moving_between_two_X_windows_never_arms_the_release()
+    {
+        XWaylandClassTests.SkipWithoutX11Focus();
+        using var rig = new Rig();
+        using var first = new FocusClient(rig.Server.DisplayName, "normal");
+        var a = rig.WaitMapped(1);
+        using var second = new FocusClient(rig.Server.DisplayName, "normal");
+        var b = rig.WaitMapped(2);
+        using var probe = new FocusProbe(rig.Server.DisplayName);
+
+        Focus(rig, a);
+        AssertXFocus(rig, probe, a.WindowId);
+        Focus(rig, b);
+        AssertXFocus(rig, probe, b.WindowId);
+        Focus(rig, a);
+        AssertXFocus(rig, probe, a.WindowId);
+        rig.PumpFor(200);
+        Assert.Equal(0, rig.Wm!.FocusReleaseRuns);
+        Assert.Equal(a.WindowId, probe.InputFocus);
+    }
+
+    [Fact]
+    public void Clearing_the_keyboard_focus_moves_the_X_focus_to_none()
+    {
+        XWaylandClassTests.SkipWithoutX11Focus();
+        using var rig = new Rig();
+        using var client = new FocusClient(rig.Server.DisplayName, "normal");
+        var x = rig.WaitMapped(1);
+        using var probe = new FocusProbe(rig.Server.DisplayName);
+
+        Focus(rig, x);
+        AssertXFocus(rig, probe, x.WindowId);
+
+        rig.Host.Seat.Keyboard.NotifyClearFocus();
+        XWaylandTestSupport.Pump(rig.Host, () => rig.Wm!.FocusReleaseRuns == 1);
+        Assert.Equal(0u, probe.InputFocus);
+        Assert.Equal(0u, probe.ActiveWindow);
+        rig.PumpFor(200);
+        Assert.Equal(0u, probe.InputFocus);
     }
 
     [Fact]

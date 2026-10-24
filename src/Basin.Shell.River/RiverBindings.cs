@@ -4,7 +4,7 @@ using Xkb;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverBindings : IDisposable
+internal sealed class RiverBindings : IDisposable, IRiverXkbBindingsV1Handler
 {
     private readonly RiverWindowManager _manager;
     private readonly WlGlobal _global;
@@ -217,82 +217,67 @@ internal sealed class RiverBindings : IDisposable
     {
         if (!_seats.TryGetValue(seat, out var state))
         {
-            state = new BindingSeat();
+            state = new BindingSeat(_manager, seat);
             _seats[seat] = state;
         }
 
         return state;
     }
 
+    internal void ForgetBinding(RiverKeyBinding binding) => _bindings.Remove(binding);
+
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new RiverXkbBindingsV1Resource(client, version, id);
+        var resource = new RiverXkbBindingsV1Resource(client, version, id, this);
         _resource = resource;
 
-        resource.GetXkbBinding += (_, e) =>
-        {
-            if (_manager.ResolveSeat(e.Seat) is not { } seat)
-            {
-                return;
-            }
-
-            var bindingResource = new RiverXkbBindingV1Resource(client, version, e.Id);
-            var binding = new RiverKeyBinding(_manager, seat, bindingResource, e.Keysym, e.Modifiers);
-            _bindings.Add(binding);
-            bindingResource.DestroyRequest += (_, _) => _bindings.Remove(binding);
-        };
-
-        resource.GetSeat += (_, e) =>
-        {
-            if (_manager.ResolveSeat(e.Seat) is not { } seat)
-            {
-                return;
-            }
-
-            var seatState = SeatStateFor(seat);
-            if (seatState.Resource is { IsDestroyed: false })
-            {
-                resource.PostError(
-                    (uint)RiverXkbBindingsV1.Error.ObjectAlreadyCreated,
-                    "This seat already has a river_xkb_bindings_seat_v1.");
-                return;
-            }
-
-            var seatResource = new RiverXkbBindingsSeatV1Resource(client, version, e.Id);
-            seatState.Resource = seatResource;
-            seatState.LastModifiers = RiverModifiers.From(seat.Seat.Keyboard);
-
-            seatResource.EnsureNextKeyEaten += (_, _) =>
-            {
-                if (_manager.EnsureWindowing())
-                {
-                    seatState.EatenPending = true;
-                }
-            };
-            seatResource.CancelEnsureNextKeyEaten += (_, _) =>
-            {
-                if (_manager.EnsureWindowing())
-                {
-                    seatState.EatenPending = false;
-                }
-            };
-            seatResource.ModifiersWatch += (_, e2) =>
-            {
-                if (_manager.EnsureWindowing())
-                {
-                    seatState.Watched = e2.Modifiers;
-                    seatState.LastModifiers = RiverModifiers.From(seat.Seat.Keyboard);
-                }
-            };
-            seatResource.DestroyRequest += (_, _) => seatState.Resource = null;
-        };
-
-        resource.DestroyRequest += (_, _) => _resource = null;
         resource.Destroyed += (_, _) => _resource = null;
     }
 
-    private sealed class BindingSeat
+    void IRiverXkbBindingsV1Handler.GetXkbBinding(RiverXkbBindingsV1Resource resource, in RiverXkbBindingsV1Resource.GetXkbBindingEventArgs args)
     {
+        if (_manager.ResolveSeat(args.Seat) is not { } seat)
+        {
+            return;
+        }
+
+        var binding = new RiverKeyBinding(_manager, this, seat, resource.Client, resource.Version, args.Id, args.Keysym, args.Modifiers);
+        _bindings.Add(binding);
+    }
+
+    void IRiverXkbBindingsV1Handler.GetSeat(RiverXkbBindingsV1Resource resource, in RiverXkbBindingsV1Resource.GetSeatEventArgs args)
+    {
+        if (_manager.ResolveSeat(args.Seat) is not { } seat)
+        {
+            return;
+        }
+
+        var seatState = SeatStateFor(seat);
+        if (seatState.Resource is { IsDestroyed: false })
+        {
+            resource.PostError(
+                (uint)RiverXkbBindingsV1.Error.ObjectAlreadyCreated,
+                "This seat already has a river_xkb_bindings_seat_v1.");
+            return;
+        }
+
+        seatState.Resource = new RiverXkbBindingsSeatV1Resource(resource.Client, resource.Version, args.Id, seatState);
+        seatState.LastModifiers = RiverModifiers.From(seat.Seat.Keyboard);
+    }
+
+    void IRiverXkbBindingsV1Handler.Destroy(RiverXkbBindingsV1Resource resource) => _resource = null;
+
+    private sealed class BindingSeat : IRiverXkbBindingsSeatV1Handler
+    {
+        private readonly RiverWindowManager _manager;
+        private readonly RiverSeat _seat;
+
+        public BindingSeat(RiverWindowManager manager, RiverSeat seat)
+        {
+            _manager = manager;
+            _seat = seat;
+        }
+
         public RiverXkbBindingsSeatV1Resource? Resource { get; set; }
 
         public Dictionary<uint, RiverKeyBinding> Held { get; } = [];
@@ -304,5 +289,32 @@ internal sealed class RiverBindings : IDisposable
         public RiverSeatV1.Modifiers Watched { get; set; }
 
         public RiverSeatV1.Modifiers LastModifiers { get; set; }
+
+        void IRiverXkbBindingsSeatV1Handler.EnsureNextKeyEaten(RiverXkbBindingsSeatV1Resource resource)
+        {
+            if (_manager.EnsureWindowing())
+            {
+                EatenPending = true;
+            }
+        }
+
+        void IRiverXkbBindingsSeatV1Handler.CancelEnsureNextKeyEaten(RiverXkbBindingsSeatV1Resource resource)
+        {
+            if (_manager.EnsureWindowing())
+            {
+                EatenPending = false;
+            }
+        }
+
+        void IRiverXkbBindingsSeatV1Handler.ModifiersWatch(RiverXkbBindingsSeatV1Resource resource, in RiverXkbBindingsSeatV1Resource.ModifiersWatchEventArgs args)
+        {
+            if (_manager.EnsureWindowing())
+            {
+                Watched = args.Modifiers;
+                LastModifiers = RiverModifiers.From(_seat.Seat.Keyboard);
+            }
+        }
+
+        void IRiverXkbBindingsSeatV1Handler.Destroy(RiverXkbBindingsSeatV1Resource resource) => Resource = null;
     }
 }

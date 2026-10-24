@@ -12,7 +12,7 @@ namespace Basin;
 /// <summary>
 /// Serves <c>zwp_linux_dmabuf_v1</c>: dmabuf buffer import, the format table, and default and per-surface feedback.
 /// </summary>
-public sealed class LinuxDmabufGlobal : IDisposable
+public sealed class LinuxDmabufGlobal : IDisposable, IZwpLinuxDmabufV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -192,7 +192,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new ZwpLinuxDmabufV1Resource(client, version, id);
+        var resource = new ZwpLinuxDmabufV1Resource(client, version, id, this);
 
         if (version < 4)
         {
@@ -211,27 +211,31 @@ public sealed class LinuxDmabufGlobal : IDisposable
 #pragma warning restore CS0618
         }
 
-        resource.CreateParams += (_, e) =>
-        {
-            var paramsResource = new ZwpLinuxBufferParamsV1Resource(client, resource.Version, e.ParamsId);
-            _ = new BufferParams(this, paramsResource);
-        };
+    }
 
-        resource.GetDefaultFeedback += (_, e) => SendFeedback(new ZwpLinuxDmabufFeedbackV1Resource(client, resource.Version, e.Id), scanoutIndices: null);
-        resource.GetSurfaceFeedback += (_, e) =>
+    void IZwpLinuxDmabufV1Handler.Destroy(ZwpLinuxDmabufV1Resource resource)
+    {
+    }
+
+    void IZwpLinuxDmabufV1Handler.CreateParams(ZwpLinuxDmabufV1Resource resource, in ZwpLinuxDmabufV1Resource.CreateParamsEventArgs args) =>
+        _ = new BufferParams(this, resource.Client, resource.Version, args.ParamsId);
+
+    void IZwpLinuxDmabufV1Handler.GetDefaultFeedback(ZwpLinuxDmabufV1Resource resource, in ZwpLinuxDmabufV1Resource.GetDefaultFeedbackEventArgs args) =>
+        SendFeedback(new ZwpLinuxDmabufFeedbackV1Resource(resource.Client, resource.Version, args.Id), scanoutIndices: null);
+
+    void IZwpLinuxDmabufV1Handler.GetSurfaceFeedback(ZwpLinuxDmabufV1Resource resource, in ZwpLinuxDmabufV1Resource.GetSurfaceFeedbackEventArgs args)
+    {
+        var feedback = new ZwpLinuxDmabufFeedbackV1Resource(resource.Client, resource.Version, args.Id);
+        var surface = _compositor?.ResolveSurface(args.Surface);
+        if (surface is not null)
         {
-            var feedback = new ZwpLinuxDmabufFeedbackV1Resource(client, resource.Version, e.Id);
-            var surface = _compositor?.ResolveSurface(e.Surface);
-            if (surface is not null)
-            {
-                TrackSurfaceFeedback(surface, feedback);
-                SendFeedback(feedback, _scanoutTranches.TryGetValue(surface, out var indices) ? indices : null);
-            }
-            else
-            {
-                SendFeedback(feedback, scanoutIndices: null);
-            }
-        };
+            TrackSurfaceFeedback(surface, feedback);
+            SendFeedback(feedback, _scanoutTranches.TryGetValue(surface, out var indices) ? indices : null);
+        }
+        else
+        {
+            SendFeedback(feedback, scanoutIndices: null);
+        }
     }
 
     /// <summary>
@@ -429,7 +433,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
             ? devT
             : throw new InvalidOperationException($"The device '{devicePath}' has no dev_t. Give the path of a DRM device node.");
 
-    private sealed class BufferParams
+    private sealed class BufferParams : IZwpLinuxBufferParamsV1Handler
     {
         private const int PlaneLimit = 4;
 
@@ -445,21 +449,33 @@ public sealed class LinuxDmabufGlobal : IDisposable
         private IRemoteImage? _image;
         private int _imageSlot = -1;
 
-        internal BufferParams(LinuxDmabufGlobal owner, ZwpLinuxBufferParamsV1Resource resource)
+        internal BufferParams(LinuxDmabufGlobal owner, WlClient client, uint version, uint id)
         {
             _owner = owner;
-            _resource = resource;
+            _resource = new ZwpLinuxBufferParamsV1Resource(client, version, id, this);
             for (var plane = 0; plane < PlaneLimit; plane++)
             {
                 _fds[plane] = -1;
             }
 
-            resource.Add += (_, e) => OnAdd(e);
-            resource.SetSamplingDevice += (_, e) => OnSetSamplingDevice(e.Device);
-            resource.Create += (_, e) => OnCreate(e.Width, e.Height, (uint)e.Format, immedId: null);
-            resource.CreateImmed += (_, e) => OnCreate(e.Width, e.Height, (uint)e.Format, e.BufferId);
-            resource.Destroyed += (_, _) => CloseUnclaimedFds();
+            _resource.Destroyed += (_, _) => CloseUnclaimedFds();
         }
+
+        void IZwpLinuxBufferParamsV1Handler.Destroy(ZwpLinuxBufferParamsV1Resource resource)
+        {
+        }
+
+        void IZwpLinuxBufferParamsV1Handler.Add(ZwpLinuxBufferParamsV1Resource resource, in ZwpLinuxBufferParamsV1Resource.AddEventArgs args) =>
+            OnAdd(in args);
+
+        void IZwpLinuxBufferParamsV1Handler.SetSamplingDevice(ZwpLinuxBufferParamsV1Resource resource, in ZwpLinuxBufferParamsV1Resource.SetSamplingDeviceEventArgs args) =>
+            OnSetSamplingDevice(args.Device);
+
+        void IZwpLinuxBufferParamsV1Handler.Create(ZwpLinuxBufferParamsV1Resource resource, in ZwpLinuxBufferParamsV1Resource.CreateEventArgs args) =>
+            OnCreate(args.Width, args.Height, (uint)args.Format, immedId: null);
+
+        void IZwpLinuxBufferParamsV1Handler.CreateImmed(ZwpLinuxBufferParamsV1Resource resource, in ZwpLinuxBufferParamsV1Resource.CreateImmedEventArgs args) =>
+            OnCreate(args.Width, args.Height, (uint)args.Format, args.BufferId);
 
         private void OnSetSamplingDevice(byte[] device)
         {
@@ -474,11 +490,11 @@ public sealed class LinuxDmabufGlobal : IDisposable
             _samplingDevice = BitConverter.ToUInt64(device);
         }
 
-        private void OnAdd(ZwpLinuxBufferParamsV1Resource.AddEventArgs e)
+        private void OnAdd(in ZwpLinuxBufferParamsV1Resource.AddEventArgs e)
         {
             if (_resource.Client.FdSlots is { } slots)
             {
-                OnAddToken(slots, e);
+                OnAddToken(slots, in e);
                 return;
             }
 
@@ -522,7 +538,7 @@ public sealed class LinuxDmabufGlobal : IDisposable
             _planeCount++;
         }
 
-        private void OnAddToken(Wayland.Server.IFdSlotTable slots, ZwpLinuxBufferParamsV1Resource.AddEventArgs e)
+        private void OnAddToken(Wayland.Server.IFdSlotTable slots, in ZwpLinuxBufferParamsV1Resource.AddEventArgs e)
         {
             object? payload;
             try

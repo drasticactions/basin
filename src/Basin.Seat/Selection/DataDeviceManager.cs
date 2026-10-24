@@ -7,7 +7,7 @@ namespace Basin.Seat;
 /// <summary>
 /// Advertises the <c>wl_data_device_manager</c> global, creates data sources and binds each data device to its seat.
 /// </summary>
-public sealed class DataDeviceManager : IDisposable
+public sealed class DataDeviceManager : IDisposable, IWlDataDeviceManagerHandler
 {
     /// <summary>
     /// The highest <c>wl_data_device_manager</c> version that the global advertises.
@@ -53,26 +53,28 @@ public sealed class DataDeviceManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new WlDataDeviceManagerResource(client, version, id);
+        _ = new WlDataDeviceManagerResource(client, version, id, this);
+    }
 
-        manager.CreateDataSource += (_, e) =>
+    void IWlDataDeviceManagerHandler.CreateDataSource(WlDataDeviceManagerResource resource, in WlDataDeviceManagerResource.CreateDataSourceEventArgs args) =>
+        DataSourceRegistry.Register(new DataSource(resource.Client, resource.Version, args.Id));
+
+    void IWlDataDeviceManagerHandler.GetDataDevice(WlDataDeviceManagerResource resource, in WlDataDeviceManagerResource.GetDataDeviceEventArgs args)
+    {
+        if (Resolve(args.Seat) is not { } seat)
         {
-            var resource = new WlDataSourceResource(client, manager.Version, e.Id);
-            DataSourceRegistry.Register(new DataSource(resource));
-        };
+            resource.PostError(0, "unknown seat");
+            return;
+        }
 
-        manager.GetDataDevice += (_, e) =>
-        {
-            if (Resolve(e.Seat) is not { } seat)
-            {
-                manager.PostError(0, "unknown seat");
-                return;
-            }
+        var client = resource.Client;
+        var seatClient = seat.ClientFor(client);
+        var device = new WlDataDeviceResource(client, resource.Version, args.Id, seatClient);
+        seatClient.AddDataDevice(device);
+        seat.DataDevice.WireDevice(seatClient);
+    }
 
-            var device = new WlDataDeviceResource(client, manager.Version, e.Id);
-            var seatClient = seat.ClientFor(client);
-            seatClient.AddDataDevice(device);
-            seat.DataDevice.WireDevice(seatClient, device);
-        };
+    void IWlDataDeviceManagerHandler.Release(WlDataDeviceManagerResource resource)
+    {
     }
 }

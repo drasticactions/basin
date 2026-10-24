@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>ext_session_lock_manager_v1</c> global. It allows one lock at a time, and sends <c>locked</c> after each enabled output commits a frame.
 /// </summary>
-public sealed class SessionLockManager : IDisposable
+public sealed class SessionLockManager : IDisposable, IExtSessionLockManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -79,75 +79,41 @@ public sealed class SessionLockManager : IDisposable
         _global.Dispose();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ExtSessionLockManagerV1Resource(client, version, id, this);
+
+    void IExtSessionLockManagerV1Handler.Destroy(ExtSessionLockManagerV1Resource resource)
     {
-        var manager = new ExtSessionLockManagerV1Resource(client, version, id);
-        manager.Lock += (_, e) =>
+    }
+
+    void IExtSessionLockManagerV1Handler.Lock(ExtSessionLockManagerV1Resource resource, in ExtSessionLockManagerV1Resource.LockEventArgs args)
+    {
+        var sessionLock = new SessionLock(this, resource.Client, resource.Version, args.Id);
+        var lockResource = sessionLock.Resource;
+        if (_activeLock is not null && !_activeLock.IsDestroyed)
         {
-            var lockResource = new ExtSessionLockV1Resource(client, manager.Version, e.Id);
-            if (_activeLock is not null && !_activeLock.IsDestroyed)
-            {
-                lockResource.SendFinished();
-                return;
-            }
+            lockResource.SendFinished();
+            return;
+        }
 
-            _activeLock = lockResource;
-            var wasLocked = IsLocked;
-            IsLocked = true;
-            if (!wasLocked)
-            {
-                LockRequested?.Invoke();
-            }
+        _activeLock = lockResource;
+        var wasLocked = IsLocked;
+        IsLocked = true;
+        if (!wasLocked)
+        {
+            LockRequested?.Invoke();
+        }
 
-            if (IsPresentedLocked)
-            {
-                lockResource.SendLocked();
-            }
-            else
-            {
-                BeginWaiting();
-            }
+        if (IsPresentedLocked)
+        {
+            lockResource.SendLocked();
+        }
+        else
+        {
+            BeginWaiting();
+        }
 
-            var unlocked = false;
-            lockResource.UnlockAndDestroy += (_, _) =>
-            {
-                unlocked = true;
-                CancelWaiters();
-                IsLocked = false;
-                _activeLock = null;
-                IsPresentedLocked = false;
-                Unlocked?.Invoke();
-            };
-            lockResource.Destroyed += (_, _) =>
-            {
-                if (!unlocked && ReferenceEquals(_activeLock, lockResource))
-                {
-                    CancelWaiters();
-                    _activeLock = null;
-                    Abandoned?.Invoke();
-                }
-            };
-            lockResource.GetLockSurface += (_, se) =>
-            {
-                var surface = _compositor.ResolveSurface(se.Surface);
-                var output = OutputGlobal.FromResource(se.Output);
-                var surfaceResource = new ExtSessionLockSurfaceV1Resource(client, lockResource.Version, se.Id);
-                if (surface is null || output is null)
-                {
-                    return;
-                }
-
-                if (!surface.CanSetRole(LockSurface.RoleName))
-                {
-                    lockResource.PostError((uint)ExtSessionLockV1.Error.Role, "The surface already has a role.");
-                    return;
-                }
-
-                var lockSurface = new LockSurface(_display, surface, surfaceResource, output);
-                surface.TrySetRole(LockSurface.RoleName, lockSurface);
-                NewLockSurface?.Invoke(lockSurface);
-            };
-        };
+        sessionLock.Activate();
     }
 
     private void BeginWaiting()
@@ -251,5 +217,82 @@ public sealed class SessionLockManager : IDisposable
         }
 
         private void OnDestroyed() => _owner.Complete(this);
+    }
+
+    private sealed class SessionLock : IExtSessionLockV1Handler
+    {
+        private readonly SessionLockManager _owner;
+        private bool _active;
+        private bool _unlocked;
+
+        public SessionLock(SessionLockManager owner, WlClient client, uint version, uint id)
+        {
+            _owner = owner;
+            Resource = new ExtSessionLockV1Resource(client, version, id, this);
+        }
+
+        public ExtSessionLockV1Resource Resource { get; }
+
+        public void Activate()
+        {
+            _active = true;
+            Resource.Destroyed += OnDestroyed;
+        }
+
+        void IExtSessionLockV1Handler.Destroy(ExtSessionLockV1Resource resource)
+        {
+        }
+
+        void IExtSessionLockV1Handler.UnlockAndDestroy(ExtSessionLockV1Resource resource)
+        {
+            if (!_active)
+            {
+                return;
+            }
+
+            _unlocked = true;
+            _owner.CancelWaiters();
+            _owner.IsLocked = false;
+            _owner._activeLock = null;
+            _owner.IsPresentedLocked = false;
+            _owner.Unlocked?.Invoke();
+        }
+
+        void IExtSessionLockV1Handler.GetLockSurface(ExtSessionLockV1Resource resource, in ExtSessionLockV1Resource.GetLockSurfaceEventArgs args)
+        {
+            if (!_active)
+            {
+                return;
+            }
+
+            var surface = _owner._compositor.ResolveSurface(args.Surface);
+            var output = OutputGlobal.FromResource(args.Output);
+            if (surface is null || output is null)
+            {
+                _ = new ExtSessionLockSurfaceV1Resource(resource.Client, resource.Version, args.Id);
+                return;
+            }
+
+            if (!surface.CanSetRole(LockSurface.RoleName))
+            {
+                _ = new ExtSessionLockSurfaceV1Resource(resource.Client, resource.Version, args.Id);
+                resource.PostError((uint)ExtSessionLockV1.Error.Role, "The surface already has a role.");
+                return;
+            }
+
+            var lockSurface = new LockSurface(_owner._display, surface, resource.Client, resource.Version, args.Id, output);
+            surface.TrySetRole(LockSurface.RoleName, lockSurface);
+            _owner.NewLockSurface?.Invoke(lockSurface);
+        }
+
+        private void OnDestroyed(object? sender, EventArgs e)
+        {
+            if (!_unlocked && ReferenceEquals(_owner._activeLock, Resource))
+            {
+                _owner.CancelWaiters();
+                _owner._activeLock = null;
+                _owner.Abandoned?.Invoke();
+            }
+        }
     }
 }

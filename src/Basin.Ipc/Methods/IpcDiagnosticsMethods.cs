@@ -51,6 +51,19 @@ internal static class IpcDiagnosticsMethods
             });
         }
 
+        if (describe.Find<IExplicitSyncDiagnostics>() is { } explicitSync)
+        {
+            server.Methods.RegisterLibrary(IpcMethodNames.DiagSyncobj, (ref IpcParams _, IpcReply reply) =>
+            {
+                var c = explicitSync.Counters;
+                reply.Write(
+                    new IpcDiagSyncobj(
+                        c.ManagedCommits, c.ExplicitCommits, c.ParkedAcquires, c.UnparkedAcquires,
+                        c.LateAcquires, c.UnexportableAcquires, c.DeferredReleases, c.SupersededReleases, c.DiscardedReleases),
+                    IpcJsonContext.Default.IpcDiagSyncobj);
+            });
+        }
+
         if (describe.Find<IUIElementLocator>() is { } locator)
         {
             server.Methods.RegisterLibrary(IpcMethodNames.DiagElement, (ref IpcParams parameters, IpcReply reply) =>

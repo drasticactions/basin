@@ -22,10 +22,39 @@ public sealed class ForeignToplevelListManager : IToplevelObserver, IDisposable
     private readonly Dictionary<ulong, Tracked> _toplevels = [];
     private int _identifierCounter;
 
-    private sealed class Binding
+    private sealed class Binding : IExtForeignToplevelListV1Handler
     {
-        public required ExtForeignToplevelListV1Resource List;
-        public bool Stopped;
+        public Binding(WlClient client, uint version, uint id)
+        {
+            List = new ExtForeignToplevelListV1Resource(client, version, id, this);
+        }
+
+        public ExtForeignToplevelListV1Resource List { get; }
+
+        public bool Stopped { get; private set; }
+
+        void IExtForeignToplevelListV1Handler.Stop(ExtForeignToplevelListV1Resource resource)
+        {
+            Stopped = true;
+            List.SendFinished();
+        }
+
+        void IExtForeignToplevelListV1Handler.Destroy(ExtForeignToplevelListV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class IgnoredList : IExtForeignToplevelListV1Handler
+    {
+        public static readonly IgnoredList Instance = new();
+
+        void IExtForeignToplevelListV1Handler.Stop(ExtForeignToplevelListV1Resource resource)
+        {
+        }
+
+        void IExtForeignToplevelListV1Handler.Destroy(ExtForeignToplevelListV1Resource resource)
+        {
+        }
     }
 
     private sealed class Tracked
@@ -185,20 +214,15 @@ public sealed class ForeignToplevelListManager : IToplevelObserver, IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var list = new ExtForeignToplevelListV1Resource(client, version, id);
         if (_model is null)
         {
-            list.SendFinished();
+            new ExtForeignToplevelListV1Resource(client, version, id, IgnoredList.Instance).SendFinished();
             return;
         }
 
-        var binding = new Binding { List = list };
+        var binding = new Binding(client, version, id);
+        var list = binding.List;
         _lists.Add(binding);
-        list.Stop += (_, _) =>
-        {
-            binding.Stopped = true;
-            list.SendFinished();
-        };
         list.Destroyed += (_, _) => _lists.Remove(binding);
 
         foreach (var tracked in _toplevels.Values)

@@ -22,13 +22,86 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
     private readonly List<WorkspaceGroup> _groups = [];
     private readonly List<Workspace> _workspaces = [];
 
-    internal sealed class Binding
+    internal sealed class Binding : IExtWorkspaceManagerV1Handler
     {
-        public required ExtWorkspaceManagerV1Resource Manager;
-        public required Dictionary<WorkspaceGroup, ExtWorkspaceGroupHandleV1Resource> Groups;
-        public required Dictionary<Workspace, ExtWorkspaceHandleV1Resource> Workspaces;
-        public required List<Action> Pending;
-        public bool Stopped;
+        public Binding(WlClient client, uint version, uint id)
+        {
+            Manager = new ExtWorkspaceManagerV1Resource(client, version, id, this);
+        }
+
+        public ExtWorkspaceManagerV1Resource Manager { get; }
+
+        public Dictionary<WorkspaceGroup, ExtWorkspaceGroupHandleV1Resource> Groups { get; } = [];
+
+        public Dictionary<Workspace, ExtWorkspaceHandleV1Resource> Workspaces { get; } = [];
+
+        public List<Action> Pending { get; } = [];
+
+        public bool Stopped { get; private set; }
+
+        void IExtWorkspaceManagerV1Handler.Stop(ExtWorkspaceManagerV1Resource resource)
+        {
+            Stopped = true;
+            Manager.SendFinished();
+        }
+
+        void IExtWorkspaceManagerV1Handler.Commit(ExtWorkspaceManagerV1Resource resource)
+        {
+            foreach (var request in Pending)
+            {
+                request();
+            }
+
+            Pending.Clear();
+        }
+    }
+
+    private sealed class GroupRequests(Binding binding, WorkspaceGroup group) : IExtWorkspaceGroupHandleV1Handler
+    {
+        void IExtWorkspaceGroupHandleV1Handler.CreateWorkspace(ExtWorkspaceGroupHandleV1Resource resource, in ExtWorkspaceGroupHandleV1Resource.CreateWorkspaceEventArgs args)
+        {
+            var name = args.Workspace;
+            if (!group.IsRemoved)
+            {
+                binding.Pending.Add(() => group.RaiseCreateRequested(name));
+            }
+        }
+
+        void IExtWorkspaceGroupHandleV1Handler.Destroy(ExtWorkspaceGroupHandleV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class WorkspaceRequests(Binding binding, Workspace workspace) : IExtWorkspaceHandleV1Handler
+    {
+        void IExtWorkspaceHandleV1Handler.Activate(ExtWorkspaceHandleV1Resource resource) =>
+            binding.Pending.Add(workspace.RaiseActivateRequested);
+
+        void IExtWorkspaceHandleV1Handler.Deactivate(ExtWorkspaceHandleV1Resource resource) =>
+            binding.Pending.Add(workspace.RaiseDeactivateRequested);
+
+        void IExtWorkspaceHandleV1Handler.Remove(ExtWorkspaceHandleV1Resource resource) =>
+            binding.Pending.Add(workspace.RaiseRemoveRequested);
+
+        void IExtWorkspaceHandleV1Handler.Assign(ExtWorkspaceHandleV1Resource resource, in ExtWorkspaceHandleV1Resource.AssignEventArgs args)
+        {
+            foreach (var (group, groupHandle) in binding.Groups)
+            {
+                if (groupHandle.RawHandle == args.WorkspaceGroupHandle)
+                {
+                    if (!group.IsRemoved)
+                    {
+                        binding.Pending.Add(() => workspace.RaiseAssignRequested(group));
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        void IExtWorkspaceHandleV1Handler.Destroy(ExtWorkspaceHandleV1Resource resource)
+        {
+        }
     }
 
     private readonly IWorkspaceModel? _model;
@@ -310,24 +383,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new ExtWorkspaceManagerV1Resource(client, version, id);
-        var binding = new Binding { Manager = manager, Groups = [], Workspaces = [], Pending = [] };
+        var binding = new Binding(client, version, id);
+        var manager = binding.Manager;
         _bindings.Add(binding);
         manager.Destroyed += (_, _) => _bindings.Remove(binding);
-        manager.Stop += (_, _) =>
-        {
-            binding.Stopped = true;
-            manager.SendFinished();
-        };
-        manager.Commit += (_, _) =>
-        {
-            foreach (var request in binding.Pending)
-            {
-                request();
-            }
-
-            binding.Pending.Clear();
-        };
 
         foreach (var group in _groups)
         {
@@ -344,18 +403,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
 
     private void AnnounceGroup(Binding binding, WorkspaceGroup group)
     {
-        var handle = new ExtWorkspaceGroupHandleV1Resource(binding.Manager.Client, binding.Manager.Version, 0);
+        var handle = new ExtWorkspaceGroupHandleV1Resource(binding.Manager.Client, binding.Manager.Version, 0, new GroupRequests(binding, group));
         binding.Manager.SendWorkspaceGroup(handle);
         binding.Groups[group] = handle;
         handle.Destroyed += (_, _) => binding.Groups.Remove(group);
-        handle.CreateWorkspace += (_, e) =>
-        {
-            var name = e.Workspace;
-            if (!group.IsRemoved)
-            {
-                binding.Pending.Add(() => group.RaiseCreateRequested(name));
-            }
-        };
 
         handle.SendCapabilities(group.ClientsCanCreateWorkspaces
             ? ExtWorkspaceGroupHandleV1.GroupCapabilities.CreateWorkspace
@@ -379,29 +430,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
 
     private void AnnounceWorkspace(Binding binding, Workspace workspace)
     {
-        var handle = new ExtWorkspaceHandleV1Resource(binding.Manager.Client, binding.Manager.Version, 0);
+        var handle = new ExtWorkspaceHandleV1Resource(binding.Manager.Client, binding.Manager.Version, 0, new WorkspaceRequests(binding, workspace));
         binding.Manager.SendWorkspace(handle);
         binding.Workspaces[workspace] = handle;
         handle.Destroyed += (_, _) => binding.Workspaces.Remove(workspace);
-
-        handle.Activate += (_, _) => binding.Pending.Add(workspace.RaiseActivateRequested);
-        handle.Deactivate += (_, _) => binding.Pending.Add(workspace.RaiseDeactivateRequested);
-        handle.Remove += (_, _) => binding.Pending.Add(workspace.RaiseRemoveRequested);
-        handle.Assign += (_, e) =>
-        {
-            foreach (var (group, groupHandle) in binding.Groups)
-            {
-                if (groupHandle.RawHandle == e.WorkspaceGroupHandle)
-                {
-                    if (!group.IsRemoved)
-                    {
-                        binding.Pending.Add(() => workspace.RaiseAssignRequested(group));
-                    }
-
-                    break;
-                }
-            }
-        };
 
         if (workspace.Id is { } workspaceId)
         {

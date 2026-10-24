@@ -4,7 +4,7 @@ using Wayland;
 
 namespace Basin.Hypr;
 
-internal sealed class FocusGrab : IPointerGrab, IKeyboardGrab, ITouchGrab
+internal sealed class FocusGrab : IPointerGrab, IKeyboardGrab, ITouchGrab, IHyprlandFocusGrabV1Handler
 {
     private enum SurfaceState
     {
@@ -26,21 +26,32 @@ internal sealed class FocusGrab : IPointerGrab, IKeyboardGrab, ITouchGrab
         HyprlandFocusGrabManager owner,
         CompositorGlobal compositor,
         Basin.Seat.Seat seat,
-        HyprlandFocusGrabV1Resource resource)
+        Wayland.Server.WlClient client,
+        uint version,
+        uint id)
     {
         _owner = owner;
         _compositor = compositor;
         _seat = seat;
-        _resource = resource;
+        _resource = new HyprlandFocusGrabV1Resource(client, version, id, this);
 
-        resource.AddSurface += (_, e) => Add(_compositor.ResolveSurface(e.Surface));
-        resource.RemoveSurface += (_, e) => Remove(_compositor.ResolveSurface(e.Surface));
-        resource.Commit += (_, _) => Commit(removeOnly: false);
-        resource.Destroyed += (_, _) =>
+        _resource.Destroyed += (_, _) =>
         {
             Finish(sendCleared: false);
             _owner.Forget(this);
         };
+    }
+
+    void IHyprlandFocusGrabV1Handler.AddSurface(HyprlandFocusGrabV1Resource resource, in HyprlandFocusGrabV1Resource.AddSurfaceEventArgs args) =>
+        Add(_compositor.ResolveSurface(args.Surface));
+
+    void IHyprlandFocusGrabV1Handler.RemoveSurface(HyprlandFocusGrabV1Resource resource, in HyprlandFocusGrabV1Resource.RemoveSurfaceEventArgs args) =>
+        Remove(_compositor.ResolveSurface(args.Surface));
+
+    void IHyprlandFocusGrabV1Handler.Commit(HyprlandFocusGrabV1Resource resource) => Commit(removeOnly: false);
+
+    void IHyprlandFocusGrabV1Handler.Destroy(HyprlandFocusGrabV1Resource resource)
+    {
     }
 
     public bool IsActive => _active;

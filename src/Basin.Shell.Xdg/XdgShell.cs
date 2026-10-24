@@ -9,7 +9,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The <c>xdg_wm_base</c> global. It keeps the client positioners and makes an <see cref="XdgSurfaceState"/> for each valid <c>get_xdg_surface</c> request.
 /// </summary>
-public sealed class XdgShell : IDisposable
+public sealed class XdgShell : IDisposable, IXdgWmBaseHandler, IXdgPositionerHandler
 {
     /// <summary>
     /// The version of <c>xdg_wm_base</c> that the global advertises.
@@ -105,110 +105,127 @@ public sealed class XdgShell : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var wmBase = new XdgWmBaseResource(client, version, id);
-
-        wmBase.CreatePositioner += (_, e) =>
-        {
-            var resource = new XdgPositionerResource(client, wmBase.Version, e.Id);
-            _positioners[resource] = default;
-            resource.Destroyed += (_, _) => _positioners.Remove(resource);
-            WirePositioner(resource);
-        };
-
-        wmBase.GetXdgSurface += (_, e) =>
-        {
-            var surface = Compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, "The wl_surface is not known.");
-                return;
-            }
-
-            if (surface.Current.Buffer is not null || surface.Pending.Buffer is not null)
-            {
-                wmBase.PostError((uint)XdgWmBase.Error.InvalidSurfaceState, "The surface already has a buffer. Make the xdg_surface before you attach a buffer.");
-                return;
-            }
-
-            var resource = new XdgSurfaceResource(client, wmBase.Version, e.Id);
-            _ = new XdgSurfaceState(this, wmBase, resource, surface);
-        };
-
+        var wmBase = new XdgWmBaseResource(client, version, id, this);
         _bases.Add(wmBase);
         wmBase.Destroyed += (_, _) => _bases.Remove(wmBase);
-        wmBase.Pong += (_, e) => Ponged?.Invoke(client, e.Serial);
     }
 
-    private void WirePositioner(XdgPositionerResource resource)
+    void IXdgWmBaseHandler.Destroy(XdgWmBaseResource resource)
     {
-        resource.SetSize += (_, e) =>
-        {
-            if (e.Width <= 0 || e.Height <= 0)
-            {
-                resource.PostError((uint)XdgPositioner.Error.InvalidInput, "The positioner size must be more than zero.");
-                return;
-            }
+    }
 
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { Width = e.Width, Height = e.Height };
-            }
-        };
-        resource.SetAnchorRect += (_, e) =>
-        {
-            if (e.Width < 0 || e.Height < 0)
-            {
-                resource.PostError((uint)XdgPositioner.Error.InvalidInput, "The anchor rectangle size must not be negative.");
-                return;
-            }
+    void IXdgWmBaseHandler.CreatePositioner(XdgWmBaseResource resource, in XdgWmBaseResource.CreatePositionerEventArgs args)
+    {
+        var positioner = new XdgPositionerResource(resource.Client, resource.Version, args.Id, this);
+        _positioners[positioner] = default;
+        positioner.Destroyed += (_, _) => _positioners.Remove(positioner);
+    }
 
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { AnchorRect = new Box(e.X, e.Y, e.Width, e.Height) };
-            }
-        };
-        resource.SetAnchor += (_, e) =>
+    void IXdgWmBaseHandler.GetXdgSurface(XdgWmBaseResource resource, in XdgWmBaseResource.GetXdgSurfaceEventArgs args)
+    {
+        var surface = Compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { Anchor = e.Anchor };
-            }
-        };
-        resource.SetGravity += (_, e) =>
+            resource.PostError((uint)XdgWmBase.Error.Role, "The wl_surface is not known.");
+            return;
+        }
+
+        if (surface.Current.Buffer is not null || surface.Pending.Buffer is not null)
         {
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { Gravity = e.Gravity };
-            }
-        };
-        resource.SetConstraintAdjustment += (_, e) =>
+            resource.PostError((uint)XdgWmBase.Error.InvalidSurfaceState, "The surface already has a buffer. Make the xdg_surface before you attach a buffer.");
+            return;
+        }
+
+        _ = new XdgSurfaceState(this, resource, args.Id, surface);
+    }
+
+    void IXdgWmBaseHandler.Pong(XdgWmBaseResource resource, in XdgWmBaseResource.PongEventArgs args) => Ponged?.Invoke(resource.Client, args.Serial);
+
+    void IXdgPositionerHandler.Destroy(XdgPositionerResource resource)
+    {
+    }
+
+    void IXdgPositionerHandler.SetSize(XdgPositionerResource resource, in XdgPositionerResource.SetSizeEventArgs args)
+    {
+        if (args.Width <= 0 || args.Height <= 0)
         {
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { ConstraintAdjustment = e.ConstraintAdjustment };
-            }
-        };
-        resource.SetOffset += (_, e) =>
+            resource.PostError((uint)XdgPositioner.Error.InvalidInput, "The positioner size must be more than zero.");
+            return;
+        }
+
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
         {
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { OffsetX = e.X, OffsetY = e.Y };
-            }
-        };
-        resource.SetReactive += (_, _) =>
+            rules = rules with { Width = args.Width, Height = args.Height };
+        }
+    }
+
+    void IXdgPositionerHandler.SetAnchorRect(XdgPositionerResource resource, in XdgPositionerResource.SetAnchorRectEventArgs args)
+    {
+        if (args.Width < 0 || args.Height < 0)
         {
-            ref var rules = ref RulesOf(resource);
-            if (!Unsafe.IsNullRef(ref rules))
-            {
-                rules = rules with { Reactive = true };
-            }
-        };
+            resource.PostError((uint)XdgPositioner.Error.InvalidInput, "The anchor rectangle size must not be negative.");
+            return;
+        }
+
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
+        {
+            rules = rules with { AnchorRect = new Box(args.X, args.Y, args.Width, args.Height) };
+        }
+    }
+
+    void IXdgPositionerHandler.SetAnchor(XdgPositionerResource resource, in XdgPositionerResource.SetAnchorEventArgs args)
+    {
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
+        {
+            rules = rules with { Anchor = args.Anchor };
+        }
+    }
+
+    void IXdgPositionerHandler.SetGravity(XdgPositionerResource resource, in XdgPositionerResource.SetGravityEventArgs args)
+    {
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
+        {
+            rules = rules with { Gravity = args.Gravity };
+        }
+    }
+
+    void IXdgPositionerHandler.SetConstraintAdjustment(XdgPositionerResource resource, in XdgPositionerResource.SetConstraintAdjustmentEventArgs args)
+    {
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
+        {
+            rules = rules with { ConstraintAdjustment = args.ConstraintAdjustment };
+        }
+    }
+
+    void IXdgPositionerHandler.SetOffset(XdgPositionerResource resource, in XdgPositionerResource.SetOffsetEventArgs args)
+    {
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
+        {
+            rules = rules with { OffsetX = args.X, OffsetY = args.Y };
+        }
+    }
+
+    void IXdgPositionerHandler.SetReactive(XdgPositionerResource resource)
+    {
+        ref var rules = ref RulesOf(resource);
+        if (!Unsafe.IsNullRef(ref rules))
+        {
+            rules = rules with { Reactive = true };
+        }
+    }
+
+    void IXdgPositionerHandler.SetParentSize(XdgPositionerResource resource, in XdgPositionerResource.SetParentSizeEventArgs args)
+    {
+    }
+
+    void IXdgPositionerHandler.SetParentConfigure(XdgPositionerResource resource, in XdgPositionerResource.SetParentConfigureEventArgs args)
+    {
     }
 
     private ref XdgPositionerRules RulesOf(XdgPositionerResource resource) =>

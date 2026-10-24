@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwlr_output_power_manager_v1</c> global. It turns outputs on and off through <see cref="IOutputPower"/>.
 /// </summary>
-public sealed class OutputPowerManager : IDisposable
+public sealed class OutputPowerManager : IDisposable, IZwlrOutputPowerManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -67,38 +67,73 @@ public sealed class OutputPowerManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwlrOutputPowerManagerV1Resource(client, version, id, this);
+
+    void IZwlrOutputPowerManagerV1Handler.Destroy(ZwlrOutputPowerManagerV1Resource resource)
     {
-        var manager = new ZwlrOutputPowerManagerV1Resource(client, version, id);
-        manager.GetOutputPower += (_, e) =>
+    }
+
+    void IZwlrOutputPowerManagerV1Handler.GetOutputPower(
+        ZwlrOutputPowerManagerV1Resource resource,
+        in ZwlrOutputPowerManagerV1Resource.GetOutputPowerEventArgs args)
+    {
+        var handler = new PowerControl(this, resource.Client, resource.Version, args.Id);
+        var control = handler.Resource;
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        if (output is null || _power is null)
         {
-            var control = new ZwlrOutputPowerV1Resource(client, manager.Version, e.Id);
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            if (output is null || _power is null)
+            control.SendFailed();
+            return;
+        }
+
+        handler.Attach(output);
+        control.SendMode(_power.IsOn(output) ? ZwlrOutputPowerV1.Mode.On : ZwlrOutputPowerV1.Mode.Off);
+    }
+
+    private sealed class PowerControl : IZwlrOutputPowerV1Handler
+    {
+        private readonly OutputPowerManager _manager;
+        private IOutput? _output;
+
+        public PowerControl(OutputPowerManager manager, WlClient client, uint version, uint id)
+        {
+            _manager = manager;
+            Resource = new ZwlrOutputPowerV1Resource(client, version, id, this);
+        }
+
+        public ZwlrOutputPowerV1Resource Resource { get; }
+
+        public void Attach(IOutput output)
+        {
+            _output = output;
+            _manager._controls.Add((Resource, output));
+            Resource.Destroyed += OnDestroyed;
+        }
+
+        void IZwlrOutputPowerV1Handler.SetMode(ZwlrOutputPowerV1Resource resource, in ZwlrOutputPowerV1Resource.SetModeEventArgs args)
+        {
+            if (_output is not { } output)
             {
-                control.SendFailed();
                 return;
             }
 
-            var entry = (control, output);
-            _controls.Add(entry);
-            control.Destroyed += (_, _) => _controls.Remove(entry);
-
-            control.SendMode(_power.IsOn(output) ? ZwlrOutputPowerV1.Mode.On : ZwlrOutputPowerV1.Mode.Off);
-
-            control.SetMode += (_, me) =>
+            if (args.Mode is not (ZwlrOutputPowerV1.Mode.On or ZwlrOutputPowerV1.Mode.Off))
             {
-                if (me.Mode is not (ZwlrOutputPowerV1.Mode.On or ZwlrOutputPowerV1.Mode.Off))
-                {
-                    control.PostError(ErrorInvalidMode, "The power mode is not valid.");
-                    return;
-                }
+                resource.PostError(ErrorInvalidMode, "The power mode is not valid.");
+                return;
+            }
 
-                if (!_power.SetOn(output, me.Mode == ZwlrOutputPowerV1.Mode.On))
-                {
-                    control.SendFailed();
-                }
-            };
-        };
+            if (!_manager._power!.SetOn(output, args.Mode == ZwlrOutputPowerV1.Mode.On))
+            {
+                resource.SendFailed();
+            }
+        }
+
+        void IZwlrOutputPowerV1Handler.Destroy(ZwlrOutputPowerV1Resource resource)
+        {
+        }
+
+        private void OnDestroyed(object? sender, EventArgs e) => _manager._controls.Remove((Resource, _output!));
     }
 }

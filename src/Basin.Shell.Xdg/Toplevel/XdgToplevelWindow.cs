@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// An <c>xdg_toplevel</c> role object. It reports the client's requests as events and coalesces state and size changes into one configure on the next idle callback.
 /// </summary>
-public sealed class XdgToplevelWindow : IToplevelHandle
+public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
 {
     /// <summary>
     /// The role name that a toplevel sets on its <see cref="Basin.Surface"/>.
@@ -20,71 +20,11 @@ public sealed class XdgToplevelWindow : IToplevelHandle
     private bool _sizeRequested;
     private bool _configureScheduled;
 
-    internal XdgToplevelWindow(XdgSurfaceState xdg, XdgToplevelResource resource)
+    internal XdgToplevelWindow(XdgSurfaceState xdg, uint id)
     {
         Xdg = xdg;
+        var resource = new XdgToplevelResource(xdg.Resource.Client, xdg.Resource.Version, id, this);
         Resource = resource;
-
-        resource.SetTitle += (_, e) =>
-        {
-            Title = e.Title;
-            TitleChanged?.Invoke();
-        };
-        resource.SetAppId += (_, e) =>
-        {
-            AppId = e.AppId;
-            AppIdChanged?.Invoke();
-        };
-        resource.SetParent += (_, e) =>
-        {
-            Parent = e.Parent is { } parent ? XdgToplevelRegistry.Resolve(parent) : null;
-            ParentChanged?.Invoke();
-        };
-        resource.SetMinSize += (_, e) => (MinWidth, MinHeight) = (e.Width, e.Height);
-        resource.SetMaxSize += (_, e) => (MaxWidth, MaxHeight) = (e.Width, e.Height);
-
-        resource.Move += (_, e) =>
-        {
-            if (xdg.Shell.Seat is { } seat && seat.ValidateImplicitGrabSerial(e.Serial))
-            {
-                MoveRequested?.Invoke(e.Serial);
-            }
-        };
-        resource.Resize += (_, e) =>
-        {
-            if (xdg.Shell.Seat is { } seat && seat.ValidateImplicitGrabSerial(e.Serial))
-            {
-                ResizeRequested?.Invoke(e.Serial, (ResizeEdges)e.Edges);
-            }
-        };
-        resource.SetMaximized += (_, _) =>
-        {
-            RequestedMaximized = true;
-            MaximizeRequested?.Invoke(true);
-        };
-        resource.UnsetMaximized += (_, _) =>
-        {
-            RequestedMaximized = false;
-            MaximizeRequested?.Invoke(false);
-        };
-        resource.SetFullscreen += (_, e) =>
-        {
-            RequestedFullscreenOutput = OutputGlobal.FromResource(e.Output)?.Output;
-            RequestedFullscreen = true;
-            FullscreenRequested?.Invoke(true);
-        };
-        resource.UnsetFullscreen += (_, _) =>
-        {
-            RequestedFullscreenOutput = null;
-            RequestedFullscreen = false;
-            FullscreenRequested?.Invoke(false);
-        };
-        resource.SetMinimized += (_, _) =>
-        {
-            RequestedMinimized = true;
-            MinimizeRequested?.Invoke();
-        };
-        resource.ShowWindowMenu += (_, e) => ShowWindowMenuRequested?.Invoke(e.X, e.Y);
 
         xdg.Unmapped += OnUnmapped;
         resource.Destroyed += (_, _) =>
@@ -97,6 +37,85 @@ public sealed class XdgToplevelWindow : IToplevelHandle
         };
         XdgToplevelRegistry.Register(resource, this);
     }
+
+    void IXdgToplevelHandler.Destroy(XdgToplevelResource resource)
+    {
+    }
+
+    void IXdgToplevelHandler.SetTitle(XdgToplevelResource resource, in XdgToplevelResource.SetTitleEventArgs args)
+    {
+        Title = args.Title;
+        TitleChanged?.Invoke();
+    }
+
+    void IXdgToplevelHandler.SetAppId(XdgToplevelResource resource, in XdgToplevelResource.SetAppIdEventArgs args)
+    {
+        AppId = args.AppId;
+        AppIdChanged?.Invoke();
+    }
+
+    void IXdgToplevelHandler.SetParent(XdgToplevelResource resource, in XdgToplevelResource.SetParentEventArgs args)
+    {
+        Parent = args.Parent is { } parent ? XdgToplevelRegistry.Resolve(parent) : null;
+        ParentChanged?.Invoke();
+    }
+
+    void IXdgToplevelHandler.SetMinSize(XdgToplevelResource resource, in XdgToplevelResource.SetMinSizeEventArgs args) =>
+        (MinWidth, MinHeight) = (args.Width, args.Height);
+
+    void IXdgToplevelHandler.SetMaxSize(XdgToplevelResource resource, in XdgToplevelResource.SetMaxSizeEventArgs args) =>
+        (MaxWidth, MaxHeight) = (args.Width, args.Height);
+
+    void IXdgToplevelHandler.Move(XdgToplevelResource resource, in XdgToplevelResource.MoveEventArgs args)
+    {
+        if (Xdg.Shell.Seat is { } seat && seat.ValidateImplicitGrabSerial(args.Serial))
+        {
+            MoveRequested?.Invoke(args.Serial);
+        }
+    }
+
+    void IXdgToplevelHandler.Resize(XdgToplevelResource resource, in XdgToplevelResource.ResizeEventArgs args)
+    {
+        if (Xdg.Shell.Seat is { } seat && seat.ValidateImplicitGrabSerial(args.Serial))
+        {
+            ResizeRequested?.Invoke(args.Serial, (ResizeEdges)args.Edges);
+        }
+    }
+
+    void IXdgToplevelHandler.SetMaximized(XdgToplevelResource resource)
+    {
+        RequestedMaximized = true;
+        MaximizeRequested?.Invoke(true);
+    }
+
+    void IXdgToplevelHandler.UnsetMaximized(XdgToplevelResource resource)
+    {
+        RequestedMaximized = false;
+        MaximizeRequested?.Invoke(false);
+    }
+
+    void IXdgToplevelHandler.SetFullscreen(XdgToplevelResource resource, in XdgToplevelResource.SetFullscreenEventArgs args)
+    {
+        RequestedFullscreenOutput = OutputGlobal.FromResource(args.Output)?.Output;
+        RequestedFullscreen = true;
+        FullscreenRequested?.Invoke(true);
+    }
+
+    void IXdgToplevelHandler.UnsetFullscreen(XdgToplevelResource resource)
+    {
+        RequestedFullscreenOutput = null;
+        RequestedFullscreen = false;
+        FullscreenRequested?.Invoke(false);
+    }
+
+    void IXdgToplevelHandler.SetMinimized(XdgToplevelResource resource)
+    {
+        RequestedMinimized = true;
+        MinimizeRequested?.Invoke();
+    }
+
+    void IXdgToplevelHandler.ShowWindowMenu(XdgToplevelResource resource, in XdgToplevelResource.ShowWindowMenuEventArgs args) =>
+        ShowWindowMenuRequested?.Invoke(args.X, args.Y);
 
     /// <summary>
     /// Gets the <c>xdg_surface</c> state under the toplevel.

@@ -11,7 +11,7 @@ namespace Basin.Desktop;
 /// Serves the <c>wp_linux_drm_syncobj_manager_v1</c> global. It waits on acquire points before a commit applies, and signals release points when the buffer is free.
 /// </summary>
 [SupportedOSPlatform("linux")]
-public sealed class LinuxDrmSyncobjManager : IDisposable
+public sealed class LinuxDrmSyncobjManager : IDisposable, IExplicitSyncDiagnostics, IWpLinuxDrmSyncobjManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -30,6 +30,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
     private readonly IDrmSyncDevice _device;
     private readonly Dictionary<nint, DrmSyncobjTimeline> _timelines = [];
     private readonly Dictionary<Surface, SyncSurface> _surfaces = [];
+    private readonly Dictionary<Surface, SyncSurface> _dropped = [];
 
     /// <summary>
     /// Holds the explicit sync points of the current buffer of a surface.
@@ -106,6 +107,21 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
     /// </summary>
     public long DeferredReleases { get; private set; }
 
+    /// <summary>
+    /// Gets the number of release points of buffers that a later synchronized commit replaced before they reached the screen.
+    /// </summary>
+    public long SupersededReleases { get; private set; }
+
+    /// <summary>
+    /// Gets the number of release points of commits that were discarded before they applied, for example with a destroyed surface.
+    /// </summary>
+    public long DiscardedReleases { get; private set; }
+
+    /// <inheritdoc/>
+    public ExplicitSyncCounters Counters => new(
+        ManagedCommits, ExplicitCommits, ParkedAcquires, UnparkedAcquires, LateAcquires, UnexportableAcquires, DeferredReleases,
+        SupersededReleases, DiscardedReleases);
+
     private void SignalRelease(IBuffer buffer, DrmSyncobjTimeline timeline, ulong point)
     {
         var reads = OutstandingReads(buffer);
@@ -122,6 +138,35 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
         }
 
         RenderFences.CloseFence(reads);
+    }
+
+    private void SignalWhenFree(IBuffer buffer, DrmSyncobjTimeline timeline, ulong point)
+    {
+        if (buffer.LockCount > 0)
+        {
+            SignalOnRelease(buffer, timeline, point);
+        }
+        else if (buffer.IsDestroyed)
+        {
+            timeline.Signal(point);
+        }
+        else
+        {
+            SignalRelease(buffer, timeline, point);
+        }
+    }
+
+    private void SignalOnRelease(IBuffer buffer, DrmSyncobjTimeline timeline, ulong point)
+    {
+        timeline.Retain();
+        Action? handler = null;
+        handler = () =>
+        {
+            buffer.Released -= handler;
+            SignalRelease(buffer, timeline, point);
+            timeline.Release();
+        };
+        buffer.Released += handler;
     }
 
     private static int OutstandingReads(IBuffer buffer)
@@ -202,60 +247,95 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
         return sync is null || sync.Acquire.IsSignaled(sync.AcquirePoint);
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpLinuxDrmSyncobjManagerV1Handler.Destroy(WpLinuxDrmSyncobjManagerV1Resource resource)
     {
-        var manager = new WpLinuxDrmSyncobjManagerV1Resource(client, version, id);
-        manager.ImportTimeline += (_, e) =>
+    }
+
+    void IWpLinuxDrmSyncobjManagerV1Handler.ImportTimeline(WpLinuxDrmSyncobjManagerV1Resource resource, in WpLinuxDrmSyncobjManagerV1Resource.ImportTimelineEventArgs args)
+    {
+        var client = resource.Client;
+        var timelineResource = new WpLinuxDrmSyncobjTimelineV1Resource(client, resource.Version, args.Id);
+        if (!_device.TryImportTimeline(args.Fd, out var timeline))
         {
-            var resource = new WpLinuxDrmSyncobjTimelineV1Resource(client, manager.Version, e.Id);
-            if (!_device.TryImportTimeline(e.Fd, out var timeline))
-            {
-                client.CloseFd(e.Fd);
-                manager.PostError(ErrorInvalidTimeline, "The fd is not a drm_syncobj.");
-                return;
-            }
+            client.CloseFd(args.Fd);
+            resource.PostError(ErrorInvalidTimeline, "The fd is not a drm_syncobj.");
+            return;
+        }
 
-            client.CloseFd(e.Fd);
-            var raw = resource.RawHandle;
-            _timelines[raw] = timeline;
-            resource.Destroyed += (_, _) =>
-            {
-                _timelines.Remove(raw);
-                timeline.Release();
-            };
-        };
-        manager.GetSurface += (_, e) =>
+        client.CloseFd(args.Fd);
+        var raw = timelineResource.RawHandle;
+        _timelines[raw] = timeline;
+        timelineResource.Destroyed += (_, _) =>
         {
-            var resource = new WpLinuxDrmSyncobjSurfaceV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
-
-            if (_surfaces.ContainsKey(surface))
-            {
-                manager.PostError(ErrorSurfaceExists, "The surface already has a sync object.");
-                return;
-            }
-
-            var sync = new SyncSurface(this, resource, surface);
-            _surfaces[surface] = sync;
-            resource.Destroyed += (_, _) =>
-            {
-                _surfaces.Remove(surface);
-                sync.Drop();
-            };
-            surface.Destroyed += () => _surfaces.Remove(surface);
+            _timelines.Remove(raw);
+            timeline.Release();
         };
     }
 
+    void IWpLinuxDrmSyncobjManagerV1Handler.GetSurface(WpLinuxDrmSyncobjManagerV1Resource resource, in WpLinuxDrmSyncobjManagerV1Resource.GetSurfaceEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
+        {
+            _ = new WpLinuxDrmSyncobjSurfaceV1Resource(resource.Client, resource.Version, args.Id, IgnoredSyncSurface.Instance);
+            return;
+        }
+
+        if (_surfaces.ContainsKey(surface))
+        {
+            _ = new WpLinuxDrmSyncobjSurfaceV1Resource(resource.Client, resource.Version, args.Id, IgnoredSyncSurface.Instance);
+            resource.PostError(ErrorSurfaceExists, "The surface already has a sync object.");
+            return;
+        }
+
+        if (_dropped.Remove(surface, out var previous))
+        {
+            previous.Detach();
+        }
+
+        var sync = new SyncSurface(this, resource.Client, resource.Version, args.Id, surface);
+        _surfaces[surface] = sync;
+        sync.Resource.Destroyed += (_, _) =>
+        {
+            if (_surfaces.TryGetValue(surface, out var live) && ReferenceEquals(live, sync))
+            {
+                _surfaces.Remove(surface);
+            }
+
+            sync.Drop();
+            if (!surface.IsDestroyed && !_surfaces.ContainsKey(surface))
+            {
+                _dropped[surface] = sync;
+            }
+            else
+            {
+                sync.Detach();
+            }
+        };
+        surface.Destroyed += () =>
+        {
+            _surfaces.Remove(surface);
+            if (_dropped.Remove(surface, out var dropped))
+            {
+                dropped.Detach();
+            }
+        };
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpLinuxDrmSyncobjManagerV1Resource(client, version, id, this);
+
     private DrmSyncobjTimeline? TimelineOf(nint resourceHandle) => _timelines.GetValueOrDefault(resourceHandle);
 
-    internal sealed class PendingSync : IDisposable
+    internal sealed class PendingSync : IDisposable, ISupersededPayload
     {
-        public PendingSync(DrmSyncobjTimeline acquire, ulong acquirePoint, DrmSyncobjTimeline release, ulong releasePoint)
+        private readonly LinuxDrmSyncobjManager _owner;
+
+        public PendingSync(
+            LinuxDrmSyncobjManager owner, IBuffer buffer, DrmSyncobjTimeline acquire, ulong acquirePoint, DrmSyncobjTimeline release, ulong releasePoint)
         {
+            _owner = owner;
+            Buffer = buffer;
             acquire.Retain();
             release.Retain();
             Acquire = acquire;
@@ -272,40 +352,102 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
         public ulong ReleasePoint { get; }
 
+        public IBuffer? Buffer { get; private set; }
+
+        public void Superseded()
+        {
+            if (Buffer is null)
+            {
+                return;
+            }
+
+            _owner.SupersededReleases++;
+            ReleaseWhenFree();
+        }
+
+        public void ReleaseWhenFree()
+        {
+            if (Buffer is { } buffer)
+            {
+                Buffer = null;
+                _owner.SignalWhenFree(buffer, Release, ReleasePoint);
+            }
+        }
+
         public void Dispose()
         {
+            if (Buffer is not null)
+            {
+                _owner.DiscardedReleases++;
+                ReleaseWhenFree();
+            }
+
             Acquire.Release();
             Release.Release();
         }
     }
 
-    private sealed class SyncSurface
+    private sealed class IgnoredSyncSurface : IWpLinuxDrmSyncobjSurfaceV1Handler
+    {
+        public static readonly IgnoredSyncSurface Instance = new();
+
+        void IWpLinuxDrmSyncobjSurfaceV1Handler.Destroy(WpLinuxDrmSyncobjSurfaceV1Resource resource)
+        {
+        }
+
+        void IWpLinuxDrmSyncobjSurfaceV1Handler.SetAcquirePoint(WpLinuxDrmSyncobjSurfaceV1Resource resource, in WpLinuxDrmSyncobjSurfaceV1Resource.SetAcquirePointEventArgs args)
+        {
+        }
+
+        void IWpLinuxDrmSyncobjSurfaceV1Handler.SetReleasePoint(WpLinuxDrmSyncobjSurfaceV1Resource resource, in WpLinuxDrmSyncobjSurfaceV1Resource.SetReleasePointEventArgs args)
+        {
+        }
+    }
+
+    private sealed class SyncSurface : IWpLinuxDrmSyncobjSurfaceV1Handler
     {
         private readonly LinuxDrmSyncobjManager _owner;
         private readonly WpLinuxDrmSyncobjSurfaceV1Resource _resource;
         private readonly Surface _surface;
         private (DrmSyncobjTimeline Timeline, ulong Point)? _pendingAcquire;
         private (DrmSyncobjTimeline Timeline, ulong Point)? _pendingRelease;
+        private bool _dropped;
 
-        public SyncSurface(LinuxDrmSyncobjManager owner, WpLinuxDrmSyncobjSurfaceV1Resource resource, Surface surface)
+        public SyncSurface(LinuxDrmSyncobjManager owner, WlClient client, uint version, uint id, Surface surface)
         {
             _owner = owner;
-            _resource = resource;
             _surface = surface;
+            _resource = new WpLinuxDrmSyncobjSurfaceV1Resource(client, version, id, this);
 
-            resource.SetAcquirePoint += (_, e) => SetPoint(ref _pendingAcquire, e.Timeline?.RawHandle ?? 0, e.PointHi, e.PointLo);
-            resource.SetReleasePoint += (_, e) => SetPoint(ref _pendingRelease, e.Timeline?.RawHandle ?? 0, e.PointHi, e.PointLo);
             surface.CommitRequested += OnCommitRequested;
             surface.Committed += OnCommitted;
         }
 
+        public WpLinuxDrmSyncobjSurfaceV1Resource Resource => _resource;
+
         public CommitSync? Current { get; private set; }
+
+        void IWpLinuxDrmSyncobjSurfaceV1Handler.Destroy(WpLinuxDrmSyncobjSurfaceV1Resource resource)
+        {
+        }
+
+        void IWpLinuxDrmSyncobjSurfaceV1Handler.SetAcquirePoint(WpLinuxDrmSyncobjSurfaceV1Resource resource, in WpLinuxDrmSyncobjSurfaceV1Resource.SetAcquirePointEventArgs args) =>
+            SetPoint(ref _pendingAcquire, args.Timeline?.RawHandle ?? 0, args.PointHi, args.PointLo);
+
+        void IWpLinuxDrmSyncobjSurfaceV1Handler.SetReleasePoint(WpLinuxDrmSyncobjSurfaceV1Resource resource, in WpLinuxDrmSyncobjSurfaceV1Resource.SetReleasePointEventArgs args) =>
+            SetPoint(ref _pendingRelease, args.Timeline?.RawHandle ?? 0, args.PointHi, args.PointLo);
 
         public void Drop()
         {
+            _dropped = true;
             _surface.CommitRequested -= OnCommitRequested;
-            _surface.Committed -= OnCommitted;
             ClearCurrent();
+        }
+
+        public void Detach()
+        {
+            Drop();
+            _surface.Committed -= OnCommitted;
         }
 
         private void SetPoint(ref (DrmSyncobjTimeline, ulong)? slot, nint timelineHandle, uint hi, uint lo)
@@ -366,7 +508,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
             _owner.ManagedCommits++;
             _owner.ExplicitCommits++;
             _surface.MarkExplicitAcquire();
-            _surface.Pending.SetExtension(new PendingSync(acquire.Timeline, acquire.Point, release.Timeline, release.Point));
+            _surface.Pending.SetExtension(new PendingSync(_owner, _surface.Pending.Buffer!, acquire.Timeline, acquire.Point, release.Timeline, release.Point));
             ParkOnAcquire(acquire.Timeline, acquire.Point);
         }
 
@@ -396,10 +538,13 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
             using (sync)
             {
-                ClearCurrent();
-                sync.Acquire.Retain();
-                sync.Release.Retain();
-                Current = new CommitSync(sync.Acquire, sync.AcquirePoint, sync.Release, sync.ReleasePoint);
+                if (!_dropped)
+                {
+                    ClearCurrent();
+                    sync.Acquire.Retain();
+                    sync.Release.Retain();
+                    Current = new CommitSync(sync.Acquire, sync.AcquirePoint, sync.Release, sync.ReleasePoint);
+                }
 
                 var exported = sync.Acquire.ExportSyncFileAt(sync.AcquirePoint);
                 if (exported < 0)
@@ -414,21 +559,7 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
                 }
 
                 _surface.SetAcquireFence(exported);
-
-                if (_surface.Current.Buffer is { } buffer)
-                {
-                    var releaseTimeline = sync.Release;
-                    var releasePoint = sync.ReleasePoint;
-                    releaseTimeline.Retain();
-                    Action? handler = null;
-                    handler = () =>
-                    {
-                        buffer.Released -= handler;
-                        _owner.SignalRelease(buffer, releaseTimeline, releasePoint);
-                        releaseTimeline.Release();
-                    };
-                    buffer.Released += handler;
-                }
+                sync.ReleaseWhenFree();
             }
         }
 

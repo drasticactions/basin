@@ -6,7 +6,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_focus_grab_manager_v1</c>. A grab keeps keyboard focus on a set of surfaces and ends when the user clicks or touches outside them.
 /// </summary>
-public sealed class HyprlandFocusGrabManager : IDisposable
+public sealed class HyprlandFocusGrabManager : IDisposable, IHyprlandFocusGrabManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -86,11 +86,13 @@ public sealed class HyprlandFocusGrabManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandFocusGrabManagerV1Resource(client, version, id);
-        manager.CreateGrab += (_, e) =>
-        {
-            var resource = new HyprlandFocusGrabV1Resource(client, manager.Version, e.Grab);
-            _grabs.Add(new FocusGrab(this, _compositor, _seat, resource));
-        };
+        _ = new HyprlandFocusGrabManagerV1Resource(client, version, id, this);
+    }
+
+    void IHyprlandFocusGrabManagerV1Handler.CreateGrab(HyprlandFocusGrabManagerV1Resource resource, in HyprlandFocusGrabManagerV1Resource.CreateGrabEventArgs args) =>
+        _grabs.Add(new FocusGrab(this, _compositor, _seat, resource.Client, resource.Version, args.Grab));
+
+    void IHyprlandFocusGrabManagerV1Handler.Destroy(HyprlandFocusGrabManagerV1Resource resource)
+    {
     }
 }

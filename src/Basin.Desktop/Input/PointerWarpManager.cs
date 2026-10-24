@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_pointer_warp_v1</c> global. A warp applies only to the surface with pointer focus, with a valid enter serial, no pointer grab, and a position inside the surface.
 /// </summary>
-public sealed class PointerWarpManager : IDisposable
+public sealed class PointerWarpManager : IDisposable, IWpPointerWarpV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -44,13 +44,17 @@ public sealed class PointerWarpManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpPointerWarpV1Handler.Destroy(WpPointerWarpV1Resource resource)
     {
-        var manager = new WpPointerWarpV1Resource(client, version, id);
-        manager.WarpPointer += (_, e) => OnWarp(client, e);
     }
 
-    private void OnWarp(WlClient client, WpPointerWarpV1Resource.WarpPointerEventArgs e)
+    void IWpPointerWarpV1Handler.WarpPointer(WpPointerWarpV1Resource resource, in WpPointerWarpV1Resource.WarpPointerEventArgs args) =>
+        OnWarp(resource.Client, in args);
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpPointerWarpV1Resource(client, version, id, this);
+
+    private void OnWarp(WlClient client, in WpPointerWarpV1Resource.WarpPointerEventArgs e)
     {
         var pointer = _seat.Pointer;
         if (_compositor.ResolveSurface(e.Surface) is not { } surface ||

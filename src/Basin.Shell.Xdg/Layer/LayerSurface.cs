@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// A <c>zwlr_layer_surface_v1</c> role object. It double-buffers the client's layer state and applies it on each commit of the <see cref="Surface"/>. Placement and configure sizes are the consumer's policy.
 /// </summary>
-public sealed class LayerSurface
+public sealed class LayerSurface : IZwlrLayerSurfaceV1Handler
 {
     /// <summary>
     /// The role name that a layer surface sets on its <see cref="Basin.Surface"/>.
@@ -39,12 +39,15 @@ public sealed class LayerSurface
     internal LayerSurface(
         WlServerDisplay display,
         Surface surface,
-        ZwlrLayerSurfaceV1Resource resource,
+        WlClient client,
+        uint version,
+        uint id,
         OutputGlobal? output,
         LayerKind layer,
         string clientNamespace)
     {
         _display = display;
+        var resource = new ZwlrLayerSurfaceV1Resource(client, version, id, this);
         _resource = resource;
         Surface = surface;
         Output = output;
@@ -52,31 +55,6 @@ public sealed class LayerSurface
         _pendingLayer = layer;
         Layer = layer;
 
-        resource.SetSize += (_, e) => (_pendingWidth, _pendingHeight) = ((int)e.Width, (int)e.Height);
-        resource.SetAnchor += (_, e) => _pendingAnchor = (LayerAnchor)e.Anchor;
-        resource.SetExclusiveZone += (_, e) => _pendingExclusiveZone = e.Zone;
-        resource.SetExclusiveEdge += (_, e) => _pendingExclusiveEdge = (LayerAnchor)e.Edge;
-        resource.SetMargin += (_, e) => _pendingMargin = (e.Top, e.Right, e.Bottom, e.Left);
-        resource.SetKeyboardInteractivity += (_, e) => _pendingKeyboard = e.KeyboardInteractivity;
-        resource.SetLayer += (_, e) => _pendingLayer = (LayerKind)e.Layer;
-        resource.AckConfigure += (_, e) =>
-        {
-            var index = _sentConfigures.IndexOf(e.Serial);
-            if (index >= 0)
-            {
-                _sentConfigures.RemoveRange(0, index + 1);
-                _acked = true;
-            }
-        };
-        resource.GetPopup += (_, e) =>
-        {
-            var popup = e.Popup is { } popupResource ? XdgPopupRegistry.Resolve(popupResource) : null;
-            if (popup is not null)
-            {
-                popup.LayerParent = this;
-                PopupAdopted?.Invoke(popup);
-            }
-        };
         void OnSurfaceDestroyed() => Unmap(sendClosed: false);
         resource.Destroyed += (_, _) =>
         {
@@ -89,6 +67,51 @@ public sealed class LayerSurface
 
         surface.Committed += OnCommitted;
         surface.Destroyed += OnSurfaceDestroyed;
+    }
+
+    void IZwlrLayerSurfaceV1Handler.Destroy(ZwlrLayerSurfaceV1Resource resource)
+    {
+    }
+
+    void IZwlrLayerSurfaceV1Handler.SetSize(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetSizeEventArgs args) =>
+        (_pendingWidth, _pendingHeight) = ((int)args.Width, (int)args.Height);
+
+    void IZwlrLayerSurfaceV1Handler.SetAnchor(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetAnchorEventArgs args) =>
+        _pendingAnchor = (LayerAnchor)args.Anchor;
+
+    void IZwlrLayerSurfaceV1Handler.SetExclusiveZone(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetExclusiveZoneEventArgs args) =>
+        _pendingExclusiveZone = args.Zone;
+
+    void IZwlrLayerSurfaceV1Handler.SetExclusiveEdge(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetExclusiveEdgeEventArgs args) =>
+        _pendingExclusiveEdge = (LayerAnchor)args.Edge;
+
+    void IZwlrLayerSurfaceV1Handler.SetMargin(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetMarginEventArgs args) =>
+        _pendingMargin = (args.Top, args.Right, args.Bottom, args.Left);
+
+    void IZwlrLayerSurfaceV1Handler.SetKeyboardInteractivity(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetKeyboardInteractivityEventArgs args) =>
+        _pendingKeyboard = args.KeyboardInteractivity;
+
+    void IZwlrLayerSurfaceV1Handler.SetLayer(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.SetLayerEventArgs args) =>
+        _pendingLayer = (LayerKind)args.Layer;
+
+    void IZwlrLayerSurfaceV1Handler.AckConfigure(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.AckConfigureEventArgs args)
+    {
+        var index = _sentConfigures.IndexOf(args.Serial);
+        if (index >= 0)
+        {
+            _sentConfigures.RemoveRange(0, index + 1);
+            _acked = true;
+        }
+    }
+
+    void IZwlrLayerSurfaceV1Handler.GetPopup(ZwlrLayerSurfaceV1Resource resource, in ZwlrLayerSurfaceV1Resource.GetPopupEventArgs args)
+    {
+        var popup = args.Popup is { } popupResource ? XdgPopupRegistry.Resolve(popupResource) : null;
+        if (popup is not null)
+        {
+            popup.LayerParent = this;
+            PopupAdopted?.Invoke(popup);
+        }
     }
 
     /// <summary>

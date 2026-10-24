@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_content_type_manager_v1</c> global. It tracks the content type that each surface commits.
 /// </summary>
-public sealed class ContentTypeManager : IDisposable
+public sealed class ContentTypeManager : IDisposable, IWpContentTypeManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -99,63 +99,103 @@ public sealed class ContentTypeManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpContentTypeManagerV1Handler.Destroy(WpContentTypeManagerV1Resource resource)
     {
-        var manager = new WpContentTypeManagerV1Resource(client, version, id);
-        manager.GetSurfaceContentType += (_, e) =>
+    }
+
+    void IWpContentTypeManagerV1Handler.GetSurfaceContentType(WpContentTypeManagerV1Resource resource, in WpContentTypeManagerV1Resource.GetSurfaceContentTypeEventArgs args)
+    {
+        var handler = new SurfaceType(this);
+        var typeResource = new WpContentTypeV1Resource(resource.Client, resource.Version, args.Id, handler);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new WpContentTypeV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            if (!_claimed.Add(surface))
-            {
-                manager.PostError(ErrorAlreadyConstructed, "The surface already has a content type object.");
-                return;
-            }
+        if (!_claimed.Add(surface))
+        {
+            resource.PostError(ErrorAlreadyConstructed, "The surface already has a content type object.");
+            return;
+        }
 
-            ContentType? pending = null;
-            resource.SetContentType += (_, te) => pending = (ContentType)te.ContentType;
-            Action onCommitRequested = () =>
+        handler.Attach(surface);
+        typeResource.Destroyed += (_, _) =>
+        {
+            handler.Detach();
+            _claimed.Remove(surface);
+            _store?.SetContentType(surface, Basin.Capabilities.SurfaceContentType.None);
+            if (_types.Remove(surface))
             {
-                if (pending is { } type)
-                {
-                    pending = null;
-                    surface.Pending.SetExtension(new PendingType(type));
-                }
-            };
-            Action onCommitted = () =>
-            {
-                if (surface.Current.TakeExtension<PendingType>() is { } carried)
-                {
-                    using (carried)
-                    {
-                        Apply(surface, carried.Type);
-                    }
-                }
-            };
-            surface.CommitRequested += onCommitRequested;
-            surface.Committed += onCommitted;
-            resource.Destroyed += (_, _) =>
-            {
-                surface.CommitRequested -= onCommitRequested;
-                surface.Committed -= onCommitted;
-                _claimed.Remove(surface);
-                _store?.SetContentType(surface, Basin.Capabilities.SurfaceContentType.None);
-                if (_types.Remove(surface))
-                {
-                    TypeChanged?.Invoke(surface, ContentType.None);
-                }
-            };
-            surface.Destroyed += () =>
-            {
-                _claimed.Remove(surface);
-                _types.Remove(surface);
-                _store?.SetContentType(surface, Basin.Capabilities.SurfaceContentType.None);
-            };
+                TypeChanged?.Invoke(surface, ContentType.None);
+            }
         };
+        surface.Destroyed += () =>
+        {
+            _claimed.Remove(surface);
+            _types.Remove(surface);
+            _store?.SetContentType(surface, Basin.Capabilities.SurfaceContentType.None);
+        };
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpContentTypeManagerV1Resource(client, version, id, this);
+
+    private sealed class SurfaceType(ContentTypeManager owner) : IWpContentTypeV1Handler
+    {
+        private Surface? _surface;
+        private ContentType? _pending;
+        private Action? _onCommitRequested;
+        private Action? _onCommitted;
+
+        public void Attach(Surface surface)
+        {
+            _surface = surface;
+            _onCommitRequested = OnCommitRequested;
+            _onCommitted = OnCommitted;
+            surface.CommitRequested += _onCommitRequested;
+            surface.Committed += _onCommitted;
+        }
+
+        public void Detach()
+        {
+            if (_surface is { } surface)
+            {
+                surface.CommitRequested -= _onCommitRequested;
+                surface.Committed -= _onCommitted;
+            }
+        }
+
+        void IWpContentTypeV1Handler.Destroy(WpContentTypeV1Resource resource)
+        {
+        }
+
+        void IWpContentTypeV1Handler.SetContentType(WpContentTypeV1Resource resource, in WpContentTypeV1Resource.SetContentTypeEventArgs args)
+        {
+            if (_surface is not null)
+            {
+                _pending = (ContentType)args.ContentType;
+            }
+        }
+
+        private void OnCommitRequested()
+        {
+            if (_pending is { } type)
+            {
+                _pending = null;
+                _surface!.Pending.SetExtension(new PendingType(type));
+            }
+        }
+
+        private void OnCommitted()
+        {
+            if (_surface!.Current.TakeExtension<PendingType>() is { } carried)
+            {
+                using (carried)
+                {
+                    owner.Apply(_surface, carried.Type);
+                }
+            }
+        }
     }
 }

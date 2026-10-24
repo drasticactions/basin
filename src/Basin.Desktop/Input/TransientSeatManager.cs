@@ -10,7 +10,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>ext_transient_seat_manager_v1</c> global. The consumer answers each request through <see cref="SeatRequested"/>, and an unanswered request is denied.
 /// </summary>
-public sealed class TransientSeatManager : IDisposable
+public sealed class TransientSeatManager : IDisposable, IExtTransientSeatManagerV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -181,18 +181,21 @@ public sealed class TransientSeatManager : IDisposable
         seat.Retire();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IExtTransientSeatManagerV1Handler.Create(ExtTransientSeatManagerV1Resource resource, in ExtTransientSeatManagerV1Resource.CreateEventArgs args)
     {
-        var manager = new ExtTransientSeatManagerV1Resource(client, version, id);
-        manager.Create += (_, e) =>
+        var seat = new ExtTransientSeatV1Resource(resource.Client, resource.Version, args.Seat);
+        var request = new SeatRequest(this, seat);
+        SeatRequested?.Invoke(request);
+        if (!request.Handled)
         {
-            var seat = new ExtTransientSeatV1Resource(client, manager.Version, e.Seat);
-            var request = new SeatRequest(this, seat);
-            SeatRequested?.Invoke(request);
-            if (!request.Handled)
-            {
-                seat.SendDenied();
-            }
-        };
+            seat.SendDenied();
+        }
     }
+
+    void IExtTransientSeatManagerV1Handler.Destroy(ExtTransientSeatManagerV1Resource resource)
+    {
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ExtTransientSeatManagerV1Resource(client, version, id, this);
 }

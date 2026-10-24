@@ -61,6 +61,58 @@ public sealed class GammaControlTests
     private static extern int close(int fd);
 
     [Fact]
+    public void A_control_that_failed_ignores_set_gamma_and_closes_its_fd()
+    {
+        using var host = new CompositorTestHost();
+        var gamma = new TestOutputGamma();
+        using var manager = new GammaControlManager(host.Display, gamma);
+
+        Basin.Desktop.Protocol.ZwlrGammaControlManagerV1? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "zwlr_gamma_control_manager_v1")
+            {
+                proxy = registry.Bind<Basin.Desktop.Protocol.ZwlrGammaControlManagerV1>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+
+        var first = proxy!.GetGammaControl(host.Client.Outputs[0]);
+        var firstFailed = false;
+        uint firstSize = 0;
+        first.GammaSize += (_, e) => firstSize = e.Size;
+        first.Failed += (_, _) => firstFailed = true;
+        host.PumpUntil(() => firstSize != 0);
+
+        var second = proxy.GetGammaControl(host.Client.Outputs[0]);
+        uint secondSize = 0;
+        second.GammaSize += (_, e) => secondSize = e.Size;
+        host.PumpUntil(() => firstFailed && secondSize != 0);
+
+        var fd = memfd_create("gamma", 0);
+        var table = new byte[24];
+        unsafe
+        {
+            fixed (byte* data = table)
+            {
+                Assert.Equal(24, (int)write(fd, data, 24));
+            }
+        }
+
+        lseek(fd, 0, 0);
+        first.SetGamma(fd);
+        close(fd);
+        host.PumpToServer();
+        host.PumpToClient();
+
+        Assert.Empty(gamma.Applied);
+        first.Dispose();
+        second.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
     public void Ramps_reach_the_consumer_and_reset_on_destroy()
     {
         using var host = new CompositorTestHost();

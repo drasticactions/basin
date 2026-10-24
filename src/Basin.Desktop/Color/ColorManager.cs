@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_color_manager_v1</c> global. It tracks the image description of each surface and of each output, and tells clients the supported features.
 /// </summary>
-public sealed class ColorManager : IDisposable
+public sealed class ColorManager : IDisposable, IWpColorManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -333,7 +333,7 @@ public sealed class ColorManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new WpColorManagerV1Resource(client, version, id);
+        var manager = new WpColorManagerV1Resource(client, version, id, this);
         manager.SendSupportedIntent(WpColorManagerV1.RenderIntent.Perceptual);
         if (manager.Version >= 2)
         {
@@ -381,145 +381,93 @@ public sealed class ColorManager : IDisposable
         }
 
         manager.SendDone();
+    }
 
-        manager.CreateIccCreator += (_, e) =>
+    void IWpColorManagerV1Handler.Destroy(WpColorManagerV1Resource resource)
+    {
+    }
+
+    void IWpColorManagerV1Handler.CreateIccCreator(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.CreateIccCreatorEventArgs args)
+    {
+        if (Profiles is { } profiles && profiles.Features.HasFlag(ColorFeatures.IccProfiles))
         {
-            if (Profiles is { } profiles && profiles.Features.HasFlag(ColorFeatures.IccProfiles))
-            {
-                _ = new IccCreator(new WpImageDescriptionCreatorIccV1Resource(client, manager.Version, e.Obj), profiles);
-            }
-            else
-            {
-                manager.PostError(ManagerErrorUnsupportedFeature, "ICC image descriptions are not supported.");
-            }
-        };
-        manager.CreateWindowsScrgb += (_, e) =>
+            _ = new IccCreator(resource.Client, resource.Version, args.Obj, profiles);
+        }
+        else
         {
-            if (!OffersScrgb)
-            {
-                manager.PostError(ManagerErrorUnsupportedFeature, "windows_scrgb is not supported.");
-                return;
-            }
+            resource.PostError(ManagerErrorUnsupportedFeature, "ICC image descriptions are not supported.");
+        }
+    }
 
-            DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, e.ImageDescription), ImageDescription.WindowsScrgb(), allowInformation: false);
-        };
-        manager.CreateWindowsBt2100 += (_, e) =>
-            manager.PostError(ManagerErrorUnsupportedFeature, "windows_bt2100 is not supported.");
-
-        manager.CreateParametricCreator += (_, e) =>
-            _ = new ParametricCreator(new WpImageDescriptionCreatorParamsV1Resource(client, manager.Version, e.Obj), this);
-
-        manager.GetImageDescription += (_, e) =>
+    void IWpColorManagerV1Handler.CreateWindowsScrgb(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.CreateWindowsScrgbEventArgs args)
+    {
+        if (!OffersScrgb)
         {
-            var target = new WpImageDescriptionV1Resource(client, manager.Version, e.ImageDescription);
-            if (ReferenceRegistry.TryResolve(e.Reference, out var referenced, out var allowInformation))
-            {
-                DescribeInto(target, referenced, allowInformation);
-                return;
-            }
+            resource.PostError(ManagerErrorUnsupportedFeature, "windows_scrgb is not supported.");
+            return;
+        }
 
-            target.SendFailed(WpImageDescriptionV1.Cause.NoOutput, "unknown image description reference");
-        };
+        DescribeInto(new DescriptionObject(resource.Client, resource.Version, args.ImageDescription), ImageDescription.WindowsScrgb(), allowInformation: false);
+    }
 
-        manager.GetOutput += (_, e) =>
+    void IWpColorManagerV1Handler.CreateWindowsBt2100(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.CreateWindowsBt2100EventArgs args) =>
+        resource.PostError(ManagerErrorUnsupportedFeature, "windows_bt2100 is not supported.");
+
+    void IWpColorManagerV1Handler.CreateParametricCreator(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.CreateParametricCreatorEventArgs args) =>
+        _ = new ParametricCreator(resource.Client, resource.Version, args.Obj, this);
+
+    void IWpColorManagerV1Handler.GetImageDescription(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.GetImageDescriptionEventArgs args)
+    {
+        var target = new DescriptionObject(resource.Client, resource.Version, args.ImageDescription);
+        if (ReferenceRegistry.TryResolve(args.Reference, out var referenced, out var allowInformation))
         {
-            var resource = new WpColorManagementOutputV1Resource(client, manager.Version, e.Id);
-            var output = OutputGlobal.FromResource(e.Output);
-            if (output is null)
-            {
-                return;
-            }
+            DescribeInto(target, referenced, allowInformation);
+            return;
+        }
 
-            var entry = (resource, output);
-            _outputResources.Add(entry);
-            resource.Destroyed += (_, _) => _outputResources.Remove(entry);
-            resource.GetImageDescription += (_, ge) =>
-            {
-                var description = _outputs.GetValueOrDefault(output, ImageDescription.SdrDefault);
-                DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, ge.ImageDescription), description);
-            };
-        };
+        target.Resource.SendFailed(WpImageDescriptionV1.Cause.NoOutput, "unknown image description reference");
+    }
 
-        manager.GetSurface += (_, e) =>
+    void IWpColorManagerV1Handler.GetOutput(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.GetOutputEventArgs args)
+    {
+        var handler = new OutputColor(this, resource.Client, resource.Version, args.Id);
+        var output = OutputGlobal.FromResource(args.Output);
+        if (output is null)
         {
-            var resource = new WpColorManagementSurfaceV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            if (!_claimed.Add(surface))
-            {
-                manager.PostError(ManagerErrorSurfaceExists, "The surface already has a color management object.");
-                return;
-            }
+        handler.Attach(output);
+    }
 
-            var state = StateFor(surface);
-            var inert = false;
-            surface.Destroyed += () => inert = true;
-
-            resource.SetImageDescription += (_, se) =>
-            {
-                if (inert)
-                {
-                    resource.PostError(SurfaceErrorInert, "The surface of this object is destroyed.");
-                    return;
-                }
-
-                var description = DescriptionRegistry.Resolve(se.ImageDescription?.RawHandle ?? 0);
-                if (description is null)
-                {
-                    return;
-                }
-
-                state.HasPending = true;
-                state.Pending = description;
-                state.PendingIntent = se.RenderIntent;
-            };
-            resource.UnsetImageDescription += (_, _) =>
-            {
-                if (inert)
-                {
-                    resource.PostError(SurfaceErrorInert, "The surface of this object is destroyed.");
-                    return;
-                }
-
-                state.HasPending = true;
-                state.Pending = null;
-                state.PendingIntent = default;
-            };
-            resource.Destroyed += (_, _) =>
-            {
-                _claimed.Remove(surface);
-                if (inert)
-                {
-                    return;
-                }
-
-                state.HasPending = true;
-                state.Pending = null;
-                state.PendingIntent = default;
-            };
-        };
-
-        manager.GetSurfaceFeedback += (_, e) =>
+    void IWpColorManagerV1Handler.GetSurface(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.GetSurfaceEventArgs args)
+    {
+        var handler = new SurfaceColorObject(this, resource.Client, resource.Version, args.Id);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new WpColorManagementSurfaceFeedbackV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            var entry = (resource, surface);
-            _feedback.Add(entry);
-            resource.Destroyed += (_, _) => _feedback.Remove(entry);
-            resource.GetPreferred += (_, ge) =>
-                DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, ge.ImageDescription), PreferredFor(surface));
-            resource.GetPreferredParametric += (_, ge) =>
-                DescribeInto(new WpImageDescriptionV1Resource(client, manager.Version, ge.ImageDescription), PreferredFor(surface));
-        };
+        if (!_claimed.Add(surface))
+        {
+            resource.PostError(ManagerErrorSurfaceExists, "The surface already has a color management object.");
+            return;
+        }
+
+        handler.Attach(surface, StateFor(surface));
+    }
+
+    void IWpColorManagerV1Handler.GetSurfaceFeedback(WpColorManagerV1Resource resource, in WpColorManagerV1Resource.GetSurfaceFeedbackEventArgs args)
+    {
+        var handler = new FeedbackObject(this, resource.Client, resource.Version, args.Id);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
+        {
+            return;
+        }
+
+        handler.Attach(surface);
     }
 
     /// <summary>
@@ -564,80 +512,290 @@ public sealed class ColorManager : IDisposable
     }
 
     private static void DescribeInto(
-        WpImageDescriptionV1Resource resource,
+        DescriptionObject target,
         ImageDescription description,
         bool allowInformation = true)
     {
-        DescriptionRegistry.Register(resource, description);
+        DescriptionRegistry.Register(target.Resource, description);
         if (!allowInformation)
         {
-            resource.GetInformation += (_, _) => resource.PostError(
-                (uint)WpImageDescriptionV1.Error.NoInformation,
-                "This image description has no information.");
-            SendReady(resource, description);
+            target.NoInformation = "This image description has no information.";
+            SendReady(target.Resource, description);
             return;
         }
 
-        resource.GetInformation += (_, ie) =>
+        target.Information = description;
+        SendReady(target.Resource, description);
+    }
+
+    private static void SendInformation(WpImageDescriptionV1Resource resource, uint id, ImageDescription description)
+    {
+        var info = new WpImageDescriptionInfoV1Resource(resource.Client, resource.Version, id);
+        if (description.IccData is { } icc)
         {
-            var info = new WpImageDescriptionInfoV1Resource(resource.Client, resource.Version, ie.Information);
-            if (description.IccData is { } icc)
+            using var blob = Wayland.Server.Shm.ShmBlobs
+                .ForClient(resource.Client)
+                .Create("basin-icc-profile", icc);
+            info.SendIccFile(blob.FdSlot, blob.Size);
+        }
+
+        if (description.PrimariesNamed is { } primariesNamed)
+        {
+            info.SendPrimariesNamed((WpColorManagerV1.Primaries)primariesNamed);
+        }
+
+        if (description.PrimariesCustom is { } p)
+        {
+            info.SendPrimaries(p.Rx, p.Ry, p.Gx, p.Gy, p.Bx, p.By, p.Wx, p.Wy);
+        }
+
+        if (description.TransferNamed is { } tf)
+        {
+            info.SendTfNamed((WpColorManagerV1.TransferFunction)tf);
+        }
+
+        if (description.TransferPower is { } power)
+        {
+            info.SendTfPower(power);
+        }
+
+        if (description.Luminances is { } luminances)
+        {
+            info.SendLuminances(luminances.Min, luminances.Max, luminances.Reference);
+        }
+
+        if (description.MasteringPrimaries is { } mp)
+        {
+            info.SendTargetPrimaries(mp.Rx, mp.Ry, mp.Gx, mp.Gy, mp.Bx, mp.By, mp.Wx, mp.Wy);
+        }
+
+        if (description.MasteringLuminance is { } ml)
+        {
+            info.SendTargetLuminance(ml.Min, ml.Max);
+        }
+
+        if (description.MaxCll is { } cll)
+        {
+            info.SendTargetMaxCll(cll);
+        }
+
+        if (description.MaxFall is { } fall)
+        {
+            info.SendTargetMaxFall(fall);
+        }
+
+        info.SendDone();
+    }
+
+    private sealed class DescriptionObject : IWpImageDescriptionV1Handler
+    {
+        public DescriptionObject(WlClient client, uint version, uint id)
+        {
+            Resource = new WpImageDescriptionV1Resource(client, version, id, this);
+        }
+
+        public WpImageDescriptionV1Resource Resource { get; }
+
+        public ImageDescription? Information { get; set; }
+
+        public string? NoInformation { get; set; }
+
+        void IWpImageDescriptionV1Handler.Destroy(WpImageDescriptionV1Resource resource)
+        {
+        }
+
+        void IWpImageDescriptionV1Handler.GetInformation(WpImageDescriptionV1Resource resource, in WpImageDescriptionV1Resource.GetInformationEventArgs args)
+        {
+            if (NoInformation is { } message)
             {
-                using var blob = Wayland.Server.Shm.ShmBlobs
-                    .ForClient(resource.Client)
-                    .Create("basin-icc-profile", icc);
-                info.SendIccFile(blob.FdSlot, blob.Size);
+                resource.PostError((uint)WpImageDescriptionV1.Error.NoInformation, message);
+                return;
             }
 
-            if (description.PrimariesNamed is { } primariesNamed)
+            if (Information is { } description)
             {
-                info.SendPrimariesNamed((WpColorManagerV1.Primaries)primariesNamed);
+                SendInformation(resource, args.Information, description);
+            }
+        }
+    }
+
+    private sealed class OutputColor : IWpColorManagementOutputV1Handler
+    {
+        private readonly ColorManager _manager;
+        private OutputGlobal? _output;
+
+        public OutputColor(ColorManager manager, WlClient client, uint version, uint id)
+        {
+            _manager = manager;
+            Resource = new WpColorManagementOutputV1Resource(client, version, id, this);
+        }
+
+        public WpColorManagementOutputV1Resource Resource { get; }
+
+        public void Attach(OutputGlobal output)
+        {
+            _output = output;
+            _manager._outputResources.Add((Resource, output));
+            Resource.Destroyed += OnDestroyed;
+        }
+
+        void IWpColorManagementOutputV1Handler.Destroy(WpColorManagementOutputV1Resource resource)
+        {
+        }
+
+        void IWpColorManagementOutputV1Handler.GetImageDescription(
+            WpColorManagementOutputV1Resource resource,
+            in WpColorManagementOutputV1Resource.GetImageDescriptionEventArgs args)
+        {
+            if (_output is not { } output)
+            {
+                return;
             }
 
-            if (description.PrimariesCustom is { } p)
+            var description = _manager._outputs.GetValueOrDefault(output, ImageDescription.SdrDefault);
+            DescribeInto(new DescriptionObject(resource.Client, resource.Version, args.ImageDescription), description);
+        }
+
+        private void OnDestroyed(object? sender, EventArgs e) => _manager._outputResources.Remove((Resource, _output!));
+    }
+
+    private sealed class SurfaceColorObject : IWpColorManagementSurfaceV1Handler
+    {
+        private readonly ColorManager _manager;
+        private Surface? _surface;
+        private SurfaceColor? _state;
+        private bool _inert;
+
+        public SurfaceColorObject(ColorManager manager, WlClient client, uint version, uint id)
+        {
+            _manager = manager;
+            Resource = new WpColorManagementSurfaceV1Resource(client, version, id, this);
+        }
+
+        public WpColorManagementSurfaceV1Resource Resource { get; }
+
+        public void Attach(Surface surface, SurfaceColor state)
+        {
+            _surface = surface;
+            _state = state;
+            surface.Destroyed += OnSurfaceDestroyed;
+            Resource.Destroyed += OnResourceDestroyed;
+        }
+
+        void IWpColorManagementSurfaceV1Handler.Destroy(WpColorManagementSurfaceV1Resource resource)
+        {
+        }
+
+        void IWpColorManagementSurfaceV1Handler.SetImageDescription(
+            WpColorManagementSurfaceV1Resource resource,
+            in WpColorManagementSurfaceV1Resource.SetImageDescriptionEventArgs args)
+        {
+            if (_state is not { } state)
             {
-                info.SendPrimaries(p.Rx, p.Ry, p.Gx, p.Gy, p.Bx, p.By, p.Wx, p.Wy);
+                return;
             }
 
-            if (description.TransferNamed is { } tf)
+            if (_inert)
             {
-                info.SendTfNamed((WpColorManagerV1.TransferFunction)tf);
+                resource.PostError(SurfaceErrorInert, "The surface of this object is destroyed.");
+                return;
             }
 
-            if (description.TransferPower is { } power)
+            var description = DescriptionRegistry.Resolve(args.ImageDescription?.RawHandle ?? 0);
+            if (description is null)
             {
-                info.SendTfPower(power);
+                return;
             }
 
-            if (description.Luminances is { } luminances)
+            state.HasPending = true;
+            state.Pending = description;
+            state.PendingIntent = args.RenderIntent;
+        }
+
+        void IWpColorManagementSurfaceV1Handler.UnsetImageDescription(WpColorManagementSurfaceV1Resource resource)
+        {
+            if (_state is not { } state)
             {
-                info.SendLuminances(luminances.Min, luminances.Max, luminances.Reference);
+                return;
             }
 
-            if (description.MasteringPrimaries is { } mp)
+            if (_inert)
             {
-                info.SendTargetPrimaries(mp.Rx, mp.Ry, mp.Gx, mp.Gy, mp.Bx, mp.By, mp.Wx, mp.Wy);
+                resource.PostError(SurfaceErrorInert, "The surface of this object is destroyed.");
+                return;
             }
 
-            if (description.MasteringLuminance is { } ml)
+            state.HasPending = true;
+            state.Pending = null;
+            state.PendingIntent = default;
+        }
+
+        private void OnSurfaceDestroyed() => _inert = true;
+
+        private void OnResourceDestroyed(object? sender, EventArgs e)
+        {
+            _manager._claimed.Remove(_surface!);
+            if (_inert)
             {
-                info.SendTargetLuminance(ml.Min, ml.Max);
+                return;
             }
 
-            if (description.MaxCll is { } cll)
+            var state = _state!;
+            state.HasPending = true;
+            state.Pending = null;
+            state.PendingIntent = default;
+        }
+    }
+
+    private sealed class FeedbackObject : IWpColorManagementSurfaceFeedbackV1Handler
+    {
+        private readonly ColorManager _manager;
+        private Surface? _surface;
+
+        public FeedbackObject(ColorManager manager, WlClient client, uint version, uint id)
+        {
+            _manager = manager;
+            Resource = new WpColorManagementSurfaceFeedbackV1Resource(client, version, id, this);
+        }
+
+        public WpColorManagementSurfaceFeedbackV1Resource Resource { get; }
+
+        public void Attach(Surface surface)
+        {
+            _surface = surface;
+            _manager._feedback.Add((Resource, surface));
+            Resource.Destroyed += OnDestroyed;
+        }
+
+        void IWpColorManagementSurfaceFeedbackV1Handler.Destroy(WpColorManagementSurfaceFeedbackV1Resource resource)
+        {
+        }
+
+        void IWpColorManagementSurfaceFeedbackV1Handler.GetPreferred(
+            WpColorManagementSurfaceFeedbackV1Resource resource,
+            in WpColorManagementSurfaceFeedbackV1Resource.GetPreferredEventArgs args)
+        {
+            if (_surface is not { } surface)
             {
-                info.SendTargetMaxCll(cll);
+                return;
             }
 
-            if (description.MaxFall is { } fall)
+            DescribeInto(new DescriptionObject(resource.Client, resource.Version, args.ImageDescription), _manager.PreferredFor(surface));
+        }
+
+        void IWpColorManagementSurfaceFeedbackV1Handler.GetPreferredParametric(
+            WpColorManagementSurfaceFeedbackV1Resource resource,
+            in WpColorManagementSurfaceFeedbackV1Resource.GetPreferredParametricEventArgs args)
+        {
+            if (_surface is not { } surface)
             {
-                info.SendTargetMaxFall(fall);
+                return;
             }
 
-            info.SendDone();
-        };
+            DescribeInto(new DescriptionObject(resource.Client, resource.Version, args.ImageDescription), _manager.PreferredFor(surface));
+        }
 
-        SendReady(resource, description);
+        private void OnDestroyed(object? sender, EventArgs e) => _manager._feedback.Remove((Resource, _surface!));
     }
 
     internal static class ReferenceRegistry
@@ -685,7 +843,7 @@ public sealed class ColorManager : IDisposable
         public static ImageDescription? Resolve(nint handle) => Descriptions.GetValueOrDefault(handle);
     }
 
-    private sealed class IccCreator
+    private sealed class IccCreator : IWpImageDescriptionCreatorIccV1Handler
     {
         private const uint ErrorAlreadySet = 1;
         private const uint ErrorBadFd = 2;
@@ -698,13 +856,21 @@ public sealed class ColorManager : IDisposable
         private byte[]? _data;
         private bool _readFailed;
 
-        public IccCreator(WpImageDescriptionCreatorIccV1Resource resource, IColorProfileService profiles)
+        public IccCreator(WlClient client, uint version, uint id, IColorProfileService profiles)
         {
-            _resource = resource;
             _profiles = profiles;
-            resource.SetIccFile += (_, e) => OnSetIccFile(e.IccProfile, e.Offset, e.Length);
-            resource.Create += (_, e) => OnCreate(new WpImageDescriptionV1Resource(resource.Client, resource.Version, e.ImageDescription));
+            _resource = new WpImageDescriptionCreatorIccV1Resource(client, version, id, this);
         }
+
+        void IWpImageDescriptionCreatorIccV1Handler.SetIccFile(
+            WpImageDescriptionCreatorIccV1Resource resource,
+            in WpImageDescriptionCreatorIccV1Resource.SetIccFileEventArgs args) =>
+            OnSetIccFile(args.IccProfile, args.Offset, args.Length);
+
+        void IWpImageDescriptionCreatorIccV1Handler.Create(
+            WpImageDescriptionCreatorIccV1Resource resource,
+            in WpImageDescriptionCreatorIccV1Resource.CreateEventArgs args) =>
+            OnCreate(new DescriptionObject(resource.Client, resource.Version, args.ImageDescription));
 
         private void OnSetIccFile(int fd, uint offset, uint length)
         {
@@ -768,11 +934,11 @@ public sealed class ColorManager : IDisposable
             _data = data;
         }
 
-        private void OnCreate(WpImageDescriptionV1Resource target)
+        private void OnCreate(DescriptionObject target)
         {
             if (_readFailed)
             {
-                target.SendFailed(WpImageDescriptionV1.Cause.OperatingSystem, "reading the ICC file failed");
+                target.Resource.SendFailed(WpImageDescriptionV1.Cause.OperatingSystem, "reading the ICC file failed");
                 return;
             }
 
@@ -784,22 +950,22 @@ public sealed class ColorManager : IDisposable
 
             if (!_profiles.TryParseIcc(data, out var parsed))
             {
-                target.SendFailed(WpImageDescriptionV1.Cause.Unsupported, "unusable ICC profile");
+                target.Resource.SendFailed(WpImageDescriptionV1.Cause.Unsupported, "unusable ICC profile");
                 return;
             }
 
             var description = parsed with { IccData = data };
-            DescriptionRegistry.Register(target, description);
-            target.GetInformation += (_, _) =>
-                target.PostError((uint)WpImageDescriptionV1.Error.NoInformation, "An image description made from an ICC file has no information.");
+            DescriptionRegistry.Register(target.Resource, description);
+            target.NoInformation = "An image description made from an ICC file has no information.";
 
-            SendReady(target, description);
+            SendReady(target.Resource, description);
         }
     }
 
-    private sealed class ParametricCreator
+    private sealed class ParametricCreator : IWpImageDescriptionCreatorParamsV1Handler
     {
         private readonly WpImageDescriptionCreatorParamsV1Resource _resource;
+        private readonly ColorManager _manager;
         private ColorPrimaries? _primariesNamed;
         private (int, int, int, int, int, int, int, int)? _primariesCustom;
         private ColorTransferFunction? _tfNamed;
@@ -810,61 +976,99 @@ public sealed class ColorManager : IDisposable
         private uint? _maxCll;
         private uint? _maxFall;
 
-        public ParametricCreator(WpImageDescriptionCreatorParamsV1Resource resource, ColorManager manager)
+        public ParametricCreator(WlClient client, uint version, uint id, ColorManager manager)
         {
-            _resource = resource;
-            resource.SetPrimariesNamed += (_, e) =>
-            {
-                if (!manager.SupportedPrimaries.Contains((ColorPrimaries)e.Primaries) ||
-                    IsDeprecatedAt((ColorPrimaries)e.Primaries, resource.Version))
-                {
-                    resource.PostError(CreatorErrorInvalidPrimariesNamed, "These primaries are not supported.");
-                    return;
-                }
+            _manager = manager;
+            _resource = new WpImageDescriptionCreatorParamsV1Resource(client, version, id, this);
+        }
 
-                Set(ref _primariesNamed, (ColorPrimaries)e.Primaries);
-            };
-            resource.SetPrimaries += (_, e) => Set(ref _primariesCustom, (e.RX, e.RY, e.GX, e.GY, e.BX, e.BY, e.WX, e.WY));
-            resource.SetTfNamed += (_, e) =>
+        void IWpImageDescriptionCreatorParamsV1Handler.SetPrimariesNamed(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetPrimariesNamedEventArgs args)
+        {
+            if (!_manager.SupportedPrimaries.Contains((ColorPrimaries)args.Primaries) ||
+                IsDeprecatedAt((ColorPrimaries)args.Primaries, resource.Version))
             {
-                if (!manager.SupportedTransferFunctions.Contains((ColorTransferFunction)e.Tf) ||
-                    IsDeprecatedAt((ColorTransferFunction)e.Tf, resource.Version))
-                {
-                    resource.PostError(CreatorErrorInvalidTf, "This transfer function is not supported.");
-                    return;
-                }
+                resource.PostError(CreatorErrorInvalidPrimariesNamed, "These primaries are not supported.");
+                return;
+            }
 
-                Set(ref _tfNamed, (ColorTransferFunction)e.Tf);
-            };
-            resource.SetTfPower += (_, e) => Set(ref _tfPower, e.Eexp);
-            resource.SetLuminances += (_, e) => Set(ref _luminances, (e.MinLum, e.MaxLum, e.ReferenceLum));
-            resource.SetMasteringDisplayPrimaries += (_, e) => Set(ref _masteringPrimaries, (e.RX, e.RY, e.GX, e.GY, e.BX, e.BY, e.WX, e.WY));
-            resource.SetMasteringLuminance += (_, e) => Set(ref _masteringLuminance, (e.MinLum, e.MaxLum));
-            resource.SetMaxCll += (_, e) => Set(ref _maxCll, e.MaxCll);
-            resource.SetMaxFall += (_, e) => Set(ref _maxFall, e.MaxFall);
-            resource.Create += (_, e) =>
+            Set(ref _primariesNamed, (ColorPrimaries)args.Primaries);
+        }
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetPrimaries(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetPrimariesEventArgs args) =>
+            Set(ref _primariesCustom, (args.RX, args.RY, args.GX, args.GY, args.BX, args.BY, args.WX, args.WY));
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetTfNamed(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetTfNamedEventArgs args)
+        {
+            if (!_manager.SupportedTransferFunctions.Contains((ColorTransferFunction)args.Tf) ||
+                IsDeprecatedAt((ColorTransferFunction)args.Tf, resource.Version))
             {
-                var target = new WpImageDescriptionV1Resource(resource.Client, resource.Version, e.ImageDescription);
-                if ((_primariesNamed is null && _primariesCustom is null) || (_tfNamed is null && _tfPower is null))
-                {
-                    resource.PostError(CreatorErrorIncompleteSet, "The image description needs primaries and a transfer function.");
-                    return;
-                }
+                resource.PostError(CreatorErrorInvalidTf, "This transfer function is not supported.");
+                return;
+            }
 
-                var description = new ImageDescription
-                {
-                    PrimariesNamed = _primariesNamed,
-                    PrimariesCustom = _primariesCustom,
-                    TransferNamed = _tfNamed,
-                    TransferPower = _tfPower,
-                    Luminances = _luminances,
-                    MasteringPrimaries = _masteringPrimaries,
-                    MasteringLuminance = _masteringLuminance,
-                    MaxCll = _maxCll,
-                    MaxFall = _maxFall,
-                };
-                DescribeInto(target, description);
+            Set(ref _tfNamed, (ColorTransferFunction)args.Tf);
+        }
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetTfPower(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetTfPowerEventArgs args) =>
+            Set(ref _tfPower, args.Eexp);
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetLuminances(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetLuminancesEventArgs args) =>
+            Set(ref _luminances, (args.MinLum, args.MaxLum, args.ReferenceLum));
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetMasteringDisplayPrimaries(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetMasteringDisplayPrimariesEventArgs args) =>
+            Set(ref _masteringPrimaries, (args.RX, args.RY, args.GX, args.GY, args.BX, args.BY, args.WX, args.WY));
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetMasteringLuminance(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetMasteringLuminanceEventArgs args) =>
+            Set(ref _masteringLuminance, (args.MinLum, args.MaxLum));
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetMaxCll(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetMaxCllEventArgs args) =>
+            Set(ref _maxCll, args.MaxCll);
+
+        void IWpImageDescriptionCreatorParamsV1Handler.SetMaxFall(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.SetMaxFallEventArgs args) =>
+            Set(ref _maxFall, args.MaxFall);
+
+        void IWpImageDescriptionCreatorParamsV1Handler.Create(
+            WpImageDescriptionCreatorParamsV1Resource resource,
+            in WpImageDescriptionCreatorParamsV1Resource.CreateEventArgs args)
+        {
+            var target = new DescriptionObject(resource.Client, resource.Version, args.ImageDescription);
+            if ((_primariesNamed is null && _primariesCustom is null) || (_tfNamed is null && _tfPower is null))
+            {
+                resource.PostError(CreatorErrorIncompleteSet, "The image description needs primaries and a transfer function.");
+                return;
+            }
+
+            var description = new ImageDescription
+            {
+                PrimariesNamed = _primariesNamed,
+                PrimariesCustom = _primariesCustom,
+                TransferNamed = _tfNamed,
+                TransferPower = _tfPower,
+                Luminances = _luminances,
+                MasteringPrimaries = _masteringPrimaries,
+                MasteringLuminance = _masteringLuminance,
+                MaxCll = _maxCll,
+                MaxFall = _maxFall,
             };
+            DescribeInto(target, description);
         }
 
         private void Set<T>(ref T? slot, T value)

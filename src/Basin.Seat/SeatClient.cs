@@ -4,7 +4,7 @@ using Wayland.Server;
 
 namespace Basin.Seat;
 
-internal sealed class SeatClient
+internal sealed class SeatClient : IWlSeatHandler, IWlPointerHandler, IWlDataDeviceHandler
 {
     private readonly Seat _seat;
     private readonly Value120Accumulator[] _value120 = new Value120Accumulator[2];
@@ -66,6 +66,36 @@ internal sealed class SeatClient
         public double Value;
     }
 
+    void IWlSeatHandler.GetPointer(WlSeatResource resource, in WlSeatResource.GetPointerEventArgs args) =>
+        AddPointer(new WlPointerResource(Client, resource.Version, args.Id, this));
+
+    void IWlSeatHandler.GetKeyboard(WlSeatResource resource, in WlSeatResource.GetKeyboardEventArgs args) =>
+        AddKeyboard(new WlKeyboardResource(Client, resource.Version, args.Id));
+
+    void IWlSeatHandler.GetTouch(WlSeatResource resource, in WlSeatResource.GetTouchEventArgs args) =>
+        AddTouch(new WlTouchResource(Client, resource.Version, args.Id));
+
+    void IWlSeatHandler.Release(WlSeatResource resource)
+    {
+    }
+
+    void IWlPointerHandler.SetCursor(WlPointerResource resource, in WlPointerResource.SetCursorEventArgs args) =>
+        _seat.Pointer.HandleSetCursor(this, args);
+
+    void IWlPointerHandler.Release(WlPointerResource resource)
+    {
+    }
+
+    void IWlDataDeviceHandler.SetSelection(WlDataDeviceResource resource, in WlDataDeviceResource.SetSelectionEventArgs args) =>
+        _seat.DataDevice.OnSetSelection(in args);
+
+    void IWlDataDeviceHandler.StartDrag(WlDataDeviceResource resource, in WlDataDeviceResource.StartDragEventArgs args) =>
+        _seat.DataDevice.HandleStartDrag(this, in args);
+
+    void IWlDataDeviceHandler.Release(WlDataDeviceResource resource)
+    {
+    }
+
     public void AddPointer(WlPointerResource pointer)
     {
         Pointers.Add(pointer);
@@ -74,7 +104,6 @@ internal sealed class SeatClient
             Pointers.Remove(pointer);
             _seat.PruneClient(this);
         };
-        pointer.SetCursor += (_, e) => _seat.Pointer.HandleSetCursor(this, e);
         _seat.Pointer.InitializeResource(this, pointer);
     }
 

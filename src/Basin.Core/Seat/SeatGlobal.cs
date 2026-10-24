@@ -6,7 +6,7 @@ namespace Basin;
 /// <summary>
 /// A <c>wl_seat</c> global with no capabilities. Each request for a pointer, keyboard or touch device gets the <c>missing_capability</c> error.
 /// </summary>
-public sealed class SeatGlobal : IDisposable
+public sealed class SeatGlobal : IDisposable, IWlSeatHandler
 {
     /// <summary>The <c>wl_seat</c> version that this global advertises.</summary>
     public const int Version = 5;
@@ -52,16 +52,22 @@ public sealed class SeatGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var seat = new WlSeatResource(client, version, id);
+        var seat = new WlSeatResource(client, version, id, this);
         seat.SendCapabilities(default);
         if (version >= 2)
         {
             seat.SendName(_name);
         }
+    }
 
-        seat.GetPointer += (_, _) => PostMissingCapability(seat, "pointer");
-        seat.GetKeyboard += (_, _) => PostMissingCapability(seat, "keyboard");
-        seat.GetTouch += (_, _) => PostMissingCapability(seat, "touch");
+    void IWlSeatHandler.GetPointer(WlSeatResource resource, in WlSeatResource.GetPointerEventArgs args) => PostMissingCapability(resource, "pointer");
+
+    void IWlSeatHandler.GetKeyboard(WlSeatResource resource, in WlSeatResource.GetKeyboardEventArgs args) => PostMissingCapability(resource, "keyboard");
+
+    void IWlSeatHandler.GetTouch(WlSeatResource resource, in WlSeatResource.GetTouchEventArgs args) => PostMissingCapability(resource, "touch");
+
+    void IWlSeatHandler.Release(WlSeatResource resource)
+    {
     }
 
     private static void PostMissingCapability(WlSeatResource seat, string what)

@@ -38,6 +38,7 @@ internal static class IpcFullRig
                 services.UseDefault<IUIElementLocator>(new Basin.Capabilities.Defaults.UIElementDirectory());
                 services.UseDefault<IInputDiagnostics>(new QuietInputDiagnostics());
                 services.UseDefault<ISurfaceDiagnostics>(new SurfaceDiagnostics(host.Compositor));
+                services.UseDefault<IExplicitSyncDiagnostics>(new QuietSyncDiagnostics());
             },
             new IpcSessionInfo { Compositor = "full", Quit = () => { }, Settle = new ManualSettle() },
             path,
@@ -47,6 +48,11 @@ internal static class IpcFullRig
         rig.Server.Approvals = new IpcApprovalBroker();
         register?.Invoke(rig.Server);
         return rig;
+    }
+
+    internal sealed class QuietSyncDiagnostics : IExplicitSyncDiagnostics
+    {
+        public ExplicitSyncCounters Counters => default;
     }
 
     internal sealed class QuietInputDiagnostics : IInputDiagnostics

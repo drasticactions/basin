@@ -1,6 +1,6 @@
 // x11focus MODE [SECONDS]: one X11 window shaped the way a focus or class test needs.
-// Prints WINDOW 0xID, MAPPED, FOCUS in|out MODE DETAIL, CONFIGURE X Y W H and
-// MOVERESIZE sent as they happen.
+// Prints WINDOW 0xID, MAPPED, FOCUS in|out MODE DETAIL, CONFIGURE X Y W H,
+// MOVERESIZE sent and KEY CODE for each key press as they happen.
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,7 +113,7 @@ int main(int argc, char **argv)
         screen->white_pixel,
         (uint32_t)(!strcmp(mode, "orflip") || stub),
         XCB_EVENT_MASK_FOCUS_CHANGE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_BUTTON_PRESS |
-            XCB_EVENT_MASK_EXPOSURE,
+            XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS,
     };
     xcb_create_window(conn, XCB_COPY_FROM_PARENT, window, screen->root, x, y, width, height, 0,
         XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual,
@@ -210,6 +210,12 @@ int main(int argc, char **argv)
                     xcb_focus_in_event_t *e = (xcb_focus_in_event_t *)event;
                     printf("FOCUS %s %s %s\n", (event->response_type & 0x7F) == XCB_FOCUS_IN ? "in" : "out",
                         mode_name(e->mode), detail_name(e->detail));
+                    break;
+                }
+                case XCB_KEY_PRESS:
+                {
+                    xcb_key_press_event_t *e = (xcb_key_press_event_t *)event;
+                    printf("KEY %u\n", e->detail);
                     break;
                 }
                 case XCB_BUTTON_PRESS:

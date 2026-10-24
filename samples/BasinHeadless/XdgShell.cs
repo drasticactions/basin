@@ -10,7 +10,7 @@ using Wayland.Server;
 
 namespace Basin.Samples.Headless;
 
-internal sealed class XdgShell
+internal sealed class XdgShell : IXdgWmBaseHandler
 {
     public const string ToplevelRole = "xdg_toplevel";
 
@@ -28,19 +28,31 @@ internal sealed class XdgShell
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var wmBase = new XdgWmBaseResource(client, version, id);
-        wmBase.GetXdgSurface += (_, e) =>
-        {
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, "unknown surface");
-                return;
-            }
+        _ = new XdgWmBaseResource(client, version, id, this);
+    }
 
-            var xdgSurface = new XdgSurfaceResource(client, wmBase.Version, e.Id);
-            xdgSurface.GetToplevel += (_, t) => OnGetToplevel(client, xdgSurface, surface, t.Id);
-        };
+    void IXdgWmBaseHandler.Destroy(XdgWmBaseResource resource)
+    {
+    }
+
+    void IXdgWmBaseHandler.CreatePositioner(XdgWmBaseResource resource, in XdgWmBaseResource.CreatePositionerEventArgs args)
+    {
+    }
+
+    void IXdgWmBaseHandler.GetXdgSurface(XdgWmBaseResource resource, in XdgWmBaseResource.GetXdgSurfaceEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
+        {
+            resource.PostError((uint)XdgWmBase.Error.Role, "unknown surface");
+            return;
+        }
+
+        _ = new XdgSurfaceResource(resource.Client, resource.Version, args.Id, new ShellSurface(this, surface));
+    }
+
+    void IXdgWmBaseHandler.Pong(XdgWmBaseResource resource, in XdgWmBaseResource.PongEventArgs args)
+    {
     }
 
     private void OnGetToplevel(WlClient client, XdgSurfaceResource xdgSurface, Surface surface, uint id)
@@ -71,5 +83,27 @@ internal sealed class XdgShell
         };
 
         toplevel.Destroyed += (_, _) => surface.ClearRoleObject();
+    }
+
+    private sealed class ShellSurface(XdgShell owner, Surface surface) : IXdgSurfaceHandler
+    {
+        void IXdgSurfaceHandler.Destroy(XdgSurfaceResource resource)
+        {
+        }
+
+        void IXdgSurfaceHandler.GetToplevel(XdgSurfaceResource resource, in XdgSurfaceResource.GetToplevelEventArgs args) =>
+            owner.OnGetToplevel(resource.Client, resource, surface, args.Id);
+
+        void IXdgSurfaceHandler.GetPopup(XdgSurfaceResource resource, in XdgSurfaceResource.GetPopupEventArgs args)
+        {
+        }
+
+        void IXdgSurfaceHandler.SetWindowGeometry(XdgSurfaceResource resource, in XdgSurfaceResource.SetWindowGeometryEventArgs args)
+        {
+        }
+
+        void IXdgSurfaceHandler.AckConfigure(XdgSurfaceResource resource, in XdgSurfaceResource.AckConfigureEventArgs args)
+        {
+        }
     }
 }

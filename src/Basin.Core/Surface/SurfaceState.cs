@@ -149,7 +149,12 @@ public sealed class SurfaceState : IDisposable
                 Array.Resize(ref target._extensions, SurfaceCommitSlots.Count);
             }
 
-            target._extensions[i]?.Dispose();
+            if (target._extensions[i] is { } replaced)
+            {
+                (replaced as ISupersededPayload)?.Superseded();
+                replaced.Dispose();
+            }
+
             target._extensions[i] = payload;
         }
     }

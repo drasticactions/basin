@@ -6,7 +6,7 @@ namespace Basin;
 /// <summary>
 /// The <c>wl_subcompositor</c> global. It gives surfaces the <see cref="Subsurface"/> role and refuses a parent that makes a loop.
 /// </summary>
-public sealed class SubcompositorGlobal : IDisposable
+public sealed class SubcompositorGlobal : IDisposable, IWlSubcompositorHandler
 {
     /// <summary>The <c>wl_subcompositor</c> version that this global advertises.</summary>
     public const int Version = 1;
@@ -28,36 +28,39 @@ public sealed class SubcompositorGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var subcompositor = new WlSubcompositorResource(client, version, id);
+        _ = new WlSubcompositorResource(client, version, id, this);
+    }
 
-        subcompositor.GetSubsurface += (_, e) =>
+    void IWlSubcompositorHandler.Destroy(WlSubcompositorResource resource)
+    {
+    }
+
+    void IWlSubcompositorHandler.GetSubsurface(WlSubcompositorResource resource, in WlSubcompositorResource.GetSubsurfaceEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        var parent = _compositor.ResolveSurface(args.Parent);
+        if (surface is null || parent is null)
         {
-            var surface = _compositor.ResolveSurface(e.Surface);
-            var parent = _compositor.ResolveSurface(e.Parent);
-            if (surface is null || parent is null)
-            {
-                subcompositor.PostError((uint)WlSubcompositor.Error.BadSurface, "unknown surface");
-                return;
-            }
+            resource.PostError((uint)WlSubcompositor.Error.BadSurface, "unknown surface");
+            return;
+        }
 
-            if (surface == parent || IsAncestorOf(surface, parent))
-            {
-                subcompositor.PostError((uint)WlSubcompositor.Error.BadParent, "parent would create a loop");
-                return;
-            }
+        if (surface == parent || IsAncestorOf(surface, parent))
+        {
+            resource.PostError((uint)WlSubcompositor.Error.BadParent, "parent would create a loop");
+            return;
+        }
 
-            if (!surface.CanSetRole(Subsurface.RoleName))
-            {
-                subcompositor.PostError(
-                    (uint)WlSubcompositor.Error.BadSurface,
-                    $"surface already has the '{surface.Role}' role");
-                return;
-            }
+        if (!surface.CanSetRole(Subsurface.RoleName))
+        {
+            resource.PostError(
+                (uint)WlSubcompositor.Error.BadSurface,
+                $"surface already has the '{surface.Role}' role");
+            return;
+        }
 
-            var resource = new WlSubsurfaceResource(client, subcompositor.Version, e.Id);
-            var subsurface = new Subsurface(resource, surface, parent);
-            surface.TrySetRole(Subsurface.RoleName, subsurface);
-        };
+        var subsurface = new Subsurface(resource.Client, resource.Version, args.Id, surface, parent);
+        surface.TrySetRole(Subsurface.RoleName, subsurface);
     }
 
     private static bool IsAncestorOf(Surface surface, Surface other)

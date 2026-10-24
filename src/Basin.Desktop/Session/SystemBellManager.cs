@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>xdg_system_bell_v1</c> global. Each ring goes to <see cref="IBell"/> and then to <see cref="Rang"/>.
 /// </summary>
-public sealed class SystemBellManager : IDisposable
+public sealed class SystemBellManager : IDisposable, IXdgSystemBellV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -45,14 +45,17 @@ public sealed class SystemBellManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new XdgSystemBellV1Resource(client, version, id, this);
+
+    void IXdgSystemBellV1Handler.Destroy(XdgSystemBellV1Resource resource)
     {
-        var bell = new XdgSystemBellV1Resource(client, version, id);
-        bell.Ring += (_, e) =>
-        {
-            var surface = e.Surface is { } resource ? _compositor.ResolveSurface(resource) : null;
-            _bell?.Ring(surface);
-            Rang?.Invoke(surface);
-        };
+    }
+
+    void IXdgSystemBellV1Handler.Ring(XdgSystemBellV1Resource resource, in XdgSystemBellV1Resource.RingEventArgs args)
+    {
+        var surface = args.Surface is { } surfaceResource ? _compositor.ResolveSurface(surfaceResource) : null;
+        _bell?.Ring(surface);
+        Rang?.Invoke(surface);
     }
 }

@@ -173,33 +173,68 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new GamescopeActionBindingManagerResource(client, version, id);
         var allowed = _policy.Allows(client);
-        manager.CreateActionBinding += (_, e) =>
-        {
-            var resource = new GamescopeActionBindingResource(client, manager.Version, e.Callback);
-            var binding = new Binding(this, resource, $"{AppIdPrefix}:{client.RawHandle:x}", ++_nextBinding, allowed);
-            resource.SetDescription += (_, d) => binding.Description = d.Description ?? string.Empty;
-            resource.AddKeyboardTrigger += (_, t) => binding.AddTrigger(t.Keysyms);
-            resource.ClearTriggers += (_, _) => binding.ClearTriggers();
-            resource.Arm += (_, a) => binding.Arm((uint)a.ArmFlags);
-            resource.Disarm += (_, _) => binding.Disarm(except: null);
-            resource.Destroyed += (_, _) => binding.Disarm(except: null);
-        };
+        _ = new GamescopeActionBindingManagerResource(client, version, id, new BoundManager(this, allowed));
     }
 
-    private sealed class Binding(
-        ActionBindingManager owner, GamescopeActionBindingResource resource, string appId, ulong number, bool allowed)
+    private sealed class BoundManager(ActionBindingManager owner, bool allowed) : IGamescopeActionBindingManagerHandler
+    {
+        void IGamescopeActionBindingManagerHandler.Destroy(GamescopeActionBindingManagerResource resource)
+        {
+        }
+
+        void IGamescopeActionBindingManagerHandler.CreateActionBinding(
+            GamescopeActionBindingManagerResource resource,
+            in GamescopeActionBindingManagerResource.CreateActionBindingEventArgs args)
+        {
+            var client = resource.Client;
+            _ = new Binding(
+                owner, client, resource.Version, args.Callback, $"{AppIdPrefix}:{client.RawHandle:x}", ++owner._nextBinding, allowed);
+        }
+    }
+
+    private sealed class Binding : IGamescopeActionBindingHandler
     {
         private readonly List<(uint Keysym, Modifiers Modifiers)> _triggers = [];
         private readonly List<string> _registered = [];
+        private readonly ActionBindingManager _owner;
+        private readonly string _appId;
+        private readonly ulong _number;
+        private readonly bool _allowed;
         private bool _armed;
 
-        public GamescopeActionBindingResource Resource => resource;
+        public Binding(ActionBindingManager owner, WlClient client, uint version, uint id, string appId, ulong number, bool allowed)
+        {
+            _owner = owner;
+            _appId = appId;
+            _number = number;
+            _allowed = allowed;
+            Resource = new GamescopeActionBindingResource(client, version, id, this);
+            Resource.Destroyed += (_, _) => Disarm(except: null);
+        }
+
+        public GamescopeActionBindingResource Resource { get; }
 
         public string Description { get; set; } = string.Empty;
 
         public GlobalShortcutFlags Flags { get; private set; }
+
+        void IGamescopeActionBindingHandler.Destroy(GamescopeActionBindingResource resource)
+        {
+        }
+
+        void IGamescopeActionBindingHandler.SetDescription(GamescopeActionBindingResource resource, in GamescopeActionBindingResource.SetDescriptionEventArgs args) =>
+            Description = args.Description ?? string.Empty;
+
+        void IGamescopeActionBindingHandler.AddKeyboardTrigger(GamescopeActionBindingResource resource, in GamescopeActionBindingResource.AddKeyboardTriggerEventArgs args) =>
+            AddTrigger(args.Keysyms);
+
+        void IGamescopeActionBindingHandler.ClearTriggers(GamescopeActionBindingResource resource) => ClearTriggers();
+
+        void IGamescopeActionBindingHandler.Arm(GamescopeActionBindingResource resource, in GamescopeActionBindingResource.ArmEventArgs args) =>
+            Arm((uint)args.ArmFlags);
+
+        void IGamescopeActionBindingHandler.Disarm(GamescopeActionBindingResource resource) => Disarm(except: null);
 
         public void AddTrigger(byte[]? array)
         {
@@ -212,7 +247,7 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
 
             if (!TryChord(keysyms, out var keysym, out var modifiers))
             {
-                Log.Warn($"action binding {number}: trigger has more than one non-modifier key, the binding never fires");
+                Log.Warn($"action binding {_number}: trigger has more than one non-modifier key, the binding never fires");
                 return;
             }
 
@@ -245,8 +280,8 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
             {
                 if (id != except)
                 {
-                    owner._byShortcut.Remove((appId, id));
-                    owner._registry?.Unregister(appId, id);
+                    _owner._byShortcut.Remove((_appId, id));
+                    _owner._registry?.Unregister(_appId, id);
                 }
             }
 
@@ -258,12 +293,12 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
         {
             foreach (var id in _registered)
             {
-                owner._byShortcut.Remove((appId, id));
-                owner._registry?.Unregister(appId, id);
+                _owner._byShortcut.Remove((_appId, id));
+                _owner._registry?.Unregister(_appId, id);
             }
 
             _registered.Clear();
-            if (!allowed || owner._registry is not { } registry)
+            if (!_allowed || _owner._registry is not { } registry)
             {
                 return;
             }
@@ -271,12 +306,12 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
             for (var i = 0; i < _triggers.Count; i++)
             {
                 var (keysym, modifiers) = _triggers[i];
-                var id = $"{number}/{i}";
-                var info = new GlobalShortcutInfo(appId, id, Description, "", TriggerSyntax.Format(keysym, modifiers), Flags);
+                var id = $"{_number}/{i}";
+                var info = new GlobalShortcutInfo(_appId, id, Description, "", TriggerSyntax.Format(keysym, modifiers), Flags);
                 if (registry.TryRegister(in info))
                 {
                     _registered.Add(id);
-                    owner._byShortcut[(appId, id)] = this;
+                    _owner._byShortcut[(_appId, id)] = this;
                 }
             }
         }

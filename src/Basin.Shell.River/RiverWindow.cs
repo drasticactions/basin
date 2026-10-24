@@ -2,10 +2,11 @@ using Basin.Scene;
 using Basin.Shell.River.Protocol;
 using Basin.Shell.Xdg;
 using Basin.XWayland;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverWindow
+internal sealed class RiverWindow : IRiverWindowV1Handler
 {
     private readonly RiverWindowManager _manager;
 
@@ -83,13 +84,14 @@ internal sealed class RiverWindow
 
     internal bool IsFrozen => _snapshot is not null;
 
-    internal void Bind(RiverWindowV1Resource resource)
+    internal RiverWindowV1Resource Bind(WlClient client, uint version, uint id)
     {
+        var resource = new RiverWindowV1Resource(client, version, id, this);
         Resource = resource;
         _sent = default;
         _sentIdentity = false;
         Phase = WindowPhase.Ready;
-        WireRequests(resource);
+        return resource;
     }
 
     internal void SendChanges(uint version)
@@ -421,8 +423,8 @@ internal sealed class RiverWindow
         loop.DeferDestroy(snapshot);
     }
 
-    internal RiverNode EnsureNode(RiverNodeV1Resource resource) =>
-        _node ??= new RiverNode(_manager, resource, () => Tree);
+    internal RiverNode EnsureNode(WlClient client, uint version, uint id) =>
+        _node ??= new RiverNode(_manager, client, version, id, () => Tree);
 
     internal bool HasNode => _node is not null;
 
@@ -696,169 +698,238 @@ internal sealed class RiverWindow
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
 
-    private void WireRequests(RiverWindowV1Resource resource)
+    void IRiverWindowV1Handler.ProposeDimensions(RiverWindowV1Resource resource, in RiverWindowV1Resource.ProposeDimensionsEventArgs args)
     {
-        resource.ProposeDimensions += (_, e) =>
+        if (!_manager.EnsureWindowing())
         {
-            if (!_manager.EnsureWindowing())
+            return;
+        }
+
+        if (args.Width < 0 || args.Height < 0)
+        {
+            resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "The dimensions must not be negative.");
+            return;
+        }
+
+        _requested.ProposedSize = new Size(args.Width, args.Height);
+        _requested.HasProposal = true;
+
+        ForceDimensionResend();
+    }
+
+    void IRiverWindowV1Handler.SetDimensionBounds(RiverWindowV1Resource resource, in RiverWindowV1Resource.SetDimensionBoundsEventArgs args)
+    {
+        if (!_manager.EnsureWindowing())
+        {
+            return;
+        }
+
+        if (args.MaxWidth < 0 || args.MaxHeight < 0)
+        {
+            resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "The bounds must not be negative.");
+            return;
+        }
+
+        _requested.MaxBounds = new Size(args.MaxWidth, args.MaxHeight);
+    }
+
+    void IRiverWindowV1Handler.Close(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.Closed = true;
+        }
+    }
+
+    void IRiverWindowV1Handler.UseCsd(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.ServerSideDecorations = false;
+        }
+    }
+
+    void IRiverWindowV1Handler.UseSsd(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.ServerSideDecorations = true;
+        }
+    }
+
+    void IRiverWindowV1Handler.SetTiled(RiverWindowV1Resource resource, in RiverWindowV1Resource.SetTiledEventArgs args)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.TiledEdges = FromRiverEdges(args.Edges);
+        }
+    }
+
+    void IRiverWindowV1Handler.SetCapabilities(RiverWindowV1Resource resource, in RiverWindowV1Resource.SetCapabilitiesEventArgs args)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.Capabilities = args.Caps;
+        }
+    }
+
+    void IRiverWindowV1Handler.InformMaximized(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.InformMaximized = true;
+        }
+    }
+
+    void IRiverWindowV1Handler.InformUnmaximized(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.InformMaximized = false;
+        }
+    }
+
+    void IRiverWindowV1Handler.InformFullscreen(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.InformFullscreen = true;
+        }
+    }
+
+    void IRiverWindowV1Handler.InformNotFullscreen(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.InformFullscreen = false;
+        }
+    }
+
+    void IRiverWindowV1Handler.InformResizeStart(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.InformResizing = true;
+        }
+    }
+
+    void IRiverWindowV1Handler.InformResizeEnd(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            _requested.InformResizing = false;
+        }
+    }
+
+    void IRiverWindowV1Handler.Fullscreen(RiverWindowV1Resource resource, in RiverWindowV1Resource.FullscreenEventArgs args)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            var output = _manager.ResolveOutput(args.Output);
+            if (output is { IsRemoved: true })
             {
                 return;
             }
 
-            if (e.Width < 0 || e.Height < 0)
-            {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "The dimensions must not be negative.");
-                return;
-            }
-
-            _requested.ProposedSize = new Size(e.Width, e.Height);
-            _requested.HasProposal = true;
+            _requested.Fullscreen = output;
 
             ForceDimensionResend();
-        };
-        resource.SetDimensionBounds += (_, e) =>
-        {
-            if (!_manager.EnsureWindowing())
-            {
-                return;
-            }
+        }
+    }
 
-            if (e.MaxWidth < 0 || e.MaxHeight < 0)
-            {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidDimensions, "The bounds must not be negative.");
-                return;
-            }
-
-            _requested.MaxBounds = new Size(e.MaxWidth, e.MaxHeight);
-        };
-        resource.Close += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                _requested.Closed = true;
-            }
-        };
-        resource.UseCsd += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                _requested.ServerSideDecorations = false;
-            }
-        };
-        resource.UseSsd += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                _requested.ServerSideDecorations = true;
-            }
-        };
-        resource.SetTiled += (_, e) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                _requested.TiledEdges = FromRiverEdges(e.Edges);
-            }
-        };
-        resource.SetCapabilities += (_, e) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                _requested.Capabilities = e.Caps;
-            }
-        };
-        resource.InformMaximized += (_, _) => SetIfWindowing(() => _requested.InformMaximized = true);
-        resource.InformUnmaximized += (_, _) => SetIfWindowing(() => _requested.InformMaximized = false);
-        resource.InformFullscreen += (_, _) => SetIfWindowing(() => _requested.InformFullscreen = true);
-        resource.InformNotFullscreen += (_, _) => SetIfWindowing(() => _requested.InformFullscreen = false);
-        resource.InformResizeStart += (_, _) => SetIfWindowing(() => _requested.InformResizing = true);
-        resource.InformResizeEnd += (_, _) => SetIfWindowing(() => _requested.InformResizing = false);
-        resource.Fullscreen += (_, e) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                var output = _manager.ResolveOutput(e.Output);
-                if (output is { IsRemoved: true })
-                {
-                    return;
-                }
-
-                _requested.Fullscreen = output;
-
-                ForceDimensionResend();
-            }
-        };
-        resource.ExitFullscreen += (_, _) => SetIfWindowing(() =>
+    void IRiverWindowV1Handler.ExitFullscreen(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
         {
             _requested.Fullscreen = null;
             ForceDimensionResend();
-        });
-
-        resource.Show += (_, _) => SetIfRendering(() => _render.Hidden = false);
-        resource.Hide += (_, _) => SetIfRendering(() => _render.Hidden = true);
-        resource.SetBorders += (_, e) =>
-        {
-            if (!_manager.EnsureRendering())
-            {
-                return;
-            }
-
-            if (e.Width < 0)
-            {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidBorder, "The border width must not be negative.");
-                return;
-            }
-
-            _render.BorderEdges = FromRiverEdges(e.Edges);
-            _render.BorderWidth = e.Width;
-            _render.BorderColor = (e.R, e.G, e.B, e.A);
-        };
-        resource.SetClipBox += (_, e) =>
-        {
-            if (!_manager.EnsureRendering())
-            {
-                return;
-            }
-
-            if (e.Width < 0 || e.Height < 0)
-            {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "The clip box size must not be negative.");
-                return;
-            }
-
-            _render.ClipBox = new Box(e.X, e.Y, e.Width, e.Height);
-        };
-        resource.SetContentClipBox += (_, e) =>
-        {
-            if (!_manager.EnsureRendering())
-            {
-                return;
-            }
-
-            if (e.Width < 0 || e.Height < 0)
-            {
-                resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "The clip box size must not be negative.");
-                return;
-            }
-
-            _render.ContentClipBox = new Box(e.X, e.Y, e.Width, e.Height);
-        };
-
-        resource.GetDecorationAbove += (_, e) => CreateDecoration(resource, e.Id, e.Surface, above: true);
-        resource.GetDecorationBelow += (_, e) => CreateDecoration(resource, e.Id, e.Surface, above: false);
-
-        resource.GetNode += (_, e) =>
-        {
-            if (HasNode)
-            {
-                resource.PostError((uint)RiverWindowV1.Error.NodeExists, "The window already has a node.");
-                return;
-            }
-
-            var node = new RiverNodeV1Resource(resource.Client, resource.Version, e.Id);
-            _manager.RegisterNode(EnsureNode(node));
-        };
-        resource.DestroyRequest += (_, _) => _manager.ForgetWindowResource(this);
+        }
     }
+
+    void IRiverWindowV1Handler.Show(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureRendering())
+        {
+            _render.Hidden = false;
+        }
+    }
+
+    void IRiverWindowV1Handler.Hide(RiverWindowV1Resource resource)
+    {
+        if (_manager.EnsureRendering())
+        {
+            _render.Hidden = true;
+        }
+    }
+
+    void IRiverWindowV1Handler.SetBorders(RiverWindowV1Resource resource, in RiverWindowV1Resource.SetBordersEventArgs args)
+    {
+        if (!_manager.EnsureRendering())
+        {
+            return;
+        }
+
+        if (args.Width < 0)
+        {
+            resource.PostError((uint)RiverWindowV1.Error.InvalidBorder, "The border width must not be negative.");
+            return;
+        }
+
+        _render.BorderEdges = FromRiverEdges(args.Edges);
+        _render.BorderWidth = args.Width;
+        _render.BorderColor = (args.R, args.G, args.B, args.A);
+    }
+
+    void IRiverWindowV1Handler.SetClipBox(RiverWindowV1Resource resource, in RiverWindowV1Resource.SetClipBoxEventArgs args)
+    {
+        if (!_manager.EnsureRendering())
+        {
+            return;
+        }
+
+        if (args.Width < 0 || args.Height < 0)
+        {
+            resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "The clip box size must not be negative.");
+            return;
+        }
+
+        _render.ClipBox = new Box(args.X, args.Y, args.Width, args.Height);
+    }
+
+    void IRiverWindowV1Handler.SetContentClipBox(RiverWindowV1Resource resource, in RiverWindowV1Resource.SetContentClipBoxEventArgs args)
+    {
+        if (!_manager.EnsureRendering())
+        {
+            return;
+        }
+
+        if (args.Width < 0 || args.Height < 0)
+        {
+            resource.PostError((uint)RiverWindowV1.Error.InvalidClipBox, "The clip box size must not be negative.");
+            return;
+        }
+
+        _render.ContentClipBox = new Box(args.X, args.Y, args.Width, args.Height);
+    }
+
+    void IRiverWindowV1Handler.GetDecorationAbove(RiverWindowV1Resource resource, in RiverWindowV1Resource.GetDecorationAboveEventArgs args) =>
+        CreateDecoration(resource, args.Id, args.Surface, above: true);
+
+    void IRiverWindowV1Handler.GetDecorationBelow(RiverWindowV1Resource resource, in RiverWindowV1Resource.GetDecorationBelowEventArgs args) =>
+        CreateDecoration(resource, args.Id, args.Surface, above: false);
+
+    void IRiverWindowV1Handler.GetNode(RiverWindowV1Resource resource, in RiverWindowV1Resource.GetNodeEventArgs args)
+    {
+        if (HasNode)
+        {
+            resource.PostError((uint)RiverWindowV1.Error.NodeExists, "The window already has a node.");
+            return;
+        }
+
+        _manager.RegisterNode(EnsureNode(resource.Client, resource.Version, args.Id));
+    }
+
+    void IRiverWindowV1Handler.Destroy(RiverWindowV1Resource resource) => _manager.ForgetWindowResource(this);
 
     private void CreateDecoration(RiverWindowV1Resource resource, uint id, Wayland.WlSurfaceResource? surfaceResource, bool above)
     {
@@ -877,26 +948,9 @@ internal sealed class RiverWindow
             return;
         }
 
-        var decorationResource = new RiverDecorationV1Resource(resource.Client, resource.Version, id);
-        var decoration = new RiverDecoration(_manager, decorationResource, this, surface, Tree, above);
+        var decoration = new RiverDecoration(_manager, resource.Client, resource.Version, id, this, surface, Tree, above);
         surface.TrySetRole(RiverDecoration.RoleName, decoration);
         _manager.AddDecoration(decoration);
-    }
-
-    private void SetIfWindowing(Action apply)
-    {
-        if (_manager.EnsureWindowing())
-        {
-            apply();
-        }
-    }
-
-    private void SetIfRendering(Action apply)
-    {
-        if (_manager.EnsureRendering())
-        {
-            apply();
-        }
     }
 
     private static ResizeEdges FromRiverEdges(RiverWindowV1.Edges edges)

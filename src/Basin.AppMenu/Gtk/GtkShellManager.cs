@@ -90,65 +90,10 @@ public sealed class GtkShellManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var shell = new GtkShell1Resource(client, version, id);
+        var shell = new GtkShell1Resource(client, version, id, new Shell(this));
         _shells.Add(shell);
         shell.Destroyed += (_, _) => _shells.Remove(shell);
         shell.SendCapabilities(Capabilities);
-        var surfaces = new Dictionary<GtkSurface1Resource, Surface>();
-        shell.GetGtkSurface += (_, e) =>
-        {
-            var gtk = new GtkSurface1Resource(client, shell.Version, e.GtkSurface);
-            if (_compositor.ResolveSurface(e.Surface) is not { } surface)
-            {
-                return;
-            }
-
-            surfaces[gtk] = surface;
-            Wire(gtk, surface);
-            gtk.Destroyed += (_, _) => surfaces.Remove(gtk);
-        };
-        shell.SystemBell += (_, e) =>
-            BellRequested?.Invoke(e.Surface is GtkSurface1Resource gtk && surfaces.TryGetValue(gtk, out var surface) ? surface : null);
-    }
-
-    private void Wire(GtkSurface1Resource gtk, Surface surface)
-    {
-        gtk.SetDbusProperties += (_, e) =>
-        {
-            if (surface.IsDestroyed)
-            {
-                return;
-            }
-
-            if (e.UniqueBusName is not { Length: > 0 } bus || (e.MenubarPath is not { Length: > 0 } && e.AppMenuPath is not { Length: > 0 }))
-            {
-                Clear(surface);
-                return;
-            }
-
-            _addresses.Set(surface, new AppMenuAddress(
-                AppMenuAddressKind.GMenu,
-                bus,
-                MenubarPath: e.MenubarPath ?? "",
-                AppMenuPath: e.AppMenuPath ?? "",
-                ApplicationPath: e.ApplicationObjectPath ?? "",
-                WindowPath: e.WindowObjectPath ?? ""));
-        };
-        gtk.SetModal += (_, _) => ModalChanged?.Invoke(surface, true);
-        gtk.UnsetModal += (_, _) => ModalChanged?.Invoke(surface, false);
-        gtk.Present += (_, e) => PresentRequested?.Invoke(surface, e.Time);
-        gtk.RequestFocus += (_, e) => FocusRequested?.Invoke(surface, e.StartupId);
-        gtk.TitlebarGesture += (_, e) =>
-        {
-            if ((uint)e.Gesture is < 1 or > 3)
-            {
-                gtk.PostError((uint)GtkSurface1.Error.InvalidGesture, "The titlebar gesture is not known.");
-                return;
-            }
-
-            TitlebarGesture?.Invoke(surface, (GtkShellGesture)(uint)e.Gesture);
-        };
-        gtk.Destroyed += (_, _) => Clear(surface);
     }
 
     private void Clear(Surface surface)
@@ -156,6 +101,104 @@ public sealed class GtkShellManager : IDisposable
         if (!surface.IsDestroyed && _addresses.AddressOf(surface)?.Kind == AppMenuAddressKind.GMenu)
         {
             _addresses.Set(surface, null);
+        }
+    }
+
+    private sealed class Shell : IGtkShell1Handler
+    {
+        private readonly GtkShellManager _owner;
+        private readonly Dictionary<GtkSurface1Resource, Surface> _surfaces = [];
+
+        internal Shell(GtkShellManager owner)
+        {
+            _owner = owner;
+        }
+
+        void IGtkShell1Handler.GetGtkSurface(GtkShell1Resource resource, in GtkShell1Resource.GetGtkSurfaceEventArgs args)
+        {
+            if (_owner._compositor.ResolveSurface(args.Surface) is not { } surface)
+            {
+                _ = new GtkSurface1Resource(resource.Client, resource.Version, args.GtkSurface);
+                return;
+            }
+
+            var gtk = new GtkSurface1Resource(resource.Client, resource.Version, args.GtkSurface, new GtkSurface(_owner, surface));
+            _surfaces[gtk] = surface;
+            gtk.Destroyed += (_, _) =>
+            {
+                _owner.Clear(surface);
+                _surfaces.Remove(gtk);
+            };
+        }
+
+        void IGtkShell1Handler.SetStartupId(GtkShell1Resource resource, in GtkShell1Resource.SetStartupIdEventArgs args)
+        {
+        }
+
+        void IGtkShell1Handler.SystemBell(GtkShell1Resource resource, in GtkShell1Resource.SystemBellEventArgs args) =>
+            _owner.BellRequested?.Invoke(args.Surface is GtkSurface1Resource gtk && _surfaces.TryGetValue(gtk, out var surface) ? surface : null);
+
+        void IGtkShell1Handler.NotifyLaunch(GtkShell1Resource resource, in GtkShell1Resource.NotifyLaunchEventArgs args)
+        {
+        }
+    }
+
+    private sealed class GtkSurface : IGtkSurface1Handler
+    {
+        private readonly GtkShellManager _owner;
+        private readonly Surface _surface;
+
+        internal GtkSurface(GtkShellManager owner, Surface surface)
+        {
+            _owner = owner;
+            _surface = surface;
+        }
+
+        void IGtkSurface1Handler.SetDbusProperties(GtkSurface1Resource resource, in GtkSurface1Resource.SetDbusPropertiesEventArgs args)
+        {
+            if (_surface.IsDestroyed)
+            {
+                return;
+            }
+
+            if (args.UniqueBusName is not { Length: > 0 } bus || (args.MenubarPath is not { Length: > 0 } && args.AppMenuPath is not { Length: > 0 }))
+            {
+                _owner.Clear(_surface);
+                return;
+            }
+
+            _owner._addresses.Set(_surface, new AppMenuAddress(
+                AppMenuAddressKind.GMenu,
+                bus,
+                MenubarPath: args.MenubarPath ?? "",
+                AppMenuPath: args.AppMenuPath ?? "",
+                ApplicationPath: args.ApplicationObjectPath ?? "",
+                WindowPath: args.WindowObjectPath ?? ""));
+        }
+
+        void IGtkSurface1Handler.SetModal(GtkSurface1Resource resource) => _owner.ModalChanged?.Invoke(_surface, true);
+
+        void IGtkSurface1Handler.UnsetModal(GtkSurface1Resource resource) => _owner.ModalChanged?.Invoke(_surface, false);
+
+        void IGtkSurface1Handler.Present(GtkSurface1Resource resource, in GtkSurface1Resource.PresentEventArgs args) =>
+            _owner.PresentRequested?.Invoke(_surface, args.Time);
+
+        void IGtkSurface1Handler.RequestFocus(GtkSurface1Resource resource, in GtkSurface1Resource.RequestFocusEventArgs args) =>
+            _owner.FocusRequested?.Invoke(_surface, args.StartupId);
+
+        void IGtkSurface1Handler.Release(GtkSurface1Resource resource)
+        {
+        }
+
+        void IGtkSurface1Handler.TitlebarGesture(GtkSurface1Resource resource, in GtkSurface1Resource.TitlebarGestureEventArgs args)
+        {
+            if ((uint)args.Gesture is < 1 or > 3)
+            {
+                resource.PostError((uint)GtkSurface1.Error.InvalidGesture, "The titlebar gesture is not known.");
+                return;
+            }
+
+            _owner.TitlebarGesture?.Invoke(_surface, (GtkShellGesture)(uint)args.Gesture);
         }
     }
 }

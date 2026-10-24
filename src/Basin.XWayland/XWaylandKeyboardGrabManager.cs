@@ -7,7 +7,7 @@ namespace Basin.XWayland;
 /// <summary>
 /// Advertises <c>zwp_xwayland_keyboard_grab_manager_v1</c>. A grab sends every key to one surface until the grab object or the surface is destroyed.
 /// </summary>
-public sealed class XWaylandKeyboardGrabManager : IDisposable
+public sealed class XWaylandKeyboardGrabManager : IDisposable, IZwpXwaylandKeyboardGrabManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -63,26 +63,34 @@ public sealed class XWaylandKeyboardGrabManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new ZwpXwaylandKeyboardGrabManagerV1Resource(client, version, id);
-        manager.GrabKeyboard += (_, e) =>
+        _ = new ZwpXwaylandKeyboardGrabManagerV1Resource(client, version, id, this);
+    }
+
+    void IZwpXwaylandKeyboardGrabManagerV1Handler.Destroy(ZwpXwaylandKeyboardGrabManagerV1Resource resource)
+    {
+    }
+
+    void IZwpXwaylandKeyboardGrabManagerV1Handler.GrabKeyboard(
+        ZwpXwaylandKeyboardGrabManagerV1Resource resource,
+        in ZwpXwaylandKeyboardGrabManagerV1Resource.GrabKeyboardEventArgs args)
+    {
+        var client = resource.Client;
+        var grabResource = new ZwpXwaylandKeyboardGrabV1Resource(client, resource.Version, args.Id);
+
+        if (_isXwayland is { } check && !check(client))
         {
-            var resource = new ZwpXwaylandKeyboardGrabV1Resource(client, manager.Version, e.Id);
+            return;
+        }
 
-            if (_isXwayland is { } check && !check(client))
-            {
-                return;
-            }
+        if (_seat is not { } seat || _compositor.ResolveSurface(args.Surface) is not { } surface)
+        {
+            return;
+        }
 
-            if (_seat is not { } seat || _compositor.ResolveSurface(e.Surface) is not { } surface)
-            {
-                return;
-            }
-
-            Release();
-            _active = new Grab(this, resource, surface, seat);
-            seat.Keyboard.StartGrab(_active);
-            GrabChanged?.Invoke(surface);
-        };
+        Release();
+        _active = new Grab(this, grabResource, surface, seat);
+        seat.Keyboard.StartGrab(_active);
+        GrabChanged?.Invoke(surface);
     }
 
     private void Release()

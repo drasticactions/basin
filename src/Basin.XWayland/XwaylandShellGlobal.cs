@@ -7,7 +7,7 @@ namespace Basin.XWayland;
 /// <summary>
 /// Advertises <c>xwayland_shell_v1</c> and pairs each X11 window serial with its <see cref="Surface"/> when the serial is committed.
 /// </summary>
-public sealed class XwaylandShellGlobal : IDisposable
+public sealed class XwaylandShellGlobal : IDisposable, IXwaylandShellV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -90,48 +90,68 @@ public sealed class XwaylandShellGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var shell = new XwaylandShellV1Resource(client, version, id);
         if (_isXwayland is { } check && !check(client))
         {
+            var shell = new XwaylandShellV1Resource(client, version, id);
             shell.PostError(0 , "Only Xwayland can bind xwayland_shell_v1.");
             return;
         }
 
-        shell.GetXwaylandSurface += (_, e) =>
+        _ = new XwaylandShellV1Resource(client, version, id, this);
+    }
+
+    void IXwaylandShellV1Handler.Destroy(XwaylandShellV1Resource resource)
+    {
+    }
+
+    void IXwaylandShellV1Handler.GetXwaylandSurface(XwaylandShellV1Resource resource, in XwaylandShellV1Resource.GetXwaylandSurfaceEventArgs args)
+    {
+        var client = resource.Client;
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new XwaylandSurfaceV1Resource(client, shell.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
+            _ = new XwaylandSurfaceV1Resource(client, resource.Version, args.Id);
+            return;
+        }
+
+        var role = new XwaylandSurface(this, client, surface);
+        _ = new XwaylandSurfaceV1Resource(client, resource.Version, args.Id, role);
+        surface.Committed += role.OnCommitted;
+        surface.Destroyed += role.OnSurfaceDestroyed;
+    }
+
+    private sealed class XwaylandSurface(XwaylandShellGlobal owner, WlClient client, Surface surface) : IXwaylandSurfaceV1Handler
+    {
+        private ulong? _pendingSerial;
+
+        void IXwaylandSurfaceV1Handler.SetSerial(XwaylandSurfaceV1Resource resource, in XwaylandSurfaceV1Resource.SetSerialEventArgs args) =>
+            _pendingSerial = ((ulong)args.SerialHi << 32) | args.SerialLo;
+
+        void IXwaylandSurfaceV1Handler.Destroy(XwaylandSurfaceV1Resource resource)
+        {
+        }
+
+        public void OnCommitted()
+        {
+            if (_pendingSerial is { } serial)
             {
-                return;
+                _pendingSerial = null;
+                owner._bySerial[(client, serial)] = surface;
+                owner.SerialCommitted?.Invoke(client, serial, surface);
             }
+        }
 
-            ulong? pendingSerial = null;
-            resource.SetSerial += (_, se) => pendingSerial = ((ulong)se.SerialHi << 32) | se.SerialLo;
-
-            void OnCommitted()
+        public void OnSurfaceDestroyed()
+        {
+            surface.Committed -= OnCommitted;
+            foreach (var (key, value) in owner._bySerial)
             {
-                if (pendingSerial is { } serial)
+                if (value == surface)
                 {
-                    pendingSerial = null;
-                    _bySerial[(client, serial)] = surface;
-                    SerialCommitted?.Invoke(client, serial, surface);
+                    owner._bySerial.Remove(key);
+                    break;
                 }
             }
-
-            surface.Committed += OnCommitted;
-            surface.Destroyed += () =>
-            {
-                surface.Committed -= OnCommitted;
-                foreach (var (key, value) in _bySerial)
-                {
-                    if (value == surface)
-                    {
-                        _bySerial.Remove(key);
-                        break;
-                    }
-                }
-            };
-        };
+        }
     }
 }

@@ -51,6 +51,23 @@ public sealed class OutputScalingTests
 public sealed class FractionalScaleTests
 {
     [Fact]
+    public void An_announced_surface_without_a_scale_object_is_forgotten_when_destroyed()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        var before = host.FractionalScale.TrackedSurfaces;
+        host.FractionalScale.AnnounceScale(window.ServerSurface, 1.5);
+        Assert.Equal(before + 1, host.FractionalScale.TrackedSurfaces);
+
+        window.Toplevel.Dispose();
+        window.XdgSurface.Dispose();
+        window.Surface.Destroy();
+        host.PumpToServer();
+
+        Assert.Equal(before, host.FractionalScale.TrackedSurfaces);
+    }
+
+    [Fact]
     public void Output_scale_snaps_and_wl_output_advertises_the_ceiling()
     {
         using var host = new CompositorTestHost();

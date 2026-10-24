@@ -9,7 +9,7 @@ namespace Basin.Hypr.InputCapture;
 /// <summary>
 /// Advertises <c>hyprland_input_capture_manager_v1</c> and gives each session an EIS socket fd. Pointer barriers and capture state come from an <see cref="InputCaptureEngine"/>.
 /// </summary>
-public sealed class HyprlandInputCaptureManager : IDisposable
+public sealed class HyprlandInputCaptureManager : IDisposable, IHyprlandInputCaptureManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -129,37 +129,39 @@ public sealed class HyprlandInputCaptureManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandInputCaptureManagerV1Resource(client, version, id);
-        manager.CreateSession += (_, e) =>
+        _ = new HyprlandInputCaptureManagerV1Resource(client, version, id, this);
+    }
+
+    void IHyprlandInputCaptureManagerV1Handler.CreateSession(
+        HyprlandInputCaptureManagerV1Resource resource,
+        in HyprlandInputCaptureManagerV1Resource.CreateSessionEventArgs args)
+    {
+        HyprlandInputCaptureFront front;
+        try
         {
-            var resource = new HyprlandInputCaptureV1Resource(client, manager.Version, e.Session);
-            HyprlandInputCaptureFront front;
-            try
-            {
-                front = new HyprlandInputCaptureFront(this, resource, e.Handle);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, $"session {e.Handle}: cannot create the EIS context");
-                return;
-            }
+            front = new HyprlandInputCaptureFront(this, resource.Client, resource.Version, args.Session, args.Handle);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"session {args.Handle}: cannot create the EIS context");
+            return;
+        }
 
-            _fronts.Add(front);
-            int fd;
-            try
-            {
-                fd = front.Session.Eis.AddClientFd();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, $"session {e.Handle}: cannot create the EIS client fd");
-                return;
-            }
+        _fronts.Add(front);
+        int fd;
+        try
+        {
+            fd = front.Session.Eis.AddClientFd();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"session {args.Handle}: cannot create the EIS client fd");
+            return;
+        }
 
-            resource.SendEisFd(fd);
-            _ = close(fd);
-            Log.Info($"session {e.Handle} created");
-        };
+        front.Resource.SendEisFd(fd);
+        _ = close(fd);
+        Log.Info($"session {args.Handle} created");
     }
 
     [DllImport("libc", SetLastError = true)]

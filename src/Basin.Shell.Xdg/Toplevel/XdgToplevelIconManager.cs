@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The <c>xdg_toplevel_icon_manager_v1</c> global. It reports the icon name that a client sets on a toplevel and ignores icon buffers.
 /// </summary>
-public sealed class XdgToplevelIconManager : IDisposable
+public sealed class XdgToplevelIconManager : IDisposable, IXdgToplevelIconManagerV1Handler, IXdgToplevelIconV1Handler
 {
     /// <summary>
     /// The version of <c>xdg_toplevel_icon_manager_v1</c> that the global advertises.
@@ -38,26 +38,41 @@ public sealed class XdgToplevelIconManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new XdgToplevelIconManagerV1Resource(client, version, id);
+        var manager = new XdgToplevelIconManagerV1Resource(client, version, id, this);
         manager.SendDone();
+    }
 
-        manager.CreateIcon += (_, e) =>
-        {
-            var icon = new XdgToplevelIconV1Resource(client, manager.Version, e.Id);
-            var raw = icon.RawHandle;
-            IconNames[raw] = null;
-            icon.SetName += (_, ne) => IconNames[raw] = ne.IconName;
-            icon.Destroyed += (_, _) => IconNames.Remove(raw);
-        };
-        manager.SetIcon += (_, e) =>
-        {
-            if (e.Toplevel is null || XdgToplevelRegistry.Resolve(e.Toplevel) is not { } toplevel)
-            {
-                return;
-            }
+    void IXdgToplevelIconManagerV1Handler.Destroy(XdgToplevelIconManagerV1Resource resource)
+    {
+    }
 
-            var name = e.Icon is { } icon ? IconNames.GetValueOrDefault(icon.RawHandle) : null;
-            IconChanged?.Invoke(toplevel, name);
-        };
+    void IXdgToplevelIconManagerV1Handler.CreateIcon(XdgToplevelIconManagerV1Resource resource, in XdgToplevelIconManagerV1Resource.CreateIconEventArgs args)
+    {
+        var icon = new XdgToplevelIconV1Resource(resource.Client, resource.Version, args.Id, this);
+        var raw = icon.RawHandle;
+        IconNames[raw] = null;
+        icon.Destroyed += (_, _) => IconNames.Remove(raw);
+    }
+
+    void IXdgToplevelIconManagerV1Handler.SetIcon(XdgToplevelIconManagerV1Resource resource, in XdgToplevelIconManagerV1Resource.SetIconEventArgs args)
+    {
+        if (args.Toplevel is null || XdgToplevelRegistry.Resolve(args.Toplevel) is not { } toplevel)
+        {
+            return;
+        }
+
+        var name = args.Icon is { } icon ? IconNames.GetValueOrDefault(icon.RawHandle) : null;
+        IconChanged?.Invoke(toplevel, name);
+    }
+
+    void IXdgToplevelIconV1Handler.Destroy(XdgToplevelIconV1Resource resource)
+    {
+    }
+
+    void IXdgToplevelIconV1Handler.SetName(XdgToplevelIconV1Resource resource, in XdgToplevelIconV1Resource.SetNameEventArgs args) =>
+        IconNames[resource.RawHandle] = args.IconName;
+
+    void IXdgToplevelIconV1Handler.AddBuffer(XdgToplevelIconV1Resource resource, in XdgToplevelIconV1Resource.AddBufferEventArgs args)
+    {
     }
 }

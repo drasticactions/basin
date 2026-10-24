@@ -7,7 +7,7 @@ namespace Basin.Shell.River;
 /// The river-input-management-v1 global. It holds the map from input devices to seat names and reports the changes that the window manager asks for.
 /// It does not open devices or move them itself. The consumer registers its devices and applies the reported settings.
 /// </summary>
-public sealed class RiverInputManager : IDisposable
+public sealed class RiverInputManager : IDisposable, IRiverInputManagerV1Handler
 {
     /// <summary>
     /// The name of the seat that always exists. It takes every device whose seat is destroyed or unknown.
@@ -235,52 +235,16 @@ public sealed class RiverInputManager : IDisposable
             return;
         }
 
-        var resource = new RiverInputDeviceV1Resource(manager.Client, manager.Version, 0);
-        device.Bind(resource);
+        var resource = device.Bind(manager.Client, manager.Version, 0);
         manager.SendInputDevice(resource);
         device.SendProperties(manager.Version);
     }
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new RiverInputManagerV1Resource(client, version, id);
+        var resource = new RiverInputManagerV1Resource(client, version, id, this);
         _resource = resource;
 
-        resource.CreateSeat += (_, e) =>
-        {
-            if (string.IsNullOrEmpty(e.Name) || _seatNames.Contains(e.Name))
-            {
-                return;
-            }
-
-            _seatNames.Add(e.Name);
-            SeatCreated?.Invoke(e.Name);
-        };
-
-        resource.DestroySeat += (_, e) =>
-        {
-            if (e.Name == DefaultSeatName || !_seatNames.Remove(e.Name))
-            {
-                return;
-            }
-
-            foreach (var device in _devices)
-            {
-                if (device.SeatName == e.Name)
-                {
-                    device.AssignTo(DefaultSeatName);
-                }
-            }
-
-            SeatDestroyed?.Invoke(e.Name);
-        };
-
-        resource.Stop += (_, _) =>
-        {
-            resource.SendFinished();
-            _resource = null;
-        };
-        resource.DestroyRequest += (_, _) => _resource = null;
         resource.Destroyed += (_, _) => _resource = null;
 
         foreach (var device in _devices)
@@ -288,4 +252,41 @@ public sealed class RiverInputManager : IDisposable
             Announce(device);
         }
     }
+
+    void IRiverInputManagerV1Handler.CreateSeat(RiverInputManagerV1Resource resource, in RiverInputManagerV1Resource.CreateSeatEventArgs args)
+    {
+        if (string.IsNullOrEmpty(args.Name) || _seatNames.Contains(args.Name))
+        {
+            return;
+        }
+
+        _seatNames.Add(args.Name);
+        SeatCreated?.Invoke(args.Name);
+    }
+
+    void IRiverInputManagerV1Handler.DestroySeat(RiverInputManagerV1Resource resource, in RiverInputManagerV1Resource.DestroySeatEventArgs args)
+    {
+        if (args.Name == DefaultSeatName || !_seatNames.Remove(args.Name))
+        {
+            return;
+        }
+
+        foreach (var device in _devices)
+        {
+            if (device.SeatName == args.Name)
+            {
+                device.AssignTo(DefaultSeatName);
+            }
+        }
+
+        SeatDestroyed?.Invoke(args.Name);
+    }
+
+    void IRiverInputManagerV1Handler.Stop(RiverInputManagerV1Resource resource)
+    {
+        resource.SendFinished();
+        _resource = null;
+    }
+
+    void IRiverInputManagerV1Handler.Destroy(RiverInputManagerV1Resource resource) => _resource = null;
 }

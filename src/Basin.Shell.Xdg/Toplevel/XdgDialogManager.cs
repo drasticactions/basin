@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The <c>xdg_wm_dialog_v1</c> global. It reports when a client makes a toplevel modal or not modal.
 /// </summary>
-public sealed class XdgDialogManager : IDisposable
+public sealed class XdgDialogManager : IDisposable, IXdgWmDialogV1Handler
 {
     /// <summary>
     /// The version of <c>xdg_wm_dialog_v1</c> that the global advertises.
@@ -38,53 +38,78 @@ public sealed class XdgDialogManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) => _ = new XdgWmDialogV1Resource(client, version, id, this);
+
+    void IXdgWmDialogV1Handler.Destroy(XdgWmDialogV1Resource resource)
     {
-        var manager = new XdgWmDialogV1Resource(client, version, id);
-        manager.GetXdgDialog += (_, e) =>
+    }
+
+    void IXdgWmDialogV1Handler.GetXdgDialog(XdgWmDialogV1Resource resource, in XdgWmDialogV1Resource.GetXdgDialogEventArgs args)
+    {
+        if (args.Toplevel is null || XdgToplevelRegistry.Resolve(args.Toplevel) is not { } toplevel)
         {
-            var dialog = new XdgDialogV1Resource(client, manager.Version, e.Id);
-            if (e.Toplevel is null || XdgToplevelRegistry.Resolve(e.Toplevel) is not { } toplevel)
-            {
-                return;
-            }
+            _ = new XdgDialogV1Resource(resource.Client, resource.Version, args.Id);
+            return;
+        }
 
-            if (!_dialogs.Add(toplevel))
-            {
-                manager.PostError(ErrorAlreadyUsed, "The toplevel already has a dialog object.");
-                return;
-            }
+        if (!_dialogs.Add(toplevel))
+        {
+            _ = new XdgDialogV1Resource(resource.Client, resource.Version, args.Id);
+            resource.PostError(ErrorAlreadyUsed, "The toplevel already has a dialog object.");
+            return;
+        }
 
-            var inert = false;
-            void OnToplevelDestroyed()
-            {
-                inert = true;
-                _dialogs.Remove(toplevel);
-            }
+        _ = new Dialog(this, resource.Client, resource.Version, args.Id, toplevel);
+    }
 
+    private sealed class Dialog : IXdgDialogV1Handler
+    {
+        private readonly XdgDialogManager _owner;
+        private readonly XdgToplevelWindow _toplevel;
+        private bool _inert;
+
+        internal Dialog(XdgDialogManager owner, WlClient client, uint version, uint id, XdgToplevelWindow toplevel)
+        {
+            _owner = owner;
+            _toplevel = toplevel;
+            var dialog = new XdgDialogV1Resource(client, version, id, this);
             toplevel.Destroyed += OnToplevelDestroyed;
-            dialog.SetModal += (_, _) =>
+            dialog.Destroyed += OnDialogDestroyed;
+        }
+
+        void IXdgDialogV1Handler.Destroy(XdgDialogV1Resource resource)
+        {
+        }
+
+        void IXdgDialogV1Handler.SetModal(XdgDialogV1Resource resource)
+        {
+            if (!_inert)
             {
-                if (!inert)
-                {
-                    ModalChanged?.Invoke(toplevel, true);
-                }
-            };
-            dialog.UnsetModal += (_, _) =>
+                _owner.ModalChanged?.Invoke(_toplevel, true);
+            }
+        }
+
+        void IXdgDialogV1Handler.UnsetModal(XdgDialogV1Resource resource)
+        {
+            if (!_inert)
             {
-                if (!inert)
-                {
-                    ModalChanged?.Invoke(toplevel, false);
-                }
-            };
-            dialog.Destroyed += (_, _) =>
+                _owner.ModalChanged?.Invoke(_toplevel, false);
+            }
+        }
+
+        private void OnToplevelDestroyed()
+        {
+            _inert = true;
+            _owner._dialogs.Remove(_toplevel);
+        }
+
+        private void OnDialogDestroyed(object? sender, EventArgs e)
+        {
+            if (!_inert)
             {
-                if (!inert)
-                {
-                    toplevel.Destroyed -= OnToplevelDestroyed;
-                    _dialogs.Remove(toplevel);
-                }
-            };
-        };
+                _toplevel.Destroyed -= OnToplevelDestroyed;
+                _owner._dialogs.Remove(_toplevel);
+            }
+        }
     }
 }

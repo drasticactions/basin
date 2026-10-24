@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the output and foreign-toplevel image capture source globals. It maps each source resource to the <see cref="CaptureSource"/> that it names.
 /// </summary>
-public sealed class ImageCaptureSourceManager : IDisposable
+public sealed class ImageCaptureSourceManager : IDisposable, IExtOutputImageCaptureSourceManagerV1Handler, IExtForeignToplevelImageCaptureSourceManagerV1Handler
 {
     /// <summary>
     /// The protocol version that both globals advertise.
@@ -55,25 +55,31 @@ public sealed class ImageCaptureSourceManager : IDisposable
         resource.Destroyed += (_, _) => ByResource.Remove(handle);
     }
 
-    private static void OnBindOutput(WlClient client, uint version, uint id)
+    private void OnBindOutput(WlClient client, uint version, uint id) =>
+        _ = new ExtOutputImageCaptureSourceManagerV1Resource(client, version, id, this);
+
+    private void OnBindToplevel(WlClient client, uint version, uint id) =>
+        _ = new ExtForeignToplevelImageCaptureSourceManagerV1Resource(client, version, id, this);
+
+    void IExtOutputImageCaptureSourceManagerV1Handler.CreateSource(ExtOutputImageCaptureSourceManagerV1Resource resource, in ExtOutputImageCaptureSourceManagerV1Resource.CreateSourceEventArgs args)
     {
-        var manager = new ExtOutputImageCaptureSourceManagerV1Resource(client, version, id);
-        manager.CreateSource += (_, e) =>
-        {
-            var resource = new ExtImageCaptureSourceV1Resource(client, manager.Version, e.Source);
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            Register(resource, output is null ? default : CaptureSource.Output(output));
-        };
+        var source = new ExtImageCaptureSourceV1Resource(resource.Client, resource.Version, args.Source);
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        Register(source, output is null ? default : CaptureSource.Output(output));
     }
 
-    private static void OnBindToplevel(WlClient client, uint version, uint id)
+    void IExtOutputImageCaptureSourceManagerV1Handler.Destroy(ExtOutputImageCaptureSourceManagerV1Resource resource)
     {
-        var manager = new ExtForeignToplevelImageCaptureSourceManagerV1Resource(client, version, id);
-        manager.CreateSource += (_, e) =>
-        {
-            var resource = new ExtImageCaptureSourceV1Resource(client, manager.Version, e.Source);
-            var toplevelId = e.ToplevelHandle is { } handle ? ForeignToplevelListManager.ToplevelOf(handle.RawHandle) : 0;
-            Register(resource, toplevelId == 0 ? default : CaptureSource.Toplevel(toplevelId));
-        };
+    }
+
+    void IExtForeignToplevelImageCaptureSourceManagerV1Handler.CreateSource(ExtForeignToplevelImageCaptureSourceManagerV1Resource resource, in ExtForeignToplevelImageCaptureSourceManagerV1Resource.CreateSourceEventArgs args)
+    {
+        var source = new ExtImageCaptureSourceV1Resource(resource.Client, resource.Version, args.Source);
+        var toplevelId = args.ToplevelHandle is { } handle ? ForeignToplevelListManager.ToplevelOf(handle.RawHandle) : 0;
+        Register(source, toplevelId == 0 ? default : CaptureSource.Toplevel(toplevelId));
+    }
+
+    void IExtForeignToplevelImageCaptureSourceManagerV1Handler.Destroy(ExtForeignToplevelImageCaptureSourceManagerV1Resource resource)
+    {
     }
 }

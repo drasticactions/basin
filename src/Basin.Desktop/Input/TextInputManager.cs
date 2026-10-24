@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_text_input_manager_v3</c> global and connects the enabled text input of the focused client to an <see cref="ITextInputMethod"/>. The consumer moves the focus through <see cref="NotifyFocus"/>.
 /// </summary>
-public sealed class TextInputManager : IDisposable, ITextInputFocus
+public sealed class TextInputManager : IDisposable, ITextInputFocus, IZwpTextInputManagerV3Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -246,32 +246,34 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
         method.Commit(0);
     }
 
-    private void OnBindTextInput(WlClient client, uint version, uint id)
+    void IZwpTextInputManagerV3Handler.Destroy(ZwpTextInputManagerV3Resource resource)
     {
-        var manager = new ZwpTextInputManagerV3Resource(client, version, id);
-        manager.GetTextInput += (_, e) =>
-        {
-            var resource = new ZwpTextInputV3Resource(client, manager.Version, e.Id);
-            var textInput = new TextInput(this, resource);
-            _textInputs.Add(textInput);
-            resource.Destroyed += (_, _) =>
-            {
-                var wasActive = textInput == ActiveTextInput();
-                _textInputs.Remove(textInput);
-                if (wasActive)
-                {
-                    OnActiveStateChanged();
-                }
-            };
-
-            if (_focus is not null && textInput.Owns(_focus))
-            {
-                textInput.SendEnter(_focus);
-            }
-        };
     }
 
-    private sealed class TextInput
+    void IZwpTextInputManagerV3Handler.GetTextInput(ZwpTextInputManagerV3Resource resource, in ZwpTextInputManagerV3Resource.GetTextInputEventArgs args)
+    {
+        var textInput = new TextInput(this, resource.Client, resource.Version, args.Id);
+        _textInputs.Add(textInput);
+        textInput.Resource.Destroyed += (_, _) =>
+        {
+            var wasActive = textInput == ActiveTextInput();
+            _textInputs.Remove(textInput);
+            if (wasActive)
+            {
+                OnActiveStateChanged();
+            }
+        };
+
+        if (_focus is not null && textInput.Owns(_focus))
+        {
+            textInput.SendEnter(_focus);
+        }
+    }
+
+    private void OnBindTextInput(WlClient client, uint version, uint id) =>
+        _ = new ZwpTextInputManagerV3Resource(client, version, id, this);
+
+    private sealed class TextInput : IZwpTextInputV3Handler
     {
         private readonly TextInputManager _owner;
         private readonly ZwpTextInputV3Resource _resource;
@@ -281,50 +283,13 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
         private (uint Hint, uint Purpose)? _pendingContentType;
         private Box? _pendingCursorRectangle;
 
-        public TextInput(TextInputManager owner, ZwpTextInputV3Resource resource)
+        public TextInput(TextInputManager owner, WlClient client, uint version, uint id)
         {
             _owner = owner;
-            _resource = resource;
-
-            resource.Enable += (_, _) => _pendingEnabled = true;
-            resource.Disable += (_, _) => _pendingEnabled = false;
-            resource.SetSurroundingText += (_, e) => _pendingSurrounding = (e.Text, e.Cursor, e.Anchor);
-            resource.SetContentType += (_, e) => _pendingContentType = ((uint)e.Hint, (uint)e.Purpose);
-            resource.SetCursorRectangle += (_, e) =>
-                _pendingCursorRectangle = new Box(e.X, e.Y, e.Width, e.Height);
-            resource.Commit += (_, _) =>
-            {
-                _serial++;
-                var wasEnabled = Enabled;
-                Enabled = _pendingEnabled;
-                Surrounding = _pendingSurrounding;
-                ContentType = _pendingContentType;
-                var caretMoved = _pendingCursorRectangle is { } pending && pending != CursorRectangle;
-                CursorRectangle = _pendingCursorRectangle;
-
-                var active = _owner.ActiveTextInput();
-                if (active == this && caretMoved && Enabled && _owner._focus is { } focused && CursorRectangle is { } moved)
-                {
-                    _owner.CaretMoved?.Invoke(focused, ServerScaling.ToLogicalNearest(moved, focused.ServerScale));
-                }
-
-                if (active == this)
-                {
-                    if (!wasEnabled)
-                    {
-                        _owner.OnActiveStateChanged();
-                    }
-                    else
-                    {
-                        _owner.SendState(this);
-                    }
-                }
-                else if (wasEnabled && !Enabled)
-                {
-                    _owner.OnActiveStateChanged();
-                }
-            };
+            _resource = new ZwpTextInputV3Resource(client, version, id, this);
         }
+
+        public ZwpTextInputV3Resource Resource => _resource;
 
         public bool Enabled { get; private set; }
 
@@ -389,6 +354,72 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
             {
                 _resource.SendDone(_serial);
             }
+        }
+
+        void IZwpTextInputV3Handler.Destroy(ZwpTextInputV3Resource resource)
+        {
+        }
+
+        void IZwpTextInputV3Handler.Enable(ZwpTextInputV3Resource resource) => _pendingEnabled = true;
+
+        void IZwpTextInputV3Handler.Disable(ZwpTextInputV3Resource resource) => _pendingEnabled = false;
+
+        void IZwpTextInputV3Handler.SetSurroundingText(ZwpTextInputV3Resource resource, in ZwpTextInputV3Resource.SetSurroundingTextEventArgs args) =>
+            _pendingSurrounding = (args.Text, args.Cursor, args.Anchor);
+
+        void IZwpTextInputV3Handler.SetTextChangeCause(ZwpTextInputV3Resource resource, in ZwpTextInputV3Resource.SetTextChangeCauseEventArgs args)
+        {
+        }
+
+        void IZwpTextInputV3Handler.SetContentType(ZwpTextInputV3Resource resource, in ZwpTextInputV3Resource.SetContentTypeEventArgs args) =>
+            _pendingContentType = ((uint)args.Hint, (uint)args.Purpose);
+
+        void IZwpTextInputV3Handler.SetCursorRectangle(ZwpTextInputV3Resource resource, in ZwpTextInputV3Resource.SetCursorRectangleEventArgs args) =>
+            _pendingCursorRectangle = new Box(args.X, args.Y, args.Width, args.Height);
+
+        void IZwpTextInputV3Handler.Commit(ZwpTextInputV3Resource resource)
+        {
+            _serial++;
+            var wasEnabled = Enabled;
+            Enabled = _pendingEnabled;
+            Surrounding = _pendingSurrounding;
+            ContentType = _pendingContentType;
+            var caretMoved = _pendingCursorRectangle is { } pending && pending != CursorRectangle;
+            CursorRectangle = _pendingCursorRectangle;
+
+            var active = _owner.ActiveTextInput();
+            if (active == this && caretMoved && Enabled && _owner._focus is { } focused && CursorRectangle is { } moved)
+            {
+                _owner.CaretMoved?.Invoke(focused, ServerScaling.ToLogicalNearest(moved, focused.ServerScale));
+            }
+
+            if (active == this)
+            {
+                if (!wasEnabled)
+                {
+                    _owner.OnActiveStateChanged();
+                }
+                else
+                {
+                    _owner.SendState(this);
+                }
+            }
+            else if (wasEnabled && !Enabled)
+            {
+                _owner.OnActiveStateChanged();
+            }
+        }
+
+        void IZwpTextInputV3Handler.SetAvailableActions(ZwpTextInputV3Resource resource, in ZwpTextInputV3Resource.SetAvailableActionsEventArgs args)
+        {
+        }
+
+        void IZwpTextInputV3Handler.ShowInputPanel(ZwpTextInputV3Resource resource)
+        {
+        }
+
+        void IZwpTextInputV3Handler.HideInputPanel(ZwpTextInputV3Resource resource)
+        {
         }
     }
 }

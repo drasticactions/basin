@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_relative_pointer_manager_v1</c> global and sends relative motion to the client with pointer focus. Until the consumer calls <see cref="NotifyMotion"/>, it follows pointer motion and reports it as both accelerated and unaccelerated.
 /// </summary>
-public sealed class RelativePointerManager : IDisposable
+public sealed class RelativePointerManager : IDisposable, IZwpRelativePointerManagerV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -95,14 +95,17 @@ public sealed class RelativePointerManager : IDisposable
         _seat.Pointer.NotifyFrame();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpRelativePointerManagerV1Handler.Destroy(ZwpRelativePointerManagerV1Resource resource)
     {
-        var manager = new ZwpRelativePointerManagerV1Resource(client, version, id);
-        manager.GetRelativePointer += (_, e) =>
-        {
-            var pointer = new ZwpRelativePointerV1Resource(client, manager.Version, e.Id);
-            _pointers.Add(pointer);
-            pointer.Destroyed += (_, _) => _pointers.Remove(pointer);
-        };
     }
+
+    void IZwpRelativePointerManagerV1Handler.GetRelativePointer(ZwpRelativePointerManagerV1Resource resource, in ZwpRelativePointerManagerV1Resource.GetRelativePointerEventArgs args)
+    {
+        var pointer = new ZwpRelativePointerV1Resource(resource.Client, resource.Version, args.Id);
+        _pointers.Add(pointer);
+        pointer.Destroyed += (_, _) => _pointers.Remove(pointer);
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpRelativePointerManagerV1Resource(client, version, id, this);
 }

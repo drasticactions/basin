@@ -7,7 +7,7 @@ namespace Basin.Shell.Weston;
 /// <summary>
 /// The <c>weston_screensaver</c> global. It forwards the screensaver surface of one bound client to <see cref="IShellRoles.SetScreensaverSurface"/>.
 /// </summary>
-public sealed class WestonScreensaverGlobal : IDisposable
+public sealed class WestonScreensaverGlobal : IDisposable, IWestonScreensaverHandler
 {
     /// <summary>
     /// The version of <c>weston_screensaver</c> that the global advertises.
@@ -44,13 +44,13 @@ public sealed class WestonScreensaverGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var screensaver = new WestonScreensaverResource(client, version, id);
         if (_bound is { IsDestroyed: false })
         {
-            screensaver.PostError(ErrorInvalidArgument, "weston_screensaver is already bound.");
+            new WestonScreensaverResource(client, version, id).PostError(ErrorInvalidArgument, "weston_screensaver is already bound.");
             return;
         }
 
+        var screensaver = new WestonScreensaverResource(client, version, id, this);
         _bound = screensaver;
         screensaver.Destroyed += (_, _) =>
         {
@@ -59,18 +59,18 @@ public sealed class WestonScreensaverGlobal : IDisposable
                 _bound = null;
             }
         };
+    }
 
-        screensaver.SetSurface += (_, e) =>
+    void IWestonScreensaverHandler.SetSurface(WestonScreensaverResource resource, in WestonScreensaverResource.SetSurfaceEventArgs args)
+    {
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (output is null || surface is null)
         {
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (output is null || surface is null)
-            {
-                screensaver.PostError(ErrorInvalidArgument, "The output or the surface is not known.");
-                return;
-            }
+            resource.PostError(ErrorInvalidArgument, "The output or the surface is not known.");
+            return;
+        }
 
-            _roles.SetScreensaverSurface(output, surface);
-        };
+        _roles.SetScreensaverSurface(output, surface);
     }
 }

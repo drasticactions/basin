@@ -43,6 +43,7 @@ public sealed class LinuxDrmSyncobjModule : IProtocolModule
             services.Require<CompositorGlobal>(),
             services.Require<IDrmSyncDevice>());
         services.Use(Manager);
+        services.UseDefault<IExplicitSyncDiagnostics>(Manager);
         return Manager;
     }
 }

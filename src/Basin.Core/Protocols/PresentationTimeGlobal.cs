@@ -7,7 +7,7 @@ namespace Basin;
 /// <summary>
 /// Serves <c>wp_presentation</c> and sends feedback for the content that each surface had when an output presented a frame.
 /// </summary>
-public sealed class PresentationTimeGlobal : IDisposable
+public sealed class PresentationTimeGlobal : IDisposable, IWpPresentationHandler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -304,29 +304,38 @@ public sealed class PresentationTimeGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var presentation = new WpPresentationResource(client, version, id);
+        var presentation = new WpPresentationResource(client, version, id, this);
         presentation.SendClockId(ClockId);
+    }
 
-        presentation.Feedback += (_, e) =>
+    void IWpPresentationHandler.Destroy(WpPresentationResource resource)
+    {
+    }
+
+    void IWpPresentationHandler.Feedback(WpPresentationResource resource, in WpPresentationResource.FeedbackEventArgs args)
+    {
+        var feedbackResource = new WpPresentationFeedbackResource(resource.Client, resource.Version, args.Callback);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new WpPresentationFeedbackResource(client, presentation.Version, e.Callback);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                resource.SendDiscarded();
-                resource.Destroy();
-                return;
-            }
+            feedbackResource.SendDiscarded();
+            feedbackResource.Destroy();
+            return;
+        }
 
-            var feedback = TrackSurface(surface);
-            feedback.Pending.Add(resource);
-            resource.Destroyed += (_, _) =>
-            {
-                feedback.Pending.Remove(resource);
-                feedback.Forget(resource);
-                surface.Pending.GetExtension<PendingFeedback>()?.Forget(resource);
-                surface.Current.GetExtension<PendingFeedback>()?.Forget(resource);
-            };
+        var feedback = TrackSurface(surface);
+        feedback.Pending.Add(feedbackResource);
+        WatchFeedback(feedbackResource, feedback, surface);
+    }
+
+    private static void WatchFeedback(WpPresentationFeedbackResource resource, SurfaceFeedback feedback, Surface surface)
+    {
+        resource.Destroyed += (_, _) =>
+        {
+            feedback.Pending.Remove(resource);
+            feedback.Forget(resource);
+            surface.Pending.GetExtension<PendingFeedback>()?.Forget(resource);
+            surface.Current.GetExtension<PendingFeedback>()?.Forget(resource);
         };
     }
 

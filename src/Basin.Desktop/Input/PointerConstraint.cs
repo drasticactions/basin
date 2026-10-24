@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// One client request to lock or confine the pointer on a surface. The constraint applies only while it is active, and <see cref="PointerConstraintDriver"/> decides when that is.
 /// </summary>
-public sealed class PointerConstraint
+public sealed class PointerConstraint : IZwpLockedPointerV1Handler, IZwpConfinedPointerV1Handler
 {
     private readonly PointerConstraintsManager _owner;
     private readonly ZwpLockedPointerV1Resource? _locked;
@@ -38,21 +38,35 @@ public sealed class PointerConstraint
 
         if (kind == ConstraintKind.Lock)
         {
-            _locked = new ZwpLockedPointerV1Resource(client, version, id);
+            _locked = new ZwpLockedPointerV1Resource(client, version, id, this);
             _locked.Destroyed += (_, _) => Dispose();
-            _locked.SetCursorPositionHint += (_, e) => OnHint(e.SurfaceX.ToDouble(), e.SurfaceY.ToDouble());
-            _locked.SetRegion += (_, e) => OnSetRegion(_owner.ResolveRegion(e.Region));
         }
         else
         {
-            _confined = new ZwpConfinedPointerV1Resource(client, version, id);
+            _confined = new ZwpConfinedPointerV1Resource(client, version, id, this);
             _confined.Destroyed += (_, _) => Dispose();
-            _confined.SetRegion += (_, e) => OnSetRegion(_owner.ResolveRegion(e.Region));
         }
 
         surface.Committed += OnCommitted;
         surface.Destroyed += Dispose;
     }
+
+    void IZwpLockedPointerV1Handler.Destroy(ZwpLockedPointerV1Resource resource)
+    {
+    }
+
+    void IZwpLockedPointerV1Handler.SetCursorPositionHint(ZwpLockedPointerV1Resource resource, in ZwpLockedPointerV1Resource.SetCursorPositionHintEventArgs args) =>
+        OnHint(args.SurfaceX.ToDouble(), args.SurfaceY.ToDouble());
+
+    void IZwpLockedPointerV1Handler.SetRegion(ZwpLockedPointerV1Resource resource, in ZwpLockedPointerV1Resource.SetRegionEventArgs args) =>
+        OnSetRegion(_owner.ResolveRegion(args.Region));
+
+    void IZwpConfinedPointerV1Handler.Destroy(ZwpConfinedPointerV1Resource resource)
+    {
+    }
+
+    void IZwpConfinedPointerV1Handler.SetRegion(ZwpConfinedPointerV1Resource resource, in ZwpConfinedPointerV1Resource.SetRegionEventArgs args) =>
+        OnSetRegion(_owner.ResolveRegion(args.Region));
 
     /// <summary>
     /// Gets the surface that the constraint applies to.

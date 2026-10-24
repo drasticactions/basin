@@ -10,7 +10,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_virtual_keyboard_manager_v1</c> global. Each virtual keyboard becomes an injected keyboard on the input sink of its seat, or of the default sink.
 /// </summary>
-public sealed class VirtualKeyboardManager : IDisposable
+public sealed class VirtualKeyboardManager : IDisposable, IZwpVirtualKeyboardManagerV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -44,47 +44,31 @@ public sealed class VirtualKeyboardManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpVirtualKeyboardManagerV1Handler.CreateVirtualKeyboard(ZwpVirtualKeyboardManagerV1Resource resource, in ZwpVirtualKeyboardManagerV1Resource.CreateVirtualKeyboardEventArgs args)
     {
-        var manager = new ZwpVirtualKeyboardManagerV1Resource(client, version, id);
-        manager.CreateVirtualKeyboard += (_, e) =>
+        var client = resource.Client;
+        var handler = new VirtualKeyboard(this);
+        var keyboard = new ZwpVirtualKeyboardV1Resource(client, resource.Version, args.Id, handler);
+        var seat = Seat.Seat.FromResource(args.Seat);
+        var sink = seat?.InputSink ?? _sink;
+        var device = sink?.CreateKeyboard();
+        if (device is not null)
         {
-            var keyboard = new ZwpVirtualKeyboardV1Resource(client, manager.Version, e.Id);
-            var seat = Seat.Seat.FromResource(e.Seat);
-            var sink = seat?.InputSink ?? _sink;
-            var device = sink?.CreateKeyboard();
-            if (device is not null)
-            {
-                device.Tag = client;
-            }
+            device.Tag = client;
+        }
 
-            seat?.AddVirtualDevice(SeatCapability.Keyboard);
-            keyboard.Destroyed += (_, _) =>
-            {
-                device?.Dispose();
-                seat?.RemoveVirtualDevice(SeatCapability.Keyboard);
-            };
-            keyboard.Keymap += (_, ke) =>
-            {
-                if (device is not null && ReadKeymap(ke.Fd, ke.Size) is { } bytes)
-                {
-                    device.SetKeymap(bytes);
-                }
-
-                if (KeymapSubmitted is { } handler)
-                {
-                    handler(new ClientFd(ke.Fd, keyboard.Client), ke.Size);
-                }
-                else
-                {
-                    keyboard.Client.CloseFd(ke.Fd);
-                }
-            };
-            keyboard.Key += (_, ke) => sink?.Key(device, ke.Time, ke.Key, ke.State == 1);
-            keyboard.Modifiers += (_, me) =>
-                sink?.Modifiers(device, me.ModsDepressed, me.ModsLatched, me.ModsLocked, me.Group);
+        seat?.AddVirtualDevice(SeatCapability.Keyboard);
+        keyboard.Destroyed += (_, _) =>
+        {
+            device?.Dispose();
+            seat?.RemoveVirtualDevice(SeatCapability.Keyboard);
         };
+        handler.Sink = sink;
+        handler.Device = device;
     }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpVirtualKeyboardManagerV1Resource(client, version, id, this);
 
     private static byte[]? ReadKeymap(int fd, uint size)
     {
@@ -103,6 +87,40 @@ public sealed class VirtualKeyboardManager : IDisposable
         catch (System.IO.IOException)
         {
             return null;
+        }
+    }
+
+    private sealed class VirtualKeyboard(VirtualKeyboardManager owner) : IZwpVirtualKeyboardV1Handler
+    {
+        public IInputSink? Sink { get; set; }
+
+        public IInjectedKeyboard? Device { get; set; }
+
+        void IZwpVirtualKeyboardV1Handler.Keymap(ZwpVirtualKeyboardV1Resource resource, in ZwpVirtualKeyboardV1Resource.KeymapEventArgs args)
+        {
+            if (Device is not null && ReadKeymap(args.Fd, args.Size) is { } bytes)
+            {
+                Device.SetKeymap(bytes);
+            }
+
+            if (owner.KeymapSubmitted is { } handler)
+            {
+                handler(new ClientFd(args.Fd, resource.Client), args.Size);
+            }
+            else
+            {
+                resource.Client.CloseFd(args.Fd);
+            }
+        }
+
+        void IZwpVirtualKeyboardV1Handler.Key(ZwpVirtualKeyboardV1Resource resource, in ZwpVirtualKeyboardV1Resource.KeyEventArgs args) =>
+            Sink?.Key(Device, args.Time, args.Key, args.State == 1);
+
+        void IZwpVirtualKeyboardV1Handler.Modifiers(ZwpVirtualKeyboardV1Resource resource, in ZwpVirtualKeyboardV1Resource.ModifiersEventArgs args) =>
+            Sink?.Modifiers(Device, args.ModsDepressed, args.ModsLatched, args.ModsLocked, args.Group);
+
+        void IZwpVirtualKeyboardV1Handler.Destroy(ZwpVirtualKeyboardV1Resource resource)
+        {
         }
     }
 }

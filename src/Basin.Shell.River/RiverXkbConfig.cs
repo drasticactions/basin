@@ -8,7 +8,7 @@ namespace Basin.Shell.River;
 /// <summary>
 /// The river-xkb-config-v1 global. It lets the window manager validate keymaps and set them on keyboards, and it reports the layout and lock state of each keyboard.
 /// </summary>
-public sealed class RiverXkbConfig : IDisposable
+public sealed class RiverXkbConfig : IDisposable, IRiverXkbConfigV1Handler, IRiverXkbKeymapV1Handler
 {
     private readonly RiverWindowManager _manager;
     private readonly WlGlobal _global;
@@ -107,49 +107,16 @@ public sealed class RiverXkbConfig : IDisposable
             return;
         }
 
-        var resource = new RiverXkbKeyboardV1Resource(config.Client, config.Version, 0);
-        keyboard.Bind(resource);
+        var resource = keyboard.Bind(config.Client, config.Version, 0);
         config.SendXkbKeyboard(resource);
         keyboard.SendState(config.Version);
     }
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new RiverXkbConfigV1Resource(client, version, id);
+        var resource = new RiverXkbConfigV1Resource(client, version, id, this);
         _resource = resource;
 
-        resource.CreateKeymap += (_, e) =>
-        {
-            var keymapResource = new RiverXkbKeymapV1Resource(client, version, e.Id);
-            var text = ReadKeymap(e.Fd, out var readError);
-            if (text is null)
-            {
-                keymapResource.SendFailure(readError ?? "The keymap fd cannot be read.");
-                return;
-            }
-
-            try
-            {
-                using var context = XkbContext.Create();
-                using var compiled = context.CreateKeymapFromString(text);
-            }
-            catch (XkbException error)
-            {
-                keymapResource.SendFailure(error.Message);
-                return;
-            }
-
-            _keymaps[keymapResource] = text;
-            keymapResource.DestroyRequest += (_, _) => _keymaps.Remove(keymapResource);
-            keymapResource.SendSuccess();
-        };
-
-        resource.Stop += (_, _) =>
-        {
-            resource.SendFinished();
-            _resource = null;
-        };
-        resource.DestroyRequest += (_, _) => _resource = null;
         resource.Destroyed += (_, _) => _resource = null;
 
         foreach (var keyboard in _keyboards)
@@ -157,6 +124,41 @@ public sealed class RiverXkbConfig : IDisposable
             Announce(keyboard);
         }
     }
+
+    void IRiverXkbConfigV1Handler.CreateKeymap(RiverXkbConfigV1Resource resource, in RiverXkbConfigV1Resource.CreateKeymapEventArgs args)
+    {
+        var keymapResource = new RiverXkbKeymapV1Resource(resource.Client, resource.Version, args.Id, this);
+        var text = ReadKeymap(args.Fd, out var readError);
+        if (text is null)
+        {
+            keymapResource.SendFailure(readError ?? "The keymap fd cannot be read.");
+            return;
+        }
+
+        try
+        {
+            using var context = XkbContext.Create();
+            using var compiled = context.CreateKeymapFromString(text);
+        }
+        catch (XkbException error)
+        {
+            keymapResource.SendFailure(error.Message);
+            return;
+        }
+
+        _keymaps[keymapResource] = text;
+        keymapResource.SendSuccess();
+    }
+
+    void IRiverXkbConfigV1Handler.Stop(RiverXkbConfigV1Resource resource)
+    {
+        resource.SendFinished();
+        _resource = null;
+    }
+
+    void IRiverXkbConfigV1Handler.Destroy(RiverXkbConfigV1Resource resource) => _resource = null;
+
+    void IRiverXkbKeymapV1Handler.Destroy(RiverXkbKeymapV1Resource resource) => _keymaps.Remove(resource);
 
     private readonly Dictionary<RiverXkbKeymapV1Resource, string> _keymaps = [];
 

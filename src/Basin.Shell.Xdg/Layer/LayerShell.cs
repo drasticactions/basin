@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The <c>zwlr_layer_shell_v1</c> global. It makes a <see cref="LayerSurface"/> for each valid <c>get_layer_surface</c> request and raises <see cref="NewSurface"/>.
 /// </summary>
-public sealed class LayerShell : IDisposable
+public sealed class LayerShell : IDisposable, IZwlrLayerShellV1Handler
 {
     /// <summary>
     /// The version of <c>zwlr_layer_shell_v1</c> that the global advertises.
@@ -40,29 +40,31 @@ public sealed class LayerShell : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) => _ = new ZwlrLayerShellV1Resource(client, version, id, this);
+
+    void IZwlrLayerShellV1Handler.Destroy(ZwlrLayerShellV1Resource resource)
     {
-        var resource = new ZwlrLayerShellV1Resource(client, version, id);
-        resource.GetLayerSurface += (_, e) =>
+    }
+
+    void IZwlrLayerShellV1Handler.GetLayerSurface(ZwlrLayerShellV1Resource resource, in ZwlrLayerShellV1Resource.GetLayerSurfaceEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                resource.PostError((uint)ZwlrLayerShellV1.Error.Role, "The wl_surface is not known.");
-                return;
-            }
+            resource.PostError((uint)ZwlrLayerShellV1.Error.Role, "The wl_surface is not known.");
+            return;
+        }
 
-            var layerResource = new ZwlrLayerSurfaceV1Resource(client, resource.Version, e.Id);
-            if (!surface.CanSetRole(LayerSurface.RoleName))
-            {
-                layerResource.PostError((uint)ZwlrLayerShellV1.Error.Role, "The surface already has a role.");
-                return;
-            }
+        if (!surface.CanSetRole(LayerSurface.RoleName))
+        {
+            var layerResource = new ZwlrLayerSurfaceV1Resource(resource.Client, resource.Version, args.Id);
+            layerResource.PostError((uint)ZwlrLayerShellV1.Error.Role, "The surface already has a role.");
+            return;
+        }
 
-            var output = OutputGlobal.FromResource(e.Output);
-            var layerSurface = new LayerSurface(_display, surface, layerResource, output, (LayerKind)e.Layer, e.Namespace);
-            surface.TrySetRole(LayerSurface.RoleName, layerSurface);
-            NewSurface?.Invoke(layerSurface);
-        };
+        var output = OutputGlobal.FromResource(args.Output);
+        var layerSurface = new LayerSurface(_display, surface, resource.Client, resource.Version, args.Id, output, (LayerKind)args.Layer, args.Namespace);
+        surface.TrySetRole(LayerSurface.RoleName, layerSurface);
+        NewSurface?.Invoke(layerSurface);
     }
 }

@@ -7,7 +7,7 @@ namespace Basin.AppMenu;
 /// The <c>org_kde_kwin_appmenu_manager</c> global. <c>set_address</c> records a dbusmenu address for a surface, and an empty service name or path clears it.
 /// Releasing the appmenu object also clears a dbusmenu address.
 /// </summary>
-public sealed class KdeAppMenuManager : IDisposable
+public sealed class KdeAppMenuManager : IDisposable, IOrgKdeKwinAppmenuManagerHandler
 {
     /// <summary>The version of the global that the manager advertises.</summary>
     public const int Version = 2;
@@ -34,36 +34,56 @@ public sealed class KdeAppMenuManager : IDisposable
     /// <summary>Removes the global.</summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) => _ = new OrgKdeKwinAppmenuManagerResource(client, version, id, this);
+
+    void IOrgKdeKwinAppmenuManagerHandler.Create(OrgKdeKwinAppmenuManagerResource resource, in OrgKdeKwinAppmenuManagerResource.CreateEventArgs args)
     {
-        var manager = new OrgKdeKwinAppmenuManagerResource(client, version, id);
-        manager.Create += (_, e) =>
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var menu = new OrgKdeKwinAppmenuResource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
+            _ = new OrgKdeKwinAppmenuResource(resource.Client, resource.Version, args.Id);
+            return;
+        }
+
+        var menu = new OrgKdeKwinAppmenuResource(resource.Client, resource.Version, args.Id, new AppMenu(this, surface));
+        menu.Destroyed += (_, _) =>
+        {
+            if (!surface.IsDestroyed && _addresses.AddressOf(surface)?.Kind == AppMenuAddressKind.DbusMenu)
+            {
+                _addresses.Set(surface, null);
+            }
+        };
+    }
+
+    void IOrgKdeKwinAppmenuManagerHandler.Release(OrgKdeKwinAppmenuManagerResource resource)
+    {
+    }
+
+    private sealed class AppMenu : IOrgKdeKwinAppmenuHandler
+    {
+        private readonly KdeAppMenuManager _owner;
+        private readonly Surface _surface;
+
+        internal AppMenu(KdeAppMenuManager owner, Surface surface)
+        {
+            _owner = owner;
+            _surface = surface;
+        }
+
+        void IOrgKdeKwinAppmenuHandler.SetAddress(OrgKdeKwinAppmenuResource resource, in OrgKdeKwinAppmenuResource.SetAddressEventArgs args)
+        {
+            if (_surface.IsDestroyed)
             {
                 return;
             }
 
-            menu.SetAddress += (_, address) =>
-            {
-                if (surface.IsDestroyed)
-                {
-                    return;
-                }
+            _owner._addresses.Set(_surface, args.ServiceName.Length == 0 || args.ObjectPath.Length == 0
+                ? null
+                : AppMenuAddress.DbusMenu(args.ServiceName, args.ObjectPath));
+        }
 
-                _addresses.Set(surface, address.ServiceName.Length == 0 || address.ObjectPath.Length == 0
-                    ? null
-                    : AppMenuAddress.DbusMenu(address.ServiceName, address.ObjectPath));
-            };
-            menu.Destroyed += (_, _) =>
-            {
-                if (!surface.IsDestroyed && _addresses.AddressOf(surface)?.Kind == AppMenuAddressKind.DbusMenu)
-                {
-                    _addresses.Set(surface, null);
-                }
-            };
-        };
+        void IOrgKdeKwinAppmenuHandler.Release(OrgKdeKwinAppmenuResource resource)
+        {
+        }
     }
 }

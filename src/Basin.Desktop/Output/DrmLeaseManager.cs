@@ -238,10 +238,17 @@ public sealed class DrmLeaseManager : IDisposable
         }
     }
 
-    internal sealed class Binding
+    internal sealed class Binding : IWpDrmLeaseDeviceV1Handler
     {
-        public required WpDrmLeaseDeviceV1Resource Device;
-        public required Dictionary<OfferedConnector, WpDrmLeaseConnectorV1Resource> Connectors;
+        public readonly WpDrmLeaseDeviceV1Resource Device;
+        public readonly Dictionary<OfferedConnector, WpDrmLeaseConnectorV1Resource> Connectors = [];
+        private readonly DrmLeaseManager _owner;
+
+        public Binding(DrmLeaseManager owner, WlClient client, uint version, uint id)
+        {
+            _owner = owner;
+            Device = new WpDrmLeaseDeviceV1Resource(client, version, id, this);
+        }
 
         public void Announce(OfferedConnector connector)
         {
@@ -254,12 +261,49 @@ public sealed class DrmLeaseManager : IDisposable
             Connectors[connector] = resource;
             resource.Destroyed += (_, _) => Connectors.Remove(connector);
         }
+
+        void IWpDrmLeaseDeviceV1Handler.CreateLeaseRequest(WpDrmLeaseDeviceV1Resource resource, in WpDrmLeaseDeviceV1Resource.CreateLeaseRequestEventArgs args) =>
+            _ = new LeaseRequest(_owner, this, resource.Client, resource.Version, args.Id);
+
+        void IWpDrmLeaseDeviceV1Handler.Release(WpDrmLeaseDeviceV1Resource resource)
+        {
+            resource.SendReleased();
+            resource.Destroy();
+        }
+    }
+
+    private sealed class LeaseRequest : IWpDrmLeaseRequestV1Handler
+    {
+        private readonly DrmLeaseManager _owner;
+        private readonly Binding _binding;
+        private readonly List<OfferedConnector> _requested = [];
+
+        public LeaseRequest(DrmLeaseManager owner, Binding binding, WlClient client, uint version, uint id)
+        {
+            _owner = owner;
+            _binding = binding;
+            _ = new WpDrmLeaseRequestV1Resource(client, version, id, this);
+        }
+
+        void IWpDrmLeaseRequestV1Handler.RequestConnector(WpDrmLeaseRequestV1Resource resource, in WpDrmLeaseRequestV1Resource.RequestConnectorEventArgs args)
+        {
+            foreach (var (connector, connectorResource) in _binding.Connectors)
+            {
+                if (connectorResource.RawHandle == args.ConnectorHandle && !connector.Withdrawn)
+                {
+                    _requested.Add(connector);
+                }
+            }
+        }
+
+        void IWpDrmLeaseRequestV1Handler.Submit(WpDrmLeaseRequestV1Resource resource, in WpDrmLeaseRequestV1Resource.SubmitEventArgs args) =>
+            _owner.Submit(resource.Client, _binding.Device.Version, args.Id, _requested);
     }
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var device = new WpDrmLeaseDeviceV1Resource(client, version, id);
-        var binding = new Binding { Device = device, Connectors = [] };
+        var binding = new Binding(this, client, version, id);
+        var device = binding.Device;
         _bindings.Add(binding);
 
         var enumFd = _device?.OpenEnumerationFd() ?? -1;
@@ -275,49 +319,34 @@ public sealed class DrmLeaseManager : IDisposable
         }
 
         device.SendDone();
+    }
 
-        device.CreateLeaseRequest += (_, e) =>
+    private void Submit(WlClient client, uint version, uint id, List<OfferedConnector> requested)
+    {
+        var lease = new WpDrmLeaseV1Resource(client, version, id);
+        var objects = new List<uint>();
+        foreach (var connector in requested)
         {
-            var request = new WpDrmLeaseRequestV1Resource(client, device.Version, e.Id);
-            var requested = new List<OfferedConnector>();
-            request.RequestConnector += (_, ce) =>
-            {
-                foreach (var (connector, resource) in binding.Connectors)
-                {
-                    if (resource.RawHandle == ce.ConnectorHandle && !connector.Withdrawn)
-                    {
-                        requested.Add(connector);
-                    }
-                }
-            };
-            request.Submit += (_, se) =>
-            {
-                var lease = new WpDrmLeaseV1Resource(client, device.Version, se.Id);
-                var objects = new List<uint>();
-                foreach (var connector in requested)
-                {
-                    objects.AddRange(connector.ObjectIds);
-                }
+            objects.AddRange(connector.ObjectIds);
+        }
 
-                if (objects.Count == 0 || _device is null ||
-                    !_device.TryCreateLease(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(objects), out var leaseFd, out var lesseeId))
-                {
-                    lease.SendFinished();
-                    return;
-                }
+        if (objects.Count == 0 || _device is null ||
+            !_device.TryCreateLease(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(objects), out var leaseFd, out var lesseeId))
+        {
+            lease.SendFinished();
+            return;
+        }
 
-                lease.SendLeaseFd(leaseFd);
-                close(leaseFd);
-                var active = new ActiveLease(this, lease, lesseeId);
-                _leases.Add(active);
-                lease.Destroyed += (_, _) =>
-                {
-                    if (_leases.Remove(active))
-                    {
-                        _device.RevokeLease(lesseeId);
-                    }
-                };
-            };
+        lease.SendLeaseFd(leaseFd);
+        close(leaseFd);
+        var active = new ActiveLease(this, lease, lesseeId);
+        _leases.Add(active);
+        lease.Destroyed += (_, _) =>
+        {
+            if (_leases.Remove(active))
+            {
+                _device.RevokeLease(lesseeId);
+            }
         };
     }
 }

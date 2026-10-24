@@ -5,7 +5,7 @@ using Xkb;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverXkbKeyboard
+internal sealed class RiverXkbKeyboard : IRiverXkbKeyboardV1Handler
 {
     private readonly RiverXkbConfig _owner;
     private RiverXkbKeyboardV1Resource? _resource;
@@ -30,65 +30,71 @@ internal sealed class RiverXkbKeyboard
 
     internal Basin.Capabilities.IInjectedKeyboard? Device { get; }
 
-    internal void Bind(RiverXkbKeyboardV1Resource resource)
+    internal RiverXkbKeyboardV1Resource Bind(WlClient client, uint version, uint id)
     {
+        var resource = new RiverXkbKeyboardV1Resource(client, version, id, this);
         _resource = resource;
         _layoutSent = false;
         _locksSent = false;
-
-        resource.SetKeymap += (_, e) =>
-        {
-            if (_owner.KeymapTextOf(e.Keymap) is not { } text)
-            {
-                resource.PostError(
-                    (uint)RiverXkbKeyboardV1.Error.InvalidKeymap,
-                    "The compositor did not validate this keymap.");
-                return;
-            }
-
-            if (Device is { } device)
-            {
-                device.SetKeymap(System.Text.Encoding.UTF8.GetBytes(text));
-            }
-            else
-            {
-                Seat.Keyboard.SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(text));
-            }
-
-            _capsLock = false;
-            _numLock = false;
-            _layoutSent = false;
-            _locksSent = false;
-            _owner.Manager.MarkManageDirty();
-        };
-
-        resource.SetLayoutByIndex += (_, e) =>
-        {
-            if (e.Index >= 0)
-            {
-                ApplyLayout((uint)e.Index);
-            }
-        };
-
-        resource.SetLayoutByName += (_, e) =>
-        {
-            if (e.Name is null)
-            {
-                return;
-            }
-
-            if (Seat.Keyboard.Keymap?.GetLayoutIndex(e.Name) is { } index)
-            {
-                ApplyLayout(index);
-            }
-        };
-
-        resource.CapslockEnable += (_, _) => SetLock(ref _capsLock, true);
-        resource.CapslockDisable += (_, _) => SetLock(ref _capsLock, false);
-        resource.NumlockEnable += (_, _) => SetLock(ref _numLock, true);
-        resource.NumlockDisable += (_, _) => SetLock(ref _numLock, false);
-        resource.DestroyRequest += (_, _) => _resource = null;
+        return resource;
     }
+
+    void IRiverXkbKeyboardV1Handler.SetKeymap(RiverXkbKeyboardV1Resource resource, in RiverXkbKeyboardV1Resource.SetKeymapEventArgs args)
+    {
+        if (_owner.KeymapTextOf(args.Keymap) is not { } text)
+        {
+            resource.PostError(
+                (uint)RiverXkbKeyboardV1.Error.InvalidKeymap,
+                "The compositor did not validate this keymap.");
+            return;
+        }
+
+        if (Device is { } device)
+        {
+            device.SetKeymap(System.Text.Encoding.UTF8.GetBytes(text));
+        }
+        else
+        {
+            Seat.Keyboard.SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(text));
+        }
+
+        _capsLock = false;
+        _numLock = false;
+        _layoutSent = false;
+        _locksSent = false;
+        _owner.Manager.MarkManageDirty();
+    }
+
+    void IRiverXkbKeyboardV1Handler.SetLayoutByIndex(RiverXkbKeyboardV1Resource resource, in RiverXkbKeyboardV1Resource.SetLayoutByIndexEventArgs args)
+    {
+        if (args.Index >= 0)
+        {
+            ApplyLayout((uint)args.Index);
+        }
+    }
+
+    void IRiverXkbKeyboardV1Handler.SetLayoutByName(RiverXkbKeyboardV1Resource resource, in RiverXkbKeyboardV1Resource.SetLayoutByNameEventArgs args)
+    {
+        if (args.Name is null)
+        {
+            return;
+        }
+
+        if (Seat.Keyboard.Keymap?.GetLayoutIndex(args.Name) is { } index)
+        {
+            ApplyLayout(index);
+        }
+    }
+
+    void IRiverXkbKeyboardV1Handler.CapslockEnable(RiverXkbKeyboardV1Resource resource) => SetLock(ref _capsLock, true);
+
+    void IRiverXkbKeyboardV1Handler.CapslockDisable(RiverXkbKeyboardV1Resource resource) => SetLock(ref _capsLock, false);
+
+    void IRiverXkbKeyboardV1Handler.NumlockEnable(RiverXkbKeyboardV1Resource resource) => SetLock(ref _numLock, true);
+
+    void IRiverXkbKeyboardV1Handler.NumlockDisable(RiverXkbKeyboardV1Resource resource) => SetLock(ref _numLock, false);
+
+    void IRiverXkbKeyboardV1Handler.Destroy(RiverXkbKeyboardV1Resource resource) => _resource = null;
 
     internal void SendState(uint version)
     {

@@ -10,7 +10,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_keyboard_shortcuts_inhibit_manager_v1</c> global. The compositor decides whether an inhibitor is active, and only an active inhibitor asks it to pass shortcuts to the client.
 /// </summary>
-public sealed class KeyboardShortcutsInhibitManager : IDisposable
+public sealed class KeyboardShortcutsInhibitManager : IDisposable, IZwpKeyboardShortcutsInhibitManagerV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -133,40 +133,43 @@ public sealed class KeyboardShortcutsInhibitManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpKeyboardShortcutsInhibitManagerV1Handler.Destroy(ZwpKeyboardShortcutsInhibitManagerV1Resource resource)
     {
-        var manager = new ZwpKeyboardShortcutsInhibitManagerV1Resource(client, version, id);
-        manager.InhibitShortcuts += (_, e) =>
-        {
-            var inhibitor = new ZwpKeyboardShortcutsInhibitorV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
-
-            if (_inhibitors.ContainsKey(surface))
-            {
-                manager.PostError(ErrorAlreadyInhibited, "The surface already has a shortcuts inhibitor.");
-                return;
-            }
-
-            _inhibitors[surface] = inhibitor;
-            inhibitor.Destroyed += (_, _) =>
-            {
-                _inhibitors.Remove(surface);
-                _active.Remove(surface);
-            };
-            surface.Destroyed += () =>
-            {
-                _inhibitors.Remove(surface);
-                _active.Remove(surface);
-            };
-            InhibitorCreated?.Invoke(surface);
-            if (_seat?.Keyboard.Focus == surface)
-            {
-                Activate(surface);
-            }
-        };
     }
+
+    void IZwpKeyboardShortcutsInhibitManagerV1Handler.InhibitShortcuts(ZwpKeyboardShortcutsInhibitManagerV1Resource resource, in ZwpKeyboardShortcutsInhibitManagerV1Resource.InhibitShortcutsEventArgs args)
+    {
+        var inhibitor = new ZwpKeyboardShortcutsInhibitorV1Resource(resource.Client, resource.Version, args.Id);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
+        {
+            return;
+        }
+
+        if (_inhibitors.ContainsKey(surface))
+        {
+            resource.PostError(ErrorAlreadyInhibited, "The surface already has a shortcuts inhibitor.");
+            return;
+        }
+
+        _inhibitors[surface] = inhibitor;
+        inhibitor.Destroyed += (_, _) =>
+        {
+            _inhibitors.Remove(surface);
+            _active.Remove(surface);
+        };
+        surface.Destroyed += () =>
+        {
+            _inhibitors.Remove(surface);
+            _active.Remove(surface);
+        };
+        InhibitorCreated?.Invoke(surface);
+        if (_seat?.Keyboard.Focus == surface)
+        {
+            Activate(surface);
+        }
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpKeyboardShortcutsInhibitManagerV1Resource(client, version, id, this);
 }

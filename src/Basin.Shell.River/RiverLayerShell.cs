@@ -8,7 +8,7 @@ namespace Basin.Shell.River;
 /// The river-layer-shell-v1 global. It sends each output's area that is left after exclusive zones, records the default output for unplaced layer surfaces, and carries the layer focus handshake.
 /// A window manager that binds it tells the compositor that layer surfaces can map.
 /// </summary>
-public sealed class RiverLayerShell : IDisposable
+public sealed class RiverLayerShell : IDisposable, IRiverLayerShellV1Handler
 {
     private readonly RiverWindowManager _manager;
     private readonly WlGlobal _global;
@@ -201,68 +201,68 @@ public sealed class RiverLayerShell : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new RiverLayerShellV1Resource(client, version, id);
+        var resource = new RiverLayerShellV1Resource(client, version, id, this);
         _resource = resource;
 
-        resource.GetOutput += (_, e) =>
-        {
-            if (_manager.ResolveOutput(e.Output) is not { IsRemoved: false } output)
-            {
-                return;
-            }
-
-            if (_outputs.TryGetValue(output, out var existing) && existing.Resource is { IsDestroyed: false })
-            {
-                resource.PostError(
-                    (uint)RiverLayerShellV1.Error.ObjectAlreadyCreated,
-                    "This output already has a river_layer_shell_output_v1.");
-                return;
-            }
-
-            var outputResource = new RiverLayerShellOutputV1Resource(client, version, e.Id);
-            var state = new OutputState { Resource = outputResource };
-            _outputs[output] = state;
-
-            Send(output, state, new Box(output.Position.X, output.Position.Y, output.Width, output.Height));
-
-            outputResource.SetDefault += (_, _) =>
-            {
-                if (_manager.EnsureWindowing())
-                {
-                    DefaultOutput = output.Output;
-                }
-            };
-            outputResource.DestroyRequest += (_, _) => state.Resource = null;
-        };
-
-        resource.GetSeat += (_, e) =>
-        {
-            if (_manager.ResolveSeat(e.Seat) is not { } seat)
-            {
-                return;
-            }
-
-            if (_seats.TryGetValue(seat, out var existing) && existing.Resource is { IsDestroyed: false })
-            {
-                resource.PostError(
-                    (uint)RiverLayerShellV1.Error.ObjectAlreadyCreated,
-                    "This seat already has a river_layer_shell_seat_v1.");
-                return;
-            }
-
-            var seatResource = new RiverLayerShellSeatV1Resource(client, version, e.Id);
-            var state = new SeatState { Resource = seatResource };
-            _seats[seat] = state;
-            seatResource.DestroyRequest += (_, _) => state.Resource = null;
-        };
-
-        resource.DestroyRequest += (_, _) => ResetForNewManager();
         resource.Destroyed += (_, _) => ResetForNewManager();
         _manager.MarkManageDirty();
     }
 
-    private sealed class OutputState
+    void IRiverLayerShellV1Handler.GetOutput(RiverLayerShellV1Resource resource, in RiverLayerShellV1Resource.GetOutputEventArgs args)
     {
+        if (_manager.ResolveOutput(args.Output) is not { IsRemoved: false } output)
+        {
+            return;
+        }
+
+        if (_outputs.TryGetValue(output, out var existing) && existing.Resource is { IsDestroyed: false })
+        {
+            resource.PostError(
+                (uint)RiverLayerShellV1.Error.ObjectAlreadyCreated,
+                "This output already has a river_layer_shell_output_v1.");
+            return;
+        }
+
+        var state = new OutputState(this, output);
+        state.Resource = new RiverLayerShellOutputV1Resource(resource.Client, resource.Version, args.Id, state);
+        _outputs[output] = state;
+
+        Send(output, state, new Box(output.Position.X, output.Position.Y, output.Width, output.Height));
+    }
+
+    void IRiverLayerShellV1Handler.GetSeat(RiverLayerShellV1Resource resource, in RiverLayerShellV1Resource.GetSeatEventArgs args)
+    {
+        if (_manager.ResolveSeat(args.Seat) is not { } seat)
+        {
+            return;
+        }
+
+        if (_seats.TryGetValue(seat, out var existing) && existing.Resource is { IsDestroyed: false })
+        {
+            resource.PostError(
+                (uint)RiverLayerShellV1.Error.ObjectAlreadyCreated,
+                "This seat already has a river_layer_shell_seat_v1.");
+            return;
+        }
+
+        var state = new SeatState();
+        state.Resource = new RiverLayerShellSeatV1Resource(resource.Client, resource.Version, args.Id, state);
+        _seats[seat] = state;
+    }
+
+    void IRiverLayerShellV1Handler.Destroy(RiverLayerShellV1Resource resource) => ResetForNewManager();
+
+    private sealed class OutputState : IRiverLayerShellOutputV1Handler
+    {
+        private readonly RiverLayerShell _owner;
+        private readonly RiverOutput _output;
+
+        public OutputState(RiverLayerShell owner, RiverOutput output)
+        {
+            _owner = owner;
+            _output = output;
+        }
+
         public RiverLayerShellOutputV1Resource? Resource { get; set; }
 
         public Box Area { get; set; }
@@ -270,9 +270,19 @@ public sealed class RiverLayerShell : IDisposable
         public bool AreaSent { get; set; }
 
         public bool Explicit { get; set; }
+
+        void IRiverLayerShellOutputV1Handler.SetDefault(RiverLayerShellOutputV1Resource resource)
+        {
+            if (_owner._manager.EnsureWindowing())
+            {
+                _owner.DefaultOutput = _output.Output;
+            }
+        }
+
+        void IRiverLayerShellOutputV1Handler.Destroy(RiverLayerShellOutputV1Resource resource) => Resource = null;
     }
 
-    private sealed class SeatState
+    private sealed class SeatState : IRiverLayerShellSeatV1Handler
     {
         public RiverLayerShellSeatV1Resource? Resource { get; set; }
 
@@ -281,5 +291,7 @@ public sealed class RiverLayerShell : IDisposable
         public Surface? FocusSurface { get; set; }
 
         public bool FocusSent { get; set; }
+
+        void IRiverLayerShellSeatV1Handler.Destroy(RiverLayerShellSeatV1Resource resource) => Resource = null;
     }
 }

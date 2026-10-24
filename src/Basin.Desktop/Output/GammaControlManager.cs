@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwlr_gamma_control_manager_v1</c> global. It reads gamma ramps that clients send and applies them through <see cref="IOutputGamma"/>.
 /// </summary>
-public sealed class GammaControlManager : IDisposable
+public sealed class GammaControlManager : IDisposable, IZwlrGammaControlManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -23,7 +23,7 @@ public sealed class GammaControlManager : IDisposable
 
     private readonly WlGlobal _global;
     private readonly IOutputGamma? _gamma;
-    private readonly Dictionary<IOutput, ZwlrGammaControlV1Resource> _controls = [];
+    private readonly Dictionary<IOutput, GammaControl> _controls = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GammaControlManager"/> class and creates the global.
@@ -43,48 +43,45 @@ public sealed class GammaControlManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwlrGammaControlManagerV1Resource(client, version, id, this);
+
+    void IZwlrGammaControlManagerV1Handler.Destroy(ZwlrGammaControlManagerV1Resource resource)
     {
-        var manager = new ZwlrGammaControlManagerV1Resource(client, version, id);
-        manager.GetGammaControl += (_, e) =>
-        {
-            var control = new ZwlrGammaControlV1Resource(client, manager.Version, e.Id);
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            if (output is null)
-            {
-                control.SendFailed();
-                return;
-            }
-
-            var size = _gamma?.RampSize(output) ?? 0;
-            if (size == 0)
-            {
-                control.SendFailed();
-                return;
-            }
-
-            if (_controls.TryGetValue(output, out var previous) && !previous.IsDestroyed)
-            {
-                previous.SendFailed();
-            }
-
-            _controls[output] = control;
-            control.Destroyed += (_, _) =>
-            {
-                if (_controls.TryGetValue(output, out var current) && current == control)
-                {
-                    _controls.Remove(output);
-                    _gamma!.Reset(output);
-                }
-            };
-
-            control.SendGammaSize(size);
-            control.SetGamma += (_, ge) => OnSetGamma(control, output, size, ge.Fd);
-        };
     }
 
-    private unsafe void OnSetGamma(ZwlrGammaControlV1Resource control, IOutput output, uint size, int fd)
+    void IZwlrGammaControlManagerV1Handler.GetGammaControl(
+        ZwlrGammaControlManagerV1Resource resource,
+        in ZwlrGammaControlManagerV1Resource.GetGammaControlEventArgs args)
     {
+        var handler = new GammaControl(this, resource.Client, resource.Version, args.Id);
+        var control = handler.Resource;
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        if (output is null)
+        {
+            control.SendFailed();
+            return;
+        }
+
+        var size = _gamma?.RampSize(output) ?? 0;
+        if (size == 0)
+        {
+            control.SendFailed();
+            return;
+        }
+
+        if (_controls.TryGetValue(output, out var previous) && !previous.Resource.IsDestroyed)
+        {
+            previous.Fail();
+        }
+
+        _controls[output] = handler;
+        handler.Attach(output, size);
+    }
+
+    private unsafe void OnSetGamma(GammaControl handler, IOutput output, uint size, int fd)
+    {
+        var control = handler.Resource;
         var bytes = new byte[size * 3 * sizeof(ushort)];
         var total = 0;
         fixed (byte* buffer = bytes)
@@ -115,7 +112,62 @@ public sealed class GammaControlManager : IDisposable
 
         if (_gamma is null || !_gamma.Apply(output, ramps))
         {
-            control.SendFailed();
+            handler.Fail();
+        }
+    }
+
+    private sealed class GammaControl : IZwlrGammaControlV1Handler
+    {
+        private readonly GammaControlManager _manager;
+        private IOutput? _output;
+        private uint _size;
+        private bool _failed;
+
+        public GammaControl(GammaControlManager manager, WlClient client, uint version, uint id)
+        {
+            _manager = manager;
+            Resource = new ZwlrGammaControlV1Resource(client, version, id, this);
+        }
+
+        public ZwlrGammaControlV1Resource Resource { get; }
+
+        public void Attach(IOutput output, uint size)
+        {
+            _output = output;
+            _size = size;
+            Resource.Destroyed += OnDestroyed;
+            Resource.SendGammaSize(size);
+        }
+
+        public void Fail()
+        {
+            _failed = true;
+            Resource.SendFailed();
+        }
+
+        void IZwlrGammaControlV1Handler.SetGamma(ZwlrGammaControlV1Resource resource, in ZwlrGammaControlV1Resource.SetGammaEventArgs args)
+        {
+            if (_output is not { } output || _failed)
+            {
+                resource.Client.CloseFd(args.Fd);
+                return;
+            }
+
+            _manager.OnSetGamma(this, output, _size, args.Fd);
+        }
+
+        void IZwlrGammaControlV1Handler.Destroy(ZwlrGammaControlV1Resource resource)
+        {
+        }
+
+        private void OnDestroyed(object? sender, EventArgs e)
+        {
+            var output = _output!;
+            if (_manager._controls.TryGetValue(output, out var current) && current == this)
+            {
+                _manager._controls.Remove(output);
+                _manager._gamma!.Reset(output);
+            }
         }
     }
 }

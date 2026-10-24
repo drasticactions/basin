@@ -183,6 +183,44 @@ public sealed class IpcDiagnosticsTests
     }
 
     [Fact]
+    public void Diag_syncobj_returns_the_explicit_sync_counters_as_json_and_a_line()
+    {
+        var counters = new FixedSyncCounters(new ExplicitSyncCounters(9, 8, 7, 6, 5, 4, 3, 2, 1));
+        using var rig = new IpcTestRig(services => services.Use<IExplicitSyncDiagnostics>(counters));
+        new IpcLineReport().AddDiagnosticsLines(rig.Server.Methods);
+        rig.Server.Start();
+        var peer = rig.Connect();
+        using (var reply = JsonDocument.Parse(peer.Call("""{"method":"diag/syncobj","params":{}}""")))
+        {
+            var result = reply.RootElement.GetProperty("result");
+            Assert.Equal(9, result.GetProperty("managed_commits").GetInt64());
+            Assert.Equal(2, result.GetProperty("superseded_releases").GetInt64());
+        }
+
+        rig.Server.StartLineFront(-1);
+        var previous = Console.Out;
+        var captured = new StringWriter();
+        Console.SetOut(captured);
+        try
+        {
+            rig.Server.LineFront!.Execute("syncobj");
+        }
+        finally
+        {
+            Console.SetOut(previous);
+        }
+
+        Assert.Equal(
+            "SYNCOBJ managed=9 explicit=8 parked=7 unparked=6 late=5 unexportable=4 deferred-releases=3 superseded-releases=2 discarded-releases=1",
+            captured.ToString().Trim());
+    }
+
+    private sealed class FixedSyncCounters(ExplicitSyncCounters counters) : IExplicitSyncDiagnostics
+    {
+        public ExplicitSyncCounters Counters => counters;
+    }
+
+    [Fact]
     public void A_recording_replies_when_it_finishes()
     {
         var diagnostics = new IpcFullRig.QuietDiagnostics { DeferRecordings = true };

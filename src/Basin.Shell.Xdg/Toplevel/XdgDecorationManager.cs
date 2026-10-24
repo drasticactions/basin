@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The <c>zxdg_decoration_manager_v1</c> global. It negotiates the decoration mode of each toplevel. Drawing a server-side frame is the consumer's work.
 /// </summary>
-public sealed class XdgDecorationManager : IDisposable
+public sealed class XdgDecorationManager : IDisposable, IZxdgDecorationManagerV1Handler
 {
     /// <summary>
     /// The version of <c>zxdg_decoration_manager_v1</c> that the global advertises.
@@ -112,31 +112,32 @@ public sealed class XdgDecorationManager : IDisposable
         _global.Dispose();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) => _ = new ZxdgDecorationManagerV1Resource(client, version, id, this);
+
+    void IZxdgDecorationManagerV1Handler.Destroy(ZxdgDecorationManagerV1Resource resource)
     {
-        var manager = new ZxdgDecorationManagerV1Resource(client, version, id);
-        manager.GetToplevelDecoration += (_, e) =>
+    }
+
+    void IZxdgDecorationManagerV1Handler.GetToplevelDecoration(ZxdgDecorationManagerV1Resource resource, in ZxdgDecorationManagerV1Resource.GetToplevelDecorationEventArgs args)
+    {
+        var toplevel = args.Toplevel is { } toplevelResource ? XdgToplevelRegistry.Resolve(toplevelResource) : null;
+        if (toplevel is null)
         {
-            var resource = new ZxdgToplevelDecorationV1Resource(client, manager.Version, e.Id);
-            var toplevel = e.Toplevel is { } toplevelResource ? XdgToplevelRegistry.Resolve(toplevelResource) : null;
-            if (toplevel is null)
-            {
-                resource.PostError(
-                    (uint)ZxdgToplevelDecorationV1.Error.Orphaned,
-                    "The xdg_toplevel is not known.");
-                return;
-            }
+            new ZxdgToplevelDecorationV1Resource(resource.Client, resource.Version, args.Id).PostError(
+                (uint)ZxdgToplevelDecorationV1.Error.Orphaned,
+                "The xdg_toplevel is not known.");
+            return;
+        }
 
-            if (_decorations.ContainsKey(toplevel))
-            {
-                resource.PostError(
-                    (uint)ZxdgToplevelDecorationV1.Error.AlreadyConstructed,
-                    "The toplevel already has a decoration object.");
-                return;
-            }
+        if (_decorations.ContainsKey(toplevel))
+        {
+            new ZxdgToplevelDecorationV1Resource(resource.Client, resource.Version, args.Id).PostError(
+                (uint)ZxdgToplevelDecorationV1.Error.AlreadyConstructed,
+                "The toplevel already has a decoration object.");
+            return;
+        }
 
-            _decorations[toplevel] = new Decoration(this, resource, toplevel);
-        };
+        _decorations[toplevel] = new Decoration(this, resource.Client, resource.Version, args.Id, toplevel);
     }
 
     private void Retain(XdgToplevelWindow toplevel, DecorationMode mode)
@@ -197,7 +198,7 @@ public sealed class XdgDecorationManager : IDisposable
         private void OnDestroyed() => _owner.Forget(_toplevel);
     }
 
-    private sealed class Decoration
+    private sealed class Decoration : IZxdgToplevelDecorationV1Handler
     {
         private readonly XdgDecorationManager _owner;
         private readonly ZxdgToplevelDecorationV1Resource _resource;
@@ -205,32 +206,13 @@ public sealed class XdgDecorationManager : IDisposable
         private DecorationMode? _preference;
         private bool _configured;
 
-        internal Decoration(XdgDecorationManager owner, ZxdgToplevelDecorationV1Resource resource, XdgToplevelWindow toplevel)
+        internal Decoration(XdgDecorationManager owner, WlClient client, uint version, uint id, XdgToplevelWindow toplevel)
         {
             _owner = owner;
+            var resource = new ZxdgToplevelDecorationV1Resource(client, version, id, this);
             _resource = resource;
             _toplevel = toplevel;
             Mode = Decide();
-
-            resource.SetMode += (_, e) =>
-            {
-                if (e.Mode is not (ZxdgToplevelDecorationV1.Mode.ClientSide or ZxdgToplevelDecorationV1.Mode.ServerSide))
-                {
-                    resource.PostError((uint)ZxdgToplevelDecorationV1.Error.InvalidMode, $"Decoration mode {(uint)e.Mode} is not a known value.");
-                    return;
-                }
-
-                _preference = (DecorationMode)e.Mode;
-                owner.PreferenceChanged?.Invoke(toplevel, _preference);
-                Reconsider();
-            };
-
-            resource.UnsetMode += (_, _) =>
-            {
-                _preference = null;
-                owner.PreferenceChanged?.Invoke(toplevel, null);
-                Reconsider();
-            };
 
             resource.Destroyed += (_, _) =>
             {
@@ -242,6 +224,30 @@ public sealed class XdgDecorationManager : IDisposable
             toplevel.RequestConfigure();
 
             owner.PreferenceChanged?.Invoke(toplevel, _preference);
+        }
+
+        void IZxdgToplevelDecorationV1Handler.Destroy(ZxdgToplevelDecorationV1Resource resource)
+        {
+        }
+
+        void IZxdgToplevelDecorationV1Handler.SetMode(ZxdgToplevelDecorationV1Resource resource, in ZxdgToplevelDecorationV1Resource.SetModeEventArgs args)
+        {
+            if (args.Mode is not (ZxdgToplevelDecorationV1.Mode.ClientSide or ZxdgToplevelDecorationV1.Mode.ServerSide))
+            {
+                resource.PostError((uint)ZxdgToplevelDecorationV1.Error.InvalidMode, $"Decoration mode {(uint)args.Mode} is not a known value.");
+                return;
+            }
+
+            _preference = (DecorationMode)args.Mode;
+            _owner.PreferenceChanged?.Invoke(_toplevel, _preference);
+            Reconsider();
+        }
+
+        void IZxdgToplevelDecorationV1Handler.UnsetMode(ZxdgToplevelDecorationV1Resource resource)
+        {
+            _preference = null;
+            _owner.PreferenceChanged?.Invoke(_toplevel, null);
+            Reconsider();
         }
 
         internal DecorationMode Mode { get; private set; }

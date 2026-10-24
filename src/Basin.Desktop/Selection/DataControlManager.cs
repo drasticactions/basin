@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwlr_data_control_manager_v1</c> global. Clipboard managers read and set the clipboard and primary selection through <see cref="ISelectionStore"/>, without focus.
 /// </summary>
-public sealed class DataControlManager : IDisposable
+public sealed class DataControlManager : IDisposable, IZwlrDataControlManagerV1Handler, IZwlrDataControlDeviceV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -17,6 +17,8 @@ public sealed class DataControlManager : IDisposable
     private readonly WlGlobal _global;
     private readonly ISelectionStore? _store;
     private readonly List<DeviceEntry> _devices = [];
+    private readonly OfferReceiver _clipboardOffers;
+    private readonly OfferReceiver _primaryOffers;
 
     private sealed class DeviceEntry
     {
@@ -33,6 +35,8 @@ public sealed class DataControlManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(display);
         _store = store;
+        _clipboardOffers = new OfferReceiver(store, SelectionKind.Clipboard);
+        _primaryOffers = new OfferReceiver(store, SelectionKind.Primary);
         _global = display.CreateGlobal(ZwlrDataControlManagerV1.Interface, Version, OnBind);
         if (_store is { } live)
         {
@@ -66,32 +70,38 @@ public sealed class DataControlManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwlrDataControlManagerV1Resource(client, version, id, this);
+
+    void IZwlrDataControlManagerV1Handler.CreateDataSource(ZwlrDataControlManagerV1Resource resource, in ZwlrDataControlManagerV1Resource.CreateDataSourceEventArgs args) =>
+        _ = new ControlSource(resource.Client, resource.Version, args.Id);
+
+    void IZwlrDataControlManagerV1Handler.GetDataDevice(ZwlrDataControlManagerV1Resource resource, in ZwlrDataControlManagerV1Resource.GetDataDeviceEventArgs args)
     {
-        var manager = new ZwlrDataControlManagerV1Resource(client, version, id);
-        manager.CreateDataSource += (_, e) =>
-        {
-            var resource = new ZwlrDataControlSourceV1Resource(client, manager.Version, e.Id);
-            _ = new ControlSource(resource);
-        };
-        manager.GetDataDevice += (_, e) =>
-        {
-            var device = new ZwlrDataControlDeviceV1Resource(client, manager.Version, e.Id);
-            var entry = new DeviceEntry { Resource = device };
-            _devices.Add(entry);
-            device.Destroyed += (_, _) => _devices.Remove(entry);
+        var device = new ZwlrDataControlDeviceV1Resource(resource.Client, resource.Version, args.Id, this);
+        var entry = new DeviceEntry { Resource = device };
+        _devices.Add(entry);
+        device.Destroyed += (_, _) => _devices.Remove(entry);
 
-            device.SetSelection += (_, se) =>
-                _store?.SetSelection(SelectionKind.Clipboard, ControlSource.Resolve(se.Source)?.Wrapped, SelectionSerial.Unchecked);
-            device.SetPrimarySelection += (_, se) =>
-                _store?.SetSelection(SelectionKind.Primary, ControlSource.Resolve(se.Source)?.Wrapped, SelectionSerial.Unchecked);
+        SendSelection(device, primary: false);
+        if (device.Version >= 2)
+        {
+            SendSelection(device, primary: true);
+        }
+    }
 
-            SendSelection(device, primary: false);
-            if (device.Version >= 2)
-            {
-                SendSelection(device, primary: true);
-            }
-        };
+    void IZwlrDataControlManagerV1Handler.Destroy(ZwlrDataControlManagerV1Resource resource)
+    {
+    }
+
+    void IZwlrDataControlDeviceV1Handler.SetSelection(ZwlrDataControlDeviceV1Resource resource, in ZwlrDataControlDeviceV1Resource.SetSelectionEventArgs args) =>
+        _store?.SetSelection(SelectionKind.Clipboard, ControlSource.Resolve(args.Source)?.Wrapped, SelectionSerial.Unchecked);
+
+    void IZwlrDataControlDeviceV1Handler.SetPrimarySelection(ZwlrDataControlDeviceV1Resource resource, in ZwlrDataControlDeviceV1Resource.SetPrimarySelectionEventArgs args) =>
+        _store?.SetSelection(SelectionKind.Primary, ControlSource.Resolve(args.Source)?.Wrapped, SelectionSerial.Unchecked);
+
+    void IZwlrDataControlDeviceV1Handler.Destroy(ZwlrDataControlDeviceV1Resource resource)
+    {
     }
 
     private void SendSelection(ZwlrDataControlDeviceV1Resource device, bool primary)
@@ -101,14 +111,12 @@ public sealed class DataControlManager : IDisposable
         ZwlrDataControlOfferV1Resource? offer = null;
         if (source is not null)
         {
-            offer = new ZwlrDataControlOfferV1Resource(device.Client, device.Version, 0);
+            offer = new ZwlrDataControlOfferV1Resource(device.Client, device.Version, 0, primary ? _primaryOffers : _clipboardOffers);
             device.SendDataOffer(offer);
             foreach (var mime in source.MimeTypes)
             {
                 offer.SendOffer(mime);
             }
-
-            offer.Receive += (_, e) => _store!.Receive(kind, e.MimeType, new ClientFd(e.Fd, offer.Client));
         }
 
         if (primary)
@@ -124,14 +132,24 @@ public sealed class DataControlManager : IDisposable
         }
     }
 
-    private sealed class ControlSource
+    private sealed class OfferReceiver(ISelectionStore? store, SelectionKind kind) : IZwlrDataControlOfferV1Handler
+    {
+        void IZwlrDataControlOfferV1Handler.Receive(ZwlrDataControlOfferV1Resource resource, in ZwlrDataControlOfferV1Resource.ReceiveEventArgs args) =>
+            store!.Receive(kind, args.MimeType, new ClientFd(args.Fd, resource.Client));
+
+        void IZwlrDataControlOfferV1Handler.Destroy(ZwlrDataControlOfferV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class ControlSource : IZwlrDataControlSourceV1Handler
     {
         private static readonly Dictionary<ZwlrDataControlSourceV1Resource, ControlSource> Registry = [];
         private readonly List<string> _mimes = [];
 
-        public ControlSource(ZwlrDataControlSourceV1Resource resource)
+        public ControlSource(WlClient client, uint version, uint id)
         {
-            resource.Offer += (_, e) => _mimes.Add(e.MimeType);
+            var resource = new ZwlrDataControlSourceV1Resource(client, version, id, this);
             Wrapped = new DataSource(
                 _mimes,
                 (mime, fd) =>
@@ -163,5 +181,12 @@ public sealed class DataControlManager : IDisposable
 
         public static ControlSource? Resolve(ZwlrDataControlSourceV1Resource? resource) =>
             resource is not null && Registry.TryGetValue(resource, out var source) ? source : null;
+
+        void IZwlrDataControlSourceV1Handler.Offer(ZwlrDataControlSourceV1Resource resource, in ZwlrDataControlSourceV1Resource.OfferEventArgs args) =>
+            _mimes.Add(args.MimeType);
+
+        void IZwlrDataControlSourceV1Handler.Destroy(ZwlrDataControlSourceV1Resource resource)
+        {
+        }
     }
 }

@@ -7,7 +7,7 @@ namespace Basin;
 /// <summary>
 /// A client's <c>wl_surface</c>. It collects requests into <see cref="Pending"/> and moves them onto <see cref="Current"/> on commit, unless a <see cref="CommitParkReason"/> holds the commit.
 /// </summary>
-public sealed class Surface
+public sealed class Surface : IWlSurfaceHandler
 {
     private const CommitParkReason DeferredReasons =
         CommitParkReason.FifoBarrier | CommitParkReason.CommitTiming | CommitParkReason.Held | CommitParkReason.Fence;
@@ -31,32 +31,46 @@ public sealed class Surface
     private double _serverScaleOverride;
     private Pixman.PixmanRegion32? _scaleScratch;
 
-    internal Surface(CompositorGlobal owner, WlSurfaceResource resource)
-        : this(owner, resource, 1.0)
-    {
-    }
-
-    internal Surface(CompositorGlobal owner, WlSurfaceResource resource, double clientScale)
+    internal Surface(CompositorGlobal owner, Wayland.Server.WlClient client, uint version, uint id, double clientScale)
     {
         _owner = owner;
-        Resource = resource;
         _clientScale = clientScale;
         Current.ServerScale = clientScale;
+        Resource = new WlSurfaceResource(client, version, id, this);
         BasinCounters.Track();
-
-        resource.Attach += (_, e) => OnAttach(e);
-        resource.Damage += (_, e) => OnDamage(e.X, e.Y, e.Width, e.Height, Pending.SurfaceDamage, SurfaceStateFields.SurfaceDamage);
-        resource.DamageBuffer += (_, e) => OnDamage(e.X, e.Y, e.Width, e.Height, Pending.BufferDamage, SurfaceStateFields.BufferDamage);
-        resource.Frame += (_, e) => OnFrame(e.Callback);
-        resource.GetRelease += (_, e) => OnGetRelease(e.Callback);
-        resource.SetOpaqueRegion += (_, e) => OnSetOpaqueRegion(e.Region);
-        resource.SetInputRegion += (_, e) => OnSetInputRegion(e.Region);
-        resource.SetBufferTransform += (_, e) => OnSetBufferTransform((int)e.Transform);
-        resource.SetBufferScale += (_, e) => OnSetBufferScale(e.Scale);
-        resource.Offset += (_, e) => OnOffset(e.X, e.Y);
-        resource.Commit += (_, _) => OnCommit();
-        resource.Destroyed += (_, _) => OnDestroyed();
+        Resource.Destroyed += OnResourceDestroyed;
     }
+
+    void IWlSurfaceHandler.Destroy(WlSurfaceResource resource)
+    {
+    }
+
+    void IWlSurfaceHandler.Attach(WlSurfaceResource resource, in WlSurfaceResource.AttachEventArgs args) => OnAttach(in args);
+
+    void IWlSurfaceHandler.Damage(WlSurfaceResource resource, in WlSurfaceResource.DamageEventArgs args) =>
+        OnDamage(args.X, args.Y, args.Width, args.Height, Pending.SurfaceDamage, SurfaceStateFields.SurfaceDamage);
+
+    void IWlSurfaceHandler.DamageBuffer(WlSurfaceResource resource, in WlSurfaceResource.DamageBufferEventArgs args) =>
+        OnDamage(args.X, args.Y, args.Width, args.Height, Pending.BufferDamage, SurfaceStateFields.BufferDamage);
+
+    void IWlSurfaceHandler.Frame(WlSurfaceResource resource, in WlSurfaceResource.FrameEventArgs args) => OnFrame(args.Callback);
+
+    void IWlSurfaceHandler.GetRelease(WlSurfaceResource resource, in WlSurfaceResource.GetReleaseEventArgs args) => OnGetRelease(args.Callback);
+
+    void IWlSurfaceHandler.SetOpaqueRegion(WlSurfaceResource resource, in WlSurfaceResource.SetOpaqueRegionEventArgs args) => OnSetOpaqueRegion(args.Region);
+
+    void IWlSurfaceHandler.SetInputRegion(WlSurfaceResource resource, in WlSurfaceResource.SetInputRegionEventArgs args) => OnSetInputRegion(args.Region);
+
+    void IWlSurfaceHandler.SetBufferTransform(WlSurfaceResource resource, in WlSurfaceResource.SetBufferTransformEventArgs args) =>
+        OnSetBufferTransform((int)args.Transform);
+
+    void IWlSurfaceHandler.SetBufferScale(WlSurfaceResource resource, in WlSurfaceResource.SetBufferScaleEventArgs args) => OnSetBufferScale(args.Scale);
+
+    void IWlSurfaceHandler.Offset(WlSurfaceResource resource, in WlSurfaceResource.OffsetEventArgs args) => OnOffset(args.X, args.Y);
+
+    void IWlSurfaceHandler.Commit(WlSurfaceResource resource) => OnCommit();
+
+    private void OnResourceDestroyed(object? sender, EventArgs e) => OnDestroyed();
 
     /// <summary>Gets the surface resource.</summary>
     public WlSurfaceResource Resource { get; }
@@ -365,7 +379,7 @@ public sealed class Surface
         Resource.SendPreferredBufferScale(scale);
     }
 
-    private void OnAttach(WlSurfaceResource.AttachEventArgs e)
+    private void OnAttach(in WlSurfaceResource.AttachEventArgs e)
     {
         if (Resource.Version >= 5 && (e.X != 0 || e.Y != 0))
         {

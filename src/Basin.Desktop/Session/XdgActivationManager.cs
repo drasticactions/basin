@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>xdg_activation_v1</c> global. It mints tokens and redeems them through <see cref="IActivationTokens"/>.
 /// </summary>
-public sealed class XdgActivationManager : IDisposable
+public sealed class XdgActivationManager : IDisposable, IXdgActivationV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -44,31 +44,55 @@ public sealed class XdgActivationManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new XdgActivationV1Resource(client, version, id, this);
+
+    void IXdgActivationV1Handler.Destroy(XdgActivationV1Resource resource)
     {
-        var activation = new XdgActivationV1Resource(client, version, id);
-        activation.GetActivationToken += (_, e) =>
+    }
+
+    void IXdgActivationV1Handler.GetActivationToken(XdgActivationV1Resource resource, in XdgActivationV1Resource.GetActivationTokenEventArgs args) =>
+        _ = new TokenRequest(this, resource.Client, resource.Version, args.Id);
+
+    void IXdgActivationV1Handler.Activate(XdgActivationV1Resource resource, in XdgActivationV1Resource.ActivateEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is not null && _tokens is { } store && store.Redeem(args.Token, surface))
         {
-            var resource = new XdgActivationTokenV1Resource(client, activation.Version, e.Id);
-            Surface? requesting = null;
-            uint serial = 0;
-            string? appId = null;
-            resource.SetSurface += (_, se) => requesting = _compositor.ResolveSurface(se.Surface);
-            resource.SetSerial += (_, se) => serial = se.Serial;
-            resource.SetAppId += (_, ae) => appId = ae.AppId;
-            resource.Commit += (_, _) =>
-            {
-                var token = _tokens?.Mint(client, requesting, serial, appId) ?? string.Empty;
-                resource.SendDone(token);
-            };
-        };
-        activation.Activate += (_, e) =>
+            ActivationRequested?.Invoke(surface);
+        }
+    }
+
+    private sealed class TokenRequest : IXdgActivationTokenV1Handler
+    {
+        private readonly XdgActivationManager _owner;
+        private Surface? _requesting;
+        private uint _serial;
+        private string? _appId;
+
+        public TokenRequest(XdgActivationManager owner, WlClient client, uint version, uint id)
         {
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is not null && _tokens is { } store && store.Redeem(e.Token, surface))
-            {
-                ActivationRequested?.Invoke(surface);
-            }
-        };
+            _owner = owner;
+            _ = new XdgActivationTokenV1Resource(client, version, id, this);
+        }
+
+        void IXdgActivationTokenV1Handler.SetSurface(XdgActivationTokenV1Resource resource, in XdgActivationTokenV1Resource.SetSurfaceEventArgs args) =>
+            _requesting = _owner._compositor.ResolveSurface(args.Surface);
+
+        void IXdgActivationTokenV1Handler.SetSerial(XdgActivationTokenV1Resource resource, in XdgActivationTokenV1Resource.SetSerialEventArgs args) =>
+            _serial = args.Serial;
+
+        void IXdgActivationTokenV1Handler.SetAppId(XdgActivationTokenV1Resource resource, in XdgActivationTokenV1Resource.SetAppIdEventArgs args) =>
+            _appId = args.AppId;
+
+        void IXdgActivationTokenV1Handler.Commit(XdgActivationTokenV1Resource resource)
+        {
+            var token = _owner._tokens?.Mint(resource.Client, _requesting, _serial, _appId) ?? string.Empty;
+            resource.SendDone(token);
+        }
+
+        void IXdgActivationTokenV1Handler.Destroy(XdgActivationTokenV1Resource resource)
+        {
+        }
     }
 }

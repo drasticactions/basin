@@ -7,7 +7,7 @@ namespace Basin;
 /// <summary>
 /// Serves <c>wp_viewporter</c>. A viewport writes its source crop and destination size into the pending state of its surface. A request on a viewport whose surface is destroyed raises <c>no_surface</c>.
 /// </summary>
-public sealed class ViewporterGlobal : IDisposable
+public sealed class ViewporterGlobal : IDisposable, IWpViewporterHandler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -36,76 +36,35 @@ public sealed class ViewporterGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var viewporter = new WpViewporterResource(client, version, id);
-        viewporter.GetViewport += (_, e) =>
+        _ = new WpViewporterResource(client, version, id, this);
+    }
+
+    void IWpViewporterHandler.Destroy(WpViewporterResource resource)
+    {
+    }
+
+    void IWpViewporterHandler.GetViewport(WpViewporterResource resource, in WpViewporterResource.GetViewportEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                viewporter.PostError((uint)WpViewporter.Error.ViewportExists, "unknown surface");
-                return;
-            }
+            resource.PostError((uint)WpViewporter.Error.ViewportExists, "unknown surface");
+            return;
+        }
 
-            if (!_withViewport.Add(surface))
-            {
-                viewporter.PostError((uint)WpViewporter.Error.ViewportExists, "surface already has a viewport");
-                return;
-            }
+        if (!_withViewport.Add(surface))
+        {
+            resource.PostError((uint)WpViewporter.Error.ViewportExists, "surface already has a viewport");
+            return;
+        }
 
-            var viewport = new WpViewportResource(client, viewporter.Version, e.Id);
-            WireViewport(viewport, surface);
-        };
+        var viewport = new WpViewportResource(resource.Client, resource.Version, args.Id, new Viewport(surface));
+        WireViewport(viewport, surface);
     }
 
     private void WireViewport(WpViewportResource viewport, Surface surface)
     {
         surface.ViewportResource = viewport;
-        viewport.SetSource += (_, e) =>
-        {
-            if (surface.IsDestroyed)
-            {
-                viewport.PostError((uint)WpViewport.Error.NoSurface, "the surface of the viewport is destroyed");
-                return;
-            }
-
-            var x = e.X.ToDouble();
-            var y = e.Y.ToDouble();
-            var width = e.Width.ToDouble();
-            var height = e.Height.ToDouble();
-            var unset = x == -1 && y == -1 && width == -1 && height == -1;
-            if (!unset && (width <= 0 || height <= 0 || x < 0 || y < 0))
-            {
-                viewport.PostError((uint)WpViewport.Error.BadValue, "invalid viewport source rectangle");
-                return;
-            }
-
-            surface.Pending.ViewportSourceX = unset ? 0 : x;
-            surface.Pending.ViewportSourceY = unset ? 0 : y;
-            surface.Pending.ViewportSourceWidth = unset ? -1 : width;
-            surface.Pending.ViewportSourceHeight = unset ? -1 : height;
-            surface.Pending.Committed |= SurfaceStateFields.Viewport;
-        };
-
-        viewport.SetDestination += (_, e) =>
-        {
-            if (surface.IsDestroyed)
-            {
-                viewport.PostError((uint)WpViewport.Error.NoSurface, "the surface of the viewport is destroyed");
-                return;
-            }
-
-            var unset = e.Width == -1 && e.Height == -1;
-            if (!unset && (e.Width <= 0 || e.Height <= 0))
-            {
-                viewport.PostError((uint)WpViewport.Error.BadValue, "invalid viewport destination size");
-                return;
-            }
-
-            surface.Pending.ViewportDestinationWidth = unset ? -1 : e.Width;
-            surface.Pending.ViewportDestinationHeight = unset ? -1 : e.Height;
-            surface.Pending.Committed |= SurfaceStateFields.Viewport;
-        };
-
         viewport.Destroyed += (_, _) =>
         {
             _withViewport.Remove(surface);
@@ -119,5 +78,58 @@ public sealed class ViewporterGlobal : IDisposable
                 surface.Pending.Committed |= SurfaceStateFields.Viewport;
             }
         };
+    }
+
+    private sealed class Viewport(Surface surface) : IWpViewportHandler
+    {
+        void IWpViewportHandler.Destroy(WpViewportResource resource)
+        {
+        }
+
+        void IWpViewportHandler.SetSource(WpViewportResource resource, in WpViewportResource.SetSourceEventArgs args)
+        {
+            if (surface.IsDestroyed)
+            {
+                resource.PostError((uint)WpViewport.Error.NoSurface, "the surface of the viewport is destroyed");
+                return;
+            }
+
+            var x = args.X.ToDouble();
+            var y = args.Y.ToDouble();
+            var width = args.Width.ToDouble();
+            var height = args.Height.ToDouble();
+            var unset = x == -1 && y == -1 && width == -1 && height == -1;
+            if (!unset && (width <= 0 || height <= 0 || x < 0 || y < 0))
+            {
+                resource.PostError((uint)WpViewport.Error.BadValue, "invalid viewport source rectangle");
+                return;
+            }
+
+            surface.Pending.ViewportSourceX = unset ? 0 : x;
+            surface.Pending.ViewportSourceY = unset ? 0 : y;
+            surface.Pending.ViewportSourceWidth = unset ? -1 : width;
+            surface.Pending.ViewportSourceHeight = unset ? -1 : height;
+            surface.Pending.Committed |= SurfaceStateFields.Viewport;
+        }
+
+        void IWpViewportHandler.SetDestination(WpViewportResource resource, in WpViewportResource.SetDestinationEventArgs args)
+        {
+            if (surface.IsDestroyed)
+            {
+                resource.PostError((uint)WpViewport.Error.NoSurface, "the surface of the viewport is destroyed");
+                return;
+            }
+
+            var unset = args.Width == -1 && args.Height == -1;
+            if (!unset && (args.Width <= 0 || args.Height <= 0))
+            {
+                resource.PostError((uint)WpViewport.Error.BadValue, "invalid viewport destination size");
+                return;
+            }
+
+            surface.Pending.ViewportDestinationWidth = unset ? -1 : args.Width;
+            surface.Pending.ViewportDestinationHeight = unset ? -1 : args.Height;
+            surface.Pending.Committed |= SurfaceStateFields.Viewport;
+        }
     }
 }

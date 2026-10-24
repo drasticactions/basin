@@ -8,7 +8,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_toplevel_mapping_manager_v1</c>. It answers a foreign-toplevel handle with the toplevel id, split into a high and a low 32-bit word.
 /// </summary>
-public sealed class HyprlandToplevelMappingManager : IDisposable
+public sealed class HyprlandToplevelMappingManager : IDisposable, IHyprlandToplevelMappingManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -38,17 +38,27 @@ public sealed class HyprlandToplevelMappingManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandToplevelMappingManagerV1Resource(client, version, id);
-        manager.GetWindowForToplevel += (_, e) =>
-        {
-            var handle = new HyprlandToplevelWindowMappingHandleV1Resource(client, manager.Version, e.Handle);
-            Answer(handle, ForeignToplevelListManager.ToplevelOf(e.ToplevelHandle));
-        };
-        manager.GetWindowForToplevelWlr += (_, e) =>
-        {
-            var handle = new HyprlandToplevelWindowMappingHandleV1Resource(client, manager.Version, e.Handle);
-            Answer(handle, ForeignToplevelManager.ToplevelOf(e.ToplevelHandle));
-        };
+        _ = new HyprlandToplevelMappingManagerV1Resource(client, version, id, this);
+    }
+
+    void IHyprlandToplevelMappingManagerV1Handler.GetWindowForToplevel(
+        HyprlandToplevelMappingManagerV1Resource resource,
+        in HyprlandToplevelMappingManagerV1Resource.GetWindowForToplevelEventArgs args)
+    {
+        var handle = new HyprlandToplevelWindowMappingHandleV1Resource(resource.Client, resource.Version, args.Handle);
+        Answer(handle, ForeignToplevelListManager.ToplevelOf(args.ToplevelHandle));
+    }
+
+    void IHyprlandToplevelMappingManagerV1Handler.GetWindowForToplevelWlr(
+        HyprlandToplevelMappingManagerV1Resource resource,
+        in HyprlandToplevelMappingManagerV1Resource.GetWindowForToplevelWlrEventArgs args)
+    {
+        var handle = new HyprlandToplevelWindowMappingHandleV1Resource(resource.Client, resource.Version, args.Handle);
+        Answer(handle, ForeignToplevelManager.ToplevelOf(args.ToplevelHandle));
+    }
+
+    void IHyprlandToplevelMappingManagerV1Handler.Destroy(HyprlandToplevelMappingManagerV1Resource resource)
+    {
     }
 
     private void Answer(HyprlandToplevelWindowMappingHandleV1Resource handle, ulong toplevelId)

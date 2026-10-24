@@ -498,6 +498,37 @@ public sealed class OutputManagementTests
     }
 
     [Fact]
+    public void Stop_is_answered_with_finished_and_ends_the_manager_events()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new OutputManagementManager(
+            host.Display,
+            host.Layout,
+            new Basin.Capabilities.Defaults.LayoutOutputSet(host.Layout),
+            new Basin.Capabilities.Defaults.LayoutOutputConfiguration(host.Layout));
+
+        uint serial = 0;
+        var heads = 0;
+        var finished = false;
+        var proxy = BindManager(host, 4, p =>
+        {
+            p.Head += (_, _) => heads++;
+            p.Done += (_, e) => serial = e.Serial;
+            p.Finished += (_, _) => finished = true;
+        });
+        host.PumpUntil(() => serial != 0);
+
+        proxy.Stop();
+        host.PumpUntil(() => finished);
+
+        var hotplug = host.Backend.CreateOutput(new OutputMode(64, 48, 60_000), manualFrameClock: true);
+        host.Layout.Add(hotplug, 0, 0);
+        host.PumpToClient();
+        Assert.Equal(1, heads);
+        hotplug.Destroy();
+    }
+
+    [Fact]
     public void A_hotplugged_output_reaches_a_manager_that_is_already_bound()
     {
         using var host = new CompositorTestHost();

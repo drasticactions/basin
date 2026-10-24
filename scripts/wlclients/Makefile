@@ -22,7 +22,7 @@ LDLIBS += $(shell pkg-config --libs wayland-client)
 all: $(BIN)/locktest $(BIN)/vptr $(BIN)/vpad $(BIN)/vtouch $(BIN)/vkbd $(BIN)/vmouse $(BIN)/gestures $(BIN)/colorinfo \
 	$(BIN)/hyprsurface $(BIN)/focusgrab $(BIN)/locknotify $(BIN)/toplevelexport $(BIN)/ssdwin \
 	$(BIN)/panel $(BIN)/riverrepeat $(BIN)/appmenu $(BIN)/pointerlock $(BIN)/textinput $(BIN)/randremu $(BIN)/x11focus \
-	$(BIN)/scrgbwin $(BIN)/tabwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch $(BIN)/exportdmabuf
+	$(BIN)/scrgbwin $(BIN)/tabwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch $(BIN)/exportdmabuf $(BIN)/syncsub
 
 $(BIN):
 	mkdir -p $(BIN)
@@ -55,6 +55,7 @@ XML_ext-foreign-toplevel-list-v1 := $(FOREIGN_LIST_XML)
 XML_fractional-scale-v1 := $(FRACTIONAL_XML)
 XML_viewporter := $(VIEWPORTER_XML)
 XML_linux-dmabuf-v1 := $(WAYLAND_PROTOCOLS)/stable/linux-dmabuf/linux-dmabuf-v1.xml
+XML_linux-drm-syncobj-v1 := $(WAYLAND_PROTOCOLS)/staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml
 XML_text-input-unstable-v3 := $(WAYLAND_PROTOCOLS)/unstable/text-input/text-input-unstable-v3.xml
 XML_pointer-constraints-unstable-v1 := $(WAYLAND_PROTOCOLS)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml
 XML_relative-pointer-unstable-v1 := $(WAYLAND_PROTOCOLS)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
@@ -93,6 +94,10 @@ $(BIN)/kmsretain: kmsretain.c | $(BIN)
 # a Windows program, so it needs mingw-w64 and is not part of all
 $(BIN)/modeswitch.exe: modeswitch.c | $(BIN)
 	x86_64-w64-mingw32-gcc -O2 -Wall -o $@ modeswitch.c -mwindows -lgdi32
+
+# a Windows D3D11 program, so it needs mingw-w64 and is not part of all
+$(BIN)/d3dspin.exe: d3dspin.c | $(BIN)
+	x86_64-w64-mingw32-gcc -O2 -Wall -o $@ d3dspin.c -mwindows -ld3d11 -ldxgi -lgdi32 -luser32 -luuid
 
 $(BIN)/vpad: vpad.c | $(BIN)
 	$(CC) $(CFLAGS) -o $@ vpad.c -lm
@@ -193,3 +198,11 @@ $(BIN)/textinput: textinput.c $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-clien
 $(BIN)/nv12win: nv12win.c $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-protocol.h \
 	$(BIN)/linux-dmabuf-v1-protocol.c $(BIN)/linux-dmabuf-v1-client-protocol.h | $(BIN)
 	$(CC) $(CFLAGS) $(shell pkg-config --cflags gbm) -o $@ nv12win.c $(BIN)/xdg-shell-protocol.c $(BIN)/linux-dmabuf-v1-protocol.c $(LDLIBS) $(shell pkg-config --libs gbm)
+
+SYNCSUB_GEN := $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-protocol.h \
+	$(BIN)/linux-dmabuf-v1-protocol.c $(BIN)/linux-dmabuf-v1-client-protocol.h \
+	$(BIN)/linux-drm-syncobj-v1-protocol.c $(BIN)/linux-drm-syncobj-v1-client-protocol.h
+
+$(BIN)/syncsub: syncsub.c $(SYNCSUB_GEN) | $(BIN)
+	$(CC) $(CFLAGS) $(shell pkg-config --cflags gbm libdrm) -o $@ syncsub.c $(BIN)/xdg-shell-protocol.c \
+		$(BIN)/linux-dmabuf-v1-protocol.c $(BIN)/linux-drm-syncobj-v1-protocol.c $(LDLIBS) $(shell pkg-config --libs gbm libdrm)

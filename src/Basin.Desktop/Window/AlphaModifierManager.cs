@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_alpha_modifier_v1</c> global. It applies the committed alpha factor of each surface through <see cref="ISurfaceAppearance"/>.
 /// </summary>
-public sealed class AlphaModifierManager : IDisposable
+public sealed class AlphaModifierManager : IDisposable, IWpAlphaModifierV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -63,60 +63,102 @@ public sealed class AlphaModifierManager : IDisposable
     /// <returns>The opacity from 0 to 1.</returns>
     public double AlphaOf(Surface surface) => _appearance.OpacityOf(surface);
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpAlphaModifierV1Resource(client, version, id, this);
+
+    void IWpAlphaModifierV1Handler.GetSurface(WpAlphaModifierV1Resource resource, in WpAlphaModifierV1Resource.GetSurfaceEventArgs args)
     {
-        var manager = new WpAlphaModifierV1Resource(client, version, id);
-        manager.GetSurface += (_, e) =>
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new WpAlphaModifierSurfaceV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
+            _ = new WpAlphaModifierSurfaceV1Resource(resource.Client, resource.Version, args.Id, IgnoredSurface.Instance);
+            return;
+        }
+
+        if (!_claimed.Add(surface))
+        {
+            _ = new WpAlphaModifierSurfaceV1Resource(resource.Client, resource.Version, args.Id, IgnoredSurface.Instance);
+            resource.PostError(ErrorAlreadyConstructed, "The surface already has an alpha modifier.");
+            return;
+        }
+
+        _ = new AlphaSurface(this, resource.Client, resource.Version, args.Id, surface);
+    }
+
+    void IWpAlphaModifierV1Handler.Destroy(WpAlphaModifierV1Resource resource)
+    {
+    }
+
+    private sealed class AlphaSurface : IWpAlphaModifierSurfaceV1Handler
+    {
+        private readonly AlphaModifierManager _owner;
+        private readonly Surface _surface;
+        private readonly Action _committed;
+        private bool _alive = true;
+
+        public AlphaSurface(AlphaModifierManager owner, WlClient client, uint version, uint id, Surface surface)
+        {
+            _owner = owner;
+            _surface = surface;
+            var resource = new WpAlphaModifierSurfaceV1Resource(client, version, id, this);
+            _committed = OnCommitted;
+            surface.Committed += _committed;
+            resource.Destroyed += OnResourceDestroyed;
+            surface.Destroyed += OnSurfaceDestroyed;
+        }
+
+        void IWpAlphaModifierSurfaceV1Handler.SetMultiplier(WpAlphaModifierSurfaceV1Resource resource, in WpAlphaModifierSurfaceV1Resource.SetMultiplierEventArgs args)
+        {
+            if (!_alive)
             {
+                resource.PostError(ErrorNoSurface, "The wl_surface is destroyed.");
                 return;
             }
 
-            if (!_claimed.Add(surface))
+            _surface.Pending.SetExtension(new PendingAlpha(args.Factor / (double)uint.MaxValue));
+        }
+
+        void IWpAlphaModifierSurfaceV1Handler.Destroy(WpAlphaModifierSurfaceV1Resource resource)
+        {
+        }
+
+        private void OnCommitted()
+        {
+            if (_surface.Current.TakeExtension<PendingAlpha>() is { } pending)
             {
-                manager.PostError(ErrorAlreadyConstructed, "The surface already has an alpha modifier.");
-                return;
+                _owner._appearance.SetOpacity(_surface, pending.Alpha);
+                _owner.AlphaChanged?.Invoke(_surface, pending.Alpha);
             }
+        }
 
-            var alive = true;
-            Action committed = () =>
+        private void OnResourceDestroyed(object? sender, EventArgs e)
+        {
+            _owner._claimed.Remove(_surface);
+            if (_alive)
             {
-                if (surface.Current.TakeExtension<PendingAlpha>() is { } pending)
-                {
-                    _appearance.SetOpacity(surface, pending.Alpha);
-                    AlphaChanged?.Invoke(surface, pending.Alpha);
-                }
-            };
-            surface.Committed += committed;
+                _surface.Pending.SetExtension(new PendingAlpha(1.0));
+            }
+        }
 
-            resource.SetMultiplier += (_, me) =>
-            {
-                if (!alive)
-                {
-                    resource.PostError(ErrorNoSurface, "The wl_surface is destroyed.");
-                    return;
-                }
+        private void OnSurfaceDestroyed()
+        {
+            _alive = false;
+            _owner._claimed.Remove(_surface);
+            _surface.Committed -= _committed;
+        }
+    }
 
-                surface.Pending.SetExtension(new PendingAlpha(me.Factor / (double)uint.MaxValue));
-            };
-            resource.Destroyed += (_, _) =>
-            {
-                _claimed.Remove(surface);
-                if (alive)
-                {
-                    surface.Pending.SetExtension(new PendingAlpha(1.0));
-                }
-            };
-            surface.Destroyed += () =>
-            {
-                alive = false;
-                _claimed.Remove(surface);
-                surface.Committed -= committed;
-            };
-        };
+    private sealed class IgnoredSurface : IWpAlphaModifierSurfaceV1Handler
+    {
+        public static readonly IgnoredSurface Instance = new();
+
+        void IWpAlphaModifierSurfaceV1Handler.SetMultiplier(WpAlphaModifierSurfaceV1Resource resource, in WpAlphaModifierSurfaceV1Resource.SetMultiplierEventArgs args)
+        {
+        }
+
+        void IWpAlphaModifierSurfaceV1Handler.Destroy(WpAlphaModifierSurfaceV1Resource resource)
+        {
+        }
     }
 
     private sealed class PendingAlpha(double alpha) : IDisposable

@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The state of one <c>xdg_surface</c>: its window geometry, its configure serials and its mapped state. The toplevel or popup role object sits on top of it.
 /// </summary>
-public sealed class XdgSurfaceState
+public sealed class XdgSurfaceState : IXdgSurfaceHandler
 {
     private readonly List<uint> _pendingConfigures = [];
     private Box _pendingGeometry;
@@ -19,57 +19,14 @@ public sealed class XdgSurfaceState
     private bool _awaitingSerial;
     private TransactionParticipant _participant;
 
-    internal XdgSurfaceState(XdgShell shell, XdgWmBaseResource wmBase, XdgSurfaceResource resource, Surface surface)
+    internal XdgSurfaceState(XdgShell shell, XdgWmBaseResource wmBase, uint id, Surface surface)
     {
         Shell = shell;
         WmBase = wmBase;
+        var resource = new XdgSurfaceResource(wmBase.Client, wmBase.Version, id, this);
         Resource = resource;
         Surface = surface;
 
-        resource.GetToplevel += (_, e) =>
-        {
-            if (!Surface.CanSetRole(XdgToplevelWindow.RoleName))
-            {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, $"The surface already has the '{Surface.Role}' role.");
-                return;
-            }
-
-            var toplevelResource = new XdgToplevelResource(resource.Client, resource.Version, e.Id);
-            var toplevel = new XdgToplevelWindow(this, toplevelResource);
-            Surface.TrySetRole(XdgToplevelWindow.RoleName, toplevel);
-            Role = toplevel;
-            shell.EmitNewToplevel(toplevel);
-        };
-
-        resource.GetPopup += (_, e) =>
-        {
-            if (!Surface.CanSetRole(XdgPopupWindow.RoleName))
-            {
-                wmBase.PostError((uint)XdgWmBase.Error.Role, $"The surface already has the '{Surface.Role}' role.");
-                return;
-            }
-
-            if (!shell.TryGetPositioner(e.Positioner, out var rules))
-            {
-                wmBase.PostError((uint)XdgWmBase.Error.InvalidPositioner, "The positioner is not complete. Set its size and anchor rectangle.");
-                return;
-            }
-
-            var parent = e.Parent is { } parentResource ? XdgSurfaceRegistry.Resolve(parentResource) : null;
-            var popupResource = new XdgPopupResource(resource.Client, resource.Version, e.Id);
-            var popup = new XdgPopupWindow(this, popupResource, parent, rules);
-            Surface.TrySetRole(XdgPopupWindow.RoleName, popup);
-            Role = popup;
-            shell.EmitNewPopup(popup);
-        };
-
-        resource.SetWindowGeometry += (_, e) =>
-        {
-            _pendingGeometry = new Box(e.X, e.Y, e.Width, e.Height);
-            _geometrySet = true;
-        };
-
-        resource.AckConfigure += (_, e) => OnAckConfigure(e.Serial);
         resource.Destroyed += (_, _) =>
         {
             XdgSurfaceRegistry.Remove(resource);
@@ -83,6 +40,53 @@ public sealed class XdgSurfaceState
         surface.Destroyed += OnSurfaceDestroyed;
         XdgSurfaceRegistry.Register(resource, this);
     }
+
+    void IXdgSurfaceHandler.Destroy(XdgSurfaceResource resource)
+    {
+    }
+
+    void IXdgSurfaceHandler.GetToplevel(XdgSurfaceResource resource, in XdgSurfaceResource.GetToplevelEventArgs args)
+    {
+        if (!Surface.CanSetRole(XdgToplevelWindow.RoleName))
+        {
+            WmBase.PostError((uint)XdgWmBase.Error.Role, $"The surface already has the '{Surface.Role}' role.");
+            return;
+        }
+
+        var toplevel = new XdgToplevelWindow(this, args.Id);
+        Surface.TrySetRole(XdgToplevelWindow.RoleName, toplevel);
+        Role = toplevel;
+        Shell.EmitNewToplevel(toplevel);
+    }
+
+    void IXdgSurfaceHandler.GetPopup(XdgSurfaceResource resource, in XdgSurfaceResource.GetPopupEventArgs args)
+    {
+        if (!Surface.CanSetRole(XdgPopupWindow.RoleName))
+        {
+            WmBase.PostError((uint)XdgWmBase.Error.Role, $"The surface already has the '{Surface.Role}' role.");
+            return;
+        }
+
+        if (!Shell.TryGetPositioner(args.Positioner, out var rules))
+        {
+            WmBase.PostError((uint)XdgWmBase.Error.InvalidPositioner, "The positioner is not complete. Set its size and anchor rectangle.");
+            return;
+        }
+
+        var parent = args.Parent is { } parentResource ? XdgSurfaceRegistry.Resolve(parentResource) : null;
+        var popup = new XdgPopupWindow(this, args.Id, parent, rules);
+        Surface.TrySetRole(XdgPopupWindow.RoleName, popup);
+        Role = popup;
+        Shell.EmitNewPopup(popup);
+    }
+
+    void IXdgSurfaceHandler.SetWindowGeometry(XdgSurfaceResource resource, in XdgSurfaceResource.SetWindowGeometryEventArgs args)
+    {
+        _pendingGeometry = new Box(args.X, args.Y, args.Width, args.Height);
+        _geometrySet = true;
+    }
+
+    void IXdgSurfaceHandler.AckConfigure(XdgSurfaceResource resource, in XdgSurfaceResource.AckConfigureEventArgs args) => OnAckConfigure(args.Serial);
 
     /// <summary>
     /// Gets the shell that made the surface.

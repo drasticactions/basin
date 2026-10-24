@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Holds the lock surface role of one surface on one output. It maps when the client commits a buffer after it acknowledges the first configure.
 /// </summary>
-public sealed class LockSurface
+public sealed class LockSurface : IExtSessionLockSurfaceV1Handler
 {
     /// <summary>
     /// The surface role name that a lock surface holds.
@@ -20,23 +20,16 @@ public sealed class LockSurface
     private bool _acked;
     private bool _mapped;
 
-    internal LockSurface(WlServerDisplay display, Surface surface, ExtSessionLockSurfaceV1Resource resource, OutputGlobal output)
+    internal LockSurface(WlServerDisplay display, Surface surface, WlClient client, uint version, uint id, OutputGlobal output)
     {
         _display = display;
-        _resource = resource;
+        _resource = new ExtSessionLockSurfaceV1Resource(client, version, id, this);
         Surface = surface;
         Output = output;
 
-        resource.AckConfigure += (_, e) =>
-        {
-            if (e.Serial == _lastSerial)
-            {
-                _acked = true;
-            }
-        };
         surface.Committed += OnCommitted;
         surface.Destroyed += () => SetMapped(false);
-        resource.Destroyed += (_, _) => SetMapped(false);
+        _resource.Destroyed += (_, _) => SetMapped(false);
 
         var (logicalWidth, logicalHeight) = output.Output.LogicalSize();
         Configure(logicalWidth, logicalHeight);
@@ -78,6 +71,18 @@ public sealed class LockSurface
         {
             _lastSerial = _display.NextSerial();
             _resource.SendConfigure(_lastSerial, (uint)width, (uint)height);
+        }
+    }
+
+    void IExtSessionLockSurfaceV1Handler.Destroy(ExtSessionLockSurfaceV1Resource resource)
+    {
+    }
+
+    void IExtSessionLockSurfaceV1Handler.AckConfigure(ExtSessionLockSurfaceV1Resource resource, in ExtSessionLockSurfaceV1Resource.AckConfigureEventArgs args)
+    {
+        if (args.Serial == _lastSerial)
+        {
+            _acked = true;
         }
     }
 

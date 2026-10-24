@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// The <c>xdg_toplevel_tag_manager_v1</c> global. It reports the tags and descriptions that clients set on their toplevels.
 /// </summary>
-public sealed class XdgToplevelTagManager : IDisposable
+public sealed class XdgToplevelTagManager : IDisposable, IXdgToplevelTagManagerV1Handler
 {
     /// <summary>
     /// The version of <c>xdg_toplevel_tag_manager_v1</c> that the global advertises.
@@ -40,22 +40,25 @@ public sealed class XdgToplevelTagManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) => _ = new XdgToplevelTagManagerV1Resource(client, version, id, this);
+
+    void IXdgToplevelTagManagerV1Handler.Destroy(XdgToplevelTagManagerV1Resource resource)
     {
-        var manager = new XdgToplevelTagManagerV1Resource(client, version, id);
-        manager.SetToplevelTag += (_, e) =>
+    }
+
+    void IXdgToplevelTagManagerV1Handler.SetToplevelTag(XdgToplevelTagManagerV1Resource resource, in XdgToplevelTagManagerV1Resource.SetToplevelTagEventArgs args)
+    {
+        if (args.Toplevel is not null && XdgToplevelRegistry.Resolve(args.Toplevel) is { } toplevel)
         {
-            if (e.Toplevel is not null && XdgToplevelRegistry.Resolve(e.Toplevel) is { } toplevel)
-            {
-                TagSet?.Invoke(toplevel, e.Tag);
-            }
-        };
-        manager.SetToplevelDescription += (_, e) =>
+            TagSet?.Invoke(toplevel, args.Tag);
+        }
+    }
+
+    void IXdgToplevelTagManagerV1Handler.SetToplevelDescription(XdgToplevelTagManagerV1Resource resource, in XdgToplevelTagManagerV1Resource.SetToplevelDescriptionEventArgs args)
+    {
+        if (args.Toplevel is not null && XdgToplevelRegistry.Resolve(args.Toplevel) is { } toplevel)
         {
-            if (e.Toplevel is not null && XdgToplevelRegistry.Resolve(e.Toplevel) is { } toplevel)
-            {
-                DescriptionSet?.Invoke(toplevel, e.Description);
-            }
-        };
+            DescriptionSet?.Invoke(toplevel, args.Description);
+        }
     }
 }

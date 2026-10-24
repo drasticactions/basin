@@ -7,7 +7,7 @@ namespace Basin.Shell.Weston;
 /// <summary>
 /// The <c>weston_desktop_shell</c> global. It forwards the requests of one bound shell client to <see cref="IShellRoles"/> and sends <see cref="IShellClient"/> events back to it.
 /// </summary>
-public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
+public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable, IWestonDesktopShellHandler
 {
     /// <summary>
     /// The version of <c>weston_desktop_shell</c> that the global advertises.
@@ -84,19 +84,19 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var shell = new WestonDesktopShellResource(client, version, id);
         if (!IsAllowed(client))
         {
-            shell.PostError(ErrorInvalidArgument, "Only the shell client of the compositor can bind weston_desktop_shell.");
+            new WestonDesktopShellResource(client, version, id).PostError(ErrorInvalidArgument, "Only the shell client of the compositor can bind weston_desktop_shell.");
             return;
         }
 
         if (_bound is { IsDestroyed: false })
         {
-            shell.PostError(ErrorInvalidArgument, "weston_desktop_shell is already bound.");
+            new WestonDesktopShellResource(client, version, id).PostError(ErrorInvalidArgument, "weston_desktop_shell is already bound.");
             return;
         }
 
+        var shell = new WestonDesktopShellResource(client, version, id, this);
         _bound = shell;
         shell.Destroyed += (_, _) =>
         {
@@ -105,53 +105,54 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
                 _bound = null;
             }
         };
-
-        shell.SetBackground += (_, e) =>
-        {
-            if (Resolve(shell, e.Output, e.Surface) is { } role)
-            {
-                _roles.SetBackground(role.Output, role.Surface);
-            }
-        };
-
-        shell.SetPanel += (_, e) =>
-        {
-            if (Resolve(shell, e.Output, e.Surface) is { } role)
-            {
-                _roles.SetPanel(role.Output, role.Surface);
-            }
-        };
-
-        shell.SetPanelPosition += (_, e) =>
-        {
-            if (e.Position > (uint)ShellPanelPosition.Right)
-            {
-                shell.PostError(ErrorInvalidArgument, "The panel position is not known.");
-                return;
-            }
-
-            _roles.SetPanelPosition((ShellPanelPosition)e.Position);
-        };
-
-        shell.SetLockSurface += (_, e) =>
-        {
-            if (ResolveSurface(shell, e.Surface) is { } surface)
-            {
-                _roles.SetLockSurface(surface);
-            }
-        };
-
-        shell.SetGrabSurface += (_, e) =>
-        {
-            if (ResolveSurface(shell, e.Surface) is { } surface)
-            {
-                _roles.SetGrabSurface(surface);
-            }
-        };
-
-        shell.Unlock += (_, _) => _roles.Unlock();
-        shell.DesktopReady += (_, _) => _roles.DesktopReady();
     }
+
+    void IWestonDesktopShellHandler.SetBackground(WestonDesktopShellResource resource, in WestonDesktopShellResource.SetBackgroundEventArgs args)
+    {
+        if (Resolve(resource, args.Output, args.Surface) is { } role)
+        {
+            _roles.SetBackground(role.Output, role.Surface);
+        }
+    }
+
+    void IWestonDesktopShellHandler.SetPanel(WestonDesktopShellResource resource, in WestonDesktopShellResource.SetPanelEventArgs args)
+    {
+        if (Resolve(resource, args.Output, args.Surface) is { } role)
+        {
+            _roles.SetPanel(role.Output, role.Surface);
+        }
+    }
+
+    void IWestonDesktopShellHandler.SetPanelPosition(WestonDesktopShellResource resource, in WestonDesktopShellResource.SetPanelPositionEventArgs args)
+    {
+        if (args.Position > (uint)ShellPanelPosition.Right)
+        {
+            resource.PostError(ErrorInvalidArgument, "The panel position is not known.");
+            return;
+        }
+
+        _roles.SetPanelPosition((ShellPanelPosition)args.Position);
+    }
+
+    void IWestonDesktopShellHandler.SetLockSurface(WestonDesktopShellResource resource, in WestonDesktopShellResource.SetLockSurfaceEventArgs args)
+    {
+        if (ResolveSurface(resource, args.Surface) is { } surface)
+        {
+            _roles.SetLockSurface(surface);
+        }
+    }
+
+    void IWestonDesktopShellHandler.SetGrabSurface(WestonDesktopShellResource resource, in WestonDesktopShellResource.SetGrabSurfaceEventArgs args)
+    {
+        if (ResolveSurface(resource, args.Surface) is { } surface)
+        {
+            _roles.SetGrabSurface(surface);
+        }
+    }
+
+    void IWestonDesktopShellHandler.Unlock(WestonDesktopShellResource resource) => _roles.Unlock();
+
+    void IWestonDesktopShellHandler.DesktopReady(WestonDesktopShellResource resource) => _roles.DesktopReady();
 
     private bool IsAllowed(WlClient client)
     {

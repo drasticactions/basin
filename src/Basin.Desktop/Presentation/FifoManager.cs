@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_fifo_manager_v1</c> global. It holds fifo commits until the output latches a frame. A guard timer releases them when no frame comes.
 /// </summary>
-public sealed class FifoManager : IDisposable, IFrameSink
+public sealed class FifoManager : IDisposable, IFrameSink, IWpFifoManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -343,57 +343,46 @@ public sealed class FifoManager : IDisposable, IFrameSink
         _sweep.Clear();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpFifoManagerV1Handler.Destroy(WpFifoManagerV1Resource resource)
     {
-        var manager = new WpFifoManagerV1Resource(client, version, id);
-        manager.GetFifo += (_, e) =>
+    }
+
+    void IWpFifoManagerV1Handler.GetFifo(WpFifoManagerV1Resource resource, in WpFifoManagerV1Resource.GetFifoEventArgs args)
+    {
+        var fifo = new Fifo(this);
+        var fifoResource = new WpFifoV1Resource(resource.Client, resource.Version, args.Id, fifo);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new WpFifoV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            if (_owners.ContainsKey(surface))
-            {
-                manager.PostError((uint)WpFifoManagerV1.Error.AlreadyExists, "The surface already has a fifo object.");
-                return;
-            }
+        if (_owners.ContainsKey(surface))
+        {
+            resource.PostError((uint)WpFifoManagerV1.Error.AlreadyExists, "The surface already has a fifo object.");
+            return;
+        }
 
-            _owners[surface] = resource;
-            _surfaces.Add(surface);
+        _owners[surface] = fifoResource;
+        _surfaces.Add(surface);
+        fifo.Surface = surface;
 
-            resource.SetBarrier += (_, _) =>
-            {
-                if (Alive(resource, surface))
-                {
-                    surface.SetFifoBarrier();
-                }
-            };
-            resource.WaitBarrier += (_, _) =>
-            {
-                if (Alive(resource, surface))
-                {
-                    surface.WaitFifoBarrier();
-                    ArmGuard();
-                }
-            };
-
-            resource.Destroyed += (_, _) =>
-            {
-                if (_owners.TryGetValue(surface, out var owner) && ReferenceEquals(owner, resource))
-                {
-                    _owners.Remove(surface);
-                }
-            };
-            surface.Destroyed += () =>
+        fifoResource.Destroyed += (_, _) =>
+        {
+            if (_owners.TryGetValue(surface, out var owner) && ReferenceEquals(owner, fifoResource))
             {
                 _owners.Remove(surface);
-                _surfaces.Remove(surface);
-            };
+            }
+        };
+        surface.Destroyed += () =>
+        {
+            _owners.Remove(surface);
+            _surfaces.Remove(surface);
         };
     }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpFifoManagerV1Resource(client, version, id, this);
 
     private static bool Alive(WpFifoV1Resource resource, Surface surface)
     {
@@ -404,5 +393,31 @@ public sealed class FifoManager : IDisposable, IFrameSink
 
         resource.PostError((uint)WpFifoV1.Error.SurfaceDestroyed, "The surface of the fifo object is destroyed.");
         return false;
+    }
+
+    private sealed class Fifo(FifoManager owner) : IWpFifoV1Handler
+    {
+        public Surface? Surface { get; set; }
+
+        void IWpFifoV1Handler.SetBarrier(WpFifoV1Resource resource)
+        {
+            if (Surface is { } surface && Alive(resource, surface))
+            {
+                surface.SetFifoBarrier();
+            }
+        }
+
+        void IWpFifoV1Handler.WaitBarrier(WpFifoV1Resource resource)
+        {
+            if (Surface is { } surface && Alive(resource, surface))
+            {
+                surface.WaitFifoBarrier();
+                owner.ArmGuard();
+            }
+        }
+
+        void IWpFifoV1Handler.Destroy(WpFifoV1Resource resource)
+        {
+        }
     }
 }

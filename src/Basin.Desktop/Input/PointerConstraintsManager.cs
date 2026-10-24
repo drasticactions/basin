@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_pointer_constraints_v1</c> global and keeps at most one constraint per surface. A second request for a constrained surface is a protocol error.
 /// </summary>
-public sealed class PointerConstraintsManager : IDisposable
+public sealed class PointerConstraintsManager : IDisposable, IZwpPointerConstraintsV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -81,12 +81,18 @@ public sealed class PointerConstraintsManager : IDisposable
 
     internal Region? ResolveRegion(WlRegionResource? resource) => _compositor.ResolveRegion(resource);
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpPointerConstraintsV1Handler.Destroy(ZwpPointerConstraintsV1Resource resource)
     {
-        var manager = new ZwpPointerConstraintsV1Resource(client, version, id);
-        manager.LockPointer += (_, e) => Create(client, manager.Version, e.Id, e.Surface, e.Region, ConstraintKind.Lock, (uint)e.Lifetime);
-        manager.ConfinePointer += (_, e) => Create(client, manager.Version, e.Id, e.Surface, e.Region, ConstraintKind.Confine, (uint)e.Lifetime);
     }
+
+    void IZwpPointerConstraintsV1Handler.LockPointer(ZwpPointerConstraintsV1Resource resource, in ZwpPointerConstraintsV1Resource.LockPointerEventArgs args) =>
+        Create(resource.Client, resource.Version, args.Id, args.Surface, args.Region, ConstraintKind.Lock, (uint)args.Lifetime);
+
+    void IZwpPointerConstraintsV1Handler.ConfinePointer(ZwpPointerConstraintsV1Resource resource, in ZwpPointerConstraintsV1Resource.ConfinePointerEventArgs args) =>
+        Create(resource.Client, resource.Version, args.Id, args.Surface, args.Region, ConstraintKind.Confine, (uint)args.Lifetime);
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpPointerConstraintsV1Resource(client, version, id, this);
 
     private void Create(WlClient client, uint version, uint id, WlSurfaceResource? surfaceResource, WlRegionResource? region, ConstraintKind kind, uint lifetime)
     {

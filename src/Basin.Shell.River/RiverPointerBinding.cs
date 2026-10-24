@@ -1,38 +1,28 @@
 using Basin.Shell.River.Protocol;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverPointerBinding
+internal sealed class RiverPointerBinding : IRiverPointerBindingV1Handler
 {
     private readonly RiverWindowManager _manager;
+    private readonly RiverSeat _seat;
     private RiverPointerBindingV1Resource? _resource;
 
     internal RiverPointerBinding(
         RiverWindowManager manager,
-        RiverPointerBindingV1Resource resource,
+        RiverSeat seat,
+        WlClient client,
+        uint version,
+        uint id,
         uint button,
         RiverSeatV1.Modifiers modifiers)
     {
         _manager = manager;
-        _resource = resource;
+        _seat = seat;
         Button = button;
         Modifiers = modifiers;
-
-        resource.Enable += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                IsEnabled = true;
-            }
-        };
-        resource.Disable += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                IsEnabled = false;
-            }
-        };
-        resource.DestroyRequest += (_, _) => _resource = null;
+        _resource = new RiverPointerBindingV1Resource(client, version, id, this);
     }
 
     internal uint Button { get; }
@@ -55,5 +45,27 @@ internal sealed class RiverPointerBinding
         {
             resource.SendReleased();
         }
+    }
+
+    void IRiverPointerBindingV1Handler.Enable(RiverPointerBindingV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            IsEnabled = true;
+        }
+    }
+
+    void IRiverPointerBindingV1Handler.Disable(RiverPointerBindingV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            IsEnabled = false;
+        }
+    }
+
+    void IRiverPointerBindingV1Handler.Destroy(RiverPointerBindingV1Resource resource)
+    {
+        _resource = null;
+        _seat.ForgetPointerBinding(this);
     }
 }

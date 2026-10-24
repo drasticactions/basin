@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>ext_data_control_manager_v1</c> global. Clipboard managers read and set the clipboard and primary selection through <see cref="ISelectionStore"/>, without focus.
 /// </summary>
-public sealed class ExtDataControlManager : IDisposable
+public sealed class ExtDataControlManager : IDisposable, IExtDataControlManagerV1Handler, IExtDataControlDeviceV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -17,6 +17,8 @@ public sealed class ExtDataControlManager : IDisposable
     private readonly WlGlobal _global;
     private readonly ISelectionStore? _store;
     private readonly List<ExtDataControlDeviceV1Resource> _devices = [];
+    private readonly OfferReceiver _clipboardOffers;
+    private readonly OfferReceiver _primaryOffers;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExtDataControlManager"/> class and creates the global.
@@ -28,6 +30,8 @@ public sealed class ExtDataControlManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(display);
         _store = store;
+        _clipboardOffers = new OfferReceiver(store, SelectionKind.Clipboard);
+        _primaryOffers = new OfferReceiver(store, SelectionKind.Primary);
         _global = display.CreateGlobal(ExtDataControlManagerV1.Interface, Version, OnBind);
         if (_store is { } live)
         {
@@ -61,28 +65,34 @@ public sealed class ExtDataControlManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ExtDataControlManagerV1Resource(client, version, id, this);
+
+    void IExtDataControlManagerV1Handler.CreateDataSource(ExtDataControlManagerV1Resource resource, in ExtDataControlManagerV1Resource.CreateDataSourceEventArgs args) =>
+        _ = new ControlSource(resource.Client, resource.Version, args.Id);
+
+    void IExtDataControlManagerV1Handler.GetDataDevice(ExtDataControlManagerV1Resource resource, in ExtDataControlManagerV1Resource.GetDataDeviceEventArgs args)
     {
-        var manager = new ExtDataControlManagerV1Resource(client, version, id);
-        manager.CreateDataSource += (_, e) =>
-        {
-            var resource = new ExtDataControlSourceV1Resource(client, manager.Version, e.Id);
-            _ = new ControlSource(resource);
-        };
-        manager.GetDataDevice += (_, e) =>
-        {
-            var device = new ExtDataControlDeviceV1Resource(client, manager.Version, e.Id);
-            _devices.Add(device);
-            device.Destroyed += (_, _) => _devices.Remove(device);
+        var device = new ExtDataControlDeviceV1Resource(resource.Client, resource.Version, args.Id, this);
+        _devices.Add(device);
+        device.Destroyed += (_, _) => _devices.Remove(device);
 
-            device.SetSelection += (_, se) =>
-                _store?.SetSelection(SelectionKind.Clipboard, ControlSource.Resolve(se.Source)?.Wrapped, SelectionSerial.Unchecked);
-            device.SetPrimarySelection += (_, se) =>
-                _store?.SetSelection(SelectionKind.Primary, ControlSource.Resolve(se.Source)?.Wrapped, SelectionSerial.Unchecked);
+        SendSelection(device, primary: false);
+        SendSelection(device, primary: true);
+    }
 
-            SendSelection(device, primary: false);
-            SendSelection(device, primary: true);
-        };
+    void IExtDataControlManagerV1Handler.Destroy(ExtDataControlManagerV1Resource resource)
+    {
+    }
+
+    void IExtDataControlDeviceV1Handler.SetSelection(ExtDataControlDeviceV1Resource resource, in ExtDataControlDeviceV1Resource.SetSelectionEventArgs args) =>
+        _store?.SetSelection(SelectionKind.Clipboard, ControlSource.Resolve(args.Source)?.Wrapped, SelectionSerial.Unchecked);
+
+    void IExtDataControlDeviceV1Handler.SetPrimarySelection(ExtDataControlDeviceV1Resource resource, in ExtDataControlDeviceV1Resource.SetPrimarySelectionEventArgs args) =>
+        _store?.SetSelection(SelectionKind.Primary, ControlSource.Resolve(args.Source)?.Wrapped, SelectionSerial.Unchecked);
+
+    void IExtDataControlDeviceV1Handler.Destroy(ExtDataControlDeviceV1Resource resource)
+    {
     }
 
     private void SendSelection(ExtDataControlDeviceV1Resource device, bool primary)
@@ -92,14 +102,12 @@ public sealed class ExtDataControlManager : IDisposable
         ExtDataControlOfferV1Resource? offer = null;
         if (source is not null)
         {
-            offer = new ExtDataControlOfferV1Resource(device.Client, device.Version, 0);
+            offer = new ExtDataControlOfferV1Resource(device.Client, device.Version, 0, primary ? _primaryOffers : _clipboardOffers);
             device.SendDataOffer(offer);
             foreach (var mime in source.MimeTypes)
             {
                 offer.SendOffer(mime);
             }
-
-            offer.Receive += (_, e) => _store!.Receive(kind, e.MimeType, new ClientFd(e.Fd, offer.Client));
         }
 
         if (primary)
@@ -112,14 +120,24 @@ public sealed class ExtDataControlManager : IDisposable
         }
     }
 
-    private sealed class ControlSource
+    private sealed class OfferReceiver(ISelectionStore? store, SelectionKind kind) : IExtDataControlOfferV1Handler
+    {
+        void IExtDataControlOfferV1Handler.Receive(ExtDataControlOfferV1Resource resource, in ExtDataControlOfferV1Resource.ReceiveEventArgs args) =>
+            store!.Receive(kind, args.MimeType, new ClientFd(args.Fd, resource.Client));
+
+        void IExtDataControlOfferV1Handler.Destroy(ExtDataControlOfferV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class ControlSource : IExtDataControlSourceV1Handler
     {
         private static readonly Dictionary<ExtDataControlSourceV1Resource, ControlSource> Registry = [];
         private readonly List<string> _mimes = [];
 
-        public ControlSource(ExtDataControlSourceV1Resource resource)
+        public ControlSource(WlClient client, uint version, uint id)
         {
-            resource.Offer += (_, e) => _mimes.Add(e.MimeType);
+            var resource = new ExtDataControlSourceV1Resource(client, version, id, this);
             Wrapped = new DataSource(
                 _mimes,
                 (mime, fd) =>
@@ -151,5 +169,12 @@ public sealed class ExtDataControlManager : IDisposable
 
         public static ControlSource? Resolve(ExtDataControlSourceV1Resource? resource) =>
             resource is not null && Registry.TryGetValue(resource, out var source) ? source : null;
+
+        void IExtDataControlSourceV1Handler.Offer(ExtDataControlSourceV1Resource resource, in ExtDataControlSourceV1Resource.OfferEventArgs args) =>
+            _mimes.Add(args.MimeType);
+
+        void IExtDataControlSourceV1Handler.Destroy(ExtDataControlSourceV1Resource resource)
+        {
+        }
     }
 }

@@ -409,6 +409,8 @@ public sealed unsafe class XWaylandWm : IDisposable
             window.RaiseDestroyed();
         }
 
+        _focusRelease?.Remove();
+        _focusRelease = null;
         _source.Remove();
         Libxcb.xcb_disconnect(_conn);
         Disposed?.Invoke(this);
@@ -1154,7 +1156,14 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     private uint _lastTimestamp;
 
+    /// <summary>
+    /// Gets the number of times the deferred release of the X focus ran after the keyboard focus left the Xwayland client.
+    /// </summary>
+    public long FocusReleaseRuns { get; private set; }
+
     private XWaylandWindow? _focused;
+
+    private IEventSource? _focusRelease;
 
     private const byte NotifyGrab = 1;
 
@@ -1876,14 +1885,69 @@ public sealed unsafe class XWaylandWm : IDisposable
     {
         var previous = _keyboardFocus;
         _keyboardFocus = focus;
+        var leftX = _focused is not null || IsXwaylandSurface(previous);
         if (_focused is { } focused && (focus is null || !ReferenceEquals(focused.Surface, focus)))
         {
             _focused = null;
         }
 
+        if (IsXwaylandSurface(focus))
+        {
+            _focusRelease?.UpdateTimer(0);
+        }
+        else if (leftX && !_disposed)
+        {
+            (_focusRelease ??= _loop.AddTimer(ReleaseXFocus)).UpdateTimer(1);
+        }
+
         if (previous != focus)
         {
             KeyboardFocusChanged?.Invoke(previous, focus);
+        }
+    }
+
+    private bool IsXwaylandSurface(Surface? surface)
+    {
+        if (surface is null)
+        {
+            return false;
+        }
+
+        if (_client is not null)
+        {
+            return ReferenceEquals(surface.Resource.Client, _client);
+        }
+
+        foreach (var window in _windows.Values)
+        {
+            if (ReferenceEquals(window.Surface, surface))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ReleaseXFocus()
+    {
+        try
+        {
+            FocusReleaseRuns++;
+            if (_disposed || _focused is not null || IsXwaylandSurface(_keyboardFocus))
+            {
+                return;
+            }
+
+            Log.Debug($"wm: the keyboard focus left the Xwayland client, the X focus goes to None");
+            _ = Libxcb.xcb_set_input_focus(_conn, 1, 0, 0);
+            var none = 0u;
+            SetProperty32(_root, Atom("_NET_ACTIVE_WINDOW"), 33, &none, 1);
+            Flush();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn(ex, $"wm: the X focus release failed");
         }
     }
 

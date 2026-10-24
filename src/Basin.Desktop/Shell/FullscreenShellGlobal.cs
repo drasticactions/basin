@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_fullscreen_shell_v1</c> global. It keeps one presented surface per output, and reports the most recent one.
 /// </summary>
-public sealed class FullscreenShellGlobal : IDisposable
+public sealed class FullscreenShellGlobal : IDisposable, IZwpFullscreenShellV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -95,18 +95,26 @@ public sealed class FullscreenShellGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var shell = new ZwpFullscreenShellV1Resource(client, version, id);
+        var shell = new ZwpFullscreenShellV1Resource(client, version, id, this);
         if (_bound.Add(client))
         {
             client.Destroyed += () => _bound.Remove(client);
         }
 
         shell.SendCapability(ZwpFullscreenShellV1.Capability.ArbitraryModes);
-        shell.PresentSurface += (_, e) => OnPresentSurface(shell, e);
-        shell.PresentSurfaceForMode += (_, e) => OnPresentSurfaceForMode(shell, e);
     }
 
-    private void OnPresentSurface(ZwpFullscreenShellV1Resource shell, ZwpFullscreenShellV1Resource.PresentSurfaceEventArgs e)
+    void IZwpFullscreenShellV1Handler.PresentSurface(ZwpFullscreenShellV1Resource resource, in ZwpFullscreenShellV1Resource.PresentSurfaceEventArgs args) =>
+        OnPresentSurface(resource, in args);
+
+    void IZwpFullscreenShellV1Handler.PresentSurfaceForMode(ZwpFullscreenShellV1Resource resource, in ZwpFullscreenShellV1Resource.PresentSurfaceForModeEventArgs args) =>
+        OnPresentSurfaceForMode(resource, in args);
+
+    void IZwpFullscreenShellV1Handler.Release(ZwpFullscreenShellV1Resource resource)
+    {
+    }
+
+    private void OnPresentSurface(ZwpFullscreenShellV1Resource shell, in ZwpFullscreenShellV1Resource.PresentSurfaceEventArgs e)
     {
         if (e.Method > ZwpFullscreenShellV1.PresentMethod.Stretch)
         {
@@ -141,7 +149,7 @@ public sealed class FullscreenShellGlobal : IDisposable
     }
 
     private void OnPresentSurfaceForMode(
-        ZwpFullscreenShellV1Resource shell, ZwpFullscreenShellV1Resource.PresentSurfaceForModeEventArgs e)
+        ZwpFullscreenShellV1Resource shell, in ZwpFullscreenShellV1Resource.PresentSurfaceForModeEventArgs e)
     {
         var feedback = new ZwpFullscreenShellModeFeedbackV1Resource(shell.Client, shell.Version, e.Feedback);
         var output = OutputGlobal.FromResource(e.Output)?.Output ?? FirstOutput;

@@ -53,6 +53,7 @@ namespace Basin.Ipc;
 [JsonSerializable(typeof(IpcLineReply))]
 [JsonSerializable(typeof(IpcDiagTree))]
 [JsonSerializable(typeof(IpcDiagFrames))]
+[JsonSerializable(typeof(IpcDiagSyncobj))]
 [JsonSerializable(typeof(IpcDiagParts))]
 [JsonSerializable(typeof(IpcDiagElement))]
 [JsonSerializable(typeof(IpcDiagRecording))]

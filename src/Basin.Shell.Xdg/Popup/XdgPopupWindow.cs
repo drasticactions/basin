@@ -7,7 +7,7 @@ namespace Basin.Shell.Xdg;
 /// <summary>
 /// An <c>xdg_popup</c> role object. It places the popup from its positioner and runs the popup grab. The consumer places the popup in the scene and sets the constraint box.
 /// </summary>
-public sealed class XdgPopupWindow
+public sealed class XdgPopupWindow : IXdgPopupHandler
 {
     /// <summary>
     /// The role name that a popup sets on its <see cref="Basin.Surface"/>.
@@ -19,8 +19,9 @@ public sealed class XdgPopupWindow
     private bool _dismissed;
     private bool _configureDeferred;
 
-    internal XdgPopupWindow(XdgSurfaceState xdg, XdgPopupResource resource, XdgSurfaceState? parent, XdgPositionerRules rules)
+    internal XdgPopupWindow(XdgSurfaceState xdg, uint id, XdgSurfaceState? parent, XdgPositionerRules rules)
     {
+        var resource = new XdgPopupResource(xdg.Resource.Client, xdg.Resource.Version, id, this);
         XdgPopupRegistry.Register(resource, this);
         resource.Destroyed += (_, _) => XdgPopupRegistry.Remove(resource);
         Xdg = xdg;
@@ -29,8 +30,6 @@ public sealed class XdgPopupWindow
         _rules = rules;
         Geometry = rules.Place();
 
-        resource.Grab += (_, e) => OnGrabRequested(e.Serial);
-        resource.Reposition += (_, e) => OnReposition(e.Positioner, e.Token);
         resource.Destroyed += (_, _) =>
         {
             _grab?.Remove(this);
@@ -39,6 +38,15 @@ public sealed class XdgPopupWindow
             Destroyed?.Invoke();
         };
     }
+
+    void IXdgPopupHandler.Destroy(XdgPopupResource resource)
+    {
+    }
+
+    void IXdgPopupHandler.Grab(XdgPopupResource resource, in XdgPopupResource.GrabEventArgs args) => OnGrabRequested(args.Serial);
+
+    void IXdgPopupHandler.Reposition(XdgPopupResource resource, in XdgPopupResource.RepositionEventArgs args) =>
+        OnReposition(args.Positioner, args.Token);
 
     /// <summary>
     /// Gets the <c>xdg_surface</c> state under the popup.

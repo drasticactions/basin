@@ -25,6 +25,7 @@ internal static class IpcDiagLines
         Add(methods, IpcMethodNames.DiagPlaneTrace, "plane-trace {on:bool}", Plain);
         Add(methods, IpcMethodNames.DiagCompare, "compare {window} {reference} [{diff_path}]", Comparison);
         Add(methods, IpcMethodNames.DiagCommitTrace, "commit-trace {on:bool} {target}", Plain);
+        Add(methods, IpcMethodNames.DiagSyncobj, "syncobj", Syncobj);
     }
 
     public static string? DamageEvent(ReadOnlySpan<byte> data)
@@ -71,6 +72,10 @@ internal static class IpcDiagLines
 
         return text.ToString();
     }
+
+    public static string? Syncobj(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagSyncobj, static (c, text) =>
+        text.Append(CultureInfo.InvariantCulture,
+            $"SYNCOBJ managed={c.ManagedCommits} explicit={c.ExplicitCommits} parked={c.ParkedAcquires} unparked={c.UnparkedAcquires} late={c.LateAcquires} unexportable={c.UnexportableAcquires} deferred-releases={c.DeferredReleases} superseded-releases={c.SupersededReleases} discarded-releases={c.DiscardedReleases}\n"));
 
     public static string? PlanesState(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagPlaneState, static (state, text) =>
     {

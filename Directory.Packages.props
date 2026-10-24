@@ -38,7 +38,7 @@
     <PackageVersion Include="pixman-dotnet" Version="0.46.9" />
     <PackageVersion Include="seatd-dotnet" Version="0.9.3" />
     <PackageVersion Include="udev-dotnet" Version="261.2.0" />
-    <PackageVersion Include="WaylandSharpest" Version="1.27.3" />
+    <PackageVersion Include="WaylandSharpest" Version="1.28.0" />
     <PackageVersion Include="xcb-dotnet" Version="1.17.0" />
     <PackageVersion Include="xkbcommon-dotnet" Version="1.13.6" />
   </ItemGroup>

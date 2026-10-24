@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_pointer_gestures_v1</c> global. The consumer reports gestures, and the manager sends them to the client with pointer focus. Each call does nothing when no surface has pointer focus.
 /// </summary>
-public sealed class PointerGesturesManager : IDisposable
+public sealed class PointerGesturesManager : IDisposable, IZwpPointerGesturesV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -217,13 +217,21 @@ public sealed class PointerGesturesManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpPointerGesturesV1Handler.GetSwipeGesture(ZwpPointerGesturesV1Resource resource, in ZwpPointerGesturesV1Resource.GetSwipeGestureEventArgs args) =>
+        Track(_swipes, new ZwpPointerGestureSwipeV1Resource(resource.Client, resource.Version, args.Id));
+
+    void IZwpPointerGesturesV1Handler.GetPinchGesture(ZwpPointerGesturesV1Resource resource, in ZwpPointerGesturesV1Resource.GetPinchGestureEventArgs args) =>
+        Track(_pinches, new ZwpPointerGesturePinchV1Resource(resource.Client, resource.Version, args.Id));
+
+    void IZwpPointerGesturesV1Handler.GetHoldGesture(ZwpPointerGesturesV1Resource resource, in ZwpPointerGesturesV1Resource.GetHoldGestureEventArgs args) =>
+        Track(_holds, new ZwpPointerGestureHoldV1Resource(resource.Client, resource.Version, args.Id));
+
+    void IZwpPointerGesturesV1Handler.Release(ZwpPointerGesturesV1Resource resource)
     {
-        var manager = new ZwpPointerGesturesV1Resource(client, version, id);
-        manager.GetSwipeGesture += (_, e) => Track(_swipes, new ZwpPointerGestureSwipeV1Resource(client, manager.Version, e.Id));
-        manager.GetPinchGesture += (_, e) => Track(_pinches, new ZwpPointerGesturePinchV1Resource(client, manager.Version, e.Id));
-        manager.GetHoldGesture += (_, e) => Track(_holds, new ZwpPointerGestureHoldV1Resource(client, manager.Version, e.Id));
     }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpPointerGesturesV1Resource(client, version, id, this);
 
     private static void Track<T>(List<T> list, T resource)
         where T : WlResource

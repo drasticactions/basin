@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwlr_export_dmabuf_manager_v1</c> global. Each frame request exports the current output dmabuf, or sends a cancel event when no frame is available.
 /// </summary>
-public sealed class ExportDmabufManager : IDisposable
+public sealed class ExportDmabufManager : IDisposable, IZwlrExportDmabufManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -42,27 +42,30 @@ public sealed class ExportDmabufManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwlrExportDmabufManagerV1Resource(client, version, id, this);
+
+    void IZwlrExportDmabufManagerV1Handler.CaptureOutput(ZwlrExportDmabufManagerV1Resource resource, in ZwlrExportDmabufManagerV1Resource.CaptureOutputEventArgs args)
     {
-        var manager = new ZwlrExportDmabufManagerV1Resource(client, version, id);
-        manager.CaptureOutput += (_, e) =>
+        var frame = new ZwlrExportDmabufFrameV1Resource(resource.Client, resource.Version, args.Frame);
+        var output = OutputGlobal.FromResource(args.Output)?.Output;
+        if (output is null || _capture is null)
         {
-            var frame = new ZwlrExportDmabufFrameV1Resource(client, manager.Version, e.Frame);
-            var output = OutputGlobal.FromResource(e.Output)?.Output;
-            if (output is null || _capture is null)
-            {
-                frame.SendCancel(ZwlrExportDmabufFrameV1.CancelReason.Permanent);
-                return;
-            }
+            frame.SendCancel(ZwlrExportDmabufFrameV1.CancelReason.Permanent);
+            return;
+        }
 
-            if (!_capture.TryCurrentFrame(output, out var dmabuf))
-            {
-                frame.SendCancel(ZwlrExportDmabufFrameV1.CancelReason.Temporary);
-                return;
-            }
+        if (!_capture.TryCurrentFrame(output, out var dmabuf))
+        {
+            frame.SendCancel(ZwlrExportDmabufFrameV1.CancelReason.Temporary);
+            return;
+        }
 
-            SendFrame(frame, dmabuf);
-        };
+        SendFrame(frame, dmabuf);
+    }
+
+    void IZwlrExportDmabufManagerV1Handler.Destroy(ZwlrExportDmabufManagerV1Resource resource)
+    {
     }
 
     private static void SendFrame(ZwlrExportDmabufFrameV1Resource frame, in DmabufAttributes dmabuf)

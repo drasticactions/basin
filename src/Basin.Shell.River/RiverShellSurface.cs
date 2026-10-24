@@ -1,9 +1,10 @@
 using Basin.Scene;
 using Basin.Shell.River.Protocol;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverShellSurface
+internal sealed class RiverShellSurface : IRiverShellSurfaceV1Handler
 {
     internal const string RoleName = "river_shell_surface_v1";
 
@@ -13,40 +14,18 @@ internal sealed class RiverShellSurface
 
     internal RiverShellSurface(
         RiverWindowManager manager,
-        RiverShellSurfaceV1Resource resource,
+        WlClient client,
+        uint version,
+        uint id,
         Surface surface,
         SceneTree parent)
     {
         _manager = manager;
-        _resource = resource;
         Surface = surface;
         Tree = new SceneTree(parent);
         Scene = new SceneSurface(Tree, surface);
+        _resource = new RiverShellSurfaceV1Resource(client, version, id, this);
 
-        resource.GetNode += (_, e) =>
-        {
-            if (_node is not null)
-            {
-                resource.PostError(
-                    (uint)RiverShellSurfaceV1.Error.NodeExists,
-                    "This shell surface already has a node.");
-                return;
-            }
-
-            var nodeResource = new RiverNodeV1Resource(resource.Client, resource.Version, e.Id);
-            _node = new RiverNode(_manager, nodeResource, () => Tree);
-            _manager.RegisterNode(_node);
-        };
-
-        resource.SyncNextCommit += (_, _) =>
-        {
-            if (_manager.EnsureRendering())
-            {
-                _manager.HoldNextCommit(this);
-            }
-        };
-
-        resource.DestroyRequest += (_, _) => Destroy();
         surface.Destroyed += Destroy;
 
         surface.CommitRequested += () => AwaitingCommit = false;
@@ -89,4 +68,28 @@ internal sealed class RiverShellSurface
         Scene.Destroy();
         Tree.Destroy();
     }
+
+    void IRiverShellSurfaceV1Handler.GetNode(RiverShellSurfaceV1Resource resource, in RiverShellSurfaceV1Resource.GetNodeEventArgs args)
+    {
+        if (_node is not null)
+        {
+            resource.PostError(
+                (uint)RiverShellSurfaceV1.Error.NodeExists,
+                "This shell surface already has a node.");
+            return;
+        }
+
+        _node = new RiverNode(_manager, resource.Client, resource.Version, args.Id, () => Tree);
+        _manager.RegisterNode(_node);
+    }
+
+    void IRiverShellSurfaceV1Handler.SyncNextCommit(RiverShellSurfaceV1Resource resource)
+    {
+        if (_manager.EnsureRendering())
+        {
+            _manager.HoldNextCommit(this);
+        }
+    }
+
+    void IRiverShellSurfaceV1Handler.Destroy(RiverShellSurfaceV1Resource resource) => Destroy();
 }

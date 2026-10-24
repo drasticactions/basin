@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_primary_selection_device_manager_v1</c> global. Only the client with keyboard focus gets the primary selection and can set it.
 /// </summary>
-public sealed class PrimarySelectionManager : IDisposable
+public sealed class PrimarySelectionManager : IDisposable, IZwpPrimarySelectionDeviceManagerV1Handler, IZwpPrimarySelectionDeviceV1Handler, IZwpPrimarySelectionOfferV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -88,27 +88,41 @@ public sealed class PrimarySelectionManager : IDisposable
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
-    {
-        var manager = new ZwpPrimarySelectionDeviceManagerV1Resource(client, version, id);
-        manager.CreateSource += (_, e) =>
-        {
-            var resource = new ZwpPrimarySelectionSourceV1Resource(client, manager.Version, e.Id);
-            _ = new PrimarySource(resource);
-        };
-        manager.GetDevice += (_, e) =>
-        {
-            var device = new ZwpPrimarySelectionDeviceV1Resource(client, manager.Version, e.Id);
-            _devices.Add(device);
-            device.Destroyed += (_, _) => _devices.Remove(device);
-            device.SetSelection += (_, se) =>
-                _store?.SetSelection(SelectionKind.Primary, PrimarySource.Resolve(se.Source)?.Wrapped, se.Serial);
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpPrimarySelectionDeviceManagerV1Resource(client, version, id, this);
 
-            if (_seat?.Keyboard.Focus is { IsDestroyed: false } focus && focus.Resource.Client == client)
-            {
-                SendSelection(device);
-            }
-        };
+    void IZwpPrimarySelectionDeviceManagerV1Handler.CreateSource(ZwpPrimarySelectionDeviceManagerV1Resource resource, in ZwpPrimarySelectionDeviceManagerV1Resource.CreateSourceEventArgs args) =>
+        _ = new PrimarySource(resource.Client, resource.Version, args.Id);
+
+    void IZwpPrimarySelectionDeviceManagerV1Handler.GetDevice(ZwpPrimarySelectionDeviceManagerV1Resource resource, in ZwpPrimarySelectionDeviceManagerV1Resource.GetDeviceEventArgs args)
+    {
+        var client = resource.Client;
+        var device = new ZwpPrimarySelectionDeviceV1Resource(client, resource.Version, args.Id, this);
+        _devices.Add(device);
+        device.Destroyed += (_, _) => _devices.Remove(device);
+
+        if (_seat?.Keyboard.Focus is { IsDestroyed: false } focus && focus.Resource.Client == client)
+        {
+            SendSelection(device);
+        }
+    }
+
+    void IZwpPrimarySelectionDeviceManagerV1Handler.Destroy(ZwpPrimarySelectionDeviceManagerV1Resource resource)
+    {
+    }
+
+    void IZwpPrimarySelectionDeviceV1Handler.SetSelection(ZwpPrimarySelectionDeviceV1Resource resource, in ZwpPrimarySelectionDeviceV1Resource.SetSelectionEventArgs args) =>
+        _store?.SetSelection(SelectionKind.Primary, PrimarySource.Resolve(args.Source)?.Wrapped, args.Serial);
+
+    void IZwpPrimarySelectionDeviceV1Handler.Destroy(ZwpPrimarySelectionDeviceV1Resource resource)
+    {
+    }
+
+    void IZwpPrimarySelectionOfferV1Handler.Receive(ZwpPrimarySelectionOfferV1Resource resource, in ZwpPrimarySelectionOfferV1Resource.ReceiveEventArgs args) =>
+        _store!.Receive(SelectionKind.Primary, args.MimeType, new ClientFd(args.Fd, resource.Client));
+
+    void IZwpPrimarySelectionOfferV1Handler.Destroy(ZwpPrimarySelectionOfferV1Resource resource)
+    {
     }
 
     private void SendSelection(ZwpPrimarySelectionDeviceV1Resource device)
@@ -117,27 +131,25 @@ public sealed class PrimarySelectionManager : IDisposable
         ZwpPrimarySelectionOfferV1Resource? offer = null;
         if (source is not null)
         {
-            offer = new ZwpPrimarySelectionOfferV1Resource(device.Client, device.Version, 0);
+            offer = new ZwpPrimarySelectionOfferV1Resource(device.Client, device.Version, 0, this);
             device.SendDataOffer(offer);
             foreach (var mime in source.MimeTypes)
             {
                 offer.SendOffer(mime);
             }
-
-            offer.Receive += (_, e) => _store!.Receive(SelectionKind.Primary, e.MimeType, new ClientFd(e.Fd, offer.Client));
         }
 
         device.SendSelection(offer);
     }
 
-    private sealed class PrimarySource
+    private sealed class PrimarySource : IZwpPrimarySelectionSourceV1Handler
     {
         private static readonly Dictionary<ZwpPrimarySelectionSourceV1Resource, PrimarySource> Registry = [];
         private readonly List<string> _mimes = [];
 
-        public PrimarySource(ZwpPrimarySelectionSourceV1Resource resource)
+        public PrimarySource(WlClient client, uint version, uint id)
         {
-            resource.Offer += (_, e) => _mimes.Add(e.MimeType);
+            var resource = new ZwpPrimarySelectionSourceV1Resource(client, version, id, this);
             Wrapped = new DataSource(
                 _mimes,
                 (mime, fd) =>
@@ -169,5 +181,12 @@ public sealed class PrimarySelectionManager : IDisposable
 
         public static PrimarySource? Resolve(ZwpPrimarySelectionSourceV1Resource? resource) =>
             resource is not null && Registry.TryGetValue(resource, out var source) ? source : null;
+
+        void IZwpPrimarySelectionSourceV1Handler.Offer(ZwpPrimarySelectionSourceV1Resource resource, in ZwpPrimarySelectionSourceV1Resource.OfferEventArgs args) =>
+            _mimes.Add(args.MimeType);
+
+        void IZwpPrimarySelectionSourceV1Handler.Destroy(ZwpPrimarySelectionSourceV1Resource resource)
+        {
+        }
     }
 }

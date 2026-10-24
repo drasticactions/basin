@@ -8,7 +8,7 @@ namespace Basin.Shell.River;
 /// The river-libinput-config-v1 global. It announces each libinput device with its whole state and applies the window manager's settings through <see cref="Configuration"/>.
 /// A setting that the configuration does not support gets an unsupported result.
 /// </summary>
-public sealed class RiverLibinputConfig : IDisposable
+public sealed class RiverLibinputConfig : IDisposable, IRiverLibinputConfigV1Handler, IRiverLibinputAccelConfigV1Handler
 {
     private readonly RiverWindowManager _manager;
     private readonly WlGlobal _global;
@@ -83,7 +83,7 @@ public sealed class RiverLibinputConfig : IDisposable
             return;
         }
 
-        var entry = new DeviceEntry(deviceId);
+        var entry = new DeviceEntry(this, deviceId);
         _devices.Add(entry);
         Announce(entry);
     }
@@ -158,9 +158,8 @@ public sealed class RiverLibinputConfig : IDisposable
             return;
         }
 
-        var resource = new RiverLibinputDeviceV1Resource(config.Client, config.Version, 0);
+        var resource = new RiverLibinputDeviceV1Resource(config.Client, config.Version, 0, entry);
         entry.Resource = resource;
-        Wire(entry, resource);
         config.SendLibinputDevice(resource);
         if (InputDeviceFor?.Invoke(entry.Id) is { } handle &&
             _manager.InputManager.ResourceFor(handle, config.Client) is { } inputDevice)
@@ -558,103 +557,11 @@ public sealed class RiverLibinputConfig : IDisposable
         }
     }
 
-    private void Wire(DeviceEntry entry, RiverLibinputDeviceV1Resource resource)
-    {
-        var client = resource.Client;
-        var version = resource.Version;
-
-        void Simple(uint id, InputSetting kind, uint value)
-        {
-            if (!entry.Removed)
-            {
-                Answer(client, version, id, entry.Id, kind, new InputSettingValue(value));
-            }
-        }
-
-        void Numeric(uint id, InputSetting kind, in InputSettingValue value)
-        {
-            if (entry.Removed)
-            {
-                return;
-            }
-
-            if (value.Count == 0)
-            {
-                resource.PostError((uint)RiverLibinputDeviceV1.Error.InvalidArg, "The array argument is not valid.");
-                return;
-            }
-
-            Answer(client, version, id, entry.Id, kind, value);
-        }
-
-        resource.SetSendEvents += (_, e) => Simple(e.Result, InputSetting.SendEvents, (uint)e.Mode);
-        resource.SetTap += (_, e) => Simple(e.Result, InputSetting.Tap, (uint)e.State);
-        resource.SetTapButtonMap += (_, e) => Simple(e.Result, InputSetting.TapButtonMap, (uint)e.ButtonMap);
-        resource.SetDrag += (_, e) => Simple(e.Result, InputSetting.Drag, (uint)e.State);
-        resource.SetDragLock += (_, e) => Simple(e.Result, InputSetting.DragLock, (uint)e.State);
-        resource.SetThreeFingerDrag += (_, e) => Simple(e.Result, InputSetting.ThreeFingerDrag, (uint)e.State);
-        resource.SetAccelProfile += (_, e) => Simple(e.Result, InputSetting.AccelProfile, (uint)e.Profile);
-        resource.SetNaturalScroll += (_, e) => Simple(e.Result, InputSetting.NaturalScroll, (uint)e.State);
-        resource.SetLeftHanded += (_, e) => Simple(e.Result, InputSetting.LeftHanded, (uint)e.State);
-        resource.SetClickMethod += (_, e) => Simple(e.Result, InputSetting.ClickMethod, (uint)e.Method);
-        resource.SetClickfingerButtonMap += (_, e) =>
-            Simple(e.Result, InputSetting.ClickfingerButtonMap, (uint)e.ButtonMap);
-        resource.SetMiddleEmulation += (_, e) => Simple(e.Result, InputSetting.MiddleEmulation, (uint)e.State);
-        resource.SetScrollMethod += (_, e) => Simple(e.Result, InputSetting.ScrollMethod, (uint)e.Method);
-        resource.SetScrollButton += (_, e) => Simple(e.Result, InputSetting.ScrollButton, e.Button);
-        resource.SetScrollButtonLock += (_, e) =>
-            Simple(e.Result, InputSetting.ScrollButtonLock, (uint)e.State);
-        resource.SetDwt += (_, e) => Simple(e.Result, InputSetting.DisableWhileTyping, (uint)e.State);
-        resource.SetDwtp += (_, e) => Simple(e.Result, InputSetting.DisableWhileTrackpointing, (uint)e.State);
-        resource.SetRotation += (_, e) => Simple(e.Result, InputSetting.Rotation, e.Angle);
-
-        resource.SetCalibrationMatrix += (_, e) =>
-            Numeric(e.Result, InputSetting.CalibrationMatrix, ReadMatrix(e.Matrix));
-        resource.SetAccelSpeed += (_, e) =>
-            Numeric(e.Result, InputSetting.AccelSpeed, ReadDouble(e.Speed));
-        resource.ApplyAccelConfig += (_, e) =>
-        {
-            if (!entry.Removed)
-            {
-                ApplyCurves(client, version, e.Result, entry.Id, e.Config);
-            }
-        };
-
-        resource.DestroyRequest += (_, _) => entry.Resource = null;
-    }
-
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new RiverLibinputConfigV1Resource(client, version, id);
+        var resource = new RiverLibinputConfigV1Resource(client, version, id, this);
         _resource = resource;
 
-        resource.CreateAccelConfig += (_, e) =>
-        {
-            var curve = new RiverLibinputAccelConfigV1Resource(client, version, e.Id);
-            _curves[curve] = [];
-            curve.SetPoints += (_, points) =>
-            {
-                var result = new RiverLibinputResultV1Resource(client, version, points.Result);
-                var step = ReadDouble(points.Step);
-                var values = ReadDoubles(points.Points);
-                if (step.Count == 0 || values is null || (uint)points.Type > (uint)InputAccelCurveType.Scroll)
-                {
-                    curve.PostError((uint)RiverLibinputAccelConfigV1.Error.InvalidArg, "The set_points argument is not valid.");
-                    return;
-                }
-
-                _curves[curve][(InputAccelCurveType)(uint)points.Type] = (step[0], values);
-                result.SendSuccess();
-            };
-            curve.DestroyRequest += (_, _) => _curves.Remove(curve);
-        };
-
-        resource.Stop += (_, _) =>
-        {
-            resource.SendFinished();
-            _resource = null;
-        };
-        resource.DestroyRequest += (_, _) => _resource = null;
         resource.Destroyed += (_, _) => _resource = null;
 
         foreach (var device in _devices)
@@ -662,6 +569,37 @@ public sealed class RiverLibinputConfig : IDisposable
             Announce(device);
         }
     }
+
+    void IRiverLibinputConfigV1Handler.CreateAccelConfig(RiverLibinputConfigV1Resource resource, in RiverLibinputConfigV1Resource.CreateAccelConfigEventArgs args)
+    {
+        var curve = new RiverLibinputAccelConfigV1Resource(resource.Client, resource.Version, args.Id, this);
+        _curves[curve] = [];
+    }
+
+    void IRiverLibinputConfigV1Handler.Stop(RiverLibinputConfigV1Resource resource)
+    {
+        resource.SendFinished();
+        _resource = null;
+    }
+
+    void IRiverLibinputConfigV1Handler.Destroy(RiverLibinputConfigV1Resource resource) => _resource = null;
+
+    void IRiverLibinputAccelConfigV1Handler.SetPoints(RiverLibinputAccelConfigV1Resource resource, in RiverLibinputAccelConfigV1Resource.SetPointsEventArgs args)
+    {
+        var result = new RiverLibinputResultV1Resource(resource.Client, resource.Version, args.Result);
+        var step = ReadDouble(args.Step);
+        var values = ReadDoubles(args.Points);
+        if (step.Count == 0 || values is null || (uint)args.Type > (uint)InputAccelCurveType.Scroll)
+        {
+            resource.PostError((uint)RiverLibinputAccelConfigV1.Error.InvalidArg, "The set_points argument is not valid.");
+            return;
+        }
+
+        _curves[resource][(InputAccelCurveType)(uint)args.Type] = (step[0], values);
+        result.SendSuccess();
+    }
+
+    void IRiverLibinputAccelConfigV1Handler.Destroy(RiverLibinputAccelConfigV1Resource resource) => _curves.Remove(resource);
 
     private void ApplyCurves(WlClient client, uint version, uint id, ulong deviceId, RiverLibinputAccelConfigV1Resource? config)
     {
@@ -731,12 +669,106 @@ public sealed class RiverLibinputConfig : IDisposable
         return InputSettingValue.Matrix(matrix);
     }
 
-    private sealed class DeviceEntry(ulong id)
+    private sealed class DeviceEntry(RiverLibinputConfig owner, ulong id) : IRiverLibinputDeviceV1Handler
     {
         public ulong Id { get; } = id;
 
         public RiverLibinputDeviceV1Resource? Resource { get; set; }
 
         public bool Removed { get; set; }
+
+        void IRiverLibinputDeviceV1Handler.SetSendEvents(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetSendEventsEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.SendEvents, (uint)args.Mode);
+
+        void IRiverLibinputDeviceV1Handler.SetTap(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetTapEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.Tap, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetTapButtonMap(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetTapButtonMapEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.TapButtonMap, (uint)args.ButtonMap);
+
+        void IRiverLibinputDeviceV1Handler.SetDrag(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetDragEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.Drag, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetDragLock(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetDragLockEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.DragLock, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetThreeFingerDrag(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetThreeFingerDragEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.ThreeFingerDrag, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetAccelProfile(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetAccelProfileEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.AccelProfile, (uint)args.Profile);
+
+        void IRiverLibinputDeviceV1Handler.SetNaturalScroll(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetNaturalScrollEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.NaturalScroll, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetLeftHanded(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetLeftHandedEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.LeftHanded, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetClickMethod(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetClickMethodEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.ClickMethod, (uint)args.Method);
+
+        void IRiverLibinputDeviceV1Handler.SetClickfingerButtonMap(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetClickfingerButtonMapEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.ClickfingerButtonMap, (uint)args.ButtonMap);
+
+        void IRiverLibinputDeviceV1Handler.SetMiddleEmulation(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetMiddleEmulationEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.MiddleEmulation, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetScrollMethod(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetScrollMethodEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.ScrollMethod, (uint)args.Method);
+
+        void IRiverLibinputDeviceV1Handler.SetScrollButton(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetScrollButtonEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.ScrollButton, args.Button);
+
+        void IRiverLibinputDeviceV1Handler.SetScrollButtonLock(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetScrollButtonLockEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.ScrollButtonLock, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetDwt(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetDwtEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.DisableWhileTyping, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetDwtp(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetDwtpEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.DisableWhileTrackpointing, (uint)args.State);
+
+        void IRiverLibinputDeviceV1Handler.SetRotation(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetRotationEventArgs args) =>
+            Simple(resource, args.Result, InputSetting.Rotation, args.Angle);
+
+        void IRiverLibinputDeviceV1Handler.SetCalibrationMatrix(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetCalibrationMatrixEventArgs args) =>
+            Numeric(resource, args.Result, InputSetting.CalibrationMatrix, ReadMatrix(args.Matrix));
+
+        void IRiverLibinputDeviceV1Handler.SetAccelSpeed(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.SetAccelSpeedEventArgs args) =>
+            Numeric(resource, args.Result, InputSetting.AccelSpeed, ReadDouble(args.Speed));
+
+        void IRiverLibinputDeviceV1Handler.ApplyAccelConfig(RiverLibinputDeviceV1Resource resource, in RiverLibinputDeviceV1Resource.ApplyAccelConfigEventArgs args)
+        {
+            if (!Removed)
+            {
+                owner.ApplyCurves(resource.Client, resource.Version, args.Result, Id, args.Config);
+            }
+        }
+
+        void IRiverLibinputDeviceV1Handler.Destroy(RiverLibinputDeviceV1Resource resource) => Resource = null;
+
+        private void Simple(RiverLibinputDeviceV1Resource resource, uint id, InputSetting kind, uint value)
+        {
+            if (!Removed)
+            {
+                owner.Answer(resource.Client, resource.Version, id, Id, kind, new InputSettingValue(value));
+            }
+        }
+
+        private void Numeric(RiverLibinputDeviceV1Resource resource, uint id, InputSetting kind, in InputSettingValue value)
+        {
+            if (Removed)
+            {
+                return;
+            }
+
+            if (value.Count == 0)
+            {
+                resource.PostError((uint)RiverLibinputDeviceV1.Error.InvalidArg, "The array argument is not valid.");
+                return;
+            }
+
+            owner.Answer(resource.Client, resource.Version, id, Id, kind, value);
+        }
     }
 }

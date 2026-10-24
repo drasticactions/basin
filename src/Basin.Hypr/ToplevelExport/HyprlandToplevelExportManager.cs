@@ -10,7 +10,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_toplevel_export_manager_v1</c>. It copies one toplevel into a client buffer through <see cref="IScreenCapture"/>. A frame without <c>ignore_damage</c> waits for damage that touches the toplevel.
 /// </summary>
-public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, IToplevelObserver, IDisposable
+public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, IToplevelObserver, IDisposable, IHyprlandToplevelExportManagerV1Handler
 {
     private static readonly BasinLogger Log = BasinLog.For("hyprland");
 
@@ -165,17 +165,21 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandToplevelExportManagerV1Resource(client, version, id);
-        manager.CaptureToplevel += (_, e) =>
-        {
-            var frame = new HyprlandToplevelExportFrameV1Resource(client, manager.Version, e.Frame);
-            Start(frame, ResolveHandle(_toplevels, e.Handle), e.OverlayCursor != 0);
-        };
-        manager.CaptureToplevelWithWlrToplevelHandle += (_, e) =>
-        {
-            var frame = new HyprlandToplevelExportFrameV1Resource(client, manager.Version, e.Frame);
-            Start(frame, ForeignToplevelManager.ToplevelOf(e.HandleHandle), e.OverlayCursor != 0);
-        };
+        _ = new HyprlandToplevelExportManagerV1Resource(client, version, id, this);
+    }
+
+    void IHyprlandToplevelExportManagerV1Handler.CaptureToplevel(
+        HyprlandToplevelExportManagerV1Resource resource,
+        in HyprlandToplevelExportManagerV1Resource.CaptureToplevelEventArgs args) =>
+        Start(resource, args.Frame, ResolveHandle(_toplevels, args.Handle), args.OverlayCursor != 0);
+
+    void IHyprlandToplevelExportManagerV1Handler.CaptureToplevelWithWlrToplevelHandle(
+        HyprlandToplevelExportManagerV1Resource resource,
+        in HyprlandToplevelExportManagerV1Resource.CaptureToplevelWithWlrToplevelHandleEventArgs args) =>
+        Start(resource, args.Frame, ForeignToplevelManager.ToplevelOf(args.HandleHandle), args.OverlayCursor != 0);
+
+    void IHyprlandToplevelExportManagerV1Handler.Destroy(HyprlandToplevelExportManagerV1Resource resource)
+    {
     }
 
     /// <summary>
@@ -223,21 +227,21 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         return resolved;
     }
 
-    private void Start(HyprlandToplevelExportFrameV1Resource resource, ulong toplevelId, bool overlayCursor)
+    private void Start(HyprlandToplevelExportManagerV1Resource manager, uint frameId, ulong toplevelId, bool overlayCursor)
     {
         var source = CaptureSource.Toplevel(toplevelId, clientOnly: true, overlayCursor: overlayCursor);
         if (toplevelId == 0 || _capture is not { } capture || _toplevels is not { } toplevels ||
             !toplevels.TryGet(toplevelId, out var info) || !capture.Supports(source) ||
             !capture.TryDescribe(source, out var format) || format.Width <= 0 || format.Height <= 0)
         {
-            resource.SendFailed();
+            new HyprlandToplevelExportFrameV1Resource(manager.Client, manager.Version, frameId).SendFailed();
             return;
         }
 
-        _ = new Frame(this, resource, source, info.Geometry, format);
+        _ = new Frame(this, manager.Client, manager.Version, frameId, source, info.Geometry, format);
     }
 
-    private sealed class Frame
+    private sealed class Frame : IHyprlandToplevelExportFrameV1Handler
     {
         private readonly HyprlandToplevelExportManager _owner;
         private readonly HyprlandToplevelExportFrameV1Resource _resource;
@@ -248,27 +252,35 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
 
         public Frame(
             HyprlandToplevelExportManager owner,
-            HyprlandToplevelExportFrameV1Resource resource,
+            WlClient client,
+            uint version,
+            uint id,
             in CaptureSource source,
             in Box box,
             in CaptureFormat format)
         {
             _owner = owner;
-            _resource = resource;
+            _resource = new HyprlandToplevelExportFrameV1Resource(client, version, id, this);
             _source = source;
             _format = format;
             Box = box;
 
-            resource.SendBuffer(WlShm.Format.Xrgb8888, (uint)format.Width, (uint)format.Height, (uint)format.Stride);
+            _resource.SendBuffer(WlShm.Format.Xrgb8888, (uint)format.Width, (uint)format.Height, (uint)format.Stride);
             if (owner.OffersDmabuf)
             {
-                resource.SendLinuxDmabuf((uint)ExportFormat, (uint)format.Width, (uint)format.Height);
+                _resource.SendLinuxDmabuf((uint)ExportFormat, (uint)format.Width, (uint)format.Height);
             }
 
-            resource.SendBufferDone();
+            _resource.SendBufferDone();
 
-            resource.Copy += (_, e) => OnCopy(e.BufferHandle, e.IgnoreDamage != 0);
-            resource.Destroyed += (_, _) => _owner._waiting.Remove(this);
+            _resource.Destroyed += (_, _) => _owner._waiting.Remove(this);
+        }
+
+        void IHyprlandToplevelExportFrameV1Handler.Copy(HyprlandToplevelExportFrameV1Resource resource, in HyprlandToplevelExportFrameV1Resource.CopyEventArgs args) =>
+            OnCopy(args.BufferHandle, args.IgnoreDamage != 0);
+
+        void IHyprlandToplevelExportFrameV1Handler.Destroy(HyprlandToplevelExportFrameV1Resource resource)
+        {
         }
 
         public Box Box { get; }

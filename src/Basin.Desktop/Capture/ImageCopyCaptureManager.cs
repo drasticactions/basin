@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>ext_image_copy_capture_manager_v1</c> global. It copies outputs, toplevels and the cursor into client buffers through <see cref="IScreenCapture"/>.
 /// </summary>
-public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposable
+public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposable, IExtImageCopyCaptureManagerV1Handler
 {
     private static readonly BasinLogger Log = BasinLog.For("capture");
 
@@ -179,47 +179,84 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         (attributes.Format == DrmFormat.Nv12 && attributes.Modifier == DrmFormatSet.ModifierLinear && WrapsYuv) ||
         (_dmabuf is { } constraints && constraints.Formats.Contains(attributes.Format, attributes.Modifier));
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ExtImageCopyCaptureManagerV1Resource(client, version, id, this);
+
+    void IExtImageCopyCaptureManagerV1Handler.CreateSession(ExtImageCopyCaptureManagerV1Resource resource, in ExtImageCopyCaptureManagerV1Resource.CreateSessionEventArgs args)
     {
-        var manager = new ExtImageCopyCaptureManagerV1Resource(client, version, id);
-        manager.CreateSession += (_, e) =>
+        if (((uint)args.Options & ~1u) != 0)
         {
-            var resource = new ExtImageCopyCaptureSessionV1Resource(client, manager.Version, e.Session);
-            if (((uint)e.Options & ~1u) != 0)
-            {
-                manager.PostError(ErrorInvalidOption, "The options bitfield is not valid.");
-                return;
-            }
+            _ = new ExtImageCopyCaptureSessionV1Resource(resource.Client, resource.Version, args.Session, IgnoredSession.Instance);
+            resource.PostError(ErrorInvalidOption, "The options bitfield is not valid.");
+            return;
+        }
 
-            var source = e.Source is { } sourceResource
-                ? ImageCaptureSourceManager.FromResource(sourceResource.RawHandle)
-                : default;
-            var session = new Session(this, resource, source, ((uint)e.Options & 1u) != 0);
-            if (session.Stopped)
-            {
-                resource.SendStopped();
-                return;
-            }
+        var source = args.Source is { } sourceResource
+            ? ImageCaptureSourceManager.FromResource(sourceResource.RawHandle)
+            : default;
+        var session = new Session(this, resource.Client, resource.Version, args.Session, source, ((uint)args.Options & 1u) != 0);
+        if (session.Stopped)
+        {
+            session.Resource.SendStopped();
+            return;
+        }
 
-            _sessions.Add(session);
+        _sessions.Add(session);
+        ReportSessionCount(session.Source);
+        session.Resource.Destroyed += (_, _) =>
+        {
+            _sessions.Remove(session);
             ReportSessionCount(session.Source);
-            resource.Destroyed += (_, _) =>
-            {
-                _sessions.Remove(session);
-                ReportSessionCount(session.Source);
-            };
-            session.SendConstraints();
         };
-        manager.CreatePointerCursorSession += (_, e) =>
+        session.SendConstraints();
+    }
+
+    void IExtImageCopyCaptureManagerV1Handler.CreatePointerCursorSession(ExtImageCopyCaptureManagerV1Resource resource, in ExtImageCopyCaptureManagerV1Resource.CreatePointerCursorSessionEventArgs args)
+    {
+        var source = args.Source is { } sourceResource
+            ? ImageCaptureSourceManager.FromResource(sourceResource.RawHandle)
+            : default;
+        var cursorSession = new CursorSession(this, resource.Client, resource.Version, args.Session, source.OutputTarget);
+        _cursorSessions.Add(cursorSession);
+        cursorSession.Resource.Destroyed += (_, _) => _cursorSessions.Remove(cursorSession);
+    }
+
+    void IExtImageCopyCaptureManagerV1Handler.Destroy(ExtImageCopyCaptureManagerV1Resource resource)
+    {
+    }
+
+    private sealed class IgnoredSession : IExtImageCopyCaptureSessionV1Handler
+    {
+        public static readonly IgnoredSession Instance = new();
+
+        void IExtImageCopyCaptureSessionV1Handler.CreateFrame(ExtImageCopyCaptureSessionV1Resource resource, in ExtImageCopyCaptureSessionV1Resource.CreateFrameEventArgs args)
         {
-            var resource = new ExtImageCopyCaptureCursorSessionV1Resource(client, manager.Version, e.Session);
-            var source = e.Source is { } sourceResource
-                ? ImageCaptureSourceManager.FromResource(sourceResource.RawHandle)
-                : default;
-            var cursorSession = new CursorSession(this, resource, source.OutputTarget);
-            _cursorSessions.Add(cursorSession);
-            resource.Destroyed += (_, _) => _cursorSessions.Remove(cursorSession);
-        };
+        }
+
+        void IExtImageCopyCaptureSessionV1Handler.Destroy(ExtImageCopyCaptureSessionV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class IgnoredFrame : IExtImageCopyCaptureFrameV1Handler
+    {
+        public static readonly IgnoredFrame Instance = new();
+
+        void IExtImageCopyCaptureFrameV1Handler.AttachBuffer(ExtImageCopyCaptureFrameV1Resource resource, in ExtImageCopyCaptureFrameV1Resource.AttachBufferEventArgs args)
+        {
+        }
+
+        void IExtImageCopyCaptureFrameV1Handler.DamageBuffer(ExtImageCopyCaptureFrameV1Resource resource, in ExtImageCopyCaptureFrameV1Resource.DamageBufferEventArgs args)
+        {
+        }
+
+        void IExtImageCopyCaptureFrameV1Handler.Capture(ExtImageCopyCaptureFrameV1Resource resource)
+        {
+        }
+
+        void IExtImageCopyCaptureFrameV1Handler.Destroy(ExtImageCopyCaptureFrameV1Resource resource)
+        {
+        }
     }
 
     internal sealed class DamageAccumulator
@@ -262,7 +299,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         }
     }
 
-    internal sealed class Session
+    internal sealed class Session : IExtImageCopyCaptureSessionV1Handler
     {
         private readonly ImageCopyCaptureManager _owner;
         private readonly ExtImageCopyCaptureSessionV1Resource _resource;
@@ -270,12 +307,14 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
 
         public Session(
             ImageCopyCaptureManager owner,
-            ExtImageCopyCaptureSessionV1Resource resource,
+            WlClient client,
+            uint version,
+            uint id,
             in CaptureSource source,
             bool paintCursors)
         {
             _owner = owner;
-            _resource = resource;
+            _resource = new ExtImageCopyCaptureSessionV1Resource(client, version, id, this);
             Source = source;
             PaintCursors = paintCursors;
 
@@ -286,28 +325,9 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
 
             Stopped = Width <= 0 || Height <= 0;
             Damage = new DamageAccumulator(new Box(0, 0, Width, Height));
-
-            resource.CreateFrame += (_, e) =>
-            {
-                var frameResource = new ExtImageCopyCaptureFrameV1Resource(resource.Client, resource.Version, e.Frame);
-                if (_activeFrame is not null)
-                {
-                    resource.PostError(ErrorDuplicateFrame, "The previous frame is not destroyed. Destroy it before the next frame.");
-                    return;
-                }
-
-                var frame = new Frame(_owner, this, frameResource);
-                _activeFrame = frame;
-                frameResource.Destroyed += (_, _) =>
-                {
-                    _owner._waiting.Remove(frame);
-                    if (_activeFrame == frame)
-                    {
-                        _activeFrame = null;
-                    }
-                };
-            };
         }
+
+        public ExtImageCopyCaptureSessionV1Resource Resource => _resource;
 
         public CaptureSource Source { get; }
 
@@ -360,48 +380,81 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
                 _resource.SendStopped();
             }
         }
+
+        void IExtImageCopyCaptureSessionV1Handler.CreateFrame(ExtImageCopyCaptureSessionV1Resource resource, in ExtImageCopyCaptureSessionV1Resource.CreateFrameEventArgs args)
+        {
+            if (_activeFrame is not null)
+            {
+                _ = new ExtImageCopyCaptureFrameV1Resource(resource.Client, resource.Version, args.Frame, IgnoredFrame.Instance);
+                resource.PostError(ErrorDuplicateFrame, "The previous frame is not destroyed. Destroy it before the next frame.");
+                return;
+            }
+
+            var frame = new Frame(_owner, this, resource.Client, resource.Version, args.Frame);
+            _activeFrame = frame;
+            frame.Resource.Destroyed += (_, _) =>
+            {
+                _owner._waiting.Remove(frame);
+                if (_activeFrame == frame)
+                {
+                    _activeFrame = null;
+                }
+            };
+        }
+
+        void IExtImageCopyCaptureSessionV1Handler.Destroy(ExtImageCopyCaptureSessionV1Resource resource)
+        {
+        }
     }
 
-    internal sealed class Frame
+    internal sealed class Frame : IExtImageCopyCaptureFrameV1Handler
     {
         private readonly ImageCopyCaptureManager _owner;
         private readonly ExtImageCopyCaptureFrameV1Resource _resource;
         private nint _bufferHandle;
         private bool _captured;
 
-        public Frame(ImageCopyCaptureManager owner, Session session, ExtImageCopyCaptureFrameV1Resource resource)
+        public Frame(ImageCopyCaptureManager owner, Session session, WlClient client, uint version, uint id)
         {
             _owner = owner;
             Session = session;
-            _resource = resource;
-
-            resource.AttachBuffer += (_, e) =>
-            {
-                if (_captured)
-                {
-                    resource.PostError(ErrorAlreadyCaptured, "attach_buffer came after capture. Attach the buffer before capture.");
-                    return;
-                }
-
-                _bufferHandle = e.BufferHandle;
-            };
-            resource.DamageBuffer += (_, e) =>
-            {
-                if (_captured)
-                {
-                    resource.PostError(ErrorAlreadyCaptured, "damage_buffer came after capture. Damage the buffer before capture.");
-                    return;
-                }
-
-                if (e.X < 0 || e.Y < 0 || e.Width <= 0 || e.Height <= 0)
-                {
-                    resource.PostError(ErrorInvalidBufferDamage, "The buffer damage is not valid.");
-                }
-            };
-            resource.Capture += (_, _) => OnCapture();
+            _resource = new ExtImageCopyCaptureFrameV1Resource(client, version, id, this);
         }
 
         public Session Session { get; }
+
+        public ExtImageCopyCaptureFrameV1Resource Resource => _resource;
+
+        void IExtImageCopyCaptureFrameV1Handler.AttachBuffer(ExtImageCopyCaptureFrameV1Resource resource, in ExtImageCopyCaptureFrameV1Resource.AttachBufferEventArgs args)
+        {
+            if (_captured)
+            {
+                resource.PostError(ErrorAlreadyCaptured, "attach_buffer came after capture. Attach the buffer before capture.");
+                return;
+            }
+
+            _bufferHandle = args.BufferHandle;
+        }
+
+        void IExtImageCopyCaptureFrameV1Handler.DamageBuffer(ExtImageCopyCaptureFrameV1Resource resource, in ExtImageCopyCaptureFrameV1Resource.DamageBufferEventArgs args)
+        {
+            if (_captured)
+            {
+                resource.PostError(ErrorAlreadyCaptured, "damage_buffer came after capture. Damage the buffer before capture.");
+                return;
+            }
+
+            if (args.X < 0 || args.Y < 0 || args.Width <= 0 || args.Height <= 0)
+            {
+                resource.PostError(ErrorInvalidBufferDamage, "The buffer damage is not valid.");
+            }
+        }
+
+        void IExtImageCopyCaptureFrameV1Handler.Capture(ExtImageCopyCaptureFrameV1Resource resource) => OnCapture();
+
+        void IExtImageCopyCaptureFrameV1Handler.Destroy(ExtImageCopyCaptureFrameV1Resource resource)
+        {
+        }
 
         public void Complete()
         {
@@ -488,7 +541,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         }
     }
 
-    private sealed class CursorSession
+    private sealed class CursorSession : IExtImageCopyCaptureCursorSessionV1Handler
     {
         private readonly ImageCopyCaptureManager _owner;
         private readonly ExtImageCopyCaptureCursorSessionV1Resource _resource;
@@ -496,25 +549,31 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         private CursorCaptureSession? _capture;
         private bool _entered;
 
-        public CursorSession(ImageCopyCaptureManager owner, ExtImageCopyCaptureCursorSessionV1Resource resource, IOutput? output)
+        public CursorSession(ImageCopyCaptureManager owner, WlClient client, uint version, uint id, IOutput? output)
         {
             _owner = owner;
-            _resource = resource;
+            _resource = new ExtImageCopyCaptureCursorSessionV1Resource(client, version, id, this);
             _output = output;
-            resource.GetCaptureSession += (_, e) =>
-            {
-                var sessionResource = new ExtImageCopyCaptureSessionV1Resource(resource.Client, resource.Version, e.Session);
-                if (_capture is not null)
-                {
-                    resource.PostError(ErrorDuplicateSession, "get_capture_session was sent two times. Send it one time for each frame.");
-                    return;
-                }
-
-                _capture = new CursorCaptureSession(_owner, sessionResource, _output);
-                _capture.SendConstraints();
-            };
-
             Refresh();
+        }
+
+        public ExtImageCopyCaptureCursorSessionV1Resource Resource => _resource;
+
+        void IExtImageCopyCaptureCursorSessionV1Handler.GetCaptureSession(ExtImageCopyCaptureCursorSessionV1Resource resource, in ExtImageCopyCaptureCursorSessionV1Resource.GetCaptureSessionEventArgs args)
+        {
+            if (_capture is not null)
+            {
+                _ = new ExtImageCopyCaptureSessionV1Resource(resource.Client, resource.Version, args.Session, IgnoredSession.Instance);
+                resource.PostError(ErrorDuplicateSession, "get_capture_session was sent two times. Send it one time for each frame.");
+                return;
+            }
+
+            _capture = new CursorCaptureSession(_owner, resource.Client, resource.Version, args.Session, _output);
+            _capture.SendConstraints();
+        }
+
+        void IExtImageCopyCaptureCursorSessionV1Handler.Destroy(ExtImageCopyCaptureCursorSessionV1Resource resource)
+        {
         }
 
         public void Refresh()
@@ -555,7 +614,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         }
     }
 
-    private sealed class CursorCaptureSession
+    private sealed class CursorCaptureSession : IExtImageCopyCaptureSessionV1Handler
     {
         private readonly ImageCopyCaptureManager _owner;
         private readonly ExtImageCopyCaptureSessionV1Resource _resource;
@@ -564,28 +623,52 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         private readonly List<CursorFrame> _waiting = [];
         private (int Width, int Height)? _sent;
 
-        private sealed class CursorFrame
+        private sealed class CursorFrame : IExtImageCopyCaptureFrameV1Handler
         {
-            public required ExtImageCopyCaptureFrameV1Resource Resource;
-            public nint BufferHandle;
-            public bool Captured;
+            private readonly CursorCaptureSession _session;
+
+            public CursorFrame(CursorCaptureSession session, WlClient client, uint version, uint id)
+            {
+                _session = session;
+                Resource = new ExtImageCopyCaptureFrameV1Resource(client, version, id, this);
+            }
+
+            public ExtImageCopyCaptureFrameV1Resource Resource { get; }
+
+            public nint BufferHandle { get; private set; }
+
+            public bool Captured { get; set; }
+
+            void IExtImageCopyCaptureFrameV1Handler.AttachBuffer(ExtImageCopyCaptureFrameV1Resource resource, in ExtImageCopyCaptureFrameV1Resource.AttachBufferEventArgs args) =>
+                BufferHandle = args.BufferHandle;
+
+            void IExtImageCopyCaptureFrameV1Handler.DamageBuffer(ExtImageCopyCaptureFrameV1Resource resource, in ExtImageCopyCaptureFrameV1Resource.DamageBufferEventArgs args)
+            {
+            }
+
+            void IExtImageCopyCaptureFrameV1Handler.Capture(ExtImageCopyCaptureFrameV1Resource resource) => _session.OnCapture(this);
+
+            void IExtImageCopyCaptureFrameV1Handler.Destroy(ExtImageCopyCaptureFrameV1Resource resource)
+            {
+            }
         }
 
-        public CursorCaptureSession(ImageCopyCaptureManager owner, ExtImageCopyCaptureSessionV1Resource resource, IOutput? output)
+        public CursorCaptureSession(ImageCopyCaptureManager owner, WlClient client, uint version, uint id, IOutput? output)
         {
             _owner = owner;
-            _resource = resource;
+            _resource = new ExtImageCopyCaptureSessionV1Resource(client, version, id, this);
             _output = output;
             _damage = new DamageAccumulator(TryDescribe(out var format) ? new Box(0, 0, format.Width, format.Height) : default);
+        }
 
-            resource.CreateFrame += (_, e) =>
-            {
-                var frameResource = new ExtImageCopyCaptureFrameV1Resource(resource.Client, resource.Version, e.Frame);
-                var frame = new CursorFrame { Resource = frameResource };
-                frameResource.AttachBuffer += (_, ae) => frame.BufferHandle = ae.BufferHandle;
-                frameResource.Capture += (_, _) => OnCapture(frame);
-                frameResource.Destroyed += (_, _) => _waiting.RemoveAll(w => w == frame);
-            };
+        void IExtImageCopyCaptureSessionV1Handler.CreateFrame(ExtImageCopyCaptureSessionV1Resource resource, in ExtImageCopyCaptureSessionV1Resource.CreateFrameEventArgs args)
+        {
+            var frame = new CursorFrame(this, resource.Client, resource.Version, args.Frame);
+            frame.Resource.Destroyed += (_, _) => _waiting.RemoveAll(w => w == frame);
+        }
+
+        void IExtImageCopyCaptureSessionV1Handler.Destroy(ExtImageCopyCaptureSessionV1Resource resource)
+        {
         }
 
         public void SendConstraints()

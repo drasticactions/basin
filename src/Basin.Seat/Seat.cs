@@ -300,8 +300,14 @@ public sealed class Seat : IDisposable
             }
         }
 
+        return AddClient(client);
+    }
+
+    private SeatClient AddClient(WlClient client)
+    {
         var created = new SeatClient(this, client);
         _clients.Add(created);
+        client.Destroyed += () => _clients.Remove(created);
         return created;
     }
 
@@ -318,7 +324,8 @@ public sealed class Seat : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new WlSeatResource(client, version, id);
+        var seatClient = ClientFor(client);
+        var resource = new WlSeatResource(client, version, id, seatClient);
         _resources.Add(resource);
         ByResource[resource] = this;
         resource.Destroyed += (_, _) =>
@@ -331,10 +338,5 @@ public sealed class Seat : IDisposable
         {
             resource.SendName(Name);
         }
-
-        var seatClient = ClientFor(client);
-        resource.GetPointer += (_, e) => seatClient.AddPointer(new WlPointerResource(client, resource.Version, e.Id));
-        resource.GetKeyboard += (_, e) => seatClient.AddKeyboard(new WlKeyboardResource(client, resource.Version, e.Id));
-        resource.GetTouch += (_, e) => seatClient.AddTouch(new WlTouchResource(client, resource.Version, e.Id));
     }
 }

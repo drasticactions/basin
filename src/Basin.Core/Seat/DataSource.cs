@@ -6,24 +6,24 @@ namespace Basin;
 /// <summary>
 /// A selection or drag-and-drop source. It wraps a client's <c>wl_data_source</c>, or a compositor-side source that answers through delegates.
 /// </summary>
-public sealed class DataSource
+public sealed class DataSource : IWlDataSourceHandler
 {
     private readonly Action<string, ClientFd>? _send;
     private readonly Action? _cancel;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DataSource"/> class for a client resource. It records the client's offers and actions as the requests arrive.
+    /// Initializes a new instance of the <see cref="DataSource"/> class and creates the client's <c>wl_data_source</c> resource. It records the client's offers and actions as the requests arrive.
     /// </summary>
-    /// <param name="resource">The client's data source resource.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="resource"/> is <see langword="null"/>.</exception>
-    public DataSource(WlDataSourceResource resource)
+    /// <param name="client">The client that owns the resource.</param>
+    /// <param name="version">The resource version.</param>
+    /// <param name="id">The new object id from the client.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
+    public DataSource(WlClient client, uint version, uint id)
     {
-        ArgumentNullException.ThrowIfNull(resource);
+        ArgumentNullException.ThrowIfNull(client);
         MimeTypes = [];
-        Resource = resource;
-        resource.Offer += (_, e) => MimeTypes.Add(e.MimeType);
-        resource.SetActions += (_, e) => Actions = (WlDataDeviceManager.DndAction)e.DndActions;
-        resource.Destroyed += (_, _) => MarkDestroyed();
+        Resource = new WlDataSourceResource(client, version, id, this);
+        Resource.Destroyed += (_, _) => MarkDestroyed();
     }
 
     /// <summary>
@@ -42,6 +42,15 @@ public sealed class DataSource
     }
 
     private readonly WlClient? _client;
+
+    void IWlDataSourceHandler.Offer(WlDataSourceResource resource, in WlDataSourceResource.OfferEventArgs args) => MimeTypes.Add(args.MimeType);
+
+    void IWlDataSourceHandler.Destroy(WlDataSourceResource resource)
+    {
+    }
+
+    void IWlDataSourceHandler.SetActions(WlDataSourceResource resource, in WlDataSourceResource.SetActionsEventArgs args) =>
+        Actions = (WlDataDeviceManager.DndAction)args.DndActions;
 
     /// <summary>Gets the client resource, or <see langword="null"/> for a source that delegates its transfers.</summary>
     public WlDataSourceResource? Resource { get; }

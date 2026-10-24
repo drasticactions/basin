@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_commit_timing_manager_v1</c> global. It holds commits that carry a target time until a frame or its timer reaches that time.
 /// </summary>
-public sealed class CommitTimingManager : IDisposable, IFrameSink
+public sealed class CommitTimingManager : IDisposable, IFrameSink, IWpCommitTimingManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -76,31 +76,35 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         _global.Dispose();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpCommitTimingManagerV1Handler.Destroy(WpCommitTimingManagerV1Resource resource)
     {
-        var manager = new WpCommitTimingManagerV1Resource(client, version, id);
-        manager.GetTimer += (_, e) =>
-        {
-            var resource = new WpCommitTimerV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
-
-            if (!_surfaces.Add(surface))
-            {
-                manager.PostError((uint)WpCommitTimingManagerV1.Error.CommitTimerExists, "The surface already has a commit timer.");
-                return;
-            }
-
-            resource.SetTimestamp += (_, te) => OnSetTimestamp(resource, surface, te);
-            resource.Destroyed += (_, _) => _surfaces.Remove(surface);
-            surface.Destroyed += () => _surfaces.Remove(surface);
-        };
     }
 
-    private void OnSetTimestamp(WpCommitTimerV1Resource resource, Surface surface, WpCommitTimerV1Resource.SetTimestampEventArgs e)
+    void IWpCommitTimingManagerV1Handler.GetTimer(WpCommitTimingManagerV1Resource resource, in WpCommitTimingManagerV1Resource.GetTimerEventArgs args)
+    {
+        var timer = new CommitTimer(this);
+        var timerResource = new WpCommitTimerV1Resource(resource.Client, resource.Version, args.Id, timer);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
+        {
+            return;
+        }
+
+        if (!_surfaces.Add(surface))
+        {
+            resource.PostError((uint)WpCommitTimingManagerV1.Error.CommitTimerExists, "The surface already has a commit timer.");
+            return;
+        }
+
+        timer.Surface = surface;
+        timerResource.Destroyed += (_, _) => _surfaces.Remove(surface);
+        surface.Destroyed += () => _surfaces.Remove(surface);
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpCommitTimingManagerV1Resource(client, version, id, this);
+
+    private void OnSetTimestamp(WpCommitTimerV1Resource resource, Surface surface, in WpCommitTimerV1Resource.SetTimestampEventArgs e)
     {
         if (surface.IsDestroyed)
         {
@@ -185,6 +189,23 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         {
             _timerArmed = true;
             _timer.UpdateTimer((int)Math.Max(1, delayNanos / 1_000_000));
+        }
+    }
+
+    private sealed class CommitTimer(CommitTimingManager owner) : IWpCommitTimerV1Handler
+    {
+        public Surface? Surface { get; set; }
+
+        void IWpCommitTimerV1Handler.SetTimestamp(WpCommitTimerV1Resource resource, in WpCommitTimerV1Resource.SetTimestampEventArgs args)
+        {
+            if (Surface is { } surface)
+            {
+                owner.OnSetTimestamp(resource, surface, in args);
+            }
+        }
+
+        void IWpCommitTimerV1Handler.Destroy(WpCommitTimerV1Resource resource)
+        {
         }
     }
 }

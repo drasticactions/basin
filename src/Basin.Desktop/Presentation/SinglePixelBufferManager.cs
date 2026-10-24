@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_single_pixel_buffer_manager_v1</c> global. It creates one-pixel solid color buffers.
 /// </summary>
-public sealed class SinglePixelBufferManager : IDisposable
+public sealed class SinglePixelBufferManager : IDisposable, IWpSinglePixelBufferManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -34,33 +34,36 @@ public sealed class SinglePixelBufferManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpSinglePixelBufferManagerV1Handler.Destroy(WpSinglePixelBufferManagerV1Resource resource)
     {
-        var manager = new WpSinglePixelBufferManagerV1Resource(client, version, id);
-        manager.CreateU32RgbaBuffer += (_, e) =>
-        {
-            var buffer = new MemoryBuffer(1, 1, DrmFormat.Argb8888);
-            if (buffer.BeginDataAccess(BufferDataAccess.Write, out var view))
-            {
-                static byte To8(uint value) => (byte)(value >> 24);
-                unsafe
-                {
-                    *(uint*)view.Data = (uint)(To8(e.A) << 24 | To8(e.R) << 16 | To8(e.G) << 8 | To8(e.B));
-                }
+    }
 
-                buffer.EndDataAccess();
+    void IWpSinglePixelBufferManagerV1Handler.CreateU32RgbaBuffer(WpSinglePixelBufferManagerV1Resource resource, in WpSinglePixelBufferManagerV1Resource.CreateU32RgbaBufferEventArgs args)
+    {
+        var buffer = new MemoryBuffer(1, 1, DrmFormat.Argb8888);
+        if (buffer.BeginDataAccess(BufferDataAccess.Write, out var view))
+        {
+            static byte To8(uint value) => (byte)(value >> 24);
+            unsafe
+            {
+                *(uint*)view.Data = (uint)(To8(args.A) << 24 | To8(args.R) << 16 | To8(args.G) << 8 | To8(args.B));
             }
 
-            var resource = new WlBufferResource(client, 1, e.Id);
-            _registry.Register(resource.RawHandle, buffer);
-            buffer.Released += () =>
+            buffer.EndDataAccess();
+        }
+
+        var bufferResource = new WlBufferResource(resource.Client, 1, args.Id);
+        _registry.Register(bufferResource.RawHandle, buffer);
+        buffer.Released += () =>
+        {
+            if (!bufferResource.IsDestroyed)
             {
-                if (!resource.IsDestroyed)
-                {
-                    resource.SendRelease();
-                }
-            };
-            resource.Destroyed += (_, _) => buffer.Destroy();
+                bufferResource.SendRelease();
+            }
         };
+        bufferResource.Destroyed += (_, _) => buffer.Destroy();
     }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpSinglePixelBufferManagerV1Resource(client, version, id, this);
 }

@@ -5,6 +5,23 @@ namespace Basin.Tests;
 
 public sealed class SeatKeyboardTests
 {
+    [Fact]
+    public void A_disconnected_client_leaves_no_seat_client_behind()
+    {
+        using var host = new CompositorTestHost();
+        var before = host.Seat.Clients.Count;
+        var client = host.ConnectClient();
+        var window = MappedToplevel.Map(host, client);
+        host.Seat.Keyboard.NotifyEnter(window.ServerSurface);
+        host.Seat.Keyboard.NotifyClearFocus();
+        Assert.True(host.Seat.Clients.Count > before);
+
+        host.DisconnectClient(client);
+        host.PumpToServer();
+
+        Assert.Equal(before, host.Seat.Clients.Count);
+    }
+
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close")]
     private static extern int LibcClose(int fd);
 

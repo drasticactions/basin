@@ -1,12 +1,13 @@
 using Basin.Diagnostics;
 using Wayland;
+using Wayland.Server;
 
 namespace Basin;
 
 /// <summary>
 /// The <c>wl_subsurface</c> role. Position and stacking changes apply on the parent's commit, and a synchronized child's own commits apply there too.
 /// </summary>
-public sealed class Subsurface
+public sealed class Subsurface : IWlSubsurfaceHandler
 {
     /// <summary>The role name that <see cref="Surface.Role"/> holds for a subsurface.</summary>
     public const string RoleName = "wl_subsurface";
@@ -16,9 +17,9 @@ public sealed class Subsurface
     private bool _hasPendingPosition;
     private bool _destroyed;
 
-    internal Subsurface(WlSubsurfaceResource resource, Surface surface, Surface parent)
+    internal Subsurface(WlClient client, uint version, uint id, Surface surface, Surface parent)
     {
-        Resource = resource;
+        Resource = new WlSubsurfaceResource(client, version, id, this);
         Surface = surface;
         Parent = parent;
         BasinCounters.Track();
@@ -27,28 +28,35 @@ public sealed class Subsurface
 
         parent.SubsurfacesAbove.Add(this);
 
-        resource.SetPosition += (_, e) =>
+        Resource.Destroyed += (_, _) => OnRoleDestroyed();
+    }
+
+    void IWlSubsurfaceHandler.Destroy(WlSubsurfaceResource resource)
+    {
+    }
+
+    void IWlSubsurfaceHandler.SetPosition(WlSubsurfaceResource resource, in WlSubsurfaceResource.SetPositionEventArgs args)
+    {
+        _pendingX = args.X;
+        _pendingY = args.Y;
+        _hasPendingPosition = true;
+    }
+
+    void IWlSubsurfaceHandler.PlaceAbove(WlSubsurfaceResource resource, in WlSubsurfaceResource.PlaceAboveEventArgs args) =>
+        Restack(args.Sibling, above: true);
+
+    void IWlSubsurfaceHandler.PlaceBelow(WlSubsurfaceResource resource, in WlSubsurfaceResource.PlaceBelowEventArgs args) =>
+        Restack(args.Sibling, above: false);
+
+    void IWlSubsurfaceHandler.SetSync(WlSubsurfaceResource resource) => Synchronized = true;
+
+    void IWlSubsurfaceHandler.SetDesync(WlSubsurfaceResource resource)
+    {
+        Synchronized = false;
+        if (!IsEffectivelySynchronized)
         {
-            _pendingX = e.X;
-            _pendingY = e.Y;
-            _hasPendingPosition = true;
-        };
-
-        resource.PlaceAbove += (_, e) => Restack(e.Sibling, above: true);
-        resource.PlaceBelow += (_, e) => Restack(e.Sibling, above: false);
-
-        resource.SetSync += (_, _) => Synchronized = true;
-
-        resource.SetDesync += (_, _) =>
-        {
-            Synchronized = false;
-            if (!IsEffectivelySynchronized)
-            {
-                Surface.ApplyCacheOnDesync();
-            }
-        };
-
-        resource.Destroyed += (_, _) => OnRoleDestroyed();
+            Surface.ApplyCacheOnDesync();
+        }
     }
 
     /// <summary>Gets the subsurface resource.</summary>

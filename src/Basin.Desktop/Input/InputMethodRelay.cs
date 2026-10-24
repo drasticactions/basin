@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_input_method_manager_v2</c> global and relays text input to one input method client. While no client is bound, a fallback input method can serve instead.
 /// </summary>
-public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, IDisposable
+public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, IDisposable, IZwpInputMethodManagerV2Handler, IZwpInputMethodV2Handler, IZwpInputMethodKeyboardGrabV2Handler
 {
     /// <summary>
     /// The highest global version that the relay advertises.
@@ -279,90 +279,138 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpInputMethodManagerV2Handler.Destroy(ZwpInputMethodManagerV2Resource resource)
     {
-        var manager = new ZwpInputMethodManagerV2Resource(client, version, id);
-        manager.GetInputMethod += (_, e) =>
+    }
+
+    void IZwpInputMethodManagerV2Handler.GetInputMethod(ZwpInputMethodManagerV2Resource resource, in ZwpInputMethodManagerV2Resource.GetInputMethodEventArgs args)
+    {
+        if (HasInputMethodClient)
         {
-            var resource = new ZwpInputMethodV2Resource(client, manager.Version, e.InputMethod);
-            if (HasInputMethodClient)
+            var unavailable = new ZwpInputMethodV2Resource(resource.Client, resource.Version, args.InputMethod, UnavailableMethod.Instance);
+            unavailable.SendUnavailable();
+            return;
+        }
+
+        var method = new ZwpInputMethodV2Resource(resource.Client, resource.Version, args.InputMethod, this);
+        _method = method;
+        if (_activeSurface is not null)
+        {
+            method.SendActivate();
+        }
+
+        method.Destroyed += (_, _) =>
+        {
+            if (_method == method)
             {
-                resource.SendUnavailable();
-                return;
+                _method = null;
+                AvailabilityChanged?.Invoke();
             }
-
-            _method = resource;
-            if (_activeSurface is not null)
-            {
-                resource.SendActivate();
-            }
-
-            resource.Destroyed += (_, _) =>
-            {
-                if (_method == resource)
-                {
-                    _method = null;
-                    AvailabilityChanged?.Invoke();
-                }
-            };
-
-            resource.SetPreeditString += (_, pe) => (_pendingPreedit, _preeditBegin, _preeditEnd) = (pe.Text, pe.CursorBegin, pe.CursorEnd);
-            resource.CommitString += (_, ce) => _pendingCommit = ce.Text;
-            resource.DeleteSurroundingText += (_, de) => _pendingDelete = (de.BeforeLength, de.AfterLength);
-            resource.Commit += (_, _) =>
-            {
-                if (_pendingPreedit is { } preedit)
-                {
-                    Preedit?.Invoke(new PreeditString(preedit, _preeditBegin, _preeditEnd));
-                }
-
-                if (_pendingCommit is { } committed)
-                {
-                    CommitString?.Invoke(committed);
-                }
-
-                if (_pendingDelete is { } delete)
-                {
-                    DeleteSurroundingText?.Invoke(delete.Before, delete.After);
-                }
-
-                _pendingPreedit = null;
-                _pendingCommit = null;
-                _pendingDelete = null;
-                Done?.Invoke();
-            };
-            resource.GrabKeyboard += (_, ge) =>
-            {
-                var grab = new ZwpInputMethodKeyboardGrabV2Resource(resource.Client, resource.Version, ge.Keyboard);
-                _grab = grab;
-                grab.Release += (_, _) => _grab = null;
-                grab.Destroyed += (_, _) =>
-                {
-                    if (_grab == grab)
-                    {
-                        _grab = null;
-                    }
-                };
-
-                if (_seat is { } seat)
-                {
-                    if (seat.Keyboard.KeymapFor(grab.Client) is { } keymap)
-                    {
-                        grab.SendKeymap(WlKeyboard.KeymapFormat.XkbV1, keymap.Fd, keymap.Size);
-                    }
-
-                    var repeat = seat.Keyboard.RepeatInfo;
-                    grab.SendRepeatInfo(repeat.Rate, repeat.Delay);
-                }
-
-                ForwardSeatModifiers();
-            };
-            resource.GetInputPopupSurface += (_, pe) =>
-            {
-                _ = new ZwpInputPopupSurfaceV2Resource(resource.Client, resource.Version, pe.Id);
-            };
-
-            AvailabilityChanged?.Invoke();
         };
+
+        AvailabilityChanged?.Invoke();
+    }
+
+    void IZwpInputMethodV2Handler.SetPreeditString(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.SetPreeditStringEventArgs args) =>
+        (_pendingPreedit, _preeditBegin, _preeditEnd) = (args.Text, args.CursorBegin, args.CursorEnd);
+
+    void IZwpInputMethodV2Handler.CommitString(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.CommitStringEventArgs args) =>
+        _pendingCommit = args.Text;
+
+    void IZwpInputMethodV2Handler.DeleteSurroundingText(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.DeleteSurroundingTextEventArgs args) =>
+        _pendingDelete = (args.BeforeLength, args.AfterLength);
+
+    void IZwpInputMethodV2Handler.Commit(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.CommitEventArgs args)
+    {
+        if (_pendingPreedit is { } preedit)
+        {
+            Preedit?.Invoke(new PreeditString(preedit, _preeditBegin, _preeditEnd));
+        }
+
+        if (_pendingCommit is { } committed)
+        {
+            CommitString?.Invoke(committed);
+        }
+
+        if (_pendingDelete is { } delete)
+        {
+            DeleteSurroundingText?.Invoke(delete.Before, delete.After);
+        }
+
+        _pendingPreedit = null;
+        _pendingCommit = null;
+        _pendingDelete = null;
+        Done?.Invoke();
+    }
+
+    void IZwpInputMethodV2Handler.GrabKeyboard(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.GrabKeyboardEventArgs args)
+    {
+        var grab = new ZwpInputMethodKeyboardGrabV2Resource(resource.Client, resource.Version, args.Keyboard, this);
+        _grab = grab;
+        grab.Destroyed += (_, _) =>
+        {
+            if (_grab == grab)
+            {
+                _grab = null;
+            }
+        };
+
+        if (_seat is { } seat)
+        {
+            if (seat.Keyboard.KeymapFor(grab.Client) is { } keymap)
+            {
+                grab.SendKeymap(WlKeyboard.KeymapFormat.XkbV1, keymap.Fd, keymap.Size);
+            }
+
+            var repeat = seat.Keyboard.RepeatInfo;
+            grab.SendRepeatInfo(repeat.Rate, repeat.Delay);
+        }
+
+        ForwardSeatModifiers();
+    }
+
+    void IZwpInputMethodV2Handler.GetInputPopupSurface(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.GetInputPopupSurfaceEventArgs args) =>
+        _ = new ZwpInputPopupSurfaceV2Resource(resource.Client, resource.Version, args.Id);
+
+    void IZwpInputMethodV2Handler.Destroy(ZwpInputMethodV2Resource resource)
+    {
+    }
+
+    void IZwpInputMethodKeyboardGrabV2Handler.Release(ZwpInputMethodKeyboardGrabV2Resource resource) => _grab = null;
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpInputMethodManagerV2Resource(client, version, id, this);
+
+    private sealed class UnavailableMethod : IZwpInputMethodV2Handler
+    {
+        public static readonly UnavailableMethod Instance = new();
+
+        void IZwpInputMethodV2Handler.CommitString(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.CommitStringEventArgs args)
+        {
+        }
+
+        void IZwpInputMethodV2Handler.SetPreeditString(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.SetPreeditStringEventArgs args)
+        {
+        }
+
+        void IZwpInputMethodV2Handler.DeleteSurroundingText(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.DeleteSurroundingTextEventArgs args)
+        {
+        }
+
+        void IZwpInputMethodV2Handler.Commit(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.CommitEventArgs args)
+        {
+        }
+
+        void IZwpInputMethodV2Handler.GetInputPopupSurface(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.GetInputPopupSurfaceEventArgs args)
+        {
+        }
+
+        void IZwpInputMethodV2Handler.GrabKeyboard(ZwpInputMethodV2Resource resource, in ZwpInputMethodV2Resource.GrabKeyboardEventArgs args)
+        {
+        }
+
+        void IZwpInputMethodV2Handler.Destroy(ZwpInputMethodV2Resource resource)
+        {
+        }
     }
 }

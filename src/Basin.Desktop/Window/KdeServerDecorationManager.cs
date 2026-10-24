@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>org_kde_kwin_server_decoration_manager</c> global. It grants each mode that a client asks for and records it per surface.
 /// </summary>
-public sealed class KdeServerDecorationManager : IDisposable
+public sealed class KdeServerDecorationManager : IDisposable, IOrgKdeKwinServerDecorationManagerHandler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -72,35 +72,44 @@ public sealed class KdeServerDecorationManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new OrgKdeKwinServerDecorationManagerResource(client, version, id);
+        var manager = new OrgKdeKwinServerDecorationManagerResource(client, version, id, this);
         manager.SendDefaultMode((uint)_defaultMode);
-        manager.Create += (_, e) =>
+    }
+
+    void IOrgKdeKwinServerDecorationManagerHandler.Create(OrgKdeKwinServerDecorationManagerResource resource, in OrgKdeKwinServerDecorationManagerResource.CreateEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        var decoration = new OrgKdeKwinServerDecorationResource(resource.Client, resource.Version, args.Id, new Decoration(this, surface));
+        decoration.SendMode((uint)_defaultMode);
+        if (surface is not null)
         {
-            var decoration = new OrgKdeKwinServerDecorationResource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            decoration.SendMode((uint)_defaultMode);
+            _modes[surface] = _defaultMode;
+            surface.Destroyed += () => _modes.Remove(surface);
+        }
+
+        decoration.Destroyed += (_, _) =>
+        {
             if (surface is not null)
             {
-                _modes[surface] = _defaultMode;
-                surface.Destroyed += () => _modes.Remove(surface);
+                _modes.Remove(surface);
             }
-
-            decoration.RequestMode += (_, me) =>
-            {
-                decoration.SendMode((uint)me.Mode);
-                if (surface is not null)
-                {
-                    _modes[surface] = (DecorationMode)me.Mode;
-                    ModeRequested?.Invoke(surface, (DecorationMode)me.Mode);
-                }
-            };
-            decoration.Destroyed += (_, _) =>
-            {
-                if (surface is not null)
-                {
-                    _modes.Remove(surface);
-                }
-            };
         };
+    }
+
+    private sealed class Decoration(KdeServerDecorationManager owner, Surface? surface) : IOrgKdeKwinServerDecorationHandler
+    {
+        void IOrgKdeKwinServerDecorationHandler.RequestMode(OrgKdeKwinServerDecorationResource resource, in OrgKdeKwinServerDecorationResource.RequestModeEventArgs args)
+        {
+            resource.SendMode((uint)args.Mode);
+            if (surface is not null)
+            {
+                owner._modes[surface] = (DecorationMode)args.Mode;
+                owner.ModeRequested?.Invoke(surface, (DecorationMode)args.Mode);
+            }
+        }
+
+        void IOrgKdeKwinServerDecorationHandler.Release(OrgKdeKwinServerDecorationResource resource)
+        {
+        }
     }
 }

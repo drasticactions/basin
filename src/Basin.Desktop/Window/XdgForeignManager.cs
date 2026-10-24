@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the xdg-foreign exporter and importer globals, v1 and v2. A client can make a surface of another client the parent of its own surface.
 /// </summary>
-public sealed class XdgForeignManager : IDisposable
+public sealed class XdgForeignManager : IDisposable, IZxdgExporterV1Handler, IZxdgImporterV1Handler, IZxdgExporterV2Handler, IZxdgImporterV2Handler
 {
     /// <summary>
     /// The protocol version that all four globals advertise.
@@ -108,93 +108,143 @@ public sealed class XdgForeignManager : IDisposable
         }
     }
 
-    private void OnBindExporterV1(WlClient client, uint version, uint id)
+    private void OnBindExporterV1(WlClient client, uint version, uint id) =>
+        _ = new ZxdgExporterV1Resource(client, version, id, this);
+
+    private void OnBindImporterV1(WlClient client, uint version, uint id) =>
+        _ = new ZxdgImporterV1Resource(client, version, id, this);
+
+    private void OnBindExporter(WlClient client, uint version, uint id) =>
+        _ = new ZxdgExporterV2Resource(client, version, id, this);
+
+    private void OnBindImporter(WlClient client, uint version, uint id) =>
+        _ = new ZxdgImporterV2Resource(client, version, id, this);
+
+    void IZxdgExporterV1Handler.Export(ZxdgExporterV1Resource resource, in ZxdgExporterV1Resource.ExportEventArgs args)
     {
-        var exporter = new ZxdgExporterV1Resource(client, version, id);
-        exporter.Export += (_, e) =>
+        var exported = new ZxdgExportedV1Resource(resource.Client, resource.Version, args.Id);
+        if (_compositor.ResolveSurface(args.Surface) is not { } surface)
         {
-            var exported = new ZxdgExportedV1Resource(client, exporter.Version, e.Id);
-            if (_compositor.ResolveSurface(e.Surface) is not { } surface)
-            {
-                return;
-            }
+            return;
+        }
 
-            var drop = Export(surface, exported.SendHandle);
-            exported.Destroyed += (_, _) => drop();
-            surface.Destroyed += drop;
-        };
+        var drop = Export(surface, exported.SendHandle);
+        exported.Destroyed += (_, _) => drop();
+        surface.Destroyed += drop;
     }
 
-    private void OnBindImporterV1(WlClient client, uint version, uint id)
+    void IZxdgExporterV1Handler.Destroy(ZxdgExporterV1Resource resource)
     {
-        var importer = new ZxdgImporterV1Resource(client, version, id);
-        importer.Import += (_, e) =>
+    }
+
+    void IZxdgImporterV1Handler.Import(ZxdgImporterV1Resource resource, in ZxdgImporterV1Resource.ImportEventArgs args)
+    {
+        var imported = new ImportedV1(this, resource.Client, resource.Version, args.Id);
+        if (Import(args.Handle, imported) is not { } entry)
         {
-            var resource = new ZxdgImportedV1Resource(client, importer.Version, e.Id);
-            var imported = new ImportedV1(resource);
-            if (Import(e.Handle, imported) is not { } entry)
-            {
-                return;
-            }
+            return;
+        }
 
-            resource.Destroyed += (_, _) => entry.Importers.Remove(imported);
-            resource.SetParentOf += (_, pe) => SetParentOf(entry, pe.Surface);
-        };
+        imported.Entry = entry;
+        imported.Resource.Destroyed += (_, _) => entry.Importers.Remove(imported);
     }
 
-    private void OnBindExporter(WlClient client, uint version, uint id)
+    void IZxdgImporterV1Handler.Destroy(ZxdgImporterV1Resource resource)
     {
-        var exporter = new ZxdgExporterV2Resource(client, version, id);
-        exporter.ExportToplevel += (_, e) =>
+    }
+
+    void IZxdgExporterV2Handler.ExportToplevel(ZxdgExporterV2Resource resource, in ZxdgExporterV2Resource.ExportToplevelEventArgs args)
+    {
+        var exported = new ZxdgExportedV2Resource(resource.Client, resource.Version, args.Id);
+        if (_compositor.ResolveSurface(args.Surface) is not { } surface)
         {
-            var exported = new ZxdgExportedV2Resource(client, exporter.Version, e.Id);
-            if (_compositor.ResolveSurface(e.Surface) is not { } surface)
-            {
-                return;
-            }
+            return;
+        }
 
-            var drop = Export(surface, exported.SendHandle);
-            exported.Destroyed += (_, _) => drop();
-            surface.Destroyed += drop;
-        };
+        var drop = Export(surface, exported.SendHandle);
+        exported.Destroyed += (_, _) => drop();
+        surface.Destroyed += drop;
     }
 
-    private void OnBindImporter(WlClient client, uint version, uint id)
+    void IZxdgExporterV2Handler.Destroy(ZxdgExporterV2Resource resource)
     {
-        var importer = new ZxdgImporterV2Resource(client, version, id);
-        importer.ImportToplevel += (_, e) =>
+    }
+
+    void IZxdgImporterV2Handler.ImportToplevel(ZxdgImporterV2Resource resource, in ZxdgImporterV2Resource.ImportToplevelEventArgs args)
+    {
+        var imported = new ImportedV2(this, resource.Client, resource.Version, args.Id);
+        if (Import(args.Handle, imported) is not { } entry)
         {
-            var resource = new ZxdgImportedV2Resource(client, importer.Version, e.Id);
-            var imported = new ImportedV2(resource);
-            if (Import(e.Handle, imported) is not { } entry)
+            return;
+        }
+
+        imported.Entry = entry;
+        imported.Resource.Destroyed += (_, _) => entry.Importers.Remove(imported);
+    }
+
+    void IZxdgImporterV2Handler.Destroy(ZxdgImporterV2Resource resource)
+    {
+    }
+
+    private sealed class ImportedV1 : IImported, IZxdgImportedV1Handler
+    {
+        private readonly XdgForeignManager _owner;
+
+        public ImportedV1(XdgForeignManager owner, WlClient client, uint version, uint id)
+        {
+            _owner = owner;
+            Resource = new ZxdgImportedV1Resource(client, version, id, this);
+        }
+
+        public ZxdgImportedV1Resource Resource { get; }
+
+        public Exported? Entry { get; set; }
+
+        public bool IsDestroyed => Resource.IsDestroyed;
+
+        public void SendDestroyed() => Resource.SendDestroyed();
+
+        void IZxdgImportedV1Handler.SetParentOf(ZxdgImportedV1Resource resource, in ZxdgImportedV1Resource.SetParentOfEventArgs args)
+        {
+            if (Entry is { } entry)
             {
-                return;
+                _owner.SetParentOf(entry, args.Surface);
             }
+        }
 
-            resource.Destroyed += (_, _) => entry.Importers.Remove(imported);
-            resource.SetParentOf += (_, pe) => SetParentOf(entry, pe.Surface);
-        };
+        void IZxdgImportedV1Handler.Destroy(ZxdgImportedV1Resource resource)
+        {
+        }
     }
 
-    private sealed class ImportedV1 : IImported
+    private sealed class ImportedV2 : IImported, IZxdgImportedV2Handler
     {
-        private readonly ZxdgImportedV1Resource _resource;
+        private readonly XdgForeignManager _owner;
 
-        public ImportedV1(ZxdgImportedV1Resource resource) => _resource = resource;
+        public ImportedV2(XdgForeignManager owner, WlClient client, uint version, uint id)
+        {
+            _owner = owner;
+            Resource = new ZxdgImportedV2Resource(client, version, id, this);
+        }
 
-        public bool IsDestroyed => _resource.IsDestroyed;
+        public ZxdgImportedV2Resource Resource { get; }
 
-        public void SendDestroyed() => _resource.SendDestroyed();
-    }
+        public Exported? Entry { get; set; }
 
-    private sealed class ImportedV2 : IImported
-    {
-        private readonly ZxdgImportedV2Resource _resource;
+        public bool IsDestroyed => Resource.IsDestroyed;
 
-        public ImportedV2(ZxdgImportedV2Resource resource) => _resource = resource;
+        public void SendDestroyed() => Resource.SendDestroyed();
 
-        public bool IsDestroyed => _resource.IsDestroyed;
+        void IZxdgImportedV2Handler.SetParentOf(ZxdgImportedV2Resource resource, in ZxdgImportedV2Resource.SetParentOfEventArgs args)
+        {
+            if (Entry is { } entry)
+            {
+                _owner.SetParentOf(entry, args.Surface);
+            }
+        }
 
-        public void SendDestroyed() => _resource.SendDestroyed();
+        void IZxdgImportedV2Handler.Destroy(ZxdgImportedV2Resource resource)
+        {
+        }
     }
 }

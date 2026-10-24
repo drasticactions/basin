@@ -6,7 +6,7 @@ namespace Basin;
 /// <summary>
 /// The <c>wl_compositor</c> global. It creates each <see cref="Surface"/> and <see cref="Region"/> and resolves client resources to them.
 /// </summary>
-public sealed class CompositorGlobal : IDisposable
+public sealed class CompositorGlobal : IDisposable, IWlCompositorHandler
 {
     /// <summary>The <c>wl_compositor</c> version that this global advertises.</summary>
     public const int Version = 7;
@@ -92,23 +92,28 @@ public sealed class CompositorGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var compositor = new WlCompositorResource(client, version, id);
+        _ = new WlCompositorResource(client, version, id, this);
+    }
 
-        compositor.CreateSurface += (_, e) =>
-        {
-            var resource = new WlSurfaceResource(client, compositor.Version, e.Id);
-            var surface = new Surface(this, resource, ClientScales.ScaleOf(client));
-            _surfaces[resource] = surface;
-            surface.Destroyed += () => _surfaces.Remove(resource);
-            SurfaceCreated?.Invoke(surface);
-        };
+    void IWlCompositorHandler.CreateSurface(WlCompositorResource resource, in WlCompositorResource.CreateSurfaceEventArgs args)
+    {
+        var client = resource.Client;
+        var surface = new Surface(this, client, resource.Version, args.Id, ClientScales.ScaleOf(client));
+        var surfaceResource = surface.Resource;
+        _surfaces[surfaceResource] = surface;
+        surface.Destroyed += () => _surfaces.Remove(surfaceResource);
+        SurfaceCreated?.Invoke(surface);
+    }
 
-        compositor.CreateRegion += (_, e) =>
-        {
-            var resource = new WlRegionResource(client, compositor.Version, e.Id);
-            var region = new Region(resource);
-            _regions[resource] = region;
-            resource.Destroyed += (_, _) => _regions.Remove(resource);
-        };
+    void IWlCompositorHandler.CreateRegion(WlCompositorResource resource, in WlCompositorResource.CreateRegionEventArgs args)
+    {
+        var region = new Region(resource.Client, resource.Version, args.Id);
+        var regionResource = region.Resource;
+        _regions[regionResource] = region;
+        regionResource.Destroyed += (_, _) => _regions.Remove(regionResource);
+    }
+
+    void IWlCompositorHandler.Release(WlCompositorResource resource)
+    {
     }
 }

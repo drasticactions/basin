@@ -7,7 +7,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_global_shortcuts_manager_v1</c>. It registers each client shortcut in an <see cref="IGlobalShortcuts"/> registry and forwards presses and releases to the client.
 /// </summary>
-public sealed class HyprlandGlobalShortcutsManager : IGlobalShortcutObserver, IDisposable
+public sealed class HyprlandGlobalShortcutsManager : IGlobalShortcutObserver, IDisposable, IHyprlandGlobalShortcutsManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -114,28 +114,35 @@ public sealed class HyprlandGlobalShortcutsManager : IGlobalShortcutObserver, ID
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandGlobalShortcutsManagerV1Resource(client, version, id);
-        manager.RegisterShortcut += (_, e) =>
-        {
-            var resource = new HyprlandGlobalShortcutV1Resource(client, manager.Version, e.Shortcut);
-            var key = (e.AppId, e.Id);
-            var info = new GlobalShortcutInfo(e.AppId, e.Id, e.Description, e.TriggerDescription, e.TriggerDescription);
-            if (_shortcuts.ContainsKey(key) || !_registry.TryRegister(in info))
-            {
-                manager.PostError(
-                    (uint)HyprlandGlobalShortcutsManagerV1.Error.AlreadyTaken,
-                    "This app_id and id pair is already registered.");
-                return;
-            }
+        _ = new HyprlandGlobalShortcutsManagerV1Resource(client, version, id, this);
+    }
 
-            _shortcuts[key] = resource;
-            resource.Destroyed += (_, _) =>
+    void IHyprlandGlobalShortcutsManagerV1Handler.RegisterShortcut(
+        HyprlandGlobalShortcutsManagerV1Resource resource,
+        in HyprlandGlobalShortcutsManagerV1Resource.RegisterShortcutEventArgs args)
+    {
+        var shortcut = new HyprlandGlobalShortcutV1Resource(resource.Client, resource.Version, args.Shortcut);
+        var key = (args.AppId, args.Id);
+        var info = new GlobalShortcutInfo(args.AppId, args.Id, args.Description, args.TriggerDescription, args.TriggerDescription);
+        if (_shortcuts.ContainsKey(key) || !_registry.TryRegister(in info))
+        {
+            resource.PostError(
+                (uint)HyprlandGlobalShortcutsManagerV1.Error.AlreadyTaken,
+                "This app_id and id pair is already registered.");
+            return;
+        }
+
+        _shortcuts[key] = shortcut;
+        shortcut.Destroyed += (_, _) =>
+        {
+            if (_shortcuts.Remove(key))
             {
-                if (_shortcuts.Remove(key))
-                {
-                    _registry.Unregister(e.AppId, e.Id);
-                }
-            };
+                _registry.Unregister(key.AppId, key.Id);
+            }
         };
+    }
+
+    void IHyprlandGlobalShortcutsManagerV1Handler.Destroy(HyprlandGlobalShortcutsManagerV1Resource resource)
+    {
     }
 }

@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_color_representation_manager_v1</c> global. It tracks the alpha mode, YUV coefficients, range and chroma location that each surface commits.
 /// </summary>
-public sealed class ColorRepresentationManager : IDisposable
+public sealed class ColorRepresentationManager : IDisposable, IWpColorRepresentationManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -159,7 +159,7 @@ public sealed class ColorRepresentationManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new WpColorRepresentationManagerV1Resource(client, version, id);
+        var manager = new WpColorRepresentationManagerV1Resource(client, version, id, this);
         manager.SendSupportedAlphaMode(WpColorRepresentationSurfaceV1.AlphaMode.PremultipliedElectrical);
         manager.SendSupportedAlphaMode(WpColorRepresentationSurfaceV1.AlphaMode.Straight);
         foreach (var (coefficients, range) in (ReadOnlySpan<(WpColorRepresentationSurfaceV1.Coefficients, WpColorRepresentationSurfaceV1.Range)>)
@@ -173,78 +173,122 @@ public sealed class ColorRepresentationManager : IDisposable
         }
 
         manager.SendDone();
+    }
 
-        manager.GetSurface += (_, e) =>
+    void IWpColorRepresentationManagerV1Handler.Destroy(WpColorRepresentationManagerV1Resource resource)
+    {
+    }
+
+    void IWpColorRepresentationManagerV1Handler.GetSurface(
+        WpColorRepresentationManagerV1Resource resource,
+        in WpColorRepresentationManagerV1Resource.GetSurfaceEventArgs args)
+    {
+        var handler = new SurfaceRepresentationObject(this, resource.Client, resource.Version, args.Id);
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new WpColorRepresentationSurfaceV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
+            return;
+        }
+
+        if (!_claimed.Add(surface))
+        {
+            resource.PostError(ErrorSurfaceExists, "The surface already has a color representation object.");
+            return;
+        }
+
+        handler.Attach(surface, StateFor(surface));
+    }
+
+    private sealed class SurfaceRepresentationObject : IWpColorRepresentationSurfaceV1Handler
+    {
+        private readonly ColorRepresentationManager _manager;
+        private Surface? _surface;
+        private SurfaceRepresentation? _state;
+        private bool _inert;
+
+        public SurfaceRepresentationObject(ColorRepresentationManager manager, WlClient client, uint version, uint id)
+        {
+            _manager = manager;
+            Resource = new WpColorRepresentationSurfaceV1Resource(client, version, id, this);
+        }
+
+        public WpColorRepresentationSurfaceV1Resource Resource { get; }
+
+        public void Attach(Surface surface, SurfaceRepresentation state)
+        {
+            _surface = surface;
+            _state = state;
+            surface.Destroyed += OnSurfaceDestroyed;
+            Resource.Destroyed += OnResourceDestroyed;
+        }
+
+        void IWpColorRepresentationSurfaceV1Handler.Destroy(WpColorRepresentationSurfaceV1Resource resource)
+        {
+        }
+
+        void IWpColorRepresentationSurfaceV1Handler.SetAlphaMode(
+            WpColorRepresentationSurfaceV1Resource resource,
+            in WpColorRepresentationSurfaceV1Resource.SetAlphaModeEventArgs args)
+        {
+            if (_state is not { } state || Basis(state) is not { } basis)
             {
                 return;
             }
 
-            if (!_claimed.Add(surface))
+            state.Pending = basis with { AlphaMode = args.AlphaMode };
+            state.HasPending = true;
+        }
+
+        void IWpColorRepresentationSurfaceV1Handler.SetCoefficientsAndRange(
+            WpColorRepresentationSurfaceV1Resource resource,
+            in WpColorRepresentationSurfaceV1Resource.SetCoefficientsAndRangeEventArgs args)
+        {
+            if (_state is not { } state || Basis(state) is not { } basis)
             {
-                manager.PostError(ErrorSurfaceExists, "The surface already has a color representation object.");
                 return;
             }
 
-            var state = StateFor(surface);
-            var inert = false;
-            surface.Destroyed += () => inert = true;
+            state.Pending = basis with { Coefficients = args.Coefficients, Range = args.Range };
+            state.HasPending = true;
+        }
 
-            Representation? Basis()
+        void IWpColorRepresentationSurfaceV1Handler.SetChromaLocation(
+            WpColorRepresentationSurfaceV1Resource resource,
+            in WpColorRepresentationSurfaceV1Resource.SetChromaLocationEventArgs args)
+        {
+            if (_state is not { } state || Basis(state) is not { } basis)
             {
-                if (inert)
-                {
-                    resource.PostError(ErrorInert, "The surface of this object is destroyed.");
-                    return null;
-                }
-
-                return state.HasPending ? state.Pending : state.HasLatched ? state.Latched : state.Current;
+                return;
             }
 
-            resource.SetAlphaMode += (_, ae) =>
-            {
-                if (Basis() is not { } basis)
-                {
-                    return;
-                }
+            state.Pending = basis with { ChromaLocation = args.ChromaLocation };
+            state.HasPending = true;
+        }
 
-                state.Pending = basis with { AlphaMode = ae.AlphaMode };
-                state.HasPending = true;
-            };
-            resource.SetCoefficientsAndRange += (_, ce) =>
+        private Representation? Basis(SurfaceRepresentation state)
+        {
+            if (_inert)
             {
-                if (Basis() is not { } basis)
-                {
-                    return;
-                }
+                Resource.PostError(ErrorInert, "The surface of this object is destroyed.");
+                return null;
+            }
 
-                state.Pending = basis with { Coefficients = ce.Coefficients, Range = ce.Range };
-                state.HasPending = true;
-            };
-            resource.SetChromaLocation += (_, le) =>
+            return state.HasPending ? state.Pending : state.HasLatched ? state.Latched : state.Current;
+        }
+
+        private void OnSurfaceDestroyed() => _inert = true;
+
+        private void OnResourceDestroyed(object? sender, EventArgs e)
+        {
+            _manager._claimed.Remove(_surface!);
+            if (_inert)
             {
-                if (Basis() is not { } basis)
-                {
-                    return;
-                }
+                return;
+            }
 
-                state.Pending = basis with { ChromaLocation = le.ChromaLocation };
-                state.HasPending = true;
-            };
-            resource.Destroyed += (_, _) =>
-            {
-                _claimed.Remove(surface);
-                if (inert)
-                {
-                    return;
-                }
-
-                state.Pending = Representation.Default;
-                state.HasPending = true;
-            };
-        };
+            var state = _state!;
+            state.Pending = Representation.Default;
+            state.HasPending = true;
+        }
     }
 }

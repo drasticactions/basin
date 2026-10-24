@@ -7,7 +7,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zxdg_output_manager_v1</c> global. It reports the logical box of each output, with optional overrides for single clients.
 /// </summary>
-public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalOutputOverrides
+public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalOutputOverrides, IZxdgOutputManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -92,30 +92,33 @@ public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalO
         _global.Dispose();
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZxdgOutputManagerV1Resource(client, version, id, this);
+
+    void IZxdgOutputManagerV1Handler.Destroy(ZxdgOutputManagerV1Resource resource)
     {
-        var manager = new ZxdgOutputManagerV1Resource(client, version, id);
-        manager.GetXdgOutput += (_, e) =>
+    }
+
+    void IZxdgOutputManagerV1Handler.GetXdgOutput(ZxdgOutputManagerV1Resource manager, in ZxdgOutputManagerV1Resource.GetXdgOutputEventArgs args)
+    {
+        var resource = new ZxdgOutputV1Resource(manager.Client, manager.Version, args.Id);
+        var output = OutputGlobal.FromResource(args.Output);
+        if (output is null)
         {
-            var resource = new ZxdgOutputV1Resource(client, manager.Version, e.Id);
-            var output = OutputGlobal.FromResource(e.Output);
-            if (output is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            var entry = new Entry(resource, output, BoxFor(resource, output));
-            _outputs.Add(entry);
-            resource.Destroyed += (_, _) => _outputs.RemoveAll(candidate => candidate.Resource == resource);
-            SendBox(entry);
-            if (resource.Version >= 2)
-            {
-                resource.SendName(output.Output.Name);
-                resource.SendDescription(output.Output.Description);
-            }
+        var entry = new Entry(resource, output, BoxFor(resource, output));
+        _outputs.Add(entry);
+        resource.Destroyed += (_, _) => _outputs.RemoveAll(candidate => candidate.Resource == resource);
+        SendBox(entry);
+        if (resource.Version >= 2)
+        {
+            resource.SendName(output.Output.Name);
+            resource.SendDescription(output.Output.Description);
+        }
 
-            SendDone(entry);
-        };
+        SendDone(entry);
     }
 
     private void OnLayoutChanged()

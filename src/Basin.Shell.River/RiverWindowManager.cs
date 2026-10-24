@@ -12,7 +12,7 @@ namespace Basin.Shell.River;
 /// The compositor half of river-window-management-v1. It hands window-management policy to one client and keeps the mechanism: sequences, transactions, scene nodes, borders and bindings.
 /// The consumer owns the shells, seats, outputs and input path, and calls in. All members must run on the compositor thread.
 /// </summary>
-public sealed class RiverWindowManager : IDisposable
+public sealed class RiverWindowManager : IDisposable, IRiverWindowManagerV1Handler
 {
     /// <summary>
     /// The highest version of river-window-management-v1 that the global advertises.
@@ -1362,70 +1362,14 @@ public sealed class RiverWindowManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var resource = new RiverWindowManagerV1Resource(client, version, id);
-
         if (_manager is { IsDestroyed: false })
         {
-            resource.SendUnavailable();
+            new RiverWindowManagerV1Resource(client, version, id, UnavailableManager.Instance).SendUnavailable();
             return;
         }
 
+        var resource = new RiverWindowManagerV1Resource(client, version, id, this);
         _manager = resource;
-        resource.ManageFinish += (_, _) =>
-        {
-            if (_state != SequenceState.Manage)
-            {
-                resource.PostError(
-                    (uint)RiverWindowManagerV1.Error.SequenceOrder,
-                    "manage_finish came outside a manage sequence.");
-                return;
-            }
-
-            FinishManage();
-        };
-        resource.RenderFinish += (_, _) =>
-        {
-            if (_state != SequenceState.Render)
-            {
-                resource.PostError(
-                    (uint)RiverWindowManagerV1.Error.SequenceOrder,
-                    "render_finish came outside a render sequence.");
-                return;
-            }
-
-            FinishRender();
-        };
-        resource.ManageDirty += (_, _) => MarkManageDirtyLazy();
-        resource.GetShellSurface += (_, e) =>
-        {
-            if (Compositor is null || e.Surface is null)
-            {
-                return;
-            }
-
-            var surface = Compositor.ResolveSurface(e.Surface);
-            if (surface is null || !surface.CanSetRole(RiverShellSurface.RoleName) ||
-                surface.Current.Buffer is not null || surface.Pending.Buffer is not null)
-            {
-                resource.PostError(
-                    (uint)RiverWindowManagerV1.Error.Role,
-                    "The surface already has a role or a buffer.");
-                return;
-            }
-
-            var shellResource = new RiverShellSurfaceV1Resource(resource.Client, resource.Version, e.Id);
-            var shell = new RiverShellSurface(this, shellResource, surface, _shellTree);
-            surface.TrySetRole(RiverShellSurface.RoleName, shell);
-            _shellSurfaces.Add(shell);
-            MarkRenderDirty();
-        };
-        resource.Stop += (_, _) =>
-        {
-            resource.SendFinished();
-            DetachManager();
-        };
-        resource.ExitSession += (_, _) => ExitSessionRequested?.Invoke();
-        resource.DestroyRequest += (_, _) => DetachManager();
         resource.Destroyed += (_, _) => DetachManager();
 
         foreach (var window in _windows)
@@ -1498,8 +1442,7 @@ public sealed class RiverWindowManager : IDisposable
 
     private void AnnounceWindow(RiverWindowManagerV1Resource manager, RiverWindow window)
     {
-        var resource = new RiverWindowV1Resource(manager.Client, manager.Version, 0);
-        window.Bind(resource);
+        var resource = window.Bind(manager.Client, manager.Version, 0);
         _windowsByResource[resource] = window;
         manager.SendWindow(resource);
 
@@ -1509,16 +1452,14 @@ public sealed class RiverWindowManager : IDisposable
 
     private void AnnounceOutput(RiverWindowManagerV1Resource manager, RiverOutput output)
     {
-        var resource = new RiverOutputV1Resource(manager.Client, manager.Version, 0);
-        output.Bind(resource);
+        var resource = output.Bind(manager.Client, manager.Version, 0);
         _outputsByResource[resource] = output;
         manager.SendOutput(resource);
     }
 
     private void AnnounceSeat(RiverWindowManagerV1Resource manager, RiverSeat seat)
     {
-        var resource = new RiverSeatV1Resource(manager.Client, manager.Version, 0);
-        seat.Bind(resource);
+        var resource = seat.Bind(manager.Client, manager.Version, 0);
         manager.SendSeat(resource);
 
         resource.SendWlSeat(seat.Seat.NameFor(resource.Client));
@@ -1711,6 +1652,100 @@ public sealed class RiverWindowManager : IDisposable
                 (uint)RiverWindowManagerV1.Error.Unresponsive,
                 "The window manager did not finish its sequence in time.");
             DetachManager();
+        }
+    }
+
+    void IRiverWindowManagerV1Handler.ManageFinish(RiverWindowManagerV1Resource resource)
+    {
+        if (_state != SequenceState.Manage)
+        {
+            resource.PostError(
+                (uint)RiverWindowManagerV1.Error.SequenceOrder,
+                "manage_finish came outside a manage sequence.");
+            return;
+        }
+
+        FinishManage();
+    }
+
+    void IRiverWindowManagerV1Handler.RenderFinish(RiverWindowManagerV1Resource resource)
+    {
+        if (_state != SequenceState.Render)
+        {
+            resource.PostError(
+                (uint)RiverWindowManagerV1.Error.SequenceOrder,
+                "render_finish came outside a render sequence.");
+            return;
+        }
+
+        FinishRender();
+    }
+
+    void IRiverWindowManagerV1Handler.ManageDirty(RiverWindowManagerV1Resource resource) => MarkManageDirtyLazy();
+
+    void IRiverWindowManagerV1Handler.GetShellSurface(RiverWindowManagerV1Resource resource, in RiverWindowManagerV1Resource.GetShellSurfaceEventArgs args)
+    {
+        if (Compositor is null || args.Surface is null)
+        {
+            return;
+        }
+
+        var surface = Compositor.ResolveSurface(args.Surface);
+        if (surface is null || !surface.CanSetRole(RiverShellSurface.RoleName) ||
+            surface.Current.Buffer is not null || surface.Pending.Buffer is not null)
+        {
+            resource.PostError(
+                (uint)RiverWindowManagerV1.Error.Role,
+                "The surface already has a role or a buffer.");
+            return;
+        }
+
+        var shell = new RiverShellSurface(this, resource.Client, resource.Version, args.Id, surface, _shellTree);
+        surface.TrySetRole(RiverShellSurface.RoleName, shell);
+        _shellSurfaces.Add(shell);
+        MarkRenderDirty();
+    }
+
+    void IRiverWindowManagerV1Handler.Stop(RiverWindowManagerV1Resource resource)
+    {
+        resource.SendFinished();
+        DetachManager();
+    }
+
+    void IRiverWindowManagerV1Handler.ExitSession(RiverWindowManagerV1Resource resource) => ExitSessionRequested?.Invoke();
+
+    void IRiverWindowManagerV1Handler.Destroy(RiverWindowManagerV1Resource resource) => DetachManager();
+
+    private sealed class UnavailableManager : IRiverWindowManagerV1Handler
+    {
+        internal static readonly UnavailableManager Instance = new();
+
+        public void Stop(RiverWindowManagerV1Resource resource)
+        {
+        }
+
+        public void Destroy(RiverWindowManagerV1Resource resource)
+        {
+        }
+
+        public void ManageFinish(RiverWindowManagerV1Resource resource)
+        {
+        }
+
+        public void ManageDirty(RiverWindowManagerV1Resource resource)
+        {
+        }
+
+        public void RenderFinish(RiverWindowManagerV1Resource resource)
+        {
+        }
+
+        public void GetShellSurface(RiverWindowManagerV1Resource resource, in RiverWindowManagerV1Resource.GetShellSurfaceEventArgs args)
+        {
+        }
+
+        public void ExitSession(RiverWindowManagerV1Resource resource)
+        {
         }
     }
 }

@@ -9,7 +9,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_surface_manager_v1</c>. Opacity and visible-region requests are double-buffered and go to <see cref="ISurfaceAppearance"/> on the next surface commit.
 /// </summary>
-public sealed class HyprlandSurfaceManager : IDisposable
+public sealed class HyprlandSurfaceManager : IDisposable, IHyprlandSurfaceManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -57,79 +57,38 @@ public sealed class HyprlandSurfaceManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandSurfaceManagerV1Resource(client, version, id);
-        manager.GetHyprlandSurface += (_, e) =>
+        _ = new HyprlandSurfaceManagerV1Resource(client, version, id, this);
+    }
+
+    void IHyprlandSurfaceManagerV1Handler.GetHyprlandSurface(
+        HyprlandSurfaceManagerV1Resource resource,
+        in HyprlandSurfaceManagerV1Resource.GetHyprlandSurfaceEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new HyprlandSurfaceV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
-            {
-                return;
-            }
+            _ = new HyprlandSurfaceV1Resource(resource.Client, resource.Version, args.Id);
+            return;
+        }
 
-            if (!_claimed.Add(surface))
-            {
-                manager.PostError(
-                    (uint)HyprlandSurfaceManagerV1.Error.AlreadyConstructed,
-                    "The wl_surface already has a hyprland surface object.");
-                return;
-            }
+        if (!_claimed.Add(surface))
+        {
+            _ = new HyprlandSurfaceV1Resource(resource.Client, resource.Version, args.Id);
+            resource.PostError(
+                (uint)HyprlandSurfaceManagerV1.Error.AlreadyConstructed,
+                "The wl_surface already has a hyprland surface object.");
+            return;
+        }
 
-            var alive = true;
-            Action committed = () =>
-            {
-                if (surface.Current.TakeExtension<PendingAppearance>() is { } pending)
-                {
-                    pending.ApplyTo(_appearance, surface);
-                    pending.Dispose();
-                }
-            };
-            surface.Committed += committed;
+        var appearance = new SurfaceAppearance(this, surface);
+        var surfaceResource = new HyprlandSurfaceV1Resource(resource.Client, resource.Version, args.Id, appearance);
+        surface.Committed += appearance.OnCommitted;
+        surfaceResource.Destroyed += appearance.OnResourceDestroyed;
+        surface.Destroyed += appearance.OnSurfaceDestroyed;
+    }
 
-            resource.SetOpacity += (_, oe) =>
-            {
-                if (!alive)
-                {
-                    resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_opacity came for a destroyed wl_surface.");
-                    return;
-                }
-
-                var opacity = oe.Opacity.ToDouble();
-                if (opacity < 0.0 || opacity > 1.0)
-                {
-                    resource.PostError((uint)HyprlandSurfaceV1.Error.OutOfRange, "The opacity must be from 0.0 to 1.0.");
-                    return;
-                }
-
-                Stage(surface).Opacity = opacity;
-            };
-            resource.SetVisibleRegion += (_, re) =>
-            {
-                if (!alive)
-                {
-                    resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_visible_region came for a destroyed wl_surface.");
-                    return;
-                }
-
-                Stage(surface).SetRegion(_compositor.ResolveRegion(re.Region)?.Pixman);
-            };
-            resource.Destroyed += (_, _) =>
-            {
-                _claimed.Remove(surface);
-                if (alive)
-                {
-                    var pending = Stage(surface);
-                    pending.Opacity = 1.0;
-                    pending.SetRegion(null);
-                }
-            };
-            surface.Destroyed += () =>
-            {
-                alive = false;
-                _claimed.Remove(surface);
-                surface.Committed -= committed;
-            };
-        };
+    void IHyprlandSurfaceManagerV1Handler.Destroy(HyprlandSurfaceManagerV1Resource resource)
+    {
     }
 
     private static PendingAppearance Stage(Surface surface)
@@ -191,6 +150,71 @@ public sealed class HyprlandSurfaceManager : IDisposable
         {
             _region?.Dispose();
             _region = null;
+        }
+    }
+
+    private sealed class SurfaceAppearance(HyprlandSurfaceManager owner, Surface surface) : IHyprlandSurfaceV1Handler
+    {
+        private bool _alive = true;
+
+        public void OnCommitted()
+        {
+            if (surface.Current.TakeExtension<PendingAppearance>() is { } pending)
+            {
+                pending.ApplyTo(owner._appearance, surface);
+                pending.Dispose();
+            }
+        }
+
+        public void OnResourceDestroyed(object? sender, EventArgs e)
+        {
+            owner._claimed.Remove(surface);
+            if (_alive)
+            {
+                var pending = Stage(surface);
+                pending.Opacity = 1.0;
+                pending.SetRegion(null);
+            }
+        }
+
+        public void OnSurfaceDestroyed()
+        {
+            _alive = false;
+            owner._claimed.Remove(surface);
+            surface.Committed -= OnCommitted;
+        }
+
+        void IHyprlandSurfaceV1Handler.SetOpacity(HyprlandSurfaceV1Resource resource, in HyprlandSurfaceV1Resource.SetOpacityEventArgs args)
+        {
+            if (!_alive)
+            {
+                resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_opacity came for a destroyed wl_surface.");
+                return;
+            }
+
+            var opacity = args.Opacity.ToDouble();
+            if (opacity < 0.0 || opacity > 1.0)
+            {
+                resource.PostError((uint)HyprlandSurfaceV1.Error.OutOfRange, "The opacity must be from 0.0 to 1.0.");
+                return;
+            }
+
+            Stage(surface).Opacity = opacity;
+        }
+
+        void IHyprlandSurfaceV1Handler.SetVisibleRegion(HyprlandSurfaceV1Resource resource, in HyprlandSurfaceV1Resource.SetVisibleRegionEventArgs args)
+        {
+            if (!_alive)
+            {
+                resource.PostError((uint)HyprlandSurfaceV1.Error.NoSurface, "set_visible_region came for a destroyed wl_surface.");
+                return;
+            }
+
+            Stage(surface).SetRegion(owner._compositor.ResolveRegion(args.Region)?.Pixman);
+        }
+
+        void IHyprlandSurfaceV1Handler.Destroy(HyprlandSurfaceV1Resource resource)
+        {
         }
     }
 }

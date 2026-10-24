@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>ext_background_effect_manager_v1</c> global. It advertises blur when the effects capability supports it, and keeps each surface's committed blur region.
 /// </summary>
-public sealed class BackgroundEffectManager : IDisposable
+public sealed class BackgroundEffectManager : IDisposable, IExtBackgroundEffectManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -52,54 +52,96 @@ public sealed class BackgroundEffectManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new ExtBackgroundEffectManagerV1Resource(client, version, id);
+        var manager = new ExtBackgroundEffectManagerV1Resource(client, version, id, this);
         manager.SendCapabilities((ExtBackgroundEffectManagerV1.Capability)_effects);
-        manager.GetBackgroundEffect += (_, e) =>
+    }
+
+    void IExtBackgroundEffectManagerV1Handler.GetBackgroundEffect(ExtBackgroundEffectManagerV1Resource resource, in ExtBackgroundEffectManagerV1Resource.GetBackgroundEffectEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        if (surface is null)
         {
-            var resource = new ExtBackgroundEffectSurfaceV1Resource(client, manager.Version, e.Id);
-            var surface = _compositor.ResolveSurface(e.Surface);
-            if (surface is null)
+            _ = new ExtBackgroundEffectSurfaceV1Resource(resource.Client, resource.Version, args.Id, IgnoredEffect.Instance);
+            return;
+        }
+
+        if (!_claimed.Add(surface))
+        {
+            _ = new ExtBackgroundEffectSurfaceV1Resource(resource.Client, resource.Version, args.Id, IgnoredEffect.Instance);
+            resource.PostError(ErrorBackgroundEffectExists, "The surface already has a background effect object.");
+            return;
+        }
+
+        _ = new EffectSurface(this, resource.Client, resource.Version, args.Id, surface);
+    }
+
+    void IExtBackgroundEffectManagerV1Handler.Destroy(ExtBackgroundEffectManagerV1Resource resource)
+    {
+    }
+
+    private sealed class EffectSurface : IExtBackgroundEffectSurfaceV1Handler
+    {
+        private readonly BackgroundEffectManager _owner;
+        private readonly Surface _surface;
+        private bool _alive = true;
+
+        public EffectSurface(BackgroundEffectManager owner, WlClient client, uint version, uint id, Surface surface)
+        {
+            _owner = owner;
+            _surface = surface;
+            var resource = new ExtBackgroundEffectSurfaceV1Resource(client, version, id, this);
+            resource.Destroyed += OnResourceDestroyed;
+            surface.Destroyed += OnSurfaceDestroyed;
+        }
+
+        void IExtBackgroundEffectSurfaceV1Handler.SetBlurRegion(ExtBackgroundEffectSurfaceV1Resource resource, in ExtBackgroundEffectSurfaceV1Resource.SetBlurRegionEventArgs args)
+        {
+            if (!_alive)
             {
+                resource.PostError(ErrorSurfaceDestroyed, "The wl_surface is destroyed.");
                 return;
             }
 
-            if (!_claimed.Add(surface))
+            var payload = new BlurRegion();
+            if (_owner._compositor.ResolveRegion(args.Region) is { } region)
             {
-                manager.PostError(ErrorBackgroundEffectExists, "The surface already has a background effect object.");
-                return;
+                payload.Region.Copy(region.Pixman);
             }
 
-            var alive = true;
-            resource.SetBlurRegion += (_, re) =>
-            {
-                if (!alive)
-                {
-                    resource.PostError(ErrorSurfaceDestroyed, "The wl_surface is destroyed.");
-                    return;
-                }
+            _surface.Pending.SetExtension(payload);
+        }
 
-                var payload = new BlurRegion();
-                if (_compositor.ResolveRegion(re.Region) is { } region)
-                {
-                    payload.Region.Copy(region.Pixman);
-                }
+        void IExtBackgroundEffectSurfaceV1Handler.Destroy(ExtBackgroundEffectSurfaceV1Resource resource)
+        {
+        }
 
-                surface.Pending.SetExtension(payload);
-            };
-            resource.Destroyed += (_, _) =>
+        private void OnResourceDestroyed(object? sender, EventArgs e)
+        {
+            _owner._claimed.Remove(_surface);
+            if (_alive)
             {
-                _claimed.Remove(surface);
-                if (alive)
-                {
-                    surface.Pending.SetExtension(new BlurRegion());
-                }
-            };
-            surface.Destroyed += () =>
-            {
-                alive = false;
-                _claimed.Remove(surface);
-            };
-        };
+                _surface.Pending.SetExtension(new BlurRegion());
+            }
+        }
+
+        private void OnSurfaceDestroyed()
+        {
+            _alive = false;
+            _owner._claimed.Remove(_surface);
+        }
+    }
+
+    private sealed class IgnoredEffect : IExtBackgroundEffectSurfaceV1Handler
+    {
+        public static readonly IgnoredEffect Instance = new();
+
+        void IExtBackgroundEffectSurfaceV1Handler.SetBlurRegion(ExtBackgroundEffectSurfaceV1Resource resource, in ExtBackgroundEffectSurfaceV1Resource.SetBlurRegionEventArgs args)
+        {
+        }
+
+        void IExtBackgroundEffectSurfaceV1Handler.Destroy(ExtBackgroundEffectSurfaceV1Resource resource)
+        {
+        }
     }
 
     private sealed class BlurRegion : IDisposable

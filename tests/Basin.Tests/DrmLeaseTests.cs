@@ -86,6 +86,41 @@ public sealed class DrmLeaseTests
     }
 
     [Fact]
+    public void Release_is_answered_with_released()
+    {
+        using var host = new CompositorTestHost();
+        var device = new TestDrmLeaseDevice();
+        using var manager = new DrmLeaseManager(host.Display, device);
+
+        Basin.Desktop.Protocol.WpDrmLeaseDeviceV1? proxy = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "wp_drm_lease_device_v1")
+            {
+                proxy = registry.Bind<Basin.Desktop.Protocol.WpDrmLeaseDeviceV1>(e.Name, 1);
+            }
+        };
+        host.PumpToClient();
+
+        var done = false;
+        var released = false;
+        var connectors = 0;
+        proxy!.DrmFd += (_, e) => close(e.Fd);
+        proxy.Done += (_, _) => done = true;
+        proxy.Connector += (_, _) => connectors++;
+        proxy.Released += (_, _) => released = true;
+        host.PumpUntil(() => done);
+
+        proxy.Release();
+        host.PumpUntil(() => released);
+
+        manager.OfferConnector("DP-3", "late", 80, [80]);
+        host.PumpToClient();
+        Assert.Equal(0, connectors);
+    }
+
+    [Fact]
     public void A_lease_the_device_ends_by_itself_reaches_the_client()
     {
         using var host = new CompositorTestHost();

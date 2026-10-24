@@ -127,8 +127,9 @@ public sealed class OutputManagementManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new ZwlrOutputManagerV1Resource(client, version, id);
-        var heads = new List<HeadState>();
+        var binding = new ManagerBinding(this, client, version, id);
+        var manager = binding.Resource;
+        var heads = binding.Heads;
         _managers.Add((manager, heads));
         manager.Destroyed += (_, _) => _managers.RemoveAll(entry => entry.Manager == manager);
 
@@ -143,12 +144,6 @@ public sealed class OutputManagementManager : IDisposable
         }
 
         manager.SendDone(_serial);
-
-        manager.CreateConfiguration += (_, e) =>
-        {
-            var configuration = new ZwlrOutputConfigurationV1Resource(client, manager.Version, e.Id);
-            _ = new Configuration(this, configuration, e.Serial, heads);
-        };
     }
 
     private HeadState CreateHead(ZwlrOutputManagerV1Resource manager, IOutput output)
@@ -223,10 +218,37 @@ public sealed class OutputManagementManager : IDisposable
         }
     }
 
-    private sealed class Configuration
+    private sealed class ManagerBinding : IZwlrOutputManagerV1Handler
+    {
+        private readonly OutputManagementManager _owner;
+
+        public ManagerBinding(OutputManagementManager owner, WlClient client, uint version, uint id)
+        {
+            _owner = owner;
+            Resource = new ZwlrOutputManagerV1Resource(client, version, id, this);
+        }
+
+        public ZwlrOutputManagerV1Resource Resource { get; }
+
+        public List<HeadState> Heads { get; } = [];
+
+        void IZwlrOutputManagerV1Handler.CreateConfiguration(
+            ZwlrOutputManagerV1Resource resource,
+            in ZwlrOutputManagerV1Resource.CreateConfigurationEventArgs args) =>
+            _ = new Configuration(_owner, resource.Client, resource.Version, args.Id, args.Serial, Heads);
+
+        void IZwlrOutputManagerV1Handler.Stop(ZwlrOutputManagerV1Resource resource)
+        {
+            resource.SendFinished();
+            resource.Destroy();
+        }
+    }
+
+    private sealed class Configuration : IZwlrOutputConfigurationV1Handler
     {
         private readonly OutputManagementManager _owner;
         private readonly ZwlrOutputConfigurationV1Resource _resource;
+        private readonly List<HeadState> _heads;
         private readonly bool _stale;
         private readonly List<Change> _changes = [];
 
@@ -240,64 +262,50 @@ public sealed class OutputManagementManager : IDisposable
             bool? AdaptiveSync);
         private readonly HashSet<IOutput> _configured = [];
 
-        public Configuration(OutputManagementManager owner, ZwlrOutputConfigurationV1Resource resource, uint serial, List<HeadState> heads)
+        public Configuration(OutputManagementManager owner, WlClient client, uint version, uint id, uint serial, List<HeadState> heads)
         {
             _owner = owner;
-            _resource = resource;
+            _heads = heads;
             _stale = serial != owner._serial;
+            _resource = new ZwlrOutputConfigurationV1Resource(client, version, id, this);
+        }
 
-            resource.EnableHead += (_, e) =>
+        void IZwlrOutputConfigurationV1Handler.EnableHead(
+            ZwlrOutputConfigurationV1Resource resource,
+            in ZwlrOutputConfigurationV1Resource.EnableHeadEventArgs args)
+        {
+            var target = args.Head;
+            var head = _heads.FirstOrDefault(h => h.Head == target);
+            if (head is null)
             {
-                var head = heads.FirstOrDefault(h => h.Head == e.Head);
-                if (head is null)
-                {
-                    return;
-                }
+                return;
+            }
 
-                var configurationHead = new ZwlrOutputConfigurationHeadV1Resource(resource.Client, resource.Version, e.Id);
-                var entryIndex = _changes.Count;
-                _changes.Add(new Change(head, true, null, null, null, null, null));
+            var entryIndex = _changes.Count;
+            _ = new ConfigurationHead(this, head, entryIndex, resource.Client, resource.Version, args.Id);
+            _changes.Add(new Change(head, true, null, null, null, null, null));
+            _configured.Add(head.Output);
+        }
+
+        void IZwlrOutputConfigurationV1Handler.DisableHead(
+            ZwlrOutputConfigurationV1Resource resource,
+            in ZwlrOutputConfigurationV1Resource.DisableHeadEventArgs args)
+        {
+            var target = args.Head;
+            var head = _heads.FirstOrDefault(h => h.Head == target);
+            if (head is not null)
+            {
+                _changes.Add(new Change(head, false, null, null, null, null, null));
                 _configured.Add(head.Output);
-                configurationHead.SetMode += (_, me) =>
-                {
-                    var mode = head.Modes.FirstOrDefault(m => m.Resource == me.Mode);
-                    _changes[entryIndex] = _changes[entryIndex] with { Mode = mode.Mode };
-                };
-                configurationHead.SetCustomMode += (_, me) =>
-                    _changes[entryIndex] = _changes[entryIndex] with { Mode = new OutputMode(me.Width, me.Height, me.Refresh) };
-                configurationHead.SetPosition += (_, pe) =>
-                    _changes[entryIndex] = _changes[entryIndex] with { Position = new Point(pe.X, pe.Y) };
-                configurationHead.SetScale += (_, se) =>
-                    _changes[entryIndex] = _changes[entryIndex] with { Scale = se.Scale.ToDouble() };
-                configurationHead.SetTransform += (_, te) =>
-                    _changes[entryIndex] = _changes[entryIndex] with { Transform = (OutputTransform)te.Transform };
-                configurationHead.SetAdaptiveSync += (_, ae) =>
-                {
-                    if (ae.State is not (ZwlrOutputHeadV1.AdaptiveSyncState.Disabled or ZwlrOutputHeadV1.AdaptiveSyncState.Enabled))
-                    {
-                        configurationHead.PostError(
-                            (uint)ZwlrOutputConfigurationHeadV1.Error.InvalidAdaptiveSyncState,
-                            $"Adaptive sync state {(uint)ae.State} is not a known value.");
-                        return;
-                    }
+            }
+        }
 
-                    _changes[entryIndex] = _changes[entryIndex] with
-                    {
-                        AdaptiveSync = ae.State == ZwlrOutputHeadV1.AdaptiveSyncState.Enabled,
-                    };
-                };
-            };
-            resource.DisableHead += (_, e) =>
-            {
-                var head = heads.FirstOrDefault(h => h.Head == e.Head);
-                if (head is not null)
-                {
-                    _changes.Add(new Change(head, false, null, null, null, null, null));
-                    _configured.Add(head.Output);
-                }
-            };
-            resource.Test += (_, _) => Finish(apply: false);
-            resource.Apply += (_, _) => Finish(apply: true);
+        void IZwlrOutputConfigurationV1Handler.Test(ZwlrOutputConfigurationV1Resource resource) => Finish(apply: false);
+
+        void IZwlrOutputConfigurationV1Handler.Apply(ZwlrOutputConfigurationV1Resource resource) => Finish(apply: true);
+
+        void IZwlrOutputConfigurationV1Handler.Destroy(ZwlrOutputConfigurationV1Resource resource)
+        {
         }
 
         private void Finish(bool apply)
@@ -340,6 +348,70 @@ public sealed class OutputManagementManager : IDisposable
             if (apply)
             {
                 _owner.Refresh();
+            }
+        }
+
+        private sealed class ConfigurationHead : IZwlrOutputConfigurationHeadV1Handler
+        {
+            private readonly Configuration _configuration;
+            private readonly HeadState _head;
+            private readonly int _entryIndex;
+
+            public ConfigurationHead(Configuration configuration, HeadState head, int entryIndex, WlClient client, uint version, uint id)
+            {
+                _configuration = configuration;
+                _head = head;
+                _entryIndex = entryIndex;
+                _ = new ZwlrOutputConfigurationHeadV1Resource(client, version, id, this);
+            }
+
+            private List<Change> Changes => _configuration._changes;
+
+            void IZwlrOutputConfigurationHeadV1Handler.SetMode(
+                ZwlrOutputConfigurationHeadV1Resource resource,
+                in ZwlrOutputConfigurationHeadV1Resource.SetModeEventArgs args)
+            {
+                var target = args.Mode;
+                var mode = _head.Modes.FirstOrDefault(m => m.Resource == target);
+                Changes[_entryIndex] = Changes[_entryIndex] with { Mode = mode.Mode };
+            }
+
+            void IZwlrOutputConfigurationHeadV1Handler.SetCustomMode(
+                ZwlrOutputConfigurationHeadV1Resource resource,
+                in ZwlrOutputConfigurationHeadV1Resource.SetCustomModeEventArgs args) =>
+                Changes[_entryIndex] = Changes[_entryIndex] with { Mode = new OutputMode(args.Width, args.Height, args.Refresh) };
+
+            void IZwlrOutputConfigurationHeadV1Handler.SetPosition(
+                ZwlrOutputConfigurationHeadV1Resource resource,
+                in ZwlrOutputConfigurationHeadV1Resource.SetPositionEventArgs args) =>
+                Changes[_entryIndex] = Changes[_entryIndex] with { Position = new Point(args.X, args.Y) };
+
+            void IZwlrOutputConfigurationHeadV1Handler.SetScale(
+                ZwlrOutputConfigurationHeadV1Resource resource,
+                in ZwlrOutputConfigurationHeadV1Resource.SetScaleEventArgs args) =>
+                Changes[_entryIndex] = Changes[_entryIndex] with { Scale = args.Scale.ToDouble() };
+
+            void IZwlrOutputConfigurationHeadV1Handler.SetTransform(
+                ZwlrOutputConfigurationHeadV1Resource resource,
+                in ZwlrOutputConfigurationHeadV1Resource.SetTransformEventArgs args) =>
+                Changes[_entryIndex] = Changes[_entryIndex] with { Transform = (OutputTransform)args.Transform };
+
+            void IZwlrOutputConfigurationHeadV1Handler.SetAdaptiveSync(
+                ZwlrOutputConfigurationHeadV1Resource resource,
+                in ZwlrOutputConfigurationHeadV1Resource.SetAdaptiveSyncEventArgs args)
+            {
+                if (args.State is not (ZwlrOutputHeadV1.AdaptiveSyncState.Disabled or ZwlrOutputHeadV1.AdaptiveSyncState.Enabled))
+                {
+                    resource.PostError(
+                        (uint)ZwlrOutputConfigurationHeadV1.Error.InvalidAdaptiveSyncState,
+                        $"Adaptive sync state {(uint)args.State} is not a known value.");
+                    return;
+                }
+
+                Changes[_entryIndex] = Changes[_entryIndex] with
+                {
+                    AdaptiveSync = args.State == ZwlrOutputHeadV1.AdaptiveSyncState.Enabled,
+                };
             }
         }
     }

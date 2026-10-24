@@ -1,54 +1,18 @@
 using Basin.Scene;
 using Basin.Shell.River.Protocol;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverNode
+internal sealed class RiverNode : IRiverNodeV1Handler
 {
     private readonly RiverWindowManager _manager;
 
-    internal RiverNode(RiverWindowManager manager, RiverNodeV1Resource resource, Func<SceneTree?> tree)
+    internal RiverNode(RiverWindowManager manager, WlClient client, uint version, uint id, Func<SceneTree?> tree)
     {
         _manager = manager;
-        Resource = resource;
         Tree = tree;
-
-        resource.SetPosition += (_, e) =>
-        {
-            if (_manager.EnsureRendering())
-            {
-                RequestedPosition = new Point(e.X, e.Y);
-            }
-        };
-        resource.PlaceTop += (_, _) =>
-        {
-            if (_manager.EnsureRendering())
-            {
-                _manager.RenderOrder.PlaceTop(this);
-            }
-        };
-        resource.PlaceBottom += (_, _) =>
-        {
-            if (_manager.EnsureRendering())
-            {
-                _manager.RenderOrder.PlaceBottom(this);
-            }
-        };
-        resource.PlaceAbove += (_, e) =>
-        {
-            if (_manager.EnsureRendering() && _manager.ResolveNode(e.Other) is { } other)
-            {
-                _manager.RenderOrder.PlaceAbove(this, other);
-            }
-        };
-        resource.PlaceBelow += (_, e) =>
-        {
-            if (_manager.EnsureRendering() && _manager.ResolveNode(e.Other) is { } other)
-            {
-                _manager.RenderOrder.PlaceBelow(this, other);
-            }
-        };
-        resource.DestroyRequest += (_, _) => _manager.ForgetNode(this);
+        Resource = new RiverNodeV1Resource(client, version, id, this);
     }
 
     internal RiverNodeV1Resource Resource { get; }
@@ -56,4 +20,46 @@ internal sealed class RiverNode
     internal Func<SceneTree?> Tree { get; }
 
     internal Point? RequestedPosition { get; private set; }
+
+    void IRiverNodeV1Handler.SetPosition(RiverNodeV1Resource resource, in RiverNodeV1Resource.SetPositionEventArgs args)
+    {
+        if (_manager.EnsureRendering())
+        {
+            RequestedPosition = new Point(args.X, args.Y);
+        }
+    }
+
+    void IRiverNodeV1Handler.PlaceTop(RiverNodeV1Resource resource)
+    {
+        if (_manager.EnsureRendering())
+        {
+            _manager.RenderOrder.PlaceTop(this);
+        }
+    }
+
+    void IRiverNodeV1Handler.PlaceBottom(RiverNodeV1Resource resource)
+    {
+        if (_manager.EnsureRendering())
+        {
+            _manager.RenderOrder.PlaceBottom(this);
+        }
+    }
+
+    void IRiverNodeV1Handler.PlaceAbove(RiverNodeV1Resource resource, in RiverNodeV1Resource.PlaceAboveEventArgs args)
+    {
+        if (_manager.EnsureRendering() && _manager.ResolveNode(args.Other) is { } other)
+        {
+            _manager.RenderOrder.PlaceAbove(this, other);
+        }
+    }
+
+    void IRiverNodeV1Handler.PlaceBelow(RiverNodeV1Resource resource, in RiverNodeV1Resource.PlaceBelowEventArgs args)
+    {
+        if (_manager.EnsureRendering() && _manager.ResolveNode(args.Other) is { } other)
+        {
+            _manager.RenderOrder.PlaceBelow(this, other);
+        }
+    }
+
+    void IRiverNodeV1Handler.Destroy(RiverNodeV1Resource resource) => _manager.ForgetNode(this);
 }

@@ -182,34 +182,32 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
 
     internal void OnKeyboardFocus(Surface surface) => OfferSelectionTo(surface);
 
-    internal void WireDevice(SeatClient seatClient, WlDataDeviceResource device)
+    internal void WireDevice(SeatClient seatClient)
     {
-        device.SetSelection += (_, e) =>
-        {
-            var source = DataSourceRegistry.Resolve(e.Source);
-            if (SelectionRequested is { } handler)
-            {
-                handler(source);
-            }
-            else if (Store is { } store)
-            {
-                store.SetSelection(Capabilities.SelectionKind.Clipboard, source, e.Serial);
-            }
-            else
-            {
-                SetSelection(source);
-            }
-        };
-
-        device.StartDrag += (_, e) => HandleStartDrag(seatClient, e);
-
         if (_seat.Keyboard.Focus is { } focus && _seat.ClientOf(focus) == seatClient)
         {
             OfferSelectionTo(focus);
         }
     }
 
-    private void HandleStartDrag(SeatClient seatClient, WlDataDeviceResource.StartDragEventArgs e)
+    internal void OnSetSelection(in WlDataDeviceResource.SetSelectionEventArgs e)
+    {
+        var source = DataSourceRegistry.Resolve(e.Source);
+        if (SelectionRequested is { } handler)
+        {
+            handler(source);
+        }
+        else if (Store is { } store)
+        {
+            store.SetSelection(Capabilities.SelectionKind.Clipboard, source, e.Serial);
+        }
+        else
+        {
+            SetSelection(source);
+        }
+    }
+
+    internal void HandleStartDrag(SeatClient seatClient, in WlDataDeviceResource.StartDragEventArgs e)
     {
         var origin = _seat.ResolveSurface(e.Origin);
         if (origin is null || !_seat.ValidateImplicitGrabSerial(e.Serial) || _seat.ClientOf(origin) != seatClient)
@@ -250,7 +248,7 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         {
             if (Selection is { IsDestroyed: false } selection)
             {
-                var offer = CreateOffer(device, selection, dnd: false);
+                var offer = CreateOffer(device, selection, dnd: false, grab: null);
                 device.SendSelection(offer);
             }
             else
@@ -260,45 +258,64 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         }
     }
 
-    private WlDataOfferResource CreateOffer(WlDataDeviceResource device, DataSource source, bool dnd)
+    private WlDataOfferResource CreateOffer(WlDataDeviceResource device, DataSource source, bool dnd, DragGrab? grab)
     {
-        var offer = new WlDataOfferResource(device.Client, device.Version, 0);
+        var offer = new WlDataOfferResource(device.Client, device.Version, 0, new DataOffer(this, source, dnd, grab));
         device.SendDataOffer(offer);
         foreach (var mime in source.MimeTypes)
         {
             offer.SendOffer(mime);
         }
 
-        string? acceptedMime = null;
-        offer.Accept += (_, e) =>
+        return offer;
+    }
+
+    private sealed class DataOffer(SeatDataDevice owner, DataSource source, bool dnd, DragGrab? grab) : IWlDataOfferHandler
+    {
+        private string? _acceptedMime;
+
+        void IWlDataOfferHandler.Accept(WlDataOfferResource resource, in WlDataOfferResource.AcceptEventArgs args)
         {
-            if (dnd && acceptedMime != e.MimeType)
+            if (dnd && _acceptedMime != args.MimeType)
             {
-                source.Target(e.MimeType);
+                source.Target(args.MimeType);
             }
 
-            acceptedMime = e.MimeType;
-        };
+            _acceptedMime = args.MimeType;
+            grab?.OnAccept(args.MimeType);
+        }
 
-        offer.Receive += (_, e) =>
+        void IWlDataOfferHandler.Receive(WlDataOfferResource resource, in WlDataOfferResource.ReceiveEventArgs args)
         {
-            if (!dnd && Store is { } store)
+            if (!dnd && owner.Store is { } store)
             {
-                store.Receive(Capabilities.SelectionKind.Clipboard, e.MimeType, new ClientFd(e.Fd, offer.Client));
+                store.Receive(Capabilities.SelectionKind.Clipboard, args.MimeType, new ClientFd(args.Fd, resource.Client));
                 return;
             }
 
-            source.Send(e.MimeType, new ClientFd(e.Fd, offer.Client));
-        };
-
-        if (dnd && offer.Version >= 3)
-        {
-            offer.SetActions += (_, e) => _drag?.NegotiateActions(
-                offer, source, (WlDataDeviceManager.DndAction)e.DndActions, (WlDataDeviceManager.DndAction)e.PreferredAction);
-            offer.Finish += (_, _) => source.Finished();
+            source.Send(args.MimeType, new ClientFd(args.Fd, resource.Client));
         }
 
-        return offer;
+        void IWlDataOfferHandler.Destroy(WlDataOfferResource resource)
+        {
+        }
+
+        void IWlDataOfferHandler.Finish(WlDataOfferResource resource)
+        {
+            if (dnd && resource.Version >= 3)
+            {
+                source.Finished();
+            }
+        }
+
+        void IWlDataOfferHandler.SetActions(WlDataOfferResource resource, in WlDataOfferResource.SetActionsEventArgs args)
+        {
+            if (dnd && resource.Version >= 3)
+            {
+                owner._drag?.NegotiateActions(
+                    resource, source, (WlDataDeviceManager.DndAction)args.DndActions, (WlDataDeviceManager.DndAction)args.PreferredAction);
+            }
+        }
     }
 
     private sealed class DragGrab : IPointerGrab
@@ -320,6 +337,8 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         }
 
         internal DataSource? Source => _source;
+
+        internal void OnAccept(string? mimeType) => _accepted = mimeType is not null;
 
         public void Enter(Surface? surface, double x, double y)
         {
@@ -354,8 +373,7 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
             var serial = _seat.NextSerial(SerialKind.Other);
             if (_source is { IsDestroyed: false } source)
             {
-                _offer = _owner.CreateOffer(device, source, dnd: true);
-                _offer.Accept += (_, e) => _accepted = e.MimeType is not null;
+                _offer = _owner.CreateOffer(device, source, dnd: true, grab: this);
                 if (_offer.Version >= 3 && source.Actions != 0)
                 {
                     _offer.SendSourceActions(source.Actions);

@@ -8,7 +8,7 @@ namespace Basin;
 /// <summary>
 /// basin's own <c>wl_shm</c> global over the WaylandSharpest shared-memory seam. It enforces <see cref="ShmLimits"/> and never moves a mapping that a reader holds.
 /// </summary>
-public sealed class ManagedShmGlobal : IDisposable
+public sealed class ManagedShmGlobal : IDisposable, IWlShmHandler
 {
     /// <summary>The <c>wl_shm</c> version that this global advertises.</summary>
     public const int Version = 2;
@@ -29,11 +29,23 @@ public sealed class ManagedShmGlobal : IDisposable
         public int BufferCount;
     }
 
-    private sealed class PoolEntry
+    private sealed class PoolEntry : IWlShmPoolHandler
     {
+        public required ManagedShmGlobal Owner;
+        public required ClientState State;
         public required ShmPool Pool;
         public long AccountedBytes;
         public bool Released;
+
+        void IWlShmPoolHandler.CreateBuffer(WlShmPoolResource resource, in WlShmPoolResource.CreateBufferEventArgs args) =>
+            Owner.OnCreateBuffer(resource, this, in args);
+
+        void IWlShmPoolHandler.Destroy(WlShmPoolResource resource)
+        {
+        }
+
+        void IWlShmPoolHandler.Resize(WlShmPoolResource resource, in WlShmPoolResource.ResizeEventArgs args) =>
+            Owner.OnResize(resource, this, in args);
     }
 
     /// <summary>
@@ -127,138 +139,146 @@ public sealed class ManagedShmGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var shm = new WlShmResource(client, version, id);
+        var shm = new WlShmResource(client, version, id, this);
         foreach (var format in _formats)
         {
             shm.SendFormat((WlShm.Format)format.ToWlShm());
         }
+    }
 
-        shm.CreatePool += (_, e) =>
+    void IWlShmHandler.Release(WlShmResource resource)
+    {
+    }
+
+    void IWlShmHandler.CreatePool(WlShmResource resource, in WlShmResource.CreatePoolEventArgs args)
+    {
+        var client = resource.Client;
+        var state = StateOf(client);
+        if (args.Size <= 0)
         {
-            var state = StateOf(client);
-            if (e.Size <= 0)
-            {
-                client.CloseFd(e.Fd);
-                shm.PostError((uint)WlShm.Error.InvalidStride, $"invalid pool size {e.Size}");
-                return;
-            }
+            client.CloseFd(args.Fd);
+            resource.PostError((uint)WlShm.Error.InvalidStride, $"invalid pool size {args.Size}");
+            return;
+        }
 
-            if (state.PoolCount >= _limits.MaxPools)
-            {
-                client.CloseFd(e.Fd);
-                shm.PostError((uint)WlShm.Error.InvalidFd, $"too many pools (limit {_limits.MaxPools})");
-                return;
-            }
+        if (state.PoolCount >= _limits.MaxPools)
+        {
+            client.CloseFd(args.Fd);
+            resource.PostError((uint)WlShm.Error.InvalidFd, $"too many pools (limit {_limits.MaxPools})");
+            return;
+        }
 
-            if (state.MappedBytes + e.Size > _limits.MaxBytes)
-            {
-                client.CloseFd(e.Fd);
-                shm.PostError((uint)WlShm.Error.InvalidFd, $"pool exceeds the {_limits.MaxBytes}-byte cap");
-                return;
-            }
+        if (state.MappedBytes + args.Size > _limits.MaxBytes)
+        {
+            client.CloseFd(args.Fd);
+            resource.PostError((uint)WlShm.Error.InvalidFd, $"pool exceeds the {_limits.MaxBytes}-byte cap");
+            return;
+        }
 
-            if (SharedMemoryFor(client) is not { } memory)
-            {
-                client.CloseFd(e.Fd);
-                shm.PostError(
-                    (uint)WlShm.Error.InvalidFd,
-                    "this host maps no client pool fd; a client reaches it over a transport that carries its own");
-                return;
-            }
+        if (SharedMemoryFor(client) is not { } memory)
+        {
+            client.CloseFd(args.Fd);
+            resource.PostError(
+                (uint)WlShm.Error.InvalidFd,
+                "this host maps no client pool fd; a client reaches it over a transport that carries its own");
+            return;
+        }
 
-            IMappedMemory mapping;
-            try
-            {
-                mapping = memory.Map(e.Fd, e.Size);
-            }
-            catch (Exception ex) when (ex is WaylandException or ArgumentOutOfRangeException)
-            {
-                shm.PostError((uint)WlShm.Error.InvalidFd, $"create_pool failed: {ex.Message}");
-                return;
-            }
+        IMappedMemory mapping;
+        try
+        {
+            mapping = memory.Map(args.Fd, args.Size);
+        }
+        catch (Exception ex) when (ex is WaylandException or ArgumentOutOfRangeException)
+        {
+            resource.PostError((uint)WlShm.Error.InvalidFd, $"create_pool failed: {ex.Message}");
+            return;
+        }
 
-            state.SharedMemory = memory;
-            var pool = new ShmPool(mapping, freed => state.Pools.Remove(freed));
-            state.PoolCount++;
-            state.MappedBytes += e.Size;
-            state.Pools.Add(pool);
+        state.SharedMemory = memory;
+        var pool = new ShmPool(mapping, freed => state.Pools.Remove(freed));
+        state.PoolCount++;
+        state.MappedBytes += args.Size;
+        state.Pools.Add(pool);
 
-            var entry = new PoolEntry { Pool = pool, AccountedBytes = e.Size };
-            var poolResource = new WlShmPoolResource(client, shm.Version, e.Id);
-            WirePool(client, poolResource, entry, state);
+        var entry = new PoolEntry { Owner = this, State = state, Pool = pool, AccountedBytes = args.Size };
+        var poolResource = new WlShmPoolResource(client, resource.Version, args.Id, entry);
+        WirePool(poolResource, entry, state);
+    }
+
+    private void OnCreateBuffer(WlShmPoolResource poolResource, PoolEntry entry, in WlShmPoolResource.CreateBufferEventArgs args)
+    {
+        var client = poolResource.Client;
+        var state = entry.State;
+        if (state.BufferCount >= _limits.MaxBuffers)
+        {
+            poolResource.PostError((uint)WlShm.Error.InvalidFd, $"too many buffers (limit {_limits.MaxBuffers})");
+            return;
+        }
+
+        var format = DrmFormatExtensions.FromWlShm((uint)args.Format);
+        if (!_formats.Contains(format))
+        {
+            poolResource.PostError((uint)WlShm.Error.InvalidFormat, $"unsupported format {args.Format}");
+            return;
+        }
+
+        if (args.Width <= 0 || args.Height <= 0 ||
+            args.Stride < (long)args.Width * format.BytesPerPixel() ||
+            !entry.Pool.TryGetRegion(args.Offset, args.Height, args.Stride, out nint _))
+        {
+            poolResource.PostError(
+                (uint)WlShm.Error.InvalidStride,
+                $"buffer {args.Width}x{args.Height} stride {args.Stride} offset {args.Offset} out of pool bounds ({entry.Pool.Size})");
+            return;
+        }
+
+        var bufferResource = new WlBufferResource(client, 1, args.Id);
+        var buffer = new ManagedShmBuffer(
+            entry.Pool, args.Offset, args.Width, args.Height, args.Stride, format,
+            Policy == ShmAccessPolicy.Guarded ? state.SharedMemory ?? _sharedMemory : null);
+        state.BufferCount++;
+        _registry.Register(bufferResource.RawHandle, buffer);
+        buffer.Released += () =>
+        {
+            if (!bufferResource.IsDestroyed)
+            {
+                bufferResource.SendRelease();
+            }
+        };
+        bufferResource.Destroyed += (_, _) =>
+        {
+            state.BufferCount--;
+            buffer.Destroy();
         };
     }
 
-    private void WirePool(WlClient client, WlShmPoolResource poolResource, PoolEntry entry, ClientState state)
+    private void OnResize(WlShmPoolResource poolResource, PoolEntry entry, in WlShmPoolResource.ResizeEventArgs args)
     {
-        poolResource.CreateBuffer += (_, e) =>
+        var state = entry.State;
+        var newAccounted = Math.Max(args.Size > 0 ? args.Size : 0, entry.AccountedBytes);
+        if (state.MappedBytes - entry.AccountedBytes + newAccounted > _limits.MaxBytes)
         {
-            if (state.BufferCount >= _limits.MaxBuffers)
-            {
-                poolResource.PostError((uint)WlShm.Error.InvalidFd, $"too many buffers (limit {_limits.MaxBuffers})");
-                return;
-            }
+            poolResource.PostError((uint)WlShm.Error.InvalidFd, $"resize exceeds the {_limits.MaxBytes}-byte cap");
+            return;
+        }
 
-            var format = DrmFormatExtensions.FromWlShm((uint)e.Format);
-            if (!_formats.Contains(format))
-            {
-                poolResource.PostError((uint)WlShm.Error.InvalidFormat, $"unsupported format {e.Format}");
-                return;
-            }
-
-            if (e.Width <= 0 || e.Height <= 0 ||
-                e.Stride < (long)e.Width * format.BytesPerPixel() ||
-                !entry.Pool.TryGetRegion(e.Offset, e.Height, e.Stride, out nint _))
-            {
-                poolResource.PostError(
-                    (uint)WlShm.Error.InvalidStride,
-                    $"buffer {e.Width}x{e.Height} stride {e.Stride} offset {e.Offset} out of pool bounds ({entry.Pool.Size})");
-                return;
-            }
-
-            var bufferResource = new WlBufferResource(client, 1, e.Id);
-            var buffer = new ManagedShmBuffer(
-                entry.Pool, e.Offset, e.Width, e.Height, e.Stride, format,
-                Policy == ShmAccessPolicy.Guarded ? state.SharedMemory ?? _sharedMemory : null);
-            state.BufferCount++;
-            _registry.Register(bufferResource.RawHandle, buffer);
-            buffer.Released += () =>
-            {
-                if (!bufferResource.IsDestroyed)
-                {
-                    bufferResource.SendRelease();
-                }
-            };
-            bufferResource.Destroyed += (_, _) =>
-            {
-                state.BufferCount--;
-                buffer.Destroy();
-            };
-        };
-
-        poolResource.Resize += (_, e) =>
+        try
         {
-            var newAccounted = Math.Max(e.Size > 0 ? e.Size : 0, entry.AccountedBytes);
-            if (state.MappedBytes - entry.AccountedBytes + newAccounted > _limits.MaxBytes)
-            {
-                poolResource.PostError((uint)WlShm.Error.InvalidFd, $"resize exceeds the {_limits.MaxBytes}-byte cap");
-                return;
-            }
+            entry.Pool.Resize(args.Size);
+        }
+        catch (WaylandException ex)
+        {
+            poolResource.PostError((uint)WlShm.Error.InvalidFd, $"resize failed: {ex.Message}");
+            return;
+        }
 
-            try
-            {
-                entry.Pool.Resize(e.Size);
-            }
-            catch (WaylandException ex)
-            {
-                poolResource.PostError((uint)WlShm.Error.InvalidFd, $"resize failed: {ex.Message}");
-                return;
-            }
+        state.MappedBytes += newAccounted - entry.AccountedBytes;
+        entry.AccountedBytes = newAccounted;
+    }
 
-            state.MappedBytes += newAccounted - entry.AccountedBytes;
-            entry.AccountedBytes = newAccounted;
-        };
-
+    private static void WirePool(WlShmPoolResource poolResource, PoolEntry entry, ClientState state)
+    {
         poolResource.Destroyed += (_, _) =>
         {
             if (entry.Released)

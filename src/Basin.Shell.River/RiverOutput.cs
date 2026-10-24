@@ -1,8 +1,9 @@
 using Basin.Shell.River.Protocol;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverOutput
+internal sealed class RiverOutput : IRiverOutputV1Handler
 {
     private readonly RiverWindowManager _manager;
     private Point _sentPosition;
@@ -56,36 +57,39 @@ internal sealed class RiverOutput
     private OutputMode _lastMode;
     private double _lastScale;
 
-    internal void Bind(RiverOutputV1Resource resource)
+    internal RiverOutputV1Resource Bind(WlClient client, uint version, uint id)
     {
+        var resource = new RiverOutputV1Resource(client, version, id, this);
         Resource = resource;
         _positionSent = false;
         _dimensionsSent = false;
         _wlOutputSent = false;
         _captureSessionsSent = false;
+        return resource;
+    }
 
-        resource.SetPresentationMode += (_, e) =>
+    void IRiverOutputV1Handler.SetPresentationMode(RiverOutputV1Resource resource, in RiverOutputV1Resource.SetPresentationModeEventArgs args)
+    {
+        if (!_manager.EnsureRendering())
         {
-            if (!_manager.EnsureRendering())
-            {
-                return;
-            }
+            return;
+        }
 
-            if (e.Mode is not (RiverOutputV1.PresentationMode.Vsync or RiverOutputV1.PresentationMode.Async))
-            {
-                resource.PostError(
-                    (uint)RiverOutputV1.Error.InvalidPresentationMode,
-                    $"Presentation mode {(uint)e.Mode} is not a known value.");
-                return;
-            }
-
-            PresentationMode = e.Mode;
-        };
-        resource.DestroyRequest += (_, _) =>
+        if (args.Mode is not (RiverOutputV1.PresentationMode.Vsync or RiverOutputV1.PresentationMode.Async))
         {
-            Resource = null;
-            _manager.ForgetOutputResource(resource);
-        };
+            resource.PostError(
+                (uint)RiverOutputV1.Error.InvalidPresentationMode,
+                $"Presentation mode {(uint)args.Mode} is not a known value.");
+            return;
+        }
+
+        PresentationMode = args.Mode;
+    }
+
+    void IRiverOutputV1Handler.Destroy(RiverOutputV1Resource resource)
+    {
+        Resource = null;
+        _manager.ForgetOutputResource(resource);
     }
 
     internal void SendChanges(uint version)

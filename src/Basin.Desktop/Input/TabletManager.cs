@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_tablet_manager_v2</c> global. It announces every tablet, tool and pad to every tablet seat, and sends tool and pad events to the client of the focused surface.
 /// </summary>
-public sealed class TabletManager : ITabletObserver, IDisposable
+public sealed class TabletManager : ITabletObserver, IDisposable, IZwpTabletManagerV2Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -369,31 +369,34 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         return false;
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwpTabletManagerV2Handler.GetTabletSeat(ZwpTabletManagerV2Resource resource, in ZwpTabletManagerV2Resource.GetTabletSeatEventArgs args)
     {
-        var manager = new ZwpTabletManagerV2Resource(client, version, id);
-        manager.GetTabletSeat += (_, e) =>
+        var seatResource = new ZwpTabletSeatV2Resource(resource.Client, resource.Version, args.TabletSeat);
+        var binding = new SeatBinding(this, seatResource);
+        _bindings.Add(binding);
+
+        foreach (var tablet in _tablets)
         {
-            var seatResource = new ZwpTabletSeatV2Resource(client, manager.Version, e.TabletSeat);
-            var binding = new SeatBinding(this, seatResource);
-            _bindings.Add(binding);
+            binding.Announce(tablet);
+        }
 
-            foreach (var tablet in _tablets)
-            {
-                binding.Announce(tablet);
-            }
+        foreach (var tool in _tools)
+        {
+            binding.Announce(tool);
+        }
 
-            foreach (var tool in _tools)
-            {
-                binding.Announce(tool);
-            }
-
-            foreach (var pad in _pads)
-            {
-                binding.Announce(pad);
-            }
-        };
+        foreach (var pad in _pads)
+        {
+            binding.Announce(pad);
+        }
     }
+
+    void IZwpTabletManagerV2Handler.Destroy(ZwpTabletManagerV2Resource resource)
+    {
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpTabletManagerV2Resource(client, version, id, this);
 
     private sealed class SeatBinding
     {

@@ -7,7 +7,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_ctm_control_manager_v1</c>. Only one client at a time can own the matrices. A second client gets <c>blocked</c> on version 2 and is ignored.
 /// </summary>
-public sealed class HyprlandCtmControlManager : IDisposable
+public sealed class HyprlandCtmControlManager : IDisposable, IHyprlandCtmControlManagerV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -49,57 +49,20 @@ public sealed class HyprlandCtmControlManager : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandCtmControlManagerV1Resource(client, version, id);
         if (HasOwner)
         {
-            if (manager.Version >= 2)
+            var blocked = new HyprlandCtmControlManagerV1Resource(client, version, id);
+            if (blocked.Version >= 2)
             {
-                manager.SendBlocked();
+                blocked.SendBlocked();
             }
 
             return;
         }
 
+        var manager = new HyprlandCtmControlManagerV1Resource(client, version, id, this);
         _owner = manager;
         _matrices.Clear();
-        manager.SetCtmForOutput += (_, e) =>
-        {
-            if (OutputGlobal.FromResource(e.Output)?.Output is not { } output)
-            {
-                return;
-            }
-
-            var matrix = new[]
-            {
-                e.Mat0.ToDouble(), e.Mat1.ToDouble(), e.Mat2.ToDouble(),
-                e.Mat3.ToDouble(), e.Mat4.ToDouble(), e.Mat5.ToDouble(),
-                e.Mat6.ToDouble(), e.Mat7.ToDouble(), e.Mat8.ToDouble(),
-            };
-            foreach (var component in matrix)
-            {
-                if (!double.IsFinite(component) || component < 0.0)
-                {
-                    manager.PostError((uint)HyprlandCtmControlManagerV1.Error.InvalidMatrix, "A matrix component is not valid.");
-                    return;
-                }
-            }
-
-            _matrices[output] = matrix;
-        };
-        manager.Commit += (_, _) =>
-        {
-            foreach (var (output, _) in _layout.Outputs)
-            {
-                if (_matrices.TryGetValue(output, out var matrix))
-                {
-                    _ctm.SetCtm(output, matrix);
-                }
-                else
-                {
-                    _ctm.ResetCtm(output);
-                }
-            }
-        };
         manager.Destroyed += (_, _) =>
         {
             if (!ReferenceEquals(_owner, manager))
@@ -114,5 +77,51 @@ public sealed class HyprlandCtmControlManager : IDisposable
                 _ctm.ResetCtm(output);
             }
         };
+    }
+
+    void IHyprlandCtmControlManagerV1Handler.SetCtmForOutput(
+        HyprlandCtmControlManagerV1Resource resource,
+        in HyprlandCtmControlManagerV1Resource.SetCtmForOutputEventArgs args)
+    {
+        if (OutputGlobal.FromResource(args.Output)?.Output is not { } output)
+        {
+            return;
+        }
+
+        var matrix = new[]
+        {
+            args.Mat0.ToDouble(), args.Mat1.ToDouble(), args.Mat2.ToDouble(),
+            args.Mat3.ToDouble(), args.Mat4.ToDouble(), args.Mat5.ToDouble(),
+            args.Mat6.ToDouble(), args.Mat7.ToDouble(), args.Mat8.ToDouble(),
+        };
+        foreach (var component in matrix)
+        {
+            if (!double.IsFinite(component) || component < 0.0)
+            {
+                resource.PostError((uint)HyprlandCtmControlManagerV1.Error.InvalidMatrix, "A matrix component is not valid.");
+                return;
+            }
+        }
+
+        _matrices[output] = matrix;
+    }
+
+    void IHyprlandCtmControlManagerV1Handler.Commit(HyprlandCtmControlManagerV1Resource resource)
+    {
+        foreach (var (output, _) in _layout.Outputs)
+        {
+            if (_matrices.TryGetValue(output, out var matrix))
+            {
+                _ctm.SetCtm(output, matrix);
+            }
+            else
+            {
+                _ctm.ResetCtm(output);
+            }
+        }
+    }
+
+    void IHyprlandCtmControlManagerV1Handler.Destroy(HyprlandCtmControlManagerV1Resource resource)
+    {
     }
 }

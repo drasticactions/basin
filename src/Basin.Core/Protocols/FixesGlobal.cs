@@ -6,7 +6,7 @@ namespace Basin;
 /// <summary>
 /// Serves <c>wl_fixes</c>, which lets a client destroy a registry and acknowledge a global removal. The global exists only when libwayland supports it.
 /// </summary>
-public sealed class FixesGlobal : IDisposable
+public sealed class FixesGlobal : IDisposable, IWlFixesHandler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -42,10 +42,16 @@ public sealed class FixesGlobal : IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var fixes = new WlFixesResource(client, version, id);
-
-        fixes.DestroyRegistry += (_, e) => _display.DestroyRegistry(client, e.RegistryHandle);
-        fixes.AckGlobalRemove += (_, e) =>
-            _display.AckGlobalRemove(client, fixes.RawHandle, e.RegistryHandle, e.Name);
+        _ = new WlFixesResource(client, version, id, this);
     }
+
+    void IWlFixesHandler.Destroy(WlFixesResource resource)
+    {
+    }
+
+    void IWlFixesHandler.DestroyRegistry(WlFixesResource resource, in WlFixesResource.DestroyRegistryEventArgs args) =>
+        _display.DestroyRegistry(resource.Client, args.RegistryHandle);
+
+    void IWlFixesHandler.AckGlobalRemove(WlFixesResource resource, in WlFixesResource.AckGlobalRemoveEventArgs args) =>
+        _display.AckGlobalRemove(resource.Client, resource.RawHandle, args.RegistryHandle, args.Name);
 }

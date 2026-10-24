@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>zwp_text_input_manager_v1</c> global for older clients. A text input is active when its client activated it on the surface with keyboard focus.
 /// </summary>
-public sealed class TextInputV1Manager : IDisposable
+public sealed class TextInputV1Manager : IDisposable, IZwpTextInputManagerV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -169,52 +169,26 @@ public sealed class TextInputV1Manager : IDisposable
         method.Commit(textInput.Serial);
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
-    {
-        var manager = new ZwpTextInputManagerV1Resource(client, version, id);
-        manager.CreateTextInput += (_, e) =>
-        {
-            var resource = new ZwpTextInputV1Resource(client, manager.Version, e.Id);
-            _textInputs.Add(new TextInput(this, resource));
-        };
-    }
+    void IZwpTextInputManagerV1Handler.CreateTextInput(ZwpTextInputManagerV1Resource resource, in ZwpTextInputManagerV1Resource.CreateTextInputEventArgs args) =>
+        _textInputs.Add(new TextInput(this, resource.Client, resource.Version, args.Id));
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwpTextInputManagerV1Resource(client, version, id, this);
 
     private static uint PurposeToV3(uint purpose) => purpose >= 9 ? purpose + 1 : purpose;
 
-    private sealed class TextInput
+    private sealed class TextInput : IZwpTextInputV1Handler
     {
         private readonly TextInputV1Manager _owner;
         private readonly ZwpTextInputV1Resource _resource;
         private WlSurfaceResource? _activated;
         private bool _entered;
 
-        internal TextInput(TextInputV1Manager owner, ZwpTextInputV1Resource resource)
+        internal TextInput(TextInputV1Manager owner, WlClient client, uint version, uint id)
         {
             _owner = owner;
-            _resource = resource;
-
-            resource.Activate += (_, e) =>
-            {
-                _activated = e.Surface;
-                _owner.Sync();
-            };
-            resource.Deactivate += (_, _) =>
-            {
-                _activated = null;
-                _owner.Sync();
-            };
-            resource.SetSurroundingText += (_, e) => Surrounding = (e.Text, e.Cursor, e.Anchor);
-            resource.SetContentType += (_, e) => ContentType = ((uint)e.Hint, PurposeToV3((uint)e.Purpose));
-            resource.SetCursorRectangle += (_, e) => CursorRectangle = new Box(e.X, e.Y, e.Width, e.Height);
-            resource.CommitState += (_, e) =>
-            {
-                Serial = e.Serial;
-                if (IsActive)
-                {
-                    _owner.SendState(this);
-                }
-            };
-            resource.Destroyed += (_, _) =>
+            _resource = new ZwpTextInputV1Resource(client, version, id, this);
+            _resource.Destroyed += (_, _) =>
             {
                 _activated = null;
                 _entered = false;
@@ -283,6 +257,56 @@ public sealed class TextInputV1Manager : IDisposable
             {
                 _resource.SendDeleteSurroundingText(-(int)before, before + after);
             }
+        }
+
+        void IZwpTextInputV1Handler.Activate(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.ActivateEventArgs args)
+        {
+            _activated = args.Surface;
+            _owner.Sync();
+        }
+
+        void IZwpTextInputV1Handler.Deactivate(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.DeactivateEventArgs args)
+        {
+            _activated = null;
+            _owner.Sync();
+        }
+
+        void IZwpTextInputV1Handler.ShowInputPanel(ZwpTextInputV1Resource resource)
+        {
+        }
+
+        void IZwpTextInputV1Handler.HideInputPanel(ZwpTextInputV1Resource resource)
+        {
+        }
+
+        void IZwpTextInputV1Handler.Reset(ZwpTextInputV1Resource resource)
+        {
+        }
+
+        void IZwpTextInputV1Handler.SetSurroundingText(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.SetSurroundingTextEventArgs args) =>
+            Surrounding = (args.Text, args.Cursor, args.Anchor);
+
+        void IZwpTextInputV1Handler.SetContentType(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.SetContentTypeEventArgs args) =>
+            ContentType = ((uint)args.Hint, PurposeToV3((uint)args.Purpose));
+
+        void IZwpTextInputV1Handler.SetCursorRectangle(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.SetCursorRectangleEventArgs args) =>
+            CursorRectangle = new Box(args.X, args.Y, args.Width, args.Height);
+
+        void IZwpTextInputV1Handler.SetPreferredLanguage(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.SetPreferredLanguageEventArgs args)
+        {
+        }
+
+        void IZwpTextInputV1Handler.CommitState(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.CommitStateEventArgs args)
+        {
+            Serial = args.Serial;
+            if (IsActive)
+            {
+                _owner.SendState(this);
+            }
+        }
+
+        void IZwpTextInputV1Handler.InvokeAction(ZwpTextInputV1Resource resource, in ZwpTextInputV1Resource.InvokeActionEventArgs args)
+        {
         }
     }
 }

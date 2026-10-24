@@ -21,13 +21,46 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
     private readonly List<ZwlrForeignToplevelManagerV1Resource> _managers = [];
     private readonly Dictionary<ulong, Tracked> _toplevels = [];
 
-    private sealed class Tracked
+    private sealed class Tracked : IZwlrForeignToplevelHandleV1Handler
     {
         public required ulong Id;
+        public required IToplevelModel Model;
         public required Dictionary<ZwlrForeignToplevelManagerV1Resource, ZwlrForeignToplevelHandleV1Resource> Handles;
         public string? SentTitle;
         public string? SentAppId;
         public ulong SentParentId;
+
+        void IZwlrForeignToplevelHandleV1Handler.Activate(ZwlrForeignToplevelHandleV1Resource resource, in ZwlrForeignToplevelHandleV1Resource.ActivateEventArgs args) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Activate));
+
+        void IZwlrForeignToplevelHandleV1Handler.Close(ZwlrForeignToplevelHandleV1Resource resource) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Close));
+
+        void IZwlrForeignToplevelHandleV1Handler.SetMaximized(ZwlrForeignToplevelHandleV1Resource resource) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Maximize));
+
+        void IZwlrForeignToplevelHandleV1Handler.UnsetMaximized(ZwlrForeignToplevelHandleV1Resource resource) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Unmaximize));
+
+        void IZwlrForeignToplevelHandleV1Handler.SetFullscreen(ZwlrForeignToplevelHandleV1Resource resource, in ZwlrForeignToplevelHandleV1Resource.SetFullscreenEventArgs args) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Fullscreen));
+
+        void IZwlrForeignToplevelHandleV1Handler.UnsetFullscreen(ZwlrForeignToplevelHandleV1Resource resource) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Unfullscreen));
+
+        void IZwlrForeignToplevelHandleV1Handler.SetMinimized(ZwlrForeignToplevelHandleV1Resource resource) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Minimize));
+
+        void IZwlrForeignToplevelHandleV1Handler.UnsetMinimized(ZwlrForeignToplevelHandleV1Resource resource) =>
+            Model.Request(Id, new ToplevelRequest(ToplevelRequestKind.Unminimize));
+
+        void IZwlrForeignToplevelHandleV1Handler.SetRectangle(ZwlrForeignToplevelHandleV1Resource resource, in ZwlrForeignToplevelHandleV1Resource.SetRectangleEventArgs args)
+        {
+        }
+
+        void IZwlrForeignToplevelHandleV1Handler.Destroy(ZwlrForeignToplevelHandleV1Resource resource)
+        {
+        }
     }
 
     /// <summary>
@@ -84,7 +117,7 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
             return;
         }
 
-        var tracked = new Tracked { Id = id, Handles = [] };
+        var tracked = new Tracked { Id = id, Model = _model!, Handles = [] };
         _toplevels[id] = tracked;
         foreach (var manager in _managers)
         {
@@ -205,7 +238,7 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
     {
         var model = _model!;
         var id = tracked.Id;
-        var handle = new ZwlrForeignToplevelHandleV1Resource(manager.Client, manager.Version, 0);
+        var handle = new ZwlrForeignToplevelHandleV1Resource(manager.Client, manager.Version, 0, tracked);
         manager.SendToplevel(handle);
         tracked.Handles[manager] = handle;
         var raw = handle.RawHandle;
@@ -230,14 +263,5 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
         }
 
         handle.SendDone();
-
-        handle.Activate += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Activate));
-        handle.Close += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Close));
-        handle.SetMaximized += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Maximize));
-        handle.UnsetMaximized += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Unmaximize));
-        handle.SetFullscreen += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Fullscreen));
-        handle.UnsetFullscreen += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Unfullscreen));
-        handle.SetMinimized += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Minimize));
-        handle.UnsetMinimized += (_, _) => model.Request(id, new ToplevelRequest(ToplevelRequestKind.Unminimize));
     }
 }

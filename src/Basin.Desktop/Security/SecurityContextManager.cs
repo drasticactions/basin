@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_security_context_manager_v1</c> global. It accepts clients on listen sockets that a sandbox engine supplies, and tags each client with a <see cref="SecurityContext"/>.
 /// </summary>
-public sealed class SecurityContextManager : IDisposable
+public sealed class SecurityContextManager : IDisposable, IWpSecurityContextManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -73,36 +73,69 @@ public sealed class SecurityContextManager : IDisposable
     public static SecurityContext? ContextOf(WlClient client) =>
         Contexts.GetValueOrDefault(client.RawHandle);
 
-    private void OnBind(WlClient client, uint version, uint id)
-    {
-        var manager = new WpSecurityContextManagerV1Resource(client, version, id);
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpSecurityContextManagerV1Resource(client, version, id, ContextOf(client) is not null ? NestedManager.Instance : this);
 
-        if (ContextOf(client) is not null)
+    void IWpSecurityContextManagerV1Handler.CreateListener(WpSecurityContextManagerV1Resource resource, in WpSecurityContextManagerV1Resource.CreateListenerEventArgs args)
+    {
+        var client = resource.Client;
+        if (args.ListenFd < 0)
         {
-            manager.CreateListener += (_, e) =>
-            {
-                client.CloseFd(e.ListenFd);
-                client.CloseFd(e.CloseFd);
-                manager.PostError(ErrorNested, "A client in a security context cannot make a new security context.");
-            };
+            var refused = new WpSecurityContextV1Resource(client, resource.Version, args.Id, RefusedContext.Instance);
+            client.CloseFd(args.CloseFd);
+            refused.PostError(ErrorInvalidListenFd, "The listening socket is not valid.");
             return;
         }
 
-        manager.CreateListener += (_, e) =>
-        {
-            var resource = new WpSecurityContextV1Resource(client, manager.Version, e.Id);
-            if (e.ListenFd < 0)
-            {
-                client.CloseFd(e.CloseFd);
-                resource.PostError(ErrorInvalidListenFd, "The listening socket is not valid.");
-                return;
-            }
-
-            _ = new PendingContext(this, resource, e.ListenFd, e.CloseFd);
-        };
+        _ = new PendingContext(this, client, resource.Version, args.Id, args.ListenFd, args.CloseFd);
     }
 
-    private sealed class PendingContext
+    void IWpSecurityContextManagerV1Handler.Destroy(WpSecurityContextManagerV1Resource resource)
+    {
+    }
+
+    private sealed class NestedManager : IWpSecurityContextManagerV1Handler
+    {
+        public static readonly NestedManager Instance = new();
+
+        void IWpSecurityContextManagerV1Handler.CreateListener(WpSecurityContextManagerV1Resource resource, in WpSecurityContextManagerV1Resource.CreateListenerEventArgs args)
+        {
+            resource.Client.CloseFd(args.ListenFd);
+            resource.Client.CloseFd(args.CloseFd);
+            resource.PostError(ErrorNested, "A client in a security context cannot make a new security context.");
+        }
+
+        void IWpSecurityContextManagerV1Handler.Destroy(WpSecurityContextManagerV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class RefusedContext : IWpSecurityContextV1Handler
+    {
+        public static readonly RefusedContext Instance = new();
+
+        void IWpSecurityContextV1Handler.SetSandboxEngine(WpSecurityContextV1Resource resource, in WpSecurityContextV1Resource.SetSandboxEngineEventArgs args)
+        {
+        }
+
+        void IWpSecurityContextV1Handler.SetAppId(WpSecurityContextV1Resource resource, in WpSecurityContextV1Resource.SetAppIdEventArgs args)
+        {
+        }
+
+        void IWpSecurityContextV1Handler.SetInstanceId(WpSecurityContextV1Resource resource, in WpSecurityContextV1Resource.SetInstanceIdEventArgs args)
+        {
+        }
+
+        void IWpSecurityContextV1Handler.Commit(WpSecurityContextV1Resource resource)
+        {
+        }
+
+        void IWpSecurityContextV1Handler.Destroy(WpSecurityContextV1Resource resource)
+        {
+        }
+    }
+
+    private sealed class PendingContext : IWpSecurityContextV1Handler
     {
         private readonly SecurityContextManager _owner;
         private readonly WpSecurityContextV1Resource _resource;
@@ -113,29 +146,14 @@ public sealed class SecurityContextManager : IDisposable
         private string? _instanceId;
         private bool _committed;
 
-        public PendingContext(SecurityContextManager owner, WpSecurityContextV1Resource resource, int listenFd, int closeFd)
+        public PendingContext(SecurityContextManager owner, WlClient client, uint version, uint id, int listenFd, int closeFd)
         {
             _owner = owner;
+            var resource = new WpSecurityContextV1Resource(client, version, id, this);
             _resource = resource;
             _listenFd = listenFd;
             _closeFd = closeFd;
 
-            resource.SetSandboxEngine += (_, e) => SetMetadata(ref _engine, e.Name);
-            resource.SetAppId += (_, e) => SetMetadata(ref _appId, e.AppId);
-            resource.SetInstanceId += (_, e) => SetMetadata(ref _instanceId, e.InstanceId);
-            resource.Commit += (_, _) =>
-            {
-                if (_committed)
-                {
-                    resource.PostError(ErrorAlreadyUsed, "The security context is already committed.");
-                    return;
-                }
-
-                _committed = true;
-                var context = new SecurityContext(_engine, _appId, _instanceId);
-                var listener = new Listener(_owner, context, resource.Client, _listenFd, _closeFd);
-                _owner._listeners.Add(listener);
-            };
             resource.Destroyed += (_, _) =>
             {
                 if (!_committed)
@@ -144,6 +162,33 @@ public sealed class SecurityContextManager : IDisposable
                     resource.Client.CloseFd(_closeFd);
                 }
             };
+        }
+
+        void IWpSecurityContextV1Handler.SetSandboxEngine(WpSecurityContextV1Resource resource, in WpSecurityContextV1Resource.SetSandboxEngineEventArgs args) =>
+            SetMetadata(ref _engine, args.Name);
+
+        void IWpSecurityContextV1Handler.SetAppId(WpSecurityContextV1Resource resource, in WpSecurityContextV1Resource.SetAppIdEventArgs args) =>
+            SetMetadata(ref _appId, args.AppId);
+
+        void IWpSecurityContextV1Handler.SetInstanceId(WpSecurityContextV1Resource resource, in WpSecurityContextV1Resource.SetInstanceIdEventArgs args) =>
+            SetMetadata(ref _instanceId, args.InstanceId);
+
+        void IWpSecurityContextV1Handler.Commit(WpSecurityContextV1Resource resource)
+        {
+            if (_committed)
+            {
+                resource.PostError(ErrorAlreadyUsed, "The security context is already committed.");
+                return;
+            }
+
+            _committed = true;
+            var context = new SecurityContext(_engine, _appId, _instanceId);
+            var listener = new Listener(_owner, context, resource.Client, _listenFd, _closeFd);
+            _owner._listeners.Add(listener);
+        }
+
+        void IWpSecurityContextV1Handler.Destroy(WpSecurityContextV1Resource resource)
+        {
         }
 
         private void SetMetadata(ref string? slot, string value)

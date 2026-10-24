@@ -1,9 +1,10 @@
 using Basin.Scene;
 using Basin.Shell.River.Protocol;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverDecoration
+internal sealed class RiverDecoration : IRiverDecorationV1Handler
 {
     internal const string RoleName = "river_decoration_v1";
 
@@ -12,37 +13,22 @@ internal sealed class RiverDecoration
 
     internal RiverDecoration(
         RiverWindowManager manager,
-        RiverDecorationV1Resource resource,
+        WlClient client,
+        uint version,
+        uint id,
         RiverWindow window,
         Surface surface,
         SceneTree parent,
         bool above)
     {
         _manager = manager;
-        _resource = resource;
         Window = window;
         Surface = surface;
         IsAbove = above;
         Tree = new SceneTree(parent);
         Scene = new SceneSurface(Tree, surface);
+        _resource = new RiverDecorationV1Resource(client, version, id, this);
 
-        resource.SetOffset += (_, e) =>
-        {
-            if (_manager.EnsureRendering())
-            {
-                Offset = new Point(e.X, e.Y);
-            }
-        };
-
-        resource.SyncNextCommit += (_, _) =>
-        {
-            if (_manager.EnsureRendering())
-            {
-                _manager.HoldNextCommit(this);
-            }
-        };
-
-        resource.DestroyRequest += (_, _) => Destroy();
         surface.Destroyed += Destroy;
         surface.CommitRequested += () => AwaitingCommit = false;
     }
@@ -80,4 +66,22 @@ internal sealed class RiverDecoration
         Scene.Destroy();
         Tree.Destroy();
     }
+
+    void IRiverDecorationV1Handler.SetOffset(RiverDecorationV1Resource resource, in RiverDecorationV1Resource.SetOffsetEventArgs args)
+    {
+        if (_manager.EnsureRendering())
+        {
+            Offset = new Point(args.X, args.Y);
+        }
+    }
+
+    void IRiverDecorationV1Handler.SyncNextCommit(RiverDecorationV1Resource resource)
+    {
+        if (_manager.EnsureRendering())
+        {
+            _manager.HoldNextCommit(this);
+        }
+    }
+
+    void IRiverDecorationV1Handler.Destroy(RiverDecorationV1Resource resource) => Destroy();
 }

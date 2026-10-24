@@ -7,7 +7,7 @@ namespace Basin.Hypr;
 /// <summary>
 /// Advertises <c>hyprland_lock_notifier_v1</c> and sends <c>locked</c> and <c>unlocked</c> to each notification object. Each object gets each transition once.
 /// </summary>
-public sealed class HyprlandLockNotifier : ILockStateObserver, IDisposable
+public sealed class HyprlandLockNotifier : ILockStateObserver, IDisposable, IHyprlandLockNotifierV1Handler
 {
     /// <summary>
     /// The highest protocol version that the global advertises.
@@ -70,18 +70,25 @@ public sealed class HyprlandLockNotifier : ILockStateObserver, IDisposable
 
     private void OnBind(WlClient client, uint version, uint id)
     {
-        var manager = new HyprlandLockNotifierV1Resource(client, version, id);
-        manager.GetLockNotification += (_, e) =>
+        _ = new HyprlandLockNotifierV1Resource(client, version, id, this);
+    }
+
+    void IHyprlandLockNotifierV1Handler.Destroy(HyprlandLockNotifierV1Resource resource)
+    {
+    }
+
+    void IHyprlandLockNotifierV1Handler.GetLockNotification(
+        HyprlandLockNotifierV1Resource resource,
+        in HyprlandLockNotifierV1Resource.GetLockNotificationEventArgs args)
+    {
+        var notificationResource = new HyprlandLockNotificationV1Resource(resource.Client, resource.Version, args.Id);
+        var notification = new Notification(notificationResource);
+        _notifications.Add(notification);
+        notificationResource.Destroyed += (_, _) => _notifications.Remove(notification);
+        if (_state?.IsLocked == true)
         {
-            var resource = new HyprlandLockNotificationV1Resource(client, manager.Version, e.Id);
-            var notification = new Notification(resource);
-            _notifications.Add(notification);
-            resource.Destroyed += (_, _) => _notifications.Remove(notification);
-            if (_state?.IsLocked == true)
-            {
-                notification.Locked();
-            }
-        };
+            notification.Locked();
+        }
     }
 
     private sealed class Notification(HyprlandLockNotificationV1Resource resource)

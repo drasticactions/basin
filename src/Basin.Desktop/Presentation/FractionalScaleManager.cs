@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_fractional_scale_manager_v1</c> global. It follows the scale of the outputs that a surface enters until the consumer announces scales itself.
 /// </summary>
-public sealed class FractionalScaleManager : IDisposable
+public sealed class FractionalScaleManager : IDisposable, IWpFractionalScaleManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -57,6 +57,8 @@ public sealed class FractionalScaleManager : IDisposable
 
         _global.Dispose();
     }
+
+    internal int TrackedSurfaces => _preferred.Count;
 
     private void FollowLayout()
     {
@@ -141,53 +143,67 @@ public sealed class FractionalScaleManager : IDisposable
         }
 
         var value = (uint)Math.Round((scale > 0 ? scale : 1.0) * 120);
-        _preferred[surface] = value;
+        Remember(surface, value);
         return value;
     }
+
+    private void Remember(Surface surface, uint value)
+    {
+        if (!_preferred.ContainsKey(surface))
+        {
+            ForgetOnDestroy(surface);
+        }
+
+        _preferred[surface] = value;
+    }
+
+    private void ForgetOnDestroy(Surface surface) => surface.Destroyed += () => _preferred.Remove(surface);
 
     private void Announce(Surface surface, double scale)
     {
         var value = (uint)Math.Round(scale * 120);
-        if (_preferred.TryGetValue(surface, out var existing) && existing == value)
+        if (surface.IsDestroyed || (_preferred.TryGetValue(surface, out var existing) && existing == value))
         {
             return;
         }
 
-        _preferred[surface] = value;
+        Remember(surface, value);
         if (_scales.TryGetValue(surface, out var resource) && !resource.IsDestroyed)
         {
             resource.SendPreferredScale(value);
         }
     }
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpFractionalScaleManagerV1Handler.Destroy(WpFractionalScaleManagerV1Resource resource)
     {
-        var manager = new WpFractionalScaleManagerV1Resource(client, version, id);
-        manager.GetFractionalScale += (_, e) =>
-        {
-            var surface = _compositor.ResolveSurface(e.Surface);
-            var resource = new WpFractionalScaleV1Resource(client, manager.Version, e.Id);
-            if (surface is null)
-            {
-                return;
-            }
-
-            FollowOutputs(surface);
-            _scales[surface] = resource;
-            void OnOutputs() => FollowOutputs(surface);
-            surface.OutputPresenceChanged += OnOutputs;
-            resource.Destroyed += (_, _) =>
-            {
-                surface.OutputPresenceChanged -= OnOutputs;
-                _scales.Remove(surface);
-            };
-            surface.Destroyed += () =>
-            {
-                surface.OutputPresenceChanged -= OnOutputs;
-                _scales.Remove(surface);
-                _preferred.Remove(surface);
-            };
-            resource.SendPreferredScale(InitialScale(surface));
-        };
     }
+
+    void IWpFractionalScaleManagerV1Handler.GetFractionalScale(WpFractionalScaleManagerV1Resource resource, in WpFractionalScaleManagerV1Resource.GetFractionalScaleEventArgs args)
+    {
+        var surface = _compositor.ResolveSurface(args.Surface);
+        var scale = new WpFractionalScaleV1Resource(resource.Client, resource.Version, args.Id);
+        if (surface is null)
+        {
+            return;
+        }
+
+        FollowOutputs(surface);
+        _scales[surface] = scale;
+        void OnOutputs() => FollowOutputs(surface);
+        surface.OutputPresenceChanged += OnOutputs;
+        scale.Destroyed += (_, _) =>
+        {
+            surface.OutputPresenceChanged -= OnOutputs;
+            _scales.Remove(surface);
+        };
+        surface.Destroyed += () =>
+        {
+            surface.OutputPresenceChanged -= OnOutputs;
+            _scales.Remove(surface);
+        };
+        scale.SendPreferredScale(InitialScale(surface));
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpFractionalScaleManagerV1Resource(client, version, id, this);
 }

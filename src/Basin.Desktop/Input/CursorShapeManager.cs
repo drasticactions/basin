@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>wp_cursor_shape_manager_v1</c> global. It reports shape requests on pointer devices and on tablet tool devices as events. Drawing the cursor stays with the consumer.
 /// </summary>
-public sealed class CursorShapeManager : IDisposable
+public sealed class CursorShapeManager : IDisposable, IWpCursorShapeManagerV1Handler, IWpCursorShapeDeviceV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -66,56 +66,61 @@ public sealed class CursorShapeManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IWpCursorShapeManagerV1Handler.Destroy(WpCursorShapeManagerV1Resource resource)
     {
-        var manager = new WpCursorShapeManagerV1Resource(client, version, id);
-        manager.GetPointer += (_, e) =>
+    }
+
+    void IWpCursorShapeManagerV1Handler.GetPointer(WpCursorShapeManagerV1Resource resource, in WpCursorShapeManagerV1Resource.GetPointerEventArgs args) =>
+        _ = new WpCursorShapeDeviceV1Resource(resource.Client, resource.Version, args.CursorShapeDevice, this);
+
+    void IWpCursorShapeManagerV1Handler.GetTabletToolV2(WpCursorShapeManagerV1Resource resource, in WpCursorShapeManagerV1Resource.GetTabletToolV2EventArgs args) =>
+        _ = new WpCursorShapeDeviceV1Resource(resource.Client, resource.Version, args.CursorShapeDevice, new ToolDevice(this, args.TabletTool));
+
+    void IWpCursorShapeDeviceV1Handler.Destroy(WpCursorShapeDeviceV1Resource resource)
+    {
+    }
+
+    void IWpCursorShapeDeviceV1Handler.SetShape(WpCursorShapeDeviceV1Resource resource, in WpCursorShapeDeviceV1Resource.SetShapeEventArgs args)
+    {
+        if (!IsKnownShape(resource, args.Shape))
         {
-            var device = new WpCursorShapeDeviceV1Resource(client, manager.Version, e.CursorShapeDevice);
-            device.SetShape += (_, se) =>
-            {
-                if (!IsKnownShape(device, se.Shape))
-                {
-                    return;
-                }
+            return;
+        }
 
-                if (_seat is { } seat && !seat.Pointer.ValidateEnterSerial(se.Serial))
-                {
-                    return;
-                }
-
-                var shape = (CursorShape)se.Shape;
-                ShapeRequested?.Invoke(shape);
-                if (_theme is { } theme && theme.TryResolve(shape, Scale, out var image))
-                {
-                    CursorRequested?.Invoke(image);
-                }
-            };
-        };
-        manager.GetTabletToolV2 += (_, e) =>
+        if (_seat is { } seat && !seat.Pointer.ValidateEnterSerial(args.Serial))
         {
-            var device = new WpCursorShapeDeviceV1Resource(client, manager.Version, e.CursorShapeDevice);
-            var toolResource = e.TabletTool;
-            device.SetShape += (_, se) =>
-            {
-                if (!IsKnownShape(device, se.Shape) ||
-                    _tablets is null ||
-                    toolResource is null ||
-                    !_tablets.TryResolveTool(toolResource, out var tool, out var serial) ||
-                    serial == 0 ||
-                    serial != se.Serial)
-                {
-                    return;
-                }
+            return;
+        }
 
-                var shape = (CursorShape)se.Shape;
-                ToolShapeRequested?.Invoke(tool, shape);
-                if (_theme is { } theme && theme.TryResolve(shape, Scale, out var image))
-                {
-                    ToolCursorRequested?.Invoke(tool, image);
-                }
-            };
-        };
+        var shape = (CursorShape)args.Shape;
+        ShapeRequested?.Invoke(shape);
+        if (_theme is { } theme && theme.TryResolve(shape, Scale, out var image))
+        {
+            CursorRequested?.Invoke(image);
+        }
+    }
+
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new WpCursorShapeManagerV1Resource(client, version, id, this);
+
+    private void OnToolSetShape(WpCursorShapeDeviceV1Resource device, ZwpTabletToolV2Resource? toolResource, in WpCursorShapeDeviceV1Resource.SetShapeEventArgs args)
+    {
+        if (!IsKnownShape(device, args.Shape) ||
+            _tablets is null ||
+            toolResource is null ||
+            !_tablets.TryResolveTool(toolResource, out var tool, out var serial) ||
+            serial == 0 ||
+            serial != args.Serial)
+        {
+            return;
+        }
+
+        var shape = (CursorShape)args.Shape;
+        ToolShapeRequested?.Invoke(tool, shape);
+        if (_theme is { } theme && theme.TryResolve(shape, Scale, out var image))
+        {
+            ToolCursorRequested?.Invoke(tool, image);
+        }
     }
 
     private static bool IsKnownShape(WpCursorShapeDeviceV1Resource device, WpCursorShapeDeviceV1.Shape shape)
@@ -131,4 +136,14 @@ public sealed class CursorShapeManager : IDisposable
 
     private static uint HighestShape(uint version) =>
         version >= 2 ? (uint)CursorShape.AllResize : (uint)CursorShape.ZoomOut;
+
+    private sealed class ToolDevice(CursorShapeManager owner, ZwpTabletToolV2Resource? toolResource) : IWpCursorShapeDeviceV1Handler
+    {
+        void IWpCursorShapeDeviceV1Handler.Destroy(WpCursorShapeDeviceV1Resource resource)
+        {
+        }
+
+        void IWpCursorShapeDeviceV1Handler.SetShape(WpCursorShapeDeviceV1Resource resource, in WpCursorShapeDeviceV1Resource.SetShapeEventArgs args) =>
+            owner.OnToolSetShape(resource, toolResource, in args);
+    }
 }

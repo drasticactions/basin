@@ -362,6 +362,10 @@ public static class IpcMethodNames
     /// Names the method that lists every target that a diagnostics selector can reach.
     /// </summary>
     public const string DiagTargets = "diag/targets";
+    /// <summary>
+    /// Names the method that returns the counters of the explicit sync protocol.
+    /// </summary>
+    public const string DiagSyncobj = "diag/syncobj";
 
     /// <summary>
     /// Gets the method namespaces that the library owns. A consumer registration in one of them throws.

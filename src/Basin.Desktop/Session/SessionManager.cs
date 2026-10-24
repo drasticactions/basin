@@ -9,7 +9,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>xdg_session_manager_v1</c> global. It names toplevel sessions and restores saved state through <see cref="ISessionStore"/>.
 /// </summary>
-public sealed class SessionManager : IDisposable
+public sealed class SessionManager : IDisposable, IXdgSessionManagerV1Handler
 {
     /// <summary>
     /// The protocol version that the global advertises.
@@ -48,22 +48,26 @@ public sealed class SessionManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new XdgSessionManagerV1Resource(client, version, id, this);
+
+    void IXdgSessionManagerV1Handler.Destroy(XdgSessionManagerV1Resource resource)
     {
-        var manager = new XdgSessionManagerV1Resource(client, version, id);
-        manager.GetSession += (_, e) => OnGetSession(manager, client, e);
     }
+
+    void IXdgSessionManagerV1Handler.GetSession(XdgSessionManagerV1Resource resource, in XdgSessionManagerV1Resource.GetSessionEventArgs args) =>
+        OnGetSession(resource, resource.Client, args);
 
     private void OnGetSession(
         XdgSessionManagerV1Resource manager,
         WlClient client,
-        XdgSessionManagerV1Resource.GetSessionEventArgs e)
+        in XdgSessionManagerV1Resource.GetSessionEventArgs e)
     {
-        var resource = new XdgSessionV1Resource(client, manager.Version, e.Id);
         if (e.Reason is not (XdgSessionManagerV1.Reason.Launch
             or XdgSessionManagerV1.Reason.Recover
             or XdgSessionManagerV1.Reason.SessionRestore))
         {
+            _ = new XdgSessionV1Resource(client, manager.Version, e.Id);
             manager.PostError((uint)XdgSessionManagerV1.Error.InvalidReason, $"Reason {(uint)e.Reason} is not a known value.");
             return;
         }
@@ -82,6 +86,7 @@ public sealed class SessionManager : IDisposable
             {
                 if (holder.Resource.Client == client)
                 {
+                    _ = new XdgSessionV1Resource(client, manager.Version, e.Id);
                     manager.PostError((uint)XdgSessionManagerV1.Error.InUse, $"Session '{existing}' is already in use.");
                     return;
                 }
@@ -89,25 +94,25 @@ public sealed class SessionManager : IDisposable
                 holder.Replace();
             }
 
-            var restored = new Session(this, resource, existing, reason);
+            var restored = new Session(this, client, manager.Version, e.Id, existing, reason);
             _live[existing] = restored;
-            resource.SendRestored();
+            restored.Resource.SendRestored();
             return;
         }
 
         var minted = _store?.CreateSessionId();
         if (minted is null)
         {
-            _ = new Session(this, resource, sessionId: null, reason);
+            _ = new Session(this, client, manager.Version, e.Id, sessionId: null, reason);
             return;
         }
 
-        var session = new Session(this, resource, minted, reason);
+        var session = new Session(this, client, manager.Version, e.Id, minted, reason);
         _live[minted] = session;
-        resource.SendCreated(minted);
+        session.Resource.SendCreated(minted);
     }
 
-    private sealed class Session
+    private sealed class Session : IXdgSessionV1Handler
     {
         private readonly SessionManager _owner;
         private readonly SessionRestoreReason _reason;
@@ -115,26 +120,14 @@ public sealed class SessionManager : IDisposable
         private readonly HashSet<XdgToplevelWindow> _added = [];
         private bool _inert;
 
-        public Session(SessionManager owner, XdgSessionV1Resource resource, string? sessionId, SessionRestoreReason reason)
+        public Session(SessionManager owner, WlClient client, uint version, uint id, string? sessionId, SessionRestoreReason reason)
         {
             _owner = owner;
             _reason = reason;
-            Resource = resource;
+            Resource = new XdgSessionV1Resource(client, version, id, this);
             SessionId = sessionId;
 
-            resource.AddToplevel += (_, e) => Add(e.Id, e.Toplevel, e.Name, restore: false);
-            resource.RestoreToplevel += (_, e) => Add(e.Id, e.Toplevel, e.Name, restore: true);
-            resource.RemoveToplevel += (_, e) => Remove(e.Name);
-            resource.Destroyed += (_, _) => Detach();
-            resource.Remove += (_, _) =>
-            {
-                if (SessionId is { } id)
-                {
-                    _owner._store?.Forget(id);
-                }
-
-                Detach();
-            };
+            Resource.Destroyed += (_, _) => Detach();
         }
 
         public XdgSessionV1Resource Resource { get; }
@@ -152,6 +145,29 @@ public sealed class SessionManager : IDisposable
             Detach();
         }
 
+        void IXdgSessionV1Handler.Destroy(XdgSessionV1Resource resource)
+        {
+        }
+
+        void IXdgSessionV1Handler.AddToplevel(XdgSessionV1Resource resource, in XdgSessionV1Resource.AddToplevelEventArgs args) =>
+            Add(args.Id, args.Toplevel, args.Name, restore: false);
+
+        void IXdgSessionV1Handler.RestoreToplevel(XdgSessionV1Resource resource, in XdgSessionV1Resource.RestoreToplevelEventArgs args) =>
+            Add(args.Id, args.Toplevel, args.Name, restore: true);
+
+        void IXdgSessionV1Handler.RemoveToplevel(XdgSessionV1Resource resource, in XdgSessionV1Resource.RemoveToplevelEventArgs args) =>
+            Remove(args.Name);
+
+        void IXdgSessionV1Handler.Remove(XdgSessionV1Resource resource)
+        {
+            if (SessionId is { } id)
+            {
+                _owner._store?.Forget(id);
+            }
+
+            Detach();
+        }
+
         private void Detach()
         {
             if (SessionId is { } id && _owner._live.TryGetValue(id, out var live) && ReferenceEquals(live, this))
@@ -165,37 +181,41 @@ public sealed class SessionManager : IDisposable
 
         private void Add(uint newId, XdgToplevelResource? toplevelResource, string name, bool restore)
         {
-            var handle = new XdgToplevelSessionV1Resource(Resource.Client, Resource.Version, newId);
             if (XdgToplevels.Resolve(toplevelResource) is not { } toplevel)
             {
+                _ = new XdgToplevelSessionV1Resource(Resource.Client, Resource.Version, newId);
                 return;
             }
 
             if (name.Length == 0)
             {
+                _ = new XdgToplevelSessionV1Resource(Resource.Client, Resource.Version, newId);
                 Resource.PostError((uint)XdgSessionV1.Error.InvalidName, "The toplevel name is empty.");
                 return;
             }
 
             if (_toplevels.ContainsKey(name))
             {
+                _ = new XdgToplevelSessionV1Resource(Resource.Client, Resource.Version, newId);
                 Resource.PostError((uint)XdgSessionV1.Error.NameInUse, $"Toplevel name '{name}' is already in this session.");
                 return;
             }
 
             if (!_added.Add(toplevel))
             {
+                _ = new XdgToplevelSessionV1Resource(Resource.Client, Resource.Version, newId);
                 Resource.PostError((uint)XdgSessionV1.Error.AlreadyAdded, "This toplevel is already in the session.");
                 return;
             }
 
             if (restore && toplevel.Xdg.HasCommitted)
             {
+                _ = new XdgToplevelSessionV1Resource(Resource.Client, Resource.Version, newId);
                 Resource.PostError((uint)XdgSessionV1.Error.AlreadyMapped, "restore_toplevel came after the first commit of the surface.");
                 return;
             }
 
-            var entry = new ToplevelSession(this, handle, toplevel, name);
+            var entry = new ToplevelSession(this, newId, toplevel, name);
             _toplevels[name] = entry;
 
             if (_inert || SessionId is not { } id)
@@ -240,7 +260,7 @@ public sealed class SessionManager : IDisposable
             return true;
         }
 
-        private sealed class ToplevelSession
+        private sealed class ToplevelSession : IXdgToplevelSessionV1Handler
         {
             private readonly Session _session;
             private readonly XdgToplevelSessionV1Resource _resource;
@@ -249,27 +269,31 @@ public sealed class SessionManager : IDisposable
 
             public ToplevelSession(
                 Session session,
-                XdgToplevelSessionV1Resource resource,
+                uint id,
                 XdgToplevelWindow toplevel,
                 string name)
             {
                 _session = session;
-                _resource = resource;
+                _resource = new XdgToplevelSessionV1Resource(session.Resource.Client, session.Resource.Version, id, this);
                 _toplevel = toplevel;
                 Name = name;
-
-                resource.Rename += (_, e) =>
-                {
-                    if (!_inert && e.Name.Length > 0 && _session.TryRename(this, e.Name))
-                    {
-                        Name = e.Name;
-                    }
-                };
             }
 
             public string Name { get; private set; }
 
             public void MakeInert() => _inert = true;
+
+            void IXdgToplevelSessionV1Handler.Destroy(XdgToplevelSessionV1Resource resource)
+            {
+            }
+
+            void IXdgToplevelSessionV1Handler.Rename(XdgToplevelSessionV1Resource resource, in XdgToplevelSessionV1Resource.RenameEventArgs args)
+            {
+                if (!_inert && args.Name.Length > 0 && _session.TryRename(this, args.Name))
+                {
+                    Name = args.Name;
+                }
+            }
 
             public void AnnounceOnFirstConfigure()
             {

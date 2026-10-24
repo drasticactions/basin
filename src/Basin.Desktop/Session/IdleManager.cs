@@ -8,7 +8,7 @@ namespace Basin.Desktop;
 /// <summary>
 /// Serves the <c>ext_idle_notifier_v1</c> and <c>zwp_idle_inhibit_manager_v1</c> globals. Idle notifications time out on the loop and reset on activity.
 /// </summary>
-public sealed class IdleManager : IDisposable
+public sealed class IdleManager : IDisposable, IExtIdleNotifierV1Handler, IZwpIdleInhibitManagerV1Handler
 {
     /// <summary>
     /// The version that the idle notifier global advertises.
@@ -94,12 +94,22 @@ public sealed class IdleManager : IDisposable
         }
     }
 
-    private void OnBindNotifier(WlClient client, uint version, uint id)
+    private void OnBindNotifier(WlClient client, uint version, uint id) =>
+        _ = new ExtIdleNotifierV1Resource(client, version, id, this);
+
+    void IExtIdleNotifierV1Handler.Destroy(ExtIdleNotifierV1Resource resource)
     {
-        var notifier = new ExtIdleNotifierV1Resource(client, version, id);
-        notifier.GetIdleNotification += (_, e) => Create(notifier, e.Id, e.Timeout, ignoresInhibitors: false);
-        notifier.GetInputIdleNotification += (_, e) => Create(notifier, e.Id, e.Timeout, ignoresInhibitors: true);
     }
+
+    void IExtIdleNotifierV1Handler.GetIdleNotification(
+        ExtIdleNotifierV1Resource resource,
+        in ExtIdleNotifierV1Resource.GetIdleNotificationEventArgs args) =>
+        Create(resource, args.Id, args.Timeout, ignoresInhibitors: false);
+
+    void IExtIdleNotifierV1Handler.GetInputIdleNotification(
+        ExtIdleNotifierV1Resource resource,
+        in ExtIdleNotifierV1Resource.GetInputIdleNotificationEventArgs args) =>
+        Create(resource, args.Id, args.Timeout, ignoresInhibitors: true);
 
     private void Create(ExtIdleNotifierV1Resource notifier, uint id, uint timeout, bool ignoresInhibitors)
     {
@@ -113,16 +123,21 @@ public sealed class IdleManager : IDisposable
         };
     }
 
-    private void OnBindInhibit(WlClient client, uint version, uint id)
-    {
-        var manager = new ZwpIdleInhibitManagerV1Resource(client, version, id);
-        manager.CreateInhibitor += (_, e) =>
-        {
-            var resource = new ZwpIdleInhibitorV1Resource(client, manager.Version, e.Id);
+    private void OnBindInhibit(WlClient client, uint version, uint id) =>
+        _ = new ZwpIdleInhibitManagerV1Resource(client, version, id, this);
 
-            var held = _idle?.Inhibit();
-            resource.Destroyed += (_, _) => held?.Dispose();
-        };
+    void IZwpIdleInhibitManagerV1Handler.Destroy(ZwpIdleInhibitManagerV1Resource resource)
+    {
+    }
+
+    void IZwpIdleInhibitManagerV1Handler.CreateInhibitor(
+        ZwpIdleInhibitManagerV1Resource manager,
+        in ZwpIdleInhibitManagerV1Resource.CreateInhibitorEventArgs args)
+    {
+        var resource = new ZwpIdleInhibitorV1Resource(manager.Client, manager.Version, args.Id);
+
+        var held = _idle?.Inhibit();
+        resource.Destroyed += (_, _) => held?.Dispose();
     }
 
     private sealed class Notification : IDisposable

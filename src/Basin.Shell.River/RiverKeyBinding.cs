@@ -4,46 +4,28 @@ using Xkb;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverKeyBinding
+internal sealed class RiverKeyBinding : IRiverXkbBindingV1Handler
 {
     private readonly RiverWindowManager _manager;
+    private readonly RiverBindings _bindings;
     private RiverXkbBindingV1Resource? _resource;
 
     internal RiverKeyBinding(
         RiverWindowManager manager,
+        RiverBindings bindings,
         RiverSeat seat,
-        RiverXkbBindingV1Resource resource,
+        WlClient client,
+        uint version,
+        uint id,
         uint keysym,
         RiverSeatV1.Modifiers modifiers)
     {
         _manager = manager;
-        _resource = resource;
+        _bindings = bindings;
         Seat = seat;
         Keysym = keysym;
         Modifiers = modifiers;
-
-        resource.Enable += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                IsEnabled = true;
-            }
-        };
-        resource.Disable += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                IsEnabled = false;
-            }
-        };
-        resource.SetLayoutOverride += (_, e) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                LayoutOverride = e.Layout;
-            }
-        };
-        resource.DestroyRequest += (_, _) => _resource = null;
+        _resource = new RiverXkbBindingV1Resource(client, version, id, this);
     }
 
     internal RiverSeat Seat { get; }
@@ -79,4 +61,34 @@ internal sealed class RiverKeyBinding
 
     private RiverXkbBindingV1Resource? Alive() =>
         _resource is { IsDestroyed: false } resource ? resource : null;
+
+    void IRiverXkbBindingV1Handler.Enable(RiverXkbBindingV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            IsEnabled = true;
+        }
+    }
+
+    void IRiverXkbBindingV1Handler.Disable(RiverXkbBindingV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            IsEnabled = false;
+        }
+    }
+
+    void IRiverXkbBindingV1Handler.SetLayoutOverride(RiverXkbBindingV1Resource resource, in RiverXkbBindingV1Resource.SetLayoutOverrideEventArgs args)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            LayoutOverride = args.Layout;
+        }
+    }
+
+    void IRiverXkbBindingV1Handler.Destroy(RiverXkbBindingV1Resource resource)
+    {
+        _resource = null;
+        _bindings.ForgetBinding(this);
+    }
 }

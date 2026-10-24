@@ -1,8 +1,9 @@
 using Basin.Shell.River.Protocol;
+using Wayland.Server;
 
 namespace Basin.Shell.River;
 
-internal sealed class RiverSeat
+internal sealed class RiverSeat : IRiverSeatV1Handler
 {
     private readonly RiverWindowManager _manager;
     private readonly List<RiverWindow> _interactions = [];
@@ -55,62 +56,76 @@ internal sealed class RiverSeat
         _deltaSent = false;
     }
 
-    internal void Bind(RiverSeatV1Resource resource)
+    internal RiverSeatV1Resource Bind(WlClient client, uint version, uint id)
     {
+        var resource = new RiverSeatV1Resource(client, version, id, this);
         Resource = resource;
         _pointerPositionSent = false;
         _pointerEnterValid = false;
-
-        resource.FocusWindow += (_, e) =>
-        {
-            if (_manager.EnsureWindowing() && _manager.ResolveWindow(e.Window) is { } window)
-            {
-                RequestedFocus = FocusTarget.Window;
-                RequestedFocusWindow = window;
-            }
-        };
-        resource.ClearFocus += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                RequestedFocus = FocusTarget.None;
-                RequestedFocusWindow = null;
-            }
-        };
-        resource.OpStartPointer += (_, _) =>
-        {
-            if (!_manager.EnsureWindowing() || OperationActive || OperationPending)
-            {
-                return;
-            }
-
-            OperationPending = true;
-        };
-        resource.OpEnd += (_, _) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                OperationActive = false;
-                OperationReleased = false;
-            }
-        };
-        resource.PointerWarp += (_, e) =>
-        {
-            if (_manager.EnsureWindowing())
-            {
-                PendingWarp = new Point(e.X, e.Y);
-            }
-        };
-        resource.GetPointerBinding += (_, e) =>
-        {
-            var bindingResource = new RiverPointerBindingV1Resource(resource.Client, resource.Version, e.Id);
-            var binding = new RiverPointerBinding(_manager, bindingResource, e.Button, e.Modifiers);
-            _pointerBindings.Add(binding);
-            bindingResource.DestroyRequest += (_, _) => _pointerBindings.Remove(binding);
-        };
-        resource.SetXcursorTheme += (_, e) => CursorTheme = (e.Name, (int)e.Size);
-        resource.DestroyRequest += (_, _) => Resource = null;
+        return resource;
     }
+
+    internal void ForgetPointerBinding(RiverPointerBinding binding) => _pointerBindings.Remove(binding);
+
+    void IRiverSeatV1Handler.FocusWindow(RiverSeatV1Resource resource, in RiverSeatV1Resource.FocusWindowEventArgs args)
+    {
+        if (_manager.EnsureWindowing() && _manager.ResolveWindow(args.Window) is { } window)
+        {
+            RequestedFocus = FocusTarget.Window;
+            RequestedFocusWindow = window;
+        }
+    }
+
+    void IRiverSeatV1Handler.FocusShellSurface(RiverSeatV1Resource resource, in RiverSeatV1Resource.FocusShellSurfaceEventArgs args)
+    {
+    }
+
+    void IRiverSeatV1Handler.ClearFocus(RiverSeatV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            RequestedFocus = FocusTarget.None;
+            RequestedFocusWindow = null;
+        }
+    }
+
+    void IRiverSeatV1Handler.OpStartPointer(RiverSeatV1Resource resource)
+    {
+        if (!_manager.EnsureWindowing() || OperationActive || OperationPending)
+        {
+            return;
+        }
+
+        OperationPending = true;
+    }
+
+    void IRiverSeatV1Handler.OpEnd(RiverSeatV1Resource resource)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            OperationActive = false;
+            OperationReleased = false;
+        }
+    }
+
+    void IRiverSeatV1Handler.PointerWarp(RiverSeatV1Resource resource, in RiverSeatV1Resource.PointerWarpEventArgs args)
+    {
+        if (_manager.EnsureWindowing())
+        {
+            PendingWarp = new Point(args.X, args.Y);
+        }
+    }
+
+    void IRiverSeatV1Handler.GetPointerBinding(RiverSeatV1Resource resource, in RiverSeatV1Resource.GetPointerBindingEventArgs args)
+    {
+        var binding = new RiverPointerBinding(_manager, this, resource.Client, resource.Version, args.Id, args.Button, args.Modifiers);
+        _pointerBindings.Add(binding);
+    }
+
+    void IRiverSeatV1Handler.SetXcursorTheme(RiverSeatV1Resource resource, in RiverSeatV1Resource.SetXcursorThemeEventArgs args) =>
+        CursorTheme = (args.Name, (int)args.Size);
+
+    void IRiverSeatV1Handler.Destroy(RiverSeatV1Resource resource) => Resource = null;
 
     internal (string Name, int Size)? CursorTheme { get; private set; }
 

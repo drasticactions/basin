@@ -11,7 +11,7 @@ namespace Basin.Desktop;
 /// Serves the <c>zwlr_virtual_pointer_manager_v1</c> global. Events go to the input sink of the requested seat, or to the default sink when the client names no seat.
 /// A pointer made with an output maps its absolute motion onto that output's layout box, then passes it on in the layout-bounds extent that <see cref="IInputSink"/> reads.
 /// </summary>
-public sealed class VirtualPointerManager : IDisposable
+public sealed class VirtualPointerManager : IDisposable, IZwlrVirtualPointerManagerV1Handler
 {
     /// <summary>
     /// The highest global version that the manager advertises.
@@ -41,50 +41,78 @@ public sealed class VirtualPointerManager : IDisposable
     /// </summary>
     public void Dispose() => _global.Dispose();
 
-    private void OnBind(WlClient client, uint version, uint id)
+    void IZwlrVirtualPointerManagerV1Handler.CreateVirtualPointer(ZwlrVirtualPointerManagerV1Resource resource, in ZwlrVirtualPointerManagerV1Resource.CreateVirtualPointerEventArgs args) =>
+        CreatePointer(resource, args.Id, Seat.Seat.FromResource(args.Seat), null);
+
+    void IZwlrVirtualPointerManagerV1Handler.CreateVirtualPointerWithOutput(ZwlrVirtualPointerManagerV1Resource resource, in ZwlrVirtualPointerManagerV1Resource.CreateVirtualPointerWithOutputEventArgs args) =>
+        CreatePointer(
+            resource,
+            args.Id,
+            Seat.Seat.FromResource(args.Seat),
+            args.Output is { } output ? OutputGlobal.FromResource(output)?.Output : null);
+
+    void IZwlrVirtualPointerManagerV1Handler.Destroy(ZwlrVirtualPointerManagerV1Resource resource)
     {
-        var manager = new ZwlrVirtualPointerManagerV1Resource(client, version, id);
-        manager.CreateVirtualPointer += (_, e) =>
-            WirePointer(new ZwlrVirtualPointerV1Resource(client, manager.Version, e.Id), Seat.Seat.FromResource(e.Seat), null);
-        manager.CreateVirtualPointerWithOutput += (_, e) =>
-            WirePointer(
-                new ZwlrVirtualPointerV1Resource(client, manager.Version, e.Id),
-                Seat.Seat.FromResource(e.Seat),
-                e.Output is { } output ? OutputGlobal.FromResource(output)?.Output : null);
     }
 
-    private void WirePointer(ZwlrVirtualPointerV1Resource pointer, Seat.Seat? seat, IOutput? output)
+    private void OnBind(WlClient client, uint version, uint id) =>
+        _ = new ZwlrVirtualPointerManagerV1Resource(client, version, id, this);
+
+    private void CreatePointer(ZwlrVirtualPointerManagerV1Resource manager, uint id, Seat.Seat? seat, IOutput? output)
     {
         var sink = seat?.InputSink ?? _sink;
+        var pointer = new ZwlrVirtualPointerV1Resource(manager.Client, manager.Version, id, new VirtualPointer(sink, output, _layout));
         if (seat is not null)
         {
             seat.AddVirtualDevice(SeatCapability.Pointer);
             pointer.Destroyed += (_, _) => seat.RemoveVirtualDevice(SeatCapability.Pointer);
         }
+    }
 
-        pointer.Motion += (_, e) => sink?.PointerMotion(e.Time, e.Dx.ToDouble(), e.Dy.ToDouble());
-        pointer.MotionAbsolute += (_, e) =>
+    private sealed class VirtualPointer(IInputSink? sink, IOutput? output, OutputLayout? layout) : IZwlrVirtualPointerV1Handler
+    {
+        void IZwlrVirtualPointerV1Handler.Motion(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.MotionEventArgs args) =>
+            sink?.PointerMotion(args.Time, args.Dx.ToDouble(), args.Dy.ToDouble());
+
+        void IZwlrVirtualPointerV1Handler.MotionAbsolute(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.MotionAbsoluteEventArgs args)
         {
-            if (e.XExtent == 0 || e.YExtent == 0)
+            if (args.XExtent == 0 || args.YExtent == 0)
             {
                 return;
             }
 
-            if (output is not null && _layout is { } layout &&
-                layout.BoxOf(output) is { IsEmpty: false } box && layout.Bounds is { IsEmpty: false } bounds)
+            if (output is not null && layout is { } withLayout &&
+                withLayout.BoxOf(output) is { IsEmpty: false } box && withLayout.Bounds is { IsEmpty: false } bounds)
             {
-                var layoutX = box.X + ((double)e.X / e.XExtent * box.Width);
-                var layoutY = box.Y + ((double)e.Y / e.YExtent * box.Height);
-                sink?.PointerMotionAbsolute(e.Time, layoutX - bounds.X, layoutY - bounds.Y, bounds.Width, bounds.Height);
+                var layoutX = box.X + ((double)args.X / args.XExtent * box.Width);
+                var layoutY = box.Y + ((double)args.Y / args.YExtent * box.Height);
+                sink?.PointerMotionAbsolute(args.Time, layoutX - bounds.X, layoutY - bounds.Y, bounds.Width, bounds.Height);
                 return;
             }
 
-            sink?.PointerMotionAbsolute(e.Time, e.X, e.Y, e.XExtent, e.YExtent);
-        };
-        pointer.Button += (_, e) => sink?.PointerButton(e.Time, e.Button, e.State == WlPointer.ButtonState.Pressed);
-        pointer.Axis += (_, e) => sink?.PointerAxis(e.Time, (uint)e.Axis, e.Value.ToDouble());
-        pointer.AxisSource += (_, e) => sink?.PointerAxisSource((uint)e.AxisSource);
-        pointer.AxisStop += (_, e) => sink?.PointerAxisStop(e.Time, (uint)e.Axis);
-        pointer.Frame += (_, _) => sink?.Frame();
+            sink?.PointerMotionAbsolute(args.Time, args.X, args.Y, args.XExtent, args.YExtent);
+        }
+
+        void IZwlrVirtualPointerV1Handler.Button(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.ButtonEventArgs args) =>
+            sink?.PointerButton(args.Time, args.Button, args.State == WlPointer.ButtonState.Pressed);
+
+        void IZwlrVirtualPointerV1Handler.Axis(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.AxisEventArgs args) =>
+            sink?.PointerAxis(args.Time, (uint)args.Axis, args.Value.ToDouble());
+
+        void IZwlrVirtualPointerV1Handler.Frame(ZwlrVirtualPointerV1Resource resource) => sink?.Frame();
+
+        void IZwlrVirtualPointerV1Handler.AxisSource(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.AxisSourceEventArgs args) =>
+            sink?.PointerAxisSource((uint)args.AxisSource);
+
+        void IZwlrVirtualPointerV1Handler.AxisStop(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.AxisStopEventArgs args) =>
+            sink?.PointerAxisStop(args.Time, (uint)args.Axis);
+
+        void IZwlrVirtualPointerV1Handler.AxisDiscrete(ZwlrVirtualPointerV1Resource resource, in ZwlrVirtualPointerV1Resource.AxisDiscreteEventArgs args)
+        {
+        }
+
+        void IZwlrVirtualPointerV1Handler.Destroy(ZwlrVirtualPointerV1Resource resource)
+        {
+        }
     }
 }
