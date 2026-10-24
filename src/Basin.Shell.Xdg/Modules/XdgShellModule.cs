@@ -3,7 +3,7 @@ using Basin.Capabilities;
 namespace Basin.Shell.Xdg;
 
 /// <summary>
-/// Installs <c>xdg_wm_base</c>. It registers the <see cref="XdgShell"/> and its <see cref="XdgToplevelSource"/>, and adds the source to the <see cref="AggregateToplevelModel"/>. It makes that model the default <see cref="IToplevelModel"/> when no aggregate model is registered.
+/// Installs <c>xdg_wm_base</c>. It registers the <see cref="XdgShell"/> and its <see cref="XdgToplevelSource"/>, and adds the source to the <see cref="AggregateToplevelModel"/>. It makes that model the default <see cref="IToplevelModel"/> when no aggregate model is registered. The source sends move and resize requests to the registered <see cref="IToplevelPlacement"/>.
 /// </summary>
 public sealed class XdgShellModule : IProtocolModule
 {
@@ -28,7 +28,7 @@ public sealed class XdgShellModule : IProtocolModule
     {
         ArgumentNullException.ThrowIfNull(services);
         Shell = new XdgShell(services.Display, services.Require<CompositorGlobal>(), services.Find<Seat.Seat>());
-        Toplevels = new XdgToplevelSource(Shell);
+        Toplevels = new XdgToplevelSource(Shell) { Placement = services.Find<IToplevelPlacement>() };
         services.Use(Shell);
         services.Use(Toplevels);
 

@@ -344,7 +344,7 @@ internal sealed partial class LunaShell
             return;
         }
 
-        if (!_notify.Invoke(id, key, _tokens.MintShell()) || _notify.Find(id) is { Resident: true })
+        if (!_notify.Invoke(id, key, _tokens.MintLaunch(null)) || _notify.Find(id) is { Resident: true })
         {
             _notify.Dismiss(id);
         }
@@ -516,7 +516,7 @@ internal sealed partial class LunaShell
         ShowDashboard(view, false);
         if (notification.HasAction(NotificationAction.DefaultKey))
         {
-            _notify.Invoke(id, NotificationAction.DefaultKey, _tokens.MintShell());
+            _notify.Invoke(id, NotificationAction.DefaultKey, _tokens.MintLaunch(null));
             _report.Line($"NOTIFY invoke {id} default");
             return;
         }

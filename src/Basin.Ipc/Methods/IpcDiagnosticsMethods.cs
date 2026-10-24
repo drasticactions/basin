@@ -51,6 +51,26 @@ internal static class IpcDiagnosticsMethods
             });
         }
 
+        if (describe.Find<IUIElementLocator>() is { } locator)
+        {
+            server.Methods.RegisterLibrary(IpcMethodNames.DiagElement, (ref IpcParams parameters, IpcReply reply) =>
+            {
+                var name = parameters.GetString("name");
+                if (parameters.Failed)
+                {
+                    return;
+                }
+
+                if (!locator.TryLocate(name, out var box))
+                {
+                    reply.Error(IpcErrorCodes.NotFound, $"No visible element of the compositor's UI has the name '{name}'.");
+                    return;
+                }
+
+                reply.Write(new IpcDiagElement(name, Box(box)), IpcJsonContext.Default.IpcDiagElement);
+            });
+        }
+
         if (describe.Diagnostics is not { } diagnostics)
         {
             if (describe.Find<IWindowPartsSource>() is { } source)

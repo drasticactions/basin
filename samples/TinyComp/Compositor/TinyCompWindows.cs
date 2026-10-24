@@ -636,6 +636,43 @@ internal sealed partial class TinyComp
         return new Point(x, y);
     }
 
+    private sealed class PlacementPolicy : IToplevelPlacement
+    {
+        private readonly TinyComp _comp;
+
+        public PlacementPolicy(TinyComp comp) => _comp = comp;
+
+        public bool Move(IToplevelHandle toplevel, int x, int y)
+        {
+            switch (toplevel)
+            {
+                case XdgToplevelWindow xdg when _comp.FindWindow(xdg) is { } window:
+                    window.MoveTo(x, y);
+                    return true;
+                case Basin.XWayland.XWaylandWindow xwin when _comp.FindXWindow(xwin) is { } xwindow:
+                    xwindow.MoveTo(x, y);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public bool Resize(IToplevelHandle toplevel, int width, int height)
+        {
+            switch (toplevel)
+            {
+                case XdgToplevelWindow xdg when _comp.FindWindow(xdg) is { } window:
+                    window.ResizeTo(window.X, window.Y, width, height, ResizeEdges.None);
+                    return true;
+                case Basin.XWayland.XWaylandWindow xwin when _comp.FindXWindow(xwin) is { } xwindow:
+                    xwindow.ResizeTo(xwindow.X, xwindow.Y, width, height, ResizeEdges.None);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
     private XWindow? FindXWindow(Basin.XWayland.XWaylandWindow xwin)
     {
         foreach (var xwindow in _xwindows)

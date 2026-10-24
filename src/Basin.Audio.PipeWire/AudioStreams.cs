@@ -1,6 +1,8 @@
 using Basin.Diagnostics;
 using System.Globalization;
 using PipeWire;
+using PipeWire.Native;
+using PipeWire.Spa;
 
 namespace Basin.Audio.PipeWire;
 
@@ -25,6 +27,7 @@ public sealed class AudioStreams : IDisposable
     private readonly Dictionary<uint, Pending> _nodes = [];
     private readonly Dictionary<uint, ClientEntry> _clients = [];
     private readonly Dictionary<uint, AudioStream> _streams = [];
+    private readonly SpaPodBuilder _builder = new(256);
     private bool _disposed;
 
     /// <summary>
@@ -57,7 +60,7 @@ public sealed class AudioStreams : IDisposable
     public event Action<AudioStream>? Added;
 
     /// <summary>
-    /// Occurs when a known stream or its client sends new properties. The argument is a new <see cref="AudioStream"/> that replaces the old one.
+    /// Occurs when a known stream or its client sends new properties, or when the stream starts or stops running. The argument is a new <see cref="AudioStream"/> that replaces the old one.
     /// </summary>
     public event Action<AudioStream>? Changed;
 
@@ -72,6 +75,25 @@ public sealed class AudioStreams : IDisposable
     /// <param name="nodeId">The PipeWire global id of the node.</param>
     /// <returns>The stream, or <see langword="null"/> when it is not reported.</returns>
     public AudioStream? Find(uint nodeId) => _streams.GetValueOrDefault(nodeId);
+
+    /// <summary>
+    /// Writes the mute of one stream node through its props. The node keeps its volume. Nothing reports the new value back.
+    /// </summary>
+    /// <param name="nodeId">The PipeWire global id of a reported stream.</param>
+    /// <param name="muted"><see langword="true"/> to mute the stream.</param>
+    /// <returns><see langword="true"/> when the write was sent. <see langword="false"/> when the object is disposed or the stream is not reported.</returns>
+    public bool SetMuted(uint nodeId, bool muted)
+    {
+        if (_disposed || !_streams.ContainsKey(nodeId) || !_nodes.TryGetValue(nodeId, out var pending))
+        {
+            return false;
+        }
+
+        _builder.Reset();
+        SinkVolume.BuildProps(_builder, [], muted);
+        pending.Node.SetParam(spa_param_type.SPA_PARAM_Props, _builder.WrittenSpan);
+        return true;
+    }
 
     /// <summary>
     /// Stops following the registry and destroys every node and client proxy. It raises no <see cref="Removed"/>. A second call does nothing.
@@ -99,10 +121,11 @@ public sealed class AudioStreams : IDisposable
         _nodes.Clear();
         _clients.Clear();
         _streams.Clear();
+        _builder.Dispose();
         BasinCounters.Untrack();
     }
 
-    internal static AudioStream Describe(uint nodeId, IReadOnlyDictionary<string, string?> node, IReadOnlyDictionary<string, string?>? client)
+    internal static AudioStream Describe(uint nodeId, IReadOnlyDictionary<string, string?> node, IReadOnlyDictionary<string, string?>? client, bool running = false)
     {
         string? Get(string key) => node.TryGetValue(key, out var value) && value is { Length: > 0 }
             ? value
@@ -120,6 +143,7 @@ public sealed class AudioStreams : IDisposable
             MediaRole = Get("media.role"),
             ViaPulse = api == "pipewire-pulse",
             LaunchId = (long)ULong(Get(LaunchKey)),
+            IsRunning = running,
         };
     }
 
@@ -142,12 +166,18 @@ public sealed class AudioStreams : IDisposable
         _nodes[global.Id] = pending;
         node.Info += (_, info) =>
         {
-            if (info.Properties.Count == 0)
+            var running = info.State == pw_node_state.PW_NODE_STATE_RUNNING;
+            if (info.Properties.Count == 0 && running == pending.Running)
             {
                 return;
             }
 
-            pending.Properties = info.Properties;
+            pending.Running = running;
+            if (info.Properties.Count > 0)
+            {
+                pending.Properties = info.Properties;
+            }
+
             Resolve(pending);
         };
     }
@@ -210,7 +240,7 @@ public sealed class AudioStreams : IDisposable
             client = entry.Properties;
         }
 
-        var stream = Describe(pending.Id, properties, client);
+        var stream = Describe(pending.Id, properties, client, pending.Running);
         var added = !_streams.ContainsKey(pending.Id);
         _streams[pending.Id] = stream;
         if (added)
@@ -286,6 +316,8 @@ public sealed class AudioStreams : IDisposable
         public PipeWireNode Node { get; } = node;
 
         public uint ClientId { get; set; }
+
+        public bool Running { get; set; }
 
         public IReadOnlyDictionary<string, string?>? Properties { get; set; }
     }

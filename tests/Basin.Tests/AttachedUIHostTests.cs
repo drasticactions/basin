@@ -196,4 +196,60 @@ public sealed class AttachedUIHostTests
         Assert.Equal(2, lost);
         surface.Dispose();
     }
+
+    [AvaloniaFact]
+    public void A_named_control_is_located_in_layout_coordinates_newest_surface_first()
+    {
+        var owner = ThreadAffinity.Capture();
+        using var host = Attach(owner);
+        host.Pump();
+        AvaloniaUISurface Surface(double x, double y, Control content)
+        {
+            var surface = Assert.IsType<AvaloniaUISurface>(host.CreateSurface(new UISurfaceOptions { Target = UITargetKind.Memory, Width = 200, Height = 100, Scale = 1.0 }));
+            surface.Content = content;
+            surface.SetPosition(x, y);
+            return surface;
+        }
+
+        var older = Surface(10, 20, new StackPanel { Children = { new Border { Height = 30 }, new Button { Name = "Go", Width = 40, Height = 20 } } });
+        var hidden = new Button { Name = "Hidden", Width = 10, Height = 10, IsVisible = false };
+        var newer = Surface(300, 400, new StackPanel { Children = { new Button { Name = "Go", Width = 50, Height = 24, Margin = new global::Avalonia.Thickness(5, 0, 0, 0) }, hidden } });
+        Pump();
+
+        Assert.True(host.TryLocate("Go", out var box));
+        Assert.Equal(new Box(305, 400, 50, 24), box);
+        Assert.False(host.TryLocate("Hidden", out _));
+        Assert.False(host.TryLocate("Missing", out _));
+
+        newer.Dispose();
+        Assert.True(host.TryLocate("Go", out box));
+        Assert.Equal(new Box(10, 50, 40, 20), box);
+        older.Dispose();
+    }
+
+    [Fact]
+    public void The_element_directory_asks_the_newest_locator_first()
+    {
+        var directory = new Basin.Capabilities.Defaults.UIElementDirectory();
+        var first = new FixedLocator("a", new Box(1, 1, 1, 1));
+        var second = new FixedLocator("a", new Box(2, 2, 2, 2));
+        directory.Add(first);
+        directory.Add(second);
+        directory.Add(first);
+        Assert.True(directory.TryLocate("a", out var box));
+        Assert.Equal(new Box(2, 2, 2, 2), box);
+        directory.Remove(second);
+        Assert.True(directory.TryLocate("a", out box));
+        Assert.Equal(new Box(1, 1, 1, 1), box);
+        Assert.False(directory.TryLocate("b", out _));
+    }
+
+    private sealed class FixedLocator(string name, Box box) : IUIElementLocator
+    {
+        public bool TryLocate(string asked, out Box found)
+        {
+            found = asked == name ? box : default;
+            return asked == name;
+        }
+    }
 }

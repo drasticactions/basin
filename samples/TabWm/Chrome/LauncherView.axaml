@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             xmlns:chrome="using:TabWm.Chrome"
+             x:Class="TabWm.Chrome.LauncherView"
+             x:DataType="chrome:LauncherViewModel">
+  <UserControl.Resources>
+    <DataTemplate x:Key="Tile" x:DataType="chrome:LauncherEntryModel">
+      <StackPanel Width="96" Height="88" Spacing="6" Classes="launcher-tile" VerticalAlignment="Top">
+        <Panel Width="48" Height="48" HorizontalAlignment="Center">
+          <union:UnionIcon IconName="{Binding IconName}" IsVisible="{Binding HasIconName}" Width="48" Height="48" />
+          <Image Source="{Binding Icon}" IsVisible="{Binding HasImage}" Width="48" Height="48" />
+        </Panel>
+        <TextBlock Text="{Binding Name}" TextAlignment="Center" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+  <Border union:Union.Type="applicationwindow" Background="{union:Style Background.Color}">
+    <DockPanel Margin="24,20">
+      <TextBox Name="Search"
+               DockPanel.Dock="Top"
+               Classes="launcher-search"
+               CaretBlinkInterval="0:0:0"
+               PlaceholderText="Search apps or type a command"
+               Text="{Binding SearchText, Mode=TwoWay}"
+               MaxWidth="640"
+               Margin="0,0,0,16" />
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <Panel>
+          <ListBox Name="Results"
+                   IsVisible="{Binding Searching}"
+                   ItemsSource="{Binding Results}"
+                   MaxWidth="640"
+                   Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="chrome:LauncherEntryModel">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <Panel Width="24" Height="24">
+                    <union:UnionIcon IconName="{Binding IconName}" IsVisible="{Binding HasIconName}" Width="24" Height="24" />
+                    <Image Source="{Binding Icon}" IsVisible="{Binding HasImage}" Width="24" Height="24" />
+                  </Panel>
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <StackPanel IsVisible="{Binding !Searching}" Spacing="12">
+            <TextBlock Classes="launcher-heading" Text="Pinned" IsVisible="{Binding HasPinned}" />
+            <ListBox Name="Pinned"
+                     ItemsSource="{Binding Pinned}"
+                     ItemTemplate="{StaticResource Tile}"
+                     IsVisible="{Binding HasPinned}"
+                     Background="Transparent">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+            </ListBox>
+            <ItemsControl ItemsSource="{Binding Categories}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="chrome:LauncherCategoryModel">
+                  <StackPanel Spacing="6" Margin="0,8,0,0">
+                    <TextBlock Classes="launcher-heading" Text="{Binding Name}" />
+                    <ListBox Classes="launcher-category"
+                             ItemsSource="{Binding Items}"
+                             ItemTemplate="{StaticResource Tile}"
+                             Background="Transparent">
+                      <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel />
+                        </ItemsPanelTemplate>
+                      </ListBox.ItemsPanel>
+                    </ListBox>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Panel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+</UserControl>

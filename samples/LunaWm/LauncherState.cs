@@ -16,10 +16,7 @@ internal sealed class LauncherState
 
     public static string DefaultPath()
     {
-        var state = Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } dir
-            ? dir
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state");
-        return Path.Combine(state, "luna-wm", "launcher.json");
+        return Path.Combine(Basin.Freedesktop.XdgDirectories.StateHome, "luna-wm", "launcher.json");
     }
 
     public static LauncherState Build(IReadOnlyList<LauncherTab> seed, IReadOnlyList<string> seedQuickLaunch, IReadOnlyList<LauncherEntry> entries, LauncherFile? saved)

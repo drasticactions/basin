@@ -178,7 +178,7 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
     {
         ArgumentNullException.ThrowIfNull(path);
         var (key, value) = desktopId is not null ? ("desktop_id", LaunchRule.NormalizeDesktopId(desktopId)) : ("exec", exec!);
-        var document = File.Exists(path) ? TomlDocument.Load(path) : TomlDocument.Parse(string.Empty);
+        var document = TomlDocument.LoadOrEmpty(path);
         var literal = TomlValue.From(value).Text;
         var other = key == "desktop_id" ? "exec" : "desktop_id";
         var index = -1;

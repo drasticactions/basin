@@ -773,6 +773,7 @@ internal sealed partial class TinyComp :
 
         _workspaceModel = new WorkspacePolicy(this);
         _services.Use<Basin.Capabilities.IWorkspaceModel>(_workspaceModel);
+        _services.Use<Basin.Capabilities.IToplevelPlacement>(new PlacementPolicy(this));
 
         if (CreateFrameRenderer() is { } frames)
         {
@@ -906,14 +907,6 @@ internal sealed partial class TinyComp :
             FindWindow(toplevel)?.SetModal(modal);
         _xdgToplevels.CaptureExclusionRequested += (toplevel, excluded) =>
             _xdgToplevels.SetExcludedFromCapture(toplevel, excluded);
-        _xdgToplevels.MoveRequested += (toplevel, box) => FindWindow(toplevel)?.MoveTo(box.X, box.Y);
-        _xdgToplevels.ResizeRequested += (toplevel, box) =>
-        {
-            if (FindWindow(toplevel) is { } window)
-            {
-                window.ResizeTo(window.X, window.Y, box.Width, box.Height, ResizeEdges.None);
-            }
-        };
 
         WireLayerShell();
         _toplevelDrags = _services.Require<XdgToplevelDragManager>();
@@ -995,14 +988,6 @@ internal sealed partial class TinyComp :
                         FindXWindow(xwin)?.SetNoBorderOverride(noBorder);
                     xToplevels.CaptureExclusionRequested += (xwin, excluded) =>
                         xToplevels.SetExcludedFromCapture(xwin, excluded);
-                    xToplevels.MoveRequested += (xwin, box) => FindXWindow(xwin)?.MoveTo(box.X, box.Y);
-                    xToplevels.ResizeRequested += (xwin, box) =>
-                    {
-                        if (FindXWindow(xwin) is { } xwindow)
-                        {
-                            xwindow.ResizeTo(xwindow.X, xwindow.Y, box.Width, box.Height, ResizeEdges.None);
-                        }
-                    };
                 }
 
                 _report.Line($"XWAYLAND WM {display.DisplayName}");

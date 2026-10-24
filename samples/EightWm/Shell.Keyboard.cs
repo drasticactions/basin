@@ -23,11 +23,7 @@ internal sealed partial class Shell
 
     internal SoftKeyboardSession KeyboardSession => _kbSession;
 
-    internal static string KeyboardStatePath() => Path.Combine(
-        Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } state
-            ? state
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state"),
-        "eight-wm", "keyboard.json");
+    internal static string KeyboardStatePath() => Path.Combine(Basin.Freedesktop.XdgDirectories.StateHome, "eight-wm", "keyboard.json");
 
     private SoftKeyboardSessionOptions KeyboardOptions()
     {

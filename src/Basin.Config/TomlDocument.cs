@@ -47,6 +47,19 @@ public sealed class TomlDocument
     }
 
     /// <summary>
+    /// Reads a TOML file into a document, or gives an empty document when the file does not exist.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    /// <returns>The document. <see cref="Save"/> creates the file.</returns>
+    /// <exception cref="FormatException">The file does not parse.</exception>
+    /// <exception cref="IOException">The file cannot be read.</exception>
+    public static TomlDocument LoadOrEmpty(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        return File.Exists(path) ? Load(path) : Parse(string.Empty);
+    }
+
+    /// <summary>
     /// Gives the current text of the document.
     /// </summary>
     /// <returns>The TOML text with all edits.</returns>

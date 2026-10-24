@@ -1,0 +1,10 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             x:Class="TabWm.Chrome.TabWmApp">
+  <Application.Styles>
+    <union:UnionTheme />
+    <union:UnionControlsTheme />
+    <StyleInclude Source="avares://tab-wm/Chrome/TabWmStyles.axaml" />
+  </Application.Styles>
+</Application>

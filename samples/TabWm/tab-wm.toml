@@ -1,0 +1,36 @@
+# tab-wm configuration. Each tab of the strip holds a workspace.
+# Delete a key to go back to its default.
+
+[theme]
+# auto uses the native KDE Union engine when it loads, else the managed one.
+engine = "auto"          # auto | native | managed
+variant = "auto"         # auto | light | dark; light and dark pick a Breeze scheme
+color-scheme = ""        # a KColorScheme name; empty follows the session or the variant
+
+[shell]
+xwayland = true
+
+[tabs]
+# Close a tab when its last window closes, instead of showing the launcher.
+close-when-empty = false
+# How long a polite close waits for windows before it shows the ones that stay.
+close-timeout-ms = 5000
+
+[launcher]
+pinned = ["org.kde.konsole.desktop", "foot.desktop", "firefox.desktop"]
+terminal = ""            # empty uses $TERMINAL, then the environment rules
+
+[session]
+# Reopen the tabs and apps of the last session at start.
+restore = true
+# The session lock client that Super+Escape and the menu run. Empty disables locking.
+lock-command = "swaylock -f"
+
+[keys]
+# Every default chord can be rebound or removed. Examples:
+# "Super+T" = "new-tab"
+# "Super+Return" = ["foot"]
+# "Super+Q" = false
+
+# [[startup]]
+# command = "foot"       # runs once into the first tab of the primary output

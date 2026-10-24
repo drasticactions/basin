@@ -323,6 +323,10 @@ public static class IpcMethodNames
     /// </summary>
     public const string DiagParts = "diag/parts";
     /// <summary>
+    /// Names the method that answers the box of a named element of the compositor's own UI.
+    /// </summary>
+    public const string DiagElement = "diag/element";
+    /// <summary>
     /// Names the method that clicks the center of a frame part through synthetic input.
     /// </summary>
     public const string DiagClick = "diag/click";

@@ -255,6 +255,7 @@ internal sealed partial class Westonia : IDisposable
             Decorations, _services.Find<Basin.Desktop.KdeServerDecorationManager>(), _services.Find<XdgToplevelSource>());
 
         _outputs.CreateInitialOutputs();
+        _outputs.AdoptSecondaryCards();
         if (_host.Parent is not null)
         {
             _cursor.UseParentCursor();

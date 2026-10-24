@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             xmlns:chrome="using:TabWm.Chrome"
+             x:Class="TabWm.Chrome.StripView"
+             x:DataType="chrome:StripModel">
+  <Panel union:Union.Type="titlebar" Background="{union:Style Background.Color}">
+    <chrome:StripPanel Name="Layout" Margin="4,3,4,0">
+      <TabControl Name="Tabs"
+                  ItemsSource="{Binding Tabs}"
+                  SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                  union:ClosableTabs.IsEnabled="True"
+                  Padding="0"
+                  VerticalAlignment="Bottom">
+        <TabControl.ItemTemplate>
+          <DataTemplate x:DataType="chrome:TabModel">
+            <StackPanel Orientation="Horizontal" Spacing="6" Classes="tab-header" Classes.drop="{Binding DropTarget}">
+              <Panel Width="16" Height="16" VerticalAlignment="Center">
+                <union:UnionIcon IconName="{Binding IconName}" IsVisible="{Binding HasIconName}" Width="16" Height="16" />
+                <Image Source="{Binding Icon}" IsVisible="{Binding HasImage}" Width="16" Height="16" />
+                <union:BusyIndicator IsRunning="{Binding Busy}" IsVisible="{Binding Busy}" Width="16" Height="16" />
+              </Panel>
+              <TextBlock Classes="tab-label"
+                         Text="{Binding Label}"
+                         MaxWidth="180"
+                         TextTrimming="CharacterEllipsis"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding !IsEditing}" />
+              <TextBox Classes="tab-rename"
+                       Text="{Binding EditText, Mode=TwoWay}"
+                       IsVisible="{Binding IsEditing}"
+                       MinWidth="120"
+                       VerticalAlignment="Center" />
+              <Button Classes="tab-audio"
+                      IsVisible="{Binding ShowAudio}"
+                      Command="{Binding $parent[chrome:StripView].((chrome:StripModel)DataContext).MuteCommand}"
+                      CommandParameter="{Binding}"
+                      VerticalAlignment="Center"
+                      ToolTip.Tip="Mute tab">
+                <union:UnionIcon IconName="{Binding AudioIcon}" Width="16" Height="16" />
+              </Button>
+              <Ellipse Classes="tab-attention"
+                       Width="7"
+                       Height="7"
+                       VerticalAlignment="Center"
+                       Fill="{union:Style Text.Color}"
+                       IsVisible="{Binding Attention}" />
+            </StackPanel>
+          </DataTemplate>
+        </TabControl.ItemTemplate>
+        <TabControl.ContentTemplate>
+          <DataTemplate>
+            <Panel />
+          </DataTemplate>
+        </TabControl.ContentTemplate>
+      </TabControl>
+      <Button Name="NewTabButton"
+              Classes="new-tab"
+              Command="{Binding NewTabCommand}"
+              ToolTip.Tip="New tab"
+              VerticalAlignment="Center"
+              Margin="4,0">
+        <union:UnionIcon IconName="list-add" Width="16" Height="16" />
+      </Button>
+      <StackPanel Name="Status" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" Margin="8,0,0,0">
+        <union:UnionIcon IconName="audio-volume-high" Width="16" Height="16" IsVisible="{Binding AnyAudio}" VerticalAlignment="Center" />
+        <TextBlock Name="Clock" Text="{Binding Clock}" VerticalAlignment="Center" />
+        <Button Name="MenuButton" Classes="strip-menu" ToolTip.Tip="Menu" VerticalAlignment="Center">
+          <union:UnionIcon IconName="application-menu" Width="16" Height="16" />
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem Header="New Tab" Command="{Binding NewTabCommand}" />
+              <Separator />
+              <MenuItem Header="Settings" Command="{Binding MenuCommand}" CommandParameter="settings" />
+              <MenuItem Header="About tab-wm" Command="{Binding MenuCommand}" CommandParameter="about" />
+              <Separator />
+              <MenuItem Header="Lock" Command="{Binding MenuCommand}" CommandParameter="lock" />
+              <MenuItem Header="Log Out" Command="{Binding MenuCommand}" CommandParameter="logout" />
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
+    </chrome:StripPanel>
+  </Panel>
+</UserControl>

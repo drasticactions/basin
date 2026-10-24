@@ -531,6 +531,17 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public void Activate() => _wm.ActivateWindow(this);
 
     /// <summary>
+    /// Gets the frame extents that the last <see cref="SetFrameExtents"/> call wrote, or zero insets.
+    /// </summary>
+    public Basin.Capabilities.FrameInsets FrameExtents { get; internal set; }
+
+    /// <summary>
+    /// Writes <c>_NET_FRAME_EXTENTS</c>: the size of the frame that the compositor draws around the window. The window geometry stays the content box.
+    /// </summary>
+    /// <param name="insets">The frame size on each side, zero for no frame.</param>
+    public void SetFrameExtents(Basin.Capabilities.FrameInsets insets) => _wm.SetWindowFrameExtents(this, insets);
+
+    /// <summary>
     /// Sets the maximized state and writes it to <c>_NET_WM_STATE</c>.
     /// </summary>
     /// <param name="maximized"><see langword="true"/> to tell the client that it is maximized.</param>
@@ -615,9 +626,27 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
 
     internal void RaiseMinimizeRequested(bool minimized) => MinimizeRequested?.Invoke(minimized);
 
-    internal void RaiseMaximizeRequested(bool maximized) => MaximizeRequested?.Invoke(maximized);
+    internal bool RaiseMaximizeRequested(bool maximized)
+    {
+        if (MaximizeRequested is not { } handler)
+        {
+            return false;
+        }
 
-    internal void RaiseFullscreenRequested(bool fullscreen) => FullscreenRequested?.Invoke(fullscreen);
+        handler(maximized);
+        return true;
+    }
+
+    internal bool RaiseFullscreenRequested(bool fullscreen)
+    {
+        if (FullscreenRequested is not { } handler)
+        {
+            return false;
+        }
+
+        handler(fullscreen);
+        return true;
+    }
 
     internal void RaiseSizeHintsChanged() => SizeHintsChanged?.Invoke();
 

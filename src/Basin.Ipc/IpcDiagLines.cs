@@ -15,6 +15,7 @@ internal static class IpcDiagLines
         Add(methods, IpcMethodNames.DiagRecord, "record {x:int} {y:int} {width:int} {height:int} {frames:int} {path} [{output}]", Recording);
         Add(methods, IpcMethodNames.DiagRecordWindow, "record-window {window} {frames:int} {path} [{margin:int}]", Recording);
         Add(methods, IpcMethodNames.DiagParts, "parts {window}", Parts);
+        Add(methods, IpcMethodNames.DiagElement, "element {name}", Element);
         Add(methods, IpcMethodNames.DiagTargets, "targets", Targets);
         Add(methods, IpcMethodNames.DiagClick, "click {window} {part} [{button}]", Click);
         Add(methods, IpcMethodNames.DiagDrag, "drag {window} {dx:number} {dy:number} [{steps:int}] [{part}]", Drag);
@@ -202,6 +203,12 @@ internal static class IpcDiagLines
             var box = part.Box;
             text.Append(CultureInfo.InvariantCulture, $"PART {part.Part} {box.X},{box.Y},{box.Width}x{box.Height}\n");
         }
+    });
+
+    public static string? Element(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagElement, static (element, text) =>
+    {
+        var box = element.Box;
+        text.Append(CultureInfo.InvariantCulture, $"ELEMENT {element.Name} {box.X},{box.Y},{box.Width}x{box.Height}\n");
     });
 
     public static string? Recording(IpcReply reply) => Render(reply, IpcJsonContext.Default.IpcDiagRecording, static (recording, text) =>

@@ -69,6 +69,11 @@ public sealed class XWaylandDisplay : IDisposable
     public XWaylandToplevelSource? Toplevels { get; private set; }
 
     /// <summary>
+    /// Gets or sets the policy that each new <see cref="Toplevels"/> source gives move and resize requests to.
+    /// </summary>
+    public IToplevelPlacement? Placement { get; set; }
+
+    /// <summary>
     /// Gets the X display name, for example <c>:1</c>.
     /// </summary>
     public string DisplayName => Server.DisplayName;
@@ -134,7 +139,7 @@ public sealed class XWaylandDisplay : IDisposable
     private void OnReady(int wmFd)
     {
         WindowManager = new XWaylandWm(wmFd, _loop, _shell, _seat, WmOptions(), Server.Client);
-        Toplevels = new XWaylandToplevelSource(WindowManager, this);
+        Toplevels = new XWaylandToplevelSource(WindowManager, this) { Placement = Placement };
         _model?.Add(Toplevels);
         WindowManagerReady?.Invoke(WindowManager);
     }

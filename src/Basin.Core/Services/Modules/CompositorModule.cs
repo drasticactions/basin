@@ -30,6 +30,9 @@ public sealed class CompositorModule : IProtocolModule
         var popups = new Capabilities.Defaults.PopupDirectory();
         services.UseDefault(popups);
         services.UseDefault<IPopupDirectory>(popups);
+        var elements = new Capabilities.Defaults.UIElementDirectory();
+        services.UseDefault(elements);
+        services.UseDefault<IUIElementLocator>(elements);
         services.UseDefault(new PresentedSets());
         services.UseDefault<Capabilities.ISurfaceHints>(new Capabilities.Defaults.SurfaceHints());
         services.UseDefault<Capabilities.IFrameStats>(new WindowFrameStats(services));

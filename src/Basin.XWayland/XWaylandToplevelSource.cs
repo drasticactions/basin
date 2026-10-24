@@ -80,14 +80,9 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IToplevelGeometryF
     public event Action<XWaylandWindow, Surface?, Box>? MinimizedGeometryRequested;
 
     /// <summary>
-    /// Occurs on a move request. The box holds the requested position. Without a handler, <see cref="Request"/> declines the request.
+    /// Gets or sets the policy that answers move and resize requests. Without one, <see cref="Request"/> declines them.
     /// </summary>
-    public event Action<XWaylandWindow, Box>? MoveRequested;
-
-    /// <summary>
-    /// Occurs on a resize request. The box holds the requested size. Without a handler, <see cref="Request"/> declines the request.
-    /// </summary>
-    public event Action<XWaylandWindow, Box>? ResizeRequested;
+    public IToplevelPlacement? Placement { get; set; }
 
     /// <summary>
     /// Finds the window of a local id.
@@ -257,7 +252,7 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IToplevelGeometryF
     }
 
     /// <summary>
-    /// Acts on a window. Activate, close, minimize and unminimize are always accepted. The other kinds go to the matching event and are declined when it has no handler.
+    /// Acts on a window. Activate, close, minimize and unminimize are always accepted. Maximize and fullscreen go to the window's own request events, as if the client asked. The other kinds go to the matching event or to <see cref="Placement"/>, and are declined when nothing handles them.
     /// </summary>
     /// <param name="localId">The local id of the window.</param>
     /// <param name="request">The action and its arguments.</param>
@@ -280,6 +275,10 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IToplevelGeometryF
             case ToplevelRequestKind.Minimize or ToplevelRequestKind.Unminimize:
                 window.RaiseMinimizeRequested(request.Kind == ToplevelRequestKind.Minimize);
                 return true;
+            case ToplevelRequestKind.Maximize or ToplevelRequestKind.Unmaximize:
+                return window.RaiseMaximizeRequested(request.Kind == ToplevelRequestKind.Maximize);
+            case ToplevelRequestKind.Fullscreen or ToplevelRequestKind.Unfullscreen:
+                return window.RaiseFullscreenRequested(request.Kind == ToplevelRequestKind.Fullscreen);
             case ToplevelRequestKind.SetNoBorder or ToplevelRequestKind.UnsetNoBorder
                 when NoBorderRequested is { } noBorder:
                 noBorder.Invoke(window, request.Kind == ToplevelRequestKind.SetNoBorder);
@@ -295,12 +294,10 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IToplevelGeometryF
                 when CaptureExclusionRequested is { } exclusion:
                 exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
                 return true;
-            case ToplevelRequestKind.Move when MoveRequested is { } move:
-                move.Invoke(window, request.Geometry);
-                return true;
-            case ToplevelRequestKind.Resize when ResizeRequested is { } resize:
-                resize.Invoke(window, request.Geometry);
-                return true;
+            case ToplevelRequestKind.Move when Placement is { } placement:
+                return placement.Move(window, request.Geometry.X, request.Geometry.Y);
+            case ToplevelRequestKind.Resize when Placement is { } placement:
+                return placement.Resize(window, request.Geometry.Width, request.Geometry.Height);
             default:
                 return false;
         }

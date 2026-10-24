@@ -68,6 +68,38 @@ public sealed class ClientTeardownTests
         }
     }
 
+    [Fact]
+    public void The_root_of_a_grandchild_is_the_tracked_process_that_started_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "the walk reads /proc");
+
+        var marker = Path.Combine(Path.GetTempPath(), $"basin-root-{Environment.ProcessId}-{Environment.TickCount64}");
+        using var host = new CompositorTestHost();
+        try
+        {
+            using var tracker = new ProcessTracker(host.Loop, () => ProcessTracker.SessionEnvironment("wayland-not-connected", null, null));
+            var shell = tracker.SpawnShell($"sh -c 'sleep 300 & echo $! > \"{marker}\"; wait' ; true", out var error);
+            Assert.True(shell is not null, error);
+
+            var grandchild = WaitForMarker(marker);
+            Assert.True(grandchild > 0, "the shell never reported its grandchild");
+            Assert.Same(shell, tracker.RootOf(grandchild));
+            Assert.Same(shell, tracker.RootOf(shell!.Pid));
+            Assert.True(tracker.OwnsTree(grandchild));
+            Assert.Null(tracker.RootOf(Environment.ProcessId));
+
+            tracker.TerminateAll(TimeSpan.FromSeconds(2));
+            Assert.Null(tracker.RootOf(grandchild));
+        }
+        finally
+        {
+            if (File.Exists(marker))
+            {
+                File.Delete(marker);
+            }
+        }
+    }
+
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int OpenInheritable(string path, int flags = 0);
 

@@ -22,6 +22,14 @@ public static class XdgDirectories
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
 
     /// <summary>
+    /// Gets <c>$XDG_STATE_HOME</c>, or <c>~/.local/state</c> when the variable is unset, empty or relative.
+    /// </summary>
+    public static string StateHome =>
+        Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } home && Path.IsPathRooted(home)
+            ? home
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state");
+
+    /// <summary>
     /// Lists the data directories in order of importance.
     /// </summary>
     /// <returns><see cref="DataHome"/> first, then the absolute entries of <c>$XDG_DATA_DIRS</c>, or <c>/usr/local/share</c> and <c>/usr/share</c> when it is unset or empty.</returns>

@@ -99,7 +99,7 @@ internal sealed partial class LunaShell : IDisposable
         var servicePack = new DesktopServicePack(_scene, _layout, _renderer, _host.Drm);
         _capture = servicePack.Capture;
         var inputSink = new Basin.Seat.Backends.HookInputSink();
-        _tokens = new LunaActivationTokens();
+        _tokens = new Basin.Capabilities.Defaults.DefaultActivationTokens();
         servicePack.ActivationTokens = _tokens;
         _services = _host.CreateServices()
             .Use(_layout)

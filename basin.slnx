@@ -21,6 +21,7 @@
     <Project Path="samples/DungeonWm/DungeonWm.csproj" />
     <Project Path="samples/BasinGreeter/BasinGreeter.csproj" />
     <Project Path="samples/Westonia/Westonia.csproj" />
+    <Project Path="samples/TabWm/TabWm.csproj" />
     <Project Path="samples/System7Wm/System7Wm.csproj" />
     <Project Path="samples/LunaWm/LunaWm.csproj" />
   </Folder>
@@ -37,6 +38,7 @@
     <Project Path="src/Basin.Frames.MsStyles.Quill/Basin.Frames.MsStyles.Quill.csproj" />
     <Project Path="src/Basin.Themes.MsStyles/Basin.Themes.MsStyles.csproj" />
     <Project Path="src/Basin.Pty/Basin.Pty.csproj" />
+    <Project Path="src/Basin.GLib/Basin.GLib.csproj" />
     <Project Path="src/Basin.SoftKeyboard/Basin.SoftKeyboard.csproj" />
     <Project Path="src/Basin.SoftKeyboard.Avalonia/Basin.SoftKeyboard.Avalonia.csproj" />
     <Project Path="src/Basin.SoftKeyboard.Fcitx5/Basin.SoftKeyboard.Fcitx5.csproj" />
@@ -140,6 +142,7 @@
     <Project Path="tests/BasinGreeter.Tests/BasinGreeter.Tests.csproj" />
     <Project Path="tests/SdlComp.Tests/SdlComp.Tests.csproj" />
     <Project Path="tests/Westonia.Tests/Westonia.Tests.csproj" />
+    <Project Path="tests/TabWm.Tests/TabWm.Tests.csproj" />
     <Project Path="tests/EightWm.Tests/EightWm.Tests.csproj" />
     <Project Path="tests/System7Wm.Tests/System7Wm.Tests.csproj" />
     <Project Path="tests/LunaWm.Tests/LunaWm.Tests.csproj" />

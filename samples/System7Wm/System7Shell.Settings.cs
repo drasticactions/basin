@@ -29,7 +29,7 @@ internal sealed partial class System7Shell
 
         try
         {
-            var document = File.Exists(path) ? TomlDocument.Load(path) : TomlDocument.Parse("");
+            var document = TomlDocument.LoadOrEmpty(path);
             document.Set(table, key, value);
             document.Save(path);
             _settingSaveFailed = false;

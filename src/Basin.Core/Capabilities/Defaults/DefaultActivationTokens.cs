@@ -12,7 +12,7 @@ public sealed class DefaultActivationTokens : IActivationTokens
     private readonly LinkedList<Token> _order = [];
     private int _counter;
 
-    private readonly record struct Token(string Name, string? AppId, long MintedAtMs);
+    private readonly record struct Token(string Name, string? AppId, long MintedAtMs, bool FromLaunch, int RequesterPid);
 
     /// <summary>
     /// Gets or sets the time in milliseconds after which a token no longer redeems. The default is 30 000.
@@ -35,7 +35,12 @@ public sealed class DefaultActivationTokens : IActivationTokens
     public string? LastRedeemedAppId { get; private set; }
 
     /// <summary>
-    /// Mints a token that stores only the app id and the time. It removes the expired tokens first, and the oldest token when the table is full.
+    /// Occurs when a token is redeemed, before <see cref="Redeem"/> returns.
+    /// </summary>
+    public event Action<ActivationRedemption>? Redeemed;
+
+    /// <summary>
+    /// Mints a token that stores only the app id, the time and the process ID of the client. It removes the expired tokens first, and the oldest token when the table is full.
     /// </summary>
     /// <param name="client">The client that asks. The token keeps no reference to it.</param>
     /// <param name="requestingSurface">The surface that asks. The token keeps no reference to it.</param>
@@ -45,17 +50,16 @@ public sealed class DefaultActivationTokens : IActivationTokens
     public string Mint(WlClient client, Surface? requestingSurface, uint serial, string? appId)
     {
         ArgumentNullException.ThrowIfNull(client);
-        var now = Environment.TickCount64;
-        Expire(now);
-        while (_tokens.Count > 0 && _tokens.Count >= Math.Max(1, Capacity))
-        {
-            Drop(_order.First!);
-        }
-
-        var name = $"basin-{++_counter}";
-        _tokens[name] = _order.AddLast(new Token(name, appId, now));
-        return name;
+        var pid = client.TryGetCredentials(out var credentials) ? credentials.Pid : 0;
+        return Add($"basin-{++_counter}", appId, fromLaunch: false, pid);
     }
+
+    /// <summary>
+    /// Mints a token for a launch that the shell starts, with no requesting client. The shell passes it to the child in <c>XDG_ACTIVATION_TOKEN</c>.
+    /// </summary>
+    /// <param name="appId">The app id or desktop id of the launch, or <see langword="null"/>.</param>
+    /// <returns>The token string.</returns>
+    public string MintLaunch(string? appId) => Add($"basin-launch-{++_counter}", appId, fromLaunch: true, 0);
 
     /// <summary>
     /// Consumes a token. It does not check the client, the serial or the surface that minted the token.
@@ -75,6 +79,7 @@ public sealed class DefaultActivationTokens : IActivationTokens
 
         Drop(node);
         LastRedeemedAppId = node.Value.AppId;
+        Redeemed?.Invoke(new ActivationRedemption(token, target, node.Value.FromLaunch, node.Value.AppId, node.Value.RequesterPid));
         return true;
     }
 
@@ -83,6 +88,19 @@ public sealed class DefaultActivationTokens : IActivationTokens
     {
         _tokens.Clear();
         _order.Clear();
+    }
+
+    private string Add(string name, string? appId, bool fromLaunch, int requesterPid)
+    {
+        var now = Environment.TickCount64;
+        Expire(now);
+        while (_tokens.Count > 0 && _tokens.Count >= Math.Max(1, Capacity))
+        {
+            Drop(_order.First!);
+        }
+
+        _tokens[name] = _order.AddLast(new Token(name, appId, now, fromLaunch, requesterPid));
+        return name;
     }
 
     private void Expire(long now)

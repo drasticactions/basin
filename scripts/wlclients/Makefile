@@ -22,7 +22,7 @@ LDLIBS += $(shell pkg-config --libs wayland-client)
 all: $(BIN)/locktest $(BIN)/vptr $(BIN)/vpad $(BIN)/vtouch $(BIN)/vkbd $(BIN)/vmouse $(BIN)/gestures $(BIN)/colorinfo \
 	$(BIN)/hyprsurface $(BIN)/focusgrab $(BIN)/locknotify $(BIN)/toplevelexport $(BIN)/ssdwin \
 	$(BIN)/panel $(BIN)/riverrepeat $(BIN)/appmenu $(BIN)/pointerlock $(BIN)/textinput $(BIN)/randremu $(BIN)/x11focus \
-	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch $(BIN)/exportdmabuf
+	$(BIN)/scrgbwin $(BIN)/tabwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch $(BIN)/exportdmabuf
 
 $(BIN):
 	mkdir -p $(BIN)
@@ -76,6 +76,9 @@ $(BIN)/vpen: vpen.c | $(BIN)
 $(BIN)/tabletprobe: tabletprobe.c $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-protocol.h \
 		$(BIN)/tablet-v2-protocol.c $(BIN)/tablet-v2-client-protocol.h | $(BIN)
 	$(CC) $(CFLAGS) -o $@ tabletprobe.c $(BIN)/xdg-shell-protocol.c $(BIN)/tablet-v2-protocol.c $(LDLIBS)
+
+$(BIN)/tabwin: tabwin.c $(BIN)/xdg-shell-protocol.c $(BIN)/xdg-shell-client-protocol.h | $(BIN)
+	$(CC) $(CFLAGS) -o $@ tabwin.c $(BIN)/xdg-shell-protocol.c $(LDLIBS)
 
 $(BIN)/randremu: randremu.c | $(BIN)
 	$(CC) -O1 -Wall -Wextra -o $@ randremu.c $(shell pkg-config --cflags --libs xcb xcb-randr)

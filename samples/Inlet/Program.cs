@@ -753,6 +753,7 @@ internal static class Program
         };
 
         driver.CreateInitialOutputs();
+        driver.AdoptSecondaryCards();
         outputsCreated = true;
         if (drmBackend is not null && views.Count == 0)
         {

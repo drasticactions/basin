@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Basin.Capabilities;
 using Basin.Diagnostics;
 
@@ -8,9 +10,9 @@ namespace Basin.UI.Avalonia;
 
 /// <summary>
 /// An <see cref="IUIHost"/> that draws chrome surfaces with Avalonia. <see cref="BasinPlatform"/> makes it.
-/// Use it on the thread that made it.
+/// Use it on the thread that made it. It finds the controls of its surfaces by name for diagnostics.
 /// </summary>
-public sealed class AvaloniaUIHost : IUIHost
+public sealed class AvaloniaUIHost : IUIHost, IUIElementLocator
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -101,6 +103,40 @@ public sealed class AvaloniaUIHost : IUIHost
     /// It is <see langword="null"/> when no work is due, when the host is disposed and on an attached host.
     /// </summary>
     public long? NextDueMillis => _disposed || _dispatcher is null ? null : _dispatcher.NextDueMillis;
+
+    /// <inheritdoc/>
+    public bool TryLocate(string name, out Box box)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        _thread.Assert();
+        for (var i = _surfaces.Count - 1; i >= 0; i--)
+        {
+            var surface = _surfaces[i];
+            if (surface.VisualRoot is not { } root)
+            {
+                continue;
+            }
+
+            foreach (var control in root.GetVisualDescendants().OfType<Control>())
+            {
+                if (control.Name != name || !control.IsEffectivelyVisible || control.Bounds.Width <= 0 || control.Bounds.Height <= 0 ||
+                    control.TranslatePoint(default, root) is not { } origin)
+                {
+                    continue;
+                }
+
+                box = new Box(
+                    (int)Math.Round(surface.PositionX + origin.X),
+                    (int)Math.Round(surface.PositionY + origin.Y),
+                    (int)Math.Round(control.Bounds.Width),
+                    (int)Math.Round(control.Bounds.Height));
+                return true;
+            }
+        }
+
+        box = default;
+        return false;
+    }
 
     /// <inheritdoc/>
     public IUISurface? CreateSurface(in UISurfaceOptions options)

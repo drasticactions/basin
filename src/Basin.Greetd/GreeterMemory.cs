@@ -167,7 +167,7 @@ public sealed class GreeterMemory
     {
         try
         {
-            var document = File.Exists(Path) ? TomlDocument.Load(Path) : TomlDocument.Parse("");
+            var document = TomlDocument.LoadOrEmpty(Path);
             change(document);
             document.Save(Path);
             return true;

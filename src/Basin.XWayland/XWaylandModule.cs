@@ -81,6 +81,7 @@ public sealed class XWaylandModule : IProtocolModule
         var model = PublishToplevels ? services.Find<IToplevelModel>() as AggregateToplevelModel : null;
         var layout = services.Find<OutputLayout>();
         var clientScales = services.Find<ClientScales>() ?? compositor.ClientScales;
+        var placement = services.Find<IToplevelPlacement>();
 
         XWaylandDisplay Create(X11Density density, XWaylandScale scale)
         {
@@ -88,7 +89,7 @@ public sealed class XWaylandModule : IProtocolModule
             var outputs = layout is null
                 ? null
                 : new XWaylandOutputs(server, layout, clientScales, services.Find<ILogicalOutputOverrides>);
-            var display = new XWaylandDisplay(density, server, outputs, services.Loop, Shell, seat, model, PublishXSettings);
+            var display = new XWaylandDisplay(density, server, outputs, services.Loop, Shell, seat, model, PublishXSettings) { Placement = placement };
             _displays.Add(display);
             if (services.Find<Capabilities.Defaults.PopupDirectory>() is { } popups)
             {

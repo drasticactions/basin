@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>TabWm</RootNamespace>
+    <AssemblyName>tab-wm</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <BasinAvaloniaBackend>true</BasinAvaloniaBackend>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TabWm.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="tab-wm.toml" LogicalName="tab-wm.toml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Basin.Audio.PipeWire/Basin.Audio.PipeWire.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Drm/Basin.Backend.Drm.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Headless/Basin.Backend.Headless.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Libinput/Basin.Backend.Libinput.csproj" />
+    <ProjectReference Include="../../src/Basin.Backend.Wayland/Basin.Backend.Wayland.csproj" />
+    <ProjectReference Include="../../src/Basin.Cli/Basin.Cli.csproj" />
+    <ProjectReference Include="../../src/Basin.Color/Basin.Color.csproj" />
+    <ProjectReference Include="../../src/Basin.Config/Basin.Config.csproj" />
+    <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
+    <ProjectReference Include="../../src/Basin.Desktop/Basin.Desktop.csproj" />
+    <ProjectReference Include="../../src/Basin.Eis/Basin.Eis.csproj" />
+    <ProjectReference Include="../../src/Basin.Freedesktop/Basin.Freedesktop.csproj" />
+    <ProjectReference Include="../../src/Basin.GLib/Basin.GLib.csproj" />
+    <ProjectReference Include="../../src/Basin.Host/Basin.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Icons.Skia/Basin.Icons.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Inspector.Host/Basin.Inspector.Host.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Gl/Basin.Render.Gl.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Pixman/Basin.Render.Pixman.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia/Basin.Render.Skia.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Skia.Gpu/Basin.Render.Skia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.Render.Vulkan/Basin.Render.Vulkan.csproj" />
+    <ProjectReference Include="../../src/Basin.Renderers/Basin.Renderers.csproj" />
+    <ProjectReference Include="../../src/Basin.Scene/Basin.Scene.csproj" />
+    <ProjectReference Include="../../src/Basin.Screencast.PipeWire/Basin.Screencast.PipeWire.csproj" />
+    <ProjectReference Include="../../src/Basin.Seat/Basin.Seat.csproj" />
+    <ProjectReference Include="../../src/Basin.Seat.Backends/Basin.Seat.Backends.csproj" />
+    <ProjectReference Include="../../src/Basin.Session/Basin.Session.csproj" />
+    <ProjectReference Include="../../src/Basin.Shell.Xdg/Basin.Shell.Xdg.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia/Basin.UI.Avalonia.csproj" />
+    <ProjectReference Include="../../src/Basin.UI.Avalonia.Gpu/Basin.UI.Avalonia.Gpu.csproj" />
+    <ProjectReference Include="../../src/Basin.XWayland/Basin.XWayland.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.HarfBuzz" />
+    <PackageReference Include="AvaUnion.Theme" />
+    <PackageReference Include="AvaUnion.Controls" />
+    <PackageReference Include="AvaUnion.BreezeIcons" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+</Project>

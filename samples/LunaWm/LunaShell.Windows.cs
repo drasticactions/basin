@@ -22,7 +22,7 @@ internal sealed partial class LunaShell
     private SceneTree _overrideRedirect = null!;
     private PopupPlacer _popups = null!;
     private FractionalScaleManager? _scales;
-    private LunaActivationTokens _tokens = null!;
+    private Basin.Capabilities.Defaults.DefaultActivationTokens _tokens = null!;
     private long _focusClock;
 
     internal IReadOnlyList<Card> Cards => _cards;
@@ -41,11 +41,11 @@ internal sealed partial class LunaShell
                 Show(card);
             }
         };
-        _tokens.Redeemed += (_, surface, shell) =>
+        _tokens.Redeemed += redemption =>
         {
-            if (shell)
+            if (redemption.FromLaunch)
             {
-                _shellActivated.Add(surface);
+                _shellActivated.Add(redemption.Surface);
             }
         };
         _scales = _services.Find<FractionalScaleManager>();
@@ -331,7 +331,7 @@ internal sealed partial class LunaShell
         }
 
         var pid = card.Pid;
-        return pid > 0 && _launchRoots.Count > 0 && ProcessAncestry.DescendsFrom(pid, _launchRoots.Contains);
+        return pid > 0 && _launchRoots.Count > 0 && _processes.RootOf(pid) is { } root && _launchRoots.Contains(root.Pid);
     }
 
     private Card? SiblingFor(LunaView view, Card card, StackChoice choice)
@@ -682,7 +682,7 @@ internal sealed partial class LunaShell
 
     internal void Launch(string command, string? label = null, string? icon = null, string? desktopId = null)
     {
-        var token = _tokens.MintShell();
+        var token = _tokens.MintLaunch(desktopId);
         var launch = new ProcessLaunch(["sh", "-c", command])
         {
             DesktopId = desktopId,

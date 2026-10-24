@@ -83,7 +83,7 @@ server-managed exact    attach-and-damage                 0
 server-managed exact    pointer-axis                      0
 channel    exact    remote-frame                   6400
 channel    exact    remote-dmabuf-frame            6400
-server     exact    popup-cycle                  907200
+server     exact    popup-cycle                  916800
 server-managed exact    popup-cycle                  933600
 server     exact    color-representation-set          0
 server-managed exact    color-representation-set          0
@@ -149,7 +149,7 @@ server     exact    ipc-call-windows-move         10640
 server     exact    ipc-call-clipboard-empty      16800
 server     exact    ipc-call-idle-status           2400
 server     exact    ipc-call-methods-detail      3486400
-server     exact    ipc-call-windows-get-missing   4800
+server     exact    ipc-call-windows-get-missing   9600
 server     exact    ipc-call-seat-pointer-move     7944
 server     exact    ipc-call-windows-set-state    11040
 server     exact    ipc-call-windows-list        134000

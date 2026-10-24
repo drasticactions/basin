@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             xmlns:chrome="using:TabWm.Chrome"
+             x:Class="TabWm.Chrome.FrameEdgeView"
+             x:DataType="chrome:FrameModel">
+  <Panel union:Union.Type="titlebar"
+         union:Union.Hints="{Binding Hints}"
+         Background="{union:Style Background.Color}">
+    <Border Name="Line" BorderBrush="{DynamicResource Union.Active.Window.Decoration.FrameBrush}" IsHitTestVisible="False" />
+  </Panel>
+</UserControl>

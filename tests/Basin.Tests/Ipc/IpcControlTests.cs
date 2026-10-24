@@ -42,7 +42,7 @@ public sealed class IpcControlTests
     }
 
     [Fact]
-    public void Move_on_an_xdg_source_is_refused_until_the_compositor_subscribes()
+    public void Move_on_an_xdg_source_is_refused_until_the_compositor_gives_it_a_placement()
     {
         var model = new AggregateToplevelModel();
         using var rig = new IpcTestRig(services => services.Use<IToplevelModel>(model));
@@ -56,16 +56,36 @@ public sealed class IpcControlTests
         Assert.Equal(IpcErrorCodes.Refused, ErrorCode(peer.Call($$$"""{"method":"windows/move","params":{"id":{{{id}}},"x":1,"y":2}}""")));
         Assert.Equal(IpcErrorCodes.Refused, ErrorCode(peer.Call($$$"""{"method":"windows/resize","params":{"id":{{{id}}},"width":10,"height":20}}""")));
 
-        Box? moved = null;
-        Box? resized = null;
-        source.MoveRequested += (_, box) => moved = box;
-        source.ResizeRequested += (_, box) => resized = box;
+        var placement = new RecordingPlacement();
+        source.Placement = placement;
         Assert.Null(ErrorCode(peer.Call($$$"""{"method":"windows/move","params":{"id":{{{id}}},"x":1,"y":2}}""")));
         Assert.Null(ErrorCode(peer.Call($$$"""{"method":"windows/resize","params":{"id":{{{id}}},"width":10,"height":20}}""")));
-        Assert.Equal(1, moved!.Value.X);
-        Assert.Equal(2, moved.Value.Y);
-        Assert.Equal(10, resized!.Value.Width);
-        Assert.Equal(20, resized.Value.Height);
+        Assert.Equal((1, 2), placement.Moved);
+        Assert.Equal((10, 20), placement.Resized);
+
+        placement.Decline = true;
+        Assert.Equal(IpcErrorCodes.Refused, ErrorCode(peer.Call($$$"""{"method":"windows/move","params":{"id":{{{id}}},"x":3,"y":4}}""")));
+    }
+
+    private sealed class RecordingPlacement : IToplevelPlacement
+    {
+        public bool Decline { get; set; }
+
+        public (int X, int Y)? Moved { get; private set; }
+
+        public (int Width, int Height)? Resized { get; private set; }
+
+        public bool Move(IToplevelHandle toplevel, int x, int y)
+        {
+            Moved = (x, y);
+            return !Decline;
+        }
+
+        public bool Resize(IToplevelHandle toplevel, int width, int height)
+        {
+            Resized = (width, height);
+            return !Decline;
+        }
     }
 
     [Fact]

@@ -61,4 +61,27 @@ public sealed class ActivationTokenTests
         Assert.True(tokens.Redeem(token, child.ServerSurface));
         Assert.Equal("app.child", tokens.LastRedeemedAppId);
     }
+
+    [Fact]
+    public void A_launch_token_reports_its_origin_when_redeemed()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        var tokens = new DefaultActivationTokens();
+        var seen = new List<ActivationRedemption>();
+        tokens.Redeemed += seen.Add;
+        var launch = tokens.MintLaunch("foot.desktop");
+        var client = tokens.Mint(window.ServerSurface.Resource.Client, window.ServerSurface, 1, null);
+
+        Assert.True(tokens.Redeem(launch, window.ServerSurface));
+        Assert.True(tokens.Redeem(client, window.ServerSurface));
+
+        Assert.Equal(2, seen.Count);
+        Assert.True(seen[0].FromLaunch);
+        Assert.Equal("foot.desktop", seen[0].AppId);
+        Assert.Equal(0, seen[0].RequesterPid);
+        Assert.Same(window.ServerSurface, seen[0].Surface);
+        Assert.False(seen[1].FromLaunch);
+        Assert.Equal(Environment.ProcessId, seen[1].RequesterPid);
+    }
 }

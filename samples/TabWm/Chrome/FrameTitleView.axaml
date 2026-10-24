@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             xmlns:chrome="using:TabWm.Chrome"
+             x:Class="TabWm.Chrome.FrameTitleView"
+             x:DataType="chrome:FrameModel">
+  <Panel union:Union.Type="titlebar"
+         union:Union.Hints="{Binding Hints}"
+         Background="{union:Style Background.Color}">
+    <Border BorderThickness="1,1,1,0" BorderBrush="{DynamicResource Union.Active.Window.Decoration.FrameBrush}" IsHitTestVisible="False" />
+    <TextBlock Text="{Binding Title}"
+               Foreground="{union:Style Text.Color}"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               TextTrimming="CharacterEllipsis"
+               Margin="100,0" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0" union:Union.Type="titlebar" union:Union.Hints="{Binding Hints}">
+      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="minimizebutton" Command="{Binding MinimizeCommand}" />
+      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="maximizebutton" union:Union.Hints="{Binding MaximizeHints}" Command="{Binding MaximizeCommand}" />
+      <Button Theme="{StaticResource UnionCaptionButton}" union:Union.Type="closebutton" Command="{Binding CloseCommand}" />
+    </StackPanel>
+  </Panel>
+</UserControl>

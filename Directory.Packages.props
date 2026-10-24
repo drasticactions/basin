@@ -11,6 +11,8 @@
 
   <PropertyGroup>
     <AvaloniaVersion>12.1.4</AvaloniaVersion>
+    <!-- samples/TabWm: KDE Union over Avalonia; its Avalonia dependency must equal AvaloniaVersion -->
+    <AvaUnionVersion>6.8.0.6</AvaUnionVersion>
     <!-- samples/System7Wm and tests/System7Wm.Tests only, through VersionOverride; must equal external/System7.Avalonia's AvaloniaVersion -->
     <System7AvaloniaVersion>12.2.999-cibuild0100120-alpha</System7AvaloniaVersion>
     <AvaWinVersion>0.1.4</AvaWinVersion>
@@ -85,6 +87,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageVersion Include="AvaUnion.Theme" Version="$(AvaUnionVersion)" />
+    <PackageVersion Include="AvaUnion.Controls" Version="$(AvaUnionVersion)" />
+    <PackageVersion Include="AvaUnion.BreezeIcons" Version="$(AvaUnionVersion)" />
     <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />

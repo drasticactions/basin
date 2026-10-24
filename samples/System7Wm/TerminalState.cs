@@ -10,11 +10,7 @@ internal sealed class TerminalState
 
     public int? FontSize { get; set; }
 
-    public static string FileOf() => Path.Combine(
-        Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } state && Path.IsPathRooted(state)
-            ? state
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state"),
-        "system7-wm", "terminal.toml");
+    public static string FileOf() => Path.Combine(Basin.Freedesktop.XdgDirectories.StateHome, "system7-wm", "terminal.toml");
 
     public static TerminalState Load()
     {

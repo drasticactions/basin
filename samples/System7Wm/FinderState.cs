@@ -17,11 +17,7 @@ internal sealed class FinderState
 
     public Dictionary<string, Point> SmallIcons { get; } = new(StringComparer.Ordinal);
 
-    public static string Root => Path.Combine(
-        Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } state && Path.IsPathRooted(state)
-            ? state
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state"),
-        "system7-wm", "finder");
+    public static string Root => Path.Combine(Basin.Freedesktop.XdgDirectories.StateHome, "system7-wm", "finder");
 
     public static string FileOf(string folder) =>
         Path.Combine(Root, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(folder)))[..16] + ".toml");

@@ -117,4 +117,64 @@ public sealed class XWaylandActivationTests
             wm?.Dispose();
         }
     }
+
+    [Fact]
+    public void State_and_placement_requests_reach_the_window_events_and_the_placement()
+    {
+        Assert.SkipUnless(PrivateBus.OnPath("Xwayland") && PrivateBus.OnPath("xeyes"), "Xwayland and xeyes are needed");
+        using var host = new CompositorTestHost(320, 240);
+        using var shell = new XwaylandShellGlobal(host.Display, host.Compositor);
+        using var server = new XWaylandServer(host.Display, host.Loop);
+        XWaylandWm? wm = null;
+        XWaylandToplevelSource? source = null;
+        var mapped = new List<XWaylandWindow>();
+        server.Ready += fd =>
+        {
+            wm = new XWaylandWm(fd, host.Loop, shell, host.Seat);
+            source = new XWaylandToplevelSource(wm);
+            wm.WindowMapped += mapped.Add;
+        };
+
+        using var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "100x80+10+10");
+        try
+        {
+            XWaylandTestSupport.Pump(host, () => mapped.Count > 0);
+            var id = source!.IdFor(mapped[0]);
+            Assert.False(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Maximize)));
+            Assert.False(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Fullscreen)));
+            Assert.False(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Move, Geometry: new Box(5, 6, 0, 0))));
+
+            var asked = new List<string>();
+            mapped[0].MaximizeRequested += maximized => asked.Add($"maximize {maximized}");
+            mapped[0].FullscreenRequested += fullscreen => asked.Add($"fullscreen {fullscreen}");
+            source.Placement = new RecordingPlacement(asked);
+            Assert.True(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Maximize)));
+            Assert.True(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Unfullscreen)));
+            Assert.True(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Move, Geometry: new Box(5, 6, 0, 0))));
+            Assert.True(source.Request(id, new ToplevelRequest(ToplevelRequestKind.Resize, Geometry: new Box(0, 0, 70, 50))));
+            Assert.Equal(["maximize True", "fullscreen False", "move 5 6", "resize 70 50"], asked);
+        }
+        finally
+        {
+            eyes.Kill();
+            eyes.WaitForExit(2000);
+            source?.Dispose();
+            wm?.Dispose();
+        }
+    }
+
+    private sealed class RecordingPlacement(List<string> asked) : IToplevelPlacement
+    {
+        public bool Move(IToplevelHandle toplevel, int x, int y)
+        {
+            asked.Add($"move {x} {y}");
+            return true;
+        }
+
+        public bool Resize(IToplevelHandle toplevel, int width, int height)
+        {
+            asked.Add($"resize {width} {height}");
+            return true;
+        }
+    }
 }

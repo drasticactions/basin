@@ -120,6 +120,8 @@ public sealed class AvaloniaUISurface : IUISurface
     /// </summary>
     public TopLevel? Root => _root;
 
+    internal Visual? VisualRoot => _disposed ? null : _root ?? _impl.InputRoot as Visual;
+
     /// <summary>
     /// Gets the surface that a popup belongs to, or <see langword="null"/> for a surface that is not a popup.
     /// </summary>

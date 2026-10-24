@@ -128,19 +128,29 @@ public sealed class ProcessTracker : IDisposable
     /// </summary>
     /// <param name="pid">The process ID.</param>
     /// <returns><see langword="true"/> when a tracked child is the process or one of its ancestors.</returns>
-    public bool OwnsTree(int pid)
+    public bool OwnsTree(int pid) => RootOf(pid) is not null;
+
+    /// <summary>
+    /// Finds the running tracked child that is a process or its nearest ancestor. It follows at most 32 parents through <c>/proc</c>.
+    /// </summary>
+    /// <param name="pid">The process ID.</param>
+    /// <returns>The tracked child, or <see langword="null"/> when no running tracked child is the process or one of its ancestors.</returns>
+    public TrackedProcess? RootOf(int pid)
     {
         for (var hops = 0; pid > 1 && hops < 32; hops++)
         {
-            if (Owns(pid))
+            foreach (var process in _processes)
             {
-                return true;
+                if (process.IsRunning && process.Pid == pid)
+                {
+                    return process;
+                }
             }
 
             pid = ProcessIdentity.ParentOf(pid);
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>

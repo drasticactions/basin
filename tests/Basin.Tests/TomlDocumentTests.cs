@@ -221,6 +221,27 @@ public sealed class TomlDocumentTests
     }
 
     [Fact]
+    public void LoadOrEmpty_reads_a_file_or_starts_an_empty_one_that_save_creates()
+    {
+        var directory = Directory.CreateTempSubdirectory("basin-toml-");
+        try
+        {
+            var missing = Path.Combine(directory.FullName, "sub", "new.toml");
+            var created = TomlDocument.LoadOrEmpty(missing);
+            Assert.Equal(string.Empty, created.ToString());
+            created.Set("a", "b", TomlValue.From(true));
+            created.Save(missing);
+
+            var read = TomlDocument.LoadOrEmpty(missing);
+            Assert.Equal("true", read.RawValue("a", "b"));
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Save_refuses_a_read_only_file_and_leaves_it_as_it_was()
     {
         if (OperatingSystem.IsWindows())

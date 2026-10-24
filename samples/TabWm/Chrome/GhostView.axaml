@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             x:Class="TabWm.Chrome.GhostView"
+             x:DataType="x:String">
+  <Border union:Union.Type="titlebar"
+          Background="{union:Style Background.Color}"
+          BorderBrush="{DynamicResource Union.Active.Window.Decoration.FrameBrush}"
+          BorderThickness="1"
+          CornerRadius="4"
+          Opacity="0.9"
+          Padding="10,4">
+    <TextBlock Text="{Binding}" Foreground="{union:Style Text.Color}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+  </Border>
+</UserControl>

@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             xmlns:chrome="using:TabWm.Chrome"
+             x:Class="TabWm.Chrome.BannerView"
+             x:DataType="chrome:BannerModel">
+  <Border union:Union.Type="applicationwindow" Background="{union:Style Background.Color}" Padding="10,6">
+    <DockPanel>
+      <Button DockPanel.Dock="Right" Content="Keep Tab" Command="{Binding KeepCommand}" VerticalAlignment="Center" />
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <union:UnionIcon IconName="dialog-warning" Width="16" Height="16" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding Message}" VerticalAlignment="Center" />
+        <ItemsControl ItemsSource="{Binding Windows}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="chrome:HiddenWindowModel">
+              <Button Classes="banner-window"
+                      Content="{Binding Title}"
+                      Command="{Binding $parent[chrome:BannerView].((chrome:BannerModel)DataContext).FocusCommand}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </DockPanel>
+  </Border>
+</UserControl>

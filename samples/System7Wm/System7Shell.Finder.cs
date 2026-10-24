@@ -29,11 +29,7 @@ internal sealed partial class System7Shell
 
     private static string DesktopFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Desktop");
 
-    private static string StateFile => Path.Combine(
-        Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } state && Path.IsPathRooted(state)
-            ? state
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "state"),
-        "system7-wm", "desktop.toml");
+    private static string StateFile => Path.Combine(Basin.Freedesktop.XdgDirectories.StateHome, "system7-wm", "desktop.toml");
 
     private DirectoryWatch Watch
     {
@@ -240,7 +236,7 @@ internal sealed partial class System7Shell
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-            var document = File.Exists(StateFile) ? TomlDocument.Load(StateFile) : TomlDocument.Parse("");
+            var document = TomlDocument.LoadOrEmpty(StateFile);
             foreach (var icon in desktop.Icons)
             {
                 var key = icon.Kind switch
@@ -496,7 +492,7 @@ internal sealed partial class System7Shell
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-            var document = File.Exists(StateFile) ? TomlDocument.Load(StateFile) : TomlDocument.Parse("");
+            var document = TomlDocument.LoadOrEmpty(StateFile);
             document.Set("positions", name, TomlValue.Array([TomlValue.From((long)position.X), TomlValue.From((long)position.Y)]));
             document.Save(StateFile);
         }

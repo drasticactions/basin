@@ -36,6 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Basin.Core/Basin.Core.csproj" />
     <ProjectReference Include="../../src/Basin.Pty/Basin.Pty.csproj" />
+    <ProjectReference Include="../../src/Basin.GLib/Basin.GLib.csproj" />
     <ProjectReference Include="../../src/Basin.Greetd/Basin.Greetd.csproj" />
     <ProjectReference Include="../../src/Basin.Greetd.Ipc/Basin.Greetd.Ipc.csproj" />
     <ProjectReference Include="../../src/Basin.Greetd.Host/Basin.Greetd.Host.csproj" />

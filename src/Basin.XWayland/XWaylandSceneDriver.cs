@@ -1,3 +1,4 @@
+using Basin.Capabilities;
 using Basin.Scene;
 
 namespace Basin.XWayland;
@@ -25,6 +26,11 @@ public sealed class XWaylandSceneDriver : IDisposable
     /// Gets or sets the function that gives the area, in layout coordinates, to center a managed window in when it maps at 0,0. <see langword="null"/> keeps the position.
     /// </summary>
     public Func<Box>? CenterArea { get; set; }
+
+    /// <summary>
+    /// Gets or sets the function that gives the frame of a managed window, or <see langword="null"/> for no frame. On adoption the driver writes the result to <c>_NET_FRAME_EXTENTS</c>, and <see cref="CenterArea"/> centers the outer box so the frame stays inside the area.
+    /// </summary>
+    public Func<XWaylandWindow, FrameInsets>? FrameInsets { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether each new window gets a <see cref="SceneFit"/>. The fit scales or letterboxes a buffer of the wrong size.
@@ -290,12 +296,20 @@ public sealed class XWaylandSceneDriver : IDisposable
             return;
         }
 
+        var insets = FrameInsets?.Invoke(window) ?? default;
+        if (FrameInsets is not null)
+        {
+            window.SetFrameExtents(insets);
+        }
+
         if (CenterArea is { } area && window is { X: 0, Y: 0 })
         {
             var box = area();
+            var outerWidth = window.Width + insets.Left + insets.Right;
+            var outerHeight = window.Height + insets.Top + insets.Bottom;
             window.Configure(
-                box.X + Math.Max(0, (box.Width - window.Width) / 2),
-                box.Y + Math.Max(0, (box.Height - window.Height) / 2),
+                box.X + insets.Left + Math.Max(0, (box.Width - outerWidth) / 2),
+                box.Y + insets.Top + Math.Max(0, (box.Height - outerHeight) / 2),
                 window.Width,
                 window.Height);
         }

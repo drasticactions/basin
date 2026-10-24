@@ -21,7 +21,7 @@
 #
 # A .desktop file in a publish goes into the desktop database under
 # $XDG_DATA_HOME instead, because a portal reads it there. When the set
-# includes tinycomp, westonia or maui-comp, the script also writes the two
+# includes tinycomp, westonia, maui-comp or tab-wm, the script also writes the two
 # xdg-desktop-portal registration files that route the portal interfaces to
 # basin, under $XDG_DATA_HOME/xdg-desktop-portal. --no-portal-files skips them.
 #
@@ -84,7 +84,7 @@ system_lib=/usr/local/lib/basin
 system_bin=/usr/local/bin
 system_share=/usr/local/share
 excluded=(samples/BlurClient)
-portal_programs=(tinycomp westonia maui-comp xdg-desktop-portal-basin)
+portal_programs=(tinycomp westonia maui-comp tab-wm xdg-desktop-portal-basin)
 portal_interfaces="org.freedesktop.impl.portal.ScreenCast;org.freedesktop.impl.portal.RemoteDesktop;org.freedesktop.impl.portal.Screenshot;org.freedesktop.impl.portal.Clipboard;org.freedesktop.impl.portal.InputCapture;org.freedesktop.impl.portal.GlobalShortcuts;org.freedesktop.impl.portal.Access;"
 
 while [ $# -gt 0 ]; do

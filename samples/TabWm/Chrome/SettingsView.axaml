@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:union="https://github.com/avaunion"
+             xmlns:chrome="using:TabWm.Chrome"
+             x:Class="TabWm.Chrome.SettingsView"
+             x:DataType="chrome:SettingsViewModel">
+  <Border union:Union.Type="applicationwindow" Background="{union:Style Background.Color}">
+    <DockPanel Margin="20,14,20,16">
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <TextBlock Classes="settings-title" Text="tab-wm Settings" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Name="CloseButton" Classes="strip-menu" Command="{Binding CloseCommand}" ToolTip.Tip="Close">
+          <union:UnionIcon IconName="window-close" Width="16" Height="16" />
+        </Button>
+      </Grid>
+      <TextBlock DockPanel.Dock="Bottom" Classes="settings-status" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" Margin="0,8,0,0" />
+      <TabControl Name="Sections" SelectedIndex="{Binding Section, Mode=TwoWay}">
+        <TabItem Header="General">
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="18" Margin="4,12,12,4" IsEnabled="{Binding CanSave}">
+              <StackPanel Spacing="8">
+                <TextBlock Classes="settings-heading" Text="Appearance" />
+                <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                  <TextBlock Text="Light or dark" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" Name="Variant" ItemsSource="{x:Static chrome:SettingsViewModel.Variants}" SelectedIndex="{Binding Variant, Mode=TwoWay}" MinWidth="240" />
+                  <TextBlock Grid.Row="1" Text="Color scheme" VerticalAlignment="Center" />
+                  <ComboBox Grid.Row="1" Grid.Column="1" Name="ColorScheme" ItemsSource="{Binding ColorSchemes}" SelectedIndex="{Binding ColorScheme, Mode=TwoWay}" MinWidth="240" />
+                  <TextBlock Grid.Row="2" Text="Style engine" VerticalAlignment="Center" />
+                  <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                    <ComboBox Name="Engine" ItemsSource="{x:Static chrome:SettingsViewModel.Engines}" SelectedIndex="{Binding EngineChoice, Mode=TwoWay}" MinWidth="240" />
+                    <TextBlock Classes="settings-note" Text="Applies at the next start" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+              <StackPanel Spacing="8">
+                <TextBlock Classes="settings-heading" Text="Tabs" />
+                <CheckBox Name="CloseWhenEmpty" Content="Close a tab when its last window closes" IsChecked="{Binding CloseWhenEmpty, Mode=TwoWay}" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Text="Wait for windows to close" VerticalAlignment="Center" Width="200" />
+                  <NumericUpDown Name="CloseTimeout" Value="{Binding CloseTimeoutSeconds, Mode=TwoWay}" Minimum="0" Maximum="120" Increment="1" FormatString="0" Width="120" />
+                  <TextBlock Text="seconds" VerticalAlignment="Center" />
+                </StackPanel>
+                <CheckBox Name="Restore" Content="Reopen the tabs of the last session at start" IsChecked="{Binding Restore, Mode=TwoWay}" />
+              </StackPanel>
+              <StackPanel Spacing="8">
+                <TextBlock Classes="settings-heading" Text="Programs" />
+                <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+                  <TextBlock Text="Terminal" VerticalAlignment="Center" />
+                  <TextBox Grid.Column="1" Name="Terminal" Text="{Binding Terminal, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <TextBlock Grid.Row="1" Text="Lock command" VerticalAlignment="Center" />
+                  <TextBox Grid.Row="1" Grid.Column="1" Name="LockCommand" Text="{Binding LockCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <CheckBox Name="XWayland" Content="Run X11 programs through Xwayland" IsChecked="{Binding XWayland, Mode=TwoWay}" />
+                  <TextBlock Classes="settings-note" Text="Applies at the next start" VerticalAlignment="Center" />
+                </StackPanel>
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+        <TabItem Header="Keys">
+          <DockPanel Margin="4,12,12,4">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl Name="KeyList" ItemsSource="{Binding Keys}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="chrome:SettingsKeyModel">
+                    <Grid ColumnDefinitions="200,*" Margin="0,3">
+                      <TextBlock Classes="settings-chord" Text="{Binding Chord}" />
+                      <TextBlock Grid.Column="1" Text="{Binding Action}" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </DockPanel>
+        </TabItem>
+        <TabItem Header="About">
+          <StackPanel Spacing="10" Margin="4,24,12,4" HorizontalAlignment="Center">
+            <union:UnionIcon IconName="preferences-system-windows" Width="64" Height="64" HorizontalAlignment="Center" />
+            <TextBlock Classes="settings-title" Text="tab-wm" HorizontalAlignment="Center" />
+            <TextBlock Name="AboutVersion" Text="{Binding Version}" HorizontalAlignment="Center" />
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="4" Margin="0,12,0,0" HorizontalAlignment="Center">
+              <TextBlock Classes="settings-note" Text="basin" />
+              <TextBlock Grid.Column="1" Text="{Binding BasinVersion}" />
+              <TextBlock Grid.Row="1" Classes="settings-note" Text="Backend" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Backend}" />
+              <TextBlock Grid.Row="2" Classes="settings-note" Text="Renderer" />
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Renderer}" />
+              <TextBlock Grid.Row="3" Classes="settings-note" Text="Style engine" />
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Engine}" />
+              <TextBlock Grid.Row="4" Classes="settings-note" Text="Settings file" />
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ConfigPath}" TextWrapping="Wrap" MaxWidth="420" />
+            </Grid>
+          </StackPanel>
+        </TabItem>
+      </TabControl>
+    </DockPanel>
+  </Border>
+</UserControl>

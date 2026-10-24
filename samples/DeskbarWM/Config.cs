@@ -95,7 +95,7 @@ internal sealed class Config
         var path = TomlConfig.DefaultPath("deskbar-wm");
         try
         {
-            var document = File.Exists(path) ? TomlDocument.Load(path) : TomlDocument.Parse(string.Empty);
+            var document = TomlDocument.LoadOrEmpty(path);
             edit(document);
             document.Save(path);
         }

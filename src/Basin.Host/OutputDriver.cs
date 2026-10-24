@@ -291,7 +291,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     }
 
     /// <summary>
-    /// Gets the frame count of the first output that is not secondary, or 0 when there is none.
+    /// Gets the frame count of the first output that is not secondary. When every output is secondary, it is the frame count of the first secondary output. It is 0 when there is no output.
     /// </summary>
     public long PrimaryRendered
     {
@@ -305,7 +305,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
                 }
             }
 
-            return 0;
+            return _views.Count > 0 ? _views[0].Rendered : 0;
         }
     }
 
@@ -1861,6 +1861,11 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
         RaisePainted(view);
         Capture?.Capture.NotifyDamaged(view.Output, new Box(0, 0, mode.Width, mode.Height));
+        if (ContinuousRepaint)
+        {
+            view.Scheduler!.ScheduleRepaint();
+        }
+
         if (replicating)
         {
             return;

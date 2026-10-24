@@ -6,9 +6,9 @@
 # suite cannot see: that a real session starts, scans out, and tears down with
 # nothing live and no crash.
 #
-#   --headless        Inlet on the headless backend (default)
-#   --nested          TinyWl and Inlet inside a parent compositor (default)
-#   --drm             Inlet and TinyWl on the display hardware (opt in: takes over
+#   --headless        Inlet, Westonia and TabWm on the headless backend (default)
+#   --nested          TinyWl, Inlet, Westonia and TabWm inside a parent compositor (default)
+#   --drm             Inlet, Westonia, TabWm and TinyWl on the display hardware (opt in: takes over
 #                     the connected outputs for the length of each run). Each GPU
 #                     row also runs a scanout gate: TinyComp under its default
 #                     color management, a fullscreen GL client attached, and the
@@ -95,10 +95,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [ "$build" -eq 1 ]; then
-    echo "building Inlet, TinyWl and Westonia (Release, counters on)"
+    echo "building Inlet, TinyWl, Westonia and TabWm (Release, counters on)"
     dotnet build "$root/samples/Inlet" -c Release -p:BasinCounters=true --nologo -v quiet
     dotnet build "$root/samples/TinyWl" -c Release -p:BasinCounters=true --nologo -v quiet
     dotnet build "$root/samples/Westonia" -c Release -p:BasinCounters=true --nologo -v quiet
+    fuse build "$root/samples/TabWm" -c Release -p:BasinCounters=true --nologo -v quiet
     case " ${modes[*]} " in
         *" drm "*) dotnet build "$root/samples/TinyComp" -c Release -p:BasinCounters=true --nologo -v quiet ;;
     esac
@@ -107,6 +108,7 @@ fi
 inlet=$(find "$root/samples/Inlet/bin/Release" -maxdepth 2 -mindepth 2 -name inlet -type f -perm -u+x 2>/dev/null | head -1)
 tinywl=$(find "$root/samples/TinyWl/bin/Release" -maxdepth 2 -mindepth 2 -name tinywl -type f -perm -u+x 2>/dev/null | head -1)
 westonia=$(find "$root/samples/Westonia/bin/Release" -maxdepth 2 -mindepth 2 -name westonia -type f -perm -u+x 2>/dev/null | head -1)
+tabwm=$(find "$root/samples/TabWm/bin/Release" -maxdepth 2 -mindepth 2 -name tab-wm -type f -perm -u+x 2>/dev/null | head -1)
 tinycomp=$(find "$root/samples/TinyComp/bin/Release" -maxdepth 2 -mindepth 2 -name tinycomp -type f -perm -u+x 2>/dev/null | head -1)
 if [ -z "$inlet" ] || [ -z "$tinywl" ]; then
     echo "no Release build found; run without --no-build" >&2
@@ -136,12 +138,13 @@ fell_back() {
 }
 
 strays() {
-    local inlet_left tinywl_left westonia_left tinycomp_left
+    local inlet_left tinywl_left westonia_left tinycomp_left tabwm_left
     inlet_left=$(pgrep -xc inlet 2>/dev/null || true)
     tinywl_left=$(pgrep -xc tinywl 2>/dev/null || true)
     westonia_left=$(pgrep -xc westonia 2>/dev/null || true)
     tinycomp_left=$(pgrep -xc tinycomp 2>/dev/null || true)
-    echo $(( ${inlet_left:-0} + ${tinywl_left:-0} + ${westonia_left:-0} + ${tinycomp_left:-0} ))
+    tabwm_left=$(pgrep -xc tab-wm 2>/dev/null || true)
+    echo $(( ${inlet_left:-0} + ${tinywl_left:-0} + ${westonia_left:-0} + ${tinycomp_left:-0} + ${tabwm_left:-0} ))
 }
 
 needs_gpu() {
@@ -318,9 +321,71 @@ run_westonia() {
     judge_westonia "$mode" "$row" "$log" "$status"
 }
 
+judge_tabwm() {
+    local mode=$1 row=$2 log=$3 status=$4
+    local chosen union rendered live
+
+    chosen=$(sed -n 's/^RENDERER //p' "$log" | head -1)
+    if fell_back "$log" || { [ -n "$chosen" ] && [ "$chosen" != "$row" ]; }; then
+        record tab-wm "$mode" "$row" SKIP "fell back to ${chosen:-another renderer}"
+        return
+    fi
+
+    if [ "$status" -ne 0 ]; then
+        record tab-wm "$mode" "$row" FAIL "exit $status$(crashed "$log" && echo ' (crash)')"
+        return
+    fi
+
+    if crashed "$log"; then
+        record tab-wm "$mode" "$row" FAIL "crash markers in the log"
+        return
+    fi
+
+    rendered=$(grep -m1 '^FRAMES ' "$log" | awk '{print $2}')
+    if [ -z "$rendered" ] || [ "$rendered" -eq 0 ]; then
+        record tab-wm "$mode" "$row" FAIL "${rendered:+0 frames}${rendered:-no FRAMES line}"
+        return
+    fi
+
+    live=$(grep -m1 '^FRAMES ' "$log" | awk '{print $4}')
+    if [ "$live" != untracked ] && [ "$live" != 0 ]; then
+        record tab-wm "$mode" "$row" FAIL "$live objects live at exit"
+        return
+    fi
+
+    union=$(sed -n 's/^UNION engine=\([a-z]*\) pump=\([a-z]*\).*/\1\/\2/p' "$log" | head -1)
+    if [ -z "$union" ]; then
+        record tab-wm "$mode" "$row" FAIL "no UNION line"
+        return
+    fi
+
+    record tab-wm "$mode" "$row" PASS "$rendered frames, union $union"
+}
+
+run_tabwm() {
+    local mode=$1 row=$2 backend=$3 log=$logs/tabwm-$1-$2.log
+    local status=0
+    if [ -z "$tabwm" ]; then
+        record tab-wm "$mode" "$row" SKIP "no Release build"
+        return
+    fi
+
+    # the default client is a river window manager, which TabWm does not serve, so TabWm runs bare like Westonia
+    local command=("$tabwm" --backend "$backend" --renderer "$row" --config false --no-restore --frames "$frames")
+    timeout --preserve-status -k 10 300 "${command[@]}" >"$log" 2>&1 || status=$?
+    judge_tabwm "$mode" "$row" "$log" "$status"
+}
+
 judge_scanout() {
     local mode=$1 row=$2 log=$3
     local verdict
+    # a secondary card's view repaints through the oracle and never scans out a client,
+    # so a box with no display on its primary card cannot run the gate
+    if ! grep -qE '^STATS [^ ]+ scanout=' "$log" && grep -qE '^STATS [^ ]+ full-repaint' "$log"; then
+        record scanout "$mode" "$row" SKIP "every output is on a secondary card"
+        return
+    fi
+
     verdict=$(awk '
         /^STATS [^ ]+ scanout=/ {
             delete fields
@@ -486,15 +551,18 @@ for mode in "${modes[@]}"; do
             headless)
                 run_inlet headless "$row" headless
                 run_westonia headless "$row" headless
+                run_tabwm headless "$row" headless
                 ;;
             nested)
                 run_tinywl nested "$row" nested
                 run_inlet nested "$row" nested
                 run_westonia nested "$row" nested
+                run_tabwm nested "$row" nested
                 ;;
             drm)
                 run_inlet drm "$row" drm
                 run_westonia drm "$row" drm
+                run_tabwm drm "$row" drm
                 run_tinywl drm "$row" drm
                 if needs_gpu "$row"; then
                     run_scanout drm "$row"

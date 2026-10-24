@@ -35,6 +35,7 @@ internal static class IpcFullRig
                 devices.AddTouchpad();
                 services.Use<IInputDeviceConfiguration>(devices);
                 services.UseDefault<ISceneDiagnostics>(new QuietDiagnostics());
+                services.UseDefault<IUIElementLocator>(new Basin.Capabilities.Defaults.UIElementDirectory());
                 services.UseDefault<IInputDiagnostics>(new QuietInputDiagnostics());
                 services.UseDefault<ISurfaceDiagnostics>(new SurfaceDiagnostics(host.Compositor));
             },

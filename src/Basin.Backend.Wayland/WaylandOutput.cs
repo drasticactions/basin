@@ -84,6 +84,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
     {
         _backend = backend;
         _frameFallback = backend.Loop.AddTimer(OnFrameFallback);
+        _acquireWaiter = DescriptorWait.TryCreate(backend.Loop, OnAcquireReady);
         Make = "basin";
         Model = "wayland";
         Description = $"parent compositor window {name}";
@@ -780,15 +781,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
             _framePending = true;
             _acquireFence = acquire;
             _acquireProxy2 = proxy;
-            _acquireWait = _backend.Loop.AddFd(acquire, FdReadiness.Readable, (_, _) =>
+            if (_acquireWaiter?.Arm(acquire) != true)
             {
-                var deferred = _acquireProxy2;
-                CancelAcquireWait();
-                if (deferred is not null && !deferred.IsDestroyed && !_disposedOutput)
-                {
-                    Present(deferred);
-                }
-            });
+                _acquireWait = _backend.Loop.AddFd(acquire, FdReadiness.Readable, (_, _) => OnAcquireReady());
+            }
+
             return true;
         }
 
@@ -797,13 +794,25 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    private readonly DescriptorWait? _acquireWaiter;
     private IEventSource? _acquireWait;
     private int _acquireFence = -1;
     private WlBuffer? _acquireProxy2;
     private bool _disposedOutput;
 
+    private void OnAcquireReady()
+    {
+        var deferred = _acquireProxy2;
+        CancelAcquireWait();
+        if (deferred is not null && !deferred.IsDestroyed && !_disposedOutput)
+        {
+            Present(deferred);
+        }
+    }
+
     private void CancelAcquireWait()
     {
+        _acquireWaiter?.Disarm();
         _acquireWait?.Remove();
         _acquireWait = null;
         RenderFences.CloseFence(_acquireFence);
@@ -1090,6 +1099,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
     {
         _disposedOutput = true;
         CancelAcquireWait();
+        _acquireWaiter?.Dispose();
         foreach (var (buffer, imported) in _imported)
         {
             imported.CancelReaderWait();

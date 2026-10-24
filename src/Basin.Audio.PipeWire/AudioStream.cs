@@ -65,6 +65,11 @@ public sealed class AudioStream
     public long LaunchId { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether the node is in the running state, so it moves samples now. A paused stream that stays open is not running.
+    /// </summary>
+    public bool IsRunning { get; init; }
+
+    /// <summary>
     /// Gets a display name: the application name, or <c>node</c> and the node id when the stream has none.
     /// </summary>
     public string Name => ApplicationName is { Length: > 0 } name ? name : $"node{NodeId}";

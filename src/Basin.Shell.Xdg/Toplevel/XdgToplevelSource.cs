@@ -109,14 +109,9 @@ public sealed class XdgToplevelSource : IToplevelSource, IToplevelGeometryFeed, 
     public event Action<XdgToplevelWindow, Surface?, Box>? MinimizedGeometryRequested;
 
     /// <summary>
-    /// Occurs for a request to move the window. The argument is the requested geometry. Without a handler, the request is declined.
+    /// Gets or sets the policy that answers move and resize requests. Without one, the source declines them.
     /// </summary>
-    public event Action<XdgToplevelWindow, Box>? MoveRequested;
-
-    /// <summary>
-    /// Occurs for a request to resize the window. The argument is the requested geometry. Without a handler, the request is declined.
-    /// </summary>
-    public event Action<XdgToplevelWindow, Box>? ResizeRequested;
+    public IToplevelPlacement? Placement { get; set; }
 
     /// <summary>
     /// Gets or sets the handler that sees each request first. A non-null answer from it skips the default handling and the request events.
@@ -409,12 +404,10 @@ public sealed class XdgToplevelSource : IToplevelSource, IToplevelGeometryFeed, 
                 when CaptureExclusionRequested is { } exclusion:
                 exclusion.Invoke(window, request.Kind == ToplevelRequestKind.ExcludeFromCapture);
                 return true;
-            case ToplevelRequestKind.Move when MoveRequested is { } move:
-                move.Invoke(window, request.Geometry);
-                return true;
-            case ToplevelRequestKind.Resize when ResizeRequested is { } resize:
-                resize.Invoke(window, request.Geometry);
-                return true;
+            case ToplevelRequestKind.Move when Placement is { } placement:
+                return placement.Move(window, request.Geometry.X, request.Geometry.Y);
+            case ToplevelRequestKind.Resize when Placement is { } placement:
+                return placement.Resize(window, request.Geometry.Width, request.Geometry.Height);
             default:
                 return false;
         }

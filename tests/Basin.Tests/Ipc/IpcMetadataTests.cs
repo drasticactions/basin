@@ -47,7 +47,7 @@ public sealed class IpcMetadataTests
             "ipc/version", "ipc/methods", "ipc/events", "session/describe", "session/settle", "outputs/list", "outputs/test", "windows/list",
             "windows/get", "windows/stats", "windows/stack", "windows/wait", "windows/wait-idle", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
             "capture/output", "capture/window", "capture/region", "clipboard/read", "process/list", "process/log",
-            "devices/list", "devices/get", "diag/tree", "diag/frames", "diag/parts", "diag/planes-state", "diag/compare", "diag/targets",
+            "devices/list", "devices/get", "diag/tree", "diag/frames", "diag/parts", "diag/element", "diag/planes-state", "diag/compare", "diag/targets",
         ];
         foreach (var name in LibraryNames())
         {

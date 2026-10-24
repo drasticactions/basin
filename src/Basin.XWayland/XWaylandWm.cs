@@ -127,15 +127,16 @@ public sealed unsafe class XWaylandWm : IDisposable
         var check = _wmWindow;
         SetProperty32(_root, Atom("_NET_SUPPORTING_WM_CHECK"), 33 , &check, 1);
         SetProperty32(_wmWindow, Atom("_NET_SUPPORTING_WM_CHECK"), 33, &check, 1);
-        var supported = stackalloc uint[14]
+        var supported = stackalloc uint[15]
         {
             Atom("_NET_WM_NAME"), Atom("_NET_WM_STATE"), Atom("_NET_WM_STATE_MODAL"),
             Atom("_NET_WM_STATE_FULLSCREEN"), Atom("_NET_ACTIVE_WINDOW"),
             Atom("_NET_WM_WINDOW_TYPE"), Atom("_NET_SUPPORTING_WM_CHECK"), Atom("_NET_CLIENT_LIST"),
             Atom("_NET_WM_STATE_HIDDEN"), Atom("_NET_WM_ALLOWED_ACTIONS"), Atom("_NET_WM_ACTION_MINIMIZE"),
             Atom("_NET_WM_STATE_MAXIMIZED_VERT"), Atom("_NET_WM_STATE_MAXIMIZED_HORZ"), Atom("_NET_WM_MOVERESIZE"),
+            Atom("_NET_FRAME_EXTENTS"),
         };
-        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 14);
+        SetProperty32(_root, Atom("_NET_SUPPORTED"), 4 , supported, 15);
         PublishClientList();
         Flush();
 
@@ -423,7 +424,7 @@ public sealed unsafe class XWaylandWm : IDisposable
             "_NET_WM_WINDOW_TYPE", "_NET_WM_PING", "WL_SURFACE_SERIAL", "_MOTIF_WM_HINTS", "_NET_WM_ICON",
             "CLIPBOARD", "PRIMARY", "TARGETS", "TEXT", "_BASIN_SELECTION",
             "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ", "_NET_WM_STATE_HIDDEN",
-            "_NET_WM_ALLOWED_ACTIONS", "_NET_WM_ACTION_MINIMIZE",
+            "_NET_WM_ALLOWED_ACTIONS", "_NET_WM_ACTION_MINIMIZE", "_NET_FRAME_EXTENTS",
             "_NET_WM_WINDOW_TYPE_COMBO", "_NET_WM_WINDOW_TYPE_DND", "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU",
             "_NET_WM_WINDOW_TYPE_MENU", "_NET_WM_WINDOW_TYPE_NOTIFICATION", "_NET_WM_WINDOW_TYPE_POPUP_MENU",
             "_NET_WM_WINDOW_TYPE_SPLASH", "_NET_WM_WINDOW_TYPE_DESKTOP", "_NET_WM_WINDOW_TYPE_TOOLTIP",
@@ -1566,6 +1567,18 @@ public sealed unsafe class XWaylandWm : IDisposable
             Log.Debug(error, $"wm: X-Resource not available, X11 pids are not verified");
             return 0;
         }
+    }
+
+    internal void SetWindowFrameExtents(XWaylandWindow window, Basin.Capabilities.FrameInsets insets)
+    {
+        window.FrameExtents = insets;
+        var values = stackalloc uint[4]
+        {
+            (uint)Math.Max(0, insets.Left), (uint)Math.Max(0, insets.Right),
+            (uint)Math.Max(0, insets.Top), (uint)Math.Max(0, insets.Bottom),
+        };
+        SetProperty32(window.WindowId, Atom("_NET_FRAME_EXTENTS"), 6, values, 4);
+        Flush();
     }
 
     internal void SetWindowMaximized(XWaylandWindow window, bool maximized)
