@@ -35,7 +35,7 @@ public static class IpcMethodNames
     /// </summary>
     public const string SessionQuit = "session/quit";
     /// <summary>
-    /// Names the method that answers when every output presented what it was asked to draw. It is absent when the program passes no settle source.
+    /// Names the method that answers when every output presented what it was asked to draw, every window answered its newest configure and no animation runs. It is absent when the program passes no settle source.
     /// </summary>
     public const string SessionSettle = "session/settle";
 
@@ -366,6 +366,26 @@ public static class IpcMethodNames
     /// Names the method that returns the counters of the explicit sync protocol.
     /// </summary>
     public const string DiagSyncobj = "diag/syncobj";
+
+    /// <summary>
+    /// Names the method that returns the state of the animation clock.
+    /// </summary>
+    public const string DiagClock = "diag/clock";
+
+    /// <summary>
+    /// Names the method that stops the animation clock. Times that clients see keep running.
+    /// </summary>
+    public const string DiagClockFreeze = "diag/clock-freeze";
+
+    /// <summary>
+    /// Names the method that moves the animation clock forward and asks for a frame.
+    /// </summary>
+    public const string DiagClockAdvance = "diag/clock-advance";
+
+    /// <summary>
+    /// Names the method that starts the animation clock again from its stopped time.
+    /// </summary>
+    public const string DiagClockResume = "diag/clock-resume";
 
     /// <summary>
     /// Gets the method namespaces that the library owns. A consumer registration in one of them throws.

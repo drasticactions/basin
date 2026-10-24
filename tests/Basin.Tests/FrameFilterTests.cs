@@ -28,6 +28,19 @@ public sealed class FrameFilterTests
         }
     }
 
+    private sealed class CountingVulkanFilter : IVulkanFilter
+    {
+        public List<ulong> Counts { get; } = [];
+
+        public bool IsSupported => true;
+
+        public bool Record(in VulkanFilterContext context)
+        {
+            Counts.Add(context.Options.FrameCount);
+            return false;
+        }
+    }
+
     private static string FixturePath(string name) =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "shaders", name);
 
@@ -69,6 +82,45 @@ public sealed class FrameFilterTests
         Assert.Equal(1, filter.Calls);
         var rgba = ReadRgba(target);
         Assert.True(rgba[(((60 * 160) + 80) * 4) + 0] > 200, "the scratch composite lands through the blit");
+        target.Destroy();
+    }
+
+    [Fact]
+    public void The_filter_frame_count_holds_while_the_animation_clock_is_frozen()
+    {
+        CompositorTestHost.SkipUnlessRunnable("vulkan");
+        using var host = new CompositorTestHost(renderer: "vulkan");
+        using var sceneOutput = new SceneOutput(host.Scene, host.Output);
+        using var state = new OutputState();
+        var clock = new Basin.Capabilities.Defaults.DefaultAnimationClock();
+        clock.Freeze();
+        sceneOutput.AnimationClock = clock;
+
+        var rect = new SceneRect(host.Scene.Root, 160, 120, new RenderColor(1f, 0f, 0f, 1f));
+        var filter = new CountingVulkanFilter();
+        sceneOutput.SetFrameFilter(filter);
+        var target = new MemoryBuffer(160, 120, DrmFormat.Xrgb8888);
+        void Frame(float red)
+        {
+            rect.Color = new RenderColor(red, 0f, 0f, 1f);
+            state.Clear();
+            Assert.True(sceneOutput.Commit(host.Renderer, target, 0, state, new SceneCommitOptions
+            {
+                AllowDirectScanout = false,
+                TargetPresentNanos = MonotonicClock.Nanos + 16_666_667,
+            }));
+        }
+
+        Frame(1f);
+        Frame(0.9f);
+        Frame(0.8f);
+        clock.Advance(16_666_667);
+        Frame(0.7f);
+        clock.Resume();
+        Thread.Sleep(5);
+        Frame(0.6f);
+
+        Assert.Equal([1ul, 1ul, 1ul, 2ul, 3ul], filter.Counts);
         target.Destroy();
     }
 

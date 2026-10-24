@@ -39,6 +39,9 @@ internal static class IpcFullRig
                 services.UseDefault<IInputDiagnostics>(new QuietInputDiagnostics());
                 services.UseDefault<ISurfaceDiagnostics>(new SurfaceDiagnostics(host.Compositor));
                 services.UseDefault<IExplicitSyncDiagnostics>(new QuietSyncDiagnostics());
+                var clock = new DefaultAnimationClock();
+                services.UseDefault<IAnimationClock>(clock);
+                services.UseDefault<IAnimationClockControl>(clock);
             },
             new IpcSessionInfo { Compositor = "full", Quit = () => { }, Settle = new ManualSettle() },
             path,

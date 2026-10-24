@@ -191,18 +191,21 @@ internal sealed partial class Westonia : IDisposable
         _outputs.LayoutChanged += PlaceShell;
         _outputs.BeforeRepaint += view =>
         {
+            var clock = _outputs.AnimationClock;
+            var predicted = view.Scheduler?.PredictedVblankNanos ?? 0;
+            var time = clock?.FromMonotonic(predicted) ?? predicted;
             var tick = new FrameTick(
-                view.Scheduler?.PredictedVblankNanos ?? 0,
+                time,
                 view.Output.CurrentMode.RefreshIntervalNanoseconds is var interval and > 0 ? interval : 16_666_666L);
             _animations?.Step(tick);
-            if (_animations is { IsRunning: true })
+            if (_animations is { IsRunning: true } && clock?.MarkAnimating() != false)
             {
                 view.Scheduler?.ScheduleRepaint();
             }
 
             UpdateSurfacePresence();
-            _workspaces?.Step(view.Scheduler?.PredictedVblankNanos ?? 0);
-            if (_workspaces is { IsSliding: true })
+            _workspaces?.Step(time);
+            if (_workspaces is { IsSliding: true } && clock?.MarkAnimating() != false)
             {
                 view.Scheduler?.ScheduleRepaint();
             }

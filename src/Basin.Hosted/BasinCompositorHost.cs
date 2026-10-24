@@ -50,9 +50,12 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
         Scene = new Scene.Scene();
         Layout = new OutputLayout();
         var frames = new Capabilities.Defaults.FrameClock();
+        var animationClock = new Capabilities.Defaults.DefaultAnimationClock(frames);
         var services = new BasinServices(Display, Loop)
             .Use(Layout)
             .Use<Capabilities.IFrameClock>(frames)
+            .UseDefault<Capabilities.IAnimationClock>(animationClock)
+            .UseDefault<Capabilities.IAnimationClockControl>(animationClock)
             .Use<Capabilities.IActivationTokens>(new Capabilities.Defaults.DefaultActivationTokens())
             .Use<Capabilities.IBell>(Capabilities.Defaults.SilentBell.Instance);
         if (options.TextInput is { } textInput)
@@ -125,7 +128,7 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
             textInputManager.CommitStringUnclaimed += TypeUnclaimed;
         }
 
-        Session = new HostedSession(Display, Loop) { Frames = frames };
+        Session = new HostedSession(Display, Loop) { Frames = frames, AnimationClock = Services.Find<Capabilities.IAnimationClock>() };
         frames.FrameRequested += Scene.RequestFrame;
         Screens = new HostScreens(this);
         Wake = new HostedWakeSource(Loop);

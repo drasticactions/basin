@@ -73,6 +73,11 @@ public sealed class HostedSession : IDisposable
     public IFrameClock? Frames { get; set; }
 
     /// <summary>
+    /// Gets or sets the clock that animations read. Each frame begins a clock frame, and the tick of <see cref="BeforeDispatch"/> has animation time. If <see langword="null"/>, the tick has monotonic time.
+    /// </summary>
+    public IAnimationClock? AnimationClock { get; set; }
+
+    /// <summary>
     /// Raises <see cref="WakeupRequested"/>.
     /// </summary>
     public void RequestWakeup() => WakeupRequested?.Invoke();
@@ -144,7 +149,7 @@ public sealed class HostedSession : IDisposable
     }
 
     /// <summary>
-    /// Registers an output for <see cref="Tick"/>, for the frame clock and for <see cref="NeedsRepaint"/>.
+    /// Registers an output for <see cref="Tick"/>, for the frame clock and for <see cref="NeedsRepaint"/>. An output with no animation clock gets <see cref="AnimationClock"/>.
     /// </summary>
     /// <param name="output">The scene output to register.</param>
     /// <exception cref="InvalidOperationException">The output is already registered.</exception>
@@ -158,6 +163,7 @@ public sealed class HostedSession : IDisposable
             throw new InvalidOperationException("The output is already registered. Register each output once.");
         }
 
+        output.AnimationClock ??= AnimationClock;
         _outputs.Add(output);
     }
 
@@ -190,7 +196,8 @@ public sealed class HostedSession : IDisposable
         _presented.Clear();
         var refresh = _outputs.Count > 0 ? _outputs[0].Output.CurrentMode.RefreshIntervalNanoseconds : 0;
         targetPresentNanos = Predict(targetPresentNanos, refresh);
-        var tick = new FrameTick(targetPresentNanos, refresh);
+        AnimationClock?.BeginFrame();
+        var tick = new FrameTick(AnimationClock?.FromMonotonic(targetPresentNanos) ?? targetPresentNanos, refresh);
 
         HostedDispatch.Run(_loop, DispatchWarning, DispatchLimit, DispatchOverran, DispatchExceededLimit);
         BeforeDispatch?.Invoke(tick);

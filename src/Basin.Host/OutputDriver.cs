@@ -1642,7 +1642,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
     private void RepaintCore(OutputView view)
     {
-
+        BeginAnimationFrame(view);
         AllocationScope.Pause();
         try
         {
@@ -1937,6 +1937,31 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
     private Capabilities.ISurfaceHints? _foundHints;
 
+    /// <summary>
+    /// Gets or sets the clock that animations read. The driver begins a clock frame at each repaint and gives the clock to each scene output. With <see langword="null"/>, the driver uses the <see cref="Capabilities.IAnimationClock"/> of the host services.
+    /// </summary>
+    public Capabilities.IAnimationClock? AnimationClock
+    {
+        get => _animationClock ??= _host.Services?.Find<Capabilities.IAnimationClock>();
+        set => _animationClock = value;
+    }
+
+    private Capabilities.IAnimationClock? _animationClock;
+
+    private void BeginAnimationFrame(OutputView view)
+    {
+        if (AnimationClock is not { } clock)
+        {
+            return;
+        }
+
+        clock.BeginFrame();
+        if (view.Scene is { } scene)
+        {
+            scene.AnimationClock = clock;
+        }
+    }
+
     private Capabilities.ISurfaceHints? Hints() => SurfaceHints ?? (_foundHints ??= _host.Services?.Find<Capabilities.ISurfaceHints>());
 
     private void StampPacing(OutputView view)
@@ -2027,6 +2052,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
             return;
         }
 
+        BeginAnimationFrame(view);
         Frames?.BeginFrameAtNextRefresh(view.Output);
         if (!SyncViewGeometry(view, out var mode))
         {

@@ -10,7 +10,11 @@ internal sealed class ManualSettle : IFrameSettle
 
     public int Listeners => Settled?.GetInvocationList().Length ?? 0;
 
+    public string Unsettled { get; set; } = "";
+
     public event Action? Settled;
+
+    public string DescribeUnsettled() => IsSettled ? "" : Unsettled;
 
     public void Settle(long presented)
     {

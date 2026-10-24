@@ -43,7 +43,7 @@ public sealed class IpcSettleTests
     [Fact]
     public void Settle_fails_at_its_timeout_and_is_absent_without_a_source()
     {
-        var settle = new ManualSettle { IsSettled = false };
+        var settle = new ManualSettle { IsSettled = false, Unsettled = "Output HEADLESS-1 has a repaint pending." };
         using (var rig = new IpcTestRig(session: new IpcSessionInfo { Compositor = "test", Settle = settle }))
         {
             var peer = rig.Connect();
@@ -56,6 +56,7 @@ public sealed class IpcSettleTests
 
             var reply = Parse(peer.Receive());
             Assert.Equal(IpcErrorCodes.Failed, reply.GetProperty("error").GetProperty("code").GetString());
+            Assert.EndsWith("Output HEADLESS-1 has a repaint pending.", reply.GetProperty("error").GetProperty("message").GetString());
             Assert.Equal(0, settle.Listeners);
         }
 

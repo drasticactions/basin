@@ -239,6 +239,10 @@ public sealed class XWaylandToplevelSource : IToplevelSource, IToplevelGeometryF
     }
 
     /// <inheritdoc/>
+    public bool IsConfigurePending(ulong localId) =>
+        _windows.TryGetValue(localId, out var window) && window.IsConfigurePending;
+
+    /// <inheritdoc/>
     public bool TryGet(ulong localId, out ToplevelInfo info)
     {
         if (_windows.TryGetValue(localId, out var window))

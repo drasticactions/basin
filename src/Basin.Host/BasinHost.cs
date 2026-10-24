@@ -223,14 +223,18 @@ public sealed class BasinHost : IDisposable
     }
 
     /// <summary>
-    /// Creates the service table and seeds the defaults: the frame clock, <see cref="PresentedSets"/>, the client directory and the scene diagnostics. Call it once.
+    /// Creates the service table and seeds the defaults: the frame clock, the animation clock, <see cref="PresentedSets"/>, the client directory and the scene diagnostics. Call it once.
     /// </summary>
     /// <param name="frames">The frame clock to register, or <see langword="null"/> for a new default clock.</param>
     /// <returns>The services, also kept in <see cref="Services"/>.</returns>
     public BasinServices CreateServices(IFrameClock? frames = null)
     {
         var services = new BasinServices(Display, Loop);
-        services.UseDefault(frames ?? new FrameClock());
+        var frameClock = frames ?? new FrameClock();
+        var animationClock = new DefaultAnimationClock(frameClock);
+        services.UseDefault(frameClock);
+        services.UseDefault<IAnimationClock>(animationClock);
+        services.UseDefault<IAnimationClockControl>(animationClock);
         services.UseDefault(PresentedSets);
         services.UseDefault<IClientDirectory>(new Basin.Capabilities.Defaults.DisplayClientDirectory(Display));
         Services = services;

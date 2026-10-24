@@ -41,6 +41,7 @@ public sealed class IpcMetadataTests
             "windows/activate", "windows/set-state", "windows/move", "windows/resize", "windows/send-to-output",
             "windows/send-to-workspace", "windows/frame-limit", "outputs/look", "workspaces/activate", "workspaces/deactivate", "idle/uninhibit", "devices/set", "devices/reset",
             "diag/damage-trace", "diag/frame-trace", "diag/planes", "diag/input-trace", "diag/plane-trace", "diag/commit-trace",
+            "diag/clock-freeze", "diag/clock-resume",
         ];
         string[] readOnly =
         [
@@ -48,6 +49,7 @@ public sealed class IpcMetadataTests
             "windows/get", "windows/stats", "windows/stack", "windows/wait", "windows/wait-idle", "workspaces/list", "idle/status", "lock/status", "keyboard/keymap",
             "capture/output", "capture/window", "capture/region", "clipboard/read", "process/list", "process/log",
             "devices/list", "devices/get", "diag/tree", "diag/frames", "diag/parts", "diag/element", "diag/planes-state", "diag/compare", "diag/targets", "diag/syncobj",
+            "diag/clock",
         ];
         foreach (var name in LibraryNames())
         {

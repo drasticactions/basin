@@ -235,6 +235,8 @@ internal sealed partial class TinyComp :
 
     internal Basin.Capabilities.IFrameClock FrameClock => _frameClock;
 
+    internal Basin.Capabilities.IAnimationClock? AnimationClock => _animationClock;
+
     private void ApplyBlurKernel(Config config)
     {
         if (_blurEffect is not { } blur)
@@ -425,6 +427,7 @@ internal sealed partial class TinyComp :
     private Basin.Capabilities.Defaults.LayoutOutputConfiguration? _layoutConfiguration;
     private Basin.Desktop.FifoManager _fifo = null!;
     private Basin.Capabilities.IFrameClock _frameClock = null!;
+    private Basin.Capabilities.IAnimationClock? _animationClock;
     private Basin.Desktop.IdleManager _idle = null!;
     private Basin.Desktop.LayerShellSceneDriver _layerDriver = null!;
     private readonly Basin.Desktop.PopupPlacer _popupPlacer;
@@ -972,6 +975,7 @@ internal sealed partial class TinyComp :
         _fifo = _services.Require<Basin.Desktop.FifoManager>();
         _frameClock = _services.Require<Basin.Capabilities.IFrameClock>();
         _driver.Frames = _frameClock;
+        _animationClock = _services.Require<Basin.Capabilities.IAnimationClock>();
         _xwaylandShell = _services.Require<Basin.XWayland.XwaylandShellGlobal>();
         _xwayland = xwayland.Native!;
         ApplyXWaylandScale();

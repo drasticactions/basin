@@ -878,7 +878,8 @@ public sealed class SceneOutput : IDisposable, IColorLutTable, IZoomable
         in SceneCommitOptions options)
     {
         var mode = Output.CurrentMode;
-        var tick = new FrameTick(options.TargetPresentNanos, mode.RefreshIntervalNanoseconds);
+        var target = AnimationClock is { } clock ? clock.FromMonotonic(options.TargetPresentNanos) : options.TargetPresentNanos;
+        var tick = new FrameTick(target, mode.RefreshIntervalNanoseconds);
         _inCommit = true;
         _damagedDuringCommit = false;
         try
@@ -925,6 +926,12 @@ public sealed class SceneOutput : IDisposable, IColorLutTable, IZoomable
     /// Gets or sets the set that records the client surfaces that each composed frame shows. <see langword="null"/> records nothing.
     /// </summary>
     public PresentedSet? Presented { get; set; }
+
+    /// <summary>
+    /// Gets or sets the clock that converts the target present time to the time of the <see cref="FrameTick"/>. With <see langword="null"/>, the tick has the target present time.
+    /// With a clock, the frame count of the frame filter advances only when the animation time advances.
+    /// </summary>
+    public IAnimationClock? AnimationClock { get; set; }
 
     private void RecordPresented(OutputMode mode)
     {
@@ -1720,7 +1727,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable, IZoomable
         }
 
         (texture as IRefreshableTexture)?.MarkDirty();
-        _filterFrameCount++;
+        if (AnimationClock is null || _filterLastPresentNanos == 0 || tick.TargetPresentNanos > _filterLastPresentNanos)
+        {
+            _filterFrameCount++;
+        }
+
         var delta = _filterLastPresentNanos > 0 && tick.TargetPresentNanos > _filterLastPresentNanos
             ? (uint)Math.Min((tick.TargetPresentNanos - _filterLastPresentNanos) / 1_000_000, 1000)
             : 0u;

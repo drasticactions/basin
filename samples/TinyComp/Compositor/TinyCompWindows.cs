@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Basin;
 using Basin.Host;
 using Basin.Backend.Libinput;
@@ -272,8 +271,7 @@ internal sealed partial class TinyComp
         }
     }
 
-    private FrameTick EffectTick() => new(
-        (long)(Stopwatch.GetTimestamp() * (1_000_000_000.0 / Stopwatch.Frequency)), 16_666_667);
+    private FrameTick EffectTick() => new(_animationClock?.Nanos ?? MonotonicClock.Nanos, 16_666_667);
 
     private void ScheduleEffectRepaint()
     {

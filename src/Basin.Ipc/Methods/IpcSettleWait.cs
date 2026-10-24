@@ -63,7 +63,12 @@ internal sealed class IpcSettleWait : IDisposable
             return;
         }
 
-        _reply.Error(IpcErrorCodes.Failed, "The outputs did not settle before the timeout.");
+        var unsettled = _settle.DescribeUnsettled();
+        _reply.Error(
+            IpcErrorCodes.Failed,
+            unsettled.Length == 0
+                ? "The compositor did not settle before the timeout."
+                : $"The compositor did not settle before the timeout. {unsettled}");
         _ = _reply.Complete();
         Dispose();
     }

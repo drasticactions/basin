@@ -147,11 +147,13 @@ internal sealed partial class MauiComp : IDisposable
         _animations = new ShellAnimations { Changed = () => _outputs.ScheduleAll() };
         _outputs.BeforeRepaint += view =>
         {
+            var clock = _outputs.AnimationClock;
+            var predicted = view.Scheduler?.PredictedVblankNanos ?? 0;
             var tick = new FrameTick(
-                view.Scheduler?.PredictedVblankNanos ?? 0,
+                clock?.FromMonotonic(predicted) ?? predicted,
                 view.Output.CurrentMode.RefreshIntervalNanoseconds is var interval and > 0 ? interval : 16_666_666L);
             _animations.Step(tick);
-            if (_animations.IsRunning)
+            if (_animations.IsRunning && clock?.MarkAnimating() != false)
             {
                 view.Scheduler?.ScheduleRepaint();
             }

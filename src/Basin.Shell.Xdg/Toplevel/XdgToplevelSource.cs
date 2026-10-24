@@ -37,6 +37,34 @@ public sealed class XdgToplevelSource : IToplevelSource, IToplevelGeometryFeed, 
     /// </summary>
     public bool ReportsCommits => true;
 
+    /// <summary>
+    /// Finds whether a mapped toplevel did not acknowledge its newest configure, or acknowledged a new size and did not commit it yet.
+    /// A configure that keeps the size is answered by its acknowledgement, because xdg-shell does not require a commit after it.
+    /// </summary>
+    /// <param name="localId">The local id of the toplevel.</param>
+    /// <returns><see langword="true"/> when the toplevel exists, is mapped and still owes the answer.</returns>
+    public bool IsConfigurePending(ulong localId)
+    {
+        if (!_windows.TryGetValue(localId, out var window) || window.Xdg is not { IsMapped: true } xdg)
+        {
+            return false;
+        }
+
+        if (xdg.HasUnackedConfigure)
+        {
+            return true;
+        }
+
+        if (!xdg.IsConfigurePending)
+        {
+            return false;
+        }
+
+        var (width, height) = window.ConfiguredSize;
+        var geometry = xdg.EffectiveGeometry;
+        return (width > 0 && width != geometry.Width) || (height > 0 && height != geometry.Height);
+    }
+
     /// <inheritdoc/>
     public void AddCommitObserver(IToplevelCommitObserver observer)
     {

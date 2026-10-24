@@ -1800,6 +1800,31 @@ public class RiverShellTests
     private const uint Red = 0xffff0000;
 
     [Fact]
+    public void A_river_window_owes_its_configure_until_the_client_answers_it()
+    {
+        using var fixture = new RiverFixture();
+        using var source = new Basin.Shell.Xdg.XdgToplevelSource(fixture.Host.Shell);
+        var model = new Basin.Capabilities.AggregateToplevelModel();
+        model.Add(source);
+        fixture.Server.ToplevelSource = source;
+        var toplevel = fixture.MapToplevel();
+        fixture.OnManage = context => context.Windows[0].ProposeDimensions(50, 50);
+        fixture.RequestManageAndSettle();
+        fixture.OnManage = null;
+        var id = model.GlobalId(source, source.IdFor(toplevel.ServerToplevel));
+        Assert.False(model.IsConfigurePending(id));
+
+        fixture.OnManage = context => context.Windows[0].ProposeDimensions(80, 60);
+        fixture.RunManageLeavingClientsUnanswered();
+        fixture.OnManage = null;
+        Assert.True(model.IsConfigurePending(id));
+
+        fixture.Settle();
+        Assert.Equal((80, 60), (toplevel.ConfiguredWidth, toplevel.ConfiguredHeight));
+        Assert.False(model.IsConfigurePending(id));
+    }
+
+    [Fact]
     public void A_window_frozen_mid_resize_keeps_its_decorations_on_screen()
     {
         using var fixture = new RiverFixture();

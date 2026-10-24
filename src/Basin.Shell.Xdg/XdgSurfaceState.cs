@@ -14,6 +14,7 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     private bool _geometrySet;
     private bool _initialConfigureSent;
     private bool _configureAcked;
+    private bool _ackedSinceCommit;
     private bool _mapped;
     private uint _awaitedSerial;
     private bool _awaitingSerial;
@@ -135,6 +136,11 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     public bool HasUnackedConfigure => _pendingConfigures.Count > 0;
 
     /// <summary>
+    /// Gets a value indicating whether the client did not acknowledge the newest configure, or did not commit after its last acknowledgement.
+    /// </summary>
+    public bool IsConfigurePending => _pendingConfigures.Count > 0 || _ackedSinceCommit;
+
+    /// <summary>
     /// Occurs at the commit that maps the surface.
     /// </summary>
     public event Action? Mapped;
@@ -193,6 +199,7 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
         var awaitedIndex = _awaitingSerial ? _pendingConfigures.IndexOf(_awaitedSerial) : -1;
         _pendingConfigures.RemoveRange(0, index + 1);
         _configureAcked = true;
+        _ackedSinceCommit = true;
         if (_awaitingSerial && awaitedIndex >= 0 && awaitedIndex <= index)
         {
             ConfigureState = ConfigureState.Acked;
@@ -209,6 +216,7 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     private void OnCommitted()
     {
         HasCommitted = true;
+        _ackedSinceCommit = false;
         if (_geometrySet)
         {
             WindowGeometry = _pendingGeometry;
@@ -249,6 +257,7 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
             _pendingConfigures.Clear();
             _initialConfigureSent = false;
             _configureAcked = false;
+            _ackedSinceCommit = false;
         }
 
         SetMapped(Surface.IsMapped);

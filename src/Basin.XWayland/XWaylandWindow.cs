@@ -421,6 +421,11 @@ public sealed class XWaylandWindow : Basin.Capabilities.IToplevelHandle
     public XWaylandReadiness Readiness { get; set; } = XWaylandReadiness.OnMatchingCommit;
 
     /// <summary>
+    /// Gets a value indicating whether the window joined a transaction through <see cref="Configure(Transaction, int, int, int, int)"/> and did not commit as <see cref="Readiness"/> requires yet.
+    /// </summary>
+    public bool IsConfigurePending => _awaiting;
+
+    /// <summary>
     /// Moves and resizes the X window and sends it a synthetic <c>ConfigureNotify</c>. The X11 values keep the current ones when they round to the same logical values.
     /// </summary>
     /// <param name="x">The left edge in layout coordinates.</param>

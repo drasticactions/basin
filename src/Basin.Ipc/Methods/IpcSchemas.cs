@@ -79,8 +79,8 @@ internal static class IpcSchemas
 
         Add(IpcMethodNames.SessionDescribe, ReadOnly, "Describe the session: the compositor, its backend and renderer, its sockets, the output count and its pid.", Empty);
         Add(IpcMethodNames.SessionQuit, Destructive, "Stop the compositor. Every client in the session loses its display.", Empty);
-        Add(IpcMethodNames.SessionSettle, ReadOnly, "Wait until every output has presented what it was asked to draw and the compositor's own chrome has nothing due, and answer with the count of presented frames. It answers at once when nothing is pending, and failed at the timeout.", """
-            {"type":"object","properties":{"timeout_ms":{"type":"integer","minimum":1,"maximum":3600000,"description":"The default is 5000."}},"examples":[{"timeout_ms":1000}]}
+        Add(IpcMethodNames.SessionSettle, ReadOnly, "Wait until every output has presented what it was asked to draw, the compositor's own chrome has nothing due, every mapped window has acknowledged and committed its newest configure and no animation runs. Answer with the count of presented frames. It answers at once when nothing is pending. At the timeout it answers failed with a message that names each window, output and animation that is still busy.", """
+            {"type":"object","properties":{"timeout_ms":{"type":"integer","minimum":1,"maximum":3600000,"description":"The default is 30000."}},"examples":[{"timeout_ms":1000}]}
             """);
 
         Add(IpcMethodNames.OutputsList, ReadOnly, "List the outputs with their names, modes, scale, position, transform and power state.", Empty);
@@ -238,6 +238,12 @@ internal static class IpcSchemas
             {"type":"object","properties":{"window":{"anyOf":[{"type":"integer","minimum":0},{"type":"string"}],"description":"A window id from windows/list, an app_id, or part of a title (an active window wins a tie); x11:CLASS for an X11 window; NAME/popup or NAME/popup:N for a popup or menu of that window; layer:NAMESPACE for a layer surface; node:PATH for a scene node from diag/tree."},"reference":{"type":"string","description":"An absolute path to the reference PNG, such as one diag/record-window wrote."},"channel":{"type":"integer","minimum":0,"maximum":255,"description":"The default is 2."},"pixels":{"type":"integer","minimum":0,"description":"The default is 0."},"diff_path":{"type":"string"},"inline":{"type":"boolean","description":"Return the diff PNG in the reply as base64 png."},"margin":{"type":"integer","minimum":0,"description":"Logical pixels around the frame, as in diag/record-window. The default is 24."},"timeout_ms":{"type":"integer","minimum":1,"description":"The default is 2000."}},"required":["window","reference"]}
             """);
         Add(IpcMethodNames.DiagSyncobj, ReadOnly, "Return the counters of wp_linux_drm_syncobj since the global was created: managed and explicit commits, acquire points that parked, could not park, came late or could not be exported, release points that waited for renderer reads, release points of buffers that a later synchronized commit replaced before they were shown, and release points of commits discarded before they applied.", Empty);
+        Add(IpcMethodNames.DiagClock, ReadOnly, "Return the state of the animation clock: whether it is stopped, its time in nanoseconds, and whether an animation asked for another frame.", Empty);
+        Add(IpcMethodNames.DiagClockFreeze, Idempotent, "Stop the animation clock that compositor animations read, so a screenshot can catch an animation in the middle. An animation that starts while it is stopped counts from the stopped time. Frame callbacks, presentation feedback, input times and timers keep real time.", Empty);
+        Add(IpcMethodNames.DiagClockAdvance, None, "Move the animation clock forward by ms milliseconds and draw one frame at the new time. On a stopped clock this steps a paused animation.", """
+            {"type":"object","properties":{"ms":{"type":"number","minimum":0,"maximum":86400000}},"required":["ms"],"examples":[{"ms":100}]}
+            """);
+        Add(IpcMethodNames.DiagClockResume, Idempotent, "Start the animation clock again from its stopped time. Animation time never runs backward.", Empty);
         Add(IpcMethodNames.DiagTargets, ReadOnly, "List every target a window selector can reach, with its kind (window, x11, popup, layer), its selector, window id, app_id, output and box. A scene node is reachable as node:PATH with a path from diag/tree.", Empty);
         Add(IpcMethodNames.DiagPlanes, Idempotent, "Allow or stop overlay planes and direct scanout on every output, to compare a frame with and without them.", """
             {"type":"object","properties":{"on":{"type":"boolean"}},"required":["on"]}

@@ -54,6 +54,51 @@ public sealed class XWaylandResizeTests
     }
 
     [Fact]
+    public void A_window_in_a_configure_transaction_owes_its_answer_until_the_matching_commit()
+    {
+        Assert.SkipUnless(PrivateBus.OnPath("Xwayland") && PrivateBus.OnPath("xeyes"), "Xwayland and xeyes are needed");
+        using var host = new CompositorTestHost(640, 480);
+        using var shell = new XwaylandShellGlobal(host.Display, host.Compositor);
+        using var server = new XWaylandServer(host.Display, host.Loop);
+        XWaylandWm? wm = null;
+        XWaylandToplevelSource? source = null;
+        XWaylandWindow? window = null;
+        server.Ready += fd =>
+        {
+            wm = new XWaylandWm(fd, host.Loop, shell, host.Seat);
+            source = new XWaylandToplevelSource(wm);
+            wm.WindowMapped += mapped => window ??= mapped;
+        };
+
+        using var eyes = XWaylandTestSupport.Start("xeyes", server.DisplayName, "-geometry", "150x100+0+0");
+        Transaction? transaction = null;
+        try
+        {
+            XWaylandTestSupport.Pump(host, () => window?.Surface?.Current.Buffer is not null);
+            var id = source!.IdFor(window!);
+            Assert.NotEqual(0ul, id);
+            Assert.False(source.IsConfigurePending(id));
+
+            transaction = new Transaction(host.Loop, timeoutMs: 2000);
+            window!.Configure(transaction, 0, 0, 200, 130);
+            transaction.Seal();
+            Assert.True(source.IsConfigurePending(id));
+
+            XWaylandTestSupport.Pump(host, () => transaction.IsComplete);
+            Assert.False(transaction.TimedOut);
+            Assert.False(source.IsConfigurePending(id));
+        }
+        finally
+        {
+            transaction?.Dispose();
+            eyes.Kill();
+            eyes.WaitForExit(2000);
+            source?.Dispose();
+            wm?.Dispose();
+        }
+    }
+
+    [Fact]
     public void A_configured_window_has_no_x_border()
     {
         Assert.SkipUnless(PrivateBus.OnPath("Xwayland") && PrivateBus.OnPath("xeyes"), "Xwayland and xeyes are needed");

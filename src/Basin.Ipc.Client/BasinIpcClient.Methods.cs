@@ -97,9 +97,9 @@ public sealed partial class BasinIpcClient
         CallAsync(IpcMethodNames.SessionQuit, Json.IpcEmpty, cancellationToken);
 
     /// <summary>
-    /// Calls <c>session/settle</c>, which waits until every output presented what it was asked to draw.
+    /// Calls <c>session/settle</c>, which waits until every output presented what it was asked to draw, every window answered its newest configure and no animation runs.
     /// </summary>
-    /// <param name="timeoutMs">The longest wait in milliseconds, or <see langword="null"/> for the default of 5000.</param>
+    /// <param name="timeoutMs">The longest wait in milliseconds, or <see langword="null"/> for the default of 30000.</param>
     /// <param name="cancellationToken">A token that stops the wait for the reply.</param>
     /// <returns>The count of frames presented on all outputs.</returns>
     public async Task<long> SettleAsync(long? timeoutMs = null, CancellationToken cancellationToken = default) =>

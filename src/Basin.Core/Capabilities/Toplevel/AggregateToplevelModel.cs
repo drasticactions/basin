@@ -48,6 +48,10 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         TrySplit(toplevelId, out var source, out var localId) && source.ReportsCommits && source.TryGet(localId, out _);
 
     /// <inheritdoc/>
+    public bool IsConfigurePending(ulong toplevelId) =>
+        TrySplit(toplevelId, out var source, out var localId) && source.IsConfigurePending(localId);
+
+    /// <inheritdoc/>
     public void AddCommitObserver(IToplevelCommitObserver observer)
     {
         ArgumentNullException.ThrowIfNull(observer);

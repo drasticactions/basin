@@ -330,7 +330,7 @@ internal sealed partial class TinyComp
         running |= StepPhysics(tick);
         running |= StepGridPinches(tick);
         running |= StepGridLights(tick);
-        if (running)
+        if (running && _animationClock?.MarkAnimating() != false)
         {
             for (var i = 0; i < Views.Count; i++)
             {

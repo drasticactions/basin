@@ -27,7 +27,7 @@ public sealed class IpcSettleParams : IIpcParams, IIpcReusable
 
     /// <summary>
     /// Gets or sets the time in milliseconds after which the method answers <c>failed</c>.
-    /// When it is absent, the limit is 5000 ms.
+    /// When it is absent, the limit is 30000 ms.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? TimeoutMs { get; set; }

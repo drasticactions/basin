@@ -64,6 +64,11 @@ internal static class IpcDiagnosticsMethods
             });
         }
 
+        if (describe.Find<IAnimationClockControl>() is { } control && describe.Find<IAnimationClock>() is { } clock)
+        {
+            RegisterClock(server.Methods, control, clock);
+        }
+
         if (describe.Find<IUIElementLocator>() is { } locator)
         {
             server.Methods.RegisterLibrary(IpcMethodNames.DiagElement, (ref IpcParams parameters, IpcReply reply) =>
@@ -515,6 +520,43 @@ internal static class IpcDiagnosticsMethods
     }
 
     private static IpcBox Box(in Box box) => new(box.X, box.Y, box.Width, box.Height);
+
+    private static void RegisterClock(IpcMethodRegistry methods, IAnimationClockControl control, IAnimationClock clock)
+    {
+        methods.RegisterLibrary(IpcMethodNames.DiagClock, (ref IpcParams _, IpcReply reply) => WriteClock(reply, control, clock));
+        methods.RegisterLibrary(IpcMethodNames.DiagClockFreeze, (ref IpcParams _, IpcReply reply) =>
+        {
+            control.Freeze();
+            WriteClock(reply, control, clock);
+        });
+        methods.RegisterLibrary(IpcMethodNames.DiagClockResume, (ref IpcParams _, IpcReply reply) =>
+        {
+            control.Resume();
+            WriteClock(reply, control, clock);
+        });
+        methods.RegisterLibrary(IpcMethodNames.DiagClockAdvance, (ref IpcParams parameters, IpcReply reply) =>
+        {
+            var ms = parameters.GetDouble("ms");
+            if (parameters.Failed)
+            {
+                return;
+            }
+
+            if (!double.IsFinite(ms) || ms < 0 || ms > MaxClockAdvanceMs)
+            {
+                parameters.Invalid($"'ms' must be between 0 and {MaxClockAdvanceMs}.");
+                return;
+            }
+
+            control.Advance((long)Math.Round(ms * 1_000_000));
+            WriteClock(reply, control, clock);
+        });
+    }
+
+    private const double MaxClockAdvanceMs = 86_400_000;
+
+    private static void WriteClock(IpcReply reply, IAnimationClockControl control, IAnimationClock clock) =>
+        reply.Write(new IpcDiagClock(control.IsFrozen, clock.Nanos, clock.IsAnimating), IpcJsonContext.Default.IpcDiagClock);
 
     private static void RegisterPartsSource(IpcMethodRegistry methods, IWindowPartsSource source)
     {

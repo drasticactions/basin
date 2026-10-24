@@ -452,6 +452,7 @@ internal sealed partial class TinyComp
             _frame = new Frame(_comp.FrameHosts, renderer, Tree)
             {
                 Clock = _comp.FrameClock,
+                AnimationClock = _comp.AnimationClock,
                 MenuLayer = _comp._layers.Overlay,
                 TouchSlop = TouchGripSlop,
             };

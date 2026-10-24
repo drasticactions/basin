@@ -90,6 +90,13 @@ public interface IToplevelModel
     bool ReportsCommits(ulong toplevelId) => false;
 
     /// <summary>
+    /// Finds whether a mapped toplevel did not answer its newest configure yet. The answer is an acknowledgement, and a commit after it when the configure asked for a new size. The default implementation returns <see langword="false"/>.
+    /// </summary>
+    /// <param name="toplevelId">The toplevel id.</param>
+    /// <returns><see langword="true"/> when the toplevel exists, is mapped and still owes the answer.</returns>
+    bool IsConfigurePending(ulong toplevelId) => false;
+
+    /// <summary>
     /// Adds an observer for the content commits of toplevels. A model without commit reports ignores the call.
     /// </summary>
     /// <param name="observer">The observer to add.</param>

@@ -56,7 +56,7 @@ internal static class IpcSessionMethods
         }
     }
 
-    private const int DefaultSettleMs = 5000;
+    private const int DefaultSettleMs = 30_000;
 
     private const int MaxSettleMs = 3_600_000;
 }

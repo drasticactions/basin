@@ -177,9 +177,22 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     public IFrameClock? Clock { get; set; }
 
     /// <summary>
-    /// Gets or sets the time source in nanoseconds that stamps interaction changes. The default reads the monotonic clock.
+    /// Gets or sets the clock that animation time comes from. With <see langword="null"/>, the frame uses the monotonic clock. A running animation marks this clock before it asks <see cref="Clock"/> for a frame.
     /// </summary>
-    public Func<long> Time { get; set; } = static () => MonotonicClock.Nanos;
+    public IAnimationClock? AnimationClock { get; set; }
+
+    /// <summary>
+    /// Gets or sets the time source in nanoseconds that stamps interaction changes. The default reads <see cref="AnimationClock"/>, or the monotonic clock when there is no animation clock.
+    /// </summary>
+    public Func<long> Time
+    {
+        get => _time ??= ReadAnimationClock;
+        set => _time = value;
+    }
+
+    private Func<long>? _time;
+
+    private long ReadAnimationClock() => AnimationClock?.Nanos ?? MonotonicClock.Nanos;
 
     /// <summary>
     /// Gets a value indicating whether the renderer reported that the shown chrome animates.
@@ -1000,7 +1013,7 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
 
             _fullAnimation = true;
             UpdateAnimating(_shownState);
-            if (_animating && _clockAttached && Clock is { } clock)
+            if (_animating && _clockAttached && Clock is { } clock && AnimationClock?.MarkAnimating() != false)
             {
                 clock.RequestFrame();
             }
@@ -1587,11 +1600,12 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     }
 
     /// <summary>
-    /// Advances the chrome animation to the predicted vblank through <see cref="Tick(long)"/>. A value of 0 means that the vblank is not known, and the frame ticks at <see cref="Time"/> instead.
+    /// Advances the chrome animation to the predicted vblank, converted by <see cref="AnimationClock"/>, through <see cref="Tick(long)"/>. A value of 0 means that the vblank is not known, and the frame ticks at <see cref="Time"/> instead.
     /// </summary>
     /// <param name="output">The output that the frame is for.</param>
     /// <param name="predictedVblankNanos">The predicted vblank on the monotonic clock in nanoseconds, or 0.</param>
-    public void BeginFrame(IOutput output, long predictedVblankNanos) => Tick(predictedVblankNanos > 0 ? predictedVblankNanos : Time());
+    public void BeginFrame(IOutput output, long predictedVblankNanos) =>
+        Tick(predictedVblankNanos > 0 ? AnimationClock?.FromMonotonic(predictedVblankNanos) ?? predictedVblankNanos : Time());
 
     /// <summary>
     /// Does nothing. The frame paces its animation only on <see cref="BeginFrame(IOutput, long)"/>.
@@ -1603,9 +1617,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     }
 
     /// <summary>
-    /// Redraws an animating chrome at a time and asks the clock for another frame while it still animates. It does nothing while a draw is pending.
+    /// Redraws an animating chrome at a time and asks the clock for another frame while it still animates and <see cref="AnimationClock"/> runs. It does nothing while a draw is pending.
     /// </summary>
-    /// <param name="now">The animation time on the monotonic clock in nanoseconds.</param>
+    /// <param name="now">The animation time in nanoseconds.</param>
     public void Tick(long now)
     {
         _thread.Assert();
@@ -1639,7 +1653,7 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
             DamageStrips(_interactionDamage);
             PublishShown();
             UpdateAnimating(_shownState);
-            if (_animating && _clockAttached && Clock is { } clock)
+            if (_animating && _clockAttached && Clock is { } clock && AnimationClock?.MarkAnimating() != false)
             {
                 clock.RequestFrame();
             }

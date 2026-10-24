@@ -11,7 +11,8 @@ internal sealed partial class DungeonWm
 
     private void OnBeforeRepaint(OutputView view)
     {
-        var now = MonotonicClock.Nanos;
+        var clock = _outputs.AnimationClock;
+        var now = clock?.Nanos ?? MonotonicClock.Nanos;
         var refresh = view.Output.CurrentMode.RefreshIntervalNanoseconds is var interval and > 0 ? interval : 16_666_667L;
         var animating = false;
         if (_lastStep == 0)
@@ -51,10 +52,11 @@ internal sealed partial class DungeonWm
             _plaques.Sync(window, ReferenceEquals(_focused, window));
         }
 
-        var tick = new FrameTick(Math.Max(view.Scheduler?.PredictedVblankNanos ?? now, now), refresh);
+        var predicted = view.Scheduler?.PredictedVblankNanos is { } vblank ? clock?.FromMonotonic(vblank) ?? vblank : now;
+        var tick = new FrameTick(Math.Max(predicted, now), refresh);
         var slice = _layout.BoxOf(view.Output);
         output.Render(_worldRenderer, _world.World, _camera, _layout.Bounds, slice, tick, _settings.Render, view.Width, view.Height, view.SwapModifiers);
-        if (animating || _options.Frames > 0)
+        if ((animating && clock?.MarkAnimating() != false) || _options.Frames > 0)
         {
             view.Scheduler?.ScheduleRepaint();
         }

@@ -81,6 +81,15 @@ public sealed class HostedFrame : IDisposable
     public IFrameClock? Frames { get; set; }
 
     /// <summary>
+    /// Gets or sets the clock that animations read. Each tick begins a clock frame, and the ticks of <see cref="BeforeDispatch"/> and of the scene output have animation time. If <see langword="null"/>, the ticks have monotonic time.
+    /// </summary>
+    public IAnimationClock? AnimationClock
+    {
+        get => _output.AnimationClock;
+        set => _output.AnimationClock = value;
+    }
+
+    /// <summary>
     /// Raises <see cref="WakeupRequested"/>.
     /// </summary>
     public void RequestWakeup() => WakeupRequested?.Invoke();
@@ -103,7 +112,11 @@ public sealed class HostedFrame : IDisposable
         ArgumentNullException.ThrowIfNull(target);
 
         var mode = _output.Output.CurrentMode;
-        var tick = new FrameTick(options.TargetPresentNanos, mode.RefreshIntervalNanoseconds);
+        var clock = _output.AnimationClock;
+        clock?.BeginFrame();
+        var tick = new FrameTick(
+            clock?.FromMonotonic(options.TargetPresentNanos) ?? options.TargetPresentNanos,
+            mode.RefreshIntervalNanoseconds);
 
         HostedDispatch.Run(_loop, DispatchWarning, DispatchLimit, DispatchOverran, DispatchExceededLimit);
 
