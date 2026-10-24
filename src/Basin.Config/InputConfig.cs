@@ -28,7 +28,7 @@ public static class InputConfig
     /// </summary>
     /// <param name="input">The reader of the <c>[input]</c> table.</param>
     /// <param name="log">The logger for warnings about invalid values.</param>
-    /// <returns>The rules. <see cref="InputRule.Line"/> holds the position of each rule in file order.</returns>
+    /// <returns>The rules, the catch-all <c>[input]</c> rule first when it exists, then each <c>[[input.device]]</c> rule in file order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<InputRule> Read(TomlReader input, BasinLogger log)
     {
@@ -306,7 +306,7 @@ public static class InputConfig
     {
         if (settings.Count > 0)
         {
-            rules.Add(new InputRule { Match = match, Settings = settings, Line = rules.Count });
+            rules.Add(new InputRule { Match = match, Settings = settings });
         }
     }
 

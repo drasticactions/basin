@@ -39,7 +39,7 @@ internal static class IpcWorkspaceMethods
                 return;
             }
 
-            IpcWindowMethods.Done(reply, model.Request(request.Id, new WorkspaceRequest(WorkspaceRequestKind.Move, GroupId: request.Group)));
+            IpcWindowMethods.Done(reply, model.Request(request.Id, new WorkspaceRequest(WorkspaceRequestKind.Assign, GroupId: request.Group)));
         });
     }
 

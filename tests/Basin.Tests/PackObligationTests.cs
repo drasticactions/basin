@@ -50,6 +50,22 @@ public sealed class PackObligationTests
         Assert.DoesNotContain(capability, services.UnresolvedCapabilities);
     }
 
+    [Fact]
+    public void A_data_device_module_without_a_seat_refuses_to_freeze_by_name()
+    {
+        using var host = new CompositorTestHost();
+        using var services = new BasinServices(host.Display, host.Loop)
+            .Use(host.Layout)
+            .Use(host.Compositor)
+            .Install(new Basin.Seat.DataDeviceModule());
+
+        var error = Assert.Throws<InvalidOperationException>(() => services.Freeze());
+
+        Assert.Contains("wl_data_device_manager", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Seat", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Without(\"wl_data_device_manager\")", error.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [MemberData(nameof(DriveShaped))]
     public void A_drive_shaped_module_without_a_frame_clock_refuses_to_freeze(string wireInterface)

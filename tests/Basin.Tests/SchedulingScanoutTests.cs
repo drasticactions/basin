@@ -523,6 +523,47 @@ public sealed class PlaneOffloadTests
     }
 
     [Fact]
+    public void The_plane_report_gives_scene_boxes_and_physical_plane_boxes()
+    {
+        using var host = new CompositorTestHost();
+        var output = new PlaneOutput();
+        using (var lit = new OutputState())
+        {
+            Assert.True(output.Commit(lit.SetEnabled(true).SetMode(new OutputMode(320, 240, 60_000)).SetScale(2)));
+        }
+
+        using var sceneOutput = new SceneOutput(host.Scene, output) { OffloadEntryThreshold = 1 };
+        using var swapchain = new Swapchain(new ShmAllocator(), 320, 240, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear]);
+        using var state = new OutputState();
+        _ = new SceneRect(host.Scene.Root, 160, 120, new RenderColor(1, 0, 0, 1));
+        var accepted = DirectScanoutTests.FakeClientBuffer(40, 40);
+        var declined = DirectScanoutTests.FakeClientBuffer(40, 40);
+        var onPlane = new SceneBuffer(host.Scene.Root);
+        onPlane.SetBuffer(accepted);
+        onPlane.SetPosition(10, 10);
+        var composited = new SceneBuffer(host.Scene.Root);
+        composited.SetBuffer(declined);
+        composited.SetPosition(100, 60);
+
+        output.Accept = (layer, _) => ReferenceEquals(layer.Buffer, accepted);
+        Assert.True(sceneOutput.Commit(host.Renderer, swapchain, state));
+
+        var report = Basin.Scene.SceneDiagnostics.Report(sceneOutput);
+        var plane = Assert.Single(report.Entries, entry => entry.OnPlane);
+        var other = Assert.Single(report.Entries, entry => !entry.OnPlane);
+        Assert.Equal(new Box(10, 10, 40, 40), plane.Box);
+        Assert.Equal(new Box(20, 20, 80, 80), plane.PlaneBox);
+        Assert.Equal(new Box(100, 60, 40, 40), other.Box);
+        Assert.Null(other.PlaneBox);
+
+        onPlane.Destroy();
+        composited.Destroy();
+        accepted.Destroy();
+        declined.Destroy();
+        output.Destroy();
+    }
+
+    [Fact]
     public void Layer_demoted_by_the_real_commit_is_recomposited()
     {
         using var host = new CompositorTestHost();

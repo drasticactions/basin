@@ -390,8 +390,8 @@ public sealed class SoftKeyboardSession : IDisposable
     }
 
     /// <summary>
-    /// Applies new options at run time. The layouts reload only when the layout list changes, and the size changes only when the user chose none.
-    /// The state path and the locale of the new options take effect on the next layout reload.
+    /// Applies new options at run time. The size changes only when the user chose none.
+    /// The layouts reload when the layout list, the user layout directory or the state path changes, or the locale changes while the layout list is empty. A new state path is read again first.
     /// </summary>
     /// <param name="options">The new options.</param>
     public void Reload(SoftKeyboardSessionOptions options)
@@ -406,7 +406,16 @@ public sealed class SoftKeyboardSession : IDisposable
             _router.SpacesToPeriod = options.SpacesToPeriod;
         }
 
-        if (!options.Layouts.SequenceEqual(previous.Layouts))
+        var stateMoved = !string.Equals(options.StatePath, previous.StatePath, StringComparison.Ordinal);
+        if (stateMoved)
+        {
+            LoadState();
+        }
+
+        if (stateMoved ||
+            !options.Layouts.SequenceEqual(previous.Layouts) ||
+            !string.Equals(options.UserLayoutDirectory, previous.UserLayoutDirectory, StringComparison.Ordinal) ||
+            (options.Layouts.Count == 0 && !string.Equals(options.Locale, previous.Locale, StringComparison.Ordinal)))
         {
             LoadLayouts();
             Rebuild();

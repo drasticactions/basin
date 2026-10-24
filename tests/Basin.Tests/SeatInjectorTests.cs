@@ -56,6 +56,7 @@ public sealed class SeatInjectorTests
         var axes = new List<(uint Axis, double Value, uint Source)>();
         var injector = new SeatInjector(binder, host.Seat, host.Layout, pointer)
         {
+            Moved = _ => { },
             DeliverButton = (_, button, pressed) => buttons.Add((button, pressed)),
             DeliverKey = (_, key, pressed) => keys.Add((key, pressed)),
             DeliverAxis = (_, axis, value, source) => axes.Add((axis, value, source)),
@@ -67,7 +68,7 @@ public sealed class SeatInjectorTests
         Assert.Equal((100.0, 25.0), (pointer.X, pointer.Y));
         Assert.True(sink.PointerMotion(2, 10, 5));
         Assert.Equal((110.0, 30.0), (pointer.X, pointer.Y));
-        Assert.True(sink.PointerMotionAbsolute(3, 10, 10, 0, 100));
+        Assert.False(sink.PointerMotionAbsolute(3, 10, 10, 0, 100));
         Assert.Equal((110.0, 30.0), (pointer.X, pointer.Y));
 
         Assert.True(sink.PointerButton(4, Basin.InputCodes.BtnLeft, true));
@@ -89,6 +90,43 @@ public sealed class SeatInjectorTests
         sink.Route(injector, host.Seat);
         Assert.Null(sink.OnPointerAxis);
         cursor.Dispose();
+    }
+
+    [Fact]
+    public void Motion_that_reaches_nothing_returns_false()
+    {
+        using var host = new CompositorTestHost(200, 100);
+        var pointer = new LayoutPointer(host.Layout);
+        var cursor = new CursorController(host.Layout);
+        var binder = new SeatBinder(host.Seat, host.Layout, pointer, cursor);
+        var silent = new SeatInjector(binder, host.Seat, host.Layout, pointer);
+        Assert.False(silent.MotionAbsolute(1, 50, 25, 100, 100));
+        Assert.False(silent.PointerMotionAbsolute(2, 50, 25));
+        Assert.False(silent.PointerMotion(3, 5, 5));
+        var watched = 0;
+        pointer.Moved += () => watched++;
+        Assert.True(silent.PointerMotionAbsolute(4, 60, 30));
+        Assert.Equal(1, watched);
+
+        var empty = new OutputLayout();
+        var emptyPointer = new LayoutPointer(empty);
+        var emptyInjector = new SeatInjector(binder, host.Seat, empty, emptyPointer) { Moved = _ => { } };
+        Assert.False(emptyInjector.MotionAbsolute(5, 50, 25, 100, 100));
+        cursor.Dispose();
+    }
+
+    [Fact]
+    public void Without_a_target_the_pointer_position_is_the_origin()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        host.Seat.Pointer.NotifyEnter(window.ServerSurface, 12, 7);
+        host.Seat.Pointer.NotifyMotion(1, 12, 7);
+        using var services = new BasinServices(host.Display, host.Loop);
+        var synthetic = new SeatSyntheticInput(host.Seat, services);
+
+        Assert.False(synthetic.TryPointerPosition(out var x, out var y));
+        Assert.Equal((0.0, 0.0), (x, y));
     }
 
     [Fact]

@@ -14,6 +14,7 @@ public sealed class EisReceiverTests
         var sink = new RecordingInputSink();
         var granted = InputDeviceCapability.Pointer | InputDeviceCapability.Keyboard;
         using var receiver = new EisReceiver(host.Loop, sink, host.Seat.Keyboard, granted);
+        receiver.AddRegion("LEFT", -1920, 0, 1920, 1080, 1);
         receiver.AddRegion("HEADLESS-1", 0, 0, 160, 120, 1);
         var fd = receiver.AddClientFd();
 
@@ -71,8 +72,8 @@ public sealed class EisReceiverTests
             Assert.NotNull(keyboard.GetKeymap());
         }
 
-        Assert.Single(absolute.GetRegions());
-        Assert.Equal("HEADLESS-1", absolute.GetRegions()[0].MappingId);
+        Assert.Equal(2, absolute.GetRegions().Count);
+        Assert.Equal("HEADLESS-1", absolute.GetRegions()[1].MappingId);
 
         foreach (var device in devices)
         {
@@ -96,7 +97,7 @@ public sealed class EisReceiverTests
         Assert.True(receiver.IsEmulating);
         Assert.Equal(1, sink.CreatedKeyboards);
         Assert.Equal([(4.0, -2.0)], sink.Motions.Select(m => (m.Dx, m.Dy)));
-        Assert.Equal([(30.0, 40.0, 160.0, 120.0)], sink.AbsoluteMotions.Select(m => (m.X, m.Y, m.Width, m.Height)));
+        Assert.Equal([(1950.0, 40.0, 2080.0, 1080.0)], sink.AbsoluteMotions.Select(m => (m.X, m.Y, m.Width, m.Height)));
         Assert.Equal([(InputCodes.BtnLeft, true)], sink.Buttons.Select(b => (b.Button, b.Pressed)));
         Assert.Equal([0u], sink.AxisSources);
         Assert.Equal([(0u, 15.0)], sink.Axes.Select(a => (a.Axis, a.Value)));

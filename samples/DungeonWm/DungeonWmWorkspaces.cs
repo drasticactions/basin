@@ -130,7 +130,7 @@ internal sealed class DungeonWmWorkspaces : IWorkspaceModel
             case WorkspaceRequestKind.Remove when RoomOf(targetId) is { } room && _rooms.Count > 1:
                 RemoveRequested?.Invoke(room);
                 return true;
-            case WorkspaceRequestKind.Assign when RoomOf(targetId) is { } room:
+            case WorkspaceRequestKind.MoveToplevel when RoomOf(targetId) is { } room:
                 foreach (var window in Windows())
                 {
                     if (window.ToplevelId == request.ToplevelId)

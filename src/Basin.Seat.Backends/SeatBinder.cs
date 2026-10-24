@@ -382,35 +382,6 @@ public sealed class SeatBinder
     }
 
     /// <summary>
-    /// Wires only the touch devices of a libinput backend, for a program that keeps its own key and pointer wiring. Do not combine it with <see cref="BindLibinput"/>.
-    /// </summary>
-    /// <param name="input">The libinput backend.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
-    public void BindLibinputTouch(LibinputBackend input)
-    {
-        ArgumentNullException.ThrowIfNull(input);
-
-        input.DeviceAdded += device =>
-        {
-            if (device.HasTouch)
-            {
-                _touchDevices++;
-                _seat.SetCapability(SeatCapability.Touch, _touchDevices > 0);
-            }
-        };
-        input.DeviceRemoved += device =>
-        {
-            if (device.HasTouch)
-            {
-                _touchDevices--;
-                _seat.SetCapability(SeatCapability.Touch, _touchDevices > 0);
-            }
-        };
-
-        WireLibinputTouch(input);
-    }
-
-    /// <summary>
     /// Wires only the touch devices of a nested parent. Do not combine it with <see cref="BindParent"/>.
     /// </summary>
     /// <param name="parent">The Wayland backend of the parent.</param>

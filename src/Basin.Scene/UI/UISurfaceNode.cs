@@ -149,11 +149,6 @@ public sealed class UISurfaceNode : IUISurfaceObserver, ISceneInputFilter, IDisp
     public UITargetKind? Target { get; init; }
 
     /// <summary>
-    /// Gets the DRM device that the node asks the host to allocate on, or <see langword="null"/> to let the host choose.
-    /// </summary>
-    public DrmDeviceInfo? Device { get; init; }
-
-    /// <summary>
     /// Gets or sets a value indicating whether the node is drawn.
     /// </summary>
     public bool Enabled
@@ -261,7 +256,6 @@ public sealed class UISurfaceNode : IUISurfaceObserver, ISceneInputFilter, IDisp
                     Width = width,
                     Height = height,
                     Scale = scale,
-                    Device = Device,
                 });
             }
             catch (Exception error) when (error is InvalidOperationException or NotSupportedException)

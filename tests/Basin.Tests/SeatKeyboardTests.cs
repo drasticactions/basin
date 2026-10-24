@@ -56,6 +56,45 @@ public sealed class SeatKeyboardTests
         plain.Dispose();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_removed_active_device_keymap_is_not_sent_to_a_new_keyboard(bool clear)
+    {
+        using var host = new CompositorTestHost();
+        Assert.Null(host.Seat.Keyboard.Keymap);
+        var device = host.Seat.Keyboard.CreateDevice();
+        Assert.True(device.SetKeymap(new Basin.Capabilities.KeymapNames(Layout: "de")));
+        host.Seat.Keyboard.Activate(device);
+        if (clear)
+        {
+            device.ClearKeymap();
+        }
+
+        device.Dispose();
+        Assert.Null(host.Seat.Keyboard.KeymapBuffer);
+
+        var keymaps = 0;
+        var keyboard = host.Client.Seat!.GetKeyboard();
+        keyboard.Keymap += (_, e) =>
+        {
+            keymaps++;
+            LibcClose(e.Fd);
+        };
+        host.PumpToClient();
+        host.PumpToClient();
+        Assert.Equal(0, keymaps);
+    }
+
+    [Fact]
+    public void A_disposed_keymap_refuses_to_mint_a_descriptor()
+    {
+        var keymap = new Basin.Capabilities.Keymap("xkb_keymap {};");
+        keymap.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => keymap.Fd);
+        Assert.Throws<ObjectDisposedException>(() => keymap.FdFor(null));
+    }
+
     [Fact]
     public void A_device_keymap_by_name_applies_while_it_is_active_and_clears_back_to_the_seat()
     {

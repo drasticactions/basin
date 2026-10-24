@@ -13,11 +13,8 @@ public enum WorkspaceRequestKind
     Remove,
     /// <summary>Create a workspace in the target group. A toplevel id also asks policy to move that toplevel to the new workspace.</summary>
     Create,
-    /// <summary>
-    /// With a group id, move the target workspace to that group, as ext-workspace asks.
-    /// With a toplevel id, put that toplevel on the target workspace, as IPC asks.
-    /// </summary>
+    /// <summary>Move the target workspace to the group in <see cref="WorkspaceRequest.GroupId"/>, as ext-workspace <c>assign</c> and IPC <c>workspaces/move</c> ask.</summary>
     Assign,
-    /// <summary>Move the target workspace to the group in <see cref="WorkspaceRequest.GroupId"/>, as IPC asks.</summary>
-    Move,
+    /// <summary>Put the toplevel in <see cref="WorkspaceRequest.ToplevelId"/> on the target workspace, as IPC <c>windows/send-to-workspace</c> asks.</summary>
+    MoveToplevel,
 }

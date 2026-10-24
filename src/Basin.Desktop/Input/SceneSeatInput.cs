@@ -17,7 +17,7 @@ public class SceneSeatInput : SeatInputSink
     /// <param name="scene">The scene to hit-test.</param>
     /// <param name="layout">The layout that bounds the pointer.</param>
     public SceneSeatInput(Basin.Seat.Seat seat, Basin.Scene.Scene scene, OutputLayout layout)
-        : base(seat)
+        : base(seat, layout)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(layout);

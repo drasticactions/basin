@@ -3,6 +3,7 @@ namespace Basin.Capabilities;
 /// <summary>
 /// Receives input from a virtual device, for example a virtual keyboard client, an EIS sender or a remote desktop session.
 /// Keycodes and buttons are Linux evdev codes. Each method returns <see langword="false"/> when the sink drops the event.
+/// An absolute extent maps onto the layout bounds box, and a point in it is relative to the box origin.
 /// </summary>
 public interface IInputSink
 {
@@ -35,12 +36,12 @@ public interface IInputSink
     bool PointerMotion(uint timeMs, double dx, double dy);
 
     /// <summary>
-    /// Moves the pointer to a point in an extent of <paramref name="width"/> by <paramref name="height"/>.
+    /// Moves the pointer to a point in an extent of <paramref name="width"/> by <paramref name="height"/>. The extent maps onto the layout bounds.
     /// An empty extent gives <see langword="false"/>.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
-    /// <param name="x">The horizontal position in the extent.</param>
-    /// <param name="y">The vertical position in the extent.</param>
+    /// <param name="x">The horizontal position in the extent. Zero is the left edge of the layout bounds.</param>
+    /// <param name="y">The vertical position in the extent. Zero is the top edge of the layout bounds.</param>
     /// <param name="width">The width of the extent.</param>
     /// <param name="height">The height of the extent.</param>
     /// <returns><see langword="true"/> when the sink accepted the event.</returns>
@@ -75,21 +76,21 @@ public interface IInputSink
     /// <returns><see langword="true"/> when the sink accepted the frame.</returns>
     bool Frame();
 
-    /// <summary>Starts a touch point in an extent of <paramref name="width"/> by <paramref name="height"/>. The default implementation returns <see langword="false"/>.</summary>
+    /// <summary>Starts a touch point in an extent of <paramref name="width"/> by <paramref name="height"/>, which maps onto the layout bounds. The default implementation returns <see langword="false"/>.</summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="id">The identifier of the touch point.</param>
-    /// <param name="x">The horizontal position in the extent.</param>
-    /// <param name="y">The vertical position in the extent.</param>
+    /// <param name="x">The horizontal position in the extent. Zero is the left edge of the layout bounds.</param>
+    /// <param name="y">The vertical position in the extent. Zero is the top edge of the layout bounds.</param>
     /// <param name="width">The width of the extent.</param>
     /// <param name="height">The height of the extent.</param>
     /// <returns><see langword="true"/> when the sink accepted the event.</returns>
     bool TouchDown(uint timeMs, int id, double x, double y, double width, double height) => false;
 
-    /// <summary>Moves a touch point. The default implementation returns <see langword="false"/>.</summary>
+    /// <summary>Moves a touch point in an extent that maps onto the layout bounds. The default implementation returns <see langword="false"/>.</summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="id">The identifier of the touch point.</param>
-    /// <param name="x">The horizontal position in the extent.</param>
-    /// <param name="y">The vertical position in the extent.</param>
+    /// <param name="x">The horizontal position in the extent. Zero is the left edge of the layout bounds.</param>
+    /// <param name="y">The vertical position in the extent. Zero is the top edge of the layout bounds.</param>
     /// <param name="width">The width of the extent.</param>
     /// <param name="height">The height of the extent.</param>
     /// <returns><see langword="true"/> when the sink accepted the event.</returns>

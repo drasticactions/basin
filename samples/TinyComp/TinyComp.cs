@@ -637,7 +637,6 @@ internal sealed partial class TinyComp :
         _backdrop = new SceneTree(_layers.Background);
         _pointerRefresh = new PointerRefresh(_scene, _loop, RefreshPointer);
 
-        var forcedCard = Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE");
         IReadOnlyList<DrmDeviceInfo> drmDevices = [];
         if (drm)
         {
@@ -1094,10 +1093,7 @@ internal sealed partial class TinyComp :
             _pointer = new LayoutPointer(_layout);
             _driver.CreateInitialOutputs();
 
-            if (forcedCard is null)
-            {
-                _driver.AdoptSecondaryCards();
-            }
+            _driver.AdoptSecondaryCards();
 
             _outputsCreated = true;
             SetupTouch();

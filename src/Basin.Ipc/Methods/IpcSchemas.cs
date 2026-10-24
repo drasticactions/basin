@@ -224,7 +224,7 @@ internal static class IpcSchemas
         Add(IpcMethodNames.DiagInputTrace, Idempotent, "Subscribe the caller to diag/input: pointer enter, leave, buttons, axis, keyboard focus and grabs, with the window and coordinates. motion adds pointer motion, once a frame at most.", """
             {"type":"object","properties":{"mode":{"type":"string","enum":["on","motion","off"]}},"required":["mode"]}
             """);
-        Add(IpcMethodNames.DiagPlanesState, ReadOnly, "Return, for each output, the nodes on overlay planes in the last frame and the candidates kept in the composite with the reason (blend-space, backend-refused, demoted and so on), or why the output tried no planes at all.", Empty);
+        Add(IpcMethodNames.DiagPlanesState, ReadOnly, "Return, for each output, the nodes on overlay planes in the last frame and the candidates kept in the composite with the reason (blend-space, backend-refused, demoted and so on), or why the output tried no planes at all. Each entry's box is in scene coordinates; an entry on a plane also has plane_box in output physical pixels.", Empty);
         Add(IpcMethodNames.DiagPlaneTrace, Idempotent, "Subscribe the caller to diag/plane, which sends an output's diag/planes-state entry each time it changes.", """
             {"type":"object","properties":{"on":{"type":"boolean"}},"required":["on"]}
             """);

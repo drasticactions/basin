@@ -161,7 +161,17 @@ internal sealed class CanvasSession : IDisposable
         info.Environment["XDG_RUNTIME_DIR"] = _runtimeDir;
         info.Environment["WAYLAND_DISPLAY"] = _socket;
         var process = Process.Start(info)!;
-        process.OutputDataReceived += (_, _) => { };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is { } line)
+            {
+                lock (_gate)
+                {
+                    _clientLines.Add(line);
+                    Monitor.PulseAll(_gate);
+                }
+            }
+        };
         process.ErrorDataReceived += (_, _) => { };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
@@ -229,6 +239,19 @@ internal sealed class CanvasSession : IDisposable
         Assert.NotNull(line);
         var parts = line!.Split(' ');
         return (int.Parse(parts[2]), int.Parse(parts[3]));
+    }
+
+    public (int X, int Y) WaitForWindowX(int x, int timeoutMillis = 10000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMillis;
+        var position = WindowPosition();
+        while (position.X != x && Environment.TickCount64 < deadline)
+        {
+            Thread.Sleep(50);
+            position = WindowPosition();
+        }
+
+        return position;
     }
 
     public void Rewrite(string config) => File.WriteAllText(Path.Combine(_runtimeDir, "tinycomp.toml"), config);

@@ -169,6 +169,23 @@ public sealed class SessionTests : IDisposable
     }
 
     [Fact]
+    public void A_reload_with_a_new_locale_reloads_the_default_layout()
+    {
+        using var rig = new Rig(new SoftKeyboardSessionOptions { Locale = "en_US" });
+        Assert.Equal("us-qwerty", rig.Session.CurrentLayout.Id);
+        var changed = 0;
+        rig.Session.LayoutChanged += () => changed++;
+
+        rig.Session.Reload(new SoftKeyboardSessionOptions { Locale = "fr_FR" });
+
+        Assert.Equal("fr-azerty", rig.Session.CurrentLayout.Id);
+        Assert.Equal(1, changed);
+
+        rig.Session.Reload(new SoftKeyboardSessionOptions { Locale = "fr_FR" });
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
     public void The_xkb_shapes_are_built_from_the_seat_keymap_once_attached()
     {
         using var rig = new Rig(new SoftKeyboardSessionOptions { Layouts = [SoftKeyboardSessionOptions.XkbStandard, SoftKeyboardSessionOptions.XkbFull] });

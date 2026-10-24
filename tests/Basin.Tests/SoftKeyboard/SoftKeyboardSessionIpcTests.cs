@@ -56,6 +56,8 @@ public sealed class SoftKeyboardSessionIpcTests
         Assert.Contains("no layout fr-azerty", peer.Call("""{"method":"testwm/keyboard-layout","params":{"id":"fr-azerty"}}"""));
         peer.Call("""{"method":"testwm/keyboard-layout","params":{"id":"win8-standard-en-us"}}""");
         Assert.Equal("win8-standard-en-us", session.CurrentLayout.Id);
+        Assert.DoesNotContain("error", peer.Call("""{"method":"testwm/keyboard-type","params":{"text":"\ud83d\ude00"}}"""));
+        Assert.Equal("\U0001F600", typed[^1].Text);
         peer.Call("""{"method":"testwm/keyboard","params":{"state":"hide"}}""");
         Assert.Equal("hide command", calls[^1]);
     }

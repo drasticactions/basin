@@ -26,6 +26,11 @@ public sealed class LayoutPointer(OutputLayout layout)
     public event Action? Moved;
 
     /// <summary>
+    /// Gets a value indicating whether a handler is attached to <see cref="Moved"/>. An injector reads it to tell whether a move reaches anything.
+    /// </summary>
+    public bool HasMovedHandlers => Moved is not null;
+
+    /// <summary>
     /// Puts the pointer back at the same relative place on the output it was on, after the layout or a scale changed. It clamps to the nearest point when that output is gone. Call it after each output reconfiguration.
     /// </summary>
     public void Reposition()

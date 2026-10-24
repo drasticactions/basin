@@ -34,7 +34,6 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
     private OutputLayout _layout = null!;
     private IOutputSet _outputs = null!;
     private IToplevelModel? _toplevels;
-    private IDmabufCapture? _dmabuf;
     private PortalOptions _options = new();
     private ToplevelInfo[] _toplevelScratch = new ToplevelInfo[32];
 
@@ -45,7 +44,7 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
     public override int Version => 6;
 
     /// <inheritdoc/>
-    public override IReadOnlyList<Type> Capabilities => [typeof(IToplevelModel), typeof(IDmabufCapture), typeof(IAppInfoResolver)];
+    public override IReadOnlyList<Type> Capabilities => [typeof(IToplevelModel), typeof(IAppInfoResolver)];
 
     /// <inheritdoc/>
     public override IReadOnlyList<Type> Drivers => [typeof(IScreenCapture), typeof(IScreencastPublisher), typeof(IPortalPrompts), typeof(IOutputSet)];
@@ -88,7 +87,6 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         _layout = services.Require<OutputLayout>();
         _outputs = services.Require<IOutputSet>();
         _toplevels = services.Find<IToplevelModel>();
-        _dmabuf = services.Find<IDmabufCapture>();
         _options = services.Find<PortalOptions>() ?? new PortalOptions();
         _outputs.Changed += OnOutputsChanged;
     }
@@ -342,7 +340,6 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
             StreamId = streamId,
             Source = capture,
             Cursor = state.CursorMode,
-            Dmabuf = _dmabuf,
         };
         if (!_publisher.TryPublish(request, out var info2))
         {

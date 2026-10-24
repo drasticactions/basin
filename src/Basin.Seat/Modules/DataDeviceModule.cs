@@ -14,9 +14,12 @@ public sealed class DataDeviceModule : IProtocolModule
     /// <inheritdoc/>
     public int Version => DataDeviceManager.Version;
 
+    /// <inheritdoc/>
+    public IReadOnlyList<Type> Drivers => [typeof(Seat)];
+
     /// <summary>
     /// Creates the global for the registered <see cref="Seat"/>.
-    /// The registry must hold a <see cref="Seat"/>, or the call throws.
+    /// The registry must hold a <see cref="Seat"/>. Without one, <see cref="BasinServices.Freeze"/> throws before this call with the standard missing-driver message.
     /// </summary>
     /// <param name="services">The registry to read the seat from and to add the drag tracker to.</param>
     /// <returns>The global. Disposing it removes the global.</returns>

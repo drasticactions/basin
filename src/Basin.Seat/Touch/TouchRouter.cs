@@ -76,7 +76,7 @@ public sealed class TouchRouter
     }
 
     /// <summary>
-    /// Routes a touch down. A down past the contact capacity is dropped.
+    /// Routes a touch down. A down past the contact capacity is dropped. A negative id is dropped too, because negative ids are the synthetic gesture range.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="id">The contact id.</param>
@@ -85,6 +85,12 @@ public sealed class TouchRouter
     public void Down(uint timeMs, int id, double x, double y)
     {
         _thread.Assert();
+        if (id < 0)
+        {
+            Activity?.OnTouchActivity();
+            return;
+        }
+
         var slot = FindSlot(id);
         if (slot < 0)
         {

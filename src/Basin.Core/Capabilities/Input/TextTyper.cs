@@ -64,7 +64,7 @@ public sealed class TextTyper
 
     /// <summary>
     /// Gets or sets a value indicating whether <see cref="Type"/> skips a character that it cannot type instead of stopping there.
-    /// It applies only without an <see cref="IKeymapOverride"/>.
+    /// With an <see cref="IKeymapOverride"/>, it applies to the characters of a batch that the override refuses.
     /// </summary>
     public bool SkipUntypable { get; set; }
 
@@ -74,8 +74,8 @@ public sealed class TextTyper
     /// <param name="text">The text to type.</param>
     /// <param name="timeMs">The event time in milliseconds for all key events.</param>
     /// <param name="target">The target that receives the key events.</param>
-    /// <param name="error">A message for the first character that the keymap cannot type, or <see langword="null"/>.</param>
-    /// <returns>The number of characters whose key events the target accepted.</returns>
+    /// <param name="error">A message for the first character that the keymap cannot type or that the override refuses, or <see langword="null"/> when all text is typed.</param>
+    /// <returns>The number of characters whose key events the target accepted. It stops at the first refused batch unless <see cref="SkipUntypable"/> is set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
     public int Type(ReadOnlySpan<char> text, uint timeMs, ITextKeyTarget target, out string? error)
     {
@@ -92,7 +92,13 @@ public sealed class TextTyper
                 return typed;
             }
 
-            typed += Emit(timeMs, target);
+            typed += Emit(timeMs, target, out var refused);
+            error ??= refused;
+            if (refused is not null && !SkipUntypable)
+            {
+                return typed;
+            }
+
             start = end;
         }
 
@@ -165,12 +171,25 @@ public sealed class TextTyper
         return -1;
     }
 
-    private int Emit(uint timeMs, ITextKeyTarget target)
+    private int Emit(uint timeMs, ITextKeyTarget target, out string? error)
     {
+        error = null;
         IDisposable? scope = null;
         if (_spares.Count > 0)
         {
             scope = _override!.OverrideKeysyms(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_spares));
+            if (scope is null)
+            {
+                var refused = 0;
+                foreach (var step in _plan)
+                {
+                    refused += step.Spare >= 0 ? 1 : 0;
+                }
+
+                var first = _spares[0].Keysym;
+                var codepoint = (first & 0x01000000u) != 0 ? first & 0x00ffffffu : first;
+                error = $"the keymap override refused {refused} characters, the first is U+{codepoint:X4}";
+            }
         }
 
         var typed = 0;

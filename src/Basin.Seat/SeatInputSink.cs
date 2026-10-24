@@ -5,24 +5,29 @@ using Xkb;
 namespace Basin.Seat;
 
 /// <summary>
-/// The default <see cref="IInputSink"/>. It feeds virtual device input straight into the notify methods of one seat, with no hit test.
+/// The default <see cref="IInputSink"/>. It feeds virtual device input into the notify methods of one seat.
+/// With a layout, it keeps a layout pointer and maps absolute input onto the layout bounds. It does no hit test, so it never changes the pointer focus.
 /// </summary>
 public class SeatInputSink : IInputSink
 {
     private WlPointer.AxisSource _axisSource = WlPointer.AxisSource.Wheel;
+    private OutputLayout? _layout;
+    private LayoutPointer? _pointer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SeatInputSink"/> class.
     /// </summary>
     /// <param name="seat">The seat that receives the input.</param>
-    public SeatInputSink(Seat seat)
+    /// <param name="layout">The layout that absolute pointer and touch input maps onto, or <see langword="null"/> to decline that input.</param>
+    public SeatInputSink(Seat seat, OutputLayout? layout = null)
     {
         ArgumentNullException.ThrowIfNull(seat);
         Seat = seat;
+        UseLayout(layout);
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SeatInputSink"/> class with no seat. The host binds the seat later.
+    /// Initializes a new instance of the <see cref="SeatInputSink"/> class with no seat and no layout. The host binds both later.
     /// </summary>
     protected SeatInputSink()
     {
@@ -34,7 +39,20 @@ public class SeatInputSink : IInputSink
     /// </summary>
     protected Seat Seat { get; private set; }
 
-    internal void Bind(Seat seat) => Seat ??= seat;
+    internal void Bind(Seat seat, OutputLayout? layout)
+    {
+        Seat ??= seat;
+        UseLayout(layout);
+    }
+
+    private void UseLayout(OutputLayout? layout)
+    {
+        if (_layout is null && layout is not null)
+        {
+            _layout = layout;
+            _pointer = new LayoutPointer(layout);
+        }
+    }
 
     /// <summary>
     /// Creates a <see cref="KeyboardDevice"/> on the seat keyboard.
@@ -74,35 +92,79 @@ public class SeatInputSink : IInputSink
     }
 
     /// <summary>
-    /// Moves the pointer by a distance from its last surface-local position on the current focus. It does not change the focus.
+    /// Moves the pointer by a distance in layout coordinates and sends the result to the current focus. It does not change the focus.
+    /// With no layout, it moves the pointer from its last surface-local position on the focus.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="dx">The horizontal distance.</param>
     /// <param name="dy">The vertical distance.</param>
-    /// <returns>Always <see langword="true"/>.</returns>
+    /// <returns><see langword="false"/> when a layout is set and no surface has the pointer focus.</returns>
     public virtual bool PointerMotion(uint timeMs, double dx, double dy)
     {
-        Seat.Pointer.NotifyMotion(timeMs, Seat.Pointer.X + dx, Seat.Pointer.Y + dy);
-        return true;
+        if (_pointer is not { } pointer)
+        {
+            Seat.Pointer.NotifyMotion(timeMs, Seat.Pointer.X + dx, Seat.Pointer.Y + dy);
+            return true;
+        }
+
+        if (Seat.Pointer.Focus is not null)
+        {
+            pointer.Warp(Seat.Pointer.LayoutX, Seat.Pointer.LayoutY);
+        }
+
+        pointer.Motion(dx, dy);
+        return SendToFocus(timeMs, pointer);
     }
 
     /// <summary>
-    /// Sends the point as a surface-local motion on the current focus. The extent is checked but not used to scale the point.
+    /// Moves the pointer to a point in the extent, which maps onto the layout bounds, and sends the result to the current focus. It does not change the focus.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
-    /// <param name="x">The horizontal position.</param>
-    /// <param name="y">The vertical position.</param>
+    /// <param name="x">The horizontal position in the extent, from the left edge of the layout bounds.</param>
+    /// <param name="y">The vertical position in the extent, from the top edge of the layout bounds.</param>
     /// <param name="width">The extent width. It must be positive.</param>
     /// <param name="height">The extent height. It must be positive.</param>
-    /// <returns><see langword="false"/> when the extent is empty.</returns>
+    /// <returns><see langword="false"/> when the extent is empty, no layout is set, or no surface has the pointer focus.</returns>
     public virtual bool PointerMotionAbsolute(uint timeMs, double x, double y, double width, double height)
     {
-        if (width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0 || _pointer is not { } pointer)
         {
             return false;
         }
 
-        Seat.Pointer.NotifyMotion(timeMs, x, y);
+        pointer.MotionAbsolute(null, x / width, y / height);
+        return SendToFocus(timeMs, pointer);
+    }
+
+    private bool SendToFocus(uint timeMs, LayoutPointer pointer)
+    {
+        var pointerState = Seat.Pointer;
+        if (pointerState.Focus is not { IsDestroyed: false } focus)
+        {
+            return false;
+        }
+
+        if (pointerState.MapToSurface is not { } map || !map(focus, pointer.X, pointer.Y, out var surfaceX, out var surfaceY))
+        {
+            surfaceX = pointer.X - (pointerState.LayoutX - pointerState.X);
+            surfaceY = pointer.Y - (pointerState.LayoutY - pointerState.Y);
+        }
+
+        pointerState.NotifyMotionAt(timeMs, focus, surfaceX, surfaceY, pointer.X, pointer.Y);
+        return true;
+    }
+
+    private bool ToLayout(double x, double y, double width, double height, out double layoutX, out double layoutY)
+    {
+        layoutX = 0;
+        layoutY = 0;
+        if (width <= 0 || height <= 0 || _layout?.Bounds is not { IsEmpty: false } bounds)
+        {
+            return false;
+        }
+
+        layoutX = bounds.X + (x / width * bounds.Width);
+        layoutY = bounds.Y + (y / height * bounds.Height);
         return true;
     }
 
@@ -166,44 +228,44 @@ public class SeatInputSink : IInputSink
     }
 
     /// <summary>
-    /// Routes a touch down through the seat's <see cref="TouchRouter"/>. The point is used as a layout position, not scaled to the extent.
+    /// Routes a touch down through the seat's <see cref="TouchRouter"/>. The extent maps onto the layout bounds.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="id">The contact id.</param>
-    /// <param name="x">The horizontal position in layout coordinates.</param>
-    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <param name="x">The horizontal position in the extent, from the left edge of the layout bounds.</param>
+    /// <param name="y">The vertical position in the extent, from the top edge of the layout bounds.</param>
     /// <param name="width">The extent width. It must be positive.</param>
     /// <param name="height">The extent height. It must be positive.</param>
-    /// <returns><see langword="false"/> when the extent is empty or the seat has no router.</returns>
+    /// <returns><see langword="false"/> when the extent or the layout is empty, no layout is set, or the seat has no router.</returns>
     public virtual bool TouchDown(uint timeMs, int id, double x, double y, double width, double height)
     {
-        if (width <= 0 || height <= 0 || Seat.Touch.Router is not { } router)
+        if (Seat.Touch.Router is not { } router || !ToLayout(x, y, width, height, out var layoutX, out var layoutY))
         {
             return false;
         }
 
-        router.Down(timeMs, id, x, y);
+        router.Down(timeMs, id, layoutX, layoutY);
         return true;
     }
 
     /// <summary>
-    /// Routes a touch motion through the seat's <see cref="TouchRouter"/>. The point is used as a layout position, not scaled to the extent.
+    /// Routes a touch motion through the seat's <see cref="TouchRouter"/>. The extent maps onto the layout bounds.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="id">The contact id.</param>
-    /// <param name="x">The horizontal position in layout coordinates.</param>
-    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <param name="x">The horizontal position in the extent, from the left edge of the layout bounds.</param>
+    /// <param name="y">The vertical position in the extent, from the top edge of the layout bounds.</param>
     /// <param name="width">The extent width. It must be positive.</param>
     /// <param name="height">The extent height. It must be positive.</param>
-    /// <returns><see langword="false"/> when the extent is empty or the seat has no router.</returns>
+    /// <returns><see langword="false"/> when the extent or the layout is empty, no layout is set, or the seat has no router.</returns>
     public virtual bool TouchMotion(uint timeMs, int id, double x, double y, double width, double height)
     {
-        if (width <= 0 || height <= 0 || Seat.Touch.Router is not { } router)
+        if (Seat.Touch.Router is not { } router || !ToLayout(x, y, width, height, out var layoutX, out var layoutY))
         {
             return false;
         }
 
-        router.Motion(timeMs, id, x, y);
+        router.Motion(timeMs, id, layoutX, layoutY);
         return true;
     }
 

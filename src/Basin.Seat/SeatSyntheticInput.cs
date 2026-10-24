@@ -64,7 +64,7 @@ public sealed class SeatSyntheticInput : ISyntheticInput
     public bool TouchCancel() => Target?.TouchCancel() ?? false;
 
     /// <summary>
-    /// Reads the pointer position from the target. With no target, it gives the surface-local position of the seat pointer.
+    /// Reads the pointer position in layout coordinates from the target. With no target, it gives 0, 0.
     /// </summary>
     /// <param name="x">The horizontal position.</param>
     /// <param name="y">The vertical position.</param>
@@ -76,7 +76,7 @@ public sealed class SeatSyntheticInput : ISyntheticInput
             return target.TryPointerPosition(out x, out y);
         }
 
-        (x, y) = (_seat.Pointer.X, _seat.Pointer.Y);
+        (x, y) = (0, 0);
         return false;
     }
 }

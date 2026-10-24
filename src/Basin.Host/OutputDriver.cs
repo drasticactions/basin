@@ -836,11 +836,12 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     public event Action<DrmOutput>? SecondaryOutputAdded;
 
     /// <summary>
-    /// Starts a DRM backend on every other card with connectors, and adds their outputs as secondary views with dumb buffers. It does nothing without a DRM backend and a session.
+    /// Starts a DRM backend on every other card with connectors, and adds their outputs as secondary views with dumb buffers.
+    /// It does nothing without a DRM backend and a session, or when the card is pinned (<see cref="BasinHost.DrmDevicePinned"/>), because a pinned run must not touch another card.
     /// </summary>
     public void AdoptSecondaryCards()
     {
-        if (_host.Drm is not { } primary || _host.Session is not { } session)
+        if (_host.Drm is not { } primary || _host.Session is not { } session || _host.DrmDevicePinned)
         {
             return;
         }

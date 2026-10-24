@@ -11,7 +11,4 @@ public enum UITargetKind
 
     /// <summary>dmabuf buffers that a GPU renderer imports.</summary>
     Dmabuf = 2,
-
-    /// <summary>GL textures.</summary>
-    GlTexture = 4,
 }

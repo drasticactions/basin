@@ -186,7 +186,7 @@ internal sealed class ShellWorkspaces : IWorkspaceModel, IDisposable
             case WorkspaceRequestKind.Activate when index >= 0 && index < Count:
                 Activate(index);
                 return true;
-            case WorkspaceRequestKind.Assign when index >= 0 && index < Count:
+            case WorkspaceRequestKind.MoveToplevel when index >= 0 && index < Count:
                 foreach (var window in _shell.Windows)
                 {
                     if ((ulong)window.Window.Xdg.GetHashCode() == request.ToplevelId)

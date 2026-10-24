@@ -72,6 +72,91 @@ public sealed class KeySynthesizerKeymapTests
     }
 
     [Fact]
+    public void An_override_edits_the_active_device_and_leaves_the_default_keymap_alone()
+    {
+        using var host = new CompositorTestHost();
+        var seatKeyboard = host.Seat.Keyboard;
+        seatKeyboard.SetKeymap(new KeymapNames(Layout: "us"));
+        var defaultText = seatKeyboard.Keymap!.AsString(XkbKeymapFormat.TextV1);
+        var window = MappedToplevel.Map(host, host.Client);
+        var keyboard = host.Client.Seat!.GetKeyboard();
+        var sent = new List<string>();
+        keyboard.Keymap += (_, e) => sent.Add(ReadKeymap(e.Fd, e.Size));
+        host.PumpToClient();
+        seatKeyboard.NotifyEnter(window.ServerSurface);
+
+        using var device = seatKeyboard.CreateDevice();
+        Assert.True(device.SetKeymap(new KeymapNames(Layout: "de")));
+        seatKeyboard.Activate(device);
+        var deviceText = seatKeyboard.Keymap!.AsString(XkbKeymapFormat.TextV1);
+        Assert.NotEqual(defaultText, deviceText);
+        host.PumpToClient();
+        sent.Clear();
+
+        var synthesizer = new KeySynthesizer(seatKeyboard) { Keymap = seatKeyboard.Keymap };
+        Assert.Equal(2, synthesizer.Type("a\uD55C", 10));
+        host.PumpUntil(() => sent.Count == 2);
+
+        using (var context = XkbContext.Create())
+        using (var edited = context.CreateKeymapFromBuffer(Encoding.UTF8.GetBytes(sent[0]), XkbKeymapFormat.TextV1))
+        {
+            Assert.Equal(0x100d55cu, edited!.GetKeySymsByLevel(TextTyper.SpareKeycodes[0] + 8, 0, 0)[0].Value);
+            Assert.Equal(0x7au, edited.GetKeySymsByLevel(21 + 8, 0, 0)[0].Value);
+        }
+
+        Assert.Equal(deviceText, sent[1]);
+        Assert.Equal(deviceText, seatKeyboard.Keymap!.AsString(XkbKeymapFormat.TextV1));
+        seatKeyboard.Activate(null);
+        Assert.Equal(defaultText, seatKeyboard.Keymap!.AsString(XkbKeymapFormat.TextV1));
+    }
+
+    [Fact]
+    public void An_override_scope_outlives_its_device_without_touching_the_default()
+    {
+        using var host = new CompositorTestHost();
+        var seatKeyboard = host.Seat.Keyboard;
+        seatKeyboard.SetKeymap(new KeymapNames(Layout: "us"));
+        var defaultText = seatKeyboard.Keymap!.AsString(XkbKeymapFormat.TextV1);
+        var device = seatKeyboard.CreateDevice();
+        Assert.True(device.SetKeymap(new KeymapNames(Layout: "de")));
+        seatKeyboard.Activate(device);
+
+        var scope = seatKeyboard.OverrideKeysyms([(TextTyper.SpareKeycodes[0], 0x100d55cu)]);
+        Assert.NotNull(scope);
+        device.Dispose();
+        scope!.Dispose();
+
+        Assert.Equal(defaultText, seatKeyboard.Keymap!.AsString(XkbKeymapFormat.TextV1));
+    }
+
+    [Fact]
+    public void A_refused_override_types_only_what_the_keymap_has()
+    {
+        using var context = XkbContext.Create();
+        using var us = context.CreateKeymap(new XkbRuleNames { Layout = "us" });
+        var sink = new RefusingSink();
+        var synthesizer = new KeySynthesizer(sink) { Keymap = us };
+        Assert.Equal(2, synthesizer.Type("a\u00e9b", 10));
+        Assert.Equal(1, sink.Overrides);
+        Assert.Equal(4, sink.Keys);
+    }
+
+    private sealed class RefusingSink : IKeySink, IKeymapOverride
+    {
+        public int Overrides { get; private set; }
+
+        public int Keys { get; private set; }
+
+        public void NotifyKey(uint timeMs, uint key, bool pressed) => Keys++;
+
+        public IDisposable? OverrideKeysyms(ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
+        {
+            Overrides++;
+            return null;
+        }
+    }
+
+    [Fact]
     public void An_edited_keymap_places_each_keysym_on_its_spare_key()
     {
         using var context = XkbContext.Create();

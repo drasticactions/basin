@@ -23,11 +23,6 @@ public sealed record RecordRequest(string Path, int Frames)
     public Func<Box?>? Follow { get; init; }
 
     /// <summary>
-    /// Gets the margin in logical pixels that the caller gave to the locator. The recorder does not read it.
-    /// </summary>
-    public int Margin { get; init; }
-
-    /// <summary>
     /// Gets the largest width or height of one frame in the PNG. A larger frame is downscaled to fit. 0 means no limit.
     /// </summary>
     public int MaxDimension { get; init; }

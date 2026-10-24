@@ -35,6 +35,24 @@ public sealed class TyperTests
         Assert.False(engine.IsLongPressOpen);
     }
 
+    [Theory]
+    [InlineData("a\U0001F600b")]
+    [InlineData("\U0001F198")]
+    [InlineData("\U0001F9D1\u200D\U0001F4BB")]
+    [InlineData("\u2764\uFE0F")]
+    public void An_emoji_types_as_one_key_from_the_emoji_pages(string text)
+    {
+        var layout = Keys.Layout("win8-standard-en-us");
+        var engine = new SoftKeyboardEngine(layout.Grid()) { Pages = layout.PageSet() };
+        engine.Layout(1300, 300, 5);
+        var typed = Keys.Record(engine);
+        var typer = new SoftKeyboardTyper(engine);
+
+        Assert.True(typer.Type(text));
+
+        Assert.Equal(text.Replace("\uFE0F", string.Empty, StringComparison.Ordinal), Printed(typed));
+    }
+
     [Fact]
     public void A_character_no_key_produces_stops_the_typing_there()
     {

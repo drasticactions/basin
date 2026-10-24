@@ -135,7 +135,29 @@ public sealed class IpcInputTests
         Assert.Equal(14, input.Log.Count(line => line.EndsWith("True", StringComparison.Ordinal)));
     }
 
-    private sealed class RecordingOverride(List<string> log) : IKeymapOverride
+    [Fact]
+    public void Text_refused_by_the_keymap_override_is_an_error()
+    {
+        var input = new RecordingSynthetic();
+        using var rig = new IpcTestRig(services =>
+        {
+            services.Use<IKeymapLookup>(new TableLookup());
+            services.Use<IKeymapOverride>(new RecordingOverride(input.Log, refuse: true));
+        });
+        rig.Server.SyntheticInput = input;
+        var peer = rig.Connect();
+
+        Assert.Equal(IpcErrorCodes.InvalidParams, ErrorCode(peer.Call("""{"method":"input/text","params":{"text":"é"}}""")));
+        Assert.DoesNotContain(input.Log, line => line.StartsWith("key", StringComparison.Ordinal));
+
+        input.Log.Clear();
+        var reply = Parse(peer.Call("""{"method":"input/text","params":{"text":"aéc"}}"""));
+        Assert.Equal(IpcErrorCodes.Failed, reply.GetProperty("error").GetProperty("code").GetString());
+        Assert.Contains("U+00E9", reply.GetProperty("error").GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(["override 183=0xe9", "key 30 True", "key 30 False", "key 46 True", "key 46 False"], input.Log);
+    }
+
+    private sealed class RecordingOverride(List<string> log, bool refuse = false) : IKeymapOverride
     {
         public IDisposable? OverrideKeysyms(ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
         {
@@ -146,7 +168,7 @@ public sealed class IpcInputTests
             }
 
             log.Add("override " + string.Join(' ', parts));
-            return new Restore(log);
+            return refuse ? null : new Restore(log);
         }
 
         private sealed class Restore(List<string> log) : IDisposable

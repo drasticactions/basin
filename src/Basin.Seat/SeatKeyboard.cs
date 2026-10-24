@@ -166,13 +166,32 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
     /// Compiles the seat keymap from XKB text and sends it to clients. A failed compile keeps the old keymap.
     /// </summary>
     /// <param name="keymapText">The keymap text in UTF-8.</param>
-    public void SetKeymapFromBuffer(ReadOnlySpan<byte> keymapText)
+    public void SetKeymapFromBuffer(ReadOnlySpan<byte> keymapText) =>
+        ApplyText(_default, System.Text.Encoding.UTF8.GetString(keymapText));
+
+    private bool ApplyText(KeyboardDevice device, string text)
     {
-        if (KeymapSource.TryCompile(System.Text.Encoding.UTF8.GetString(keymapText), out var keymap))
+        if (device.IsDefault)
         {
-            ApplyDeviceKeymap(_default, keymap, SourceCompiled());
+            if (!KeymapSource.TryCompile(text, out var keymap))
+            {
+                return false;
+            }
+
+            ApplyDeviceKeymap(device, keymap, SourceCompiled());
+            return true;
         }
+
+        if (device.OwnSource is not { } source || !source.TryCompile(text, out var own))
+        {
+            return false;
+        }
+
+        ApplyDeviceKeymap(device, own, source.LastCompiled);
+        return true;
     }
+
+    private bool IsLive(KeyboardDevice device) => device.IsDefault || _devices.Contains(device);
 
     /// <summary>
     /// Creates a virtual keyboard device that can carry its own keymap and repeat rate.
@@ -235,24 +254,8 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         DeliverModifiers(device.Modifiers);
     }
 
-    internal bool SetDeviceKeymap(KeyboardDevice device, ReadOnlySpan<byte> keymapText)
-    {
-        if (device.IsDefault)
-        {
-            var before = _default.File;
-            SetKeymapFromBuffer(keymapText);
-            return !ReferenceEquals(before, _default.File);
-        }
-
-        if (device.OwnSource is not { } source ||
-            !source.TryCompile(System.Text.Encoding.UTF8.GetString(keymapText), out var keymap))
-        {
-            return false;
-        }
-
-        ApplyDeviceKeymap(device, keymap, source.LastCompiled);
-        return true;
-    }
+    internal bool SetDeviceKeymap(KeyboardDevice device, ReadOnlySpan<byte> keymapText) =>
+        ApplyText(device, System.Text.Encoding.UTF8.GetString(keymapText));
 
     internal bool SetDeviceKeymap(KeyboardDevice device, in KeymapNames names)
     {
@@ -296,6 +299,11 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
             }
 
             DeliverModifiers(_default.Modifiers);
+        }
+
+        if (ReferenceEquals(_broadcast, oldFile))
+        {
+            _broadcast = _active.File;
         }
 
         oldState?.Dispose();
@@ -342,6 +350,11 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
             }
 
             DeliverModifiers(_default.Modifiers);
+        }
+
+        if (device.File is not null && ReferenceEquals(_broadcast, device.File))
+        {
+            _broadcast = _active.File;
         }
 
         device.Teardown();
@@ -624,7 +637,8 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
     /// <inheritdoc/>
     public IDisposable? OverrideKeysyms(ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
     {
-        if (Keymap is not { } current || keys.Length == 0)
+        var device = _active;
+        if (device.Compiled is not { } current || keys.Length == 0)
         {
             return null;
         }
@@ -636,26 +650,48 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
             return null;
         }
 
-        var savedModifiers = _modifiers;
-        var before = _default.File;
-        SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(edited));
-        if (ReferenceEquals(before, _default.File))
+        return Override(device, saved, edited);
+    }
+
+    private KeymapOverrideScope? Override(KeyboardDevice device, string saved, string text)
+    {
+        var savedModifiers = device.Modifiers;
+        var before = device.File;
+        if (!ApplyText(device, text) || ReferenceEquals(before, device.File))
         {
             return null;
         }
 
-        return new KeymapOverrideScope(this, saved, savedModifiers);
+        return new KeymapOverrideScope(this, device, saved, savedModifiers);
+    }
+
+    private void Restore(KeyboardDevice device, string saved, (uint Depressed, uint Latched, uint Locked, uint Group) modifiers)
+    {
+        if (!IsLive(device) || !ApplyText(device, saved))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(device, _active))
+        {
+            NotifyModifiers(modifiers.Depressed, modifiers.Latched, modifiers.Locked, modifiers.Group);
+            return;
+        }
+
+        device.State?.UpdateMask(modifiers.Depressed, modifiers.Latched, modifiers.Locked, 0, 0, modifiers.Group);
+        device.Modifiers = modifiers;
     }
 
     /// <summary>
-    /// Replaces the seat keymap with a <c>pc+us</c> keymap in which one key produces a keysym. Clients receive the new keymap.
+    /// Replaces the keymap of the active keyboard device with a <c>pc+us</c> keymap in which one key produces a keysym. Clients receive the new keymap.
     /// </summary>
     /// <param name="keycode">The Linux evdev keycode to change.</param>
     /// <param name="keysym">The keysym that the key produces.</param>
     /// <returns>A scope that restores the previous keymap and modifiers when disposed, or <see langword="null"/> when nothing changed.</returns>
     public IDisposable? OverrideKeymapForKeysym(uint keycode, uint keysym)
     {
-        if (Keymap is not { } current)
+        var device = _active;
+        if (device.Compiled is not { } current)
         {
             return null;
         }
@@ -672,7 +708,6 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
             return null;
         }
 
-        var savedModifiers = _modifiers;
         var custom =
             "xkb_keymap {\n" +
             "  xkb_keycodes \"custom\" {\n" +
@@ -685,14 +720,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
             $"    key <CSTM> {{ [ {name} ] }};\n" +
             "  };\n" +
             "};\n";
-        var before = _default.File;
-        SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(custom));
-        if (ReferenceEquals(before, _default.File))
-        {
-            return null;
-        }
-
-        return new KeymapOverrideScope(this, saved, savedModifiers);
+        return Override(device, saved, custom);
     }
 
     /// <summary>
@@ -938,6 +966,10 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
                 }
             }
         }
+        else if (oldFile is not null && ReferenceEquals(_broadcast, oldFile))
+        {
+            _broadcast = _active.File;
+        }
 
         oldState?.Dispose();
         oldFile?.Dispose();
@@ -1103,6 +1135,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
 
     private sealed class KeymapOverrideScope(
         SeatKeyboard keyboard,
+        KeyboardDevice device,
         string saved,
         (uint Depressed, uint Latched, uint Locked, uint Group) modifiers) : IDisposable
     {
@@ -1116,8 +1149,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
             }
 
             _disposed = true;
-            keyboard.SetKeymapFromBuffer(System.Text.Encoding.UTF8.GetBytes(saved));
-            keyboard.NotifyModifiers(modifiers.Depressed, modifiers.Latched, modifiers.Locked, modifiers.Group);
+            keyboard.Restore(device, saved, modifiers);
         }
     }
 

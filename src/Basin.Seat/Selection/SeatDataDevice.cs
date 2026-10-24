@@ -41,8 +41,8 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
     public DataSource? PrimarySelection { get; private set; }
 
     /// <summary>
-    /// Occurs after <see cref="SetSelection"/> changes the clipboard source. The argument is the new source.
-    /// It does not occur when the source is destroyed.
+    /// Occurs after the clipboard source changes. The argument is the new source.
+    /// It also occurs with <see langword="null"/> when the source is destroyed.
     /// </summary>
     public event Action<DataSource?>? SelectionChanged;
 
@@ -140,6 +140,7 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
                 {
                     Selection = null;
                     OfferSelectionTo(_seat.Keyboard.Focus);
+                    SelectionChanged?.Invoke(null);
                 }
             };
         }

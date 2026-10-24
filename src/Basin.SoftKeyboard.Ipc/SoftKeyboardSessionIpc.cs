@@ -60,7 +60,7 @@ public static class SoftKeyboardSessionIpc
             });
 
         report.Register(methods, ns + "/keyboard-type", "keyboard-type {text...}",
-            Info("Tap each character's key in turn through the keyboard engine, with Shift, the symbol page and long-press lists as needed."),
+            Info("Tap each text element's key in turn through the keyboard engine, with Shift, the symbol page and long-press lists as needed."),
             (ref IpcParams p, IpcReply reply) =>
             {
                 var text = p.GetString("text");
@@ -75,11 +75,13 @@ public static class SoftKeyboardSessionIpc
                     return;
                 }
 
-                foreach (var c in text)
+                var elements = System.Globalization.StringInfo.GetTextElementEnumerator(text);
+                while (elements.MoveNext())
                 {
-                    if (!typer.TypeCharacter(c))
+                    var element = elements.GetTextElement();
+                    if (!typer.TypeText(element))
                     {
-                        reply.Error(IpcErrorCodes.NotFound, $"no key types '{c}'");
+                        reply.Error(IpcErrorCodes.NotFound, $"no key types '{element}'");
                         return;
                     }
                 }

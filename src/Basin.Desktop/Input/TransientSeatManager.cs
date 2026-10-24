@@ -20,6 +20,7 @@ public sealed class TransientSeatManager : IDisposable
     private readonly WlServerDisplay _display;
     private readonly CompositorGlobal? _compositor;
     private readonly IKeymapSource? _keymaps;
+    private readonly OutputLayout? _layout;
     private readonly WlGlobal _global;
     private readonly List<Basin.Seat.Seat> _seats = [];
     private int _created;
@@ -30,15 +31,18 @@ public sealed class TransientSeatManager : IDisposable
     /// <param name="display">The display to create the global on.</param>
     /// <param name="compositor">The compositor that new seats need. When it is <see langword="null"/>, <see cref="SeatRequest.Create"/> denies every request.</param>
     /// <param name="keymaps">The keymap source for the keyboards of new seats, or <see langword="null"/> for the seat default.</param>
+    /// <param name="layout">The layout that the default input sink of a new seat maps absolute input onto, or <see langword="null"/> to decline that input.</param>
     public TransientSeatManager(
         WlServerDisplay display,
         CompositorGlobal? compositor = null,
-        IKeymapSource? keymaps = null)
+        IKeymapSource? keymaps = null,
+        OutputLayout? layout = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         _display = display;
         _compositor = compositor;
         _keymaps = keymaps;
+        _layout = layout;
         _global = display.CreateGlobal(ExtTransientSeatManagerV1.Interface, Version, OnBind);
     }
 
@@ -65,7 +69,7 @@ public sealed class TransientSeatManager : IDisposable
         /// <summary>
         /// Creates a seat that the manager owns, sends <c>ready</c> with its global name, and retires the seat when the client destroys the transient seat.
         /// </summary>
-        /// <param name="sink">A factory for the input sink of the new seat. When it is <see langword="null"/>, the seat gets a plain <see cref="SeatInputSink"/>.</param>
+        /// <param name="sink">A factory for the input sink of the new seat. When it is <see langword="null"/>, the seat gets a <see cref="SeatInputSink"/> over the manager's layout.</param>
         /// <returns>The new seat, or <see langword="null"/> when the manager has no compositor or the client already destroyed the request.</returns>
         public Basin.Seat.Seat? Create(Func<Basin.Seat.Seat, IInputSink>? sink = null)
         {
@@ -85,7 +89,7 @@ public sealed class TransientSeatManager : IDisposable
                 seat.Keyboard.KeymapSource = keymaps;
             }
 
-            seat.InputSink = sink is null ? new SeatInputSink(seat) : sink(seat);
+            seat.InputSink = sink is null ? new SeatInputSink(seat, _owner._layout) : sink(seat);
             _owner._seats.Add(seat);
             _owner.SeatCreated?.Invoke(seat);
 

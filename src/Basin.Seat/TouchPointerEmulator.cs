@@ -6,7 +6,7 @@ namespace Basin.Seat;
 public sealed class TouchPointerEmulator
 {
     private readonly SeatTouch _touch;
-    private int _slot = -1;
+    private int _id = -1;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TouchPointerEmulator"/> class.
@@ -17,50 +17,50 @@ public sealed class TouchPointerEmulator
     /// <summary>
     /// Gets the id of the emulated contact, or -1 when there is none.
     /// </summary>
-    public int Slot => _slot;
+    public int ContactId => _id;
 
     /// <summary>
     /// Gets a value indicating whether a contact drives the pointer.
     /// </summary>
-    public bool Active => _slot >= 0;
+    public bool Active => _id >= 0;
 
     /// <summary>
     /// Takes a contact for emulation.
     /// </summary>
-    /// <param name="slot">The contact id. A negative id cannot be taken.</param>
+    /// <param name="id">The contact id. A negative id cannot be taken.</param>
     /// <param name="surface">The surface under the contact, or <see langword="null"/>.</param>
-    /// <returns><see langword="false"/> when a contact is already taken or the surface's client has bound <c>wl_touch</c>.</returns>
-    public bool TryClaim(int slot, Surface? surface)
+    /// <returns><see langword="false"/> when the id is negative, a contact is already taken, or the surface's client has bound <c>wl_touch</c>.</returns>
+    public bool TryClaim(int id, Surface? surface)
     {
-        if (_slot >= 0 || _touch.Accepts(surface))
+        if (id < 0 || _id >= 0 || _touch.Accepts(surface))
         {
             return false;
         }
 
-        _slot = slot;
+        _id = id;
         return true;
     }
 
     /// <summary>
     /// Checks whether a contact is the emulated one.
     /// </summary>
-    /// <param name="slot">The contact id.</param>
+    /// <param name="id">The contact id.</param>
     /// <returns><see langword="true"/> when the contact drives the pointer.</returns>
-    public bool Owns(int slot) => _slot >= 0 && _slot == slot;
+    public bool Owns(int id) => _id >= 0 && _id == id;
 
     /// <summary>
     /// Frees the emulated contact when it lifts.
     /// </summary>
-    /// <param name="slot">The contact id.</param>
+    /// <param name="id">The contact id.</param>
     /// <returns><see langword="false"/> when the contact is not the emulated one.</returns>
-    public bool Release(int slot)
+    public bool Release(int id)
     {
-        if (!Owns(slot))
+        if (!Owns(id))
         {
             return false;
         }
 
-        _slot = -1;
+        _id = -1;
         return true;
     }
 
@@ -70,12 +70,12 @@ public sealed class TouchPointerEmulator
     /// <returns><see langword="false"/> when no contact was taken.</returns>
     public bool Cancel()
     {
-        if (_slot < 0)
+        if (_id < 0)
         {
             return false;
         }
 
-        _slot = -1;
+        _id = -1;
         return true;
     }
 }

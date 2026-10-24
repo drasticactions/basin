@@ -372,6 +372,59 @@ public sealed class TransientSeatTests
     }
 
     [Fact]
+    public void A_seat_with_no_factory_maps_absolute_motion_onto_the_layout()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new TransientSeatManager(host.Display, host.Compositor, layout: host.Layout);
+        using var pointers = new VirtualPointerManager(host.Display, sink: null);
+        Basin.Seat.Seat? created = null;
+        manager.SeatRequested += request => created = request.Create();
+
+        Basin.Desktop.Protocol.ExtTransientSeatManagerV1? seats = null;
+        Basin.Desktop.Protocol.ZwlrVirtualPointerManagerV1? virtualPointers = null;
+        var registry = host.Client.Display.GetRegistry();
+        registry.Global += (_, e) =>
+        {
+            if (e.Interface == "ext_transient_seat_manager_v1")
+            {
+                seats = registry.Bind<Basin.Desktop.Protocol.ExtTransientSeatManagerV1>(e.Name, 1);
+            }
+            else if (e.Interface == "zwlr_virtual_pointer_manager_v1")
+            {
+                virtualPointers = registry.Bind<Basin.Desktop.Protocol.ZwlrVirtualPointerManagerV1>(e.Name, 2);
+            }
+        };
+        host.PumpToClient();
+        var window = MappedToplevel.Map(host, host.Client);
+
+        var handle = seats!.Create();
+        var readyName = 0u;
+        handle.Ready += (_, e) => readyName = e.GlobalName;
+        host.PumpUntil(() => readyName != 0);
+
+        var bound = registry.Bind<Wayland.WlSeat>(readyName, 7);
+        var pointerProxy = bound.GetPointer();
+        var motions = new List<(double X, double Y)>();
+        pointerProxy.Motion += (_, e) => motions.Add((e.SurfaceX.ToDouble(), e.SurfaceY.ToDouble()));
+        var pointer = virtualPointers!.CreateVirtualPointer(bound);
+        host.PumpToServer();
+        created!.Pointer.NotifyMotionAt(1, window.ServerSurface, 0, 0, 0, 0);
+        host.PumpUntil(() => motions.Count == 1);
+
+        pointer.MotionAbsolute(2, 1, 1, 2, 2);
+        pointer.Frame();
+        host.PumpUntil(() => motions.Count == 2);
+        var mode = host.Output.CurrentMode;
+        Assert.Equal((mode.Width / 2.0, mode.Height / 2.0), motions[1]);
+
+        pointer.Dispose();
+        pointerProxy.Dispose();
+        bound.Dispose();
+        handle.Dispose();
+        host.PumpToServer();
+    }
+
+    [Fact]
     public void A_scene_driven_seat_enters_the_surface_under_its_pointer()
     {
         using var host = new CompositorTestHost();

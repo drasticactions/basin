@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
     <RootNamespace>Basin.SoftKeyboard.Tests</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TieredCompilation>false</TieredCompilation>
   </PropertyGroup>
 
   <ItemGroup>

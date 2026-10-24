@@ -259,6 +259,37 @@ public sealed class DataControlTests
     }
 
     [Fact]
+    public void A_manager_sees_the_clipboard_clear_when_another_client_destroys_its_source()
+    {
+        using var host = new CompositorTestHost();
+        using var manager = new DataControlManager(host.Display, new Basin.Seat.SeatSelectionStore(host.Seat));
+
+        var writer = host.ConnectClient();
+        MappedToplevel.Map(host, writer);
+        var writerDevice = writer.DataDeviceManager!.GetDataDevice(writer.Seat!);
+        var source = writer.DataDeviceManager.CreateDataSource();
+        source.Offer("text/plain");
+        writerDevice.SetSelection(source, 0);
+        host.PumpToServer();
+        Assert.NotNull(host.Seat.DataDevice.Selection);
+
+        var watcher = host.ConnectClient();
+        var watcherProxy = Bind(host, watcher);
+        var selections = new List<bool>();
+        var watcherDevice = watcherProxy.GetDataDevice(watcher.Seat!);
+        watcherDevice.DataOffer += (_, _) => { };
+        watcherDevice.Selection += (_, e) => selections.Add(e.Id is not null);
+        host.PumpUntil(() => selections.Count == 1);
+        Assert.True(selections[0]);
+
+        source.Destroy();
+        writer.Display.Flush();
+        host.PumpToServer();
+        host.PumpUntil(() => selections.Count == 2);
+        Assert.False(selections[1]);
+    }
+
+    [Fact]
     public void Primary_selection_channel_is_independent()
     {
         using var host = new CompositorTestHost();

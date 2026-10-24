@@ -151,15 +151,16 @@ public sealed class HostSeatTests
     }
 
     [Fact]
-    public void A_layout_change_asks_for_the_keymap_to_be_announced_again()
+    public async Task A_layout_change_asks_for_the_keymap_to_be_announced_again()
     {
         var layout = new FakeLayout();
         using var source = new HostKeymapSource(layout);
-        var changed = 0;
-        source.Changed += () => changed++;
+        Assert.False(source.TakeChanged());
 
-        layout.RaiseChanged();
-        Assert.Equal(1, changed);
+        await Task.Run(layout.RaiseChanged, TestContext.Current.CancellationToken);
+
+        Assert.True(source.TakeChanged());
+        Assert.False(source.TakeChanged());
     }
 
     [Fact]

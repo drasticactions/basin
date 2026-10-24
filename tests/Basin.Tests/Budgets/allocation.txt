@@ -83,7 +83,7 @@ server-managed exact    attach-and-damage                 0
 server-managed exact    pointer-axis                      0
 channel    exact    remote-frame                   6400
 channel    exact    remote-dmabuf-frame            6400
-server     exact    popup-cycle                  908000
+server     exact    popup-cycle                  907200
 server-managed exact    popup-cycle                  933600
 server     exact    color-representation-set          0
 server-managed exact    color-representation-set          0

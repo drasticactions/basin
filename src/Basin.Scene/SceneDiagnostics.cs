@@ -393,7 +393,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
     /// Builds a plane report from the latest commit of an output: the nodes on planes, then the declined candidates with their reasons.
     /// </summary>
     /// <param name="output">The output to report on.</param>
-    /// <returns>The report. Node boxes are in scene coordinates.</returns>
+    /// <returns>The report. Each entry's box is in scene coordinates, and an entry on a plane also has its plane box in output physical pixels.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public static PlaneReport Report(SceneOutput output)
     {
@@ -403,7 +403,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         var boxes = output.OffloadedBoxes;
         for (var i = 0; i < nodes.Count; i++)
         {
-            entries.Add(new PlaneDecision(SceneDump.PathOf(nodes[i]), boxes[i], OnPlane: true, Reason: null));
+            entries.Add(new PlaneDecision(SceneDump.PathOf(nodes[i]), SceneBox(nodes[i]), OnPlane: true, Reason: null, PlaneBox: boxes[i]));
         }
 
         var declined = output.DeclinedCandidates;
@@ -411,12 +411,16 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         for (var i = 0; i < declined.Count; i++)
         {
             var node = declined[i];
-            var (width, height) = node is SceneBuffer buffer ? buffer.Size : (0, 0);
-            entries.Add(new PlaneDecision(
-                SceneDump.PathOf(node), node.MapToScene(new Box(0, 0, width, height)), OnPlane: false, Reason: Reason(reasons[i])));
+            entries.Add(new PlaneDecision(SceneDump.PathOf(node), SceneBox(node), OnPlane: false, Reason: Reason(reasons[i])));
         }
 
         return new PlaneReport(output.Output.Name, output.OffloadSkipped, entries);
+    }
+
+    private static Box SceneBox(SceneNode node)
+    {
+        var (width, height) = node is SceneBuffer buffer ? buffer.DisplaySize : (0, 0);
+        return node.MapToScene(new Box(0, 0, width, height));
     }
 
     private static string Reason(PlaneDeclineReason reason) => reason switch

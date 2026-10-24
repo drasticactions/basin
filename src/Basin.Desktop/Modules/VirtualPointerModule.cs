@@ -19,5 +19,5 @@ public sealed class VirtualPointerModule : DesktopModule<VirtualPointerManager>
 
     /// <inheritdoc/>
     protected override VirtualPointerManager Create(BasinServices services) =>
-        new(services.Display, services.Find<IInputSink>());
+        new(services.Display, services.Find<IInputSink>(), services.Find<OutputLayout>());
 }

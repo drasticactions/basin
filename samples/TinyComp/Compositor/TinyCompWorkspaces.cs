@@ -193,7 +193,7 @@ internal sealed partial class TinyComp
 
                     return false;
 
-                case WorkspaceRequestKind.Move:
+                case WorkspaceRequestKind.MoveToplevel:
                     if (_comp.FindWorkspace(targetId) is { } destination &&
                         _comp.FindWindowByToplevelId(request.ToplevelId) is { } window)
                     {

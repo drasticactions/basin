@@ -405,4 +405,34 @@ public sealed class DataDeviceTests
         host.Seat.Pointer.NotifyMotion(3, 2, 2);
         host.PumpUntil(() => motionSeen);
     }
+
+    [Fact]
+    public void A_destroyed_clipboard_source_announces_a_cleared_selection()
+    {
+        using var host = new CompositorTestHost();
+        var store = new Basin.Seat.SeatSelectionStore(host.Seat);
+        var storeChanges = 0;
+        store.SelectionChanged += kind => storeChanges += kind == Basin.Capabilities.SelectionKind.Clipboard ? 1 : 0;
+        var changes = new List<Basin.DataSource?>();
+        host.Seat.DataDevice.SelectionChanged += changes.Add;
+
+        var client = host.Client;
+        MappedToplevel.Map(host, client);
+        var device = client.DataDeviceManager!.GetDataDevice(client.Seat!);
+        var source = client.DataDeviceManager.CreateDataSource();
+        source.Offer("text/plain");
+        device.SetSelection(source, 0);
+        host.PumpToServer();
+        Assert.NotNull(host.Seat.DataDevice.Selection);
+        changes.Clear();
+        storeChanges = 0;
+
+        source.Destroy();
+        client.Display.Flush();
+        host.PumpToServer();
+
+        Assert.Equal([null], changes);
+        Assert.Equal(1, storeChanges);
+        Assert.Null(store.Current(Basin.Capabilities.SelectionKind.Clipboard));
+    }
 }

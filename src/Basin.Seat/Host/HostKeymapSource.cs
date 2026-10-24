@@ -12,6 +12,7 @@ public sealed class HostKeymapSource : IKeymapSource, IDisposable
     private readonly XkbKeymapSource _xkb;
     private readonly IHostKeyboardLayout? _layout;
     private readonly bool _ownsLayout;
+    private int _changed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HostKeymapSource"/> class.
@@ -48,10 +49,10 @@ public sealed class HostKeymapSource : IKeymapSource, IDisposable
     public bool ReadFromHost { get; private set; }
 
     /// <summary>
-    /// Occurs when the reader reports a layout change.
-    /// It occurs on the thread of the reader, which can be a thread other than the compositor thread.
+    /// Tells whether the reader reported a layout change since the last call, and clears the flag. Any thread can call it.
     /// </summary>
-    public event Action? Changed;
+    /// <returns><see langword="true"/> once after each reported change.</returns>
+    public bool TakeChanged() => Interlocked.Exchange(ref _changed, 0) != 0;
 
     /// <summary>
     /// Compiles the host layout. When there is no reader, or the read or the compile fails, it compiles the embedded US keymap.
@@ -93,5 +94,5 @@ public sealed class HostKeymapSource : IKeymapSource, IDisposable
         _xkb.Dispose();
     }
 
-    private void OnChanged() => Changed?.Invoke();
+    private void OnChanged() => Interlocked.Exchange(ref _changed, 1);
 }

@@ -78,6 +78,27 @@ public sealed class TouchRouterTests
     }
 
     [Fact]
+    public void A_negative_contact_id_is_dropped_and_presses_no_button()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        host.PumpToServer();
+
+        var pointer = new FakePointerTarget();
+        var router = new TouchRouter(host.Seat.Touch)
+        {
+            HitTester = new FakeHitTester { Surface = window.ServerSurface },
+            Pointer = new TouchPointerDriver(host.Seat.Touch, pointer),
+        };
+
+        router.Down(1, -5, 10, 20);
+        router.Up(2, -5);
+
+        Assert.Empty(pointer.Log);
+        Assert.Equal(0, router.LiveContacts);
+    }
+
+    [Fact]
     public void Background_contacts_drive_the_pointer_only_when_asked()
     {
         using var host = new CompositorTestHost();

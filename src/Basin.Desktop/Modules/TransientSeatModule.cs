@@ -16,5 +16,5 @@ public sealed class TransientSeatModule : DesktopModule<TransientSeatManager>
 
     /// <inheritdoc/>
     protected override TransientSeatManager Create(BasinServices services) =>
-        new(services.Display, services.Find<CompositorGlobal>(), services.Find<IKeymapSource>());
+        new(services.Display, services.Find<CompositorGlobal>(), services.Find<IKeymapSource>(), services.Find<OutputLayout>());
 }

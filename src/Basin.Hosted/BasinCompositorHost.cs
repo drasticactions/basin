@@ -106,7 +106,6 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
             var hostKeymaps = new global::Basin.Seat.HostKeymapSource();
             Seat.Keyboard.KeymapSource = hostKeymaps;
             Seat.Keyboard.SetKeymapFromHost();
-            hostKeymaps.Changed += () => _hostKeymapDirty = true;
         }
         else if (PlatformFacts.HasSystemXkbData)
         {
@@ -535,7 +534,8 @@ public sealed class BasinCompositorHost : IDisposable, Scene.IPresentedOutputs
 
         _frameStamp = stamp;
         _frameOpen = true;
-        if (_hostKeymapDirty)
+        var hostChanged = Seat.Keyboard.KeymapSource is global::Basin.Seat.HostKeymapSource host && host.TakeChanged();
+        if (_hostKeymapDirty || hostChanged)
         {
             _hostKeymapDirty = false;
             Seat.Keyboard.SetKeymapFromHost();

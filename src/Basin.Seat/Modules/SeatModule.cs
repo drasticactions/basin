@@ -69,11 +69,11 @@ public sealed class SeatModule : IProtocolModule
 
         if (services.Find<IInputSink>() is SeatInputSink sink)
         {
-            sink.Bind(Seat);
+            sink.Bind(Seat, services.Find<OutputLayout>());
         }
         else
         {
-            services.UseDefault<IInputSink>(new SeatInputSink(Seat));
+            services.UseDefault<IInputSink>(new SeatInputSink(Seat, services.Find<OutputLayout>()));
         }
 
         services.UseDefault<IIdleSource>(IdleSource);

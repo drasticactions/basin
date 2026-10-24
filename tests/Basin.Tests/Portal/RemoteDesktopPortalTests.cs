@@ -152,6 +152,23 @@ public sealed class RemoteDesktopPortalTests
     }
 
     [Fact]
+    public void Absolute_motion_is_relative_to_a_layout_that_starts_left_of_zero()
+    {
+        using var host = new CompositorTestHost(64, 48);
+        var left = host.Backend.CreateOutput(new OutputMode(1920, 1080, 60_000), manualFrameClock: true);
+        var right = host.Backend.CreateOutput(new OutputMode(1920, 1080, 60_000), manualFrameClock: true);
+        var layout = new OutputLayout();
+        layout.Add(left, -1920, 0);
+        layout.Add(right, 0, 0);
+        var sink = new RecordingInputSink();
+        using var injector = new NotifyInjector(sink, keycodes: null, layout) { StreamBox = _ => new Box(0, 0, 1920, 1080) };
+
+        injector.MotionAbsolute(7, 100, 100);
+
+        Assert.Equal((2020.0, 100.0, 3840.0, 1080.0), (sink.AbsoluteMotions[0].X, sink.AbsoluteMotions[0].Y, sink.AbsoluteMotions[0].Width, sink.AbsoluteMotions[0].Height));
+    }
+
+    [Fact]
     public void A_combined_session_maps_absolute_motion_onto_its_stream()
     {
         using var daemon = PrivateBus.Start();

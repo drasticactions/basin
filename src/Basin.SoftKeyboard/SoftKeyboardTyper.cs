@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Basin.SoftKeyboard;
 
 /// <summary>
@@ -62,31 +64,55 @@ public sealed class SoftKeyboardTyper
     public void AdvanceTo(long time) => _floor = Math.Max(_floor, time);
 
     /// <summary>
-    /// Types each UTF-16 character of a text in turn. It stops at the first character that no key makes.
+    /// Types each text element of a text in turn, so an emoji of several UTF-16 units is one key. It stops at the first element that no key makes.
     /// </summary>
     /// <param name="text">The text to type.</param>
-    /// <returns><see langword="true"/> when every character was typed.</returns>
+    /// <returns><see langword="true"/> when every element was typed.</returns>
     public bool Type(ReadOnlySpan<char> text)
     {
-        foreach (var c in text)
+        while (!text.IsEmpty)
         {
-            if (!TypeCharacter(c))
+            var length = StringInfo.GetNextTextElementLength(text);
+            if (!TypeText(text[..length].ToString()))
             {
                 return false;
             }
+
+            text = text[length..];
         }
 
         return true;
     }
 
     /// <summary>
-    /// Types one character. It taps a key that makes it, or chooses it from a long-press list, after up to five steps through pages, Shift and Symbol.
+    /// Types one character. It is the same as <see cref="TypeText"/> with a one-character string.
     /// </summary>
     /// <param name="c">The character.</param>
     /// <returns><see langword="false"/> when no key makes the character.</returns>
-    public bool TypeCharacter(char c)
+    public bool TypeCharacter(char c) => TypeText(c.ToString());
+
+    /// <summary>
+    /// Types one text element, for example a letter or an emoji. It taps a key that makes it, or chooses it from a long-press list, after up to five steps through pages, Shift and Symbol.
+    /// An element that ends in the emoji variation selector U+FE0F is tried again without it.
+    /// </summary>
+    /// <param name="element">The text element.</param>
+    /// <returns><see langword="false"/> when no key makes the element.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="element"/> is <see langword="null"/>.</exception>
+    public bool TypeText(string element)
     {
-        var text = c.ToString();
+        ArgumentNullException.ThrowIfNull(element);
+        if (TypeElement(element))
+        {
+            return true;
+        }
+
+        return element.Length > 1 && element[^1] == '\uFE0F' && TypeElement(element[..^1]);
+    }
+
+    private bool TypeElement(string text)
+    {
+        var single = text.Length == 1;
+        var lower = single ? char.ToLowerInvariant(text[0]).ToString() : text;
         for (var attempt = 0; attempt < Attempts; attempt++)
         {
             var cell = Producing(text);
@@ -102,14 +128,14 @@ public sealed class SoftKeyboardTyper
                 return true;
             }
 
-            if (!Produces(_engine.Grid, text) && !Produces(_engine.Grid, char.ToLowerInvariant(c).ToString()) && PageKeyToward(text, out var pageKey))
+            if (!Produces(_engine.Grid, text) && !Produces(_engine.Grid, lower) && PageKeyToward(text, out var pageKey))
             {
                 TapCell(pageKey);
                 continue;
             }
 
             var state = _engine.State;
-            if (char.IsLetter(c) && !CellFor(char.ToLowerInvariant(c).ToString(), alternate: true, out _))
+            if (single && char.IsLetter(text[0]) && !CellFor(lower, alternate: true, out _))
             {
                 Tap("shift");
                 continue;

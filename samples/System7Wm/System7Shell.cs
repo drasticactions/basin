@@ -274,10 +274,7 @@ internal sealed partial class System7Shell : IDisposable
 
         WireColor();
         _outputs.CreateInitialOutputs();
-        if (Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE") is null)
-        {
-            _outputs.AdoptSecondaryCards();
-        }
+        _outputs.AdoptSecondaryCards();
         if (options.Backend == BackendKind.Drm && _outputs.Views.Count == 0)
         {
             throw new InvalidOperationException("no connected output");

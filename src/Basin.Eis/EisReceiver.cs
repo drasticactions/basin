@@ -261,8 +261,8 @@ public sealed unsafe class EisReceiver : IDisposable
 
             case EisEventType.PointerMotionAbsolute:
                 var absolute = (EisPointerMotionAbsoluteEvent)@event;
-                var (width, height) = Bounds();
-                _sink.PointerMotionAbsolute(Now, absolute.X, absolute.Y, width, height);
+                var union = RegionUnion();
+                _sink.PointerMotionAbsolute(Now, absolute.X - union.X, absolute.Y - union.Y, union.Width, union.Height);
                 break;
 
             case EisEventType.ButtonButton:
@@ -340,15 +340,15 @@ public sealed unsafe class EisReceiver : IDisposable
 
             case EisEventType.TouchDown:
                 var down = (EisTouchEvent)@event;
-                var (downWidth, downHeight) = Bounds();
+                var downUnion = RegionUnion();
                 _touches.Add((int)down.TouchId);
-                _touchPending |= _sink.TouchDown(Now, (int)down.TouchId, down.X, down.Y, downWidth, downHeight);
+                _touchPending |= _sink.TouchDown(Now, (int)down.TouchId, down.X - downUnion.X, down.Y - downUnion.Y, downUnion.Width, downUnion.Height);
                 break;
 
             case EisEventType.TouchMotion:
                 var touchMotion = (EisTouchEvent)@event;
-                var (motionWidth, motionHeight) = Bounds();
-                _touchPending |= _sink.TouchMotion(Now, (int)touchMotion.TouchId, touchMotion.X, touchMotion.Y, motionWidth, motionHeight);
+                var motionUnion = RegionUnion();
+                _touchPending |= _sink.TouchMotion(Now, (int)touchMotion.TouchId, touchMotion.X - motionUnion.X, touchMotion.Y - motionUnion.Y, motionUnion.Width, motionUnion.Height);
                 break;
 
             case EisEventType.TouchUp:
@@ -359,17 +359,26 @@ public sealed unsafe class EisReceiver : IDisposable
         }
     }
 
-    private (double Width, double Height) Bounds()
+    private (double X, double Y, double Width, double Height) RegionUnion()
     {
-        var right = 0;
-        var bottom = 0;
+        if (_regions.Count == 0)
+        {
+            return (0, 0, 1, 1);
+        }
+
+        var left = int.MaxValue;
+        var top = int.MaxValue;
+        var right = int.MinValue;
+        var bottom = int.MinValue;
         foreach (var (_, x, y, width, height, _) in _regions)
         {
+            left = Math.Min(left, x);
+            top = Math.Min(top, y);
             right = Math.Max(right, x + width);
             bottom = Math.Max(bottom, y + height);
         }
 
-        return right > 0 && bottom > 0 ? (right, bottom) : (1, 1);
+        return right > left && bottom > top ? (left, top, right - left, bottom - top) : (0, 0, 1, 1);
     }
 
     private void OnClientConnect(EisEvent @event)

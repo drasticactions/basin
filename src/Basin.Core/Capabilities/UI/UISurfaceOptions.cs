@@ -24,9 +24,4 @@ public readonly record struct UISurfaceOptions
     /// Gets the scale from logical to buffer pixels.
     /// </summary>
     public required double Scale { get; init; }
-
-    /// <summary>
-    /// Gets the DRM device that imports the buffers, or <see langword="null"/> when it is unknown.
-    /// </summary>
-    public DrmDeviceInfo? Device { get; init; }
 }

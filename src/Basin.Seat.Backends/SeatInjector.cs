@@ -114,36 +114,19 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
     /// <param name="y">The y position in the extent.</param>
     /// <param name="extentWidth">The extent width.</param>
     /// <param name="extentHeight">The extent height.</param>
-    /// <returns>Always <see langword="true"/>, also when the layout or the extent is empty or a lock holds the pointer.</returns>
+    /// <returns>
+    /// <see langword="false"/> when the layout or the extent is empty, or when nothing observes the move, as <see cref="PointerMotionAbsolute"/> tells.
+    /// It is <see langword="true"/> when a lock holds the pointer, because the locked client receives the relative motion.
+    /// </returns>
     public bool MotionAbsolute(uint timeMs, double x, double y, double extentWidth, double extentHeight)
     {
-        _binder.EnsurePointerCapability();
         var bounds = _layout.Bounds;
         if (bounds.Width <= 0 || bounds.Height <= 0 || !(extentWidth > 0) || !(extentHeight > 0))
         {
-            return true;
+            return false;
         }
 
-        var previousX = _pointer.X;
-        var previousY = _pointer.Y;
-        var targetX = bounds.X + (x / extentWidth * bounds.Width);
-        var targetY = bounds.Y + (y / extentHeight * bounds.Height);
-        if (!_binder.Gate(timeMs, previousX, previousY, ref targetX, ref targetY, null, null))
-        {
-            return true;
-        }
-
-        _pointer.Warp(targetX, targetY);
-        if (MovedBy is { } movedBy)
-        {
-            movedBy(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
-        }
-        else
-        {
-            Moved?.Invoke(timeMs);
-        }
-
-        return true;
+        return PointerMotionAbsolute(timeMs, bounds.X + (x / extentWidth * bounds.Width), bounds.Y + (y / extentHeight * bounds.Height));
     }
 
     /// <summary>
@@ -152,7 +135,10 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="x">The layout x.</param>
     /// <param name="y">The layout y.</param>
-    /// <returns>Always <see langword="true"/>, also when a lock holds the pointer.</returns>
+    /// <returns>
+    /// <see langword="false"/> when nothing observes the move: no callback is set, the injector does not deliver through the binder, and no handler watches the layout pointer.
+    /// It is <see langword="true"/> when a lock holds the pointer, because the locked client receives the relative motion.
+    /// </returns>
     public bool PointerMotionAbsolute(uint timeMs, double x, double y)
     {
         _binder.EnsurePointerCapability();
@@ -163,6 +149,7 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
             return true;
         }
 
+        var observed = _pointer.HasMovedHandlers;
         _pointer.Warp(x, y);
         if (MovedBy is { } movedBy)
         {
@@ -176,6 +163,10 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
         {
             _binder.RaiseMotion(timeMs, _pointer.X - previousX, _pointer.Y - previousY);
         }
+        else
+        {
+            return observed;
+        }
 
         return true;
     }
@@ -186,7 +177,7 @@ public sealed class SeatInjector : Basin.Capabilities.ISyntheticInput
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="dx">The relative x motion.</param>
     /// <param name="dy">The relative y motion.</param>
-    /// <returns>Always <see langword="true"/>.</returns>
+    /// <returns>The result of <see cref="PointerMotionAbsolute"/> for the target position.</returns>
     public bool PointerMotion(uint timeMs, double dx, double dy) =>
         PointerMotionAbsolute(timeMs, _pointer.X + dx, _pointer.Y + dy);
 

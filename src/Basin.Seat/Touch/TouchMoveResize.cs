@@ -10,7 +10,7 @@ public sealed class TouchMoveResize : ITouchCapture
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly TouchRouter _router;
     private readonly SeatTouch _touch;
-    private int _slot = -1;
+    private int _id = -1;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TouchMoveResize"/> class.
@@ -34,14 +34,14 @@ public sealed class TouchMoveResize : ITouchCapture
     /// <summary>
     /// Gets a value indicating whether a contact is captured.
     /// </summary>
-    public bool Dragging => _slot >= 0;
+    public bool Dragging => _id >= 0;
 
     /// <summary>
     /// Checks whether a contact is the captured one.
     /// </summary>
     /// <param name="id">The contact id.</param>
     /// <returns><see langword="true"/> when the contact drives the drag.</returns>
-    public bool Owns(int id) => _slot >= 0 && _slot == id;
+    public bool Owns(int id) => _id >= 0 && _id == id;
 
     /// <summary>
     /// Starts a drag from the touch down that a client names by serial, for example in <c>xdg_toplevel.move</c>.
@@ -53,7 +53,7 @@ public sealed class TouchMoveResize : ITouchCapture
     public bool TryBegin(uint? serial, out double x, out double y)
     {
         _thread.Assert();
-        if (_slot < 0 && serial is { } value && _touch.TryGetPointBySerial(value, out var id))
+        if (_id < 0 && serial is { } value && _touch.TryGetPointBySerial(value, out var id))
         {
             return TryBeginContact(id, out x, out y);
         }
@@ -73,9 +73,9 @@ public sealed class TouchMoveResize : ITouchCapture
     public bool TryBeginContact(int id, out double x, out double y)
     {
         _thread.Assert();
-        if (_slot < 0 && _router.TryGetPosition(id, out x, out y) && _router.Capture(id, this))
+        if (_id < 0 && _router.TryGetPosition(id, out x, out y) && _router.Capture(id, this))
         {
-            _slot = id;
+            _id = id;
             return true;
         }
 
@@ -90,12 +90,12 @@ public sealed class TouchMoveResize : ITouchCapture
     public void End()
     {
         _thread.Assert();
-        _slot = -1;
+        _id = -1;
     }
 
     void ITouchCapture.Motion(int id, uint timeMs, double x, double y)
     {
-        if (_slot == id)
+        if (_id == id)
         {
             Handler?.DragTo(timeMs, x, y);
         }
@@ -103,18 +103,18 @@ public sealed class TouchMoveResize : ITouchCapture
 
     void ITouchCapture.Up(int id, uint timeMs)
     {
-        if (_slot == id)
+        if (_id == id)
         {
-            _slot = -1;
+            _id = -1;
             Handler?.DragEnd(timeMs, cancelled: false);
         }
     }
 
     void ITouchCapture.Cancel()
     {
-        if (_slot >= 0)
+        if (_id >= 0)
         {
-            _slot = -1;
+            _id = -1;
             Handler?.DragEnd(0, cancelled: true);
         }
     }

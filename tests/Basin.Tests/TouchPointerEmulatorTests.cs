@@ -19,7 +19,18 @@ public class TouchPointerEmulatorTests
         Assert.False(emulator.TryClaim(0, window.ServerSurface));
 
         Assert.False(emulator.Active);
-        Assert.Equal(-1, emulator.Slot);
+        Assert.Equal(-1, emulator.ContactId);
+    }
+
+    [Fact]
+    public void A_negative_id_cannot_be_taken()
+    {
+        using var host = new CompositorTestHost();
+        var emulator = new TouchPointerEmulator(host.Seat.Touch);
+
+        Assert.False(emulator.TryClaim(-1, null));
+        Assert.False(emulator.Active);
+        Assert.Equal(-1, emulator.ContactId);
     }
 
     [Fact]
@@ -33,7 +44,7 @@ public class TouchPointerEmulatorTests
         Assert.True(emulator.TryClaim(0, window.ServerSurface));
 
         Assert.True(emulator.Active);
-        Assert.Equal(0, emulator.Slot);
+        Assert.Equal(0, emulator.ContactId);
         Assert.True(emulator.Owns(0));
     }
 
@@ -57,7 +68,7 @@ public class TouchPointerEmulatorTests
 
         Assert.False(emulator.TryClaim(1, null));
 
-        Assert.Equal(0, emulator.Slot);
+        Assert.Equal(0, emulator.ContactId);
         Assert.False(emulator.Owns(1));
     }
 

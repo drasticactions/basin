@@ -118,6 +118,11 @@ public sealed class BasinHost : IDisposable
     public DrmBackend? Drm { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the DRM card was named by <see cref="HostOptions.DrmDevice"/> or <c>BASIN_DRM_DEVICE</c>, not chosen by the backend.
+    /// </summary>
+    public bool DrmDevicePinned { get; private init; }
+
+    /// <summary>
     /// Gets the handoff policy that <see cref="Create"/> built from the options.
     /// </summary>
     public HandoffPolicy Handoff { get; private init; } = new(HandoffMode.Auto);
@@ -172,6 +177,7 @@ public sealed class BasinHost : IDisposable
         var loop = new WaylandEventLoop(display);
         ISession? session = null;
         DrmBackend? drm = null;
+        var pinned = options.DrmDevice ?? Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE");
         WaylandBackend? parent = null;
         HeadlessBackend? headless = null;
         switch (options.Backend)
@@ -179,7 +185,7 @@ public sealed class BasinHost : IDisposable
             case HostBackend.Drm:
                 session = SeatdSession.Open(loop);
                 drm = new DrmBackend(
-                    loop, session, options.DrmDevice ?? Environment.GetEnvironmentVariable("BASIN_DRM_DEVICE"))
+                    loop, session, pinned)
                 {
                     Inherit = options.Handoff != HandoffMode.Off,
                 };
@@ -199,6 +205,7 @@ public sealed class BasinHost : IDisposable
         var host = new BasinHost(display, socket, loop, session, drm, parent, headless)
         {
             Handoff = new HandoffPolicy(options.Handoff, options.Greeter, options.Greetd),
+            DrmDevicePinned = drm is not null && !string.IsNullOrEmpty(pinned),
         };
         if (drm is not null)
         {

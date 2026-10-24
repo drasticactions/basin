@@ -9,9 +9,6 @@ public sealed class InputRule
     /// <summary>Gets the settings and the values that the rule applies, in source order.</summary>
     public IReadOnlyList<(InputSetting Setting, InputSettingValue Value)> Settings { get; init; } = [];
 
-    /// <summary>Gets the position of the rule that error reports name. The configuration loader sets it.</summary>
-    public int Line { get; init; }
-
     /// <summary>Finds the value that the rule gives a setting. The first entry for the setting wins.</summary>
     /// <param name="setting">The setting to find.</param>
     /// <param name="value">The value, or the default value when the method returns <see langword="false"/>.</param>

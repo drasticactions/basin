@@ -206,4 +206,20 @@ public sealed class IpcMetadataTests
             var other => throw new InvalidOperationException($"no value for type {other}"),
         };
     }
+
+    [Fact]
+    public void A_plane_report_carries_plane_box_only_for_an_entry_on_a_plane()
+    {
+        var report = new IpcDiagPlaneReport("HEADLESS-1", null,
+        [
+            new IpcDiagPlaneEntry("root/a", new IpcBox(10, 10, 40, 40), true, null, new IpcBox(20, 20, 80, 80)),
+            new IpcDiagPlaneEntry("root/b", new IpcBox(100, 60, 40, 40), false, "backend-refused"),
+        ]);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(report, IpcJsonContext.Default.IpcDiagPlaneReport)).RootElement;
+        var entries = json.GetProperty("entries");
+
+        Assert.Equal(80, entries[0].GetProperty("plane_box").GetProperty("width").GetInt32());
+        Assert.Equal(40, entries[0].GetProperty("box").GetProperty("width").GetInt32());
+        Assert.False(entries[1].TryGetProperty("plane_box", out _));
+    }
 }

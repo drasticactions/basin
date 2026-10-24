@@ -105,9 +105,11 @@ public sealed class CanvasScaleTests
         Assert.SkipWhen(session is null || Panel() is null, "tinycomp, weston-simple-shm or panel is not available beside the tests");
         session!.Spawn(Panel()!, "left", "60");
         session.Spawn(Panel()!, "top", "30");
-        Thread.Sleep(600);
+        Assert.NotNull(session.WaitForClientLine("PANEL "));
+        Assert.NotNull(session.WaitForClientLine("PANEL "));
         session.Send("park left");
         Assert.Contains("to=" + (60 + ZoneWidth - 640), session.WaitForLine("PARK "));
+        Assert.Equal(60 + ZoneWidth - 640, session.WaitForWindowX(60 + ZoneWidth - 640).X);
         session.Send("park up");
         var corner = session.WaitForLine("PARK ");
         var rimY = (int)Math.Round(30 + ZoneHeight - (360 / Math.Sqrt(2)));

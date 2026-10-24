@@ -68,7 +68,7 @@ public sealed class NotifyInjector : IDisposable
     }
 
     /// <summary>
-    /// Moves the pointer to a position in a stream and sends a frame. The position is clamped to the stream box.
+    /// Moves the pointer to a position in a stream and sends a frame. The sink receives it relative to the layout bounds, with the bounds size as the extent. The position is clamped to the stream box.
     /// </summary>
     /// <param name="stream">The PipeWire node id of the stream.</param>
     /// <param name="x">The x position in the stream, in logical pixels.</param>
@@ -81,7 +81,7 @@ public sealed class NotifyInjector : IDisposable
         }
 
         var bounds = _layout.Bounds;
-        _sink.PointerMotionAbsolute(Now, layoutX, layoutY, Math.Max(1, bounds.Right), Math.Max(1, bounds.Bottom));
+        _sink.PointerMotionAbsolute(Now, layoutX - bounds.X, layoutY - bounds.Y, Math.Max(1, bounds.Width), Math.Max(1, bounds.Height));
         _sink.Frame();
     }
 
@@ -208,7 +208,7 @@ public sealed class NotifyInjector : IDisposable
     }
 
     /// <summary>
-    /// Starts a touch point at a position in a stream. The position is clamped to the stream box.
+    /// Starts a touch point at a position in a stream. The sink receives it relative to the layout bounds, with the bounds size as the extent. The position is clamped to the stream box.
     /// </summary>
     /// <param name="stream">The PipeWire node id of the stream.</param>
     /// <param name="slot">The touch slot.</param>
@@ -223,14 +223,14 @@ public sealed class NotifyInjector : IDisposable
 
         var bounds = _layout.Bounds;
         _touches.Add((int)slot);
-        if (_sink.TouchDown(Now, (int)slot, layoutX, layoutY, Math.Max(1, bounds.Right), Math.Max(1, bounds.Bottom)))
+        if (_sink.TouchDown(Now, (int)slot, layoutX - bounds.X, layoutY - bounds.Y, Math.Max(1, bounds.Width), Math.Max(1, bounds.Height)))
         {
             _sink.TouchFrame();
         }
     }
 
     /// <summary>
-    /// Moves a touch point to a position in a stream. The position is clamped to the stream box.
+    /// Moves a touch point to a position in a stream. The sink receives it relative to the layout bounds, with the bounds size as the extent. The position is clamped to the stream box.
     /// </summary>
     /// <param name="stream">The PipeWire node id of the stream.</param>
     /// <param name="slot">The touch slot.</param>
@@ -244,7 +244,7 @@ public sealed class NotifyInjector : IDisposable
         }
 
         var bounds = _layout.Bounds;
-        if (_sink.TouchMotion(Now, (int)slot, layoutX, layoutY, Math.Max(1, bounds.Right), Math.Max(1, bounds.Bottom)))
+        if (_sink.TouchMotion(Now, (int)slot, layoutX - bounds.X, layoutY - bounds.Y, Math.Max(1, bounds.Width), Math.Max(1, bounds.Height)))
         {
             _sink.TouchFrame();
         }

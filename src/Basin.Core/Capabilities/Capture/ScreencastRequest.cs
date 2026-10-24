@@ -19,9 +19,4 @@ public readonly record struct ScreencastRequest
     /// Gets the cursor mode of the stream. It holds one flag.
     /// </summary>
     public ScreencastCursorMode Cursor { get; init; }
-
-    /// <summary>
-    /// Gets an optional zero-copy source of output frames, or <see langword="null"/> for none.
-    /// </summary>
-    public IDmabufCapture? Dmabuf { get; init; }
 }

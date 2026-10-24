@@ -139,10 +139,12 @@ public sealed class IpcControlTests
         Assert.Null(ErrorCode(peer.Call($$$"""{"method":"workspaces/activate","params":{"id":{{{one}}}}}""")));
         Assert.Null(ErrorCode(peer.Call($$$"""{"method":"workspaces/create","params":{"group":{{{group}}},"name":"two"}}""")));
         Assert.Null(ErrorCode(peer.Call($$$"""{"method":"windows/send-to-workspace","params":{"id":{{{id}}},"workspace":{{{one}}}}}""")));
+        Assert.Null(ErrorCode(peer.Call($$$"""{"method":"workspaces/move","params":{"id":{{{one}}},"group":{{{group}}}}}""")));
         Assert.Equal(
-            [WorkspaceRequestKind.Activate, WorkspaceRequestKind.Create, WorkspaceRequestKind.Assign],
+            [WorkspaceRequestKind.Activate, WorkspaceRequestKind.Create, WorkspaceRequestKind.MoveToplevel, WorkspaceRequestKind.Assign],
             workspaces.Requests.Select(r => r.Request.Kind).ToArray());
-        Assert.Equal(id, workspaces.Requests[2].Request.ToplevelId);
+        Assert.Equal((id, 0ul), (workspaces.Requests[2].Request.ToplevelId, workspaces.Requests[2].Request.GroupId));
+        Assert.Equal((0ul, group), (workspaces.Requests[3].Request.ToplevelId, workspaces.Requests[3].Request.GroupId));
         workspaces.Accept = false;
         Assert.Equal(IpcErrorCodes.Refused, ErrorCode(peer.Call($$$"""{"method":"workspaces/remove","params":{"id":{{{one}}}}}""")));
     }

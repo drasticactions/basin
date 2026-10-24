@@ -37,6 +37,21 @@ public sealed class NestedPassthroughTests
     private static ulong InodeOf(IBuffer buffer) =>
         buffer.TryGetDmabuf(out var attributes) && fstat(attributes.Fds[0], out var stat) == 0 ? stat.Inode : 0;
 
+    private static IBuffer? ParentBufferWhen(NestedBackendTestHost host, Func<IBuffer?, bool> settled)
+    {
+        var deadline = Environment.TickCount64 + 5000;
+        while (true)
+        {
+            var buffer = host.Parent.Invoke(() => host.Parent.Toplevels[0].Surface.Current.Buffer);
+            if (settled(buffer) || Environment.TickCount64 > deadline)
+            {
+                return buffer;
+            }
+
+            host.Pump(1);
+        }
+    }
+
     [Fact]
     public void A_fullscreen_client_dmabuf_reaches_the_parent_surface_without_a_composite()
     {
@@ -71,7 +86,7 @@ public sealed class NestedPassthroughTests
             host.Pump();
             Assert.True(sceneOutput.IsDirectScanout);
             Assert.Equal(0, sceneOutput.ComposedCommits);
-            var parentBuffer = host.Parent.Invoke(() => host.Parent.Toplevels[0].Surface.Current.Buffer);
+            var parentBuffer = ParentBufferWhen(host, buffer => buffer is not null && InodeOf(buffer) == InodeOf(client!));
             Assert.NotNull(parentBuffer);
             Assert.Equal(InodeOf(client!), InodeOf(parentBuffer!));
 
@@ -80,7 +95,7 @@ public sealed class NestedPassthroughTests
             Assert.True(sceneOutput.Commit(stack.Renderer, swapchain, state));
             host.Pump();
             Assert.False(sceneOutput.IsDirectScanout);
-            parentBuffer = host.Parent.Invoke(() => host.Parent.Toplevels[0].Surface.Current.Buffer);
+            parentBuffer = ParentBufferWhen(host, buffer => buffer is not null && InodeOf(buffer) != InodeOf(client!));
             Assert.NotEqual(InodeOf(client!), InodeOf(parentBuffer!));
 
             node.Destroy();

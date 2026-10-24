@@ -256,6 +256,11 @@ internal static class IpcDiagLines
         {
             var box = entry.Box;
             text.Append(CultureInfo.InvariantCulture, $"  {(entry.OnPlane ? "PLANE" : "COMPOSITED")} {entry.Path} {box.X},{box.Y},{box.Width}x{box.Height}");
+            if (entry.PlaneBox is { } plane)
+            {
+                text.Append(CultureInfo.InvariantCulture, $" plane={plane.X},{plane.Y},{plane.Width}x{plane.Height}");
+            }
+
             if (entry.Reason is { } reason)
             {
                 text.Append(' ').Append(reason);

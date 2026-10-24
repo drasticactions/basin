@@ -147,7 +147,7 @@ internal static class IpcDiagnosticsMethods
                 return;
             }
 
-            Record(diagnostics, request with { Follow = target.Follow, Margin = margin }, reply);
+            Record(diagnostics, request with { Follow = target.Follow }, reply);
         });
 
         methods.RegisterLibrary(IpcMethodNames.DiagTargets, (ref IpcParams _, IpcReply reply) =>
@@ -200,7 +200,7 @@ internal static class IpcDiagnosticsMethods
             IpcPendingReply? pending = null;
             IpcDiagComparison? early = null;
             var refused = diagnostics.Record(
-                new RecordRequest(string.Empty, 1) { Follow = follow, Margin = margin, Immediate = true, KeepPixels = true, TimeoutMs = timeout },
+                new RecordRequest(string.Empty, 1) { Follow = follow, Immediate = true, KeepPixels = true, TimeoutMs = timeout },
                 result =>
                 {
                     var comparison = Compare(window, result, expected, expectedWidth, expectedHeight, tolerance, pixels, diffPath, inline);
@@ -399,7 +399,7 @@ internal static class IpcDiagnosticsMethods
         for (var i = 0; i < entries.Length; i++)
         {
             var entry = report.Entries[i];
-            entries[i] = new IpcDiagPlaneEntry(entry.Path, Box(entry.Box), entry.OnPlane, entry.Reason);
+            entries[i] = new IpcDiagPlaneEntry(entry.Path, Box(entry.Box), entry.OnPlane, entry.Reason, entry.PlaneBox is { } plane ? Box(plane) : null);
         }
 
         return new IpcDiagPlaneReport(report.Output, report.Skipped, entries);

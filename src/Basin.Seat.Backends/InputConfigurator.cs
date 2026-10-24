@@ -910,7 +910,7 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
                 var setting = rule.Settings[i].Setting;
                 if (InputSettingNames.IsLibinput(setting) && _reported.Add((index, 0, setting)))
                 {
-                    Rejected?.Invoke(new InputRuleOutcome(index, rule.Line, 0, null, setting, InputSettingResult.Unsupported));
+                    Rejected?.Invoke(new InputRuleOutcome(index, 0, null, setting, InputSettingResult.Unsupported));
                 }
             }
         }
@@ -920,7 +920,7 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
     {
         if (_reported.Add((rule, state.Info.Id, setting)))
         {
-            Rejected?.Invoke(new InputRuleOutcome(rule, _rules[rule].Line, state.Info.Id, state.Info.Name, setting, result));
+            Rejected?.Invoke(new InputRuleOutcome(rule, state.Info.Id, state.Info.Name, setting, result));
         }
     }
 

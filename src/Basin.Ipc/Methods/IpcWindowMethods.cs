@@ -166,7 +166,7 @@ internal static class IpcWindowMethods
                         return;
                     }
 
-                    Done(reply, workspaces.Request(request.Workspace, new WorkspaceRequest(WorkspaceRequestKind.Assign, ToplevelId: request.Id)));
+                    Done(reply, workspaces.Request(request.Workspace, new WorkspaceRequest(WorkspaceRequestKind.MoveToplevel, ToplevelId: request.Id)));
                 });
             }
 

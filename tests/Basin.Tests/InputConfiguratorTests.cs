@@ -187,6 +187,25 @@ public sealed class InputConfiguratorTests
     }
 
     [Fact]
+    public void A_rejected_outcome_names_the_rule_index_behind_a_catch_all()
+    {
+        using var rig = new Rig();
+        var mouse = rig.Backend.AddMouse();
+        rig.Backend.Refuse = (_, setting, _) => setting == InputSetting.AccelSpeed;
+        rig.Configurator.Apply(
+        [
+            Rule(default, Flag(InputSetting.NaturalScroll, true)),
+            Rule(new InputMatch(Type: InputDeviceType.Touchpad), Flag(InputSetting.Tap, true)),
+            Rule(new InputMatch(Type: InputDeviceType.Pointer), (InputSetting.AccelSpeed, InputSettingValue.Number(0.5))),
+        ]);
+        rig.Attach();
+
+        var outcome = Assert.Single(rig.Rejected, o => o.Setting == InputSetting.AccelSpeed);
+        Assert.Equal(2, outcome.Rule);
+        Assert.Equal(mouse, outcome.Device);
+    }
+
+    [Fact]
     public void No_write_happens_when_the_resolved_value_is_current()
     {
         using var rig = new Rig();
