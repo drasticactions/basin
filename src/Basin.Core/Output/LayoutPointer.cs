@@ -47,7 +47,7 @@ public sealed class LayoutPointer(OutputLayout layout)
     public void Motion(double dx, double dy) => Place(X + dx, Y + dy);
 
     /// <summary>
-    /// Moves the pointer to a normalized position on one output, for example from a tablet or a touchscreen. Without an output in the layout, the position maps over the whole layout.
+    /// Moves the pointer to a normalized position on one output, for example from a tablet or a touchscreen. Without an output in the layout, the position maps over the logical bounds of the whole layout.
     /// </summary>
     /// <param name="output">The output that the device maps to, or <see langword="null"/> for the whole layout.</param>
     /// <param name="normalizedX">The horizontal position from 0 to 1.</param>
@@ -60,8 +60,13 @@ public sealed class LayoutPointer(OutputLayout layout)
             return;
         }
 
-        var (minX, minY, maxX, maxY) = Extents();
-        Place(minX + normalizedX * (maxX - minX), minY + normalizedY * (maxY - minY));
+        var bounds = layout.Bounds;
+        if (bounds.IsEmpty)
+        {
+            return;
+        }
+
+        Place(bounds.X + normalizedX * bounds.Width, bounds.Y + normalizedY * bounds.Height);
     }
 
     /// <summary>
@@ -74,6 +79,7 @@ public sealed class LayoutPointer(OutputLayout layout)
     private void Place(double x, double y)
     {
         (x, y) = layout.ClosestPoint(x, y);
+        (x, y) = OnPanel(x, y);
         Remember(x, y);
         if (x != X || y != Y)
         {
@@ -81,6 +87,24 @@ public sealed class LayoutPointer(OutputLayout layout)
             Y = y;
             Moved?.Invoke();
         }
+    }
+
+    private (double X, double Y) OnPanel(double x, double y)
+    {
+        if (layout.OutputAt(x, y) is not { } output || output.Scale <= 0)
+        {
+            return (x, y);
+        }
+
+        var mode = output.CurrentMode;
+        var (width, height) = output.Transform.SwapsAxes() ? (mode.Height, mode.Width) : (mode.Width, mode.Height);
+        if (width <= 0 || height <= 0)
+        {
+            return (x, y);
+        }
+
+        var box = layout.BoxOf(output);
+        return (Math.Min(x, box.X + ((width - 1) / output.Scale)), Math.Min(y, box.Y + ((height - 1) / output.Scale)));
     }
 
     private void Remember(double x, double y)
@@ -94,29 +118,5 @@ public sealed class LayoutPointer(OutputLayout layout)
         _home = output;
         _homeX = (x - box.X) / box.Width;
         _homeY = (y - box.Y) / box.Height;
-    }
-
-    private (double MinX, double MinY, double MaxX, double MaxY) Extents()
-    {
-        double minX = 0, minY = 0, maxX = 0, maxY = 0;
-        var first = true;
-        foreach (var (output, position) in layout.Outputs)
-        {
-            var mode = output.CurrentMode;
-            if (first)
-            {
-                (minX, minY, maxX, maxY) = (position.X, position.Y, position.X + mode.Width, position.Y + mode.Height);
-                first = false;
-            }
-            else
-            {
-                minX = Math.Min(minX, position.X);
-                minY = Math.Min(minY, position.Y);
-                maxX = Math.Max(maxX, position.X + mode.Width);
-                maxY = Math.Max(maxY, position.Y + mode.Height);
-            }
-        }
-
-        return (minX, minY, maxX, maxY);
     }
 }

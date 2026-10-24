@@ -17,7 +17,7 @@ internal sealed class DungeonWmSnapshot
 
     public MapRegion? Room { get; set; }
 
-    public IBuffer? Canvas { get; set; }
+    public BufferBase? Canvas { get; set; }
 
     public ITexture? CanvasTexture { get; set; }
 

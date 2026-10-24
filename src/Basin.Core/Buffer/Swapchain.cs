@@ -127,15 +127,15 @@ public sealed class Swapchain : IDisposable
         {
             if (_slots[i] is { } slot)
             {
-                (slot.Buffer as BufferBase)?.Destroy();
+                slot.Buffer.Destroy();
                 _slots[i] = null;
             }
         }
     }
 
-    private sealed class Slot(IBuffer buffer)
+    private sealed class Slot(BufferBase buffer)
     {
-        public IBuffer Buffer { get; } = buffer;
+        public BufferBase Buffer { get; } = buffer;
 
         public int Age { get; set; }
     }

@@ -679,6 +679,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
     /// <inheritdoc/>
     protected override bool CommitCore(OutputState state)
     {
+        if (!CommitBuffer(state))
+        {
+            return false;
+        }
+
         if ((state.Fields & OutputStateFields.Scale) != 0 && _configured)
         {
             ApplyPresentationScale();
@@ -691,6 +696,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
             }
         }
 
+        return true;
+    }
+
+    private bool CommitBuffer(OutputState state)
+    {
         if ((state.Fields & OutputStateFields.Buffer) == 0 || !_configured)
         {
             return true;

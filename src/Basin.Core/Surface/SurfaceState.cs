@@ -9,7 +9,7 @@ namespace Basin;
 /// </summary>
 public sealed class SurfaceState : IDisposable
 {
-    /// <summary>The fields that this delta sets. On a current state it accumulates every field ever applied.</summary>
+    /// <summary>The fields that this delta sets. On a cache it is the union of the cached commits. On a current state it is the fields of the last applied commit.</summary>
     public SurfaceStateFields Committed;
 
     /// <summary>The attached buffer, or <see langword="null"/>. Use <see cref="SetBuffer"/> to keep the lock count right.</summary>

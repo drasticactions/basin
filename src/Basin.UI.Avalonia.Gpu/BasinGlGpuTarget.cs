@@ -20,7 +20,7 @@ internal sealed class BasinGlGpuTarget : IAvaloniaGpuTarget
 
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly PixmanRegion32 _whole = new();
-    private readonly List<IBuffer> _retired = [];
+    private readonly List<BufferBase> _retired = [];
     private readonly List<Slot> _slots = [];
     private readonly GlDevice _device;
     private readonly IAllocator _allocator;
@@ -330,23 +330,17 @@ internal sealed class BasinGlGpuTarget : IAvaloniaGpuTarget
         };
     }
 
-    private static void Destroy(IBuffer buffer)
-    {
-        if (buffer is BufferBase concrete)
-        {
-            concrete.Destroy();
-        }
-    }
+    private static void Destroy(BufferBase buffer) => buffer.Destroy();
 
     private sealed class Slot
     {
-        internal Slot(IBuffer buffer, MesaEglImage image)
+        internal Slot(BufferBase buffer, MesaEglImage image)
         {
             Buffer = buffer;
             Image = image;
         }
 
-        internal IBuffer Buffer { get; }
+        internal BufferBase Buffer { get; }
 
         internal MesaEglImage Image { get; }
 

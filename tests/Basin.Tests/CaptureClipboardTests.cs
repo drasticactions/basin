@@ -567,6 +567,52 @@ public sealed class OutputManagementTests
         Assert.False(host.Client.Display.IsDestroyed);
     }
 
+    [Fact]
+    public void A_commit_the_backend_refuses_sends_failed_and_reverts()
+    {
+        using var host = new CompositorTestHost();
+        var refusing = new ScriptedOutput("X-1");
+        using (var state = new OutputState())
+        {
+            Assert.True(refusing.Commit(state.SetEnabled(true).SetMode(new OutputMode(640, 480, 60000))));
+        }
+
+        host.Layout.Add(refusing, 2000, 0);
+        using var manager = new OutputManagementManager(
+            host.Display,
+            host.Layout,
+            new Basin.Capabilities.Defaults.LayoutOutputSet(host.Layout),
+            new Basin.Capabilities.Defaults.LayoutOutputConfiguration(host.Layout));
+
+        uint serial = 0;
+        var heads = new Dictionary<string, Basin.Desktop.Protocol.ZwlrOutputHeadV1>();
+        var proxy = BindManager(host, 4, p =>
+        {
+            p.Head += (_, e) => e.Head.Name += (_, ne) => heads[ne.Name] = e.Head;
+            p.Done += (_, e) => serial = e.Serial;
+        });
+        host.PumpUntil(() => serial != 0 && heads.Count == 2);
+        var hostScale = host.Output.Scale;
+        refusing.CommitResult = false;
+
+        var config = proxy.CreateConfiguration(serial);
+        var failed = false;
+        var succeeded = false;
+        config.Failed += (_, _) => failed = true;
+        config.Succeeded += (_, _) => succeeded = true;
+        config.EnableHead(heads[host.Output.Name]).SetScale(WlFixed.FromDouble(2));
+        config.EnableHead(heads["X-1"]).SetScale(WlFixed.FromDouble(2));
+        config.Apply();
+        host.PumpUntil(() => failed || succeeded);
+
+        Assert.True(failed);
+        Assert.False(succeeded);
+        Assert.Equal(hostScale, host.Output.Scale);
+        Assert.Equal(1d, refusing.Scale);
+        host.Layout.Remove(refusing);
+        refusing.Destroy();
+    }
+
     private static Basin.Desktop.Protocol.ZwlrOutputManagerV1 BindManager(
         CompositorTestHost host,
         uint version,

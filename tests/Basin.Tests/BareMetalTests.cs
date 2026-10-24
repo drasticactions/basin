@@ -249,6 +249,64 @@ public sealed class LayoutPointerTests
         Assert.Equal(299d, pointer.X);
     }
 
+    [Fact]
+    public void Absolute_motion_without_binding_respects_scale()
+    {
+        var layout = new OutputLayout();
+        var output = new FakeOutput("S");
+        using (var state = new OutputState())
+        {
+            output.Commit(state.SetEnabled(true).SetMode(new OutputMode(400, 200, 60000)).SetScale(2));
+        }
+
+        layout.Add(output, 0, 0);
+        var pointer = new LayoutPointer(layout);
+        pointer.MotionAbsolute(null, 1.0, 1.0);
+        Assert.Equal((199d, 99d), (pointer.X, pointer.Y));
+        pointer.MotionAbsolute(null, 0.5, 0.5);
+        Assert.Equal((100d, 50d), (pointer.X, pointer.Y));
+    }
+
+    [Fact]
+    public void Absolute_motion_without_binding_respects_transform()
+    {
+        var layout = new OutputLayout();
+        var output = new FakeOutput("T");
+        using (var state = new OutputState())
+        {
+            output.Commit(state.SetEnabled(true).SetMode(new OutputMode(400, 200, 60000))
+                .SetTransform(OutputTransform.Rotate90));
+        }
+
+        layout.Add(output, 0, 0);
+        var pointer = new LayoutPointer(layout);
+        pointer.MotionAbsolute(null, 1.0, 1.0);
+        Assert.Equal((199d, 399d), (pointer.X, pointer.Y));
+        pointer.MotionAbsolute(null, 0.5, 0.5);
+        Assert.Equal((100d, 200d), (pointer.X, pointer.Y));
+    }
+
+    [Fact]
+    public void The_pointer_stays_on_the_panel_at_a_rounded_up_scale()
+    {
+        var layout = new OutputLayout();
+        var output = new FakeOutput("F");
+        using (var state = new OutputState())
+        {
+            output.Commit(state.SetEnabled(true).SetMode(new OutputMode(3840, 2160, 60000)).SetScale(2.1));
+        }
+
+        layout.Add(output, 0, 0);
+        Assert.Equal(1829, layout.BoxOf(output).Width);
+        var pointer = new LayoutPointer(layout);
+        pointer.MotionAbsolute(null, 32767.0 / 32768, 32767.0 / 32768);
+        Assert.True(pointer.X * 2.1 <= 3839, $"x={pointer.X}");
+        Assert.True(pointer.Y * 2.1 <= 2159, $"y={pointer.Y}");
+
+        pointer.Warp(1828.9, 10);
+        Assert.True(pointer.X * 2.1 <= 3839, $"x={pointer.X}");
+    }
+
     private static void Rescale(IOutput output, double scale)
     {
         using var state = new OutputState();
@@ -320,5 +378,70 @@ public sealed class LayoutPointerTests
 
         Assert.Same(left, layout.OutputAt(pointer.X, pointer.Y));
         Assert.Equal(99d, pointer.X);
+    }
+}
+
+public sealed class OutputCommitTests
+{
+    private static readonly OutputMode Old = new(800, 600, 60000);
+    private static readonly OutputMode New = new(1024, 768, 75000);
+
+    private static ScriptedOutput Lit()
+    {
+        var output = new ScriptedOutput("X-1");
+        using var state = new OutputState();
+        Assert.True(output.Commit(state.SetEnabled(true).SetMode(Old).SetScale(1).SetTransform(OutputTransform.Normal)));
+        return output;
+    }
+
+    [Fact]
+    public void Failed_commit_restores_the_output_state()
+    {
+        var output = Lit();
+        var committed = 0;
+        output.Committed += _ => committed++;
+        output.CommitResult = false;
+
+        using var state = new OutputState();
+        var ok = output.Commit(state.SetEnabled(false).SetMode(New).SetScale(2)
+            .SetTransform(OutputTransform.Rotate90).SetAdaptiveSync(true));
+
+        Assert.False(ok);
+        Assert.True(output.Enabled);
+        Assert.Equal(Old, output.CurrentMode);
+        Assert.Equal(1d, output.Scale);
+        Assert.Equal(OutputTransform.Normal, output.Transform);
+        Assert.False(output.AdaptiveSync);
+        Assert.Equal(0, committed);
+        output.Destroy();
+    }
+
+    [Fact]
+    public void Commit_core_reads_the_new_state()
+    {
+        var output = new ScriptedOutput("X-1");
+        using var state = new OutputState();
+        output.CommitResult = false;
+        output.Commit(state.SetEnabled(true).SetMode(New));
+
+        Assert.True(output.SeenEnabled);
+        Assert.Equal(New, output.SeenMode);
+        Assert.False(output.Enabled);
+        output.Destroy();
+    }
+
+    [Fact]
+    public void Failed_commit_keeps_fields_it_did_not_set()
+    {
+        var output = Lit();
+        output.CommitResult = false;
+
+        using var state = new OutputState();
+        Assert.False(output.Commit(state.SetScale(2)));
+
+        Assert.Equal(Old, output.CurrentMode);
+        Assert.Equal(1d, output.Scale);
+        Assert.True(output.Enabled);
+        output.Destroy();
     }
 }

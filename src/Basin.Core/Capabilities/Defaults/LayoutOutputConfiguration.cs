@@ -1,3 +1,5 @@
+using static Basin.Diagnostics.CoreLog;
+
 namespace Basin.Capabilities.Defaults;
 
 /// <summary>
@@ -24,6 +26,16 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
     private bool _tabletMode;
 
     private sealed record Parked(Point Position, Action OnDestroyed);
+
+    private readonly record struct Snapshot(
+        bool Enabled,
+        OutputMode Mode,
+        double Scale,
+        OutputTransform Transform,
+        bool AdaptiveSync,
+        bool InLayout,
+        Point Position,
+        Point? ParkedAt);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayoutOutputConfiguration"/> class.
@@ -121,11 +133,23 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
             return false;
         }
 
-        foreach (var entry in entries)
+        var snapshots = new Snapshot[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
         {
+            snapshots[i] = Capture(entries[i].Output);
+        }
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var entry = entries[i];
             using var state = new OutputState();
             Fill(state, entry);
-            entry.Output.Commit(state);
+            if (!entry.Output.Commit(state))
+            {
+                Revert(entries, snapshots, i);
+                return false;
+            }
+
             if (entry.Enabled && !Replicating(entry))
             {
                 Expose(entry);
@@ -284,6 +308,75 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
             }
 
             _recorded[output] = OnDestroyed;
+            output.Destroyed += OnDestroyed;
+        }
+    }
+
+    private Snapshot Capture(IOutput output)
+    {
+        var inLayout = _layout.Contains(output);
+        var box = inLayout ? _layout.BoxOf(output) : default;
+        Point? parkedAt = _parked.TryGetValue(output, out var parked) ? parked.Position : null;
+        return new Snapshot(
+            output.Enabled,
+            output.CurrentMode,
+            output.Scale,
+            output.Transform,
+            output.AdaptiveSync,
+            inLayout,
+            new Point(box.X, box.Y),
+            parkedAt);
+    }
+
+    private void Revert(IReadOnlyList<OutputConfigurationEntry> entries, Snapshot[] snapshots, int failed)
+    {
+        for (var i = failed - 1; i >= 0; i--)
+        {
+            var output = entries[i].Output;
+            var snapshot = snapshots[i];
+            using var state = new OutputState();
+            state.SetEnabled(snapshot.Enabled);
+            if (snapshot.Enabled)
+            {
+                state.SetMode(snapshot.Mode).SetScale(snapshot.Scale).SetTransform(snapshot.Transform)
+                    .SetAdaptiveSync(snapshot.AdaptiveSync);
+            }
+
+            if (!output.Commit(state))
+            {
+                Log.Warn($"{output.Name}: could not restore the output after a failed configuration");
+            }
+
+            RestorePlacement(output, snapshot);
+        }
+    }
+
+    private void RestorePlacement(IOutput output, in Snapshot snapshot)
+    {
+        if (snapshot.InLayout)
+        {
+            Unpark(output);
+            if (_layout.Contains(output))
+            {
+                _layout.Move(output, snapshot.Position.X, snapshot.Position.Y);
+            }
+            else
+            {
+                _layout.Add(output, snapshot.Position.X, snapshot.Position.Y);
+            }
+
+            return;
+        }
+
+        if (_layout.Contains(output))
+        {
+            _layout.Remove(output);
+        }
+
+        if (snapshot.ParkedAt is { } parkedAt && !_parked.ContainsKey(output))
+        {
+            void OnDestroyed() => Unpark(output);
+            _parked[output] = new Parked(parkedAt, OnDestroyed);
             output.Destroyed += OnDestroyed;
         }
     }

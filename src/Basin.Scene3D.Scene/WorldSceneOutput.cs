@@ -9,7 +9,7 @@ public sealed class WorldSceneOutput : IDisposable
 {
     private const int MaxBuffers = 4;
 
-    private readonly List<IBuffer> _ring = [];
+    private readonly List<BufferBase> _ring = [];
     private readonly IAllocator _allocator;
     private int _width;
     private int _height;
@@ -108,16 +108,13 @@ public sealed class WorldSceneOutput : IDisposable
         Node.Destroy();
         foreach (var buffer in _ring)
         {
-            if (buffer is BufferBase concrete && !concrete.IsDestroyed)
-            {
-                concrete.Destroy();
-            }
+            buffer.Destroy();
         }
 
         _ring.Clear();
     }
 
-    private IBuffer? Take(ReadOnlySpan<ulong> modifiers)
+    private BufferBase? Take(ReadOnlySpan<ulong> modifiers)
     {
         foreach (var buffer in _ring)
         {
@@ -148,9 +145,9 @@ public sealed class WorldSceneOutput : IDisposable
     {
         foreach (var buffer in _ring)
         {
-            if (!ReferenceEquals(buffer, Node.Buffer) && buffer is BufferBase concrete && !concrete.IsDestroyed)
+            if (!ReferenceEquals(buffer, Node.Buffer))
             {
-                concrete.Destroy();
+                buffer.Destroy();
             }
         }
 

@@ -11,7 +11,7 @@ public sealed class XWaylandShapeMask : IDisposable
 
     private readonly IRenderer _renderer;
     private readonly IAllocator? _allocator;
-    private readonly IBuffer?[] _ring = new IBuffer?[RingSize];
+    private readonly BufferBase?[] _ring = new BufferBase?[RingSize];
     private readonly Dictionary<IBuffer, ITexture> _textures = [];
     private int _next;
     private int _width;
@@ -120,7 +120,7 @@ public sealed class XWaylandShapeMask : IDisposable
         return texture;
     }
 
-    private IBuffer Allocate(int width, int height)
+    private BufferBase Allocate(int width, int height)
     {
         if (_allocator is { } allocator)
         {
@@ -142,11 +142,7 @@ public sealed class XWaylandShapeMask : IDisposable
     {
         for (var i = 0; i < _ring.Length; i++)
         {
-            if (_ring[i] is BufferBase owned)
-            {
-                owned.Destroy();
-            }
-
+            _ring[i]?.Destroy();
             _ring[i] = null;
         }
 

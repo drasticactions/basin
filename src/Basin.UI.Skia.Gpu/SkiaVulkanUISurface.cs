@@ -15,17 +15,17 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly PixmanRegion32 _wholeDamage = new();
-    private readonly List<IBuffer> _retired = [];
+    private readonly List<BufferBase> _retired = [];
     private readonly VulkanDevice _device;
-    private readonly Func<IBuffer, IVulkanDrawTarget> _wrapFactory;
+    private readonly Func<BufferBase, IVulkanDrawTarget> _wrapFactory;
     private readonly Action _flush;
     private readonly IAllocator? _allocator;
     private readonly ulong[] _modifiers = [];
 
-    private IBuffer? _target;
-    private IBuffer? _front;
+    private BufferBase? _target;
+    private BufferBase? _front;
     private IVulkanDrawTarget? _wrap;
-    private IBuffer? _wrapped;
+    private BufferBase? _wrapped;
     private int _width;
     private int _height;
     private double _scale;
@@ -35,7 +35,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
 
     internal SkiaVulkanUISurface(
         VulkanDevice device,
-        Func<IBuffer, IVulkanDrawTarget> wrapFactory,
+        Func<BufferBase, IVulkanDrawTarget> wrapFactory,
         Action flush,
         IAllocator? allocator,
         ulong[] modifiers)
@@ -325,7 +325,7 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
         _observers.Destroyed(this);
     }
 
-    private void Retire(IBuffer buffer)
+    private void Retire(BufferBase buffer)
     {
         if (buffer.LockCount == 0)
         {
@@ -343,11 +343,5 @@ public sealed class SkiaVulkanUISurface : ISkiaUISurface
         };
     }
 
-    private static void Destroy(IBuffer buffer)
-    {
-        if (buffer is BufferBase owned && !owned.IsDestroyed)
-        {
-            owned.Destroy();
-        }
-    }
+    private static void Destroy(BufferBase buffer) => buffer.Destroy();
 }

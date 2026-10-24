@@ -106,7 +106,7 @@ internal sealed partial class DungeonWm
             pass.Submit();
         }
 
-        ((BufferBase)canvas).Destroy();
+        canvas.Destroy();
     }
 
     private void AdoptSnapshot(DungeonWmWindow window, DungeonWmSnapshot snapshot)
@@ -203,11 +203,7 @@ internal sealed partial class DungeonWm
         snapshot.World.ClearLayers();
         snapshot.CanvasTexture?.Dispose();
         snapshot.CanvasTexture = null;
-        if (snapshot.Canvas is BufferBase { IsDestroyed: false } canvas)
-        {
-            canvas.Destroy();
-        }
-
+        snapshot.Canvas?.Destroy();
         snapshot.Canvas = null;
     }
 

@@ -14,14 +14,14 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly PixmanRegion32 _wholeDamage = new();
-    private readonly List<IBuffer> _retired = [];
-    private readonly Dictionary<IBuffer, Entry> _wraps = [];
+    private readonly List<BufferBase> _retired = [];
+    private readonly Dictionary<BufferBase, Entry> _wraps = [];
     private readonly GlDevice _device;
     private readonly IAllocator _allocator;
     private readonly GRContext _context;
 
-    private IBuffer? _target;
-    private IBuffer? _front;
+    private BufferBase? _target;
+    private BufferBase? _front;
     private int _width;
     private int _height;
     private double _scale;
@@ -319,7 +319,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         _observers.Destroyed(this);
     }
 
-    private Entry WrapOf(IBuffer buffer)
+    private Entry WrapOf(BufferBase buffer)
     {
         if (_wraps.TryGetValue(buffer, out var cached))
         {
@@ -343,7 +343,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         return entry;
     }
 
-    private void Retire(IBuffer buffer)
+    private void Retire(BufferBase buffer)
     {
         if (_wraps.Remove(buffer, out var entry))
         {
@@ -376,13 +376,7 @@ public sealed class SkiaGlUISurface : ISkiaUISurface
         }
     }
 
-    private static void DestroyBuffer(IBuffer buffer)
-    {
-        if (buffer is BufferBase concrete)
-        {
-            concrete.Destroy();
-        }
-    }
+    private static void DestroyBuffer(BufferBase buffer) => buffer.Destroy();
 
     private sealed record Entry(GlRenderTarget Native, GRBackendRenderTarget Backend, SKSurface Surface, SKCanvas Canvas);
 }

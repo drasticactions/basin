@@ -13,7 +13,7 @@ public interface IOutputConfiguration
     bool Test(IReadOnlyList<OutputConfigurationEntry> entries);
 
     /// <summary>
-    /// Applies a configuration. An implementation must raise <see cref="Applied"/> once when it succeeds.
+    /// Applies a configuration. An implementation must raise <see cref="Applied"/> once when it succeeds. It returns <see langword="false"/> when a commit fails, after it reverts the outputs it already changed.
     /// </summary>
     /// <param name="entries">One entry for each output to change.</param>
     /// <returns><see langword="true"/> when the configuration is in effect. <see cref="LastFailureReason"/> can say why it is not.</returns>

@@ -11,7 +11,7 @@ public interface IAllocator : IDisposable
     DrmFormatSet Formats { get; }
 
     /// <summary>
-    /// Allocates a buffer. The caller owns the result and must call <see cref="BufferBase.Destroy"/> or the owner's equivalent when it is done.
+    /// Allocates a buffer. The caller owns the result and must call <see cref="BufferBase.Destroy"/> when it is done.
     /// </summary>
     /// <param name="width">The width in physical pixels.</param>
     /// <param name="height">The height in physical pixels.</param>
@@ -19,5 +19,5 @@ public interface IAllocator : IDisposable
     /// <param name="modifiers">The modifiers that the caller accepts. An empty span lets the allocator choose.</param>
     /// <param name="use">The uses that the buffer must support.</param>
     /// <returns>The new buffer, or <see langword="null"/> when the allocator cannot satisfy the request.</returns>
-    IBuffer? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use);
+    BufferBase? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use);
 }

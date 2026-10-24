@@ -726,18 +726,13 @@ public sealed class Surface
         }
 
         ApplyCachedState();
-        LastCommitFields = state.Committed;
         SurfaceCommit.Move(state, Current, targetIsCurrent: true);
         FinishCommit();
     }
 
-    /// <summary>Gets the fields that the last applied commit set.</summary>
-    public SurfaceStateFields LastCommitFields { get; private set; }
-
     private void ApplyCachedAndPending()
     {
         ApplyCachedState();
-        LastCommitFields = Pending.Committed;
         SurfaceCommit.Move(Pending, Current, targetIsCurrent: true);
         FinishCommit();
     }
@@ -747,7 +742,6 @@ public sealed class Surface
         if (_cached is { } cached)
         {
             _cached = null;
-            LastCommitFields = cached.Committed;
             SurfaceCommit.Move(cached, Current, targetIsCurrent: true);
             cached.Dispose();
             FinishCommit();

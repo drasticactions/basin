@@ -28,7 +28,7 @@ public sealed class GbmAllocator : IAllocator
     public DrmFormatSet Formats { get; }
 
     /// <inheritdoc/>
-    public IBuffer? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
+    public BufferBase? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
     {
         var usage = GbmBufferFlags.Rendering;
         if ((use & BufferUse.Scanout) != 0)

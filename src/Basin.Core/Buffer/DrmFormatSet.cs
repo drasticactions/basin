@@ -11,10 +11,26 @@ public sealed class DrmFormatSet
     /// <summary>The modifier value for a linear layout, as in <c>DRM_FORMAT_MOD_LINEAR</c>.</summary>
     public const ulong ModifierLinear = 0;
 
-    /// <summary>A shared empty set. Callers must not add to it.</summary>
-    public static readonly DrmFormatSet Empty = new();
+    /// <summary>A shared empty set that cannot change. <see cref="Add(DrmFormat, ulong)"/> on it throws.</summary>
+    public static readonly DrmFormatSet Empty = new(readOnly: true);
 
     private readonly Dictionary<DrmFormat, HashSet<ulong>> _formats = [];
+    private readonly bool _readOnly;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrmFormatSet"/> class that is empty and writable.
+    /// </summary>
+    public DrmFormatSet()
+    {
+    }
+
+    private DrmFormatSet(bool readOnly)
+    {
+        _readOnly = readOnly;
+    }
+
+    /// <summary>Gets a value indicating whether the set refuses <see cref="Add(DrmFormat, ulong)"/>. Only <see cref="Empty"/> is read-only.</summary>
+    public bool IsReadOnly => _readOnly;
 
     /// <summary>Gets the formats in the set.</summary>
     public IReadOnlyCollection<DrmFormat> Formats => _formats.Keys;
@@ -25,8 +41,14 @@ public sealed class DrmFormatSet
     /// <summary>Adds one format and modifier pair.</summary>
     /// <param name="format">The format.</param>
     /// <param name="modifier">The modifier.</param>
+    /// <exception cref="InvalidOperationException">The set is read-only.</exception>
     public void Add(DrmFormat format, ulong modifier)
     {
+        if (_readOnly)
+        {
+            throw new InvalidOperationException("DrmFormatSet.Empty is shared and cannot change.");
+        }
+
         if (!_formats.TryGetValue(format, out var modifiers))
         {
             _formats[format] = modifiers = [];
@@ -38,8 +60,14 @@ public sealed class DrmFormatSet
     /// <summary>Adds a format with each of several modifiers.</summary>
     /// <param name="format">The format.</param>
     /// <param name="modifiers">The modifiers to add.</param>
+    /// <exception cref="InvalidOperationException">The set is read-only.</exception>
     public void Add(DrmFormat format, ReadOnlySpan<ulong> modifiers)
     {
+        if (_readOnly)
+        {
+            throw new InvalidOperationException("DrmFormatSet.Empty is shared and cannot change.");
+        }
+
         foreach (var modifier in modifiers)
         {
             Add(format, modifier);

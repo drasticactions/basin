@@ -229,7 +229,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
     private static bool IsHighDynamicRange(ImageDescription? description) =>
         description?.TransferNamed is ColorTransferFunction.St2084Pq or ColorTransferFunction.Hlg;
 
-    private IBuffer? _intermediate;
+    private BufferBase? _intermediate;
     private ITexture? _intermediateTexture;
 
     /// <inheritdoc/>
@@ -310,7 +310,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         return renderer.ConvertToYuv(texture, default, target, YuvCoefficients, YuvRange);
     }
 
-    private IBuffer AllocateIntermediate(IRenderer renderer, int width, int height)
+    private BufferBase AllocateIntermediate(IRenderer renderer, int width, int height)
     {
         if (Allocator is { } allocator)
         {
@@ -336,7 +336,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
     {
         _intermediateTexture?.Dispose();
         _intermediateTexture = null;
-        (_intermediate as BufferBase)?.Destroy();
+        _intermediate?.Destroy();
         _intermediate = null;
     }
 

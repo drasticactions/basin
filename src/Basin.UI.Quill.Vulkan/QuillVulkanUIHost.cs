@@ -346,10 +346,7 @@ public sealed class QuillVulkanUIHost : IUIHost
         }
         finally
         {
-            if (buffer is BufferBase concrete)
-            {
-                concrete.Destroy();
-            }
+            buffer?.Destroy();
         }
     }
 }

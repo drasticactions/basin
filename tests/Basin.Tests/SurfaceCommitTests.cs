@@ -7,6 +7,44 @@ public sealed class SurfaceCommitTests
     private static MemoryBuffer NewBuffer(int w = 4, int h = 4) => new(w, h, DrmFormat.Xrgb8888);
 
     [Fact]
+    public void Current_committed_holds_the_last_commit_only()
+    {
+        using var pending = new SurfaceState();
+        using var current = new SurfaceState();
+        var buffer = NewBuffer();
+        pending.SetBuffer(buffer);
+        pending.Committed |= SurfaceStateFields.Buffer;
+        SurfaceCommit.Move(pending, current, targetIsCurrent: true);
+        Assert.Equal(SurfaceStateFields.Buffer, current.Committed);
+
+        pending.Committed |= SurfaceStateFields.Offset;
+        SurfaceCommit.Move(pending, current, targetIsCurrent: true);
+
+        Assert.Equal(SurfaceStateFields.Offset, current.Committed);
+        Assert.Same(buffer, current.Buffer);
+        current.SetBuffer(null);
+        buffer.Destroy();
+    }
+
+    [Fact]
+    public void Cache_committed_accumulates()
+    {
+        using var pending = new SurfaceState();
+        using var cache = new SurfaceState();
+        var buffer = NewBuffer();
+        pending.SetBuffer(buffer);
+        pending.Committed |= SurfaceStateFields.Buffer;
+        SurfaceCommit.Move(pending, cache);
+
+        pending.Committed |= SurfaceStateFields.Offset;
+        SurfaceCommit.Move(pending, cache);
+
+        Assert.Equal(SurfaceStateFields.Buffer | SurfaceStateFields.Offset, cache.Committed);
+        cache.SetBuffer(null);
+        buffer.Destroy();
+    }
+
+    [Fact]
     public void Buffer_lock_transfers_from_pending_to_current()
     {
         using var pending = new SurfaceState();

@@ -8,6 +8,91 @@ namespace Basin.Tests;
 public sealed class OutputSchedulerTests
 {
     [Fact]
+    public void Dispose_unsubscribes_every_output_event()
+    {
+        using var host = new CompositorTestHost();
+        var output = new CountingOutput();
+        var scheduler = new OutputScheduler(host.Loop, output);
+        Assert.Equal((1, 1, 1), (output.FrameHandlers, output.RepaintHandlers, output.DestroyedHandlers));
+
+        scheduler.Dispose();
+
+        Assert.Equal((0, 0, 0), (output.FrameHandlers, output.RepaintHandlers, output.DestroyedHandlers));
+    }
+
+    private sealed class CountingOutput : IOutput
+    {
+        public int FrameHandlers { get; private set; }
+
+        public int RepaintHandlers { get; private set; }
+
+        public int DestroyedHandlers { get; private set; }
+
+        public string Name => "C-1";
+
+        public string Description => string.Empty;
+
+        public string Make => string.Empty;
+
+        public string Model => string.Empty;
+
+        public string Serial => string.Empty;
+
+        public (int Width, int Height) PhysicalSize => default;
+
+        public OutputMode CurrentMode => new(100, 100, 60000);
+
+        public bool Enabled => true;
+
+        public double Scale => 1;
+
+        public OutputTransform Transform => OutputTransform.Normal;
+
+        public bool AdaptiveSync => false;
+
+        public event Action? Frame
+        {
+            add => FrameHandlers++;
+            remove => FrameHandlers--;
+        }
+
+        public event Action? RepaintRequested
+        {
+            add => RepaintHandlers++;
+            remove => RepaintHandlers--;
+        }
+
+        public event Action? Destroyed
+        {
+            add => DestroyedHandlers++;
+            remove => DestroyedHandlers--;
+        }
+
+        public event Action<OutputStateFields>? Committed
+        {
+            add
+            {
+            }
+
+            remove
+            {
+            }
+        }
+
+        public void RequestRepaint()
+        {
+        }
+
+        public void RequestFrame()
+        {
+        }
+
+        public bool TestCommit(OutputState state) => true;
+
+        public bool Commit(OutputState state) => true;
+    }
+
+    [Fact]
     public void Damage_while_idle_repaints_immediately()
     {
         using var host = new CompositorTestHost();

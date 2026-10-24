@@ -157,10 +157,7 @@ public static class ImGuiVulkanUIHost
         }
         finally
         {
-            if (buffer is BufferBase concrete)
-            {
-                concrete.Destroy();
-            }
+            buffer?.Destroy();
         }
     }
 }

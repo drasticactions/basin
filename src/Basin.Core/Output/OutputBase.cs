@@ -157,7 +157,7 @@ public abstract class OutputBase : IOutput
     }
 
     /// <summary>
-    /// Tests a state, records its fields on this object and then calls <see cref="CommitCore"/>. On success it raises <see cref="Committed"/>.
+    /// Tests a state, records its fields on this object and then calls <see cref="CommitCore"/>. On success it raises <see cref="Committed"/>. When <see cref="CommitCore"/> fails, it restores the fields that the state set and raises nothing.
     /// </summary>
     /// <param name="state">The staged changes. File descriptors in it are borrowed for the length of the call.</param>
     /// <returns><see langword="false"/> when the test or <see cref="CommitCore"/> failed.</returns>
@@ -167,6 +167,13 @@ public abstract class OutputBase : IOutput
         {
             return false;
         }
+
+        var fields = state.Fields;
+        var oldEnabled = Enabled;
+        var oldMode = CurrentMode;
+        var oldScale = Scale;
+        var oldTransform = Transform;
+        var oldAdaptiveSync = AdaptiveSync;
 
         if ((state.Fields & OutputStateFields.Enabled) != 0)
         {
@@ -195,6 +202,31 @@ public abstract class OutputBase : IOutput
 
         if (!CommitCore(state))
         {
+            if ((fields & OutputStateFields.Enabled) != 0)
+            {
+                Enabled = oldEnabled;
+            }
+
+            if ((fields & OutputStateFields.Mode) != 0)
+            {
+                CurrentMode = oldMode;
+            }
+
+            if ((fields & OutputStateFields.Scale) != 0)
+            {
+                Scale = oldScale;
+            }
+
+            if ((fields & OutputStateFields.Transform) != 0)
+            {
+                Transform = oldTransform;
+            }
+
+            if ((fields & OutputStateFields.AdaptiveSync) != 0)
+            {
+                AdaptiveSync = oldAdaptiveSync;
+            }
+
             return false;
         }
 

@@ -7,6 +7,19 @@ namespace Basin.Tests;
 
 public sealed class DmabufTests
 {
+    [Fact]
+    public void Empty_format_set_refuses_add()
+    {
+        Assert.True(DrmFormatSet.Empty.IsReadOnly);
+        Assert.Throws<InvalidOperationException>(() => DrmFormatSet.Empty.Add(DrmFormat.Argb8888, DrmFormatSet.ModifierLinear));
+        Assert.Throws<InvalidOperationException>(() => DrmFormatSet.Empty.Add(DrmFormat.Argb8888, [DrmFormatSet.ModifierLinear]));
+        Assert.Equal(0, DrmFormatSet.Empty.Count);
+        Assert.False(new DrmFormatSet().IsReadOnly);
+        var union = DrmFormatSet.Empty.Union(DrmFormatSet.Empty);
+        union.Add(DrmFormat.Argb8888, DrmFormatSet.ModifierLinear);
+        Assert.Equal(1, union.Count);
+    }
+
     [DllImport("libc", SetLastError = true)]
     private static extern int memfd_create(string name, uint flags);
 

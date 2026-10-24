@@ -750,6 +750,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
 
         var modeset = _needsModeset || modeChanged || !_hardwareLit;
+        var targetMode = _committedMode;
         if (modeset)
         {
             _gammaDirty = _degammaDirty = _ctmDirty = _hdrDirty = _contentTypeDirty = true;
@@ -760,10 +761,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                     : FindNativeMode(wanted))
                 ?? throw new InvalidOperationException($"{Name}: no native mode matches the requested mode");
             ReplaceModeBlob(native);
-            _committedMode = native;
+            targetMode = native;
         }
 
         uint fbId = 0;
+        var staged = buffer;
         if (buffer is not null)
         {
             fbId = _backend.Framebuffers.GetOrAdd(buffer, true);
@@ -773,8 +775,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                 return false;
             }
         }
-        else if (_scanout.Buffer is { } current)
+        else if ((_pendingScanout.Buffer ?? _scanout.Buffer) is { } current)
         {
+            staged = current;
             fbId = _backend.Framebuffers.GetOrAdd(current, true);
         }
 
@@ -884,7 +887,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             AddPlaneDefaults(builder);
         }
 
-        AddPlaneProperties(builder, fbId, _committedMode);
+        AddPlaneProperties(builder, fbId, targetMode, staged!);
         if ((state.Fields & OutputStateFields.InFence) != 0 && state.InFenceFd >= 0 && _planeProps.Has("IN_FENCE_FD"))
         {
             builder.Add(_planeProps, "plane", "IN_FENCE_FD", unchecked((ulong)(long)StageFence(state.InFenceFd)));
@@ -923,7 +926,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         HandoffInheritance? handoff = null;
         if (modeset && !_hardwareLit && Inherited is { } inheritedState)
         {
-            handoff = ChooseInheritedCommit(builder, inheritedState);
+            handoff = ChooseInheritedCommit(builder, inheritedState, targetMode);
             if (!handoff.Value.Modeset)
             {
                 flags = DrmAtomicCommitFlags.PageFlipEvent;
@@ -947,6 +950,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
             }
         }
 
+        _committedMode = targetMode;
         if (handoff is { } inheritance)
         {
             Inherited = null;
@@ -1014,19 +1018,24 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                 DropQueuedFrame();
             }
         }
+        else if (!ReferenceEquals(_pendingScanout.Buffer, staged))
+        {
+            _pendingScanout.Dispose();
+            _pendingScanout = staged!.Lock();
+        }
 
         return true;
     }
 
-    private HandoffInheritance ChooseInheritedCommit(DrmAtomicBuilder builder, DrmInheritedState inherited)
+    private HandoffInheritance ChooseInheritedCommit(DrmAtomicBuilder builder, DrmInheritedState inherited, DrmModeInfo targetMode)
     {
-        var mode = ToOutputMode(_committedMode);
+        var mode = ToOutputMode(targetMode);
         if (!_backend.Inherit)
         {
             return new HandoffInheritance(Name, mode, true, HandoffReason.Off, 0);
         }
 
-        if (!SameTimings(_committedMode, inherited.Mode) || inherited.HdrMetadata != _pendingHdr.HasValue)
+        if (!SameTimings(targetMode, inherited.Mode) || inherited.HdrMetadata != _pendingHdr.HasValue)
         {
             return new HandoffInheritance(Name, mode, true, HandoffReason.Config, 0);
         }
@@ -1747,14 +1756,14 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _backend.Framebuffers.ReleaseOrphans();
     }
 
-    private void AddPlaneProperties(DrmAtomicBuilder builder, uint fbId, DrmModeInfo mode)
+    private void AddPlaneProperties(DrmAtomicBuilder builder, uint fbId, DrmModeInfo mode, IBuffer source)
     {
         builder.Add(_planeProps, "plane", "FB_ID", fbId);
         builder.Add(_planeProps, "plane", "CRTC_ID", CrtcId);
         builder.Add(_planeProps, "plane", "SRC_X", 0);
         builder.Add(_planeProps, "plane", "SRC_Y", 0);
-        builder.Add(_planeProps, "plane", "SRC_W", (ulong)mode.HorizontalDisplay << 16);
-        builder.Add(_planeProps, "plane", "SRC_H", (ulong)mode.VerticalDisplay << 16);
+        builder.Add(_planeProps, "plane", "SRC_W", (ulong)Math.Min(source.Width, mode.HorizontalDisplay) << 16);
+        builder.Add(_planeProps, "plane", "SRC_H", (ulong)Math.Min(source.Height, mode.VerticalDisplay) << 16);
         builder.Add(_planeProps, "plane", "CRTC_X", 0);
         builder.Add(_planeProps, "plane", "CRTC_Y", 0);
         builder.Add(_planeProps, "plane", "CRTC_W", mode.HorizontalDisplay);

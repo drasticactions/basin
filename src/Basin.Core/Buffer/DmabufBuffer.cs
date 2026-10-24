@@ -56,7 +56,7 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
     /// </summary>
     /// <param name="attributes">The dmabuf description.</param>
     /// <returns><see langword="true"/> until the storage is freed.</returns>
-    public bool TryGetDmabuf(out DmabufAttributes attributes)
+    public override bool TryGetDmabuf(out DmabufAttributes attributes)
     {
         attributes = _attributes;
         return !IsStorageFreed;

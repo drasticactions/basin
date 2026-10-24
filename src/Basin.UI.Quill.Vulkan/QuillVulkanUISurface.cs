@@ -26,10 +26,10 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
     private readonly UISurfaceObservers _observers = new();
     private const int MaxSpares = 2;
 
-    private readonly List<IBuffer> _retired = [];
-    private readonly List<IBuffer> _spares = [];
-    private readonly HashSet<IBuffer> _watched = [];
-    private readonly Dictionary<IBuffer, Target> _wraps = [];
+    private readonly List<BufferBase> _retired = [];
+    private readonly List<BufferBase> _spares = [];
+    private readonly HashSet<BufferBase> _watched = [];
+    private readonly Dictionary<BufferBase, Target> _wraps = [];
     private readonly List<Target> _dropped = [];
     private readonly List<QuillVulkanFrame> _frames = [];
     private readonly VulkanDevice _device;
@@ -43,8 +43,8 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
     private QuillVulkanFrame? _frame;
     private CommandBuffer _commands;
 
-    private IBuffer? _target;
-    private IBuffer? _front;
+    private BufferBase? _target;
+    private BufferBase? _front;
     private ulong _lastPoint;
     private int _width;
     private int _height;
@@ -523,7 +523,7 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         return oldest;
     }
 
-    private void WaitForReaders(IBuffer target)
+    private void WaitForReaders(BufferBase target)
     {
         if (!target.TryGetDmabuf(out var attributes))
         {
@@ -543,7 +543,7 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         }
     }
 
-    private Target WrapOf(IBuffer buffer)
+    private Target WrapOf(BufferBase buffer)
     {
         if (_wraps.TryGetValue(buffer, out var cached))
         {
@@ -574,7 +574,7 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         return wrap;
     }
 
-    private void Retire(IBuffer buffer)
+    private void Retire(BufferBase buffer)
     {
         if (Reusable(buffer) && buffer.LockCount == 0)
         {
@@ -595,9 +595,9 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         }
     }
 
-    private void Watch(IBuffer buffer) => buffer.Released += () => OnReleased(buffer);
+    private void Watch(BufferBase buffer) => buffer.Released += () => OnReleased(buffer);
 
-    private void OnReleased(IBuffer buffer)
+    private void OnReleased(BufferBase buffer)
     {
         if (!_retired.Remove(buffer) || buffer.IsDestroyed)
         {
@@ -613,11 +613,11 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         Discard(buffer);
     }
 
-    private bool Reusable(IBuffer buffer) =>
+    private bool Reusable(BufferBase buffer) =>
         !_disposed && _spares.Count < MaxSpares && _target is { } target && !ReferenceEquals(buffer, target)
         && buffer.Width == target.Width && buffer.Height == target.Height;
 
-    private IBuffer? TakeSpare()
+    private BufferBase? TakeSpare()
     {
         for (var i = 0; i < _spares.Count; i++)
         {
@@ -648,7 +648,7 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         _spares.Clear();
     }
 
-    private void Discard(IBuffer buffer)
+    private void Discard(BufferBase buffer)
     {
         _watched.Remove(buffer);
         if (_wraps.Remove(buffer, out var wrap))
@@ -687,11 +687,5 @@ public sealed class QuillVulkanUISurface : IQuillUISurface
         wrap.Image.Dispose();
     }
 
-    private static void DestroyBuffer(IBuffer buffer)
-    {
-        if (buffer is BufferBase concrete)
-        {
-            concrete.Destroy();
-        }
-    }
+    private static void DestroyBuffer(BufferBase buffer) => buffer.Destroy();
 }

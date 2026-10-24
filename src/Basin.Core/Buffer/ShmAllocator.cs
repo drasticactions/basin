@@ -17,7 +17,7 @@ public sealed class ShmAllocator : IAllocator
     /// <param name="modifiers">The modifiers that the caller accepts. An empty span, the linear modifier or the invalid modifier are accepted.</param>
     /// <param name="use">The requested uses. This allocator ignores them.</param>
     /// <returns>The new buffer, or <see langword="null"/> when <paramref name="format"/> is not ARGB8888 or XRGB8888 or no accepted modifier is linear.</returns>
-    public IBuffer? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
+    public BufferBase? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
     {
         if (!PixelFormatInfo.TryGet(format, out _))
         {

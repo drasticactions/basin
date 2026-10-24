@@ -594,7 +594,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
                 continue;
             }
 
-            (probe as BufferBase)?.Destroy();
+            probe.Destroy();
             return candidate;
         }
 
@@ -623,7 +623,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
 
         var probe = allocator.Allocate(format.Width, format.Height, DrmFormat.Nv12, [DrmFormatSet.ModifierLinear], BufferUse.Render);
-        (probe as BufferBase)?.Destroy();
+        probe?.Destroy();
         return probe is not null;
     }
 
@@ -640,7 +640,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         if (!target.TryGetDmabuf(out var attributes))
         {
-            (target as BufferBase)?.Destroy();
+            target.Destroy();
             return;
         }
 
@@ -709,7 +709,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
                 return;
             }
 
-            (target as BufferBase)?.Destroy();
+            target?.Destroy();
             Log.Warn($"stream {entry.Id}: dmabuf allocation failed, the buffer stays empty");
         }
 
@@ -998,7 +998,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
     private sealed class Slot : IDisposable
     {
-        public IBuffer? Target { get; set; }
+        public BufferBase? Target { get; set; }
 
         public int MemFd { get; set; } = -1;
 
@@ -1012,7 +1012,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
 
         public void Dispose()
         {
-            (Target as BufferBase)?.Destroy();
+            Target?.Destroy();
             Target = null;
             if (Map != 0)
             {

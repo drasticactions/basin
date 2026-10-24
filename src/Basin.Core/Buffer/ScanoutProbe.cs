@@ -12,7 +12,7 @@ public static class ScanoutProbe
     /// <param name="output">The output whose mode gives the size.</param>
     /// <param name="modifiers">The modifiers that the caller accepts.</param>
     /// <param name="format">The pixel format to test.</param>
-    /// <returns><see langword="true"/> when the allocation succeeds and the result is a <see cref="BufferBase"/>.</returns>
+    /// <returns><see langword="true"/> when the allocation succeeds.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="output"/> is <see langword="null"/>.</exception>
     public static bool CanScanOut(
         this IAllocator allocator, IOutput output, ReadOnlySpan<ulong> modifiers, DrmFormat format)
@@ -21,7 +21,7 @@ public static class ScanoutProbe
         ArgumentNullException.ThrowIfNull(output);
         var mode = output.CurrentMode.Width > 0 ? output.CurrentMode : new OutputMode(1920, 1080, 60_000);
         if (allocator.Allocate(mode.Width, mode.Height, format, modifiers, BufferUse.Render | BufferUse.Scanout)
-            is not BufferBase probe)
+            is not { } probe)
         {
             return false;
         }

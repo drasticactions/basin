@@ -49,22 +49,22 @@ public interface IOutput
     OutputMode CurrentMode { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the last commit that set it turned the output on.
+    /// Gets a value indicating whether the last successful commit that set it turned the output on.
     /// </summary>
     bool Enabled { get; }
 
     /// <summary>
-    /// Gets the fractional scale from logical to physical pixels that the last commit applied.
+    /// Gets the fractional scale from logical to physical pixels that the last successful commit applied.
     /// </summary>
     double Scale { get; }
 
     /// <summary>
-    /// Gets the transform that the last commit applied. It is what the panel does to the image, so the compositor must draw its inverse.
+    /// Gets the transform that the last successful commit applied. It is what the panel does to the image, so the compositor must draw its inverse.
     /// </summary>
     OutputTransform Transform { get; }
 
     /// <summary>
-    /// Gets a value indicating whether variable refresh is in force.
+    /// Gets a value indicating whether variable refresh is in force, as the last successful commit that set it applied.
     /// </summary>
     bool AdaptiveSync { get; }
 

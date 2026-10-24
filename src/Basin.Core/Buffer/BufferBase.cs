@@ -36,6 +36,13 @@ public abstract class BufferBase : IBuffer
     public virtual DrmFormat Format => DrmFormat.Invalid;
 
     /// <inheritdoc/>
+    public virtual bool TryGetDmabuf(out DmabufAttributes attributes)
+    {
+        attributes = default;
+        return false;
+    }
+
+    /// <inheritdoc/>
     public bool IsDestroyed => _destroyed;
 
     /// <summary>

@@ -671,7 +671,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     private IFrameFilter? _frameFilter;
     private IAllocator? _filterAllocator;
-    private IBuffer? _filterScratch;
+    private BufferBase? _filterScratch;
     private ITexture? _filterTexture;
     private IRenderer? _filterTextureRenderer;
     private ulong _filterFrameCount;
@@ -707,7 +707,7 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _filterTexture?.Dispose();
         _filterTexture = null;
         _filterTextureRenderer = null;
-        (_filterScratch as BufferBase)?.Destroy();
+        _filterScratch?.Destroy();
         _filterScratch = null;
     }
 

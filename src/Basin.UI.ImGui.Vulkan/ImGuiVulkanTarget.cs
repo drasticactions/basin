@@ -21,14 +21,14 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
 
     private readonly ImGuiVulkanBackend _backend;
     private readonly VulkanDevice _device;
-    private readonly List<IBuffer> _retired = [];
-    private readonly List<IBuffer> _spares = [];
-    private readonly HashSet<IBuffer> _watched = [];
-    private readonly Dictionary<IBuffer, Wrap> _wraps = [];
+    private readonly List<BufferBase> _retired = [];
+    private readonly List<BufferBase> _spares = [];
+    private readonly HashSet<BufferBase> _watched = [];
+    private readonly Dictionary<BufferBase, Wrap> _wraps = [];
     private readonly List<Wrap> _dropped = [];
     private readonly List<ImGuiVulkanFrame> _frames = [];
-    private IBuffer? _target;
-    private IBuffer? _front;
+    private BufferBase? _target;
+    private BufferBase? _front;
     private ulong _lastPoint;
     private int _nextFrame;
     private int _width;
@@ -323,7 +323,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
             commands, _backend.Pipeline.Layout, ShaderStageFlags.VertexBit, 0, ImGuiVulkanPipeline.PushConstantSize, push);
     }
 
-    private IBuffer? Back()
+    private BufferBase? Back()
     {
         if (_target is not null && !ReferenceEquals(_target, _front))
         {
@@ -360,7 +360,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         return frame;
     }
 
-    private void WaitForReaders(IBuffer target)
+    private void WaitForReaders(BufferBase target)
     {
         if (!target.TryGetDmabuf(out var attributes))
         {
@@ -380,7 +380,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         }
     }
 
-    private Wrap WrapOf(IBuffer buffer)
+    private Wrap WrapOf(BufferBase buffer)
     {
         if (_wraps.TryGetValue(buffer, out var cached))
         {
@@ -411,7 +411,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         return wrap;
     }
 
-    private void Retire(IBuffer buffer)
+    private void Retire(BufferBase buffer)
     {
         if (Reusable(buffer) && buffer.LockCount == 0)
         {
@@ -432,9 +432,9 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         }
     }
 
-    private void Watch(IBuffer buffer) => buffer.Released += () => OnReleased(buffer);
+    private void Watch(BufferBase buffer) => buffer.Released += () => OnReleased(buffer);
 
-    private void OnReleased(IBuffer buffer)
+    private void OnReleased(BufferBase buffer)
     {
         if (!_retired.Remove(buffer) || buffer.IsDestroyed)
         {
@@ -450,11 +450,11 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         Discard(buffer);
     }
 
-    private bool Reusable(IBuffer buffer) =>
+    private bool Reusable(BufferBase buffer) =>
         !_disposed && _spares.Count < MaxSpares && buffer.Width == _width && buffer.Height == _height
         && !ReferenceEquals(buffer, _target);
 
-    private IBuffer? TakeSpare()
+    private BufferBase? TakeSpare()
     {
         for (var i = 0; i < _spares.Count; i++)
         {
@@ -485,7 +485,7 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         _spares.Clear();
     }
 
-    private void Discard(IBuffer buffer)
+    private void Discard(BufferBase buffer)
     {
         _watched.Remove(buffer);
         if (_wraps.Remove(buffer, out var wrap))
@@ -524,11 +524,5 @@ internal sealed unsafe class ImGuiVulkanTarget : IImGuiTarget
         wrap.Image.Dispose();
     }
 
-    private static void DestroyBuffer(IBuffer buffer)
-    {
-        if (buffer is BufferBase concrete)
-        {
-            concrete.Destroy();
-        }
-    }
+    private static void DestroyBuffer(BufferBase buffer) => buffer.Destroy();
 }

@@ -14,7 +14,7 @@ public sealed class DumbAllocator(DrmBackend backend) : IAllocator
     public DrmFormatSet Formats { get; } = BuildFormats();
 
     /// <inheritdoc/>
-    public IBuffer? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
+    public BufferBase? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
     {
         if (format is not (DrmFormat.Xrgb8888 or DrmFormat.Argb8888))
         {

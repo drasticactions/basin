@@ -360,10 +360,7 @@ public sealed class QuillUIHost : IUIHost
         }
         finally
         {
-            if (buffer is BufferBase concrete)
-            {
-                concrete.Destroy();
-            }
+            buffer?.Destroy();
         }
     }
 

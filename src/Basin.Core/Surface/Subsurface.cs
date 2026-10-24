@@ -150,11 +150,10 @@ public sealed class Subsurface
 
     private void ApplyRestack(Surface? anchorSurface, bool above)
     {
-        Parent.SubsurfacesBelow.Remove(this);
-        Parent.SubsurfacesAbove.Remove(this);
-
         if (anchorSurface is null)
         {
+            Parent.SubsurfacesBelow.Remove(this);
+            Parent.SubsurfacesAbove.Remove(this);
             if (above)
             {
                 Parent.SubsurfacesAbove.Insert(0, this);
@@ -168,10 +167,14 @@ public sealed class Subsurface
         }
 
         var role = anchorSurface.SubsurfaceRole;
-        if (role is null)
+        if (role is null || role == this || role.Parent != Parent
+            || (!Parent.SubsurfacesBelow.Contains(role) && !Parent.SubsurfacesAbove.Contains(role)))
         {
             return;
         }
+
+        Parent.SubsurfacesBelow.Remove(this);
+        Parent.SubsurfacesAbove.Remove(this);
 
         var below = Parent.SubsurfacesBelow.IndexOf(role);
         if (below >= 0)
@@ -181,10 +184,7 @@ public sealed class Subsurface
         }
 
         var aboveIndex = Parent.SubsurfacesAbove.IndexOf(role);
-        if (aboveIndex >= 0)
-        {
-            Parent.SubsurfacesAbove.Insert(above ? aboveIndex + 1 : aboveIndex, this);
-        }
+        Parent.SubsurfacesAbove.Insert(above ? aboveIndex + 1 : aboveIndex, this);
     }
 
     private void OnRoleDestroyed()

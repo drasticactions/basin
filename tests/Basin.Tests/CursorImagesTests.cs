@@ -531,7 +531,7 @@ public sealed class CursorImagesTests
 
         public DrmFormatSet Formats => _inner.Formats;
 
-        public IBuffer? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
+        public BufferBase? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
         {
             Count++;
             return _inner.Allocate(width, height, format, modifiers, use);

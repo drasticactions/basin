@@ -17,7 +17,7 @@ public sealed class CursorImages : IDisposable
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly Dictionary<string, Func<double, XcursorImage?>> _painted = [];
     private Variant _current;
-    private IBuffer? _clientImage;
+    private BufferBase? _clientImage;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CursorImages"/> class.
@@ -135,7 +135,7 @@ public sealed class CursorImages : IDisposable
         {
             if (variant.Cache.Remove(name, out var image))
             {
-                (image?.Buffer as BufferBase)?.Destroy();
+                image?.Buffer.Destroy();
             }
         }
     }
@@ -203,7 +203,7 @@ public sealed class CursorImages : IDisposable
                 }
                 else
                 {
-                    (scaled as BufferBase)?.Destroy();
+                    scaled.Destroy();
                 }
             }
 
@@ -228,7 +228,7 @@ public sealed class CursorImages : IDisposable
                 }
                 else
                 {
-                    (buffer as BufferBase)?.Destroy();
+                    buffer.Destroy();
                 }
             }
         }
@@ -339,20 +339,20 @@ public sealed class CursorImages : IDisposable
         {
             foreach (var image in variant.Cache.Values)
             {
-                (image?.Buffer as BufferBase)?.Destroy();
+                image?.Buffer.Destroy();
             }
 
             variant.Cache.Clear();
         }
 
-        (_clientImage as BufferBase)?.Destroy();
+        _clientImage?.Destroy();
         _clientImage = null;
     }
 
-    private IBuffer? Allocate() =>
+    private BufferBase? Allocate() =>
         _allocator.Allocate(_bufferWidth, _bufferHeight, DrmFormat.Argb8888, [DrmFormatSet.ModifierLinear], BufferUse.Cursor);
 
-    private IBuffer? AllocateFor(int width, int height)
+    private BufferBase? AllocateFor(int width, int height)
     {
         if (width <= _bufferWidth && height <= _bufferHeight)
         {

@@ -176,6 +176,64 @@ public sealed class SubsurfaceTests
         Assert.Equal(Red, host.Pixel(5, 5));
     }
 
+    [Fact]
+    public void Restack_against_a_destroyed_sibling_keeps_the_subsurface()
+    {
+        using var host = new CompositorTestHost();
+        var (parent, _) = MapSurface(host, 40, 40, Red);
+        var (aSurface, aSub, _) = MapChild(host, parent, 20, 20, Green);
+        var (_, bSub, _) = MapChild(host, parent, 40, 40, Blue);
+        parent.Commit();
+        host.PumpToServer();
+        host.RenderFrame();
+        Assert.Equal(Blue, host.Pixel(5, 5));
+
+        bSub.PlaceBelow(aSurface);
+        aSub.Destroy();
+        parent.Commit();
+        host.PumpToServer();
+        host.RenderFrame();
+
+        Assert.Equal(Blue, host.Pixel(5, 5));
+        Assert.Equal(Blue, host.Pixel(30, 30));
+    }
+
+    [Fact]
+    public void Restack_against_a_recreated_sibling_keeps_the_subsurface()
+    {
+        using var host = new CompositorTestHost();
+        var (parent, _) = MapSurface(host, 40, 40, Red);
+        var (aSurface, aSub, _) = MapChild(host, parent, 20, 20, Green);
+        var (_, bSub, _) = MapChild(host, parent, 40, 40, Blue);
+        parent.Commit();
+        host.PumpToServer();
+        host.RenderFrame();
+
+        bSub.PlaceBelow(aSurface);
+        aSub.Destroy();
+        var again = host.Client.Subcompositor.GetSubsurface(aSurface, parent);
+        again.SetDesync();
+        parent.Commit();
+        host.PumpToServer();
+        host.RenderFrame();
+
+        Assert.Equal(Green, host.Pixel(5, 5));
+        Assert.Equal(Blue, host.Pixel(30, 30));
+    }
+
+    private static (WlSurface Surface, WlSubsurface Subsurface, ClientShmBuffer Buffer) MapChild(
+        CompositorTestHost host, WlSurface parent, int width, int height, uint color)
+    {
+        var surface = host.Client.Compositor.CreateSurface();
+        var subsurface = host.Client.Subcompositor.GetSubsurface(surface, parent);
+        subsurface.SetDesync();
+        var buffer = host.Client.CreateBuffer(width, height, Fill.Solid(width, height, color));
+        surface.Attach(buffer.Proxy, 0, 0);
+        surface.Damage(0, 0, width, height);
+        surface.Commit();
+        return (surface, subsurface, buffer);
+    }
+
     private static (WlSurface Surface, ClientShmBuffer Buffer) MapSurface(CompositorTestHost host, int width, int height, uint color)
     {
         var surface = host.Client.Compositor.CreateSurface();

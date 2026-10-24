@@ -245,6 +245,7 @@ public sealed class OutputScheduler : IDisposable
             _disposed = true;
             _output.RepaintRequested -= ScheduleRepaint;
             _output.Frame -= OnFrame;
+            _output.Destroyed -= Dispose;
             _timer.Remove();
         }
     }

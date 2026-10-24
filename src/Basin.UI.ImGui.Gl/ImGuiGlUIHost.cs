@@ -174,10 +174,7 @@ public static class ImGuiGlUIHost
         }
         finally
         {
-            if (buffer is BufferBase concrete)
-            {
-                concrete.Destroy();
-            }
+            buffer?.Destroy();
         }
     }
 }

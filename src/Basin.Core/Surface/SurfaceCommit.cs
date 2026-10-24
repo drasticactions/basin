@@ -10,7 +10,7 @@ namespace Basin;
 public static class SurfaceCommit
 {
     /// <summary>
-    /// Moves each field set in <paramref name="pending"/> onto <paramref name="target"/> and leaves <paramref name="pending"/> an empty delta. Buffer locks transfer, frame callbacks append and extension slots always move.
+    /// Moves each field set in <paramref name="pending"/> onto <paramref name="target"/> and leaves <paramref name="pending"/> an empty delta. Buffer locks transfer, frame callbacks append and extension slots always move. On a current target, <see cref="SurfaceState.Committed"/> becomes the fields of this move.
     /// </summary>
     /// <param name="pending">The source state. It has no committed fields after the call.</param>
     /// <param name="target">The state that receives the fields.</param>
@@ -130,7 +130,7 @@ public static class SurfaceCommit
 
         pending.MoveExtensionsTo(target);
 
-        target.Committed |= fields;
+        target.Committed = targetIsCurrent ? fields : target.Committed | fields;
         pending.Committed = SurfaceStateFields.None;
     }
 }

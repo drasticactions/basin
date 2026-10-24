@@ -12,12 +12,12 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
     private const nint ResetRenderState = -8;
 
     private readonly ImGuiGlBackend _backend;
-    private readonly List<IBuffer> _retired = [];
-    private readonly List<IBuffer> _spares = [];
-    private readonly HashSet<IBuffer> _watched = [];
-    private readonly Dictionary<IBuffer, GlRenderTarget> _wraps = [];
-    private IBuffer? _target;
-    private IBuffer? _front;
+    private readonly List<BufferBase> _retired = [];
+    private readonly List<BufferBase> _spares = [];
+    private readonly HashSet<BufferBase> _watched = [];
+    private readonly Dictionary<BufferBase, GlRenderTarget> _wraps = [];
+    private BufferBase? _target;
+    private BufferBase? _front;
     private int _width;
     private int _height;
     private bool _produced;
@@ -243,7 +243,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         gl.UniformMatrix4(program.Projection, 1, false, projection);
     }
 
-    private IBuffer? Back()
+    private BufferBase? Back()
     {
         if (_target is not null && !ReferenceEquals(_target, _front))
         {
@@ -261,7 +261,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         return allocated;
     }
 
-    private void PublishWriteFence(IBuffer target)
+    private void PublishWriteFence(BufferBase target)
     {
         var device = _backend.Device;
         var fence = target.TryGetDmabuf(out var attributes) ? device.ExportFence() : -1;
@@ -277,7 +277,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         _backend.ReportSync(fenced: true);
     }
 
-    private void WaitForReaders(IBuffer target)
+    private void WaitForReaders(BufferBase target)
     {
         if (!target.TryGetDmabuf(out var attributes))
         {
@@ -297,7 +297,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         }
     }
 
-    private GlRenderTarget WrapOf(IBuffer buffer)
+    private GlRenderTarget WrapOf(BufferBase buffer)
     {
         if (_wraps.TryGetValue(buffer, out var cached))
         {
@@ -309,7 +309,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         return native;
     }
 
-    private void Retire(IBuffer buffer)
+    private void Retire(BufferBase buffer)
     {
         if (Reusable(buffer) && buffer.LockCount == 0)
         {
@@ -330,9 +330,9 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         }
     }
 
-    private void Watch(IBuffer buffer) => buffer.Released += () => OnReleased(buffer);
+    private void Watch(BufferBase buffer) => buffer.Released += () => OnReleased(buffer);
 
-    private void OnReleased(IBuffer buffer)
+    private void OnReleased(BufferBase buffer)
     {
         if (!_retired.Remove(buffer) || buffer.IsDestroyed)
         {
@@ -349,11 +349,11 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         Discard(buffer);
     }
 
-    private bool Reusable(IBuffer buffer) =>
+    private bool Reusable(BufferBase buffer) =>
         !_disposed && _spares.Count < MaxSpares && buffer.Width == _width && buffer.Height == _height
         && !ReferenceEquals(buffer, _target);
 
-    private IBuffer? TakeSpare()
+    private BufferBase? TakeSpare()
     {
         for (var i = 0; i < _spares.Count; i++)
         {
@@ -384,7 +384,7 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         _spares.Clear();
     }
 
-    private void Discard(IBuffer buffer)
+    private void Discard(BufferBase buffer)
     {
         _watched.Remove(buffer);
         if (_wraps.Remove(buffer, out var native))
@@ -398,11 +398,5 @@ internal sealed unsafe class ImGuiGlTarget : IImGuiTarget
         }
     }
 
-    private static void DestroyBuffer(IBuffer buffer)
-    {
-        if (buffer is BufferBase concrete)
-        {
-            concrete.Destroy();
-        }
-    }
+    private static void DestroyBuffer(BufferBase buffer) => buffer.Destroy();
 }
