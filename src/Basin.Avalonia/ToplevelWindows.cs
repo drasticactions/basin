@@ -37,7 +37,7 @@ public sealed class ToplevelWindows : IDisposable
         public required SceneSurface SceneSurface;
         public required int Cell;
         public Surface Surface => Toplevel?.Surface ?? Popup?.Surface ?? Foreign?.Surface ?? Plain!;
-        public Box Geometry => Toplevel?.Xdg.EffectiveGeometry ?? Popup?.Xdg.EffectiveGeometry ?? default;
+        public Box Geometry => Toplevel?.Xdg.PresentedGeometry ?? Popup?.Xdg.EffectiveGeometry ?? default;
         public BasinViewOutput? View;
         public int Width;
         public int Height;
@@ -485,7 +485,7 @@ public sealed class ToplevelWindows : IDisposable
     private void OnMapped(Entry entry)
     {
         var toplevel = entry.Toplevel!;
-        var geometry = toplevel.Xdg.EffectiveGeometry;
+        var geometry = toplevel.Xdg.PresentedGeometry;
         entry.Width = Math.Max(1, geometry.Width);
         entry.Height = Math.Max(1, geometry.Height);
         if (entry.WindowCreated)
@@ -578,7 +578,7 @@ public sealed class ToplevelWindows : IDisposable
             return;
         }
 
-        var geometry = entry.Toplevel.Xdg.EffectiveGeometry;
+        var geometry = entry.Toplevel.Xdg.PresentedGeometry;
         var width = Math.Max(1, geometry.Width);
         var height = Math.Max(1, geometry.Height);
         var current = entry.Toplevel.Surface.Current;

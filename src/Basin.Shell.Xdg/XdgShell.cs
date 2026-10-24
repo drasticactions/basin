@@ -51,6 +51,11 @@ public sealed class XdgShell : IDisposable, IXdgWmBaseHandler, IXdgPositionerHan
     public Basin.Seat.Seat? Seat { get; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether <see cref="XdgSurfaceState.PresentedGeometry"/> widens a stale window geometry toward the acknowledged configure size. A surface whose <see cref="XdgSurfaceState.WidenPresentedGeometry"/> is set ignores it. The default is <see langword="true"/>.
+    /// </summary>
+    public bool WidenPresentedGeometry { get; set; } = true;
+
+    /// <summary>
     /// Occurs when a client gives an <c>xdg_surface</c> the toplevel role, before its initial commit. A handler sets <see cref="XdgToplevelWindow.WmCapabilities"/> here.
     /// </summary>
     public event Action<XdgToplevelWindow>? NewToplevel;

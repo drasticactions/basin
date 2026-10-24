@@ -28,5 +28,9 @@ internal sealed partial class LunaShell
         }
 
         card.Content.Filter = quirks.ScaleFilter;
+        if (card.Xdg is { } xdg)
+        {
+            xdg.Xdg.WidenPresentedGeometry = quirks.WidenGeometry;
+        }
     }
 }

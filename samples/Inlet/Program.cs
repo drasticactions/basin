@@ -388,7 +388,7 @@ internal static class Program
                     return;
                 }
 
-                var geometry = toplevel.Xdg.EffectiveGeometry;
+                var geometry = toplevel.Xdg.PresentedGeometry;
                 var state = new ToplevelSessionState
                 {
                     Geometry = new Box(0, 0, geometry.Width, geometry.Height),

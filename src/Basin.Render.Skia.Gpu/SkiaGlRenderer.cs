@@ -152,7 +152,7 @@ public sealed class SkiaGlRenderer : IRenderer
     }
 
     /// <inheritdoc/>
-    public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
+    public DrmFormatSet DmabufTextureFormats => _device.ImportFormats;
 
     /// <inheritdoc/>
     public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;

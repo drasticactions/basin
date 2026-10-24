@@ -105,7 +105,7 @@ internal sealed class ShellAnimations : IDisposable
             previous.Effect.End(stack);
         }
 
-        var geometry = window.Window.Xdg.EffectiveGeometry;
+        var geometry = window.Window.Xdg.PresentedGeometry;
         var bounds = new Box(geometry.X, geometry.Y - ShellTitlebar.Height, geometry.Width, geometry.Height + ShellTitlebar.Height);
         var local = new Box(icon.X - tree.X, icon.Y - tree.Y, icon.Width, icon.Height);
         var effect = new SquashEffect();

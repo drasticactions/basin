@@ -46,7 +46,7 @@ internal sealed partial class MauiComp
             return;
         }
 
-        var geometry = window.Window.Xdg.EffectiveGeometry;
+        var geometry = window.Window.Xdg.PresentedGeometry;
         var borderX = window.Tree.X + geometry.X + (edges.HasFlag(ResizeEdges.Right) ? geometry.Width : 0);
         var borderY = window.Tree.Y + geometry.Y + (edges.HasFlag(ResizeEdges.Bottom) ? geometry.Height : 0);
         _grabX = x - borderX;

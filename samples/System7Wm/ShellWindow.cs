@@ -121,7 +121,7 @@ internal sealed class ShellWindow
 
             if (Xdg is { } xdg)
             {
-                var geometry = xdg.Xdg.EffectiveGeometry;
+                var geometry = xdg.Xdg.PresentedGeometry;
                 return (geometry.Width, geometry.Height);
             }
 

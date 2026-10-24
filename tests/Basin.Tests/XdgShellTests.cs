@@ -433,4 +433,156 @@ public sealed class XdgShellTests
         Assert.DoesNotContain(ConstrainedLeft, legacy.ConfiguredStates);
         Assert.DoesNotContain(ConstrainedTop, legacy.ConfiguredStates);
     }
+
+    [Fact]
+    public void A_stale_window_geometry_presents_the_acked_size()
+    {
+        using var host = new CompositorTestHost();
+        var window = MapStale(host, (0, 0, 400, 300), 800, 600);
+
+        Assert.Equal(new Box(0, 0, 400, 300), window.ServerToplevel.Xdg.EffectiveGeometry);
+        Assert.Equal(new Box(0, 0, 800, 600), window.ServerToplevel.Xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void A_stale_window_geometry_with_a_shadow_margin_presents_the_acked_size_at_its_origin()
+    {
+        using var host = new CompositorTestHost();
+        var window = MapStale(host, (10, 10, 400, 300), 820, 620);
+
+        Assert.Equal(new Box(10, 10, 800, 600), window.ServerToplevel.Xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void A_client_that_draws_smaller_than_the_acked_size_keeps_its_geometry()
+    {
+        using var host = new CompositorTestHost();
+        var window = MapStale(host, (0, 0, 400, 300), 400, 300);
+
+        Assert.Equal(new Box(0, 0, 400, 300), window.ServerToplevel.Xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void A_configure_of_zero_size_presents_the_committed_geometry()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        CommitBuffer(host, window, (0, 0, 40, 30), 60, 50);
+
+        Assert.Equal((0, 0), window.ServerToplevel.Xdg.AckedSize);
+        Assert.Equal(new Box(0, 0, 40, 30), window.ServerToplevel.Xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void A_size_that_the_client_chose_itself_is_not_widened()
+    {
+        using var host = new CompositorTestHost();
+        var window = MappedToplevel.Map(host, host.Client);
+        CommitBuffer(host, window, (0, 0, 40, 30), 60, 50);
+
+        var serial = window.LastConfigureSerial;
+        window.ServerToplevel.SetActivated(true);
+        host.PumpUntil(() => window.LastConfigureSerial != serial);
+        Assert.Equal(40, window.ConfiguredWidth);
+        CommitBuffer(host, window, (0, 0, 30, 20), 60, 50);
+
+        Assert.Equal((0, 0), window.ServerToplevel.Xdg.AckedSize);
+        Assert.Equal(new Box(0, 0, 30, 20), window.ServerToplevel.Xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void The_shell_default_turns_the_widening_off()
+    {
+        using var host = new CompositorTestHost();
+        host.Shell.WidenPresentedGeometry = false;
+        var window = MapStale(host, (0, 0, 400, 300), 800, 600);
+
+        Assert.Equal(new Box(0, 0, 400, 300), window.ServerToplevel.Xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void A_window_override_wins_over_the_shell_default()
+    {
+        using var host = new CompositorTestHost();
+        var window = MapStale(host, (0, 0, 400, 300), 800, 600);
+        var xdg = window.ServerToplevel.Xdg;
+
+        xdg.WidenPresentedGeometry = false;
+        Assert.Equal(new Box(0, 0, 400, 300), xdg.PresentedGeometry);
+
+        host.Shell.WidenPresentedGeometry = false;
+        xdg.WidenPresentedGeometry = true;
+        Assert.Equal(new Box(0, 0, 800, 600), xdg.PresentedGeometry);
+    }
+
+    [Fact]
+    public void Golden_stale_window_geometry_clip()
+    {
+        using var host = new CompositorTestHost();
+        var window = MapStale(host, (0, 0, 60, 40), 120, 80, (120, 80), Fill.Gradient(120, 80));
+        var scene = host.SurfaceScenes.Single(s => ReferenceEquals(s.Surface, window.ServerSurface));
+        var xdg = window.ServerToplevel.Xdg;
+        scene.Tree.SetPosition(20, 20);
+
+        scene.Tree.ClipBox = xdg.EffectiveGeometry;
+        host.RenderFrame();
+        Golden.AssertMatches(host, "stale-geometry-cropped");
+
+        scene.Tree.ClipBox = xdg.PresentedGeometry;
+        host.RenderFrame();
+        Golden.AssertMatches(host, "stale-geometry-presented");
+    }
+
+    [Fact]
+    public void A_window_rule_turns_the_widening_off_for_one_app()
+    {
+        using var host = new CompositorTestHost();
+        var rules = Basin.Config.WindowRule.MostSpecificFirst(new[]
+        {
+            new Basin.Config.WindowRule { AppIds = ["electron"], Quirks = new Basin.Config.WindowQuirks { WidenGeometry = false } },
+        });
+        var window = MapStale(host, (0, 0, 400, 300), 800, 600);
+        var xdg = window.ServerToplevel.Xdg;
+
+        xdg.WidenPresentedGeometry = Basin.Config.WindowRule.QuirksFor(rules, new Basin.Config.WindowFacts { AppId = "basin-test" }).WidenGeometry;
+        Assert.Equal(new Box(0, 0, 800, 600), xdg.PresentedGeometry);
+
+        xdg.WidenPresentedGeometry = Basin.Config.WindowRule.QuirksFor(rules, new Basin.Config.WindowFacts { AppId = "electron" }).WidenGeometry;
+        Assert.Equal(new Box(0, 0, 400, 300), xdg.PresentedGeometry);
+    }
+
+    private static MappedToplevel MapStale(
+        CompositorTestHost host,
+        (int X, int Y, int Width, int Height) geometry,
+        int bufferWidth,
+        int bufferHeight,
+        (int Width, int Height)? configured = null,
+        Action<nint, int>? fill = null)
+    {
+        var (width, height) = configured ?? (800, 600);
+        var window = MappedToplevel.Map(host, host.Client);
+        CommitBuffer(host, window, geometry, geometry.Width, geometry.Height);
+
+        window.ServerToplevel.SetSize(width, height);
+        host.PumpUntil(() => window.ConfiguredWidth == width && window.ConfiguredHeight == height);
+        CommitBuffer(host, window, geometry, bufferWidth, bufferHeight, fill);
+        Assert.Equal((width, height), window.ServerToplevel.Xdg.AckedSize);
+        return window;
+    }
+
+    private static void CommitBuffer(
+        CompositorTestHost host,
+        MappedToplevel window,
+        (int X, int Y, int Width, int Height) geometry,
+        int width,
+        int height,
+        Action<nint, int>? fill = null)
+    {
+        var buffer = host.Client.CreateBuffer(width, height, fill ?? Fill.Solid(width, height, 0xFF336699));
+        window.XdgSurface.SetWindowGeometry(geometry.X, geometry.Y, geometry.Width, geometry.Height);
+        window.Surface.Attach(buffer.Proxy, 0, 0);
+        window.Surface.Damage(0, 0, width, height);
+        window.Surface.Commit();
+        host.PumpToServer();
+    }
 }

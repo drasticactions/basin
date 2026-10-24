@@ -18,6 +18,7 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
     private int _pendingWidth;
     private int _pendingHeight;
     private bool _sizeRequested;
+    private bool _sizeAdopted;
     private bool _configureScheduled;
 
     internal XdgToplevelWindow(XdgSurfaceState xdg, uint id)
@@ -274,7 +275,7 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
     {
         get
         {
-            var geometry = Xdg.EffectiveGeometry;
+            var geometry = Xdg.PresentedGeometry;
             return (geometry.Width, geometry.Height);
         }
     }
@@ -489,6 +490,7 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
         _pendingWidth = width;
         _pendingHeight = height;
         _sizeRequested = true;
+        _sizeAdopted = false;
         ScheduleConfigure();
     }
 
@@ -502,14 +504,16 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
             return;
         }
 
-        var geometry = Xdg.EffectiveGeometry;
-        if (geometry.Width <= 0 || geometry.Height <= 0)
+        var geometry = Xdg.PresentedGeometry;
+        if (geometry.Width <= 0 || geometry.Height <= 0 ||
+            (geometry.Width == _pendingWidth && geometry.Height == _pendingHeight))
         {
             return;
         }
 
         _pendingWidth = geometry.Width;
         _pendingHeight = geometry.Height;
+        _sizeAdopted = true;
     }
 
     /// <summary>
@@ -604,7 +608,10 @@ public sealed class XdgToplevelWindow : IToplevelHandle, IXdgToplevelHandler
         _sizeRequested = false;
 
         Restoring = null;
-        return transaction is null ? Xdg.SendConfigure() : Xdg.SendConfigure(transaction);
+        var (width, height) = _sizeAdopted ? (0, 0) : (_pendingWidth, _pendingHeight);
+        return transaction is null
+            ? Xdg.SendConfigure(width, height)
+            : Xdg.SendConfigure(transaction, width, height);
     }
 
     private bool _wmCapabilitiesSent;

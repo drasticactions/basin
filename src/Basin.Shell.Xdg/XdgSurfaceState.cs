@@ -9,7 +9,7 @@ namespace Basin.Shell.Xdg;
 /// </summary>
 public sealed class XdgSurfaceState : IXdgSurfaceHandler
 {
-    private readonly List<uint> _pendingConfigures = [];
+    private readonly List<(uint Serial, int Width, int Height)> _pendingConfigures = [];
     private Box _pendingGeometry;
     private bool _geometrySet;
     private bool _initialConfigureSent;
@@ -19,6 +19,10 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     private uint _awaitedSerial;
     private bool _awaitingSerial;
     private TransactionParticipant _participant;
+    private int _ackedWidth;
+    private int _ackedHeight;
+    private int _appliedWidth;
+    private int _appliedHeight;
 
     internal XdgSurfaceState(XdgShell shell, XdgWmBaseResource wmBase, uint id, Surface surface)
     {
@@ -121,6 +125,38 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
         : WindowGeometry;
 
     /// <summary>
+    /// Gets the size that the compositor chose in the last acknowledged configure, as of the next commit, in logical pixels. A value of 0 means that the client chose that dimension, or that the configure repeated a size that the client committed.
+    /// </summary>
+    public (int Width, int Height) AckedSize => (_appliedWidth, _appliedHeight);
+
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="PresentedGeometry"/> widens the window geometry toward <see cref="AckedSize"/>. The value <see langword="null"/> follows <see cref="XdgShell.WidenPresentedGeometry"/>.
+    /// </summary>
+    public bool? WidenPresentedGeometry { get; set; }
+
+    /// <summary>
+    /// Gets the box that the compositor shows, in surface-local logical pixels. It is <see cref="EffectiveGeometry"/>, with each dimension widened toward the non-zero <see cref="AckedSize"/> as far as the surface reaches from the geometry origin. It never shrinks <see cref="EffectiveGeometry"/>.
+    /// </summary>
+    public Box PresentedGeometry
+    {
+        get
+        {
+            var geometry = EffectiveGeometry;
+            if (!(WidenPresentedGeometry ?? Shell.WidenPresentedGeometry))
+            {
+                return geometry;
+            }
+
+            var width = Widen(geometry.Width, _appliedWidth, Surface.Current.Width - geometry.X);
+            var height = Widen(geometry.Height, _appliedHeight, Surface.Current.Height - geometry.Y);
+            return new Box(geometry.X, geometry.Y, width, height);
+
+            static int Widen(int committed, int acked, int reach) =>
+                acked > committed ? Math.Max(committed, Math.Min(acked, reach)) : committed;
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating whether the surface is mapped. A commit maps it when the <c>wl_surface</c> is mapped, and the destruction of the role, the <c>xdg_surface</c> or the <c>wl_surface</c> unmaps it.
     /// </summary>
     public bool IsMapped => _mapped;
@@ -163,9 +199,14 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     public uint SendConfigure(Transaction transaction)
     {
         ArgumentNullException.ThrowIfNull(transaction);
+        return SendConfigure(transaction, 0, 0);
+    }
+
+    internal uint SendConfigure(Transaction transaction, int width, int height)
+    {
         ReleaseParticipant();
 
-        var serial = SendConfigure();
+        var serial = SendConfigure(width, height);
         _awaitedSerial = serial;
         _awaitingSerial = true;
         _participant = transaction.Join();
@@ -180,8 +221,13 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     /// <returns>The configure serial.</returns>
     public uint SendConfigure()
     {
+        return SendConfigure(0, 0);
+    }
+
+    internal uint SendConfigure(int width, int height)
+    {
         var serial = Shell.Display.NextSerial();
-        _pendingConfigures.Add(serial);
+        _pendingConfigures.Add((serial, width, height));
         Resource.SendConfigure(serial);
         _initialConfigureSent = true;
         return serial;
@@ -189,14 +235,15 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
 
     private void OnAckConfigure(uint serial)
     {
-        var index = _pendingConfigures.IndexOf(serial);
+        var index = IndexOfSerial(serial);
         if (index < 0)
         {
             Resource.PostError((uint)XdgSurface.Error.InvalidSerial, $"Serial {serial} does not match a sent configure.");
             return;
         }
 
-        var awaitedIndex = _awaitingSerial ? _pendingConfigures.IndexOf(_awaitedSerial) : -1;
+        var awaitedIndex = _awaitingSerial ? IndexOfSerial(_awaitedSerial) : -1;
+        (_, _ackedWidth, _ackedHeight) = _pendingConfigures[index];
         _pendingConfigures.RemoveRange(0, index + 1);
         _configureAcked = true;
         _ackedSinceCommit = true;
@@ -208,6 +255,19 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
         (Role as XdgPopupWindow)?.OnAckConfigure();
     }
 
+    private int IndexOfSerial(uint serial)
+    {
+        for (var i = 0; i < _pendingConfigures.Count; i++)
+        {
+            if (_pendingConfigures[i].Serial == serial)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>
     /// Gets a value indicating whether the <c>wl_surface</c> committed at least once after the <c>xdg_surface</c> was created.
     /// </summary>
@@ -217,6 +277,7 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
     {
         HasCommitted = true;
         _ackedSinceCommit = false;
+        (_appliedWidth, _appliedHeight) = (_ackedWidth, _ackedHeight);
         if (_geometrySet)
         {
             WindowGeometry = _pendingGeometry;
@@ -258,6 +319,8 @@ public sealed class XdgSurfaceState : IXdgSurfaceHandler
             _initialConfigureSent = false;
             _configureAcked = false;
             _ackedSinceCommit = false;
+            (_ackedWidth, _ackedHeight) = (0, 0);
+            (_appliedWidth, _appliedHeight) = (0, 0);
         }
 
         SetMapped(Surface.IsMapped);

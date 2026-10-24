@@ -299,7 +299,7 @@ public sealed class SdlToplevelWindows : IDisposable
         {
             case ToplevelRequestKind.Resize:
                 var frame = FrameOf(entry);
-                var geometry = toplevel.Xdg.EffectiveGeometry;
+                var geometry = toplevel.Xdg.PresentedGeometry;
                 var width = request.Geometry.Width + frame.Width - geometry.Width;
                 var height = request.Geometry.Height + frame.Height - geometry.Height;
                 if (request.Geometry.Width <= 0 || request.Geometry.Height <= 0)
@@ -323,7 +323,7 @@ public sealed class SdlToplevelWindows : IDisposable
 
     private static Box FrameOf(Entry entry)
     {
-        var geometry = entry.Toplevel.Xdg.EffectiveGeometry;
+        var geometry = entry.Toplevel.Xdg.PresentedGeometry;
         if (!entry.ClientDecorated)
         {
             return geometry;
@@ -531,7 +531,7 @@ public sealed class SdlToplevelWindows : IDisposable
         if (owner.Popup is null)
         {
             var frame = FrameOf(owner);
-            var ownerGeometry = owner.Toplevel.Xdg.EffectiveGeometry;
+            var ownerGeometry = owner.Toplevel.Xdg.PresentedGeometry;
             (marginX, marginY) = (ownerGeometry.X - frame.X, ownerGeometry.Y - frame.Y);
         }
 
@@ -699,7 +699,7 @@ public sealed class SdlToplevelWindows : IDisposable
         var geometry = FrameOf(entry);
         var cellY = entry.Cell * CellStride;
         window.View.SceneOutput.Position = new Point(geometry.X, cellY + geometry.Y);
-        _toplevelSource?.SetGeometry(entry.Toplevel, geometry.Translated(0, cellY), entry.Toplevel.Xdg.EffectiveGeometry.Translated(0, cellY));
+        _toplevelSource?.SetGeometry(entry.Toplevel, geometry.Translated(0, cellY), entry.Toplevel.Xdg.PresentedGeometry.Translated(0, cellY));
         if (geometry.Width <= 0 || geometry.Height <= 0)
         {
             return;
@@ -731,7 +731,7 @@ public sealed class SdlToplevelWindows : IDisposable
         window.View.Reconfigure(width, height, scale, OutputTransform.Normal);
         Advertise(entry);
         var frame = FrameOf(entry);
-        var geometry = entry.Toplevel.Xdg.EffectiveGeometry;
+        var geometry = entry.Toplevel.Xdg.PresentedGeometry;
         var logicalWidth = Math.Max(1, (int)Math.Round(width / scale) - (frame.Width - geometry.Width));
         var logicalHeight = Math.Max(1, (int)Math.Round(height / scale) - (frame.Height - geometry.Height));
         var (configuredWidth, configuredHeight) = entry.Toplevel.ConfiguredSize;

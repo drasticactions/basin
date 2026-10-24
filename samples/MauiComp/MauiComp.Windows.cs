@@ -272,7 +272,7 @@ internal sealed partial class MauiComp
         }
 
         var work = WorkArea();
-        var geometry = window.Window.Xdg.EffectiveGeometry;
+        var geometry = window.Window.Xdg.PresentedGeometry;
         var x = work.X + Math.Max(0, (work.Width - geometry.Width) / 2) - geometry.X;
         var y = work.Y + ShellTitlebar.Height + Math.Max(0, (work.Height - ShellTitlebar.Height - geometry.Height) / 2) - geometry.Y;
         window.Tree.SetPosition(x, y);
@@ -495,7 +495,7 @@ internal sealed partial class MauiComp
     private void PlaceFullscreen(ShellWindow window)
     {
         var box = PrimaryBox();
-        var geometry = window.Window.Xdg.EffectiveGeometry;
+        var geometry = window.Window.Xdg.PresentedGeometry;
         var x = box.X + Math.Max(0, (box.Width - geometry.Width) / 2) - geometry.X;
         var y = box.Y + Math.Max(0, (box.Height - geometry.Height) / 2) - geometry.Y;
         window.Tree.SetPosition(x, y);
@@ -503,7 +503,7 @@ internal sealed partial class MauiComp
 
     private void PlaceRestored(ShellWindow window)
     {
-        var geometry = window.Window.Xdg.EffectiveGeometry;
+        var geometry = window.Window.Xdg.PresentedGeometry;
         window.Tree.SetPosition(window.Restore.X - geometry.X, window.Restore.Y - geometry.Y);
         if (geometry.Width == window.Restore.Width && geometry.Height == window.Restore.Height)
         {

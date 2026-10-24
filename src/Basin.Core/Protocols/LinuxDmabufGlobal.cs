@@ -382,7 +382,7 @@ public sealed class LinuxDmabufGlobal : IDisposable, IZwpLinuxDmabufV1Handler
         byte[] indices)
     {
         feedback.SendTrancheTargetDevice(device);
-        feedback.SendTrancheFlags(flags);
+        feedback.SendTrancheFlags(feedback.Version >= 6 ? flags : flags & ZwpLinuxDmabufFeedbackV1.TrancheFlags.Scanout);
         feedback.SendTrancheFormats(indices);
         feedback.SendTrancheDone();
         return flags;

@@ -137,7 +137,7 @@ internal sealed partial class TabWm
 
         void Align()
         {
-            var geometry = window.Xdg.EffectiveGeometry;
+            var geometry = window.Xdg.PresentedGeometry;
             scene.Tree.SetPosition(-geometry.X, -geometry.Y);
             var committed = (geometry.Width, geometry.Height);
             if (tabWindow.Fullscreen && tabWindow.Tab is { } tab && !window.Xdg.HasUnackedConfigure)

@@ -164,7 +164,7 @@ internal sealed class ShellTitlebar : IDisposable
             return false;
         }
 
-        var geometry = _window.Window.Xdg.EffectiveGeometry;
+        var geometry = _window.Window.Xdg.PresentedGeometry;
         if (geometry.Width <= 0)
         {
             return false;
@@ -224,7 +224,7 @@ internal sealed class ShellTitlebar : IDisposable
             return;
         }
 
-        var geometry = _window.Window.Xdg.EffectiveGeometry;
+        var geometry = _window.Window.Xdg.PresentedGeometry;
         var shown = _framed && Visible;
         var height = geometry.Height + EdgeWidth;
         Place(_edges[0], geometry.X - EdgeWidth, geometry.Y, EdgeWidth, height, shown);

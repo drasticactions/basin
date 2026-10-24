@@ -84,6 +84,10 @@ internal sealed partial class Shell
         }
 
         app.Frame.Filter = quirks.ScaleFilter;
+        if (app.Xdg is { } xdg)
+        {
+            xdg.Xdg.WidenPresentedGeometry = quirks.WidenGeometry;
+        }
     }
 
     internal void Reload()

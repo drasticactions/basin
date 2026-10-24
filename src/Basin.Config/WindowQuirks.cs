@@ -13,7 +13,7 @@ public sealed record WindowQuirks
     /// </summary>
     public static readonly string[] Keys =
         ["letterbox", "scale_filter", "readiness", "force_unmaximize", "allow_client_move", "emulated_modes", "frame_limit",
-         "inverse_tone_mapping", "nested_confine_lock"];
+         "inverse_tone_mapping", "nested_confine_lock", "widen_geometry"];
 
     /// <summary>
     /// Gets the set with no opinion on any quirk.
@@ -66,6 +66,11 @@ public sealed record WindowQuirks
     public bool? NestedConfineLock { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether the presented geometry of an xdg window can grow from a stale window geometry toward the acknowledged configure size.
+    /// </summary>
+    public bool? WidenGeometry { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether the set has no opinion on any quirk.
     /// </summary>
     public bool IsEmpty => this == None;
@@ -86,6 +91,7 @@ public sealed record WindowQuirks
         FrameLimit = FrameLimit ?? weaker.FrameLimit,
         InverseToneMapping = InverseToneMapping ?? weaker.InverseToneMapping,
         NestedConfineLock = NestedConfineLock ?? weaker.NestedConfineLock,
+        WidenGeometry = WidenGeometry ?? weaker.WidenGeometry,
     };
 
     /// <summary>
@@ -151,6 +157,7 @@ public sealed record WindowQuirks
             FrameLimit = Count(take("frame_limit"), where("frame_limit"), log),
             InverseToneMapping = Flag(take("inverse_tone_mapping"), where("inverse_tone_mapping"), log),
             NestedConfineLock = Flag(take("nested_confine_lock"), where("nested_confine_lock"), log),
+            WidenGeometry = Flag(take("widen_geometry"), where("widen_geometry"), log),
         };
     }
 

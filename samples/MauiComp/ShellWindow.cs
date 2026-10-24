@@ -38,7 +38,7 @@ internal sealed class ShellWindow
     {
         get
         {
-            var geometry = Window.Xdg.EffectiveGeometry;
+            var geometry = Window.Xdg.PresentedGeometry;
             return new Box(Tree.X + geometry.X, Tree.Y + geometry.Y, geometry.Width, geometry.Height);
         }
     }

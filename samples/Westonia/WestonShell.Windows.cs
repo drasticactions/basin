@@ -527,7 +527,7 @@ internal sealed partial class WestonShell
 
         void Align()
         {
-            var geometry = window.Xdg.EffectiveGeometry;
+            var geometry = window.Xdg.PresentedGeometry;
             scene.Tree.SetPosition(-geometry.X, -geometry.Y);
             var committed = (geometry.Width, geometry.Height);
             if (shellWindow.Fullscreen && !window.Xdg.HasUnackedConfigure)
@@ -632,7 +632,7 @@ internal sealed partial class WestonShell
         }
 
         var area = WorkArea?.Invoke(output) ?? new Box(0, 0, 1280, 720);
-        var geometry = window.Window.Xdg.EffectiveGeometry;
+        var geometry = window.Window.Xdg.PresentedGeometry;
         var x = area.X + Math.Max(0, (area.Width - geometry.Width) / 2);
         var y = area.Y + Math.Max(0, (area.Height - geometry.Height) / 2);
         window.MoveTo(x, y);

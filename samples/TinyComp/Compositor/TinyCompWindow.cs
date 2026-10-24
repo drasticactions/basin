@@ -32,6 +32,7 @@ internal sealed partial class TinyComp
                     toplevel.AppId, toplevel.Title, toplevel.Parent is not null, ProcessIdentity.Of(toplevel.Surface));
                 Rule = comp._config.RuleFor(Facts);
                 Quirks = Basin.Config.WindowRule.QuirksFor(comp._config.Rules, Facts);
+                toplevel.Xdg.WidenPresentedGeometry = Quirks.WidenGeometry;
                 CornerRadius = Rule?.CornerRadius ?? comp._cornerRadius;
                 Workspace = comp.WorkspaceForRule(Rule) ?? comp.CurrentWorkspace();
                 Tree = new SceneTree(Workspace?.Tree ?? comp._layers.Windows) { DebugName = $"window {toplevel.AppId}" };
@@ -229,7 +230,7 @@ internal sealed partial class TinyComp
                 return;
             }
 
-            var geometry = Toplevel.Xdg.EffectiveGeometry;
+            var geometry = Toplevel.Xdg.PresentedGeometry;
             var configured = Toplevel.ConfiguredSize;
             var committed = (geometry.Width, geometry.Height);
             var mode = Toplevel.Xdg.HasUnackedConfigure
@@ -284,7 +285,7 @@ internal sealed partial class TinyComp
         {
             get
             {
-                var geometry = Toplevel.Xdg.EffectiveGeometry;
+                var geometry = Toplevel.Xdg.PresentedGeometry;
                 return (geometry.Width, geometry.Height);
             }
         }
@@ -420,7 +421,7 @@ internal sealed partial class TinyComp
             var comp = _comp;
             var view = comp.Views.FirstOrDefault(v => comp._layout.OutputAt(comp._cursorX, comp._cursorY) == v.Output)
                 ?? comp.Views[0];
-            var geometry = Toplevel.Xdg.EffectiveGeometry;
+            var geometry = Toplevel.Xdg.PresentedGeometry;
             _maximizeRestore = _maximizeRestore.Saving(new Box(X, Y, geometry.Width, geometry.Height));
             ApplyMaximizeGeometry(view);
         }
@@ -676,7 +677,7 @@ internal sealed partial class TinyComp
                     return default;
                 }
 
-                var g = Toplevel.Xdg.EffectiveGeometry;
+                var g = Toplevel.Xdg.PresentedGeometry;
                 var insets = _frame.Measure(BuildState(), _comp.ScaleAt(X + 1, Y + 1));
                 return new Box(
                     X + g.X - insets.Left,
@@ -693,7 +694,7 @@ internal sealed partial class TinyComp
                 return;
             }
 
-            var g = Toplevel.Xdg.EffectiveGeometry;
+            var g = Toplevel.Xdg.PresentedGeometry;
             var client = new Box(X + g.X, Y + g.Y, Math.Max(g.Width, 1), Math.Max(g.Height, 1));
             var frame = _frame is null ? client : FrameBox;
             _comp._xdgToplevels.SetGeometry(Toplevel, frame, client);
@@ -706,7 +707,7 @@ internal sealed partial class TinyComp
                 return;
             }
 
-            var geometry = Toplevel.Xdg.EffectiveGeometry;
+            var geometry = Toplevel.Xdg.PresentedGeometry;
             var visible = geometry.Width > 0 && geometry.Height > 0 &&
                 !Toplevel.HasState(Basin.Shell.Xdg.Protocol.XdgToplevel.State.Fullscreen);
             _frame.Visible = visible;
@@ -731,7 +732,7 @@ internal sealed partial class TinyComp
         {
             get
             {
-                var g = Toplevel.Xdg.EffectiveGeometry;
+                var g = Toplevel.Xdg.PresentedGeometry;
                 return new Box(X + g.X, Y + g.Y, Math.Max(g.Width, 1), Math.Max(g.Height, 1));
             }
         }

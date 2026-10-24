@@ -96,7 +96,7 @@ internal sealed class TabWindow
         {
             if (Xdg is { } xdg)
             {
-                var geometry = xdg.Xdg.EffectiveGeometry;
+                var geometry = xdg.Xdg.PresentedGeometry;
                 return (geometry.Width, geometry.Height);
             }
 

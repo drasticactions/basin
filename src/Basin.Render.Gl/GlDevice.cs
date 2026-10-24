@@ -76,7 +76,8 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         }
 
         ImageTargetTexture = (delegate* unmanaged[Cdecl]<uint, void*, void>)EglProc.Load("glEGLImageTargetTexture2DOES");
-        SampleableFormats = QuerySampleableFormats();
+        ImportFormats = QueryImportFormats();
+        SampleableFormats = Subset(ImportFormats, DrmFormat.Argb8888, DrmFormat.Xrgb8888);
         ImportsLinearYuvPlanes = ImportsLinear(DrmFormat.R8) && ImportsLinear(DrmFormat.Gr88);
     }
 
@@ -90,6 +91,11 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
     /// Gets the ARGB8888 and XRGB8888 modifiers that EGL can import as 2D textures. Each format also lists the invalid modifier, for a buffer with an implicit modifier.
     /// </summary>
     public DrmFormatSet SampleableFormats { get; }
+
+    /// <summary>
+    /// Gets the 8-bit RGB modifiers that EGL can import as 2D textures, in both channel orders. Each format also lists the invalid modifier, for a buffer with an implicit modifier.
+    /// </summary>
+    public DrmFormatSet ImportFormats { get; }
 
     /// <summary>
     /// Gets a value indicating whether EGL imports linear R8 and GR88 planes as 2D textures, which the NV12 path needs.
@@ -372,7 +378,21 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         return false;
     }
 
-    private DrmFormatSet QuerySampleableFormats()
+    private static DrmFormatSet Subset(DrmFormatSet formats, params DrmFormat[] keep)
+    {
+        var set = new DrmFormatSet();
+        foreach (var format in keep)
+        {
+            foreach (var modifier in formats.ModifiersOf(format))
+            {
+                set.Add(format, modifier);
+            }
+        }
+
+        return set;
+    }
+
+    private DrmFormatSet QueryImportFormats()
     {
         var set = new DrmFormatSet();
         var queryFormats = (delegate* unmanaged[Cdecl]<void*, int, int*, int*, uint>)EglProc.Load("eglQueryDmaBufFormatsEXT");
@@ -389,7 +409,7 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         foreach (var fourcc in formats)
         {
             var format = (DrmFormat)(uint)fourcc;
-            if (!PixelFormatInfo.TryGet(format, out _))
+            if (format is not (DrmFormat.Argb8888 or DrmFormat.Xrgb8888 or DrmFormat.Abgr8888 or DrmFormat.Xbgr8888))
             {
                 continue;
             }

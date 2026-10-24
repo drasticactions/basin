@@ -61,7 +61,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IToplevelGeometryFeed, 
         }
 
         var (width, height) = window.ConfiguredSize;
-        var geometry = xdg.EffectiveGeometry;
+        var geometry = xdg.PresentedGeometry;
         return (width > 0 && width != geometry.Width) || (height > 0 && height != geometry.Height);
     }
 
@@ -202,7 +202,7 @@ public sealed class XdgToplevelSource : IToplevelSource, IToplevelGeometryFeed, 
                 }
 
                 var drawn = boxes[i].Box;
-                var geometry = window.Xdg.EffectiveGeometry;
+                var geometry = window.Xdg.PresentedGeometry;
                 var client = new Box(drawn.X + geometry.X, drawn.Y + geometry.Y, geometry.Width, geometry.Height);
                 SetGeometry(window, client, client);
                 break;

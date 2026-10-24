@@ -23,11 +23,19 @@ public sealed class XdgShellModule : IProtocolModule
     /// </summary>
     public XdgToplevelSource? Toplevels { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the shell widens a stale window geometry toward the acknowledged configure size. It sets <see cref="XdgShell.WidenPresentedGeometry"/>. The default is <see langword="true"/>.
+    /// </summary>
+    public bool WidenPresentedGeometry { get; init; } = true;
+
     /// <inheritdoc/>
     public IDisposable Install(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        Shell = new XdgShell(services.Display, services.Require<CompositorGlobal>(), services.Find<Seat.Seat>());
+        Shell = new XdgShell(services.Display, services.Require<CompositorGlobal>(), services.Find<Seat.Seat>())
+        {
+            WidenPresentedGeometry = WidenPresentedGeometry,
+        };
         Toplevels = new XdgToplevelSource(Shell) { Placement = services.Find<IToplevelPlacement>() };
         services.Use(Shell);
         services.Use(Toplevels);

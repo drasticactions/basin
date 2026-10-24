@@ -528,7 +528,7 @@ internal sealed class RiverWindow : IRiverWindowV1Handler
     {
         if (Toplevel is { } toplevel)
         {
-            var geometry = toplevel.Xdg.EffectiveGeometry;
+            var geometry = toplevel.Xdg.PresentedGeometry;
             return new Size(geometry.Width, geometry.Height);
         }
 

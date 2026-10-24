@@ -73,7 +73,7 @@ internal sealed class DungeonWmWindow
     public int MaxHeight => Toplevel?.MaxHeight ?? X?.MaxHeight ?? 0;
 
     public Box Geometry => Toplevel is { } toplevel
-        ? toplevel.Xdg.EffectiveGeometry
+        ? toplevel.Xdg.PresentedGeometry
         : new Box(0, 0, X?.Width ?? 1, X?.Height ?? 1);
 
     public void SetActivated(bool activated) => Handle.SetActivated(activated);
@@ -99,7 +99,7 @@ internal sealed class DungeonWmWindow
         {
             if (fullscreen)
             {
-                var geometry = toplevel.Xdg.EffectiveGeometry;
+                var geometry = toplevel.Xdg.PresentedGeometry;
                 _restore = _restore.Saving(new Box(0, 0, geometry.Width, geometry.Height));
                 toplevel.SetFullscreen(true, area.Width, area.Height);
             }

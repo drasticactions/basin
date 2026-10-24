@@ -60,7 +60,7 @@ internal sealed class ShellFrame : IDisposable
 
     public bool Update(double scale)
     {
-        var geometry = _window.Window.Xdg.EffectiveGeometry;
+        var geometry = _window.Window.Xdg.PresentedGeometry;
         return _frame.Update(_window.X, _window.Y, geometry.Width, geometry.Height, scale);
     }
 

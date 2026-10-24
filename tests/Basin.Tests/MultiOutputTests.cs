@@ -251,7 +251,8 @@ public sealed class ScanoutFeedbackTests
         host.PumpToServer();
         var serverSurface = host.Compositor.Surfaces.Single();
 
-        var feedback = host.Client.Dmabuf!.GetSurfaceFeedback(surface);
+        var dmabuf = host.Client.BindAt<Basin.Protocol.ZwpLinuxDmabufV1>("zwp_linux_dmabuf_v1", 6);
+        var feedback = dmabuf.GetSurfaceFeedback(surface);
         var trancheFlags = new List<uint>();
         var doneCount = 0;
         feedback.FormatTable += (_, e) => close(e.Fd);

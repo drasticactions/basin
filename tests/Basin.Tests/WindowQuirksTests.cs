@@ -26,6 +26,7 @@ public sealed class WindowQuirksTests
             force_unmaximize = true
             allow_client_move = true
             emulated_modes = false
+            widen_geometry = false
             """);
         var expected = new WindowQuirks
         {
@@ -35,6 +36,7 @@ public sealed class WindowQuirksTests
             ForceUnmaximize = true,
             AllowClientMove = true,
             EmulatedModes = false,
+            WidenGeometry = false,
         };
 
         var log = BasinLog.For("test");

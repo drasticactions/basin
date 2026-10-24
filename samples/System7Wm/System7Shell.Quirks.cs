@@ -27,6 +27,11 @@ internal sealed partial class System7Shell
             _x11?.Refit(x11);
         }
 
+        if (window.Xdg is { } xdg)
+        {
+            xdg.Xdg.WidenPresentedGeometry = quirks.WidenGeometry;
+        }
+
         if (window.ContentNode is SceneTree content)
         {
             content.Filter = quirks.ScaleFilter;

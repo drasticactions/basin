@@ -24,5 +24,5 @@ internal sealed class Toplevel(XdgToplevelWindow window, SceneSurface scene)
 
     public Surface Surface => Window.Surface;
 
-    public Box Geometry => Window.Xdg.EffectiveGeometry;
+    public Box Geometry => Window.Xdg.PresentedGeometry;
 }

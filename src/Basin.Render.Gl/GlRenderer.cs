@@ -85,13 +85,13 @@ public sealed unsafe class GlRenderer : IRenderer
     {
         if (!_device.ImportsLinearYuvPlanes)
         {
-            return _device.SampleableFormats;
+            return _device.ImportFormats;
         }
 
         var formats = new DrmFormatSet();
-        foreach (var format in _device.SampleableFormats.Formats)
+        foreach (var format in _device.ImportFormats.Formats)
         {
-            foreach (var modifier in _device.SampleableFormats.ModifiersOf(format))
+            foreach (var modifier in _device.ImportFormats.ModifiersOf(format))
             {
                 formats.Add(format, modifier);
             }

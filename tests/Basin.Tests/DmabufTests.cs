@@ -452,6 +452,77 @@ public sealed class DmabufTests
         Assert.True(verified.Count >= 3, $"only {verified.Count} modifiers verified: {string.Join(", ", verified.Select(m => $"0x{m:X}"))}");
     }
 
+    [Theory]
+    [InlineData("gl", DrmFormat.Abgr8888, DrmFormatSet.ModifierInvalid)]
+    [InlineData("gl", DrmFormat.Xbgr8888, DrmFormatSet.ModifierLinear)]
+    [InlineData("skia-gl", DrmFormat.Abgr8888, DrmFormatSet.ModifierInvalid)]
+    [InlineData("skia-gl", DrmFormat.Xbgr8888, DrmFormatSet.ModifierLinear)]
+    [InlineData("vulkan", DrmFormat.Abgr8888, DrmFormatSet.ModifierLinear)]
+    public unsafe void A_bgr_ordered_dmabuf_draws_with_its_channels_in_order(string renderer, DrmFormat format, ulong wireModifier)
+    {
+        CompositorTestHost.SkipUnlessRunnable(renderer);
+        Assert.SkipUnless(HasRenderNode, "no render node");
+
+        using var host = new CompositorTestHost(renderer: renderer);
+        Assert.True(host.Renderer.DmabufTextureFormats.Contains(format, wireModifier), $"{renderer} does not advertise 0x{(uint)format:x8} with 0x{wireModifier:X}");
+        using var fill = host.Renderer is Basin.Render.Gl.GlRenderer or Basin.Render.Skia.SkiaGlRenderer
+            ? null
+            : new Basin.Render.Gl.GlRenderer(CompositorTestHost.RenderNodePath);
+        var device = host.Renderer switch
+        {
+            Basin.Render.Gl.GlRenderer gl => gl.Device,
+            Basin.Render.Skia.SkiaGlRenderer skia => skia.Device,
+            _ => fill!.Device,
+        };
+        using var allocator = device.CreateAllocator();
+        var source = allocator.Allocate(32, 32, format, [DrmFormatSet.ModifierLinear], BufferUse.Render);
+        Assert.NotNull(source);
+        try
+        {
+            Assert.True(source.BeginDataAccess(BufferDataAccess.Write, out var view));
+            for (var y = 0; y < 32; y++)
+            {
+                var row = (byte*)view.Data + (y * view.Stride);
+                for (var x = 0; x < 32; x++)
+                {
+                    row[(x * 4) + 0] = 0xE0;
+                    row[(x * 4) + 1] = 0x40;
+                    row[(x * 4) + 2] = 0x10;
+                    row[(x * 4) + 3] = 0xFF;
+                }
+            }
+
+            source.EndDataAccess();
+            Assert.True(source.TryGetDmabuf(out var attributes));
+
+            var bufferParams = host.Client.Dmabuf!.CreateParams();
+            bufferParams.Add(attributes.Fds[0], 0, attributes.Offsets[0], attributes.Strides[0], (uint)(wireModifier >> 32), (uint)wireModifier);
+            var wlBuffer = bufferParams.CreateImmed(32, 32, (uint)format, 0);
+            bufferParams.Dispose();
+
+            var surface = host.Client.Compositor.CreateSurface();
+            surface.Attach(wlBuffer, 0, 0);
+            surface.Commit();
+            host.PumpToServer();
+            try
+            {
+                host.RenderFrame();
+                Assert.Equal(0xFFE04010u, host.Pixel(2, 2));
+                Assert.Equal(0xFFE04010u, host.Pixel(29, 29));
+            }
+            finally
+            {
+                surface.Dispose();
+                wlBuffer.Dispose();
+                host.PumpToClient();
+            }
+        }
+        finally
+        {
+            source.Destroy();
+        }
+    }
+
     private static bool SurvivesItsOwnRenderer(IRenderer renderer, IBuffer filled, uint color)
     {
         using var texture = renderer.ImportTexture(filled);
@@ -505,7 +576,7 @@ public sealed class DmabufVersionTests
     [Theory]
     [InlineData(5u, true)]
     [InlineData((uint)LinuxDmabufGlobal.Version, false)]
-    public void Main_device_is_sent_below_six_only(uint version, bool expectMainDevice)
+    public void Main_device_and_the_sampling_flag_follow_the_bound_version(uint version, bool belowSix)
     {
         Assert.SkipUnless(HasRenderNode, "no render node");
         using var host = new CompositorTestHost();
@@ -523,11 +594,18 @@ public sealed class DmabufVersionTests
         feedback.Done += (_, _) => done = true;
         host.PumpUntil(() => done);
 
-        Assert.Equal(expectMainDevice ? 1 : 0, mainDevices);
+        Assert.Equal(belowSix ? 1 : 0, mainDevices);
 
         Assert.NotEmpty(trancheFlags);
-        Assert.All(trancheFlags, flags => Assert.NotEqual(0u, flags));
-        Assert.Contains(trancheFlags, flags => (flags & 2) != 0);
+        if (belowSix)
+        {
+            Assert.All(trancheFlags, flags => Assert.Equal(0u, flags & 2));
+        }
+        else
+        {
+            Assert.All(trancheFlags, flags => Assert.NotEqual(0u, flags));
+            Assert.Contains(trancheFlags, flags => (flags & 2) != 0);
+        }
     }
 
     [Fact]

@@ -50,7 +50,7 @@ public sealed class XdgContent : IWindowContent
     public string AppId => Toplevel.AppId;
 
     /// <inheritdoc/>
-    public Box Geometry => Toplevel.Xdg.EffectiveGeometry;
+    public Box Geometry => Toplevel.Xdg.PresentedGeometry;
 
     /// <inheritdoc/>
     public int MinWidth => Toplevel.MinWidth;
